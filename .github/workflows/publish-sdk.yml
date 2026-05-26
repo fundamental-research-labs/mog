@@ -31,6 +31,7 @@ jobs:
           - contracts
           - runtime/sdk
           - runtime/embed
+          - runtime/spreadsheet-app
           - views/sheet-view
           - compute/wasm/npm
           - compute/napi/npm/darwin-arm64

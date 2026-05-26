@@ -464,6 +464,17 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": ["@mog-sdk/embed", "@mog-sdk/node", "@mog-sdk/sheet-view"],
   },
+  "@mog/test-host": {
+    "disposition": "workspace-internal",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [
+      "@mog-sdk/embed",
+      "@mog-sdk/node",
+      "@mog-sdk/sheet-view",
+      "@mog-sdk/kernel",
+    ],
+  },
   "@mog/types-editor": {
     "disposition": "workspace-internal",
     "requirePrivate": true,
@@ -626,6 +637,12 @@
   },
 
   // ── dev-eval ──────────────────────────────────────────────────────────
+  "@mog/devtools": {
+    "disposition": "workspace-internal",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
   "eslint-plugin-mog": {
     "disposition": "dev-eval",
     "requirePrivate": true,
@@ -634,6 +651,12 @@
   },
   "@mog/xlsx-tooling": {
     "disposition": "dev-eval",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
+  "@mog/spreadsheet-testing": {
+    "disposition": "workspace-internal",
     "requirePrivate": true,
     "publicTarget": null,
     "forbiddenRuntimeDeps": [],

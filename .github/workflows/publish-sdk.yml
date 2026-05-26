@@ -36,10 +36,11 @@ jobs:
         with:
           node-version: 22.14.0
           registry-url: https://registry.npmjs.org
+          cache: pnpm
 
       - run: npm install -g npm@^11.5.1
 
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm build:public-artifacts
 

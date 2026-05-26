@@ -38,7 +38,7 @@
     { "path": "../../canvas/grid-renderer" },
     { "path": "../../charts" },
     { "path": "../../contracts" },
-    { "path": "../../dev/testing" },
+    { "path": "../../runtime/spreadsheet-testing" },
     { "path": "../../file-io/print-export" },
     { "path": "../../infra/culture" },
     { "path": "../../infra/env" },

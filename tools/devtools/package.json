@@ -1,0 +1,56 @@
+{
+  "name": "@mog/devtools",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./console/api": {
+      "development": "./src/console/api.ts",
+      "types": "./dist/console/api.d.ts",
+      "import": "./dist/console/api.js"
+    },
+    "./shell-persistence": {
+      "development": "./src/shell-persistence.ts",
+      "types": "./dist/shell-persistence.d.ts",
+      "import": "./dist/shell-persistence.js"
+    },
+    "./invariants-slot": {
+      "development": "./src/invariants-slot.ts",
+      "types": "./dist/invariants-slot.d.ts",
+      "import": "./dist/invariants-slot.js"
+    },
+    "./ui/devtools-app": {
+      "development": "./src/ui/devtools-app.tsx",
+      "types": "./dist/ui/devtools-app.d.ts",
+      "import": "./dist/ui/devtools-app.jsx"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b .",
+    "typecheck": "tsc -b .",
+    "test": "bun test --conditions development"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "playwright-core": "^1.59.1",
+    "typescript": "^5.0.0"
+  }
+}

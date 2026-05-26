@@ -17,5 +17,5 @@
     "src/**/*.test.ts",
     "src/**/*.test.tsx"
   ],
-  "references": [{ "path": "../../tools/devtools" }, { "path": "../../infra/env" }]
+  "references": [{ "path": "../../contracts" }, { "path": "../../kernel" }]
 }

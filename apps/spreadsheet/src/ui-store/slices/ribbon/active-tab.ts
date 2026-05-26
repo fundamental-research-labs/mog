@@ -163,7 +163,7 @@ export const createActiveRibbonTabSlice: StateCreator<
           breadcrumb('ribbon.setActiveTab.rejected', payload);
         } else {
           // `__dt.breadcrumb` is not part of the current devtools
-          // surface (`dev/devtools/src/types.ts` exposes
+          // surface (`@mog/devtools` exposes
           // `captureError`, `getActionLog`, etc., but no breadcrumb
           // method). Fall back to `console.debug` with the same shape
           // — same observability contract, no silent path.

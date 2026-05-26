@@ -2,6 +2,7 @@
   "name": "@mog-sdk/contracts",
   "version": "0.6.0",
   "license": "SEE LICENSE IN LICENSE",
+  "repository": "https://github.com/fundamental-research-labs/mog",
   "private": false,
   "type": "module",
   "exports": {

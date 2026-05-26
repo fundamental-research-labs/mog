@@ -20,6 +20,10 @@ jobs:
   publish:
     name: Publish ${{ matrix.package_dir }}
     runs-on: ubuntu-latest
+    environment: npm-production
+    concurrency:
+      group: npm-production
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -46,18 +50,24 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.14.0
           registry-url: https://registry.npmjs.org
           cache: pnpm
+
+      - run: npm install -g npm@^11.5.1
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build:public-artifacts
 
+      - name: Guard production publishes to main
+        if: ${{ inputs.dry_run == 'false' && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "Production publishes must be dispatched from main; got ${GITHUB_REF}."
+          exit 1
+
       - name: Publish package
         working-directory: ${{ matrix.package_dir }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --access public --dry-run

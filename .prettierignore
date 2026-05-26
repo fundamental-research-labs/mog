@@ -24,12 +24,6 @@ runtime/sdk/src/generated/
 # Rust source (formatted by rustfmt)
 **/*.rs
 
-# Lock files
-pnpm-lock.yaml
-
-# Local corpus data
-plans/data/
-
 # Tool output data
 output/
 
@@ -38,10 +32,6 @@ logo/generated/
 
 # OOXML spec data
 file-io/ooxml/spec/
-
-# Dev corpus data
-dev/corpus/
-dev/app/public/
 
 # Tauri generated schemas
 runtime/src-tauri/gen/

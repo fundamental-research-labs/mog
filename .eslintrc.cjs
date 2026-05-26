@@ -4,12 +4,7 @@
  * The single load-bearing rule here is `import/no-relative-packages`, which
  * understands the pnpm workspace graph natively and flags any relative
  * import that crosses a `package.json` boundary. This is the structural
- * enforcement that replaces older glob bans (those
- * still live in dev/app-eval/.eslintrc.cjs as belt-and-suspenders for
- * the specific UI-bypass helpers).
- *
- * Per-package configs (dev/app-eval/.eslintrc.cjs, dev/test-harness/.eslintrc.cjs)
- * extend or override what's here as needed.
+ * enforcement that replaces older glob bans.
  */
 module.exports = {
   root: true,
@@ -47,7 +42,7 @@ module.exports = {
       // use extensionless imports instead (both webpack and turbopack handle them).
       //
       // Only enforced in packages that turbopack actually bundles. Node-only
-      // packages (runtime/server, dev/fleet, etc.) require .js extensions
+      // Node-only packages require .js extensions
       // per the Node.js ESM spec — do NOT add them here.
       files: [
         'apps/spreadsheet/src/**/*.{ts,tsx}',
@@ -74,7 +69,6 @@ module.exports = {
       files: ['**/*.{ts,tsx}'],
       excludedFiles: [
         'infra/env/src/index.ts',
-        'dev/**',
         '**/*.test.{ts,tsx}',
         '**/*.spec.{ts,tsx}',
       ],

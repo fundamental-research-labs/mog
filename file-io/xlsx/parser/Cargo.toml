@@ -6,7 +6,7 @@ edition.workspace = true
 authors = ["Shortcut Team"]
 description = "High-performance XLSX parser in pure Rust"
 license = "MIT"
-repository = "https://github.com/lyfegame/shortcut"
+repository = "https://github.com/fundamental-research-labs/mog"
 
 [lib]
 crate-type = ["rlib"]

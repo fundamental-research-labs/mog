@@ -1,0 +1,76 @@
+name: Publish SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run npm publish with --dry-run
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.package_dir }}
+    runs-on: ubuntu-latest
+    environment: npm-production
+    concurrency:
+      group: npm-production
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        package_dir:
+          - contracts
+          - runtime/sdk
+          - runtime/embed
+          - views/sheet-view
+          - compute/wasm/npm
+          - compute/napi/npm/darwin-arm64
+          - compute/napi/npm/darwin-x64
+          - compute/napi/npm/linux-arm64-gnu
+          - compute/napi/npm/linux-arm64-musl
+          - compute/napi/npm/linux-x64-gnu
+          - compute/napi/npm/linux-x64-musl
+          - compute/napi/npm/win32-x64-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - run: npm install -g npm@^11.5.1
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:public-artifacts
+
+      - name: Guard production publishes to main
+        if: ${{ inputs.dry_run == 'false' && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "Production publishes must be dispatched from main; got ${GITHUB_REF}."
+          exit 1
+
+      - name: Publish package
+        working-directory: ${{ matrix.package_dir }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --access public --dry-run
+          else
+            npm publish --access public
+          fi

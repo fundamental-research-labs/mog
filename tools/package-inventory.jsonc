@@ -41,7 +41,8 @@
       "./internal/views-host": {
         "disposition": "workspace-private-friend",
         "allowedProductionConsumers": [],
-        "allowedDevConsumers": ["@mog/views-host"],
+        "allowedDevConsumers": [],
+        "allowedExternalDevConsumers": ["@mog/views-host"],
         "publicArtifact": "strip",
       },
     },
@@ -65,7 +66,8 @@
       "./app-api": {
         "disposition": "workspace-private-friend",
         "allowedProductionConsumers": ["@mog-sdk/spreadsheet-app", "@mog/shell"],
-        "allowedDevConsumers": ["@mog/spreadsheet-dev"],
+        "allowedDevConsumers": [],
+        "allowedExternalDevConsumers": ["@mog/spreadsheet-dev"],
         "publicArtifact": "strip",
       },
       "./services/capabilities": { "disposition": "public-experimental" },
@@ -249,25 +251,6 @@
       "./ink/types": { "disposition": "public-experimental" },
       "./viewport/viewport-config": { "disposition": "public-experimental" },
     },
-  },
-  "@mog-sdk/sheet-widgets": {
-    "disposition": "reserved",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [
-      "@mog/*",
-      "@mog-sdk/spreadsheet-contracts",
-      "@mog-sdk/types-*",
-      "@mog/types-*",
-    ],
-  },
-
-  // ── private first-party apps ─────────────────────────────────────────
-  "@mog/app-task-tracker": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
   },
 
   // ── binary-wrapper ────────────────────────────────────────────────────
@@ -481,35 +464,6 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": ["@mog-sdk/embed", "@mog-sdk/node", "@mog-sdk/sheet-view"],
   },
-  "@mog/test-host": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [
-      "@mog-sdk/embed",
-      "@mog-sdk/node",
-      "@mog-sdk/sheet-view",
-      "@mog-sdk/kernel",
-    ],
-  },
-  "@mog-sdk/runtime-conformance": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog-sdk/provider-conformance": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog-sdk/dist-conformance": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
   "@mog/types-editor": {
     "disposition": "workspace-internal",
     "requirePrivate": true,
@@ -656,12 +610,6 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": [],
   },
-  "@mog/collaboration-server": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
 
   // ── reserved (future public target) ───────────────────────────────────
   "@mog/shell": {
@@ -678,139 +626,7 @@
   },
 
   // ── dev-eval ──────────────────────────────────────────────────────────
-  "@mog/api-eval": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/app-eval": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/spreadsheet-dev": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/chart-fidelity": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/colab-eval": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/corpus": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/devtools": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/docs-site": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval-host-iframe-parent": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval-host-next-app-router": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval-host-plain-web-component": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval-host-static-publish": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/embed-eval-host-vite-react": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "fleet": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/parity-test": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/os-headless-server": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/test-harness": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/views-eval": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/views-host": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
   "eslint-plugin-mog": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/canvas-playground": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/typeset-lab": {
     "disposition": "dev-eval",
     "requirePrivate": true,
     "publicTarget": null,
@@ -822,116 +638,7 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": [],
   },
-  "@mog/spreadsheet-testing": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog/vite-wasm-plugin": {
-    "disposition": "dev-eval",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-
   // ── private examples ─────────────────────────────────────────────────
-  "mog-example-sheet-view-custom-chrome": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-notion-style-sheet-app": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "@mog-examples/sdk-quickstart": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-node-sdk-job": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-kernel-browser": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-nextjs": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-embed-web-component": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-embed-react": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-full-app-embed-react": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-terminal-ui": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-shortcut-sample": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-sheet-view-celebration": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-multi-tab-full-app-embed-react": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-fantasy-ledger-sheet-app": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-embed-svelte": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
-  "mog-example-chatbot-generative-sheet": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
-  },
 
   // ── generated-asset ───────────────────────────────────────────────────
   // NOTE: compute-core-wasm is the Rust crate name. The browser-consumable

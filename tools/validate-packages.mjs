@@ -212,11 +212,21 @@ function validateExportDisposition(name, manifest, entry, inventory, errors) {
     if (disposition.disposition === 'workspace-private-friend') {
       const allowedProductionConsumers = disposition.allowedProductionConsumers ?? [];
       const allowedDevConsumers = disposition.allowedDevConsumers ?? [];
-      if (!Array.isArray(allowedProductionConsumers) || !Array.isArray(allowedDevConsumers)) {
+      const allowedExternalDevConsumers = disposition.allowedExternalDevConsumers ?? [];
+      if (
+        !Array.isArray(allowedProductionConsumers) ||
+        !Array.isArray(allowedDevConsumers) ||
+        !Array.isArray(allowedExternalDevConsumers)
+      ) {
         errors.push(`${name} ${subpath}: workspace-private-friend consumers must be arrays`);
-      } else if (allowedProductionConsumers.length + allowedDevConsumers.length === 0) {
+      } else if (
+        allowedProductionConsumers.length +
+          allowedDevConsumers.length +
+          allowedExternalDevConsumers.length ===
+        0
+      ) {
         errors.push(
-          `${name} ${subpath}: workspace-private-friend must name allowedProductionConsumers or allowedDevConsumers`,
+          `${name} ${subpath}: workspace-private-friend must name allowedProductionConsumers, allowedDevConsumers, or allowedExternalDevConsumers`,
         );
       }
       for (const consumer of allowedDevConsumers) {

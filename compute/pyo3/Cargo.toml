@@ -1,0 +1,41 @@
+[package]
+name = "compute-core-pyo3"
+version = "0.6.0"
+publish = false
+edition.workspace = true
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+compute-core = { path = "../core" }
+# Ergonomic Rust API facade (re-exported for downstream consumers)
+compute-api = { path = "../api" }
+formula-types = { path = "../core/crates/types/formula-types" }
+cell-types = { path = "../core/crates/types/cell-types" }
+value-types = { path = "../core/crates/types/value-types" }
+snapshot-types = { path = "../core/crates/types/snapshot-types" }
+compute-parser = { path = "../core/crates/compute-parser" }
+compute-formats = { path = "../core/crates/compute-formats" }
+compute-charts = { path = "../core/crates/compute-charts" }
+compute-stats = { path = "../core/crates/compute-stats" }
+compute-table = { path = "../core/crates/compute-table" }
+compute-cf = { path = "../core/crates/compute-cf" }
+compute-schema = { path = "../core/crates/compute-schema" }
+# Principal — referenced by bare name in generated
+# ComputeService_service_lifecycle descriptor (R2.4).
+compute-security = { path = "../core/crates/compute-security" }
+
+# XLSX parser API (merged into single PyO3 module)
+xlsx-api = { path = "../../file-io/xlsx-api", features = ["native"] }
+
+bridge-pyo3 = { path = "../../infra/rust-bridge/bridge-pyo3" }
+bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
+
+pyo3 = { version = "0.28", features = ["multiple-pymethods", "abi3-py39"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+extension-module = ["pyo3/extension-module"]

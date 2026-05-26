@@ -1,0 +1,118 @@
+[workspace]
+resolver = "2"
+members = [
+    "domain-types",
+    "compute/core",
+    "compute/core/crates/types/value-types",
+    "compute/core/crates/types/cell-types",
+    "compute/core/crates/types/workbook-types",
+    "compute/core/crates/types/formula-types",
+    "compute/core/crates/types/finite-at-boundary",
+    "compute/core/crates/types/finite-at-boundary-walker",
+    "compute/core/crates/compute-parser",
+    "compute/core/crates/compute-stats",
+    "compute/core/crates/compute-pivot",
+    "compute/core/crates/compute-relational",
+    "compute/core/crates/types/pivot-types",
+    "compute/core/crates/compute-table",
+    "compute/core/crates/compute-functions",
+    "compute/core/crates/compute-cf",
+    "compute/core/crates/compute-formats",
+    "compute/core/crates/compute-schema",
+    "compute/core/crates/compute-graph",
+    "compute/core/crates/types/snapshot-types",
+    "compute/core/crates/compute-fill",
+    "compute/core/crates/compute-charts",
+    "compute/core/crates/compute-solver",
+    "compute/core/crates/compute-collab",
+    "compute/core/crates/compute-coordinator",
+    "compute/core/crates/compute-document",
+    "compute/core/crates/compute-wire",
+    "compute/core/crates/compute-layout-index",
+    "compute/core/crates/compute-text-measurement",
+    "compute/core/crates/compute-screenshot",
+    "compute/core/crates/compute-security",
+    "compute/wasm",
+    "compute/napi",
+    "compute/pyo3",
+    "compute/api",
+    "file-io/xlsx/parser",
+    "file-io/xlsx/parser/xml-derive",
+    "file-io/xlsx-api",
+    "file-io/csv-parser",
+    "file-io/ooxml/types",
+    "file-io/pdf/core",
+    "infra/rust-bridge/bridge-describe",
+    "infra/rust-bridge/bridge-types",
+    "infra/rust-bridge/bridge-derive",
+    "infra/rust-bridge/bridge-ir",
+    "infra/rust-bridge/bridge-core",
+    "infra/rust-bridge/bridge-wasm",
+    "infra/rust-bridge/bridge-wasm/macros",
+    "infra/rust-bridge/bridge-delegate",
+    "infra/rust-bridge/bridge-delegate/macros",
+    "infra/rust-bridge/bridge-tauri",
+    "infra/rust-bridge/bridge-tauri/macros",
+    "infra/rust-bridge/bridge-napi",
+    "infra/rust-bridge/bridge-napi/macros",
+    "infra/rust-bridge/bridge-pyo3",
+    "infra/rust-bridge/bridge-pyo3/macros",
+    "infra/rust-bridge/bridge-ts",
+]
+
+[workspace.package]
+edition = "2024"
+authors = ["Mog Contributors"]
+license = "MIT"
+repository = "https://github.com/fundamental-research-labs/mog"
+
+# Shared dependency versions across workspace
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+tikv-jemallocator = "0.6"
+tracing = "0.1"
+yrs = { version = "0.21", features = ["sync"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+# Fast profile: near-release performance with much faster builds
+# Uses thin LTO + parallel codegen + incremental compilation
+# Used by: cargo build -p xlsx-roundtrip --profile fast
+[profile.fast]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
+
+# Crashtest profile: release-speed with panic=unwind so catch_unwind works
+# Used by: cargo run --profile crashtest --bin xlsx-crashtest --features cli
+[profile.crashtest]
+inherits = "release"
+panic = "unwind"
+
+# wasm-dev profile: fast iteration for compute-core-wasm.
+# Inherits release (so the binary stays runnable in the browser; cargo's
+# default `dev` profile produces a 60-100MB wasm that's too slow to
+# instantiate) but disables fat LTO, raises codegen units, and turns on
+# incremental compilation. Skip wasm-opt + brotli post-processing too —
+# those are CDN-delivery concerns, irrelevant during local dev.
+# Used by: compute/wasm/build.sh dev (and Vite's ensureWasmBuilt).
+[profile.wasm-dev]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+incremental = true
+opt-level = 2

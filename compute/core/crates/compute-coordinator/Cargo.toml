@@ -1,0 +1,24 @@
+[package]
+name = "compute-coordinator"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Multi-participant sync coordinator with sheet-level locking for collaborative spreadsheet editing"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+yrs = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+cell-types = { path = "../types/cell-types" }
+compute-collab = { path = "../compute-collab" }
+compute-document = { path = "../compute-document" }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"

@@ -1,0 +1,10 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Matrix Layout snapshot: 2x2 matrix layout 1`] = `
+{
+  "baseline": 10,
+  "childCount": 1,
+  "height": 21,
+  "width": 23,
+}
+`;

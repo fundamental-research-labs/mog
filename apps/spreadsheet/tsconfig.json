@@ -1,0 +1,53 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./",
+    "outDir": "./dist",
+    "jsx": "react-jsx",
+    "baseUrl": "."
+  },
+  "include": [
+    "index.tsx",
+    "manifest.ts",
+    "register.ts",
+    "src/**/*",
+    "../../kernel/src/global.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/systems/**/testing/**",
+    "src/systems/testing-foundation/**",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ],
+  "references": [
+    { "path": "../../canvas/drawing-canvas" },
+    { "path": "../../canvas/drawing/engine" },
+    { "path": "../../canvas/drawing/geometry" },
+    { "path": "../../canvas/drawing/diagram" },
+    { "path": "../../canvas/drawing/text-effects" },
+    { "path": "../../canvas/engine" },
+    { "path": "../../canvas/grid-canvas" },
+    { "path": "../../canvas/grid-renderer" },
+    { "path": "../../charts" },
+    { "path": "../../contracts" },
+    { "path": "../../dev/testing" },
+    { "path": "../../file-io/print-export" },
+    { "path": "../../infra/culture" },
+    { "path": "../../infra/env" },
+    { "path": "../../infra/icons" },
+    { "path": "../../infra/platform" },
+    { "path": "../../kernel" },
+    { "path": "../../shell" },
+    { "path": "../../spreadsheet-utils" },
+    { "path": "../../ui" },
+    { "path": "../../views/sheet-view" }
+  ]
+}

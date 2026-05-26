@@ -1,0 +1,164 @@
+import { jest } from '@jest/globals';
+
+import type { ActionDependencies } from '@mog-sdk/contracts/actions';
+import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
+
+const autoFitRows = jest.fn(async () => undefined);
+const autoFitColumns = jest.fn(async () => undefined);
+const getTextMeasurementService = jest.fn(() => ({ measure: jest.fn() }));
+
+jest.unstable_mockModule('../../../systems/grid-editing/features/autofit', () => ({
+  autoFitRows,
+  autoFitColumns,
+}));
+
+jest.unstable_mockModule('@mog/grid-renderer', () => ({
+  getTextMeasurementService,
+}));
+
+const StructureHandlers = await import('../structure');
+
+function createDeps(
+  options: {
+    activeCell?: { row: number; col: number };
+    ranges?: Array<{
+      startRow: number;
+      startCol: number;
+      endRow: number;
+      endCol: number;
+      isFullRow?: boolean;
+      isFullColumn?: boolean;
+    }>;
+  } = {},
+): ActionDependencies {
+  const activeSheetId = makeSheetId('sheet1');
+  const worksheet = {
+    formatValues: jest.fn(async () => []),
+    layout: {
+      setRowVisible: jest.fn(async () => undefined),
+      setColumnVisible: jest.fn(async () => undefined),
+      setRowHeight: jest.fn(async () => undefined),
+      setColumnWidths: jest.fn(async () => undefined),
+    },
+    structure: {
+      insertRows: jest.fn(async () => undefined),
+      insertColumns: jest.fn(async () => undefined),
+      deleteRows: jest.fn(async () => undefined),
+      deleteColumns: jest.fn(async () => undefined),
+      insertCellsWithShift: jest.fn(async () => undefined),
+    },
+  };
+  const workbook = {
+    getSheetById: jest.fn(() => worksheet),
+    activeSheet: worksheet,
+  };
+
+  return {
+    workbook,
+    getActiveSheetId: jest.fn(() => activeSheetId),
+    accessors: {
+      selection: {
+        getActiveCell: jest.fn(() => options.activeCell ?? { row: 4, col: 3 }),
+        getRanges: jest.fn(() => options.ranges ?? []),
+      },
+    },
+  } as unknown as ActionDependencies;
+}
+
+function getMockWorksheet(deps: ActionDependencies) {
+  return (deps.workbook.getSheetById as jest.Mock).mock.results[0]?.value;
+}
+
+describe('Structure autofit handlers', () => {
+  beforeEach(() => {
+    autoFitRows.mockClear();
+    autoFitColumns.mockClear();
+    getTextMeasurementService.mockClear();
+  });
+
+  it('AUTO_FIT_COLUMN_WIDTH targets the active column when no selection ranges are available', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    const result = await StructureHandlers.AUTO_FIT_COLUMN_WIDTH(deps);
+
+    expect(result.handled).toBe(true);
+    expect(autoFitColumns).toHaveBeenCalledWith(
+      makeSheetId('sheet1'),
+      [3],
+      expect.anything(),
+      expect.any(Function),
+      deps.workbook,
+    );
+  });
+
+  it('AUTO_FIT_ROW_HEIGHT targets the active row when no selection ranges are available', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    const result = await StructureHandlers.AUTO_FIT_ROW_HEIGHT(deps);
+
+    expect(result.handled).toBe(true);
+    expect(autoFitRows).toHaveBeenCalledWith(
+      makeSheetId('sheet1'),
+      [4],
+      expect.anything(),
+      expect.any(Function),
+      deps.workbook,
+    );
+  });
+
+  it('row and column structure actions target the active cell when no selection ranges are available', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+    await StructureHandlers.INSERT_COLUMN_LEFT(deps);
+    await StructureHandlers.DELETE_ROWS(deps);
+    await StructureHandlers.DELETE_COLUMNS(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.structure.insertRows).toHaveBeenCalledWith(4, 1);
+    expect(worksheet.structure.insertColumns).toHaveBeenCalledWith(3, 1);
+    expect(worksheet.structure.deleteRows).toHaveBeenCalledWith(4, 1);
+    expect(worksheet.structure.deleteColumns).toHaveBeenCalledWith(3, 1);
+  });
+
+  it('INSERT_CELLS_SHIFT_DOWN uses the active cell as a one-cell range when ranges are empty', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    await StructureHandlers.INSERT_CELLS_SHIFT_DOWN(deps);
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(4, 3, 4, 3, 'down');
+  });
+
+  it('visibility and explicit sizing actions target the active row or column when ranges are empty', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    await StructureHandlers.HIDE_ROW(deps);
+    await StructureHandlers.UNHIDE_COLUMN(deps);
+    await StructureHandlers.APPLY_ROW_HEIGHT(deps, { height: 27 });
+    await StructureHandlers.APPLY_COLUMN_WIDTH(deps, { width: 88 });
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledWith(4, false);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(3, true);
+    expect(worksheet.layout.setRowHeight).toHaveBeenCalledWith(4, 27);
+    expect(worksheet.layout.setColumnWidths).toHaveBeenCalledWith([[3, 88]]);
+  });
+
+  it('AUTO_FIT_COLUMN_WIDTH still honors explicit multi-column selections', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 0, startCol: 2, endRow: 5, endCol: 4 }],
+    });
+
+    await StructureHandlers.AUTO_FIT_COLUMN_WIDTH(deps);
+
+    expect(autoFitColumns).toHaveBeenCalledWith(
+      makeSheetId('sheet1'),
+      [2, 3, 4],
+      expect.anything(),
+      expect.any(Function),
+      deps.workbook,
+    );
+  });
+});

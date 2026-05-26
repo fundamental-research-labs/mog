@@ -1,0 +1,192 @@
+{
+  "name": "@mog-sdk/types-document",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./app": {
+      "development": "./src/app/index.ts",
+      "types": "./dist/app/index.d.ts",
+      "import": "./dist/app/index.js"
+    },
+    "./app/types": {
+      "development": "./src/app/types.ts",
+      "types": "./dist/app/types.d.ts",
+      "import": "./dist/app/types.js"
+    },
+    "./document": {
+      "development": "./src/document/index.ts",
+      "types": "./dist/document/index.d.ts",
+      "import": "./dist/document/index.js"
+    },
+    "./document/comments": {
+      "development": "./src/document/comments.ts",
+      "types": "./dist/document/comments.d.ts",
+      "import": "./dist/document/comments.js"
+    },
+    "./document/document": {
+      "development": "./src/document/document.ts",
+      "types": "./dist/document/document.d.ts",
+      "import": "./dist/document/document.js"
+    },
+    "./document/search": {
+      "development": "./src/document/search.ts",
+      "types": "./dist/document/search.d.ts",
+      "import": "./dist/document/search.js"
+    },
+    "./filesystem": {
+      "development": "./src/filesystem/index.ts",
+      "types": "./dist/filesystem/index.d.ts",
+      "import": "./dist/filesystem/index.js"
+    },
+    "./filesystem/paths": {
+      "development": "./src/filesystem/paths.ts",
+      "types": "./dist/filesystem/paths.d.ts",
+      "import": "./dist/filesystem/paths.js"
+    },
+    "./filesystem/permissions": {
+      "development": "./src/filesystem/permissions.ts",
+      "types": "./dist/filesystem/permissions.d.ts",
+      "import": "./dist/filesystem/permissions.js"
+    },
+    "./filesystem/types": {
+      "development": "./src/filesystem/types.ts",
+      "types": "./dist/filesystem/types.d.ts",
+      "import": "./dist/filesystem/types.js"
+    },
+    "./platform": {
+      "development": "./src/platform/index.ts",
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js"
+    },
+    "./platform/identity": {
+      "development": "./src/platform/identity.ts",
+      "types": "./dist/platform/identity.d.ts",
+      "import": "./dist/platform/identity.js"
+    },
+    "./platform/types": {
+      "development": "./src/platform/types.ts",
+      "types": "./dist/platform/types.d.ts",
+      "import": "./dist/platform/types.js"
+    },
+    "./security": {
+      "development": "./src/security/index.ts",
+      "types": "./dist/security/index.d.ts",
+      "import": "./dist/security/index.js"
+    },
+    "./shell": {
+      "development": "./src/shell/index.ts",
+      "types": "./dist/shell/index.d.ts",
+      "import": "./dist/shell/index.js"
+    },
+    "./shell/types": {
+      "development": "./src/shell/types.ts",
+      "types": "./dist/shell/types.d.ts",
+      "import": "./dist/shell/types.js"
+    },
+    "./security/evaluator": {
+      "development": "./src/security/evaluator.ts",
+      "types": "./dist/security/evaluator.d.ts",
+      "import": "./dist/security/evaluator.js"
+    },
+    "./security/types": {
+      "development": "./src/security/types.ts",
+      "types": "./dist/security/types.d.ts",
+      "import": "./dist/security/types.js"
+    },
+    "./storage": {
+      "development": "./src/storage/index.ts",
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./storage/capabilities": {
+      "development": "./src/storage/capabilities.ts",
+      "types": "./dist/storage/capabilities.d.ts",
+      "import": "./dist/storage/capabilities.js"
+    },
+    "./storage/connection": {
+      "development": "./src/storage/connection.ts",
+      "types": "./dist/storage/connection.d.ts",
+      "import": "./dist/storage/connection.js"
+    },
+    "./storage/query": {
+      "development": "./src/storage/query.ts",
+      "types": "./dist/storage/query.d.ts",
+      "import": "./dist/storage/query.js"
+    },
+    "./storage/table-driver": {
+      "development": "./src/storage/table-driver.ts",
+      "types": "./dist/storage/table-driver.d.ts",
+      "import": "./dist/storage/table-driver.js"
+    },
+    "./storage/document-provider": {
+      "development": "./src/storage/document-provider.ts",
+      "types": "./dist/storage/document-provider.d.ts",
+      "import": "./dist/storage/document-provider.js"
+    },
+    "./storage/provider-identity": {
+      "development": "./src/storage/provider-identity.ts",
+      "types": "./dist/storage/provider-identity.d.ts",
+      "import": "./dist/storage/provider-identity.js"
+    },
+    "./storage/provider-capabilities": {
+      "development": "./src/storage/provider-capabilities.ts",
+      "types": "./dist/storage/provider-capabilities.d.ts",
+      "import": "./dist/storage/provider-capabilities.js"
+    },
+    "./storage/provider-configs": {
+      "development": "./src/storage/provider-configs.ts",
+      "types": "./dist/storage/provider-configs.d.ts",
+      "import": "./dist/storage/provider-configs.js"
+    },
+    "./storage/lifecycle": {
+      "development": "./src/storage/lifecycle.ts",
+      "types": "./dist/storage/lifecycle.d.ts",
+      "import": "./dist/storage/lifecycle.js"
+    },
+    "./storage/inbound-updates": {
+      "development": "./src/storage/inbound-updates.ts",
+      "types": "./dist/storage/inbound-updates.d.ts",
+      "import": "./dist/storage/inbound-updates.js"
+    },
+    "./storage/high-water-mark": {
+      "development": "./src/storage/high-water-mark.ts",
+      "types": "./dist/storage/high-water-mark.d.ts",
+      "import": "./dist/storage/high-water-mark.js"
+    },
+    "./storage/errors": {
+      "development": "./src/storage/errors.ts",
+      "types": "./dist/storage/errors.d.ts",
+      "import": "./dist/storage/errors.js"
+    },
+    "./storage/profiles": {
+      "development": "./src/storage/profiles.ts",
+      "types": "./dist/storage/profiles.d.ts",
+      "import": "./dist/storage/profiles.js"
+    },
+    "./storage/composition": {
+      "development": "./src/storage/composition.ts",
+      "types": "./dist/storage/composition.d.ts",
+      "import": "./dist/storage/composition.js"
+    }
+  },
+  "description": "Document lifecycle, comments, search, storage, filesystem, security, platform, and app types. Tier 1; depends only on @mog/types-core.",
+  "dependencies": {
+    "@mog/types-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

@@ -1,0 +1,296 @@
+error[E0277]: `Rc<()>` cannot be sent between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:24:23
+   |
+24 |             service = AsyncCloneNotSendService;
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<()>` cannot be sent between threads safely
+...
+40 | bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   | -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Send` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `crate::__bridge_descriptor_AsyncCloneNotSendService_ops` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be shared between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:24:23
+   |
+24 |             service = AsyncCloneNotSendService;
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<()>` cannot be shared between threads safely
+...
+40 | bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   | -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Sync` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `crate::__bridge_descriptor_AsyncCloneNotSendService_ops` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `insert` exists for struct `State<'_, TauriRegistry<AsyncCloneNotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+ 4 |   pub struct AsyncCloneNotSendService {
+   |   ----------------------------------- doesn't satisfy `AsyncCloneNotSendService: Send` or `AsyncCloneNotSendService: Sync`
+...
+21 |           $gen! {
+   |  _________^
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<AsyncCloneNotSendService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Rc<()>: Send`
+           which is required by `AsyncCloneNotSendService: Send`
+           `Rc<()>: Sync`
+           which is required by `AsyncCloneNotSendService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `clone_for_async` exists for struct `State<'_, TauriRegistry<AsyncCloneNotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+ 4 |   pub struct AsyncCloneNotSendService {
+   |   ----------------------------------- doesn't satisfy `AsyncCloneNotSendService: Send` or `AsyncCloneNotSendService: Sync`
+...
+21 |           $gen! {
+   |  _________^
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<AsyncCloneNotSendService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Rc<()>: Send`
+           which is required by `AsyncCloneNotSendService: Send`
+           `Rc<()>: Sync`
+           which is required by `AsyncCloneNotSendService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `remove` exists for struct `State<'_, TauriRegistry<AsyncCloneNotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+ 4 |   pub struct AsyncCloneNotSendService {
+   |   ----------------------------------- doesn't satisfy `AsyncCloneNotSendService: Send` or `AsyncCloneNotSendService: Sync`
+...
+21 |           $gen! {
+   |  _________^
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<AsyncCloneNotSendService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Rc<()>: Send`
+           which is required by `AsyncCloneNotSendService: Send`
+           `Rc<()>: Sync`
+           which is required by `AsyncCloneNotSendService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be sent between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:53:24
+   |
+53 |     assert_send_sync::<AsyncCloneNotSendServiceRegistry>();
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<()>` cannot be sent between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Send` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be shared between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:53:24
+   |
+53 |     assert_send_sync::<AsyncCloneNotSendServiceRegistry>();
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<()>` cannot be shared between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Sync` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be sent between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:55:9
+   |
+55 |         state(),
+   |         ^^^^^^^ `Rc<()>` cannot be sent between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Send` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be shared between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:55:9
+   |
+55 |         state(),
+   |         ^^^^^^^ `Rc<()>` cannot be shared between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Sync` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be sent between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:55:9
+   |
+55 |         state(),
+   |         ^^^^^ `Rc<()>` cannot be sent between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Send` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Rc<()>` cannot be shared between threads safely
+  --> tests/ui/async_clone_not_send_service_fail.rs:55:9
+   |
+55 |         state(),
+   |         ^^^^^ `Rc<()>` cannot be shared between threads safely
+   |
+   = help: within `AsyncCloneNotSendService`, the trait `Sync` is not implemented for `Rc<()>`
+note: required because it appears within the type `AsyncCloneNotSendService`
+  --> tests/ui/async_clone_not_send_service_fail.rs:4:12
+   |
+ 4 | pub struct AsyncCloneNotSendService {
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/async_clone_not_send_service_fail.rs:21:9
+   |
+21 | /         $gen! {
+22 | |             bridge_version = 1;
+23 | |             group = ops;
+24 | |             service = AsyncCloneNotSendService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncCloneNotSendService_ops);
+   |   -------------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)

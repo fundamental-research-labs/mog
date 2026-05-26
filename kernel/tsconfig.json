@@ -1,0 +1,40 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ],
+  "references": [
+    { "path": "../canvas/drawing/engine" },
+    { "path": "../canvas/drawing/geometry" },
+    { "path": "../canvas/drawing/ink" },
+    { "path": "../canvas/drawing/shapes" },
+    { "path": "../canvas/drawing/diagram" },
+    { "path": "../canvas/drawing/text-effects" },
+    { "path": "../canvas/engine" },
+    { "path": "../charts" },
+    { "path": "../contracts" },
+    { "path": "../infra/culture" },
+    { "path": "../infra/env" },
+    { "path": "../infra/rust-bridge/client" },
+    { "path": "../infra/transport" },
+    { "path": "../spreadsheet-utils" },
+    { "path": "../table-engine" },
+    { "path": "../typeset/math-engine" },
+    { "path": "../types/document" },
+    { "path": "../types/host" }
+  ]
+}

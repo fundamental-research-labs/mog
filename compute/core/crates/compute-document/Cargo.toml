@@ -1,0 +1,24 @@
+[package]
+name = "compute-document"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CRDT document layer for spreadsheet storage (Yrs schema, serialization, identity, undo, observation)"
+
+[dependencies]
+yrs = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+formula-types = { path = "../types/formula-types" }
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+workbook-types = { path = "../types/workbook-types" }
+# Policy types live in compute-security; SecurityStore (R2.1) is the
+# typed Yrs accessor that serializes AccessPolicy/PolicyId through this crate.
+compute-security = { path = "../compute-security" }
+rustc-hash = "2"
+uuid = { version = "1", features = ["v4"] }

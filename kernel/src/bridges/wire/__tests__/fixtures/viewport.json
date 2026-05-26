@@ -1,0 +1,109 @@
+{
+  "cellCount": 12,
+  "cells": [
+    {
+      "col": 5,
+      "display": "42.5",
+      "hasFormula": true,
+      "numberValue": 42.5,
+      "row": 10,
+      "valueType": 1
+    },
+    {
+      "col": 6,
+      "display": "Hello World",
+      "numberValue": null,
+      "row": 10,
+      "valueType": 2
+    },
+    {
+      "col": 7,
+      "display": "#DIV/0!",
+      "error": "#DIV/0!",
+      "numberValue": null,
+      "row": 10,
+      "valueType": 4
+    },
+    {
+      "col": 8,
+      "row": 10,
+      "valueType": 0
+    },
+    {
+      "col": 5,
+      "display": "TRUE",
+      "numberValue": 1.0,
+      "row": 11,
+      "valueType": 3
+    },
+    {
+      "col": 6,
+      "display": "0",
+      "hasComment": true,
+      "hasHyperlink": true,
+      "numberValue": 0.0,
+      "row": 11,
+      "valueType": 1
+    },
+    {
+      "col": 7,
+      "display": "3.14",
+      "formatIdx": 2,
+      "numberValue": 3.14,
+      "row": 11,
+      "valueType": 1
+    },
+    {
+      "col": 8,
+      "row": 11,
+      "valueType": 0
+    },
+    {
+      "col": 5,
+      "row": 12,
+      "valueType": 0
+    },
+    {
+      "col": 6,
+      "row": 12,
+      "valueType": 0
+    },
+    {
+      "col": 7,
+      "row": 12,
+      "valueType": 0
+    },
+    {
+      "col": 8,
+      "row": 12,
+      "valueType": 0
+    }
+  ],
+  "colDimensions": [
+    {
+      "col": 7,
+      "hidden": true,
+      "width": 120.0
+    }
+  ],
+  "cols": 4,
+  "generation": 7,
+  "merges": [
+    {
+      "endCol": 6,
+      "endRow": 10,
+      "startCol": 5,
+      "startRow": 10
+    }
+  ],
+  "rowDimensions": [
+    {
+      "height": 30.0,
+      "hidden": false,
+      "row": 11
+    }
+  ],
+  "rows": 3,
+  "startCol": 5,
+  "startRow": 10
+}

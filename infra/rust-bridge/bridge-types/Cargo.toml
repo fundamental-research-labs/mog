@@ -1,0 +1,11 @@
+[package]
+name = "bridge-types"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "Shared traits for rust-bridge: BridgeParse, BridgeError, BridgeStructuredError"
+
+[dependencies]
+serde_json = "1"
+bridge-derive = { path = "../bridge-derive" }
+bridge-describe = { path = "../bridge-describe" }

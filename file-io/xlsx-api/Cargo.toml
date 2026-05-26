@@ -1,0 +1,28 @@
+[package]
+name = "xlsx-api"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "Ergonomic Rust API facade for the XLSX parser — clean types, rich errors, no FFI constraints"
+
+[features]
+default = []
+native = ["xlsx-parser/native"]
+parallel = ["native", "xlsx-parser/parallel"]
+
+[dependencies]
+# The parser we wrap
+xlsx-parser = { path = "../xlsx/parser" }
+
+# Domain types (ParseOutput, RoundTripContext) for the unified export path
+domain-types = { path = "../../domain-types" }
+
+# Bridge framework for proc-macro annotations (#[bridge::api], #[bridge::pure])
+bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
+
+# Error handling
+thiserror = { workspace = true }
+
+[dev-dependencies]
+domain-types = { path = "../../domain-types" }

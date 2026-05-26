@@ -1,0 +1,249 @@
+{
+  "schemaVersion": 1,
+  "package": "@mog-sdk/contracts",
+  "verification": "pnpm check:contracts-runtime-inventory",
+  "entries": [
+    {
+      "source": "@mog/types-api/api",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/api"],
+      "runtimeExports": [
+        "CellType",
+        "CellValueType",
+        "NumberFormatCategory",
+        "RangeValueType",
+        "isFloatingObjectMutationReceipt",
+        "isFloatingObjectReceipt",
+        "isFloatingObjectRemoveReceipt"
+      ],
+      "sourceOfTruth": "contracts/src/api",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-api/store",
+      "classification": "private implementation helper",
+      "ownership": "removed-from-public-surface",
+      "publicModules": ["@mog-sdk/contracts/store"],
+      "runtimeExports": [],
+      "sourceOfTruth": "type-only public projection",
+      "verificationFixture": "pnpm check:contracts-runtime-inventory"
+    },
+    {
+      "source": "@mog/types-bridges/bridges",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/bridges"],
+      "runtimeExports": ["DEFAULT_RECOGNITION_THRESHOLDS"],
+      "sourceOfTruth": "contracts/src/bridges/ink-recognition-bridge.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-commands",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/core"],
+      "runtimeExports": ["API_CALL_TIMEOUT", "DEFAULT_EXECUTION_TIMEOUT", "ValidationErrorCodes"],
+      "sourceOfTruth": "contracts/src/core",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts", "@mog-sdk/contracts/core"],
+      "runtimeExports": [
+        "DEFAULT_CELL_STYLE",
+        "DEFAULT_PROTECTION_OPTIONS",
+        "DEFAULT_WORKBOOK_PROTECTION_OPTIONS",
+        "MAX_COLS",
+        "MAX_ROWS",
+        "RangeKind",
+        "asFormattedText",
+        "cellId",
+        "colId",
+        "displayString",
+        "displayStringOrNull",
+        "rangeId",
+        "rowId",
+        "sheetId",
+        "toCellId",
+        "toColId",
+        "toRowId"
+      ],
+      "sourceOfTruth": "contracts/src",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core/cell-identity",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/cell-identity"],
+      "runtimeExports": ["cellId", "colId", "rowId", "toCellId", "toColId", "toRowId"],
+      "sourceOfTruth": "contracts/src/cells/cell-identity.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core/cell-style",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/cell-style", "@mog-sdk/contracts/cells/cell-style"],
+      "runtimeExports": ["DEFAULT_CELL_STYLE"],
+      "sourceOfTruth": "contracts/src/cells/cell-style.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core/cells",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/cells"],
+      "runtimeExports": [
+        "DEFAULT_CELL_STYLE",
+        "cellId",
+        "colId",
+        "rowId",
+        "toCellId",
+        "toColId",
+        "toRowId"
+      ],
+      "sourceOfTruth": "contracts/src/cells",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core/core",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/core"],
+      "runtimeExports": ["MAX_COLS", "MAX_ROWS", "RangeKind", "rangeId", "sheetId"],
+      "sourceOfTruth": "contracts/src/core/core.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-core/protection",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/protection"],
+      "runtimeExports": ["DEFAULT_PROTECTION_OPTIONS", "DEFAULT_WORKBOOK_PROTECTION_OPTIONS"],
+      "sourceOfTruth": "contracts/src/document/protection.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-events",
+      "classification": "type-only contract",
+      "ownership": "removed-from-public-surface",
+      "publicModules": ["@mog-sdk/contracts/events"],
+      "runtimeExports": [],
+      "sourceOfTruth": "type-only public projection",
+      "verificationFixture": "pnpm check:contracts-runtime-inventory"
+    },
+    {
+      "source": "@mog/types-events/events",
+      "classification": "type-only contract",
+      "ownership": "removed-from-public-surface",
+      "publicModules": ["@mog-sdk/contracts/events"],
+      "runtimeExports": [],
+      "sourceOfTruth": "type-only public projection",
+      "verificationFixture": "pnpm check:contracts-runtime-inventory"
+    },
+    {
+      "source": "@mog/types-machines/actors",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/actors"],
+      "runtimeExports": ["EXTERNAL_SOURCE_SHEET_ID"],
+      "sourceOfTruth": "contracts/src/actors/clipboard.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-machines/actors/clipboard",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/actors/clipboard"],
+      "runtimeExports": ["EXTERNAL_SOURCE_SHEET_ID"],
+      "sourceOfTruth": "contracts/src/actors/clipboard.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-machines/machines",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/machines"],
+      "runtimeExports": ["FORMULA_RANGE_COLORS", "RenderPriority"],
+      "sourceOfTruth": "contracts/src/machines/types.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-machines/selectors",
+      "classification": "runtime SDK utility candidate",
+      "ownership": "moved-public-runtime",
+      "publicModules": ["@mog-sdk/contracts/selectors"],
+      "runtimeExports": ["smartArtSelectors"],
+      "sourceOfTruth": "contracts/src/selectors/smart-art.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-objects/objects",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/objects"],
+      "runtimeExports": ["CANVAS_OBJECT_TYPES", "SPREADSHEET_OBJECT_TYPES"],
+      "sourceOfTruth": "contracts/src/objects/canvas-object.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog/types-rendering",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/rendering"],
+      "runtimeExports": [
+        "BUFFER_COLS",
+        "BUFFER_ROWS",
+        "COL_HEADER_HEIGHT",
+        "DEFAULT_CHROME_THEME",
+        "DEFAULT_COL_WIDTH",
+        "DEFAULT_COL_WIDTH_MACOS",
+        "DEFAULT_COL_WIDTH_WINDOWS",
+        "DEFAULT_RESOLVED_SHEET_VIEW_OPTIONS",
+        "DEFAULT_RESOLVED_SHEET_VIEW_SKIN",
+        "DEFAULT_ROW_HEIGHT",
+        "DEFAULT_SHIMMER_CONFIG",
+        "DEFAULT_ZOOM",
+        "MAX_OUTLINE_LEVELS",
+        "MAX_ZOOM",
+        "MIN_COL_WIDTH",
+        "MIN_ROW_HEIGHT",
+        "MIN_ZOOM",
+        "MOUSE_HIT_AREA_SIZE",
+        "OUTLINE_BUTTON_SIZE",
+        "OUTLINE_LEVEL_HEIGHT",
+        "OUTLINE_LEVEL_WIDTH",
+        "ROW_HEADER_WIDTH",
+        "RenderPriority",
+        "SCROLL_BAR_WIDTH",
+        "TOUCH_HIT_AREA_SIZE",
+        "ZOOM_PRESETS",
+        "ZOOM_STEP"
+      ],
+      "sourceOfTruth": "contracts/src/rendering",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog-sdk/types-document/document/search",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/search"],
+      "runtimeExports": ["DEFAULT_SEARCH_OPTIONS"],
+      "sourceOfTruth": "contracts/src/document/search.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    },
+    {
+      "source": "@mog-sdk/types-document/security",
+      "classification": "public contract runtime value",
+      "ownership": "contracts-owned",
+      "publicModules": ["@mog-sdk/contracts/security"],
+      "runtimeExports": ["ACCESS_LEVEL_ORDER"],
+      "sourceOfTruth": "contracts/src/security/index.ts",
+      "verificationFixture": "fixtures/external/positive/contracts-runtime-values"
+    }
+  ]
+}

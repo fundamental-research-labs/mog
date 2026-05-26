@@ -1,0 +1,26 @@
+{
+  "name": "@mog-sdk/linux-x64-musl",
+  "version": "0.6.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "main": "compute-core-napi.node",
+  "files": [
+    "compute-core-napi.node"
+  ],
+  "description": "Native binary for @mog-sdk/node (Linux x64, musl)",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal"
+  }
+}

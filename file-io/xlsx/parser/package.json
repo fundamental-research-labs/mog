@@ -1,0 +1,37 @@
+{
+  "name": "@mog/xlsx-parser-wasm",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "private": true,
+  "description": "Rust WASM XLSX parser — pure Rust crate, build scripts only",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lyfegame/shortcut.git",
+    "directory": "file-io/xlsx/parser"
+  },
+  "type": "module",
+  "main": "./pkg/xlsx_parser.js",
+  "module": "./pkg/xlsx_parser.js",
+  "types": "./pkg/xlsx_parser.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "wasm-pack build --target web --out-dir pkg --release && cp scripts/pkg-gitignore-template pkg/.gitignore",
+    "build:dev": "wasm-pack build --target web --out-dir pkg --dev && cp scripts/pkg-gitignore-template pkg/.gitignore",
+    "build:bundler": "wasm-pack build --target bundler --out-dir pkg --release && cp scripts/pkg-gitignore-template pkg/.gitignore",
+    "build:nodejs": "wasm-pack build --target nodejs --out-dir pkg --release && cp scripts/pkg-gitignore-template pkg/.gitignore",
+    "test": "cargo test",
+    "test:wasm": "wasm-pack test --headless --chrome",
+    "clean": "rm -rf pkg target",
+    "lint": "cargo clippy -- -D warnings",
+    "fmt": "cargo fmt",
+    "fmt:check": "cargo fmt -- --check",
+    "bench": "cargo bench",
+    "corpus:crashtest": "sh -c 'test -n \"$MOG_XLSX_CORPUS_DIR\" || { echo \"Set MOG_XLSX_CORPUS_DIR to the XLSX corpus directory\" >&2; exit 1; }; cargo run --profile crashtest --bin xlsx-crashtest --features cli -- \"$MOG_XLSX_CORPUS_DIR\"'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

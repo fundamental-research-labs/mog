@@ -1,0 +1,12 @@
+[package]
+name = "finite-at-boundary"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Marker proc-attribute for fields that legitimately carry a bare f64 inside a #[derive(Serialize/Deserialize)] type. Read by the no_bare_f64_at_boundary walker tests in the type crates."
+
+[lib]
+proc-macro = true

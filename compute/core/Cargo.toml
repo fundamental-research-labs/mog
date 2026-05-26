@@ -1,0 +1,213 @@
+[package]
+name = "compute-core"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native Rust compute engine for spreadsheet formula evaluation"
+
+[features]
+default = ["native"]
+# Native target (desktop via Tauri): includes threading and system clock support
+native = ["dep:rayon", "dep:parking_lot", "dep:dashmap"]
+# WASM target is implicit via #[cfg(target_arch = "wasm32")] — no explicit feature needed
+# Full Power Query CRUD — gate unwired functions only
+power-query-full = []
+# Enable tracing spans in eval hot paths (zero overhead when off)
+profile = []
+# Enable execution journal (structured runtime path tracing for agent debugging)
+journal = []
+# Expose internal modules (mirror, scheduler, import, graph, collab, document, fill)
+# for dev tools like formula-eval. External consumers should NOT enable this.
+__internal = []
+# Enable double-double precision for intermediate arithmetic — carries (hi, lo) error
+# term in FiniteF64, giving ~31 decimal digits to eliminate catastrophic cancellation.
+dd-precision = ["value-types/dd-precision"]
+# Heavy tests that depend on an external real-file XLSX corpus. Set
+# `MOG_XLSX_CORPUS_DIR` when enabling this feature.
+# Gated so the default `cargo test -p compute-core` run stays fast.
+corpus-tests = []
+# Benchmark-shaped tests that exercise production compute paths at large scale.
+# These are correctness-preserving perf lanes, not default coding-agent gates.
+perf-tests = []
+# Exhaustive aggregate/audit runners that duplicate named correctness tests to
+# print matrix summaries. Keep them opt-in so the default gate is correctness-only.
+audit-tests = []
+
+[dependencies]
+# Domain-level shared types
+domain-types = { path = "../../domain-types" }
+
+# Foundation types (CellValue, CellError, CellId, etc.)
+formula-types = { path = "crates/types/formula-types" }
+
+# Value-level primitives (CellValue, DenseColumn, DenseBoolMask, etc.)
+value-types = { path = "crates/types/value-types" }
+
+# Cell identity and grid addressing (CellId, SheetId, CellPos, RangePos, etc.)
+cell-types = { path = "crates/types/cell-types" }
+workbook-types = { path = "crates/types/workbook-types" }
+
+# Formula parser (AST, lexer, expression grammar, normalize)
+compute-parser = { path = "crates/compute-parser" }
+
+# Pivot table engine
+compute-pivot = { path = "crates/compute-pivot" }
+
+# Table engine (filters, sort, slicers, structured refs, styles)
+compute-table = { path = "crates/compute-table" }
+
+# Function library (512+ Excel-compatible pure functions)
+compute-functions = { path = "crates/compute-functions", features = ["__internal"] }
+
+# Number format engine (locale, color, currency patterns)
+compute-formats = { path = "crates/compute-formats" }
+
+# Schema engine (type validation, inference, coercion, editor resolution)
+compute-schema = { path = "crates/compute-schema" }
+
+# Chart data transforms (statistics, regression, density, binning, stacking)
+compute-charts = { path = "crates/compute-charts" }
+
+# Statistical functions (aggregation, regression, descriptive stats)
+compute-stats = { path = "crates/compute-stats" }
+
+# Autofill engine (pattern detection, series generation, formula ref adjustment)
+compute-fill = { path = "crates/compute-fill" }
+
+# Conditional formatting evaluation engine
+compute-cf = { path = "crates/compute-cf" }
+
+# Dependency graph (cycle detection, topo sort, range-aware invalidation)
+compute-graph = { path = "crates/compute-graph" }
+
+# Snapshot types (IPC initialization and incremental updates)
+snapshot-types = { path = "crates/types/snapshot-types" }
+
+# Numerical optimization (root finding, NM, BFGS, L-BFGS-B, DE, auto dispatch)
+compute-solver = { path = "crates/compute-solver" }
+
+# Collaborative sync protocol (Yrs state vectors, diffs, updates)
+compute-collab = { path = "crates/compute-collab" }
+
+# CRDT document layer (schema, cell serde, hex, undo, observe, identity)
+compute-document = { path = "crates/compute-document" }
+
+# Policy types and access-control engine (structural-op privacy rebuild)
+compute-security = { path = "crates/compute-security" }
+
+# XLSX parser and API (direct Rust types for import — no serde roundtrip)
+xlsx-api = { path = "../../file-io/xlsx-api" }
+xlsx-parser = { path = "../../file-io/xlsx/parser" }
+ooxml-types = { path = "../../file-io/ooxml/types" }
+
+# CSV parser (bytes → ParseOutput; reuses XLSX hydration path)
+csv-parser = { path = "../../file-io/csv-parser" }
+
+# Wire format types and binary serialization (viewport/mutation protocols)
+compute-wire = { path = "crates/compute-wire" }
+
+# Spatial layout index (Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping)
+compute-layout-index = { path = "crates/compute-layout-index" }
+
+# Text measurement engine (rustybuzz-based text shaping for autofit, PDF export)
+compute-text-measurement = { path = "crates/compute-text-measurement" }
+
+# Headless sheet screenshot renderer (tiny-skia rasterizer → PNG)
+compute-screenshot = { path = "crates/compute-screenshot" }
+
+# Bridge code generation (proc macros for WASM/Tauri/TS binding generation)
+bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
+bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
+
+# Serialization (IPC boundary)
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = "1"
+
+# UUID handling (CellId/SheetId string ↔ u128 at IPC boundary)
+uuid = { version = "1", features = ["v4", "v5"] }
+
+# Date/time functions (clock feature needed for Utc::now() on native only)
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Zero-cost tracing instrumentation (single atomic load per span when no subscriber)
+tracing = { workspace = true }
+
+# Data-parallel recalculation (native only — no threads in WASM)
+rayon = { version = "1.10", optional = true }
+
+# Fast non-cryptographic HashMap (FxHashMap — ~5-10ns lookup with u128 keys)
+rustc-hash = "2"
+
+# Bit-vector for null bitmaps in dense columnar store
+bitvec = "1"
+
+# Compile-time perfect hash function for function registry
+phf = { version = "0.11", features = ["macros"] }
+
+# High-performance float parsing (used by scheduler/ast_helpers)
+fast-float = "0.2"
+
+# Unicode NFC normalization for sheet name keying (Hebrew, Arabic, Korean, etc.)
+unicode-normalization = "0.1"
+
+# Regex engine (structured ref patterns, formula updater, grouping)
+regex = "1"
+
+# Grow the call stack on demand (prevents stack overflow in deep dependency chains)
+stacker = "0.1"
+
+# RwLock replacement — no poisoning on panic, faster uncontended path (native only)
+parking_lot = { version = "0.12", optional = true }
+
+
+# Small inline-optimized Vec (1 element inline, heap for 2+) — lookup index row lists
+smallvec = "1"
+
+# Concurrent hash map for lock-free parallel lookup index building (native only — pulls in parking_lot_core which panics on WASM)
+dashmap = { version = "6", optional = true }
+
+# Hashable f64 wrapper for exact-match lookup indexes
+ordered-float = "4"
+
+# Yrs (Yjs CRDT port) — collaborative document storage
+yrs = { workspace = true }
+
+# LRU cache — bounds `AccessMatrixCache` (R2.2) at 64 entries so pathological
+# (principal × sheet × version) combinatorics can't blow up memory.
+lru = "0.12"
+
+# ArcSwap — `SecurityState` (R2.3) swaps `PolicyEngine` pointers without
+# locking readers, and `ComputeService` swaps the active principal the
+# same way.
+arc-swap = "1"
+
+# WASM-specific dependency overrides:
+# - getrandom needs "js" feature for random number source (used by rand/nalgebra/statrs)
+# - uuid needs "js" feature for v4 UUID generation
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+uuid = { version = "1", features = ["v4", "js"] }
+js-sys = "0.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
+
+[[bench]]
+name = "parser_bench"
+harness = false
+
+[[bench]]
+name = "eval_bench"
+harness = false
+
+[[bench]]
+name = "range_baseline_bench"
+harness = false

@@ -1,0 +1,23 @@
+{
+  "name": "@mog-sdk/win32-x64-msvc",
+  "version": "0.6.0",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "compute-core-napi.node",
+  "files": [
+    "compute-core-napi.node"
+  ],
+  "description": "Native binary for @mog-sdk/node (Windows x64, MSVC)",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal"
+  }
+}

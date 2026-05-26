@@ -1,0 +1,20 @@
+[package]
+name = "compute-schema"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Schema engine — type validation, inference, coercion, and editor resolution for spreadsheet cells"
+
+[dependencies]
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+domain-types = { path = "../../../../domain-types", default-features = false }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+regex = "1"
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,1293 @@
+/**
+ * Chart Action Handlers Tests
+ *
+ * Unit tests for chart action handlers in the Unified Action System.
+ * Tests handler behavior, payload validation, and integration with
+ * the unified Workbook/Worksheet API and XState actors.
+ *
+ * Test categories:
+ * - Chart editing actions (EDIT_CHART, EDIT_CHART_TITLE, CHANGE_CHART_TYPE)
+ * - Chart clipboard actions (COPY_CHART, CUT_CHART, PASTE_CHART, DUPLICATE_CHART)
+ * - Chart z-order actions (BRING_TO_FRONT, SEND_TO_BACK, BRING_FORWARD, SEND_BACKWARD)
+ * - Chart selection actions (SELECT_CHART, DESELECT_CHART, etc.)
+ * - Chart navigation actions (CYCLE_NEXT_CHART, CYCLE_PREVIOUS_CHART)
+ * - Chart nudge actions (NUDGE_CHART_UP/DOWN/LEFT/RIGHT)
+ * - Dialog actions (OPEN_SELECT_DATA_DIALOG, etc.)
+ *
+ */
+
+import { jest } from '@jest/globals';
+
+import type { SerializedChart } from '@mog/charts';
+import type { ActionDependencies } from '@mog-sdk/contracts/actions';
+import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
+
+import * as ChartHandlers from '../charts';
+import { createMockFileHandle, createMockPlatform, createMockShellService } from './test-helpers';
+
+// =============================================================================
+// TEST UTILITIES
+// =============================================================================
+
+/**
+ * Create minimal mock action dependencies for testing.
+ */
+function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependencies {
+  const sheetsRoot = new Map<string, Map<string, unknown>>();
+  const sheetId = makeSheetId('sheet1');
+
+  // Create test sheet using plain Maps
+  const sheetContainer = new Map<string, unknown>();
+  sheetContainer.set('charts', new Map<string, SerializedChart>());
+  sheetContainer.set('cells', new Map<string, unknown>());
+  sheetContainer.set('properties', new Map<string, unknown>());
+  sheetContainer.set('grid', new Map<string, string>());
+  sheetContainer.set('meta', new Map<string, unknown>());
+  sheetContainer.set('rowHeights', new Map<string, number>());
+  sheetContainer.set('colWidths', new Map<string, number>());
+  sheetContainer.set('merges', new Map<string, unknown>());
+  sheetsRoot.set(sheetId, sheetContainer);
+
+  // Create mock worksheet for unified Workbook API
+  const mockWorksheet = {
+    getName: jest.fn().mockResolvedValue('Sheet1'),
+    getSheetId: jest.fn().mockReturnValue(sheetId),
+    getIndex: jest.fn().mockReturnValue(0),
+    // Returns the input range unchanged by default (single cell stays single cell).
+    // Tests that exercise auto-expansion can override this via overrides.
+    getCurrentRegion: jest.fn().mockImplementation(async (row: number, col: number) => ({
+      startRow: row,
+      startCol: col,
+      endRow: row,
+      endCol: col,
+    })),
+    // Namespaced charts API (current source uses ws.charts.*)
+    charts: {
+      get: jest.fn().mockResolvedValue(null),
+      list: jest.fn().mockResolvedValue([]),
+      add: jest.fn().mockResolvedValue('new-chart-id'),
+      update: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined),
+    },
+    // Legacy flat aliases for backward-compatible test assertions
+    getChart: jest.fn().mockResolvedValue(null),
+    listCharts: jest.fn().mockResolvedValue([]),
+    addChart: jest.fn().mockResolvedValue('new-chart-id'),
+    updateChart: jest.fn().mockResolvedValue(undefined),
+    removeChart: jest.fn().mockResolvedValue(undefined),
+  };
+
+  // Create mock workbook
+  const mockWorkbook = {
+    getActiveSheet: jest.fn().mockReturnValue(mockWorksheet),
+    getSheet: jest.fn().mockReturnValue(mockWorksheet),
+    getSheetById: jest.fn().mockReturnValue(mockWorksheet),
+    addSheet: jest.fn().mockResolvedValue(mockWorksheet),
+    getSheetCount: jest.fn().mockReturnValue(1),
+    getSheetNames: jest.fn().mockReturnValue(['Sheet1']),
+    activeSheet: mockWorksheet,
+    sheets: {
+      add: jest.fn().mockResolvedValue(mockWorksheet),
+    },
+  };
+
+  // Create mock ctx
+  const mockCtx = {
+    doc: {} as any,
+    refs: {
+      doc: {} as any,
+    },
+    eventBus: {
+      emit: () => {},
+      on: () => () => {},
+      off: () => {},
+    },
+  };
+
+  // Create mock UIStore
+  const mockUIStore = {
+    getState: () => ({
+      activeSheetId: sheetId,
+      selectDataDialog: {
+        isOpen: false,
+        chartId: null,
+        sheetId: null,
+      },
+      insertChartWizardDialog: {
+        isOpen: false,
+        chartType: null,
+        variantId: null,
+        dataRange: '',
+      },
+      chartClipboard: {
+        copiedChart: null,
+        cutChartId: null,
+        isCut: false,
+      },
+      openSelectDataDialog: jest.fn(),
+      closeSelectDataDialog: jest.fn(),
+      openInsertChartWizardDialog: jest.fn(),
+      closeInsertChartWizardDialog: jest.fn(),
+      setChartWizardError: jest.fn(),
+      setActiveSheetId: jest.fn(),
+      setActiveSheet: jest.fn(),
+    }),
+  };
+
+  // Create mock chart commands with spies
+  const mockChartCommands = {
+    select: jest.fn(),
+    deselect: jest.fn(),
+    deselectAll: jest.fn(),
+    addToSelection: jest.fn(),
+    toggleSelection: jest.fn(),
+    startEdit: jest.fn(),
+    stopEditing: jest.fn(),
+    startTitleEdit: jest.fn(),
+    startSelectingData: jest.fn(),
+    stopSelectingData: jest.fn(),
+    startResize: jest.fn(),
+    updateResize: jest.fn(),
+    endResize: jest.fn(),
+    startDrag: jest.fn(),
+    updateDrag: jest.fn(),
+    endDrag: jest.fn(),
+  };
+
+  // Create mock accessors
+  const mockAccessors = {
+    selection: {
+      getActiveCell: () => ({ row: 0, col: 0 }),
+      getRanges: () => [{ startRow: 0, startCol: 0, endRow: 5, endCol: 3 }],
+      getActiveRange: () => ({ startRow: 0, startCol: 0, endRow: 5, endCol: 3 }),
+      getDataBoundedRanges: () => [{ startRow: 0, startCol: 0, endRow: 5, endCol: 3 }],
+      getSheetId: () => null,
+      getFillHandleState: () => null,
+      getDragCellsState: () => null,
+      getHeaderResizeState: () => null,
+      getFormulaRangeState: () => null,
+      isIdle: () => true,
+      isSelecting: () => false,
+      isSelectingRangeForFormula: () => false,
+      isResizingHeader: () => false,
+      isDraggingFillHandle: () => false,
+      isDraggingCells: () => false,
+    },
+    editor: {
+      getValue: () => '',
+      getCursorPosition: () => 0,
+      getSheetId: () => null,
+      getCell: () => null,
+      getResolvedFormulaRanges: () => [],
+      getActiveFormulaRange: () => null,
+      getCommitType: () => null,
+      isInactive: () => true,
+      isEditing: () => false,
+      isFormulaEditing: () => false,
+      isEnterMode: () => false,
+      isEditMode: () => false,
+      isImeComposing: () => false,
+      isCommitting: () => false,
+    },
+    clipboard: {
+      hasData: () => false,
+      getData: () => null,
+      getSourceRange: () => null,
+      getSourceSheetId: () => null,
+      getOperation: () => null,
+      getCellCount: () => 0,
+      isIdle: () => true,
+      hasCutData: () => false,
+      hasCopyData: () => false,
+    },
+    chart: {
+      getSelectedIds: () => [],
+      getSelectedCount: () => 0,
+      getSelectedChartId: () => null,
+      isChartSelected: () => false,
+      hasSelection: () => false,
+      isEditing: () => false,
+      getEditingChartId: () => null,
+      isSelectingData: () => false,
+      isResizing: () => false,
+      isDragging: () => false,
+      isIdle: () => true,
+      getResizeState: () => null,
+      getDragState: () => null,
+    },
+    object: {
+      getSelectedIds: () => [],
+      getFirstSelectedId: () => null,
+      getSelectedTypes: () => [],
+      hasSelection: () => false,
+      getSelectedCount: () => 0,
+      isIdle: () => true,
+      isDragging: () => false,
+      isResizing: () => false,
+      isEditingText: () => false,
+      isHovering: () => false,
+      getHoveredId: () => null,
+      getDragState: () => null,
+      getResizeState: () => null,
+    },
+  };
+
+  // Create mock commands
+  const mockCommands = {
+    selection: {
+      setSelection: jest.fn(),
+      setActiveCell: jest.fn(),
+      setActiveCellInRange: jest.fn(),
+      extendSelection: jest.fn(),
+      addRange: jest.fn(),
+      clear: jest.fn(),
+      keyArrow: jest.fn(),
+      keyArrowExtend: jest.fn(),
+      keyEdge: jest.fn(),
+      keyEdgeExtend: jest.fn(),
+      keyHome: jest.fn(),
+      keyHomeExtend: jest.fn(),
+      keyEnd: jest.fn(),
+      keyEndExtend: jest.fn(),
+      keyTab: jest.fn(),
+      keyEnter: jest.fn(),
+      keyPage: jest.fn(),
+      keyPageExtend: jest.fn(),
+      selectAll: jest.fn(),
+      selectCurrentRegion: jest.fn(),
+      selectEntireRow: jest.fn(),
+      selectEntireColumn: jest.fn(),
+      startFormulaRangeMode: jest.fn(),
+      exitFormulaRangeMode: jest.fn(),
+      updateFormulaRange: jest.fn(),
+      commitFormulaRange: jest.fn(),
+      startHeaderResize: jest.fn(),
+      updateHeaderResize: jest.fn(),
+      endHeaderResize: jest.fn(),
+      startFillHandle: jest.fn(),
+      updateFillHandle: jest.fn(),
+      endFillHandle: jest.fn(),
+      startDragCells: jest.fn(),
+      updateDragCells: jest.fn(),
+      endDragCells: jest.fn(),
+      // mode mutations go through commands.selection.setMode;
+      // legacy setExtendMode / setAddMode mocks were retired with the UIStore slice.
+    },
+    editor: {
+      startEditing: jest.fn(),
+      input: jest.fn(),
+      commit: jest.fn(),
+      cancel: jest.fn(),
+      insertNewline: jest.fn(),
+      toggleEditMode: jest.fn(),
+      cycleReference: jest.fn(),
+      startImeComposition: jest.fn(),
+      updateImeComposition: jest.fn(),
+      endImeComposition: jest.fn(),
+      setFormulaRanges: jest.fn(),
+      selectFormulaRange: jest.fn(),
+      clearActiveFormulaRange: jest.fn(),
+    },
+    clipboard: {
+      copy: jest.fn(),
+      cut: jest.fn(),
+      paste: jest.fn(),
+      pasteSpecial: jest.fn(),
+      clear: jest.fn(),
+    },
+    chart: mockChartCommands,
+    object: {
+      select: jest.fn(),
+      deselect: jest.fn(),
+      addToSelection: jest.fn(),
+      toggleSelection: jest.fn(),
+      startDrag: jest.fn(),
+      updateDrag: jest.fn(),
+      endDrag: jest.fn(),
+      startResize: jest.fn(),
+      updateResize: jest.fn(),
+      endResize: jest.fn(),
+      startTextEdit: jest.fn(),
+      endTextEdit: jest.fn(),
+      setHover: jest.fn(),
+      clearHover: jest.fn(),
+      nudge: jest.fn(),
+    },
+  };
+
+  return {
+    ctx: mockCtx,
+    workbook: mockWorkbook,
+    uiStore: mockUIStore,
+    accessors: mockAccessors,
+    commands: mockCommands,
+    getActiveSheetId: () => sheetId,
+    onUIAction: jest.fn(),
+    // required deps. rewrites the four
+    // `expect(deps.onUIAction).toHaveBeenCalledWith(...)` assertions for
+    // SAVE_CHART_AS_IMAGE / ADD_DATA_LABELS / ADD_TRENDLINE / TOGGLE_GRIDLINES
+    // to assert on platform.dialogs / worksheet API instead.
+    platform: createMockPlatform(),
+    shellService: createMockShellService(),
+    ...overrides,
+  } as unknown as ActionDependencies;
+}
+
+// =============================================================================
+// CHART EDITING ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Editing Actions', () => {
+  describe('EDIT_CHART', () => {
+    it('should return handled when chartId is provided', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.EDIT_CHART(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(true);
+    });
+
+    it('should call chart commands to select and start editing', () => {
+      const deps = createMockDeps();
+      ChartHandlers.EDIT_CHART(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.chart.startEdit).toHaveBeenCalled();
+    });
+
+    it('should return not handled when chartId is missing', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.EDIT_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Missing chartId in payload');
+    });
+
+    it('should return not handled when payload is undefined', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.EDIT_CHART(deps, undefined);
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('EDIT_CHART_TITLE', () => {
+    it('should call chart commands to select and start title editing', () => {
+      const deps = createMockDeps();
+      ChartHandlers.EDIT_CHART_TITLE(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.chart.startTitleEdit).toHaveBeenCalledWith('');
+    });
+
+    it('should return not handled when chartId is missing', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.EDIT_CHART_TITLE(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('CHANGE_CHART_TYPE', () => {
+    it('should use unified Worksheet API to change chart type', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CHANGE_CHART_TYPE(deps, {
+        chartId: 'chart-123',
+        chartType: 'bar',
+      });
+
+      // Handler uses ws.updateChart via unified API
+      expect(result.handled).toBe(true);
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CHANGE_CHART_TYPE(deps, { chartType: 'bar' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Missing chartId in payload');
+    });
+
+    it('should return not handled when chartType is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CHANGE_CHART_TYPE(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Missing chartType in payload');
+    });
+  });
+});
+
+// =============================================================================
+// CHART CLIPBOARD ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Clipboard Actions', () => {
+  describe('COPY_CHART', () => {
+    it('should read chart via unified Worksheet API', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.COPY_CHART(deps, { chartId: 'chart-123' });
+
+      // Handler reads chart via ws.getChart (unified API)
+      // Mock returns null, so handler returns chart not found
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.COPY_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('CUT_CHART', () => {
+    it('should read chart via unified Worksheet API', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CUT_CHART(deps, { chartId: 'chart-123' });
+
+      // Handler reads chart via ws.getChart (unified API)
+      // Mock returns null, so handler returns chart not found
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CUT_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('PASTE_CHART', () => {
+    it('should return disabled when clipboard is empty', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.PASTE_CHART(deps);
+
+      expect(result.handled).toBe(false);
+      expect(result.reason).toBe('disabled');
+    });
+  });
+
+  describe('DUPLICATE_CHART', () => {
+    it('should use Mutations layer (not onUIAction) to duplicate chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.DUPLICATE_CHART(deps, { chartId: 'chart-123' });
+
+      // Handler uses Mutations layer, not onUIAction (correct architecture)
+      // In unit tests without full Yjs setup, this will fail with chart not found
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.DUPLICATE_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('DELETE_CHART', () => {
+    it('should use unified Worksheet API to delete chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.DELETE_CHART(deps, { chartId: 'chart-123' });
+
+      // Handler uses ws.removeChart via unified API
+      expect(result.handled).toBe(true);
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.DELETE_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
+// CHART SELECTION ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Selection Actions', () => {
+  describe('SELECT_CHART', () => {
+    it('should call chart.select command', () => {
+      const deps = createMockDeps();
+      ChartHandlers.SELECT_CHART(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+    });
+
+    it('should return not handled when chartId is missing', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.SELECT_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('DESELECT_CHART', () => {
+    it('should call chart.deselect command', () => {
+      const deps = createMockDeps();
+      ChartHandlers.DESELECT_CHART(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.deselect).toHaveBeenCalled();
+    });
+  });
+
+  describe('DESELECT_ALL_CHARTS', () => {
+    it('should call chart.deselectAll command', () => {
+      const deps = createMockDeps();
+      ChartHandlers.DESELECT_ALL_CHARTS(deps);
+
+      expect(deps.commands.chart.deselectAll).toHaveBeenCalled();
+    });
+  });
+
+  describe('ADD_CHART_TO_SELECTION', () => {
+    it('should call chart.addToSelection command', () => {
+      const deps = createMockDeps();
+      ChartHandlers.ADD_CHART_TO_SELECTION(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.addToSelection).toHaveBeenCalledWith('chart-123');
+    });
+  });
+
+  describe('TOGGLE_CHART_SELECTION', () => {
+    it('should call chart.toggleSelection command', () => {
+      const deps = createMockDeps();
+      ChartHandlers.TOGGLE_CHART_SELECTION(deps, { chartId: 'chart-123' });
+
+      expect(deps.commands.chart.toggleSelection).toHaveBeenCalledWith('chart-123');
+    });
+  });
+});
+
+// =============================================================================
+// CHART Z-ORDER ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Z-Order Actions', () => {
+  describe('BRING_CHART_TO_FRONT', () => {
+    it('should use Worksheet API for z-order operations', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.BRING_CHART_TO_FRONT(deps, { chartId: 'chart-123' });
+
+      // Handler delegates to ws.charts.update() via Worksheet API
+      expect(result.handled).toBe(true);
+    });
+
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.BRING_CHART_TO_FRONT(deps, {});
+
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('SEND_CHART_TO_BACK', () => {
+    it('should use Worksheet API for z-order operations', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.SEND_CHART_TO_BACK(deps, { chartId: 'chart-123' });
+
+      // Handler delegates to ws.charts.update() via Worksheet API
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('BRING_CHART_FORWARD', () => {
+    it('should use Worksheet API for z-order operations', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.BRING_CHART_FORWARD(deps, { chartId: 'chart-123' });
+
+      // Handler delegates to ws.charts.update() via Worksheet API
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('SEND_CHART_BACKWARD', () => {
+    it('should use Worksheet API for z-order operations', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.SEND_CHART_BACKWARD(deps, { chartId: 'chart-123' });
+
+      // Handler delegates to ws.charts.update() via Worksheet API
+      expect(result.handled).toBe(true);
+    });
+  });
+});
+
+// =============================================================================
+// CHART NUDGE ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Nudge Actions', () => {
+  describe('NUDGE_CHART_UP', () => {
+    it('should use Mutations layer (not onUIAction) to move chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.NUDGE_CHART_UP(deps, { chartId: 'chart-123' });
+
+      // Handler uses Mutations layer, not onUIAction (correct architecture)
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should support large nudge', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.NUDGE_CHART_UP(deps, {
+        chartId: 'chart-123',
+        large: true,
+      });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+  });
+
+  describe('NUDGE_CHART_DOWN', () => {
+    it('should use Mutations layer (not onUIAction) to move chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.NUDGE_CHART_DOWN(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+  });
+
+  describe('NUDGE_CHART_LEFT', () => {
+    it('should use Mutations layer (not onUIAction) to move chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.NUDGE_CHART_LEFT(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+  });
+
+  describe('NUDGE_CHART_RIGHT', () => {
+    it('should use Mutations layer (not onUIAction) to move chart', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.NUDGE_CHART_RIGHT(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+  });
+
+  it('should return not handled when chartId is missing', async () => {
+    const deps = createMockDeps();
+    const result = await ChartHandlers.NUDGE_CHART_UP(deps, {});
+
+    expect(result.handled).toBe(false);
+    expect(result.error).toBe('Missing chartId in payload');
+  });
+});
+
+// =============================================================================
+// CHART NAVIGATION ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Navigation Actions', () => {
+  describe('CYCLE_NEXT_CHART', () => {
+    it('should return disabled when no charts exist', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CYCLE_NEXT_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+      expect(result.reason).toBe('disabled');
+    });
+  });
+
+  describe('CYCLE_PREVIOUS_CHART', () => {
+    it('should return disabled when no charts exist', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.CYCLE_PREVIOUS_CHART(deps, {});
+
+      expect(result.handled).toBe(false);
+      expect(result.reason).toBe('disabled');
+    });
+  });
+});
+
+// =============================================================================
+// CHART CREATION ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Creation Actions', () => {
+  describe('CREATE_CHART_SHEET', () => {
+    it('should use Mutations layer (not onUIAction) to create chart sheet', async () => {
+      const deps = createMockDeps();
+
+      // Handler uses Mutations layer, not onUIAction (correct architecture)
+      // In unit tests without full Yjs setup, creation may throw or fail
+      // The handler is now async - verify it doesn't reject due to missing onUIAction
+      await expect(ChartHandlers.CREATE_CHART_SHEET(deps)).resolves.toBeDefined();
+    });
+  });
+
+  describe('CREATE_EMBEDDED_CHART', () => {
+    it('should use unified Worksheet API to create embedded chart', async () => {
+      const deps = createMockDeps();
+
+      // Handler uses ws.addChart via unified API
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+    });
+  });
+});
+
+// =============================================================================
+// CHART DIALOG ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Dialog Actions', () => {
+  describe('OPEN_SELECT_DATA_DIALOG', () => {
+    it('should return not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.OPEN_SELECT_DATA_DIALOG(deps, {});
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Missing chartId in payload');
+    });
+  });
+
+  describe('CLOSE_SELECT_DATA_DIALOG', () => {
+    it('should call closeSelectDataDialog on uiStore', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.CLOSE_SELECT_DATA_DIALOG(deps);
+
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('OPEN_INSERT_CHART_WIZARD_DIALOG', () => {
+    it('should return handled', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('CLOSE_INSERT_CHART_WIZARD_DIALOG', () => {
+    it('should return handled', () => {
+      const deps = createMockDeps();
+      const result = ChartHandlers.CLOSE_INSERT_CHART_WIZARD_DIALOG(deps);
+
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('INSERT_CHART_FROM_WIZARD', () => {
+    it('normalizes wizard draft state before creating the chart', async () => {
+      const deps = createMockDeps();
+      const closeInsertChartWizardDialog = jest.fn();
+      const setChartWizardError = jest.fn();
+
+      (deps.uiStore as any).getState = () => ({
+        activeSheetId: deps.getActiveSheetId(),
+        insertChartWizardDialog: {
+          isOpen: true,
+          chartType: 'column',
+          variantId: 'clustered',
+          dataRange: 'A1:B5',
+          seriesInRows: true,
+          hasHeaderRow: true,
+          hasLabelColumn: true,
+          title: 'Sales',
+          xAxis: { title: 'Month', showGridlines: false },
+          yAxis: { title: 'Revenue', showGridlines: true },
+          legend: { show: false, position: 'right' },
+          showDataLabels: true,
+          error: null,
+        },
+        closeInsertChartWizardDialog,
+        setChartWizardError,
+      });
+
+      const result = await ChartHandlers.INSERT_CHART_FROM_WIZARD(deps);
+
+      expect(result.handled).toBe(true);
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.add).toHaveBeenCalledTimes(1);
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+
+      expect(addedConfig.legend).toEqual({
+        show: false,
+        position: 'right',
+        visible: false,
+      });
+      expect(addedConfig.axis.categoryAxis).toMatchObject({
+        type: 'category',
+        axisType: 'category',
+        title: 'Month',
+        gridLines: false,
+        visible: true,
+      });
+      expect(addedConfig.axis.valueAxis).toMatchObject({
+        type: 'value',
+        axisType: 'value',
+        title: 'Revenue',
+        gridLines: true,
+        visible: true,
+      });
+      expect(addedConfig.axis.xAxis).toEqual(addedConfig.axis.categoryAxis);
+      expect(addedConfig.axis.yAxis).toEqual(addedConfig.axis.valueAxis);
+      expect(addedConfig.dataLabels).toEqual({ show: true });
+      expect(addedConfig).not.toHaveProperty('showDataLabels');
+      expect(addedConfig).not.toHaveProperty('xAxis');
+      expect(addedConfig).not.toHaveProperty('yAxis');
+      expect(closeInsertChartWizardDialog).toHaveBeenCalled();
+      expect(setChartWizardError).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// =============================================================================
+// CHART CONTEXT MENU ACTIONS
+// =============================================================================
+
+describe('Chart Handlers - Context Menu Actions', () => {
+  describe('SAVE_CHART_AS_IMAGE', () => {
+    // handler now renders via `ws.charts.exportImage`
+    // and persists through `platform.dialogs.showSaveDialog` + `handle.write`.
+    // Tests assert on the real path instead of the legacy `onUIAction`.
+
+    function withChartExporter(deps: ActionDependencies, dataUrl: string | null) {
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.exportImage = jest.fn().mockResolvedValue(dataUrl as never);
+    }
+
+    it('renders via ws.charts.exportImage and writes through the platform handle', async () => {
+      const deps = createMockDeps();
+      // 1x1 transparent PNG, base64
+      const png1x1 =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+      withChartExporter(deps, png1x1);
+
+      const handle = createMockFileHandle({ name: 'chart-chart-123.png' });
+      (deps.platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(handle as never);
+
+      const result = await ChartHandlers.SAVE_CHART_AS_IMAGE(deps, {
+        chartId: 'chart-123',
+        format: 'png',
+      });
+
+      expect(result.handled).toBe(true);
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.exportImage).toHaveBeenCalledWith('chart-123', { format: 'png' });
+      expect(deps.platform.dialogs.showSaveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultPath: 'chart-chart-123.png',
+          filters: [{ name: 'PNG', extensions: ['png'] }],
+        }),
+      );
+      expect(handle.write).toHaveBeenCalledTimes(1);
+      // Ensure bytes are non-empty (decoded from the base64 PNG above).
+      const writtenBytes = (handle.write as jest.Mock).mock.calls[0][0] as Uint8Array;
+      expect(writtenBytes).toBeInstanceOf(Uint8Array);
+      expect(writtenBytes.byteLength).toBeGreaterThan(0);
+    });
+
+    it('defaults to png format when none is supplied', async () => {
+      const deps = createMockDeps();
+      withChartExporter(
+        deps,
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+      );
+      (deps.platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(
+        createMockFileHandle() as never,
+      );
+
+      await ChartHandlers.SAVE_CHART_AS_IMAGE(deps, { chartId: 'chart-123' });
+
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.exportImage).toHaveBeenCalledWith('chart-123', { format: 'png' });
+    });
+
+    it('returns notHandled (disabled) when the user cancels the save dialog', async () => {
+      const deps = createMockDeps();
+      withChartExporter(
+        deps,
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+      );
+      (deps.platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(null as never);
+
+      const result = await ChartHandlers.SAVE_CHART_AS_IMAGE(deps, { chartId: 'chart-123' });
+
+      expect(result.handled).toBe(false);
+      expect(result.reason).toBe('disabled');
+    });
+
+    it('returns not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.SAVE_CHART_AS_IMAGE(deps, { format: 'svg' });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Missing chartId in payload');
+    });
+  });
+
+  describe('ADD_DATA_LABELS', () => {
+    it('updates the series via ws.charts.updateSeries with show: true labels', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.updateSeries = jest.fn().mockResolvedValue(undefined as never);
+
+      const result = await ChartHandlers.ADD_DATA_LABELS(deps, {
+        chartId: 'chart-123',
+        seriesIndex: 1,
+      });
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.updateSeries).toHaveBeenCalledWith(
+        'chart-123',
+        1,
+        expect.objectContaining({
+          dataLabels: expect.objectContaining({ show: true }),
+        }),
+      );
+    });
+
+    it('defaults seriesIndex to 0', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.updateSeries = jest.fn().mockResolvedValue(undefined as never);
+
+      await ChartHandlers.ADD_DATA_LABELS(deps, { chartId: 'chart-123' });
+
+      expect(ws.charts.updateSeries).toHaveBeenCalledWith(
+        'chart-123',
+        0,
+        expect.objectContaining({ dataLabels: expect.any(Object) }),
+      );
+    });
+
+    it('returns not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.ADD_DATA_LABELS(deps, {});
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('ADD_TRENDLINE', () => {
+    it('calls ws.charts.addTrendline with a default linear config', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.addTrendline = jest.fn().mockResolvedValue(0 as never);
+
+      const result = await ChartHandlers.ADD_TRENDLINE(deps, {
+        chartId: 'chart-123',
+        seriesIndex: 2,
+      });
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.addTrendline).toHaveBeenCalledWith(
+        'chart-123',
+        2,
+        expect.objectContaining({ type: 'linear', show: true }),
+      );
+    });
+
+    it('defaults seriesIndex to 0', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.addTrendline = jest.fn().mockResolvedValue(0 as never);
+
+      await ChartHandlers.ADD_TRENDLINE(deps, { chartId: 'chart-123' });
+
+      expect(ws.charts.addTrendline).toHaveBeenCalledWith('chart-123', 0, expect.any(Object));
+    });
+
+    it('returns not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.ADD_TRENDLINE(deps, {});
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('TOGGLE_GRIDLINES', () => {
+    it('flips categoryAxis.gridLines for axisType "x"', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.get = jest.fn().mockResolvedValue({
+        id: 'chart-123',
+        axis: { categoryAxis: { visible: true, gridLines: false } },
+      } as never);
+
+      const result = await ChartHandlers.TOGGLE_GRIDLINES(deps, {
+        chartId: 'chart-123',
+        axisType: 'x',
+      });
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.update).toHaveBeenCalledWith(
+        'chart-123',
+        expect.objectContaining({
+          axis: expect.objectContaining({
+            categoryAxis: expect.objectContaining({ gridLines: true }),
+          }),
+        }),
+      );
+    });
+
+    it('flips valueAxis.gridLines for axisType "y" and defaults missing values', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      // No axis on the chart yet — handler should default to gridLines: true
+      // when current value is undefined.
+      ws.charts.get = jest.fn().mockResolvedValue({ id: 'chart-123' } as never);
+
+      const result = await ChartHandlers.TOGGLE_GRIDLINES(deps, {
+        chartId: 'chart-123',
+        axisType: 'y',
+      });
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.update).toHaveBeenCalledWith(
+        'chart-123',
+        expect.objectContaining({
+          axis: expect.objectContaining({
+            valueAxis: expect.objectContaining({ gridLines: true }),
+          }),
+        }),
+      );
+    });
+
+    it('returns chart-not-found error when ws.charts.get returns null', async () => {
+      const deps = createMockDeps();
+      const ws = (deps.workbook as any).activeSheet;
+      ws.charts.get = jest.fn().mockResolvedValue(null as never);
+
+      const result = await ChartHandlers.TOGGLE_GRIDLINES(deps, {
+        chartId: 'chart-123',
+        axisType: 'x',
+      });
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('returns not handled when chartId is missing', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.TOGGLE_GRIDLINES(deps, { axisType: 'x' });
+      expect(result.handled).toBe(false);
+    });
+  });
+
+  describe('RESET_CHART_STYLE', () => {
+    it('should use unified Worksheet API to reset chart style', async () => {
+      const deps = createMockDeps();
+      const result = await ChartHandlers.RESET_CHART_STYLE(deps, { chartId: 'chart-123' });
+
+      // Handler uses ws.updateChart via unified API
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('OPEN_MOVE_CHART_DIALOG', () => {
+    it('should call onUIAction with chart ID', () => {
+      const deps = createMockDeps();
+      ChartHandlers.OPEN_MOVE_CHART_DIALOG(deps, { chartId: 'chart-123' });
+
+      expect(deps.onUIAction).toHaveBeenCalledWith('OPEN_MOVE_CHART_DIALOG:chart-123');
+    });
+  });
+
+  describe('OPEN_FORMAT_CHART_AREA', () => {
+    it('should call onUIAction with chart ID', () => {
+      const deps = createMockDeps();
+      ChartHandlers.OPEN_FORMAT_CHART_AREA(deps, { chartId: 'chart-123' });
+
+      expect(deps.onUIAction).toHaveBeenCalledWith('OPEN_FORMAT_CHART_AREA:chart-123');
+    });
+  });
+});
+
+// =============================================================================
+// CURRENT-REGION AUTO-EXPANSION
+// =============================================================================
+//
+// Excel auto-expands single-cell selections to the surrounding contiguous data
+// block ("current region") before chart creation. These tests verify that the
+// chart handlers call `expandToDataRegion()` on single-cell ranges produced by
+// `getDataBoundedRanges()` and use the expanded range for the chart's
+// dataRange (and as the source for smart positioning).
+//
+
+/**
+ * Build deps with a custom selection range and an optional `getCurrentRegion`
+ * mock that simulates a populated data region around the active cell.
+ */
+function createDepsWithSelection(opts: {
+  ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  expandedRegion?: { startRow: number; startCol: number; endRow: number; endCol: number };
+  insertChartWizardOpenSpy?: jest.Mock;
+}): ActionDependencies {
+  const deps = createMockDeps();
+
+  // Override selection.getDataBoundedRanges
+  (deps.accessors.selection as any).getDataBoundedRanges = () => opts.ranges;
+
+  // Wire getCurrentRegion to return the configured expanded block (or echo input)
+  const ws = (deps.workbook as any).activeSheet;
+  ws.getCurrentRegion = jest.fn().mockImplementation(async (row: number, col: number) => {
+    if (opts.expandedRegion) return opts.expandedRegion;
+    return { startRow: row, startCol: col, endRow: row, endCol: col };
+  });
+
+  // Optionally override openInsertChartWizardDialog with a spy
+  if (opts.insertChartWizardOpenSpy) {
+    (deps.uiStore as any).getState = () => ({
+      activeSheetId: deps.getActiveSheetId(),
+      openInsertChartWizardDialog: opts.insertChartWizardOpenSpy,
+    });
+  }
+
+  return deps;
+}
+
+describe('Chart Handlers - Current-Region Auto-Expansion', () => {
+  describe('CREATE_EMBEDDED_CHART', () => {
+    it('expands single-cell selection in a data region to the full block', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 1, startCol: 1, endRow: 1, endCol: 1 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      // Chart should be created with the expanded A1 range "A1:D10"
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.add).toHaveBeenCalledTimes(1);
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('A1:D10');
+    });
+
+    it('preserves single-cell range when cell is empty (no surrounding data)', async () => {
+      // getCurrentRegion returns same 1x1 cell → expandToDataRegion returns null
+      // → handler keeps original range as-is.
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 4, startCol: 4, endRow: 4, endCol: 4 }],
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.add).toHaveBeenCalledTimes(1);
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      // Original single cell (E5) preserved
+      expect(addedConfig.dataRange).toBe('E5');
+    });
+
+    it('uses multi-cell selection as-is without expansion', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 5, endCol: 3 }],
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const ws = (deps.workbook as any).activeSheet;
+      // getCurrentRegion must NOT be called for multi-row selections
+      expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('A1:D6');
+    });
+
+    it('expands single-row header selection (A1:D1) to the full data block', async () => {
+      // A single-row selection treated as a header row should expand down to
+      // the contiguous data region.
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 3 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.getCurrentRegion).toHaveBeenCalled();
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('A1:D10');
+    });
+  });
+
+  describe('CREATE_CHART_SHEET', () => {
+    it('expands single-cell selection and emits cross-sheet dataRange', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 1, startCol: 1, endRow: 1, endCol: 1 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
+      });
+
+      const result = await ChartHandlers.CREATE_CHART_SHEET(deps);
+      expect(result.handled).toBe(true);
+
+      // The new sheet's `charts.add` is called with a cross-sheet ref using
+      // the source sheet name (default 'Sheet1' from the mock).
+      const newWs = (deps.workbook as any).sheets.add.mock.results[0].value;
+      // sheets.add returns the same mockWorksheet from createMockDeps; charts
+      // are added on it.
+      const addedConfig = (await newWs).charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe("'Sheet1'!A1:D10");
+    });
+
+    it('expands single-row selection for chart-sheet creation', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 3 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
+      });
+
+      const result = await ChartHandlers.CREATE_CHART_SHEET(deps);
+      expect(result.handled).toBe(true);
+
+      const newWs = (deps.workbook as any).sheets.add.mock.results[0].value;
+      const addedConfig = (await newWs).charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe("'Sheet1'!A1:D10");
+    });
+  });
+
+  describe('OPEN_INSERT_CHART_WIZARD_DIALOG', () => {
+    it('opens wizard with expanded A1 range for single-cell selection in data region', async () => {
+      const openSpy = jest.fn();
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 2, startCol: 2, endRow: 2, endCol: 2 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 4, endCol: 2 },
+        insertChartWizardOpenSpy: openSpy,
+      });
+
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+      expect(result.handled).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('A1:C5');
+    });
+
+    it('opens wizard with empty initialDataRange when no selection', async () => {
+      const openSpy = jest.fn();
+      const deps = createDepsWithSelection({
+        ranges: [],
+        insertChartWizardOpenSpy: openSpy,
+      });
+
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+      expect(result.handled).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('');
+    });
+
+    it('expands single-row selection before opening wizard', async () => {
+      const openSpy = jest.fn();
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 3 }],
+        expandedRegion: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
+        insertChartWizardOpenSpy: openSpy,
+      });
+
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+      expect(result.handled).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('A1:D10');
+    });
+  });
+});

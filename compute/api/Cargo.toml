@@ -1,0 +1,62 @@
+[package]
+name = "compute-api"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "Ergonomic Rust API facade for the compute engine — actor-based thread-safe access"
+
+[features]
+default = ["native"]
+native = ["dep:crossbeam-channel", "compute-core/native"]
+
+[dependencies]
+# The compute engine we wrap. `default-features = false` is critical: without it
+# the `native` feature on compute-core (with rayon, parking_lot, and the
+# bulk_set_precedents pre-allocation path) leaks into the WASM build via this
+# transitive dep and triggers heap OOM on real-file fixtures (≥500K formulas).
+# compute-api's own `native` feature re-enables it for native builds.
+compute-core = { path = "../core", default-features = false }
+
+# Type crates (re-exported)
+value-types = { path = "../core/crates/types/value-types" }
+cell-types = { path = "../core/crates/types/cell-types" }
+domain-types = { path = "../../domain-types" }
+formula-types = { path = "../core/crates/types/formula-types" }
+snapshot-types = { path = "../core/crates/types/snapshot-types" }
+
+# Security types — `ComputeService` owns the active principal and the
+# intern pool (R2.4). Principals cross the bridge as tag lists and are
+# canonicalized client-side via `make_principal`.
+compute-security = { path = "../core/crates/compute-security" }
+
+# Wire crate — R4 viewport filter (`filter_viewport_buffer`) is emitted
+# by the gated delegate for `#[bridge::read(scope = "sheet")]` byte
+# returns (viewport binaries).
+compute-wire = { path = "../core/crates/compute-wire" }
+
+# ArcSwap — service-side `active_principal` swap without `&mut self`.
+arc-swap = "1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Bridge delegate — auto-generates delegate methods from compute-core descriptors
+bridge-delegate = { path = "../../infra/rust-bridge/bridge-delegate" }
+
+# Bridge core — proc macros for #[bridge::api], #[bridge::lifecycle], etc.
+bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
+
+# Bridge types — ComputeApiError implements bridge_types::BridgeStructuredError
+# so it produces the same tagged-JSON wire shape as ComputeError when the bridge
+# macro path serializes errors.
+bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
+
+# Actor dispatch (native only — WASM uses Rc<RefCell>)
+crossbeam-channel = { version = "0.5", optional = true }
+
+[dev-dependencies]

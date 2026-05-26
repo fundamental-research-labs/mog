@@ -1,0 +1,97 @@
+{
+  "name": "@mog/types-core",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "development": "./src/core.ts",
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./disposable": {
+      "development": "./src/disposable.ts",
+      "types": "./dist/disposable.d.ts",
+      "import": "./dist/disposable.js"
+    },
+    "./result": {
+      "development": "./src/result.ts",
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js"
+    },
+    "./formatted-text": {
+      "development": "./src/formatted-text.ts",
+      "types": "./dist/formatted-text.d.ts",
+      "import": "./dist/formatted-text.js"
+    },
+    "./cell-identity": {
+      "development": "./src/cells/cell-identity.ts",
+      "types": "./dist/cells/cell-identity.d.ts",
+      "import": "./dist/cells/cell-identity.js"
+    },
+    "./cell-style": {
+      "development": "./src/cells/cell-style.ts",
+      "types": "./dist/cells/cell-style.d.ts",
+      "import": "./dist/cells/cell-style.js"
+    },
+    "./formula-string": {
+      "development": "./src/cells/formula-string.ts",
+      "types": "./dist/cells/formula-string.d.ts",
+      "import": "./dist/cells/formula-string.js"
+    },
+    "./range-ref": {
+      "development": "./src/cells/range-ref.ts",
+      "types": "./dist/cells/range-ref.d.ts",
+      "import": "./dist/cells/range-ref.js"
+    },
+    "./rich-text": {
+      "development": "./src/cells/rich-text.ts",
+      "types": "./dist/cells/rich-text.d.ts",
+      "import": "./dist/cells/rich-text.js"
+    },
+    "./spill": {
+      "development": "./src/cells/spill.ts",
+      "types": "./dist/cells/spill.d.ts",
+      "import": "./dist/cells/spill.js"
+    },
+    "./cells": {
+      "development": "./src/cells/index.ts",
+      "types": "./dist/cells/index.d.ts",
+      "import": "./dist/cells/index.js"
+    },
+    "./a1": {
+      "development": "./src/utils/a1.ts",
+      "types": "./dist/utils/a1.d.ts",
+      "import": "./dist/utils/a1.js"
+    },
+    "./function-registry": {
+      "development": "./src/utils/function-registry.ts",
+      "types": "./dist/utils/function-registry.d.ts",
+      "import": "./dist/utils/function-registry.js"
+    },
+    "./protection": {
+      "development": "./src/document/protection.ts",
+      "types": "./dist/document/protection.d.ts",
+      "import": "./dist/document/protection.js"
+    }
+  },
+  "description": "Foundation cell types (CellValue, CellRange, SheetId, CellFormat), identity model (CellId, IdentityFormula), rich text, formula string branded types, spill projections, Result, Disposable, FormattedText, A1 parse primitives. Tier 0 foundation.",
+  "dependencies": {
+    "@mog/types-culture": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

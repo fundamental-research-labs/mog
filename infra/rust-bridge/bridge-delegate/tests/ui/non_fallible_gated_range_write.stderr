@@ -1,0 +1,16 @@
+error: method bulk_touch: non-fallible scope = "range" writes are not supported under gated = true — range writes must be fallible so per-cell denial can be signalled (non-uniform column policies cannot be enforced on a signature without an error channel)
+  --> tests/ui/non_fallible_gated_range_write.rs:31:13
+   |
+31 |               method write bulk_touch {
+   |               ^^^^^^
+...
+40 | / bridge_delegate::delegate!(
+41 | |     target = StubService,
+42 | |     dispatch = dispatch,
+43 | |     gated = true,
+44 | |     skip_default_imports = true,
+45 | |     crate::__desc_non_fallible_range_write,
+46 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_non_fallible_range_write` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

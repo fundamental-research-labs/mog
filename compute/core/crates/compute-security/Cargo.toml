@@ -1,0 +1,33 @@
+[package]
+name = "compute-security"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Privacy policy types and access-control engine for compute-core"
+
+[dependencies]
+cell-types = { path = "../types/cell-types" }
+value-types = { path = "../types/value-types" }
+# Needed for `RedactMaybe` impls on return types surfaced by the
+# gated delegate macro (cell/range-scope reads on `YrsComputeEngine`
+# return `CellFormat`, `Sparkline`, `CellMergeInfo`, etc.). The
+# redaction logic lives alongside the trait so there's a single
+# place to audit. These crates have no reverse dep on
+# compute-security (checked: R4).
+domain-types = { path = "../../../../domain-types" }
+snapshot-types = { path = "../types/snapshot-types" }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["rc"] }
+serde_json = { workspace = true }
+arc-swap = "1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "engine"
+harness = false

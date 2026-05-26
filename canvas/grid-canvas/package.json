@@ -1,0 +1,39 @@
+{
+  "name": "@mog/grid-canvas",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog/canvas-engine": "workspace:*",
+    "@mog/canvas-overlay": "workspace:*",
+    "@mog/drawing-canvas": "workspace:*",
+    "@mog/env": "workspace:*",
+    "@mog/grid-renderer": "workspace:*",
+    "@mog/spreadsheet-utils": "workspace:*",
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/react": "^19.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  }
+}

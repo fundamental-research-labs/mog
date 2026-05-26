@@ -1,0 +1,40 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 16 16"
+  fill="none"
+>
+  <!-- Shackle (the U-shaped part at top) -->
+  <path
+    d="M5.5 5.5V4C5.5 2.61929 6.61929 1.5 8 1.5C9.38071 1.5 10.5 2.61929 10.5 4V5.5"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    fill="none"
+  />
+  <!-- Lock body (orange rectangle with rounded corners) -->
+  <rect
+    x="3"
+    y="5.5"
+    width="10"
+    height="9"
+    rx="1.5"
+    fill="var(--icon-accent-orange, #ea580c)"
+  />
+  <!-- Keyhole -->
+  <circle
+    cx="8"
+    cy="9.25"
+    r="1.25"
+    fill="white"
+  />
+  <rect
+    x="7.4"
+    y="9.75"
+    width="1.2"
+    height="2.25"
+    rx="0.4"
+    fill="white"
+  />
+</svg>

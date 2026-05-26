@@ -1,0 +1,22 @@
+{
+  "name": "fixture-embed-react",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@mog-sdk/embed": "TARBALL_PATH",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "@vitejs/plugin-react": "^4.2.0"
+  }
+}

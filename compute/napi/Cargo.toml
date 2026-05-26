@@ -1,0 +1,44 @@
+[package]
+name = "compute-core-napi"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+compute-core = { path = "../core" }
+# Ergonomic Rust API facade (re-exported for downstream consumers)
+compute-api = { path = "../api" }
+formula-types = { path = "../core/crates/types/formula-types" }
+cell-types = { path = "../core/crates/types/cell-types" }
+value-types = { path = "../core/crates/types/value-types" }
+snapshot-types = { path = "../core/crates/types/snapshot-types" }
+compute-parser = { path = "../core/crates/compute-parser" }
+compute-formats = { path = "../core/crates/compute-formats" }
+compute-charts = { path = "../core/crates/compute-charts" }
+compute-stats = { path = "../core/crates/compute-stats" }
+compute-table = { path = "../core/crates/compute-table" }
+compute-cf = { path = "../core/crates/compute-cf" }
+compute-schema = { path = "../core/crates/compute-schema" }
+compute-collab = { path = "../core/crates/compute-collab" }
+compute-coordinator = { path = "../core/crates/compute-coordinator" }
+# Principal — referenced by bare name in generated
+# ComputeService_service_lifecycle descriptor (R2.4).
+compute-security = { path = "../core/crates/compute-security" }
+
+# XLSX parser API (merged into single NAPI addon)
+xlsx-api = { path = "../../file-io/xlsx-api", features = ["native"] }
+
+bridge-napi = { path = "../../infra/rust-bridge/bridge-napi" }
+bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
+
+napi = { version = "2", features = ["default"] }
+napi-derive = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+napi-build = "2"

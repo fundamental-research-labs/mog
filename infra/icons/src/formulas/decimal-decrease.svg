@@ -1,0 +1,6 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Decimal text -->
+  <text x="5" y="11" font-size="8" font-weight="600" fill="currentColor">.0</text>
+  <!-- Arrow pointing left (blue accent) -->
+  <path d="M5 5l-3 3 3 3v-2h3V7H5V5z" fill="var(--icon-accent-blue, #2563eb)"/>
+</svg>

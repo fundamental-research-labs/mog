@@ -1,0 +1,49 @@
+{
+  "name": "@mog/drawing-engine",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./canvas": {
+      "development": "./src/renderer/canvas.ts",
+      "types": "./dist/renderer/canvas.d.ts",
+      "import": "./dist/renderer/canvas.js"
+    },
+    "./hit-test": {
+      "development": "./src/renderer/hit-test.ts",
+      "types": "./dist/renderer/hit-test.d.ts",
+      "import": "./dist/renderer/hit-test.js"
+    },
+    "./svg": {
+      "development": "./src/renderer/svg.ts",
+      "types": "./dist/renderer/svg.d.ts",
+      "import": "./dist/renderer/svg.js"
+    }
+  },
+  "scripts": {
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "typecheck": "tsc --noEmit",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mog/canvas-engine": "workspace:*",
+    "@mog/geometry": "workspace:*",
+    "@mog-sdk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@mog/shape-engine": "workspace:*",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  }
+}

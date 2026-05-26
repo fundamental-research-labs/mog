@@ -1,0 +1,83 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Bug Fix 3e: teardrop and diagStripe diagStripe should generate snapshot-stable path 1`] = `
+[
+  {
+    "type": "M",
+    "x": 0,
+    "y": 50,
+  },
+  {
+    "type": "L",
+    "x": 50,
+    "y": 0,
+  },
+  {
+    "type": "L",
+    "x": 100,
+    "y": 0,
+  },
+  {
+    "type": "L",
+    "x": 0,
+    "y": 100,
+  },
+  {
+    "type": "Z",
+  },
+]
+`;
+
+exports[`Bug Fix 3e: teardrop and diagStripe teardrop should generate snapshot-stable path 1`] = `
+[
+  {
+    "type": "M",
+    "x": 0,
+    "y": 50,
+  },
+  {
+    "type": "C",
+    "x": 49.99999999999999,
+    "x1": 0,
+    "x2": 22.38576250846032,
+    "y": -7.105427357601002e-15,
+    "y1": 22.38576250846033,
+    "y2": 0,
+  },
+  {
+    "type": "Q",
+    "x": 100,
+    "x1": 75,
+    "y": 0,
+    "y1": 0,
+  },
+  {
+    "type": "Q",
+    "x": 100,
+    "x1": 100,
+    "y": 50,
+    "y1": 25,
+  },
+  {
+    "type": "C",
+    "x": 50,
+    "x1": 100,
+    "x2": 77.61423749153967,
+    "y": 100,
+    "y1": 77.61423749153967,
+    "y2": 100,
+  },
+  {
+    "type": "C",
+    "x": 0,
+    "x1": 22.38576250846034,
+    "x2": 7.105427357601002e-15,
+    "y": 50.00000000000001,
+    "y1": 100,
+    "y2": 77.61423749153967,
+  },
+  {
+    "type": "Z",
+  },
+]
+`;

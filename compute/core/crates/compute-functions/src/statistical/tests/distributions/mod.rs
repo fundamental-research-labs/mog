@@ -1,0 +1,16 @@
+mod beta;
+mod binomial;
+mod chi_squared;
+mod confidence;
+mod exponential;
+mod f_dist;
+mod gamma;
+mod gauss_phi;
+mod helpers;
+mod hypergeometric;
+mod lognormal;
+mod neg_binomial;
+mod normal;
+mod poisson;
+mod t_dist;
+mod weibull;

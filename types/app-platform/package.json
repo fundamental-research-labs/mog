@@ -1,0 +1,117 @@
+{
+  "name": "@mog-sdk/types-app-platform",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest": {
+      "development": "./src/manifest/index.ts",
+      "types": "./dist/manifest/index.d.ts",
+      "import": "./dist/manifest/index.js"
+    },
+    "./manifest/types": {
+      "development": "./src/manifest/types.ts",
+      "types": "./dist/manifest/types.d.ts",
+      "import": "./dist/manifest/types.js"
+    },
+    "./manifest/validation": {
+      "development": "./src/manifest/validation.ts",
+      "types": "./dist/manifest/validation.d.ts",
+      "import": "./dist/manifest/validation.js"
+    },
+    "./package": {
+      "development": "./src/package/index.ts",
+      "types": "./dist/package/index.d.ts",
+      "import": "./dist/package/index.js"
+    },
+    "./package/types": {
+      "development": "./src/package/types.ts",
+      "types": "./dist/package/types.d.ts",
+      "import": "./dist/package/types.js"
+    },
+    "./lifecycle": {
+      "development": "./src/lifecycle/index.ts",
+      "types": "./dist/lifecycle/index.d.ts",
+      "import": "./dist/lifecycle/index.js"
+    },
+    "./lifecycle/types": {
+      "development": "./src/lifecycle/types.ts",
+      "types": "./dist/lifecycle/types.d.ts",
+      "import": "./dist/lifecycle/types.js"
+    },
+    "./routing": {
+      "development": "./src/routing/index.ts",
+      "types": "./dist/routing/index.d.ts",
+      "import": "./dist/routing/index.js"
+    },
+    "./routing/types": {
+      "development": "./src/routing/types.ts",
+      "types": "./dist/routing/types.d.ts",
+      "import": "./dist/routing/types.js"
+    },
+    "./services": {
+      "development": "./src/services/index.ts",
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
+    },
+    "./services/types": {
+      "development": "./src/services/types.ts",
+      "types": "./dist/services/types.d.ts",
+      "import": "./dist/services/types.js"
+    },
+    "./capabilities": {
+      "development": "./src/capabilities/index.ts",
+      "types": "./dist/capabilities/index.d.ts",
+      "import": "./dist/capabilities/index.js"
+    },
+    "./capabilities/types": {
+      "development": "./src/capabilities/types.ts",
+      "types": "./dist/capabilities/types.d.ts",
+      "import": "./dist/capabilities/types.js"
+    },
+    "./contributions": {
+      "development": "./src/contributions/index.ts",
+      "types": "./dist/contributions/index.d.ts",
+      "import": "./dist/contributions/index.js"
+    },
+    "./contributions/types": {
+      "development": "./src/contributions/types.ts",
+      "types": "./dist/contributions/types.d.ts",
+      "import": "./dist/contributions/types.js"
+    },
+    "./plugin": {
+      "development": "./src/plugin/index.ts",
+      "types": "./dist/plugin/index.d.ts",
+      "import": "./dist/plugin/index.js"
+    },
+    "./plugin/types": {
+      "development": "./src/plugin/types.ts",
+      "types": "./dist/plugin/types.d.ts",
+      "import": "./dist/plugin/types.js"
+    },
+    "./trust": {
+      "development": "./src/trust/index.ts",
+      "types": "./dist/trust/index.d.ts",
+      "import": "./dist/trust/index.js"
+    },
+    "./trust/types": {
+      "development": "./src/trust/types.ts",
+      "types": "./dist/trust/types.d.ts",
+      "import": "./dist/trust/types.js"
+    }
+  },
+  "description": "Canonical contract types for the Mog app/plugin platform. Contracts-only: types, validators, and pure helpers. No React, shell, kernel, or runtime imports.",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

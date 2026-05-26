@@ -1,0 +1,159 @@
+//! Yrs schema for [`StoredSlicer`] — flat Y.Map with native + JSON fields.
+//!
+//! Simple fields (String, Number, Bool) are stored as native Yrs types.
+//! Complex fields (SlicerSource, SlicerStyle, position, selected_values)
+//! are stored as JSON strings for forward compatibility.
+
+use std::sync::Arc;
+use yrs::types::map::MapRef;
+use yrs::{Any, ReadTxn};
+
+use super::helpers::*;
+use crate::domain::floating_object::FloatingObjectAnchor;
+use crate::domain::slicer::{SlicerSource, SlicerStyle, StoredSlicer};
+
+// ── Short key constants (2-char mnemonics) ──────────────────────────
+
+const KEY_ID: &str = "id";
+const KEY_SHEET_ID: &str = "si";
+const KEY_SOURCE: &str = "sr"; // JSON
+const KEY_CAPTION: &str = "ca";
+const KEY_NAME: &str = "nm";
+const KEY_STYLE: &str = "sy"; // JSON
+const KEY_POSITION: &str = "po"; // JSON
+const KEY_Z_INDEX: &str = "zi";
+const KEY_LOCKED: &str = "lk";
+const KEY_SHOW_HEADER: &str = "sh";
+const KEY_START_ITEM: &str = "ti";
+const KEY_MULTI_SELECT: &str = "ms";
+const KEY_SELECTED_VALUES: &str = "sv"; // JSON
+const KEY_CREATED_AT: &str = "ct";
+const KEY_UPDATED_AT: &str = "ut";
+
+// ── to_yrs_prelim ──────────────────────────────────────────────────
+
+/// Convert a [`StoredSlicer`] to Yrs prelim entries for Y.Map insertion.
+///
+/// All fields are emitted (StoredSlicer has no Option-heavy sparse layout
+/// like CellFormat — every slicer has an id, source, style, etc.).
+pub fn to_yrs_prelim(slicer: &StoredSlicer) -> Vec<(&str, Any)> {
+    let mut entries: Vec<(&str, Any)> = Vec::with_capacity(15);
+
+    // Native string fields
+    entries.push((KEY_ID, Any::String(Arc::from(slicer.id.as_str()))));
+    entries.push((
+        KEY_SHEET_ID,
+        Any::String(Arc::from(slicer.sheet_id.as_str())),
+    ));
+    entries.push((KEY_CAPTION, Any::String(Arc::from(slicer.caption.as_str()))));
+
+    // Optional native string fields
+    entries.push((KEY_NAME, option_string(&slicer.name)));
+
+    // Native number fields
+    entries.push((KEY_Z_INDEX, Any::Number(slicer.z_index as f64)));
+
+    // Native bool fields
+    entries.push((KEY_LOCKED, Any::Bool(slicer.locked)));
+    entries.push((KEY_SHOW_HEADER, Any::Bool(slicer.show_header)));
+    entries.push((KEY_MULTI_SELECT, Any::Bool(slicer.multi_select)));
+
+    // Optional number fields
+    entries.push((KEY_START_ITEM, option_i32(&slicer.start_item)));
+    entries.push((KEY_CREATED_AT, option_number(&slicer.created_at)));
+    entries.push((KEY_UPDATED_AT, option_number(&slicer.updated_at)));
+
+    // Complex fields as JSON strings
+    let source_json = serde_json::to_string(&slicer.source).unwrap_or_else(|_| "{}".to_string());
+    entries.push((KEY_SOURCE, Any::String(Arc::from(source_json.as_str()))));
+
+    let style_json = serde_json::to_string(&slicer.style).unwrap_or_else(|_| "{}".to_string());
+    entries.push((KEY_STYLE, Any::String(Arc::from(style_json.as_str()))));
+
+    match &slicer.position {
+        Some(pos) => {
+            let pos_json = serde_json::to_string(pos).unwrap_or_else(|_| "null".to_string());
+            entries.push((KEY_POSITION, Any::String(Arc::from(pos_json.as_str()))));
+        }
+        None => {
+            entries.push((KEY_POSITION, Any::Null));
+        }
+    }
+
+    if slicer.selected_values.is_empty() {
+        entries.push((KEY_SELECTED_VALUES, Any::Null));
+    } else {
+        let sv_json =
+            serde_json::to_string(&slicer.selected_values).unwrap_or_else(|_| "[]".to_string());
+        entries.push((
+            KEY_SELECTED_VALUES,
+            Any::String(Arc::from(sv_json.as_str())),
+        ));
+    }
+
+    entries
+}
+
+// ── from_yrs_map ───────────────────────────────────────────────────
+
+/// Read a [`StoredSlicer`] from a Y.Map with structured fields.
+///
+/// Returns `None` if the map is missing required fields (id, source).
+pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
+    let id = read_string(map, txn, KEY_ID)?;
+    let sheet_id = read_string(map, txn, KEY_SHEET_ID).unwrap_or_default();
+
+    let source: SlicerSource =
+        read_string(map, txn, KEY_SOURCE).and_then(|s| serde_json::from_str(&s).ok())?;
+
+    let caption = read_string(map, txn, KEY_CAPTION).unwrap_or_default();
+    let name = read_string(map, txn, KEY_NAME);
+
+    let style: SlicerStyle = read_string(map, txn, KEY_STYLE)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(SlicerStyle {
+            preset: None,
+            custom: None,
+            column_count: 1,
+            button_height: 20,
+            show_selection_indicator: true,
+            cross_filter: crate::domain::slicer::CrossFilterMode::ShowItemsWithDataAtTop,
+            custom_list_sort: false,
+            show_items_with_no_data: false,
+            sort_order: crate::domain::slicer::SlicerSortOrder::Ascending,
+        });
+
+    let position: Option<FloatingObjectAnchor> =
+        read_string(map, txn, KEY_POSITION).and_then(|s| serde_json::from_str(&s).ok());
+
+    let z_index = read_i32(map, txn, KEY_Z_INDEX).unwrap_or(0);
+    let locked = read_bool(map, txn, KEY_LOCKED).unwrap_or(false);
+    let show_header = read_bool(map, txn, KEY_SHOW_HEADER).unwrap_or(true);
+    let start_item = read_i32(map, txn, KEY_START_ITEM);
+    let multi_select = read_bool(map, txn, KEY_MULTI_SELECT).unwrap_or(true);
+
+    let selected_values: Vec<value_types::CellValue> = read_string(map, txn, KEY_SELECTED_VALUES)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let created_at = read_number(map, txn, KEY_CREATED_AT);
+    let updated_at = read_number(map, txn, KEY_UPDATED_AT);
+
+    Some(StoredSlicer {
+        id,
+        sheet_id,
+        source,
+        caption,
+        name,
+        style,
+        position,
+        z_index,
+        locked,
+        show_header,
+        start_item,
+        multi_select,
+        selected_values,
+        created_at,
+        updated_at,
+    })
+}

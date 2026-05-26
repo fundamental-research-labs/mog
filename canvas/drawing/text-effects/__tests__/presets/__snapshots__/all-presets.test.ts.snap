@@ -1,0 +1,165 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Preset Snapshots (default adjustment) preset "textArchDown" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 16.675000000000004 89.54305004000001 16.675000000000004 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchDown" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 16.662499999999998 144.77152502 16.662499999999998 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchDownPour" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 16.675000000000004 89.54305004000001 16.675000000000004 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchDownPour" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 9.9975 144.77152502 9.9975 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchUp" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 33.337500000000006 89.54305004000001 33.337500000000006 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchUp" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -33.324999999999996 144.77152502 -33.324999999999996 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchUpPour" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 40.0025 89.54305004000001 40.0025 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textArchUpPour" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -33.324999999999996 144.77152502 -33.324999999999996 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textButton" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 63.33 89.54305004000001 63.33 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textButton" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -13.33 144.77152502 -13.33 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textButtonPour" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 59.9975 89.54305004000001 59.9975 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textButtonPour" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -9.9975 144.77152502 -9.9975 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCanDown" bottom guide snapshot 1`] = `"M 0 50 C 50 57.5 150 57.5 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCanDown" top guide snapshot 1`] = `"M 0 0 C 50 3.75 150 3.75 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCanUp" bottom guide snapshot 1`] = `"M 0 50 C 50 46.25 150 46.25 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCanUp" top guide snapshot 1`] = `"M 0 0 C 50 -7.5 150 -7.5 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCascadeDown" bottom guide snapshot 1`] = `"M 0 38 L 100 38 L 100 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCascadeDown" top guide snapshot 1`] = `"M 0 0 L 100 0 L 100 12 L 200 12"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCascadeUp" bottom guide snapshot 1`] = `"M 0 50 L 100 50 L 100 38 L 200 38"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCascadeUp" top guide snapshot 1`] = `"M 0 12 L 100 12 L 100 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textChevron" bottom guide snapshot 1`] = `"M 0 50 L 100 40 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textChevron" top guide snapshot 1`] = `"M 0 10 L 100 0 L 200 10"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textChevronInverted" bottom guide snapshot 1`] = `"M 0 40 L 100 50 L 200 40"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textChevronInverted" top guide snapshot 1`] = `"M 0 0 L 100 10 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCircle" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 83.32499999999999 89.54305004000001 83.32499999999999 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCircle" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -33.324999999999996 144.77152502 -33.324999999999996 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCirclePour" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 69.995 89.54305004000001 69.995 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCirclePour" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -33.324999999999996 144.77152502 -33.324999999999996 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCurveDown" bottom guide snapshot 1`] = `"M 0 38.75 C 50 61.25 150 61.25 200 38.75"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCurveDown" top guide snapshot 1`] = `"M 0 0 C 50 11.25 150 11.25 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCurveUp" bottom guide snapshot 1`] = `"M 0 50 C 50 38.75 150 38.75 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textCurveUp" top guide snapshot 1`] = `"M 0 11.25 C 50 -11.25 150 -11.25 200 11.25"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflate" bottom guide snapshot 1`] = `"M 0 50 C 50 40 150 40 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflate" top guide snapshot 1`] = `"M 0 0 C 50 10 150 10 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateBottom" bottom guide snapshot 1`] = `"M 0 50 C 50 40 150 40 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateBottom" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateInflate" bottom guide snapshot 1`] = `"M 0 50 C 30 40 70 40 100 50 C 130 60 170 60 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateInflate" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateInflateDeflate" bottom guide snapshot 1`] = `"M 0 50 C 20 41.25 46.666666666666664 41.25 66.66666666666667 50 C 86.66666666666667 58.75 113.33333333333334 58.75 133.33333333333334 50 C 153.33333333333334 41.25 180 41.25 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateInflateDeflate" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateTop" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDeflateTop" top guide snapshot 1`] = `"M 0 0 C 50 10 150 10 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDoubleWave1" bottom guide snapshot 1`] = `"M 0 50 C 16.666666666666668 43.716814692820414 33.33333333333333 43.716814692820414 50 50 C 66.66666666666667 56.283185307179586 83.33333333333333 56.283185307179586 100 50 C 116.66666666666667 43.716814692820414 133.33333333333334 43.716814692820414 150 50 C 166.66666666666666 56.283185307179586 183.33333333333334 56.28318530717959 200 50.00000000000001"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textDoubleWave1" top guide snapshot 1`] = `"M 0 0 C 16.666666666666668 6.283185307179587 33.33333333333333 6.283185307179588 50 7.347880794884119e-16 C 66.66666666666667 -6.283185307179586 83.33333333333333 -6.283185307179589 100 -1.4695761589768238e-15 C 116.66666666666667 6.283185307179585 133.33333333333334 6.283185307179589 150 2.204364238465236e-15 C 166.66666666666666 -6.283185307179585 183.33333333333334 -6.28318530717959 200 -2.9391523179536475e-15"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeDown" bottom guide snapshot 1`] = `"M 40 50 L 160 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeDown" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeLeft" bottom guide snapshot 1`] = `"M 0 37.5 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeLeft" top guide snapshot 1`] = `"M 0 12.5 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeRight" bottom guide snapshot 1`] = `"M 0 50 L 200 37.5"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeRight" top guide snapshot 1`] = `"M 0 0 L 200 12.5"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeUp" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textFadeUp" top guide snapshot 1`] = `"M 40 0 L 160 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflate" bottom guide snapshot 1`] = `"M 0 50 C 50 60 150 60 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflate" top guide snapshot 1`] = `"M 0 0 C 50 -10 150 -10 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflateBottom" bottom guide snapshot 1`] = `"M 0 50 C 50 62.5 150 62.5 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflateBottom" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflateTop" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textInflateTop" top guide snapshot 1`] = `"M 0 0 C 50 -12.5 150 -12.5 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textNoShape" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textNoShape" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textPlain" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textPlain" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textRingInside" bottom guide snapshot 1`] = `"M 0 50 C 55.228474979999994 57.5 144.77152502 57.5 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textRingInside" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 -15 144.77152502 -15 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textRingOutside" bottom guide snapshot 1`] = `"M 0 50 C 55.228474979999994 35 144.77152502 35 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textRingOutside" top guide snapshot 1`] = `"M 0 0 C 55.228474979999994 7.5 144.77152502 7.5 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textSlantDown" bottom guide snapshot 1`] = `"M 0 37.5 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textSlantDown" top guide snapshot 1`] = `"M 0 0 L 200 12.5"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textSlantUp" bottom guide snapshot 1`] = `"M 0 50 L 200 37.5"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textSlantUp" top guide snapshot 1`] = `"M 0 12.5 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textStop" bottom guide snapshot 1`] = `"M 20 50 L 180 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textStop" top guide snapshot 1`] = `"M 20 0 L 180 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textTriangle" bottom guide snapshot 1`] = `"M 0 50 L 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textTriangle" top guide snapshot 1`] = `"M 0 10 L 100 0 L 200 10"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textTriangleInverted" bottom guide snapshot 1`] = `"M 0 40 L 100 50 L 200 40"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textTriangleInverted" top guide snapshot 1`] = `"M 0 0 L 200 0"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave1" bottom guide snapshot 1`] = `"M 0 50 C 33.333333333333336 60.47197551196598 66.66666666666666 60.47197551196598 100 50 C 133.33333333333334 39.52802448803402 166.66666666666666 39.52802448803402 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave1" top guide snapshot 1`] = `"M 0 0 C 33.333333333333336 10.471975511965978 66.66666666666666 10.47197551196598 100 1.2246467991473533e-15 C 133.33333333333334 -10.471975511965976 166.66666666666666 -10.47197551196598 200 -2.4492935982947065e-15"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave2" bottom guide snapshot 1`] = `"M 0 50 C 33.333333333333336 39.52802448803402 66.66666666666666 39.52802448803402 100 50 C 133.33333333333334 60.47197551196598 166.66666666666666 60.47197551196598 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave2" top guide snapshot 1`] = `"M 0 0 C 33.333333333333336 10.471975511965978 66.66666666666666 10.47197551196598 100 1.2246467991473533e-15 C 133.33333333333334 -10.471975511965976 166.66666666666666 -10.47197551196598 200 -2.4492935982947065e-15"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave4" bottom guide snapshot 1`] = `"M 0 50 C 16.666666666666668 56.283185307179586 33.33333333333333 56.283185307179586 50 50 C 66.66666666666667 43.716814692820414 83.33333333333333 43.716814692820414 100 50 C 116.66666666666667 56.283185307179586 133.33333333333334 56.283185307179586 150 50 C 166.66666666666666 43.716814692820414 183.33333333333334 43.716814692820414 200 50"`;
+
+exports[`Preset Snapshots (default adjustment) preset "textWave4" top guide snapshot 1`] = `"M 0 0 C 16.666666666666668 6.283185307179587 33.33333333333333 6.283185307179588 50 7.347880794884119e-16 C 66.66666666666667 -6.283185307179586 83.33333333333333 -6.283185307179589 100 -1.4695761589768238e-15 C 116.66666666666667 6.283185307179585 133.33333333333334 6.283185307179589 150 2.204364238465236e-15 C 166.66666666666666 -6.283185307179585 183.33333333333334 -6.28318530717959 200 -2.9391523179536475e-15"`;

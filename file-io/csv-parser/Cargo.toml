@@ -1,0 +1,33 @@
+[package]
+name = "csv-parser"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "CSV → ParseOutput parser. Encoding sniff, dialect detection, type inference, leading-zero / formula-injection guardrails."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+# Domain types we produce/consume
+value-types = { path = "../../compute/core/crates/types/value-types" }
+cell-types = { path = "../../compute/core/crates/types/cell-types" }
+formula-types = { path = "../../compute/core/crates/types/formula-types" }
+domain-types = { path = "../../domain-types" }
+
+# RFC 4180 byte-level reader. Local pin: csv-parser is a leaf crate.
+csv = "1.3"
+
+# Encoding decode + sniff (Firefox-grade libraries). Local pin.
+encoding_rs = "0.8"
+chardetng = "0.1"
+
+# Date / time arithmetic for Excel-serial conversion.
+chrono = { workspace = true }
+
+# Typed errors.
+thiserror = { workspace = true }
+
+# Stable serializable shape for `CsvImportOptions` (passed through the bridge in R-2).
+serde = { workspace = true }

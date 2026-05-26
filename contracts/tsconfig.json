@@ -1,0 +1,37 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ],
+  "references": [
+    { "path": "../types/api" },
+    { "path": "../types/bridges" },
+    { "path": "../types/commands" },
+    { "path": "../types/connections" },
+    { "path": "../types/core" },
+    { "path": "../types/culture" },
+    { "path": "../types/data" },
+    { "path": "../types/document" },
+    { "path": "../types/editor" },
+    { "path": "../types/events" },
+    { "path": "../types/formatting" },
+    { "path": "../types/machines" },
+    { "path": "../types/objects" },
+    { "path": "../types/rendering" },
+    { "path": "../types/viewport" }
+  ]
+}

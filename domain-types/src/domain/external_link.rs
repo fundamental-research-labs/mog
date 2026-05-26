@@ -1,0 +1,250 @@
+//! External link domain types.
+//!
+//! Canonical types for external workbook references, DDE links, and OLE links.
+//! Parsed from `xl/externalLinks/externalLinkN.xml` in XLSX files.
+
+use serde::{Deserialize, Serialize};
+
+/// A resolved external link from `xl/externalLinks/externalLinkN.xml`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalLink {
+    /// Link index (e.g., "1" for externalLink1.xml).
+    pub id: String,
+    /// Type of external link.
+    #[serde(default)]
+    pub link_type: ExternalLinkType,
+    /// Primary file path/URL (resolved from .rels relationship).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+    /// Alternate URL for the external workbook (from xxl21:alternateUrls extension).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_url: Option<String>,
+    /// Relative URL (from xxl21:relativeUrl in alternateUrls).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_url: Option<String>,
+    /// Sheet names in the external workbook.
+    #[serde(default)]
+    pub sheet_names: Vec<String>,
+    /// Defined names in the external workbook.
+    #[serde(default)]
+    pub defined_names: Vec<ExternalDefinedName>,
+    /// Cached cell values from the external workbook.
+    #[serde(default)]
+    pub cache_values: Vec<ExternalCacheValue>,
+    /// Sheet IDs in the sheetDataSet (preserves empty sheetData elements).
+    #[serde(default)]
+    pub sheet_data_ids: Vec<u32>,
+    /// Sheet IDs that have `refreshError="1"`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refresh_error_sheet_ids: Vec<u32>,
+    /// Original relationship ID order in .rels (None = default order).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rels_id_order: Option<Vec<String>>,
+    /// Preserved `mc:Ignorable` value from original XML.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mc_ignorable: Option<String>,
+    /// Original relationship type for file_path when non-default (e.g., "xlPathMissing").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_path_rel_type: Option<String>,
+    /// OneDrive/SharePoint driveId on alternateUrls element.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_urls_drive_id: Option<String>,
+    /// OneDrive/SharePoint itemId on alternateUrls element.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_urls_item_id: Option<String>,
+    /// Original rId for the file_path relationship (None = "rId1").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_path_rid: Option<String>,
+    /// Original rId for the alternate_url relationship (None = "rId2").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_url_rid: Option<String>,
+    /// Original rId for the relative_url relationship (None = "rId3" or "rId2").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_url_rid: Option<String>,
+    /// Extra relationships not matched by standard rId references (e.g., externalLinkLongPath).
+    /// Each entry is (rId, Target, Type).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_rels: Vec<ExternalLinkExtraRel>,
+    /// OOXML package identity captured during import.
+    ///
+    /// This is the durable mapping from workbook.xml `<externalReference r:id>`
+    /// order through `xl/_rels/workbook.xml.rels` to the concrete externalLink
+    /// part. Formula ordinal tokens like `[1]` are defined by `excel_ordinal`,
+    /// not by the `externalLinkN.xml` file number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_identity: Option<ImportedExternalLinkIdentity>,
+}
+
+impl ExternalLink {
+    /// Create a new empty external link.
+    pub fn new(id: String) -> Self {
+        Self {
+            id,
+            ..Default::default()
+        }
+    }
+
+    /// Create an external workbook link.
+    pub fn workbook(id: String, file_path: Option<String>) -> Self {
+        Self {
+            id,
+            link_type: ExternalLinkType::Workbook,
+            file_path,
+            ..Default::default()
+        }
+    }
+
+    /// Create a DDE link.
+    pub fn dde(id: String, service: String, topic: String) -> Self {
+        Self {
+            id,
+            link_type: ExternalLinkType::Dde { service, topic },
+            ..Default::default()
+        }
+    }
+
+    /// Create an OLE link.
+    pub fn ole(id: String, prog_id: String) -> Self {
+        Self {
+            id,
+            link_type: ExternalLinkType::Ole { prog_id },
+            ..Default::default()
+        }
+    }
+}
+
+/// Type of external link.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+#[derive(Default)]
+pub enum ExternalLinkType {
+    #[default]
+    Workbook,
+    Dde {
+        service: String,
+        topic: String,
+    },
+    Ole {
+        prog_id: String,
+    },
+}
+
+/// Extra relationship not matched by standard rId references.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalLinkExtraRel {
+    pub id: String,
+    pub target: String,
+    pub rel_type: String,
+}
+
+/// Imported OOXML external-link package identity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedExternalLinkIdentity {
+    /// 1-based ordinal in workbook.xml `<externalReferences>` order.
+    pub excel_ordinal: u32,
+    /// Relationship id used by the workbook externalReference element.
+    pub workbook_rel_id: String,
+    /// Part name as targeted by workbook.xml.rels, e.g.
+    /// `externalLinks/externalLink3.xml`.
+    pub part_name: String,
+    /// r:id from `<externalBook>`, when the link is an external workbook.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_book_rid: Option<String>,
+    /// Target from the workbook relationship entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// TargetMode from the workbook relationship entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
+}
+
+/// Defined name from an external workbook.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalDefinedName {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refers_to: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_id: Option<u32>,
+}
+
+impl ExternalDefinedName {
+    /// Create a new external defined name.
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            refers_to: None,
+            sheet_id: None,
+        }
+    }
+
+    /// Create with all fields.
+    pub fn with_details(name: String, refers_to: Option<String>, sheet_id: Option<u32>) -> Self {
+        Self {
+            name,
+            refers_to,
+            sheet_id,
+        }
+    }
+}
+
+/// Cached cell value from an external workbook.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalCacheValue {
+    pub sheet_id: u32,
+    /// Row number from the `<row r="N">` wrapper.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<u32>,
+    pub cell_ref: String,
+    pub value: CachedValue,
+    /// Raw numeric string for round-trip precision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_value: Option<String>,
+    /// Whether the original `<v>` had `xml:space="preserve"`.
+    #[serde(default)]
+    pub preserve_space: bool,
+}
+
+impl ExternalCacheValue {
+    /// Create a new cached value.
+    pub fn new(sheet_id: u32, cell_ref: String, value: CachedValue) -> Self {
+        Self {
+            sheet_id,
+            row: None,
+            cell_ref,
+            value,
+            raw_value: None,
+            preserve_space: false,
+        }
+    }
+
+    /// Create a new cached value with row information.
+    pub fn with_row(sheet_id: u32, row: u32, cell_ref: String, value: CachedValue) -> Self {
+        Self {
+            sheet_id,
+            row: Some(row),
+            cell_ref,
+            value,
+            raw_value: None,
+            preserve_space: false,
+        }
+    }
+}
+
+/// Cached value types for external links.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type", content = "v")]
+#[derive(Default)]
+pub enum CachedValue {
+    Number(f64),
+    String(String),
+    Boolean(bool),
+    Error(String),
+    #[default]
+    Empty,
+}

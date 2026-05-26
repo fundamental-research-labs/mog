@@ -1,0 +1,869 @@
+/* apps/spreadsheet/src/styles/globals.css - SPREADSHEET APP DESIGN TOKENS
+ *
+ * This file contains spreadsheet-specific design tokens and styles.
+ * It imports the shell's base globals first, then adds app-specific tokens.
+ *
+ * CRITICAL: CSS LAYER ARCHITECTURE
+ * =================================
+ * Tailwind v4 uses CSS @layer for cascade control. The order is:
+ *
+ * @layer theme <- lowest priority (CSS variables)
+ * @layer base <- resets, element defaults
+ * @layer components
+ * @layer utilities <- highest priority (p-4, gap-3, etc.)
+ *
+ * IMPORTANT: Styles OUTSIDE any @layer have HIGHER priority than ALL layers!
+ * This means unlayered `* { padding: 0 }` would override `p-4` utility.
+ *
+ * RULES:
+ * 1. All custom base styles MUST be inside @layer base { }
+ * 2. All custom utilities MUST be inside @layer utilities { }
+ * 3. NEVER add CSS rules outside of @layer blocks (except :root variables and
+ * top-level at-rules required by CSS tooling such as @font-face/@source)
+ * 4. Compound typography (size + line-height) is in @layer components as CSS classes
+ */
+
+/* Import shell's base styles (reset, scrollbars, tailwind) */
+@import '@mog/shell/src/styles/globals.css';
+
+/* ============================================
+ * METRIC-COMPATIBLE FONTS FOR DOCUMENT LAYOUTS
+ * ============================================
+ * These are metric-compatible fallback fonts for Microsoft Office document layouts,
+ * preserving line breaks, column widths, and text layout where possible.
+ *
+ * Carlito = Calibri (Google's metric-compatible alternative)
+ * Caladea = Cambria (Google's metric-compatible alternative)
+ *
+ * Loaded from checked-in font files instead of a network stylesheet so the
+ * spreadsheet app registers these faces deterministically in document.fonts.
+ */
+@font-face {
+  font-family: 'Carlito';
+  src: url('../../../../../compute/core/fonts/Carlito-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Carlito';
+  src: url('../../../../../compute/core/fonts/Carlito-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Carlito';
+  src: url('../../../../../compute/core/fonts/Carlito-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Carlito';
+  src: url('../../../../../compute/core/fonts/Carlito-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caladea';
+  src: url('../../../../../compute/core/fonts/Caladea-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caladea';
+  src: url('../../../../../compute/core/fonts/Caladea-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caladea';
+  src: url('../../../../../compute/core/fonts/Caladea-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caladea';
+  src: url('../../../../../compute/core/fonts/Caladea-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Explicit source for apps/spreadsheet/src: shell/globals.css sources only shell/src via
+ * the @source '../' directive. Classes used in app TSX/TS files (z-ss-modal, z-ss-popover,
+ * etc.) won't be found unless we add a source for the app's own directory.
+ * '../../' is relative to this file (apps/spreadsheet/src/infra/styles/) = apps/spreadsheet/src/ */
+@source '../../';
+
+/* ============================================
+ * RUNTIME CSS VARIABLES
+ * These are actual CSS custom properties available via var
+ * Used for LAYOUT tokens (heights, gaps, paddings)
+ *
+ * NOTE: Font sizes are in @theme section below, NOT here.
+ * This keeps typography in Tailwind's system for utilities.
+ * ============================================ */
+:root {
+  /* Tab bar (Home, Insert, etc. row) - Excel-like compact sizing */
+  --tabbar-height: 26px;
+  --tabbar-tab-gap: 0px; /* no gap - tabs touch like Excel */
+  --tabbar-tab-padding-x: 12px; /* horizontal padding inside tabs */
+  --tabbar-tab-padding-y: 5px; /* vertical padding inside tabs */
+  --tabbar-button-group-gap: 2px; /* gap between undo/redo buttons */
+  --tabbar-section-margin: 8px; /* margin between major sections */
+
+  /* Tab styling - Excel-like appearance */
+  --tab-active-bg: var(--color-ss-surface);
+  --tab-inactive-bg: transparent;
+  --tab-hover-bg: rgba(0, 0, 0, 0.04);
+  --tab-active-text: var(--color-ss-primary);
+  --tab-inactive-text: var(--color-ss-text-secondary);
+  --tab-border-radius: 3px;
+  /* Contextual tab accent (Table Design = green) */
+  --tab-contextual-accent: #217346;
+
+  /* Quick access button styling (undo/redo) */
+  --quick-access-button-size: 22px;
+  --quick-access-hover-bg: rgba(0, 0, 0, 0.06);
+  --quick-access-hover-border: rgba(0, 0, 0, 0.1);
+
+  /* Quick Access Toolbar (QAT) - Excel parity A2 */
+  --qat-height: 24px;
+  --qat-button-size: 18px; /* smaller than TabBar's 22px */
+  --qat-gap: 2px;
+  --qat-padding-x: 4px;
+
+  /* Ribbon structure - explicit heights for predictable layout */
+  /* Tightened to match Excel's vertical density (was 80px/66px) */
+  /* Note: 77px = 60px content + 14px label + 2px padding-y + 1px border-t */
+  --ribbon-height: 77px; /* total ribbon height (includes 1px border) */
+  --ribbon-content-height: 60px; /* height of button/content area */
+  --ribbon-label-height: 14px; /* height of group label area */
+  --ribbon-padding-x: 6px;
+  --ribbon-padding-y: 1px;
+
+  /* Ribbon groups */
+  --ribbon-section-gap: 4px; /* gap between ribbon groups */
+  --ribbon-group-padding-x: 6px; /* horizontal padding inside groups */
+  --ribbon-group-items-gap: 3px; /* gap between items horizontally within a group */
+
+  /* Ribbon buttons */
+  --ribbon-button-gap: 2px; /* gap between button rows vertically */
+  --ribbon-button-icon-gap: 2px; /* gap between icon and label within a button */
+  --ribbon-button-inline-gap: 1px; /* tight gap between adjacent icon buttons (B/I/U row) */
+
+  /* Ribbon button heights - CONSTRAINT-BASED SYSTEM
+ * ================================================
+ * All heights derive from --ribbon-content-height (60px).
+ * Formula: (content-height - (N-1) * gap) / N
+ *
+ * This guarantees N stacked buttons ALWAYS fit their container.
+ * Overflow is impossible by construction.
+ *
+ * Calculated values (60px content, 2px gap):
+ * full = 60px
+ * half = (60 - 2) / 2 = 29px
+ * third = (60 - 4) / 3 = 18.67px
+ */
+  --ribbon-button-height-full: var(--ribbon-content-height);
+  --ribbon-button-height-half: calc((var(--ribbon-content-height) - var(--ribbon-button-gap)) / 2);
+  --ribbon-button-height-third: calc(
+    (var(--ribbon-content-height) - 2 * var(--ribbon-button-gap)) / 3
+  );
+
+  /* Ribbon group separators & labels */
+  --ribbon-group-separator-width: 1px;
+  --ribbon-group-label-letter-spacing: 0.03em;
+
+  /* Tooltip timing */
+  --tooltip-delay: 500ms;
+  --tooltip-offset: 8px;
+}
+
+/* ============================================
+ * TAILWIND THEME TOKENS
+ * These are build-time tokens for Tailwind utilities
+ * Use via utility classes like bg-primary, text-secondary, etc.
+ * ============================================ */
+@theme inline {
+  /* ============================================
+ * COLORS - Semantic naming, not raw hex
+ * ============================================ */
+
+  /* Primary - Shortcut Green */
+  --color-ss-primary: #217346;
+  --color-ss-primary-hover: #1a5d38;
+  --color-ss-primary-active: #154a2d;
+  --color-ss-primary-light: #e6f4ea;
+  --color-ss-primary-lighter: #f0faf3;
+
+  /* Surface - Backgrounds */
+  --color-ss-surface: #ffffff;
+  --color-ss-surface-secondary: #f8f9fa;
+  --color-ss-surface-tertiary: #f1f3f4;
+  --color-ss-surface-hover: #e8eaed;
+  --color-ss-surface-active: #dadce0;
+
+  /* Text */
+  --color-ss-text: #202124;
+  --color-ss-text-secondary: #5f6368;
+  --color-ss-text-tertiary: #80868b;
+  --color-ss-text-disabled: #9aa0a6;
+  --color-ss-text-inverse: #ffffff;
+
+  /* Border */
+  --color-ss-border: #dadce0;
+  --color-ss-border-light: #e8eaed;
+  --color-ss-border-focus: #217346;
+  --color-ss-border-hover: #80868b; /* Hover tone for inputs/selects — same hex as --color-ss-text-tertiary */
+  --color-ss-border-button-hover: rgba(0, 0, 0, 0.08); /* Subtle border on button hover */
+
+  /* Status - icons, badges, indicators */
+  --color-ss-success: #34a853;
+  --color-ss-success-bg: #e6f4ea;
+  --color-ss-success-text: #166534; /* Darker green for text on success-bg */
+  --color-ss-warning: #f9ab00;
+  --color-ss-warning-bg: #fef7e0;
+  --color-ss-warning-text: #b45309; /* Darker amber for text on warning-bg */
+  --color-ss-error: #ea4335;
+  --color-ss-error-bg: #fce8e6;
+  --color-ss-error-text: #991b1b; /* Darker red for text on error-bg */
+
+  /* Excel accent colors (from built-in-styles.ts) */
+  --color-ss-accent-1: #4472c4;
+  --color-ss-accent-2: #ed7d31;
+  --color-ss-accent-3: #a5a5a5;
+  --color-ss-accent-4: #ffc000;
+  --color-ss-accent-5: #5b9bd5;
+  --color-ss-accent-6: #70ad47;
+
+  /* Info status (complements success/warning/error) */
+  --color-ss-info: #217346;
+  --color-ss-info-bg: #e6f4ea;
+  --color-ss-info-text: #1a5d38;
+
+  /* Connection/sync state tokens
+ * Use for connection indicators, sync status, real-time presence
+ */
+  --color-ss-state-idle: #666666;
+  --color-ss-state-idle-bg: #f0f0f0;
+  --color-ss-state-connecting: var(--color-ss-warning);
+  --color-ss-state-connecting-bg: var(--color-ss-warning-bg);
+  --color-ss-state-connected: var(--color-ss-success);
+  --color-ss-state-connected-bg: var(--color-ss-success-bg);
+  --color-ss-state-synced: var(--color-ss-primary);
+  --color-ss-state-synced-bg: var(--color-ss-info-bg);
+  --color-ss-state-error: var(--color-ss-error);
+  --color-ss-state-error-bg: var(--color-ss-error-bg);
+
+  /* Diff/change tracking tokens
+ * Use for review mode, cell changes, formula dependency visualization
+ */
+  --color-ss-diff-added: #217346;
+  --color-ss-diff-added-bg: rgba(33, 115, 70, 0.1);
+  --color-ss-diff-modified: #ffa500;
+  --color-ss-diff-modified-bg: rgba(255, 165, 0, 0.1);
+  --color-ss-diff-removed: #c5221f;
+  --color-ss-diff-removed-bg: rgba(197, 34, 31, 0.1);
+  --color-ss-diff-direct: #3b82f6;
+  --color-ss-diff-direct-bg: rgba(59, 130, 246, 0.1);
+  --color-ss-diff-indirect: #a855f7;
+  --color-ss-diff-indirect-bg: rgba(168, 85, 247, 0.1);
+
+  /* Formula auditing trace arrows (Excel parity)
+ * Used by TraceArrowsLayer for precedent/dependent visualization
+ */
+  --color-ss-trace-precedent: #0066cc;
+  --color-ss-trace-dependent: #cc0000;
+  --color-ss-trace-external: #000000;
+
+  /* Header resize visual feedback
+ * Used by UILayer for column/row resize drag visualization
+ */
+  --color-ss-resize-line: #34a853;
+  --color-ss-resize-tooltip-bg: rgba(50, 50, 50, 0.9);
+  --color-ss-resize-tooltip-text: #ffffff;
+
+  /* Cell drag-drop visual feedback
+ * Used by UILayer for drag source/target visualization
+ */
+  --color-ss-drag-source: rgba(33, 115, 70, 0.15);
+  --color-ss-drag-target: #217346;
+  --color-ss-drag-target-fill: rgba(33, 115, 70, 0.1);
+  --color-ss-drag-copy-mode: #34a853;
+
+  /* Conditional formatting preset colors
+ * Excel-compatible color scales and data bars
+ */
+  --color-ss-cf-positive: #63be7b;
+  --color-ss-cf-neutral: #ffeb84;
+  --color-ss-cf-negative: #f8696b;
+  --color-ss-cf-blue: #5a8ac6;
+  --color-ss-cf-white: #ffffff;
+
+  /* Data bar defaults (Excel-compatible) */
+  --color-ss-databar-blue: #638ec6;
+  --color-ss-databar-green: #63be7b;
+  --color-ss-databar-red: #f8696b;
+  --color-ss-databar-orange: #ffab46;
+
+  /* Brand color (for marketing pages, branded UI elements)
+ * NOT for general UI chrome - use primary for interactive elements
+ */
+  --color-ss-brand: #217346;
+  --color-ss-brand-hover: #1a5d38;
+  --color-ss-brand-light: rgba(33, 115, 70, 0.1);
+
+  /* Selection states (for lists, tables, dialogs)
+ * Use for row selection in Name Manager, list selection, etc.
+ */
+  --color-ss-row-selected: rgba(33, 115, 70, 0.1);
+  --color-ss-row-selected-hover: rgba(33, 115, 70, 0.15);
+
+  /* Overlay backgrounds
+ * Semi-transparent black overlays for modals, backdrops, and dimming layers.
+ * Use instead of raw bg-black/N for consistency and easy theming.
+ */
+  --color-ss-overlay-light: rgba(0, 0, 0, 0.2);
+  --color-ss-overlay: rgba(0, 0, 0, 0.3);
+  --color-ss-overlay-heavy: rgba(0, 0, 0, 0.7);
+
+  /* ============================================
+ * SPACING - 4px base scale
+ * ============================================ */
+  --spacing-ss-0_5: 2px;
+  --spacing-ss-1: 4px;
+  --spacing-ss-1_5: 6px;
+  --spacing-ss-2: 8px;
+  --spacing-ss-2_5: 10px;
+  --spacing-ss-3: 12px;
+  --spacing-ss-4: 16px;
+  --spacing-ss-5: 20px;
+  --spacing-ss-6: 24px;
+  --spacing-ss-8: 32px;
+
+  /* ============================================
+ * TYPOGRAPHY - Semantic tokens by PURPOSE
+ *
+ * ARCHITECTURE RULE:
+ * - Simple font sizes (single values) are defined here as @theme tokens
+ * - Compound typography (size + line-height) is in @layer components below
+ *
+ * NEVER use in toolbar/ribbon components:
+ * ❌ text-xs, text-sm, text-base (Tailwind defaults - wrong sizes)
+ * ❌ text-[12px] (hardcoded - not from source of truth)
+ * ❌ font-size: 12px (inline styles - not from source of truth)
+ *
+ * ALWAYS use:
+ * ✅ text-tab, text-ribbon, text-ribbon-group, text-dropdown, etc.
+ *
+ * To add a new size: Add token here, then use the utility class.
+ *
+ * NOTE: Compound typography tokens (text-cell, text-body, text-hint, etc.)
+ * are defined as CSS classes in @layer components because the "size / line-height"
+ * syntax doesn't work correctly in @theme blocks.
+ * ============================================ */
+  --font-ss-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ss-mono: 'Consolas', 'Monaco', monospace;
+
+  /* --- Toolbar/Ribbon Context: Extra compact ---
+ *
+ * Visual hierarchy (largest to smallest):
+ * text-tab (12px) - Tab headers: Home, Insert, Page Layout...
+ * text-ribbon (11px) - Ribbon button labels, Name Box (cell address)...
+ * text-ribbon-compact (10px) - Compact ribbon labels, kbd shortcuts, tooltip descriptions
+ * text-ribbon-group (9px) - Group labels: Clipboard, Font, Alignment...
+ * text-ribbon-chip (7px) - Style preview chips (tiny inline labels)
+ *
+ * Dropdowns have larger sizes for readability:
+ * text-dropdown (13px) - Menu items
+ * text-dropdown-header (11px) - Section headers within dropdowns
+ *
+ * NOTE: Tailwind v4 uses --text-* to generate text-* utilities
+ * (same pattern as @mog/shared/styles/typography.css)
+ */
+  --text-tab: 0.75rem; /* 12px - Ribbon tab headers (Home, Insert...) */
+  --text-ribbon: 0.6875rem; /* 11px */
+  --text-ribbon-compact: 0.625rem; /* 10px - Compact labels, kbd elements, tooltip descriptions */
+  --text-ribbon-group: 0.5625rem; /* 9px */
+  --text-ribbon-chip: 0.4375rem; /* 7px - Style preview chips */
+  --text-dropdown: 0.8125rem; /* 13px */
+  --text-dropdown-header: 0.6875rem; /* 11px */
+  --text-sheet-tab: 0.8125rem; /* 13px - Sheet tabs (bottom bar) */
+
+  /* ============================================
+ * SHADOWS
+ * ============================================ */
+  --shadow-ss-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-ss: 0 2px 4px rgba(0, 0, 0, 0.12);
+  --shadow-ss-md: 0 2px 10px rgba(0, 0, 0, 0.15);
+  --shadow-ss-lg: 0 4px 24px rgba(0, 0, 0, 0.15);
+  --shadow-ss-xl: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  /* Button depth - subtle tactile feedback for Excel-like polish */
+  --shadow-ss-button-hover: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-ss-button-active: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-ss-button-pressed: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+
+  /* Dropdown elevation - Excel-like floating panel */
+  --shadow-ss-dropdown: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+
+  /* ============================================
+ * BORDER RADIUS
+ * ============================================ */
+  --radius-ss-sm: 2px;
+  --radius-ss: 4px;
+  --radius-ss-md: 6px;
+  --radius-ss-lg: 8px;
+  --radius-ss-xl: 12px;
+
+  /* ============================================
+ * Z-INDEX SCALE
+ * ============================================ */
+  --z-ss-sticky: 200;
+  --z-ss-overlay: 300;
+  --z-ss-modal: 1000;
+  --z-ss-popover: 1050;
+  --z-ss-toast: 1100;
+  --z-ss-tooltip: 1200;
+
+  /* ============================================
+ * TRANSITIONS
+ * ============================================ */
+  --duration-ss-fast: 100ms;
+  --duration-ss: 150ms;
+  --duration-ss-slow: 300ms;
+
+  /* ============================================
+ * ANIMATIONS
+ * ============================================ */
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  --animate-ss-spin: spin 1s linear infinite;
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  --animate-ss-pulse: pulse 1s ease-in-out infinite;
+
+  /* Dropdown entrance animation - subtle scale + fade */
+  @keyframes dropdown-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  --animate-ss-dropdown-enter: dropdown-enter 150ms ease-out;
+}
+
+/* Base styles (reset, scrollbars) are inherited from shell/src/styles/globals.css */
+
+/* ============================================
+ * TYPOGRAPHY COMPONENT CLASSES
+ * ============================================
+ * These compound typography styles (size + line-height) must be CSS classes
+ * because the "Npx / N.N" syntax doesn't work correctly in @theme blocks.
+ * The browser receives invalid CSS like "font-size: 11px/1.4" and ignores it.
+ *
+ * Use these classes directly: class="text-body" or class="text-hint"
+ *
+ * Typography Hierarchy:
+ *
+ * --- UI Context: Comfortable for readability ---
+ * .text-subtitle (18px/1.4) - Section headings
+ * .text-section (16px/1.4) - Sub-section headings
+ * .text-body (14px/1.5) - Default body text
+ * .text-body-sm (13px/1.5) - Smaller body text
+ * .text-body-lg (16px/1.5) - Larger body text
+ *
+ * --- Content Context: Dialogs, panels, forms ---
+ * .text-label (13px/1.4) - Form labels, dialog labels
+ * .text-caption (12px/1.4) - Captions, metadata
+ * .text-hint (11px/1.4) - Help text, hints
+ *
+ * For toolbar/ribbon elements, use the @theme tokens instead:
+ * text-tab, text-ribbon, text-ribbon-group, text-dropdown, etc.
+ * ============================================ */
+@layer components {
+  /* --- UI Context: Comfortable for readability --- */
+  /* Titles & Headings */
+  .text-subtitle {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  .text-section {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  /* Body & Content */
+  .text-body {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .text-body-sm {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .text-body-lg {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  /* --- Content Context: Dialogs, panels, forms ---
+ * Use these for dialog labels, form captions, help text.
+ * Do NOT use for toolbar/ribbon elements (use text-ribbon etc. instead).
+ */
+  .text-label {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .text-caption {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .text-hint {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+}
+
+/* ============================================
+ * UTILITY CLASSES (spreadsheet-specific)
+ * Base utilities (.no-select) are inherited from shell
+ * ============================================ */
+@layer utilities {
+  /* F6 Pane Focus Indicator
+ *
+ * Visual indicator showing which pane is focused during F6 navigation.
+ * Uses an inset border (box-shadow) to avoid layout shift while providing
+ * clear visual feedback. The indicator is only visible on :focus (not :focus-within).
+ *
+ * Design decisions:
+ * - 2px inset border matches Excel's focus indicator style
+ * - Primary color for consistency with other focus states
+ * - No transition to provide immediate feedback when cycling panes
+ */
+  .pane-focus-indicator {
+    /* Remove default browser outline */
+    outline: none;
+  }
+
+  .pane-focus-indicator:focus {
+    /* Inset box-shadow creates a border effect without layout shift */
+    box-shadow: inset 0 0 0 2px var(--color-ss-primary);
+  }
+
+  /* Alternative: focus-visible for keyboard-only focus
+ * Use this variant if you want focus indicator only for keyboard navigation,
+ * not for programmatic focus or click focus.
+ */
+  .pane-focus-indicator-visible:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--color-ss-primary);
+  }
+
+  /* ============================================
+ * IME COMPOSITION STYLING (F.1: Excel Parity)
+ * ============================================
+ * Shows visual feedback during IME composition (CJK input).
+ *
+ * The composition text appears with:
+ * - Dotted underline (like Excel/Google Sheets)
+ * - Subtle background highlight
+ *
+ * Cross-browser support:
+ * - Chrome: Uses these styles directly
+ * - Firefox: Uses these styles + fallback
+ * - Safari: Uses these styles + fallback
+ *
+ */
+
+  /*
+ * For input/textarea elements during IME composition,
+ * we add a subtle visual indicator. The browser handles
+ * the actual composition text underlining natively, but
+ * we add an additional styling cue via a bottom border.
+ */
+  input.ime-composing,
+  textarea.ime-composing {
+    /* Bottom border as visual indicator that IME is active */
+    border-bottom: 2px solid var(--color-ss-primary);
+    /* Prevent padding adjustment due to border */
+    box-sizing: border-box;
+  }
+
+  /*
+ * IME composition visual feedback for rich text editor.
+ * Uses a marker to highlight the composing region.
+ */
+  .ime-composition-marker {
+    background-color: rgba(33, 115, 70, 0.1);
+    border-bottom: 1px dotted var(--color-ss-primary);
+  }
+
+  /* Z-index utilities: Tailwind v4 does not auto-generate z-* utilities from
+ * custom --z-* @theme tokens (only the built-in numeric scale is generated).
+ * Values must match the @theme inline declarations above. */
+  .z-ss-sticky {
+    z-index: 200;
+  }
+  .z-ss-overlay {
+    z-index: 300;
+  }
+  .z-ss-modal {
+    z-index: 1000;
+  }
+  .z-ss-popover {
+    z-index: 1050;
+  }
+  .z-ss-toast {
+    z-index: 1100;
+  }
+  .z-ss-tooltip {
+    z-index: 1200;
+  }
+
+  /* Transition-duration utilities: Tailwind v4 does not auto-generate duration-*
+ * utilities from custom --duration-* @theme tokens. */
+  .duration-ss-fast {
+    transition-duration: 100ms;
+  }
+  .duration-ss {
+    transition-duration: 150ms;
+  }
+  .duration-ss-slow {
+    transition-duration: 300ms;
+  }
+
+  .mog-spreadsheet-app-theme-scope {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  [data-mog-color-scheme='dark'] {
+    color-scheme: dark;
+    --color-ss-primary: #4ade80;
+    --color-ss-primary-hover: #86efac;
+    --color-ss-primary-active: #22c55e;
+    --color-ss-primary-light: rgba(74, 222, 128, 0.18);
+    --color-ss-primary-lighter: rgba(74, 222, 128, 0.12);
+    --color-ss-surface: #181c1f;
+    --color-ss-surface-secondary: #111417;
+    --color-ss-surface-tertiary: #252a2f;
+    --color-ss-surface-hover: #2f363c;
+    --color-ss-surface-active: #3b444c;
+    --color-ss-text: #f4f7f5;
+    --color-ss-text-secondary: #c6d0cb;
+    --color-ss-text-tertiary: #9aa8a2;
+    --color-ss-text-disabled: #69756f;
+    --color-ss-text-inverse: #101312;
+    --color-ss-border: #3a4248;
+    --color-ss-border-light: #2b3237;
+    --color-ss-border-focus: #4ade80;
+    --color-ss-border-hover: #6b7770;
+    --color-ss-border-button-hover: rgba(255, 255, 255, 0.12);
+    --color-ss-success-bg: rgba(52, 168, 83, 0.18);
+    --color-ss-success-text: #bbf7d0;
+    --color-ss-warning-bg: rgba(249, 171, 0, 0.18);
+    --color-ss-warning-text: #fde68a;
+    --color-ss-error-bg: rgba(234, 67, 53, 0.18);
+    --color-ss-error-text: #fecaca;
+    --color-ss-info-bg: rgba(74, 222, 128, 0.16);
+    --color-ss-info-text: #bbf7d0;
+    --tab-active-bg: var(--color-ss-surface);
+    --tab-hover-bg: rgba(255, 255, 255, 0.08);
+    --tab-active-text: var(--color-ss-primary);
+    --tab-inactive-text: var(--color-ss-text-secondary);
+    --quick-access-hover-bg: rgba(255, 255, 255, 0.08);
+    --quick-access-hover-border: rgba(255, 255, 255, 0.14);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-white,
+  [data-mog-color-scheme='dark'] .bg-ss-surface {
+    background-color: var(--color-ss-surface);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-gray-50,
+  [data-mog-color-scheme='dark'] .bg-gray-100,
+  [data-mog-color-scheme='dark'] .bg-neutral-50,
+  [data-mog-color-scheme='dark'] .bg-neutral-100,
+  [data-mog-color-scheme='dark'] .bg-ss-surface-secondary {
+    background-color: var(--color-ss-surface-secondary);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-gray-200,
+  [data-mog-color-scheme='dark'] .bg-neutral-200,
+  [data-mog-color-scheme='dark'] .bg-ss-surface-tertiary {
+    background-color: var(--color-ss-surface-tertiary);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-ss-surface-hover,
+  [data-mog-color-scheme='dark'] .data-\[highlighted\]\:bg-ss-surface-hover[data-highlighted],
+  [data-mog-color-scheme='dark'] .focus\:bg-ss-surface-hover:focus {
+    background-color: var(--color-ss-surface-hover);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-ss-surface-active,
+  [data-mog-color-scheme='dark'] .data-\[state\=open\]\:bg-ss-surface-active[data-state='open'],
+  [data-mog-color-scheme='dark'] .active\:bg-ss-surface-active:active {
+    background-color: var(--color-ss-surface-active);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-ss-primary-light,
+  [data-mog-color-scheme='dark'] .aria-pressed\:bg-ss-primary-light[aria-pressed='true'] {
+    background-color: var(--color-ss-primary-light);
+  }
+
+  [data-mog-color-scheme='dark'] .bg-ss-primary-lighter {
+    background-color: var(--color-ss-primary-lighter);
+  }
+
+  [data-mog-color-scheme='dark'] .text-text,
+  [data-mog-color-scheme='dark'] .text-ss-text,
+  [data-mog-color-scheme='dark'] .text-gray-900,
+  [data-mog-color-scheme='dark'] .text-gray-800,
+  [data-mog-color-scheme='dark'] .text-neutral-900,
+  [data-mog-color-scheme='dark'] .text-neutral-800 {
+    color: var(--color-ss-text);
+  }
+
+  [data-mog-color-scheme='dark'] .text-ss-text-secondary,
+  [data-mog-color-scheme='dark'] .text-gray-700,
+  [data-mog-color-scheme='dark'] .text-gray-600,
+  [data-mog-color-scheme='dark'] .text-neutral-700,
+  [data-mog-color-scheme='dark'] .text-neutral-600,
+  [data-mog-color-scheme='dark']
+    .data-\[state\=inactive\]\:text-ss-text-secondary[data-state='inactive'] {
+    color: var(--color-ss-text-secondary);
+  }
+
+  [data-mog-color-scheme='dark'] .text-ss-text-tertiary,
+  [data-mog-color-scheme='dark'] .text-gray-500,
+  [data-mog-color-scheme='dark'] .text-neutral-500,
+  [data-mog-color-scheme='dark'] .text-neutral-400 {
+    color: var(--color-ss-text-tertiary);
+  }
+
+  [data-mog-color-scheme='dark'] .text-ss-text-disabled,
+  [data-mog-color-scheme='dark'] .text-gray-400 {
+    color: var(--color-ss-text-disabled);
+  }
+
+  [data-mog-color-scheme='dark'] .text-ss-primary,
+  [data-mog-color-scheme='dark'] .data-\[state\=active\]\:text-ss-primary[data-state='active'],
+  [data-mog-color-scheme='dark'] .aria-pressed\:text-ss-primary[aria-pressed='true'] {
+    color: var(--color-ss-primary);
+  }
+
+  [data-mog-color-scheme='dark'] .border-ss-border,
+  [data-mog-color-scheme='dark'] .border-gray-200,
+  [data-mog-color-scheme='dark'] .border-gray-300,
+  [data-mog-color-scheme='dark'] .border-neutral-200 {
+    border-color: var(--color-ss-border);
+  }
+
+  [data-mog-color-scheme='dark'] .border-ss-border-light,
+  [data-mog-color-scheme='dark'] .border-neutral-100 {
+    border-color: var(--color-ss-border-light);
+  }
+
+  [data-mog-color-scheme='dark'] .border-ss-primary,
+  [data-mog-color-scheme='dark'] .data-\[state\=active\]\:border-ss-primary[data-state='active'],
+  [data-mog-color-scheme='dark'] .data-\[state\=checked\]\:border-ss-primary[data-state='checked'] {
+    border-color: var(--color-ss-primary);
+  }
+
+  [data-mog-color-scheme='dark'] .data-\[state\=active\]\:border-b-ss-primary[data-state='active'] {
+    border-bottom-color: var(--color-ss-primary);
+  }
+
+  [data-mog-color-scheme='dark'] .data-\[state\=active\]\:bg-ss-surface[data-state='active'] {
+    background-color: var(--color-ss-surface);
+  }
+
+  [data-mog-color-scheme='dark'] .data-\[state\=checked\]\:bg-ss-primary[data-state='checked'],
+  [data-mog-color-scheme='dark'] .data-\[state\=on\]\:bg-ss-primary[data-state='on'],
+  [data-mog-color-scheme='dark'] .active\:bg-ss-primary-active:active {
+    background-color: var(--color-ss-primary-active);
+  }
+
+  [data-mog-color-scheme='dark'] .data-\[state\=on\]\:text-ss-text-inverse[data-state='on'],
+  [data-mog-color-scheme='dark'] .text-ss-text-inverse {
+    color: var(--color-ss-text-inverse);
+  }
+
+  [data-mog-color-scheme='dark'] .shadow-ss-sm,
+  [data-mog-color-scheme='dark'] .shadow-ss,
+  [data-mog-color-scheme='dark'] .shadow-ss-md,
+  [data-mog-color-scheme='dark'] .shadow-ss-lg,
+  [data-mog-color-scheme='dark'] .shadow-ss-xl,
+  [data-mog-color-scheme='dark'] .shadow-ss-dropdown {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  @media (hover: hover) {
+    [data-mog-color-scheme='dark'] .hover\:bg-ss-surface-hover:hover,
+    [data-mog-color-scheme='dark']
+      .data-\[state\=inactive\]\:hover\:bg-ss-surface-tertiary[data-state='inactive']:hover,
+    [data-mog-color-scheme='dark'] .hover\:bg-gray-50:hover,
+    [data-mog-color-scheme='dark'] .hover\:bg-gray-100:hover,
+    [data-mog-color-scheme='dark'] .hover\:bg-neutral-200:hover {
+      background-color: var(--color-ss-surface-hover);
+    }
+
+    [data-mog-color-scheme='dark'] .hover\:bg-ss-surface-active:hover,
+    [data-mog-color-scheme='dark'] .hover\:bg-gray-200:hover {
+      background-color: var(--color-ss-surface-active);
+    }
+
+    [data-mog-color-scheme='dark'] .hover\:text-ss-text:hover,
+    [data-mog-color-scheme='dark']
+      .data-\[state\=inactive\]\:hover\:text-ss-text[data-state='inactive']:hover,
+    [data-mog-color-scheme='dark'] .hover\:text-gray-800:hover {
+      color: var(--color-ss-text);
+    }
+
+    [data-mog-color-scheme='dark'] .hover\:text-ss-text-secondary:hover,
+    [data-mog-color-scheme='dark'] .hover\:text-gray-700:hover,
+    [data-mog-color-scheme='dark'] .hover\:text-gray-600:hover {
+      color: var(--color-ss-text-secondary);
+    }
+
+    [data-mog-color-scheme='dark'] .hover\:border-ss-border:hover,
+    [data-mog-color-scheme='dark'] .hover\:border-gray-300:hover {
+      border-color: var(--color-ss-border-hover);
+    }
+  }
+}

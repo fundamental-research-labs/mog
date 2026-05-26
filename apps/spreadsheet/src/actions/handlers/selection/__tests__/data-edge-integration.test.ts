@@ -1,0 +1,318 @@
+/**
+ * Data-Edge Selection Extension Integration Tests
+ *
+ * Integration tests for the ACTUAL extendToDataEdge handlers to verify that
+ * pressing Cmd+Shift+Left followed by Cmd+Shift+Up correctly creates a
+ * rectangular selection (preserving both horizontal and vertical extensions).
+ *
+ * These tests mock ws.findDataEdge() which delegates to the Rust compute-core
+ * bridge for the actual data-edge algorithm. The mock uses a local data map
+ * to simulate the same algorithm behavior.
+ *
+ * @see ../data-edge.ts - The extendToDataEdge function
+ */
+
+import { jest } from '@jest/globals';
+
+import { sheetId } from '@mog-sdk/contracts/core';
+import { findDataEdge, type CellValueGetter } from '../../../../infra/utils';
+import {
+  EXTEND_TO_EDGE_DOWN,
+  EXTEND_TO_EDGE_LEFT,
+  EXTEND_TO_EDGE_RIGHT,
+  EXTEND_TO_EDGE_UP,
+} from '../data-edge';
+import type { ActionDependencies, CellCoord, CellRange } from '../helpers';
+import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
+
+// =============================================================================
+// TEST UTILITIES
+// =============================================================================
+
+/**
+ * Create a sparse grid of test data.
+ */
+function createTestData(): Map<string, unknown> {
+  return new Map<string, unknown>([
+    // Column A data (rows 0-4)
+    ['0,0', 'A1 data'],
+    ['1,0', 'A2 data'],
+    ['2,0', 'A3 data'],
+    ['3,0', 'A4 data'],
+    ['4,0', 'A5 data'],
+    // Column B data (rows 0-4)
+    ['0,1', 'B1 data'],
+    ['1,1', 'B2 data'],
+    ['2,1', 'B3 data'],
+    ['3,1', 'B4 data'],
+    ['4,1', 'B5 data'], // Starting cell
+  ]);
+}
+
+/**
+ * Create a mock findDataEdge that uses the sync TS algorithm with local test data.
+ */
+function createMockFindDataEdge(testData: Map<string, unknown>) {
+  const getCellValue: CellValueGetter = (row, col) =>
+    testData.get(`${row},${col}`) as ReturnType<CellValueGetter>;
+  return async (row: number, col: number, direction: 'up' | 'down' | 'left' | 'right') => {
+    return findDataEdge({ row, col }, direction, getCellValue, 1048575, 16383);
+  };
+}
+
+/**
+ * Create mock ActionDependencies for testing.
+ */
+function createMockDeps(
+  testData: Map<string, unknown>,
+  activeCell: CellCoord,
+  ranges: CellRange[],
+  anchor: CellCoord | null,
+): {
+  deps: ActionDependencies;
+  getCapturedSelection: () => { ranges: CellRange[]; activeCell: CellCoord } | null;
+} {
+  const captureBox: { value: { ranges: CellRange[]; activeCell: CellCoord } | null } = {
+    value: null,
+  };
+
+  const mockFindDataEdge = createMockFindDataEdge(testData);
+
+  const mockAccessors = {
+    selection: {
+      getActiveCell: () => activeCell,
+      getRanges: () => ranges,
+      getAnchor: () => anchor,
+    },
+  };
+
+  const mockCommands = {
+    selection: {
+      setSelection: (newRanges: CellRange[], newActiveCell: CellCoord) => {
+        captureBox.value = { ranges: newRanges, activeCell: newActiveCell };
+      },
+      goTo: jest.fn(),
+    },
+  };
+
+  const deps: ActionDependencies = {
+    workbook: {
+      activeSheet: { findDataEdge: mockFindDataEdge },
+      setPendingUndoDescription: jest.fn(),
+    } as any,
+    uiStore: {} as any,
+    coordinator: {} as any,
+    getActiveSheetId: () => sheetId('sheet-1'),
+    onUIAction: jest.fn(),
+    accessors: mockAccessors as any,
+    commands: mockCommands as any,
+    // required deps.
+    platform: createMockPlatform(),
+    shellService: createMockShellService(),
+  };
+
+  return {
+    deps,
+    getCapturedSelection: () => captureBox.value,
+  };
+}
+
+// =============================================================================
+// ACTUAL BUG REPRODUCTION TESTS
+// =============================================================================
+
+describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
+  describe('Cmd+Shift+Left then Cmd+Shift+Up creates rectangular selection', () => {
+    const testData = createTestData();
+
+    it('Step 1: Cmd+Shift+Left from B5 extends to A5:B5', async () => {
+      const activeCell: CellCoord = { row: 4, col: 1 };
+      const ranges: CellRange[] = [{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }];
+      const anchor: CellCoord | null = null;
+
+      const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+      const result = await EXTEND_TO_EDGE_LEFT(deps);
+
+      expect(result.handled).toBe(true);
+
+      const capturedSelection = getCapturedSelection();
+      expect(capturedSelection).not.toBeNull();
+      expect(capturedSelection!.ranges).toHaveLength(1);
+
+      const range = capturedSelection!.ranges[0];
+      expect(range.startRow).toBe(4);
+      expect(range.endRow).toBe(4);
+      expect(range.startCol).toBe(0);
+      expect(range.endCol).toBe(1);
+
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+    });
+
+    it('Step 2: Cmd+Shift+Up from A5:B5 creates A1:B5 (rectangular)', async () => {
+      const activeCell: CellCoord = { row: 4, col: 1 };
+      const ranges: CellRange[] = [{ startRow: 4, startCol: 0, endRow: 4, endCol: 1 }];
+      const anchor: CellCoord = { row: 4, col: 1 };
+
+      const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+      const result = await EXTEND_TO_EDGE_UP(deps);
+
+      expect(result.handled).toBe(true);
+
+      const capturedSelection = getCapturedSelection();
+      expect(capturedSelection).not.toBeNull();
+      expect(capturedSelection!.ranges).toHaveLength(1);
+
+      const range = capturedSelection!.ranges[0];
+
+      expect(range.startRow).toBe(0);
+      expect(range.endRow).toBe(4);
+      expect(range.startCol).toBe(0);
+      expect(range.endCol).toBe(1);
+
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+    });
+  });
+
+  describe('Cmd+Shift+Up then Cmd+Shift+Left creates rectangular selection', () => {
+    const testData = createTestData();
+
+    it('Step 1: Cmd+Shift+Up from B5 extends to B1:B5', async () => {
+      const activeCell: CellCoord = { row: 4, col: 1 };
+      const ranges: CellRange[] = [{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }];
+      const anchor: CellCoord | null = null;
+
+      const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+      const result = await EXTEND_TO_EDGE_UP(deps);
+
+      expect(result.handled).toBe(true);
+      const capturedSelection = getCapturedSelection();
+      expect(capturedSelection).not.toBeNull();
+      expect(capturedSelection!.ranges).toHaveLength(1);
+
+      const range = capturedSelection!.ranges[0];
+      expect(range.startRow).toBe(0);
+      expect(range.endRow).toBe(4);
+      expect(range.startCol).toBe(1);
+      expect(range.endCol).toBe(1);
+    });
+
+    it('Step 2: Cmd+Shift+Left from B1:B5 creates A1:B5 (rectangular)', async () => {
+      const activeCell: CellCoord = { row: 4, col: 1 };
+      const ranges: CellRange[] = [{ startRow: 0, startCol: 1, endRow: 4, endCol: 1 }];
+      const anchor: CellCoord = { row: 4, col: 1 };
+
+      const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+      const result = await EXTEND_TO_EDGE_LEFT(deps);
+
+      expect(result.handled).toBe(true);
+      const capturedSelection = getCapturedSelection();
+      expect(capturedSelection).not.toBeNull();
+      expect(capturedSelection!.ranges).toHaveLength(1);
+
+      const range = capturedSelection!.ranges[0];
+
+      expect(range.startCol).toBe(0);
+      expect(range.endCol).toBe(1);
+      expect(range.startRow).toBe(0);
+      expect(range.endRow).toBe(4);
+    });
+  });
+
+  describe('OTHER DIRECTIONS: Same bug pattern', () => {
+    const testData = createTestData();
+
+    it('Cmd+Shift+Right then Cmd+Shift+Down works correctly', async () => {
+      const activeCell: CellCoord = { row: 0, col: 0 };
+      let ranges: CellRange[] = [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }];
+      let anchor: CellCoord | null = null;
+
+      const { deps: deps1, getCapturedSelection: getCaptured1 } = createMockDeps(
+        testData,
+        activeCell,
+        ranges,
+        anchor,
+      );
+      await EXTEND_TO_EDGE_RIGHT(deps1);
+
+      const captured1 = getCaptured1();
+      expect(captured1).not.toBeNull();
+      const rangeAfterRight = captured1!.ranges[0];
+      expect(rangeAfterRight.startCol).toBe(0);
+      expect(rangeAfterRight.endCol).toBe(1);
+
+      ranges = [rangeAfterRight];
+      anchor = activeCell;
+
+      const { deps: deps2, getCapturedSelection: getCaptured2 } = createMockDeps(
+        testData,
+        activeCell,
+        ranges,
+        anchor,
+      );
+      await EXTEND_TO_EDGE_DOWN(deps2);
+
+      const captured2 = getCaptured2();
+      expect(captured2).not.toBeNull();
+      const finalRange = captured2!.ranges[0];
+
+      expect(finalRange.startRow).toBe(0);
+      expect(finalRange.endRow).toBe(4);
+      expect(finalRange.startCol).toBe(0);
+      expect(finalRange.endCol).toBe(1);
+    });
+  });
+});
+
+// =============================================================================
+// EDGE CASE TESTS
+// =============================================================================
+
+describe('extendToDataEdge - Edge cases', () => {
+  it('Single cell with no surrounding data extends to grid edge', async () => {
+    const testData = new Map<string, unknown>([['4,1', 'B5 data']]);
+
+    const activeCell: CellCoord = { row: 4, col: 1 };
+    const ranges: CellRange[] = [{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }];
+    const anchor: CellCoord | null = null;
+
+    const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+    await EXTEND_TO_EDGE_UP(deps);
+
+    const capturedSelection = getCapturedSelection();
+    expect(capturedSelection).not.toBeNull();
+    const range = capturedSelection!.ranges[0];
+
+    expect(range.startRow).toBe(0);
+    expect(range.endRow).toBe(4);
+  });
+
+  it('Extending into empty region stops at empty boundary', async () => {
+    const testData = new Map<string, unknown>([
+      ['0,1', 'B1 data'],
+      ['1,1', 'B2 data'],
+      // Gap at row 2
+      ['3,1', 'B4 data'],
+      ['4,1', 'B5 data'],
+    ]);
+
+    const activeCell: CellCoord = { row: 4, col: 1 };
+    const ranges: CellRange[] = [{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }];
+    const anchor: CellCoord | null = null;
+
+    const { deps, getCapturedSelection } = createMockDeps(testData, activeCell, ranges, anchor);
+
+    await EXTEND_TO_EDGE_UP(deps);
+
+    const capturedSelection = getCapturedSelection();
+    expect(capturedSelection).not.toBeNull();
+    const range = capturedSelection!.ranges[0];
+
+    expect(range.startRow).toBe(3); // B4
+    expect(range.endRow).toBe(4); // B5
+  });
+});

@@ -1,0 +1,6 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Circle in back - blue filled -->
+  <circle cx="5.5" cy="5.5" r="4.5" fill="var(--icon-accent-blue, #2563eb)"/>
+  <!-- Rounded rectangle in front - solid fill -->
+  <rect x="6.5" y="6.5" width="8.5" height="8.5" rx="2" fill="currentColor"/>
+</svg>

@@ -1,0 +1,19 @@
+[package]
+name = "pdf-core"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "PDF 1.7 document model, serializer, and content stream builder"
+
+[features]
+default = []
+
+[dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ttf-parser = "0.24"
+
+[dev-dependencies]

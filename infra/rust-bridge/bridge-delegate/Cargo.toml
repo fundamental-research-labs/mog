@@ -1,0 +1,12 @@
+[package]
+name = "bridge-delegate"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "Delegate generator for rust-bridge: auto-generate Rust wrapper methods from bridge descriptors"
+
+[dependencies]
+bridge-delegate-macros = { path = "macros" }
+
+[dev-dependencies]
+trybuild = "1"

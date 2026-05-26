@@ -1,0 +1,146 @@
+error[E0277]: `std::sync::MutexGuard<'static, ()>` cannot be sent between threads safely
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+24 | /         $gen! {
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ `std::sync::MutexGuard<'static, ()>` cannot be sent between threads safely
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = help: within `NotSendService`, the trait `Send` is not implemented for `std::sync::MutexGuard<'static, ()>`
+note: required because it appears within the type `NotSendService`
+  --> tests/ui/not_send_service_fail.rs:5:12
+   |
+ 5 | pub struct NotSendService {
+   |            ^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+24 | /         $gen! {
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `insert` exists for struct `State<'_, TauriRegistry<NotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+ 5 |   pub struct NotSendService {
+   |   ------------------------- doesn't satisfy `NotSendService: Send`
+...
+24 |           $gen! {
+   |  _________^
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSendService>>` due to unsatisfied trait bounds
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `std::sync::MutexGuard<'static, ()>: Send`
+           which is required by `NotSendService: Send`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `with_read` exists for struct `State<'_, TauriRegistry<NotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+ 5 |   pub struct NotSendService {
+   |   ------------------------- doesn't satisfy `NotSendService: Send`
+...
+24 |           $gen! {
+   |  _________^
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSendService>>` due to unsatisfied trait bounds
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `std::sync::MutexGuard<'static, ()>: Send`
+           which is required by `NotSendService: Send`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0282]: type annotations needed
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+24 | /         $gen! {
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ cannot infer type
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `remove` exists for struct `State<'_, TauriRegistry<NotSendService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+ 5 |   pub struct NotSendService {
+   |   ------------------------- doesn't satisfy `NotSendService: Send`
+...
+24 |           $gen! {
+   |  _________^
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSendService>>` due to unsatisfied trait bounds
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `std::sync::MutexGuard<'static, ()>: Send`
+           which is required by `NotSendService: Send`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `std::sync::MutexGuard<'static, ()>` cannot be sent between threads safely
+  --> tests/ui/not_send_service_fail.rs:47:24
+   |
+47 |     assert_send_sync::<NotSendServiceRegistry>();
+   |                        ^^^^^^^^^^^^^^^^^^^^^^ `std::sync::MutexGuard<'static, ()>` cannot be sent between threads safely
+   |
+   = help: within `NotSendService`, the trait `Send` is not implemented for `std::sync::MutexGuard<'static, ()>`
+note: required because it appears within the type `NotSendService`
+  --> tests/ui/not_send_service_fail.rs:5:12
+   |
+ 5 | pub struct NotSendService {
+   |            ^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/not_send_service_fail.rs:24:9
+   |
+24 | /         $gen! {
+25 | |             bridge_version = 1;
+26 | |             group = ops;
+27 | |             service = NotSendService;
+...  |
+38 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)

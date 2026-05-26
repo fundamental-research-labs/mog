@@ -1,0 +1,47 @@
+[package]
+name = "compute-wire"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Wire format definitions and binary serializers for the Rust<->TypeScript viewport/mutation protocols"
+
+[dependencies]
+domain-types = { path = "../../../../domain-types" }
+formula-types = { path = "../types/formula-types" }
+ooxml-types = { path = "../../../../file-io/ooxml/types" }
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+snapshot-types = { path = "../types/snapshot-types" }
+compute-cf = { path = "../compute-cf" }
+# R4.1: viewport filter uses SheetAccessMatrix + AccessLevel directly on the
+# wire buffer. compute-security has no Yrs or compute-core deps, so this edge
+# is clean.
+compute-security = { path = "../compute-security" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
+compute-wire = { path = ".", features = ["test-utils"] }
+
+[features]
+default = []
+test-utils = []
+
+[[bin]]
+name = "generate-ts"
+path = "src/bin/generate_ts.rs"
+
+[[bin]]
+name = "generate-test-fixtures"
+path = "src/bin/generate_test_fixtures.rs"
+
+[[bench]]
+name = "wire_bench"
+harness = false

@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./generated",
+    "outDir": "./dist"
+  },
+  "include": [
+    "generated/ooxml-types.ts",
+    "generated/xlsx-types.ts",
+    "generated/external-types.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", "src", "tests"],
+  "references": []
+}

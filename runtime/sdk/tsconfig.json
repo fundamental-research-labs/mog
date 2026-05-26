@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@mog-sdk/contracts": ["../../contracts/dist/index.d.ts"],
+      "@mog-sdk/contracts/*": [
+        "../../contracts/dist/*.d.ts",
+        "../../contracts/dist/*/index.d.ts",
+        "../../contracts/dist/*"
+      ]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.json"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "**/__tests__/**"
+  ]
+}

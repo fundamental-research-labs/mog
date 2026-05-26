@@ -1,0 +1,689 @@
+{
+  "name": "@mog/types-api",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/api/index.ts",
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./api": {
+      "development": "./src/api/index.ts",
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./api/api-errors": {
+      "development": "./src/api/api-errors.ts",
+      "types": "./dist/api/api-errors.d.ts",
+      "import": "./dist/api/api-errors.js"
+    },
+    "./api/mog-sdk-error": {
+      "development": "./src/api/mog-sdk-error.ts",
+      "types": "./dist/api/mog-sdk-error.d.ts",
+      "import": "./dist/api/mog-sdk-error.js"
+    },
+    "./api/mutation-receipt": {
+      "development": "./src/api/mutation-receipt.ts",
+      "types": "./dist/api/mutation-receipt.d.ts",
+      "import": "./dist/api/mutation-receipt.js"
+    },
+    "./api/types": {
+      "development": "./src/api/types.ts",
+      "types": "./dist/api/types.d.ts",
+      "import": "./dist/api/types.js"
+    },
+    "./api/workbook": {
+      "development": "./src/api/workbook.ts",
+      "types": "./dist/api/workbook.d.ts",
+      "import": "./dist/api/workbook.js"
+    },
+    "./api/state-mirror": {
+      "development": "./src/api/state-mirror.ts",
+      "types": "./dist/api/state-mirror.d.ts",
+      "import": "./dist/api/state-mirror.js"
+    },
+    "./api/workbook/cell-styles": {
+      "development": "./src/api/workbook/cell-styles.ts",
+      "types": "./dist/api/workbook/cell-styles.d.ts",
+      "import": "./dist/api/workbook/cell-styles.js"
+    },
+    "./api/workbook/changes": {
+      "development": "./src/api/workbook/changes.ts",
+      "types": "./dist/api/workbook/changes.d.ts",
+      "import": "./dist/api/workbook/changes.js"
+    },
+    "./api/workbook/diagnostics": {
+      "development": "./src/api/workbook/diagnostics.ts",
+      "types": "./dist/api/workbook/diagnostics.d.ts",
+      "import": "./dist/api/workbook/diagnostics.js"
+    },
+    "./api/workbook/functions": {
+      "development": "./src/api/workbook/functions.ts",
+      "types": "./dist/api/workbook/functions.d.ts",
+      "import": "./dist/api/workbook/functions.js"
+    },
+    "./api/workbook/history": {
+      "development": "./src/api/workbook/history.ts",
+      "types": "./dist/api/workbook/history.d.ts",
+      "import": "./dist/api/workbook/history.js"
+    },
+    "./api/workbook/names": {
+      "development": "./src/api/workbook/names.ts",
+      "types": "./dist/api/workbook/names.d.ts",
+      "import": "./dist/api/workbook/names.js"
+    },
+    "./api/workbook/notifications": {
+      "development": "./src/api/workbook/notifications.ts",
+      "types": "./dist/api/workbook/notifications.d.ts",
+      "import": "./dist/api/workbook/notifications.js"
+    },
+    "./api/workbook/pivot-styles": {
+      "development": "./src/api/workbook/pivot-styles.ts",
+      "types": "./dist/api/workbook/pivot-styles.d.ts",
+      "import": "./dist/api/workbook/pivot-styles.js"
+    },
+    "./api/workbook/properties": {
+      "development": "./src/api/workbook/properties.ts",
+      "types": "./dist/api/workbook/properties.d.ts",
+      "import": "./dist/api/workbook/properties.js"
+    },
+    "./api/workbook/protection": {
+      "development": "./src/api/workbook/protection.ts",
+      "types": "./dist/api/workbook/protection.d.ts",
+      "import": "./dist/api/workbook/protection.js"
+    },
+    "./api/workbook/scenarios": {
+      "development": "./src/api/workbook/scenarios.ts",
+      "types": "./dist/api/workbook/scenarios.d.ts",
+      "import": "./dist/api/workbook/scenarios.js"
+    },
+    "./api/workbook/security": {
+      "development": "./src/api/workbook/security.ts",
+      "types": "./dist/api/workbook/security.d.ts",
+      "import": "./dist/api/workbook/security.js"
+    },
+    "./api/workbook/sheets": {
+      "development": "./src/api/workbook/sheets.ts",
+      "types": "./dist/api/workbook/sheets.d.ts",
+      "import": "./dist/api/workbook/sheets.js"
+    },
+    "./api/workbook/slicer-styles": {
+      "development": "./src/api/workbook/slicer-styles.ts",
+      "types": "./dist/api/workbook/slicer-styles.d.ts",
+      "import": "./dist/api/workbook/slicer-styles.js"
+    },
+    "./api/workbook/slicers": {
+      "development": "./src/api/workbook/slicers.ts",
+      "types": "./dist/api/workbook/slicers.d.ts",
+      "import": "./dist/api/workbook/slicers.js"
+    },
+    "./api/workbook/state-provider": {
+      "development": "./src/api/workbook/state-provider.ts",
+      "types": "./dist/api/workbook/state-provider.d.ts",
+      "import": "./dist/api/workbook/state-provider.js"
+    },
+    "./api/workbook/styles": {
+      "development": "./src/api/workbook/styles.ts",
+      "types": "./dist/api/workbook/styles.d.ts",
+      "import": "./dist/api/workbook/styles.js"
+    },
+    "./api/workbook/table-styles": {
+      "development": "./src/api/workbook/table-styles.ts",
+      "types": "./dist/api/workbook/table-styles.d.ts",
+      "import": "./dist/api/workbook/table-styles.js"
+    },
+    "./api/workbook/theme": {
+      "development": "./src/api/workbook/theme.ts",
+      "types": "./dist/api/workbook/theme.d.ts",
+      "import": "./dist/api/workbook/theme.js"
+    },
+    "./api/workbook/timeline-styles": {
+      "development": "./src/api/workbook/timeline-styles.ts",
+      "types": "./dist/api/workbook/timeline-styles.d.ts",
+      "import": "./dist/api/workbook/timeline-styles.js"
+    },
+    "./api/workbook/viewport": {
+      "development": "./src/api/workbook/viewport.ts",
+      "types": "./dist/api/workbook/viewport.d.ts",
+      "import": "./dist/api/workbook/viewport.js"
+    },
+    "./api/worksheet": {
+      "development": "./src/api/worksheet.ts",
+      "types": "./dist/api/worksheet.d.ts",
+      "import": "./dist/api/worksheet.js"
+    },
+    "./api/worksheet/bindings": {
+      "development": "./src/api/worksheet/bindings.ts",
+      "types": "./dist/api/worksheet/bindings.d.ts",
+      "import": "./dist/api/worksheet/bindings.js"
+    },
+    "./api/worksheet/changes": {
+      "development": "./src/api/worksheet/changes.ts",
+      "types": "./dist/api/worksheet/changes.d.ts",
+      "import": "./dist/api/worksheet/changes.js"
+    },
+    "./api/worksheet/charts": {
+      "development": "./src/api/worksheet/charts.ts",
+      "types": "./dist/api/worksheet/charts.d.ts",
+      "import": "./dist/api/worksheet/charts.js"
+    },
+    "./api/worksheet/collections": {
+      "development": "./src/api/worksheet/collections/index.ts",
+      "types": "./dist/api/worksheet/collections/index.d.ts",
+      "import": "./dist/api/worksheet/collections/index.js"
+    },
+    "./api/worksheet/collections/connector-collection": {
+      "development": "./src/api/worksheet/collections/connector-collection.ts",
+      "types": "./dist/api/worksheet/collections/connector-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/connector-collection.js"
+    },
+    "./api/worksheet/collections/drawing-collection": {
+      "development": "./src/api/worksheet/collections/drawing-collection.ts",
+      "types": "./dist/api/worksheet/collections/drawing-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/drawing-collection.js"
+    },
+    "./api/worksheet/collections/equation-collection": {
+      "development": "./src/api/worksheet/collections/equation-collection.ts",
+      "types": "./dist/api/worksheet/collections/equation-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/equation-collection.js"
+    },
+    "./api/worksheet/collections/object-collection": {
+      "development": "./src/api/worksheet/collections/object-collection.ts",
+      "types": "./dist/api/worksheet/collections/object-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/object-collection.js"
+    },
+    "./api/worksheet/collections/picture-collection": {
+      "development": "./src/api/worksheet/collections/picture-collection.ts",
+      "types": "./dist/api/worksheet/collections/picture-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/picture-collection.js"
+    },
+    "./api/worksheet/collections/shape-collection": {
+      "development": "./src/api/worksheet/collections/shape-collection.ts",
+      "types": "./dist/api/worksheet/collections/shape-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/shape-collection.js"
+    },
+    "./api/worksheet/collections/textbox-collection": {
+      "development": "./src/api/worksheet/collections/textbox-collection.ts",
+      "types": "./dist/api/worksheet/collections/textbox-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/textbox-collection.js"
+    },
+    "./api/worksheet/collections/text-effects-collection": {
+      "development": "./src/api/worksheet/collections/text-effects-collection.ts",
+      "types": "./dist/api/worksheet/collections/text-effects-collection.d.ts",
+      "import": "./dist/api/worksheet/collections/text-effects-collection.js"
+    },
+    "./api/worksheet/comments": {
+      "development": "./src/api/worksheet/comments.ts",
+      "types": "./dist/api/worksheet/comments.d.ts",
+      "import": "./dist/api/worksheet/comments.js"
+    },
+    "./api/worksheet/conditional-formats": {
+      "development": "./src/api/worksheet/conditional-formats.ts",
+      "types": "./dist/api/worksheet/conditional-formats.d.ts",
+      "import": "./dist/api/worksheet/conditional-formats.js"
+    },
+    "./api/worksheet/custom-properties": {
+      "development": "./src/api/worksheet/custom-properties.ts",
+      "types": "./dist/api/worksheet/custom-properties.d.ts",
+      "import": "./dist/api/worksheet/custom-properties.js"
+    },
+    "./api/worksheet/filters": {
+      "development": "./src/api/worksheet/filters.ts",
+      "types": "./dist/api/worksheet/filters.d.ts",
+      "import": "./dist/api/worksheet/filters.js"
+    },
+    "./api/worksheet/form-controls": {
+      "development": "./src/api/worksheet/form-controls.ts",
+      "types": "./dist/api/worksheet/form-controls.d.ts",
+      "import": "./dist/api/worksheet/form-controls.js"
+    },
+    "./api/worksheet/format-mappings": {
+      "development": "./src/api/worksheet/format-mappings.ts",
+      "types": "./dist/api/worksheet/format-mappings.d.ts",
+      "import": "./dist/api/worksheet/format-mappings.js"
+    },
+    "./api/worksheet/formats": {
+      "development": "./src/api/worksheet/formats.ts",
+      "types": "./dist/api/worksheet/formats.d.ts",
+      "import": "./dist/api/worksheet/formats.js"
+    },
+    "./api/worksheet/handles": {
+      "development": "./src/api/worksheet/handles/index.ts",
+      "types": "./dist/api/worksheet/handles/index.d.ts",
+      "import": "./dist/api/worksheet/handles/index.js"
+    },
+    "./api/worksheet/handles/chart-handle": {
+      "development": "./src/api/worksheet/handles/chart-handle.ts",
+      "types": "./dist/api/worksheet/handles/chart-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/chart-handle.js"
+    },
+    "./api/worksheet/handles/connector-handle": {
+      "development": "./src/api/worksheet/handles/connector-handle.ts",
+      "types": "./dist/api/worksheet/handles/connector-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/connector-handle.js"
+    },
+    "./api/worksheet/handles/drawing-handle": {
+      "development": "./src/api/worksheet/handles/drawing-handle.ts",
+      "types": "./dist/api/worksheet/handles/drawing-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/drawing-handle.js"
+    },
+    "./api/worksheet/handles/equation-handle": {
+      "development": "./src/api/worksheet/handles/equation-handle.ts",
+      "types": "./dist/api/worksheet/handles/equation-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/equation-handle.js"
+    },
+    "./api/worksheet/handles/floating-object-handle": {
+      "development": "./src/api/worksheet/handles/floating-object-handle.ts",
+      "types": "./dist/api/worksheet/handles/floating-object-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/floating-object-handle.js"
+    },
+    "./api/worksheet/handles/ole-object-handle": {
+      "development": "./src/api/worksheet/handles/ole-object-handle.ts",
+      "types": "./dist/api/worksheet/handles/ole-object-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/ole-object-handle.js"
+    },
+    "./api/worksheet/handles/picture-handle": {
+      "development": "./src/api/worksheet/handles/picture-handle.ts",
+      "types": "./dist/api/worksheet/handles/picture-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/picture-handle.js"
+    },
+    "./api/worksheet/handles/shape-handle": {
+      "development": "./src/api/worksheet/handles/shape-handle.ts",
+      "types": "./dist/api/worksheet/handles/shape-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/shape-handle.js"
+    },
+    "./api/worksheet/handles/slicer-handle": {
+      "development": "./src/api/worksheet/handles/slicer-handle.ts",
+      "types": "./dist/api/worksheet/handles/slicer-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/slicer-handle.js"
+    },
+    "./api/worksheet/handles/diagram-handle": {
+      "development": "./src/api/worksheet/handles/diagram-handle.ts",
+      "types": "./dist/api/worksheet/handles/diagram-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/diagram-handle.js"
+    },
+    "./api/worksheet/handles/textbox-handle": {
+      "development": "./src/api/worksheet/handles/textbox-handle.ts",
+      "types": "./dist/api/worksheet/handles/textbox-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/textbox-handle.js"
+    },
+    "./api/worksheet/handles/types": {
+      "development": "./src/api/worksheet/handles/types.ts",
+      "types": "./dist/api/worksheet/handles/types.d.ts",
+      "import": "./dist/api/worksheet/handles/types.js"
+    },
+    "./api/worksheet/handles/text-effects-handle": {
+      "development": "./src/api/worksheet/handles/text-effects-handle.ts",
+      "types": "./dist/api/worksheet/handles/text-effects-handle.d.ts",
+      "import": "./dist/api/worksheet/handles/text-effects-handle.js"
+    },
+    "./api/worksheet/hyperlinks": {
+      "development": "./src/api/worksheet/hyperlinks.ts",
+      "types": "./dist/api/worksheet/hyperlinks.d.ts",
+      "import": "./dist/api/worksheet/hyperlinks.js"
+    },
+    "./api/worksheet/internal": {
+      "development": "./src/api/worksheet/internal.ts",
+      "types": "./dist/api/worksheet/internal.d.ts",
+      "import": "./dist/api/worksheet/internal.js"
+    },
+    "./api/worksheet/layout": {
+      "development": "./src/api/worksheet/layout.ts",
+      "types": "./dist/api/worksheet/layout.d.ts",
+      "import": "./dist/api/worksheet/layout.js"
+    },
+    "./api/worksheet/names": {
+      "development": "./src/api/worksheet/names.ts",
+      "types": "./dist/api/worksheet/names.d.ts",
+      "import": "./dist/api/worksheet/names.js"
+    },
+    "./api/worksheet/objects": {
+      "development": "./src/api/worksheet/objects.ts",
+      "types": "./dist/api/worksheet/objects.d.ts",
+      "import": "./dist/api/worksheet/objects.js"
+    },
+    "./api/worksheet/outline": {
+      "development": "./src/api/worksheet/outline.ts",
+      "types": "./dist/api/worksheet/outline.d.ts",
+      "import": "./dist/api/worksheet/outline.js"
+    },
+    "./api/worksheet/pivots": {
+      "development": "./src/api/worksheet/pivots.ts",
+      "types": "./dist/api/worksheet/pivots.d.ts",
+      "import": "./dist/api/worksheet/pivots.js"
+    },
+    "./api/worksheet/print": {
+      "development": "./src/api/worksheet/print.ts",
+      "types": "./dist/api/worksheet/print.d.ts",
+      "import": "./dist/api/worksheet/print.js"
+    },
+    "./api/worksheet/protection": {
+      "development": "./src/api/worksheet/protection.ts",
+      "types": "./dist/api/worksheet/protection.d.ts",
+      "import": "./dist/api/worksheet/protection.js"
+    },
+    "./api/worksheet/settings": {
+      "development": "./src/api/worksheet/settings.ts",
+      "types": "./dist/api/worksheet/settings.d.ts",
+      "import": "./dist/api/worksheet/settings.js"
+    },
+    "./api/worksheet/slicers": {
+      "development": "./src/api/worksheet/slicers.ts",
+      "types": "./dist/api/worksheet/slicers.d.ts",
+      "import": "./dist/api/worksheet/slicers.js"
+    },
+    "./api/worksheet/diagrams": {
+      "development": "./src/api/worksheet/diagrams.ts",
+      "types": "./dist/api/worksheet/diagrams.d.ts",
+      "import": "./dist/api/worksheet/diagrams.js"
+    },
+    "./api/worksheet/sparklines": {
+      "development": "./src/api/worksheet/sparklines.ts",
+      "types": "./dist/api/worksheet/sparklines.d.ts",
+      "import": "./dist/api/worksheet/sparklines.js"
+    },
+    "./api/worksheet/structure": {
+      "development": "./src/api/worksheet/structure.ts",
+      "types": "./dist/api/worksheet/structure.d.ts",
+      "import": "./dist/api/worksheet/structure.js"
+    },
+    "./api/worksheet/styles": {
+      "development": "./src/api/worksheet/styles.ts",
+      "types": "./dist/api/worksheet/styles.d.ts",
+      "import": "./dist/api/worksheet/styles.js"
+    },
+    "./api/worksheet/tables": {
+      "development": "./src/api/worksheet/tables.ts",
+      "types": "./dist/api/worksheet/tables.d.ts",
+      "import": "./dist/api/worksheet/tables.js"
+    },
+    "./api/worksheet/validation": {
+      "development": "./src/api/worksheet/validation.ts",
+      "types": "./dist/api/worksheet/validation.d.ts",
+      "import": "./dist/api/worksheet/validation.js"
+    },
+    "./api/worksheet/view": {
+      "development": "./src/api/worksheet/view.ts",
+      "types": "./dist/api/worksheet/view.d.ts",
+      "import": "./dist/api/worksheet/view.js"
+    },
+    "./api/worksheet/what-if": {
+      "development": "./src/api/worksheet/what-if.ts",
+      "types": "./dist/api/worksheet/what-if.d.ts",
+      "import": "./dist/api/worksheet/what-if.js"
+    },
+    "./apps": {
+      "development": "./src/apps/index.ts",
+      "types": "./dist/apps/index.d.ts",
+      "import": "./dist/apps/index.js"
+    },
+    "./apps/api": {
+      "development": "./src/apps/api.ts",
+      "types": "./dist/apps/api.d.ts",
+      "import": "./dist/apps/api.js"
+    },
+    "./apps/bindings": {
+      "development": "./src/apps/bindings.ts",
+      "types": "./dist/apps/bindings.d.ts",
+      "import": "./dist/apps/bindings.js"
+    },
+    "./apps/types": {
+      "development": "./src/apps/types.ts",
+      "types": "./dist/apps/types.d.ts",
+      "import": "./dist/apps/types.js"
+    },
+    "./apps/views": {
+      "development": "./src/apps/views.ts",
+      "types": "./dist/apps/views.d.ts",
+      "import": "./dist/apps/views.js"
+    },
+    "./capabilities": {
+      "development": "./src/capabilities/index.ts",
+      "types": "./dist/capabilities/index.d.ts",
+      "import": "./dist/capabilities/index.js"
+    },
+    "./capabilities/errors": {
+      "development": "./src/capabilities/errors.ts",
+      "types": "./dist/capabilities/errors.d.ts",
+      "import": "./dist/capabilities/errors.js"
+    },
+    "./capabilities/gated-api": {
+      "development": "./src/capabilities/gated-api.ts",
+      "types": "./dist/capabilities/gated-api.d.ts",
+      "import": "./dist/capabilities/gated-api.js"
+    },
+    "./capabilities/grants": {
+      "development": "./src/capabilities/grants.ts",
+      "types": "./dist/capabilities/grants.d.ts",
+      "import": "./dist/capabilities/grants.js"
+    },
+    "./capabilities/manifest": {
+      "development": "./src/capabilities/manifest.ts",
+      "types": "./dist/capabilities/manifest.d.ts",
+      "import": "./dist/capabilities/manifest.js"
+    },
+    "./capabilities/requester": {
+      "development": "./src/capabilities/requester.ts",
+      "types": "./dist/capabilities/requester.d.ts",
+      "import": "./dist/capabilities/requester.js"
+    },
+    "./capabilities/scope": {
+      "development": "./src/capabilities/scope.ts",
+      "types": "./dist/capabilities/scope.d.ts",
+      "import": "./dist/capabilities/scope.js"
+    },
+    "./capabilities/sensitive": {
+      "development": "./src/capabilities/sensitive.ts",
+      "types": "./dist/capabilities/sensitive.d.ts",
+      "import": "./dist/capabilities/sensitive.js"
+    },
+    "./capabilities/taxonomy": {
+      "development": "./src/capabilities/taxonomy.ts",
+      "types": "./dist/capabilities/taxonomy.d.ts",
+      "import": "./dist/capabilities/taxonomy.js"
+    },
+    "./capabilities/types": {
+      "development": "./src/capabilities/types.ts",
+      "types": "./dist/capabilities/types.d.ts",
+      "import": "./dist/capabilities/types.js"
+    },
+    "./diagnostics": {
+      "development": "./src/diagnostics/index.ts",
+      "types": "./dist/diagnostics/index.d.ts",
+      "import": "./dist/diagnostics/index.js"
+    },
+    "./diagnostics/core": {
+      "development": "./src/diagnostics/core.ts",
+      "types": "./dist/diagnostics/core.d.ts",
+      "import": "./dist/diagnostics/core.js"
+    },
+    "./diagnostics/style": {
+      "development": "./src/diagnostics/style.ts",
+      "types": "./dist/diagnostics/style.d.ts",
+      "import": "./dist/diagnostics/style.js"
+    },
+    "./extensions": {
+      "development": "./src/extensions/index.ts",
+      "types": "./dist/extensions/index.d.ts",
+      "import": "./dist/extensions/index.js"
+    },
+    "./extensions/types": {
+      "development": "./src/extensions/types.ts",
+      "types": "./dist/extensions/types.d.ts",
+      "import": "./dist/extensions/types.js"
+    },
+    "./feature-gates": {
+      "development": "./src/feature-gates.ts",
+      "types": "./dist/feature-gates.d.ts",
+      "import": "./dist/feature-gates.js"
+    },
+    "./kernel": {
+      "development": "./src/kernel/index.ts",
+      "types": "./dist/kernel/index.d.ts",
+      "import": "./dist/kernel/index.js"
+    },
+    "./kernel/kernel-context": {
+      "development": "./src/kernel/kernel-context.ts",
+      "types": "./dist/kernel/kernel-context.d.ts",
+      "import": "./dist/kernel/kernel-context.js"
+    },
+    "./performance": {
+      "development": "./src/performance/index.ts",
+      "types": "./dist/performance/index.d.ts",
+      "import": "./dist/performance/index.js"
+    },
+    "./performance/profiler-types": {
+      "development": "./src/performance/profiler-types.ts",
+      "types": "./dist/performance/profiler-types.d.ts",
+      "import": "./dist/performance/profiler-types.js"
+    },
+    "./services": {
+      "development": "./src/services/index.ts",
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
+    },
+    "./store": {
+      "development": "./src/store/index.ts",
+      "types": "./dist/store/index.d.ts",
+      "import": "./dist/store/index.js"
+    },
+    "./store/cell-schema": {
+      "development": "./src/store/cell-schema.ts",
+      "types": "./dist/store/cell-schema.d.ts",
+      "import": "./dist/store/cell-schema.js"
+    },
+    "./store/equation-schema": {
+      "development": "./src/store/equation-schema.ts",
+      "types": "./dist/store/equation-schema.d.ts",
+      "import": "./dist/store/equation-schema.js"
+    },
+    "./store/ink-schema": {
+      "development": "./src/store/ink-schema.ts",
+      "types": "./dist/store/ink-schema.d.ts",
+      "import": "./dist/store/ink-schema.js"
+    },
+    "./store/scenarios-schema": {
+      "development": "./src/store/scenarios-schema.ts",
+      "types": "./dist/store/scenarios-schema.d.ts",
+      "import": "./dist/store/scenarios-schema.js"
+    },
+    "./store/schema-types": {
+      "development": "./src/store/schema-types.ts",
+      "types": "./dist/store/schema-types.d.ts",
+      "import": "./dist/store/schema-types.js"
+    },
+    "./store/sheet-maps-schema": {
+      "development": "./src/store/sheet-maps-schema.ts",
+      "types": "./dist/store/sheet-maps-schema.d.ts",
+      "import": "./dist/store/sheet-maps-schema.js"
+    },
+    "./store/sheet-meta-schema": {
+      "development": "./src/store/sheet-meta-schema.ts",
+      "types": "./dist/store/sheet-meta-schema.d.ts",
+      "import": "./dist/store/sheet-meta-schema.js"
+    },
+    "./store/diagram-schema": {
+      "development": "./src/store/diagram-schema.ts",
+      "types": "./dist/store/diagram-schema.d.ts",
+      "import": "./dist/store/diagram-schema.js"
+    },
+    "./store/store-types": {
+      "development": "./src/store/store-types.ts",
+      "types": "./dist/store/store-types.d.ts",
+      "import": "./dist/store/store-types.js"
+    },
+    "./store/text-effects-schema": {
+      "development": "./src/store/text-effects-schema.ts",
+      "types": "./dist/store/text-effects-schema.d.ts",
+      "import": "./dist/store/text-effects-schema.js"
+    },
+    "./store/workbook-schema": {
+      "development": "./src/store/workbook-schema.ts",
+      "types": "./dist/store/workbook-schema.d.ts",
+      "import": "./dist/store/workbook-schema.js"
+    },
+    "./what-if": {
+      "development": "./src/what-if/index.ts",
+      "types": "./dist/what-if/index.d.ts",
+      "import": "./dist/what-if/index.js"
+    },
+    "./what-if/what-if": {
+      "development": "./src/what-if/what-if.ts",
+      "types": "./dist/what-if/what-if.d.ts",
+      "import": "./dist/what-if/what-if.js"
+    },
+    "./workflows": {
+      "development": "./src/workflows/index.ts",
+      "types": "./dist/workflows/index.d.ts",
+      "import": "./dist/workflows/index.js"
+    },
+    "./workflows/context": {
+      "development": "./src/workflows/context.ts",
+      "types": "./dist/workflows/context.d.ts",
+      "import": "./dist/workflows/context.js"
+    },
+    "./workflows/definition": {
+      "development": "./src/workflows/definition.ts",
+      "types": "./dist/workflows/definition.d.ts",
+      "import": "./dist/workflows/definition.js"
+    },
+    "./workflows/events": {
+      "development": "./src/workflows/events.ts",
+      "types": "./dist/workflows/events.d.ts",
+      "import": "./dist/workflows/events.js"
+    },
+    "./workflows/instance": {
+      "development": "./src/workflows/instance.ts",
+      "types": "./dist/workflows/instance.d.ts",
+      "import": "./dist/workflows/instance.js"
+    },
+    "./workflows/runtime": {
+      "development": "./src/workflows/runtime.ts",
+      "types": "./dist/workflows/runtime.d.ts",
+      "import": "./dist/workflows/runtime.js"
+    },
+    "./workflows/triggers": {
+      "development": "./src/workflows/triggers.ts",
+      "types": "./dist/workflows/triggers.d.ts",
+      "import": "./dist/workflows/triggers.js"
+    },
+    "./workflows/types": {
+      "development": "./src/workflows/types.ts",
+      "types": "./dist/workflows/types.d.ts",
+      "import": "./dist/workflows/types.js"
+    },
+    "./workflows/versioning": {
+      "development": "./src/workflows/versioning.ts",
+      "types": "./dist/workflows/versioning.d.ts",
+      "import": "./dist/workflows/versioning.js"
+    }
+  },
+  "description": "Spreadsheet Workbook/Worksheet API, apps, extensions, workflows, services, capabilities, kernel context, store schemas, what-if analysis, diagnostics, performance profiling, and feature gates. Tier 2 integration package; depends on all other tier packages.",
+  "dependencies": {
+    "@mog/types-bridges": "workspace:*",
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-culture": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-editor": "workspace:*",
+    "@mog/types-events": "workspace:*",
+    "@mog/types-formatting": "workspace:*",
+    "@mog/types-machines": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-rendering": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "compute-graph"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+rust-version = "1.85"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CellId-keyed dependency graph — cycle detection, topological sort, range-aware invalidation"
+readme = "README.md"
+
+[dependencies]
+# Foundation types (CellId, SheetId)
+cell-types = { path = "../types/cell-types" }
+workbook-types = { path = "../types/workbook-types" }
+
+# Fast non-cryptographic HashMap (FxHashMap — ~5-10ns lookup with u128 keys)
+rustc-hash = "2"
+
+# Derive macros for std::error::Error
+thiserror = { workspace = true }
+
+# Zero-cost tracing instrumentation (single atomic load per span when no subscriber)
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "graph_benchmark"
+harness = false

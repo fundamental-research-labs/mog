@@ -1,0 +1,16 @@
+error: method leaky: trailing `&Principal` param requires the `needs_principal` flag on the access attribute
+  --> tests/ui/trailing_principal_no_flag.rs:27:13
+   |
+27 |               method write leaky {
+   |               ^^^^^^
+...
+36 | / bridge_delegate::delegate!(
+37 | |     target = StubService,
+38 | |     dispatch = dispatch,
+39 | |     gated = true,
+40 | |     skip_default_imports = true,
+41 | |     crate::__desc_trailing_principal_no_flag,
+42 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_trailing_principal_no_flag` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

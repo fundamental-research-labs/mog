@@ -1,0 +1,52 @@
+{
+  "name": "@mog/types-commands",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./commands": {
+      "development": "./src/commands.ts",
+      "types": "./dist/commands.d.ts",
+      "import": "./dist/commands.js"
+    },
+    "./event-base": {
+      "development": "./src/event-base.ts",
+      "types": "./dist/event-base.d.ts",
+      "import": "./dist/event-base.js"
+    },
+    "./execution": {
+      "development": "./src/execution.ts",
+      "types": "./dist/execution.d.ts",
+      "import": "./dist/execution.js"
+    },
+    "./schema": {
+      "development": "./src/schema.ts",
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
+    "./testing": {
+      "development": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "description": "Command, event-base, execution, schema, and testing contracts shared by state machines and actors. Tier 0 foundation; depends only on @mog/types-core for IdentityRangeSchemaRef.",
+  "dependencies": {
+    "@mog/types-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

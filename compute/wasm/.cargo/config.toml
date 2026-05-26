@@ -1,0 +1,19 @@
+# Pin wasm-pack builds to a sibling target dir so they don't contend with the
+# host-triple builders on the workspace's `target-native/.cargo-lock`. Cargo
+# resolves this config file via the CWD walk-up from `compute/wasm/` (which is
+# the wasm-pack invocation site); for callers that exec from elsewhere we also
+# set `CARGO_TARGET_DIR` explicitly (see `build.sh` and `dev/app/vite.config.ts`).
+[build]
+target-dir = "../../target-wasm"
+
+# 8 MiB stack for wasm32. The default 1 MiB overflows on legitimately deep
+# formula recursion (e.g. nested IF / LET-LAMBDA chains in real-file fixtures
+# like `gantt-chart.xlsx`). Async eval futures are Box::pin-allocated on the
+# heap, but each .poll() level still consumes a few KB of stack via wasm-bindgen
+# glue + future state machines, and ~512 nested polls (the engine's MAX_DEPTH
+# guardrail) can require ~5 MiB on Chrome's default WASM stack. Verified locally
+# against gantt-chart.xlsx; corpus round-trip pre-eval doesn't regress.
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C", "link-arg=-zstack-size=8388608",
+]

@@ -1,0 +1,128 @@
+[package]
+name = "xlsx-parser"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "High-performance XLSX parser in pure Rust"
+license = "MIT"
+repository = "https://github.com/lyfegame/shortcut"
+
+[lib]
+crate-type = ["rlib"]
+
+# CLI tool for round-trip testing (native only, not WASM)
+[[bin]]
+name = "xlsx-roundtrip"
+path = "src/bin/roundtrip.rs"
+required-features = ["cli"]
+
+# Test corpus generator for malformed file testing (native only)
+[[bin]]
+name = "generate_test_corpus"
+path = "src/bin/generate_test_corpus.rs"
+required-features = ["corpus-gen"]
+
+# Crashtest tool for fuzzing existing corpus files (native only)
+[[bin]]
+name = "xlsx-crashtest"
+path = "src/bin/crashtest.rs"
+required-features = ["cli"]
+
+# Corpus profiler with per-phase timing breakdown (native only)
+[[bin]]
+name = "xlsx-profile-corpus"
+path = "src/bin/profile_corpus.rs"
+required-features = ["cli"]
+
+[dependencies]
+# XML derive macros for declarative XML <-> Rust struct mapping
+xml-derive = { path = "xml-derive" }
+
+# Domain-level shared types
+domain-types = { path = "../../../domain-types" }
+
+# OOXML vocabulary types (shared with other crates)
+ooxml-types = { path = "../../ooxml/types", features = ["serde"] }
+
+# Bridge types for cross-boundary error handling (XlsxBridgeError)
+bridge-types = { path = "../../../infra/rust-bridge/bridge-types" }
+
+# ZIP decompression (pure Rust, no std dependency)
+miniz_oxide = "0.7"
+
+# Fast byte searching with SIMD support
+memchr = "2.7"
+
+# Fast CRC32 checksum (uses hardware acceleration when available)
+crc32fast = "1.4"
+
+# Materialize embedded XLSX media parts as browser-loadable data URLs.
+base64 = "0.22"
+
+fast-float = "0.2"
+
+# Serialization for full parse result
+serde = { version = "1.0", features = ["derive"] }
+
+# Cell value types (CellValue, CellError, FiniteF64) for domain-typed parse output
+value-types = { path = "../../../compute/core/crates/types/value-types" }
+
+# Pivot table type definitions (PivotTableConfig, PivotField, FieldId, etc.)
+pivot-types = { path = "../../../compute/core/crates/types/pivot-types" }
+
+# Cell range types (SheetRange) for pivot source range parsing
+cell-types = { path = "../../../compute/core/crates/types/cell-types" }
+
+# Formula-types for CellRef / RangeRef used in A1-entry-point return types
+formula-types = { path = "../../../compute/core/crates/types/formula-types" }
+
+# Canonical A1 parser (parse_a1_cell, parse_a1_range, etc.)
+compute-parser = { path = "../../../compute/core/crates/compute-parser" }
+
+# Case-insensitive string comparison for sheet name matching
+unicase = "2.7"
+
+# JSON serialization for generic XML<->JSON bridge
+serde_json = { version = "1.0", features = ["preserve_order"] }
+
+# XML parsing for generic XML<->JSON bridge (extends existing quick-xml in scanner)
+quick-xml = "0.36"
+
+# Observability — read-path loud warnings on unknown OOXML tokens
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
+# Native-only dependencies (not compiled for WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = { version = "0.9", optional = true }
+rayon = { version = "1.8", optional = true }
+flate2 = { version = "1.0", optional = true, default-features = false, features = ["rust_backend"] }
+
+[features]
+default = []
+# CLI feature for the roundtrip testing tool (native only)
+cli = []
+# Native feature for memory-mapped I/O and fast DEFLATE decompression (not available on WASM)
+native = ["memmap2", "flate2"]
+# Parallel parsing feature for multi-core systems (native only)
+parallel = ["native", "rayon"]
+# Test corpus generator feature (native only, generates malformed test files)
+corpus-gen = []
+
+[profile.release]
+# Maximum optimization level
+opt-level = 3
+# Enable Link Time Optimization for smaller binaries
+lto = true
+# Single codegen unit for better optimization
+codegen-units = 1
+# Strip debug symbols
+debug = false
+# Abort on panic for smaller binaries
+panic = "abort"

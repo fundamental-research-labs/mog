@@ -1,0 +1,114 @@
+/**
+ * Worksheet Sub-API Interfaces — Barrel Export
+ *
+ * All worksheet namespace interfaces for the unified spreadsheet API.
+ */
+
+export type { WorksheetBindings } from './bindings';
+export type {
+  ChangeOrigin,
+  ChangeRecord,
+  ChangeTracker,
+  ChangeTrackOptions,
+  WorksheetChanges,
+} from './changes';
+export type { ChartImageExporter, WorksheetCharts } from './charts';
+export type { WorksheetComments } from './comments';
+export type { WorksheetCustomProperties } from './custom-properties';
+export type {
+  ConditionalFormatUpdate,
+  WorksheetConditionalFormatting,
+} from './conditional-formats';
+export type {
+  AdvancedFilterMode,
+  AdvancedFilterOptions,
+  AdvancedFilterResult,
+  FilterByColorOptions,
+  FilterDropdownData,
+  FilterDropdownItem,
+  WorksheetFilters,
+} from './filters';
+export type { WorksheetFormControls } from './form-controls';
+export type { WorksheetFormats } from './formats';
+export type { WorksheetHyperlinks } from './hyperlinks';
+export type { WorksheetInternal } from './internal';
+export type { RangePixelPosition, WorksheetLayout } from './layout';
+export type { WorksheetNames } from './names';
+/** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
+export type { WorksheetObjects } from './objects';
+export type { WorksheetOutline } from './outline';
+export type {
+  PivotCalculatedFieldSpec,
+  PivotCreateConfig,
+  PivotPlacementPatch,
+  PivotPlacementSpec,
+  WorksheetPivots,
+} from './pivots';
+export type { WorksheetPrint } from './print';
+export type {
+  AllowEditRange,
+  ProtectionOperation,
+  WorksheetAllowEditRanges,
+  WorksheetProtection,
+} from './protection';
+export type { WorksheetSettings } from './settings';
+export type { WorksheetSlicers } from './slicers';
+export type { NodeMoveDirection, NodePosition, WorksheetDiagrams } from './diagrams';
+export type { WorksheetSparklines } from './sparklines';
+export type { WorksheetStructure } from './structure';
+export type { WorksheetStyles } from './styles';
+export type {
+  TableRowCollection,
+  WorksheetTableEvents,
+  WorksheetTableSort,
+  WorksheetTables,
+} from './tables';
+export type {
+  DropdownItemsWithRevision,
+  WorksheetValidation,
+  ValidationCheckResult,
+} from './validation';
+export type { WorksheetView } from './view';
+export type { WorksheetWhatIf } from './what-if';
+
+// Format mapping utilities (API angle/pattern values to OOXML conversions)
+export {
+  officeJsAngleToOoxmlRotation,
+  ooxmlRotationToOfficeJsAngle,
+  officeJsPatternToOoxml,
+  ooxmlPatternToOfficeJs,
+  clampIndent,
+  MAX_INDENT_LEVEL,
+} from './format-mappings';
+
+// Handle types
+export type {
+  FloatingObjectHandle,
+  ShapeHandle,
+  PictureHandle,
+  TextBoxHandle,
+  DrawingHandle,
+  EquationHandle,
+  TextEffectHandle,
+  ConnectorHandle,
+  ChartHandle,
+  DiagramHandle,
+  SlicerHandle,
+  OleObjectHandle,
+} from './handles/index';
+
+// Collection types
+export type {
+  EquationDefaults,
+  EquationStyle,
+  TextEffectDefaults,
+  TextEffectObjectConfig,
+  WorksheetObjectCollection,
+  WorksheetShapeCollection,
+  WorksheetPictureCollection,
+  WorksheetTextBoxCollection,
+  WorksheetDrawingCollection,
+  WorksheetEquationCollection,
+  WorksheetTextEffectCollection,
+  WorksheetConnectorCollection,
+} from './collections/index';

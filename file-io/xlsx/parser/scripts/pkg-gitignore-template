@@ -1,0 +1,12 @@
+# Ignore everything by default (wasm-pack default)
+*
+
+# But track the build artifacts needed for the package to work
+!xlsx_parser.js
+!xlsx_parser.d.ts
+!xlsx_parser_bg.wasm
+!xlsx_parser_bg.wasm.d.ts
+!package.json
+
+# Keep this .gitignore tracked
+!.gitignore

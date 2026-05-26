@@ -1,0 +1,31 @@
+[package]
+name = "compute-parser"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Formula parser for the compute engine — winnow-based AST parser for spreadsheet formulas"
+keywords = ["parser", "formula", "spreadsheet", "ast"]
+categories = ["parsing", "mathematics"]
+
+[features]
+test-utils = []
+
+[dependencies]
+# Foundation types (CellValue, CellError, CellRef, SheetId, StructuredRef, etc.)
+formula-types = { path = "../types/formula-types" }
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+
+# Parser combinator (winnow = nom successor, better errors, faster compile)
+winnow = "0.6"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.0"
+
+[[bench]]
+name = "parse_benchmark"
+harness = false

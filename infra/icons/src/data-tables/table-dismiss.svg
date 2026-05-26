@@ -1,0 +1,7 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Table grid -->
+  <path d="M2 4.5C2 3.11929 3.11929 2 4.5 2H11.5C12.8807 2 14 3.11929 14 4.5V6.25716C13.0491 5.47182 11.8296 5 10.5 5C9.32259 5 8.2316 5.36997 7.33692 6H6V7.33692C5.36997 8.23159 5 9.32259 5 10.5C5 11.8296 5.47182 13.0491 6.25716 14H4.5C3.11929 14 2 12.8807 2 11.5V4.5ZM5 11H3V11.5C3 12.3284 3.67157 13 4.5 13H5V11ZM5 6H3V10H5V6ZM6 5L10 5V3H6V5ZM5 3H4.5C3.67157 3 3 3.67157 3 4.5V5H5V3ZM13 5V4.5C13 3.67157 12.3284 3 11.5 3H11V5H13Z" fill="currentColor"/>
+  <!-- Red circle with X -->
+  <circle cx="10.5" cy="10.5" r="4.5" fill="var(--icon-accent-red, #dc2626)"/>
+  <path d="M8.75 8.75l3.5 3.5M12.25 8.75l-3.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

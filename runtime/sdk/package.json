@@ -1,0 +1,95 @@
+{
+  "name": "@mog-sdk/node",
+  "version": "0.6.0",
+  "description": "Headless spreadsheet engine for Node.js with formula compute and XLSX file I/O",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "llms.txt"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "scripts": {
+    "generate:api-spec": "tsx scripts/generate-api-spec.ts",
+    "build": "tsx scripts/generate-api-spec.ts && tsup --no-dts && tsc -p tsconfig.build.json && node scripts/build-types.mjs && node ../../tools/fix-dts-extensions.mjs dist",
+    "build:dev": "tsup --no-dts",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --config jest.config.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "verify-build": "node scripts/verify-build.mjs",
+    "smoke-test": "node scripts/smoke-test.mjs",
+    "api-report": "api-extractor run --local --verbose",
+    "api-report:ci": "api-extractor run --verbose",
+    "verify-publish": "node ../../tools/verify-sdk-publish.mjs"
+  },
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "headless",
+    "formula",
+    "xlsx",
+    "compute",
+    "data"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal",
+    "directory": "runtime/sdk"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@types/node": "^25.5.0"
+  },
+  "optionalDependencies": {
+    "@mog-sdk/darwin-arm64": "workspace:*",
+    "@mog-sdk/darwin-x64": "workspace:*",
+    "@mog-sdk/linux-arm64-gnu": "workspace:*",
+    "@mog-sdk/linux-arm64-musl": "workspace:*",
+    "@mog-sdk/linux-x64-gnu": "workspace:*",
+    "@mog-sdk/linux-x64-musl": "workspace:*",
+    "@mog-sdk/win32-x64-msvc": "workspace:*"
+  },
+  "devDependencies": {
+    "@mog-sdk/types-host": "workspace:*",
+    "@microsoft/api-extractor": "^7.58.7",
+    "@mog/kernel-host-internal": "workspace:*",
+    "@mog-sdk/kernel": "workspace:*",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  }
+}

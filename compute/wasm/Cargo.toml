@@ -1,0 +1,74 @@
+[package]
+name = "compute-core-wasm"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "WASM binding layer for compute-core spreadsheet formula engine"
+
+[package.metadata.wasm-pack.profile.release]
+# Disable wasm-pack's built-in wasm-opt — we run it manually in build.sh
+# with --enable-simd (the xlsx-parser enables SIMD128)
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.wasm-dev]
+# Fast iteration profile — skip wasm-opt entirely (build.sh skips it too).
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Core compute engine — built without native features (no rayon, no parking_lot)
+compute-core = { path = "../core", default-features = false }
+# Ergonomic Rust API facade (re-exported for downstream consumers)
+compute-api = { path = "../api", default-features = false }
+formula-types = { path = "../core/crates/types/formula-types" }
+cell-types = { path = "../core/crates/types/cell-types" }
+value-types = { path = "../core/crates/types/value-types" }
+snapshot-types = { path = "../core/crates/types/snapshot-types" }
+compute-parser = { path = "../core/crates/compute-parser" }
+compute-formats = { path = "../core/crates/compute-formats" }
+compute-charts = { path = "../core/crates/compute-charts" }
+compute-stats = { path = "../core/crates/compute-stats" }
+compute-table = { path = "../core/crates/compute-table" }
+compute-cf = { path = "../core/crates/compute-cf" }
+compute-schema = { path = "../core/crates/compute-schema" }
+compute-collab = { path = "../core/crates/compute-collab" }
+# Principal — referenced by bare name in generated
+# ComputeService_service_lifecycle descriptor (R2.4).
+compute-security = { path = "../core/crates/compute-security" }
+
+# XLSX parser API (merged into single WASM module)
+xlsx-api = { path = "../../file-io/xlsx-api" }
+
+# Bridge code generation
+bridge-wasm = { path = "../../infra/rust-bridge/bridge-wasm" }
+bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
+
+# WASM bindings
+wasm-bindgen = "0.2"
+
+# Struct serialization across the JS/WASM boundary (JsValue <-> Rust structs)
+serde-wasm-bindgen = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# JavaScript interop
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console"] }
+
+# Date/time (for dynamic filter resolution)
+# wasmbind: makes Utc::now() use js_sys::Date instead of SystemTime::now() (which panics on WASM)
+chrono = { version = "0.4", default-features = false, features = ["clock", "wasmbind"] }
+
+# Better panic messages in WASM (routes panic info to console.error)
+console_error_panic_hook = "0.1"
+
+# Tracing → browser console (routes tracing spans to console.log/warn/error).
+# The WASM subscriber deliberately disables formatter timestamps in lib.rs:
+# browser devtools provide event time, and `SystemTime::now()` is unsupported
+# on wasm32-unknown-unknown.
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+tracing-web = "0.1"

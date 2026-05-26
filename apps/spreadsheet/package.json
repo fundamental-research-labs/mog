@@ -1,0 +1,121 @@
+{
+  "name": "@mog/app-spreadsheet",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "manifest.ts",
+    "register.ts",
+    "__mocks__"
+  ],
+  "type": "module",
+  "private": true,
+  "description": "Default spreadsheet app - the classic grid view",
+  "exports": {
+    ".": {
+      "development": "./index.tsx",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest": {
+      "development": "./manifest.ts",
+      "types": "./dist/manifest.d.ts",
+      "import": "./dist/manifest.js"
+    },
+    "./src/canonical-manifest": {
+      "development": "./src/canonical-manifest.ts",
+      "types": "./dist/src/canonical-manifest.d.ts",
+      "import": "./dist/src/canonical-manifest.js"
+    },
+    "./register": {
+      "development": "./register.ts",
+      "types": "./dist/register.d.ts",
+      "import": "./dist/register.js"
+    },
+    "./embed-runtime": {
+      "types": "./src/infra/context/embed-runtime-context.tsx",
+      "development": "./src/infra/context/embed-runtime-context.tsx",
+      "import": "./dist/src/infra/context/embed-runtime-context.js"
+    },
+    "./chrome/collab": {
+      "development": "./src/entries/chrome-collab.ts",
+      "types": "./dist/src/entries/chrome-collab.d.ts",
+      "import": "./dist/src/entries/chrome-collab.js"
+    },
+    "./chrome/layers": {
+      "development": "./src/entries/chrome-layers.ts",
+      "types": "./dist/src/entries/chrome-layers.d.ts",
+      "import": "./dist/src/entries/chrome-layers.js"
+    },
+    "./hooks/collab": {
+      "development": "./src/entries/hooks-collab.ts",
+      "types": "./dist/src/entries/hooks-collab.d.ts",
+      "import": "./dist/src/entries/hooks-collab.js"
+    },
+    "./dev/testing-panel": {
+      "development": "./src/dev/testing-panel-contribution.tsx",
+      "types": "./dist/src/dev/testing-panel-contribution.d.ts",
+      "import": "./dist/dev/testing-panel.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch --onSuccess 'cd ../../.. && pnpm install'",
+    "build:types": "tsc -b .",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b .",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog/canvas-engine": "workspace:*",
+    "@mog/charts": "workspace:*",
+    "@mog/culture": "workspace:*",
+    "@mog/devtools": "workspace:*",
+    "@mog/drawing-canvas": "workspace:*",
+    "@mog/drawing-engine": "workspace:*",
+    "@mog/env": "workspace:*",
+    "@mog/geometry": "workspace:*",
+    "@mog/grid-canvas": "workspace:*",
+    "@mog/grid-renderer": "workspace:*",
+    "@mog/icons": "workspace:*",
+    "@mog-sdk/kernel": "workspace:*",
+    "@mog/platform": "workspace:*",
+    "@mog/print-export": "workspace:*",
+    "@mog-sdk/sheet-view": "workspace:*",
+    "@mog/shell": "workspace:*",
+    "@mog/diagram-engine": "workspace:*",
+    "@mog/spreadsheet-utils": "workspace:*",
+    "@mog/transport": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/ui": "workspace:*",
+    "@mog/text-effects-engine": "workspace:*",
+    "@xstate/react": "^6.1.0",
+    "katex": "^0.16.44",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.2.4",
+    "xstate": "^5.31.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@mog/spreadsheet-testing": "workspace:*",
+    "@types/katex": "^0.16.8",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
+    "eslint-plugin-mog": "workspace:*",
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

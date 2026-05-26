@@ -1,0 +1,171 @@
+{
+  "name": "@mog/types-editor",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./accessibility": {
+      "development": "./src/accessibility/index.ts",
+      "types": "./dist/accessibility/index.d.ts",
+      "import": "./dist/accessibility/index.js"
+    },
+    "./accessibility/types": {
+      "development": "./src/accessibility/types.ts",
+      "types": "./dist/accessibility/types.d.ts",
+      "import": "./dist/accessibility/types.js"
+    },
+    "./actions/action-types": {
+      "development": "./src/actions/action-types.ts",
+      "types": "./dist/actions/action-types.d.ts",
+      "import": "./dist/actions/action-types.js"
+    },
+    "./context-menu": {
+      "development": "./src/context-menu/index.ts",
+      "types": "./dist/context-menu/index.d.ts",
+      "import": "./dist/context-menu/index.js"
+    },
+    "./context-menu/types": {
+      "development": "./src/context-menu/types.ts",
+      "types": "./dist/context-menu/types.d.ts",
+      "import": "./dist/context-menu/types.js"
+    },
+    "./editor": {
+      "development": "./src/editor/index.ts",
+      "types": "./dist/editor/index.d.ts",
+      "import": "./dist/editor/index.js"
+    },
+    "./editor/drag": {
+      "development": "./src/editor/drag.ts",
+      "types": "./dist/editor/drag.d.ts",
+      "import": "./dist/editor/drag.js"
+    },
+    "./editor/editor": {
+      "development": "./src/editor/editor.ts",
+      "types": "./dist/editor/editor.d.ts",
+      "import": "./dist/editor/editor.js"
+    },
+    "./editor/form-controls": {
+      "development": "./src/editor/form-controls.ts",
+      "types": "./dist/editor/form-controls.d.ts",
+      "import": "./dist/editor/form-controls.js"
+    },
+    "./fill": {
+      "development": "./src/fill/index.ts",
+      "types": "./dist/fill/index.d.ts",
+      "import": "./dist/fill/index.js"
+    },
+    "./fill/custom-lists": {
+      "development": "./src/fill/custom-lists.ts",
+      "types": "./dist/fill/custom-lists.d.ts",
+      "import": "./dist/fill/custom-lists.js"
+    },
+    "./fill/types": {
+      "development": "./src/fill/types.ts",
+      "types": "./dist/fill/types.d.ts",
+      "import": "./dist/fill/types.js"
+    },
+    "./keyboard": {
+      "development": "./src/keyboard/index.ts",
+      "types": "./dist/keyboard/index.d.ts",
+      "import": "./dist/keyboard/index.js"
+    },
+    "./keyboard/actions": {
+      "development": "./src/keyboard/actions.ts",
+      "types": "./dist/keyboard/actions.d.ts",
+      "import": "./dist/keyboard/actions.js"
+    },
+    "./keyboard/binding-utils": {
+      "development": "./src/keyboard/binding-utils.ts",
+      "types": "./dist/keyboard/binding-utils.d.ts",
+      "import": "./dist/keyboard/binding-utils.js"
+    },
+    "./keyboard/customization": {
+      "development": "./src/keyboard/customization.ts",
+      "types": "./dist/keyboard/customization.d.ts",
+      "import": "./dist/keyboard/customization.js"
+    },
+    "./keyboard/display-utils": {
+      "development": "./src/keyboard/display-utils.ts",
+      "types": "./dist/keyboard/display-utils.d.ts",
+      "import": "./dist/keyboard/display-utils.js"
+    },
+    "./keyboard/excel-reference": {
+      "development": "./src/keyboard/excel-reference.ts",
+      "types": "./dist/keyboard/excel-reference.d.ts",
+      "import": "./dist/keyboard/excel-reference.js"
+    },
+    "./keyboard/input": {
+      "development": "./src/keyboard/input.ts",
+      "types": "./dist/keyboard/input.d.ts",
+      "import": "./dist/keyboard/input.js"
+    },
+    "./keyboard/physical-keys": {
+      "development": "./src/keyboard/physical-keys.ts",
+      "types": "./dist/keyboard/physical-keys.d.ts",
+      "import": "./dist/keyboard/physical-keys.js"
+    },
+    "./keyboard/shortcuts/definitions": {
+      "development": "./src/keyboard/shortcuts/definitions/index.ts",
+      "types": "./dist/keyboard/shortcuts/definitions/index.d.ts",
+      "import": "./dist/keyboard/shortcuts/definitions/index.js"
+    },
+    "./keyboard/shortcuts/types": {
+      "development": "./src/keyboard/shortcuts/types.ts",
+      "types": "./dist/keyboard/shortcuts/types.d.ts",
+      "import": "./dist/keyboard/shortcuts/types.js"
+    },
+    "./ribbon": {
+      "development": "./src/ribbon/index.ts",
+      "types": "./dist/ribbon/index.d.ts",
+      "import": "./dist/ribbon/index.js"
+    },
+    "./ribbon/collapse-configs": {
+      "development": "./src/ribbon/collapse-configs.ts",
+      "types": "./dist/ribbon/collapse-configs.d.ts",
+      "import": "./dist/ribbon/collapse-configs.js"
+    },
+    "./ribbon/collapse-types": {
+      "development": "./src/ribbon/collapse-types.ts",
+      "types": "./dist/ribbon/collapse-types.d.ts",
+      "import": "./dist/ribbon/collapse-types.js"
+    },
+    "./selection": {
+      "development": "./src/selection/index.ts",
+      "types": "./dist/selection/index.d.ts",
+      "import": "./dist/selection/index.js"
+    },
+    "./selection/registry": {
+      "development": "./src/selection/registry.ts",
+      "types": "./dist/selection/registry.d.ts",
+      "import": "./dist/selection/registry.js"
+    },
+    "./selection/types": {
+      "development": "./src/selection/types.ts",
+      "types": "./dist/selection/types.d.ts",
+      "import": "./dist/selection/types.js"
+    }
+  },
+  "description": "Editor surfaces: cell editor, drag/fill, form controls, keyboard shortcuts/physical keys, selection behavior, custom lists, context-menu, ribbon, accessibility, and action dispatch types. Tier 1.",
+  "dependencies": {
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

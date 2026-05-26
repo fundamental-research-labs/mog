@@ -1,0 +1,45 @@
+{
+  "name": "@mog-sdk/sheet-view",
+  "version": "0.6.0",
+  "license": "SEE LICENSE IN LICENSE",
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json && api-extractor run --local --verbose && find dist -maxdepth 2 -not -path 'dist/.rollup/*' \\( -name '*.d.ts' -o -name '*.d.ts.map' \\) -delete && cp dist/.rollup/index.d.ts dist/index.d.ts && node -e \"const fs=require('node:fs');const p='dist/index.d.ts';const ref='/// <reference lib=\\\"esnext.disposable\\\" />\\n';const s=fs.readFileSync(p,'utf8');if(!s.startsWith(ref))fs.writeFileSync(p,ref+s);\" && rm -rf dist/.rollup",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b .",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
+    "@mog/canvas-engine": "workspace:*",
+    "@mog/grid-renderer": "workspace:*",
+    "@mog/grid-canvas": "workspace:*",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal",
+    "directory": "views/sheet-view"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

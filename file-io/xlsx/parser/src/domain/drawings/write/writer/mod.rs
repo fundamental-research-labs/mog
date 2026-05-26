@@ -1,0 +1,469 @@
+//! Main DrawingWriter struct and core methods for drawing XML generation.
+//!
+//! This module contains the DrawingWriter builder and its implementation
+//! for generating DrawingML XML files.
+//!
+//! The implementation is split across submodules by concern:
+//! - `objects` — Object type writers (picture, shape, chart, connector, etc.)
+//! - `text` — Rich text body, paragraphs, run properties, bullets
+//! - `styling` — Fills, outlines, effects, hyperlinks, style references
+
+mod objects;
+mod styling;
+mod text;
+
+// Re-export pub(crate) free functions from styling
+#[cfg(test)]
+pub(crate) use styling::{write_scene3d, write_shape3d};
+
+use crate::write::xml_writer::XmlWriter;
+
+use super::types::{
+    CellAnchor, ChartRef, ClientData, ConnectorProps, DrawingAnchor, DrawingObject, Extent,
+    ImageProps, NS_A, NS_A14, NS_CX, NS_MC, NS_R, NS_SLE, NS_XDR, OneCellAnchor, ShapeProps,
+    TextBox, TwoCellAnchor,
+};
+
+// ============================================================================
+// Drawing Writer
+// ============================================================================
+
+/// Drawing writer for generating DrawingML XML
+#[derive(Debug, Clone, Default)]
+pub struct DrawingWriter {
+    /// All drawing anchors
+    anchors: Vec<DrawingAnchor>,
+    /// Original root element namespace declarations for round-trip fidelity.
+    /// Each entry is (attr_name, attr_value), e.g. ("xmlns:xdr", "http://...").
+    /// When set, these are emitted instead of the hardcoded defaults.
+    root_namespace_attrs: Vec<(String, String)>,
+}
+
+impl DrawingWriter {
+    /// Create a new drawing writer
+    pub fn new() -> Self {
+        Self {
+            anchors: Vec::new(),
+            root_namespace_attrs: Vec::new(),
+        }
+    }
+
+    /// Set the original root element namespace declarations for round-trip fidelity.
+    ///
+    /// When set, these declarations are emitted on the root `<xdr:wsDr>` element
+    /// instead of the hardcoded defaults, preserving the original prefix assignments
+    /// and declaration order.
+    pub fn set_root_namespace_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.root_namespace_attrs = attrs;
+    }
+
+    /// Add a picture with two-cell anchor
+    pub fn add_picture(
+        &mut self,
+        from: CellAnchor,
+        to: CellAnchor,
+        image: ImageProps,
+    ) -> &mut Self {
+        let anchor = TwoCellAnchor {
+            from,
+            to,
+            edit_as: None, // Omit editAs — OOXML default is "twoCell"
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors.push(DrawingAnchor::TwoCell(
+            anchor,
+            DrawingObject::Picture(image),
+        ));
+        self
+    }
+
+    /// Add a picture with fixed size (one-cell anchor)
+    pub fn add_picture_fixed(
+        &mut self,
+        from: CellAnchor,
+        width: i64,
+        height: i64,
+        image: ImageProps,
+    ) -> &mut Self {
+        let anchor = OneCellAnchor {
+            from,
+            extent: Extent {
+                cx: width,
+                cy: height,
+            },
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors.push(DrawingAnchor::OneCell(
+            anchor,
+            DrawingObject::Picture(image),
+        ));
+        self
+    }
+
+    /// Add a shape with two-cell anchor
+    pub fn add_shape(&mut self, from: CellAnchor, to: CellAnchor, shape: ShapeProps) -> &mut Self {
+        let anchor = TwoCellAnchor {
+            from,
+            to,
+            edit_as: None, // Omit editAs — OOXML default is "twoCell"
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors
+            .push(DrawingAnchor::TwoCell(anchor, DrawingObject::Shape(shape)));
+        self
+    }
+
+    /// Add a chart reference with two-cell anchor
+    pub fn add_chart(&mut self, from: CellAnchor, to: CellAnchor, chart: ChartRef) -> &mut Self {
+        let anchor = TwoCellAnchor {
+            from,
+            to,
+            edit_as: None, // Omit editAs — OOXML default is "twoCell"
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors
+            .push(DrawingAnchor::TwoCell(anchor, DrawingObject::Chart(chart)));
+        self
+    }
+
+    /// Add a text box with two-cell anchor
+    pub fn add_text_box(
+        &mut self,
+        from: CellAnchor,
+        to: CellAnchor,
+        text_box: TextBox,
+    ) -> &mut Self {
+        let anchor = TwoCellAnchor {
+            from,
+            to,
+            edit_as: None, // Omit editAs — OOXML default is "twoCell"
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors.push(DrawingAnchor::TwoCell(
+            anchor,
+            DrawingObject::TextBox(text_box),
+        ));
+        self
+    }
+
+    /// Add a connector with two-cell anchor
+    pub fn add_connector(
+        &mut self,
+        from: CellAnchor,
+        to: CellAnchor,
+        connector: ConnectorProps,
+    ) -> &mut Self {
+        let anchor = TwoCellAnchor {
+            from,
+            to,
+            edit_as: None, // Omit editAs — OOXML default is "twoCell"
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        };
+        self.anchors.push(DrawingAnchor::TwoCell(
+            anchor,
+            DrawingObject::Connector(connector),
+        ));
+        self
+    }
+
+    /// Add a custom drawing anchor
+    pub fn add_anchor(&mut self, anchor: DrawingAnchor) -> &mut Self {
+        self.anchors.push(anchor);
+        self
+    }
+
+    /// Insert a drawing anchor at a specific position.
+    /// If `index` is beyond the current length, appends to the end.
+    pub fn insert_anchor(&mut self, index: usize, anchor: DrawingAnchor) -> &mut Self {
+        let pos = index.min(self.anchors.len());
+        self.anchors.insert(pos, anchor);
+        self
+    }
+
+    /// Check if the drawing is empty
+    pub fn is_empty(&self) -> bool {
+        self.anchors.is_empty()
+    }
+
+    /// Get the number of drawing objects
+    pub fn len(&self) -> usize {
+        self.anchors.len()
+    }
+
+    /// Check if any anchor contains a slicer object.
+    fn has_slicers(&self) -> bool {
+        self.anchors.iter().any(|a| {
+            let obj = match a {
+                DrawingAnchor::TwoCell(_, o) => o,
+                DrawingAnchor::OneCell(_, o) => o,
+                DrawingAnchor::Absolute(_, o) => o,
+            };
+            matches!(obj, DrawingObject::Slicer { .. })
+        })
+    }
+
+    /// Check if any anchor contains a ChartEx object.
+    fn has_chart_ex(&self) -> bool {
+        self.anchors.iter().any(|a| {
+            let obj = match a {
+                DrawingAnchor::TwoCell(_, o) => o,
+                DrawingAnchor::OneCell(_, o) => o,
+                DrawingAnchor::Absolute(_, o) => o,
+            };
+            matches!(obj, DrawingObject::ChartEx(_))
+        })
+    }
+
+    /// Check if a drawing object uses `r:` prefixed attributes (r:embed, r:id, r:link).
+    fn object_needs_r_namespace(obj: &DrawingObject) -> bool {
+        match obj {
+            // These always reference relationship IDs via r: attributes
+            DrawingObject::Picture(_) => true,
+            DrawingObject::Chart(_) => true,
+            DrawingObject::ChartEx(_) => true,
+            DrawingObject::SmartArt(_) => true,
+            DrawingObject::GraphicFrame(_) => true,
+            // Group shapes need r: if any child does
+            DrawingObject::GroupShape(g) => g.children.iter().any(Self::object_needs_r_namespace),
+            // Shapes, TextBoxes, Connectors, Slicers don't inherently use r:
+            _ => false,
+        }
+    }
+
+    /// Check if any anchor in this drawing needs the `xmlns:r` namespace declaration.
+    fn needs_r_namespace(&self) -> bool {
+        self.anchors.iter().any(|a| {
+            let obj = match a {
+                DrawingAnchor::TwoCell(_, o) => o,
+                DrawingAnchor::OneCell(_, o) => o,
+                DrawingAnchor::Absolute(_, o) => o,
+            };
+            Self::object_needs_r_namespace(obj)
+        })
+    }
+
+    /// Generate drawing XML
+    pub fn to_xml(&self) -> Vec<u8> {
+        let mut w = XmlWriter::new();
+        w.write_declaration();
+
+        let has_slicers = self.has_slicers();
+        let has_chart_ex = self.has_chart_ex();
+        let needs_mc = has_slicers || has_chart_ex;
+
+        // Start root element with namespaces.
+        // If we have preserved namespace attrs from the original file, use those
+        // to maintain round-trip fidelity (preserving prefixes and order).
+        w.start_element("xdr:wsDr");
+
+        if !self.root_namespace_attrs.is_empty() {
+            // Emit preserved namespace declarations from the original file.
+            for (attr_name, attr_value) in &self.root_namespace_attrs {
+                w.attr(attr_name, attr_value);
+            }
+            // If the original declared xmlns:r inline (e.g. on <a:blip>) rather
+            // than on the root element, we still need it on the root since our
+            // writer doesn't emit inline namespace declarations.
+            let has_r = self
+                .root_namespace_attrs
+                .iter()
+                .any(|(k, _)| k == "xmlns:r");
+            if !has_r && self.needs_r_namespace() {
+                w.attr("xmlns:r", NS_R);
+            }
+
+            // If the original didn't have slicer namespaces but we need them,
+            // add them (only if not already present).
+            if has_slicers {
+                let has_mc = self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(k, _)| k == "xmlns:mc");
+                let has_a14 = self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(k, _)| k == "xmlns:a14");
+                let has_sle = self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(k, _)| k == "xmlns:sle");
+                if !has_mc {
+                    w.attr("xmlns:mc", NS_MC);
+                }
+                if !has_a14 {
+                    w.attr("xmlns:a14", NS_A14);
+                }
+                if !has_sle {
+                    w.attr("xmlns:sle", NS_SLE);
+                }
+            }
+
+            // ChartEx needs mc + cx namespaces
+            if has_chart_ex {
+                let has_mc = self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(k, _)| k == "xmlns:mc");
+                let has_cx = self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(k, _)| k == "xmlns:cx");
+                // mc may have been added above for slicers; only add if still missing
+                if !has_mc && !has_slicers {
+                    w.attr("xmlns:mc", NS_MC);
+                }
+                if !has_cx {
+                    w.attr("xmlns:cx", NS_CX);
+                }
+            }
+        } else {
+            // Fallback: hardcoded defaults for newly-created drawings.
+            w.attr("xmlns:xdr", NS_XDR).attr("xmlns:a", NS_A);
+
+            // Only declare xmlns:r when the drawing contains objects that
+            // reference relationship IDs (pictures, charts, SmartArt, etc.).
+            if self.needs_r_namespace() {
+                w.attr("xmlns:r", NS_R);
+            }
+
+            if needs_mc {
+                w.attr("xmlns:mc", NS_MC);
+            }
+
+            if has_slicers {
+                w.attr("xmlns:a14", NS_A14).attr("xmlns:sle", NS_SLE);
+            }
+
+            if has_chart_ex {
+                w.attr("xmlns:cx", NS_CX);
+            }
+        }
+
+        w.end_attrs();
+
+        // Write each anchor
+        let mut object_id = 2u32;
+        for anchor in &self.anchors {
+            self.write_anchor(&mut w, anchor, &mut object_id);
+        }
+
+        w.end_element("xdr:wsDr");
+        w.finish()
+    }
+
+    /// Write a drawing anchor
+    fn write_anchor(&self, w: &mut XmlWriter, anchor: &DrawingAnchor, object_id: &mut u32) {
+        match anchor {
+            DrawingAnchor::TwoCell(two_cell, object) => {
+                // If the anchor was wrapped in mc:AlternateContent, emit the raw XML
+                // verbatim for perfect round-trip fidelity.
+                if let Some(ref mc) = two_cell.mc_alternate_content {
+                    w.raw_str(&mc.raw_xml);
+                    return;
+                }
+
+                let el = w.start_element("xdr:twoCellAnchor");
+                if let Some(ref ea) = two_cell.edit_as {
+                    el.attr("editAs", ea.to_ooxml());
+                }
+                el.end_attrs();
+
+                self.write_cell_anchor(w, "xdr:from", &two_cell.from);
+                self.write_cell_anchor(w, "xdr:to", &two_cell.to);
+                self.write_object(w, object, object_id);
+
+                self.write_client_data(w, &two_cell.client_data);
+                w.end_element("xdr:twoCellAnchor");
+            }
+            DrawingAnchor::OneCell(one_cell, object) => {
+                // If the anchor was wrapped in mc:AlternateContent or contains
+                // content-level mc:AlternateContent (slicer/timeslicer), emit raw XML
+                // verbatim for perfect round-trip fidelity.
+                if let Some(ref mc) = one_cell.mc_alternate_content {
+                    w.raw_str(&mc.raw_xml);
+                    return;
+                }
+
+                w.start_element("xdr:oneCellAnchor").end_attrs();
+
+                self.write_cell_anchor(w, "xdr:from", &one_cell.from);
+                self.write_extent(w, &one_cell.extent);
+                self.write_object(w, object, object_id);
+
+                self.write_client_data(w, &one_cell.client_data);
+                w.end_element("xdr:oneCellAnchor");
+            }
+            DrawingAnchor::Absolute(absolute, object) => {
+                w.start_element("xdr:absoluteAnchor").end_attrs();
+
+                // Position
+                w.start_element("xdr:pos")
+                    .attr_num("x", absolute.pos.x)
+                    .attr_num("y", absolute.pos.y)
+                    .self_close();
+
+                self.write_extent(w, &absolute.extent);
+                self.write_object(w, object, object_id);
+
+                self.write_client_data(w, &absolute.client_data);
+                w.end_element("xdr:absoluteAnchor");
+            }
+        }
+    }
+
+    /// Write `<xdr:clientData>` element with optional lock/print attributes
+    fn write_client_data(&self, w: &mut XmlWriter, cd: &ClientData) {
+        w.start_element("xdr:clientData");
+        if !cd.locks_with_sheet {
+            w.attr("fLocksWithSheet", "0");
+        }
+        if !cd.prints_with_sheet {
+            w.attr("fPrintsWithSheet", "0");
+        }
+        w.self_close();
+    }
+
+    /// Write a cell anchor (from/to)
+    fn write_cell_anchor(&self, w: &mut XmlWriter, tag: &str, anchor: &CellAnchor) {
+        w.start_element(tag).end_attrs();
+        w.element_with_text("xdr:col", &anchor.col.to_string());
+        w.element_with_text("xdr:colOff", &anchor.col_off.to_string());
+        w.element_with_text("xdr:row", &anchor.row.to_string());
+        w.element_with_text("xdr:rowOff", &anchor.row_off.to_string());
+        w.end_element(tag);
+    }
+
+    /// Write extent element
+    fn write_extent(&self, w: &mut XmlWriter, extent: &Extent) {
+        w.start_element("xdr:ext")
+            .attr_num("cx", extent.cx)
+            .attr_num("cy", extent.cy)
+            .self_close();
+    }
+
+    /// Write a drawing object
+    fn write_object(&self, w: &mut XmlWriter, object: &DrawingObject, object_id: &mut u32) {
+        match object {
+            DrawingObject::Picture(image) => self.write_picture(w, image, object_id),
+            DrawingObject::Shape(shape) => self.write_shape(w, shape, object_id),
+            DrawingObject::Chart(chart) => self.write_chart(w, chart, object_id),
+            DrawingObject::ChartEx(cx_ref) => self.write_chart_ex(w, cx_ref, object_id),
+            DrawingObject::TextBox(text_box) => self.write_text_box(w, text_box, object_id),
+            DrawingObject::Connector(props) => self.write_connector(w, props, object_id),
+            DrawingObject::GroupShape(props) => self.write_group_shape(w, props, object_id),
+            DrawingObject::GraphicFrame(gf) => self.write_graphic_frame(w, gf),
+            DrawingObject::SmartArt(sa) => self.write_smartart(w, sa, object_id),
+            DrawingObject::Slicer {
+                original_id,
+                name,
+                r_id,
+            } => self.write_slicer(w, name, r_id, *original_id, object_id),
+        }
+    }
+}

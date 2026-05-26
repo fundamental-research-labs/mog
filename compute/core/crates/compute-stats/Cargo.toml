@@ -1,0 +1,25 @@
+[package]
+name = "compute-stats"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared statistical and analytical primitives — aggregation, filtering, sorting, value semantics, statistics, regression, KDE"
+
+[dependencies]
+# Foundation types (CellValue, CellError, etc.)
+value-types = { path = "../types/value-types" }
+# Canonical domain type definitions
+domain-types = { path = "../../../../domain-types", default-features = false }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+proptest = "1"

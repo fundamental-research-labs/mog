@@ -1,0 +1,143 @@
+error[E0277]: `Cell<u8>` cannot be shared between threads safely
+  --> tests/ui/not_sync_service_fail.rs:25:23
+   |
+25 |             service = NotSyncService;
+   |                       ^^^^^^^^^^^^^^ `Cell<u8>` cannot be shared between threads safely
+...
+40 | bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   | ---------------------------------------------------------------------- in this macro invocation
+   |
+   = help: within `NotSyncService`, the trait `Sync` is not implemented for `Cell<u8>`
+   = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock` or `std::sync::atomic::AtomicU8` instead
+note: required because it appears within the type `NotSyncService`
+  --> tests/ui/not_sync_service_fail.rs:3:12
+   |
+ 3 | pub struct NotSyncService {
+   |            ^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+22 | /         $gen! {
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `crate::__bridge_descriptor_NotSyncService_ops` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `insert` exists for struct `State<'_, TauriRegistry<NotSyncService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+ 3 |   pub struct NotSyncService {
+   |   ------------------------- doesn't satisfy `NotSyncService: Sync`
+...
+22 |           $gen! {
+   |  _________^
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSyncService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Cell<u8>: Sync`
+           which is required by `NotSyncService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `with_read` exists for struct `State<'_, TauriRegistry<NotSyncService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+ 3 |   pub struct NotSyncService {
+   |   ------------------------- doesn't satisfy `NotSyncService: Sync`
+...
+22 |           $gen! {
+   |  _________^
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSyncService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Cell<u8>: Sync`
+           which is required by `NotSyncService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0282]: type annotations needed
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+22 | /         $gen! {
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ cannot infer type
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `remove` exists for struct `State<'_, TauriRegistry<NotSyncService>>`, but its trait bounds were not satisfied
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+ 3 |   pub struct NotSyncService {
+   |   ------------------------- doesn't satisfy `NotSyncService: Sync`
+...
+22 |           $gen! {
+   |  _________^
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ method cannot be called on `State<'_, TauriRegistry<NotSyncService>>` due to unsatisfied trait bounds
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   |
+   = note: the following trait bounds were not satisfied:
+           `Cell<u8>: Sync`
+           which is required by `NotSyncService: Sync`
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Cell<u8>` cannot be shared between threads safely
+  --> tests/ui/not_sync_service_fail.rs:45:24
+   |
+45 |     assert_send_sync::<NotSyncServiceRegistry>();
+   |                        ^^^^^^^^^^^^^^^^^^^^^^ `Cell<u8>` cannot be shared between threads safely
+   |
+   = help: within `NotSyncService`, the trait `Sync` is not implemented for `Cell<u8>`
+   = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock` or `std::sync::atomic::AtomicU8` instead
+note: required because it appears within the type `NotSyncService`
+  --> tests/ui/not_sync_service_fail.rs:3:12
+   |
+ 3 | pub struct NotSyncService {
+   |            ^^^^^^^^^^^^^^
+note: required by a bound in `TauriRegistry`
+  --> tests/ui/not_sync_service_fail.rs:22:9
+   |
+22 | /         $gen! {
+23 | |             bridge_version = 1;
+24 | |             group = ops;
+25 | |             service = NotSyncService;
+...  |
+36 | |         }
+   | |_________^ required by this bound in `TauriRegistry`
+...
+40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
+   |   ---------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)

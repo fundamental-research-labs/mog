@@ -1,0 +1,19 @@
+{
+  "artifactId": "mog-enterprise-security-overview",
+  "title": "Mog Enterprise Security Overview",
+  "sourceRoot": "docs/security",
+  "outputRoot": "dist/trust",
+  "claimClasses": ["Verified", "Deployment-controlled", "Roadmap", "Not claimed"],
+  "documents": [
+    "README.md",
+    "TRUST-MODEL.md",
+    "DATA-FLOW-AND-EGRESS.md",
+    "ENTERPRISE-DEPLOYMENT.md",
+    "SUPPLY-CHAIN.md",
+    "THREAT-MODEL.md",
+    "ACCESS-CONTROL-ENTERPRISE.md",
+    "AI-DATA-BOUNDARY.md",
+    "SECURITY-FAQ.md",
+    "KNOWN-LIMITATIONS.md"
+  ]
+}

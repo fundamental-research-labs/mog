@@ -1,0 +1,66 @@
+{
+  "name": "@mog-sdk/spreadsheet-app",
+  "version": "0.6.0",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Policy-driven full Mog spreadsheet app embed for trusted same-origin hosts",
+  "type": "module",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "development": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./mog-embed.css": {
+      "style": "./dist/mog-embed.css",
+      "default": "./dist/mog-embed.css"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup --no-dts && node scripts/build-types.mjs && vite build --config vite.css.config.ts && node scripts/finalize-assets.mjs && node scripts/check-boundary.mjs --require-dist",
+    "build:dev": "tsup --no-dts",
+    "test": "node scripts/generate-workbook-facade-matrix.mjs --check && node scripts/check-boundary.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "check-types": "tsc --noEmit -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog-sdk/wasm": "workspace:*",
+    "@xstate/react": "^6.1.0",
+    "lucide-react": "^0.468.0",
+    "use-sync-external-store": "^1.6.0",
+    "xstate": "^5.31.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@mog/app-spreadsheet": "workspace:*",
+    "@mog/shell": "workspace:*",
+    "@mog-sdk/kernel": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.5.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "tsup": "^8.5.0",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal",
+    "directory": "runtime/spreadsheet-app"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

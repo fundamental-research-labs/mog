@@ -1,0 +1,16 @@
+error: method do_it: missing scope = "cell" | "range" | "sheet" | "workbook" under gated = true
+  --> tests/ui/missing_scope_write.rs:26:13
+   |
+26 |               method write do_it {
+   |               ^^^^^^
+...
+34 | / bridge_delegate::delegate!(
+35 | |     target = StubService,
+36 | |     dispatch = dispatch,
+37 | |     gated = true,
+38 | |     skip_default_imports = true,
+39 | |     crate::__desc_missing_scope_write,
+40 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_missing_scope_write` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

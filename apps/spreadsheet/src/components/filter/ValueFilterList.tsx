@@ -1,0 +1,377 @@
+/**
+ * ValueFilterList Component
+ *
+ *
+ * Checkbox list of unique values with select all/none and search functionality.
+ * Used within the FilterDropdown component for value-based filtering.
+ *
+ * ARCHITECTURE (Cell Identity Model):
+ * This component receives dropdown metadata from the worksheet filter engine.
+ * Blank state is first-class metadata, not inferred from display strings.
+ *
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import type { FilterDropdownItem } from '@mog-sdk/contracts/api';
+import type { CellValue } from '@mog-sdk/contracts/core';
+// =============================================================================
+// Wildcard Pattern Matching (Excel Wildcard Support)
+// =============================================================================
+
+/**
+ * Convert an Excel wildcard pattern to a RegExp.
+ *
+ * Excel wildcard support:
+ * - `*` matches any sequence of characters (including empty)
+ * - `?` matches any single character
+ * - `~*` matches a literal asterisk
+ * - `~?` matches a literal question mark
+ * - `~~` matches a literal tilde
+ *
+ * @param pattern - The wildcard pattern from user input
+ * @returns RegExp that matches the pattern, or null if pattern is plain text
+ */
+function wildcardToRegex(pattern: string): RegExp | null {
+  // Check if pattern contains wildcards (not escaped)
+  const hasWildcard = /(?<!~)[*?]/.test(pattern);
+  if (!hasWildcard) {
+    return null; // No wildcards, use simple contains matching
+  }
+
+  // Escape regex special characters except * and ?
+  // Then convert * and ? to regex equivalents
+  let regexStr = '';
+  let i = 0;
+
+  while (i < pattern.length) {
+    const char = pattern[i];
+    const nextChar = pattern[i + 1];
+
+    if (char === '~' && nextChar) {
+      // Escape sequence: ~* ~? ~~
+      if (nextChar === '*' || nextChar === '?' || nextChar === '~') {
+        // Escape the next character literally
+        regexStr += escapeRegexChar(nextChar);
+        i += 2;
+        continue;
+      }
+    }
+
+    if (char === '*') {
+      // * matches any sequence of characters
+      regexStr += '.*';
+    } else if (char === '?') {
+      // ? matches any single character
+      regexStr += '.';
+    } else {
+      // Escape other regex special characters
+      regexStr += escapeRegexChar(char);
+    }
+    i++;
+  }
+
+  // Create case-insensitive regex that matches anywhere in the string
+  return new RegExp(regexStr, 'i');
+}
+
+/**
+ * Escape a single character for use in a regex.
+ */
+function escapeRegexChar(char: string): string {
+  // Characters that have special meaning in regex
+  const specialChars = /[.+^${}()|[\]\\]/;
+  if (specialChars.test(char)) {
+    return '\\' + char;
+  }
+  return char;
+}
+
+/**
+ * Check if a display value matches the search term.
+ * Supports Excel-style wildcards (* and ?).
+ *
+ * @param display - The formatted display value
+ * @param searchTerm - The search term (may contain wildcards)
+ * @returns true if the value matches the search
+ */
+function matchesSearch(display: string, searchTerm: string): boolean {
+  const lower = searchTerm.toLowerCase();
+  const displayLower = display.toLowerCase();
+
+  // Try wildcard matching first
+  const wildcardRegex = wildcardToRegex(lower);
+  if (wildcardRegex) {
+    return wildcardRegex.test(displayLower);
+  }
+
+  // Fall back to simple contains matching
+  return displayLower.includes(lower);
+}
+
+export interface ValueFilterListProps {
+  items: readonly FilterDropdownItem[];
+  hasBlank: boolean;
+  blankCount: number;
+  blankSelected: boolean;
+  /** Called when user applies the filter */
+  onApply: (selection: ValueFilterSelection) => void;
+  /** Called to cancel without applying */
+  onCancel?: () => void;
+}
+
+export interface ValueFilterSelection {
+  values: CellValue[];
+  includeBlanks: boolean;
+}
+
+/**
+ * Convert a CellValue to a string key for Set operations.
+ * Handles nulls, errors, and all value types.
+ */
+function valueToKey(value: CellValue): string {
+  if (value === null || value === undefined) return '__NULL__';
+  if (value === '') return '__EMPTY__';
+  if (typeof value === 'boolean') return value ? '__TRUE__' : '__FALSE__';
+  if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'error') {
+    return `__ERROR__${value.value}`;
+  }
+  return String(value);
+}
+
+/**
+ * Format a CellValue for display.
+ */
+function formatValue(value: CellValue): string {
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'error') {
+    return `#${value.value}`;
+  }
+  return String(value);
+}
+
+/**
+ * Value filter list with checkboxes, search, and select all/none.
+ */
+export function ValueFilterList({
+  items,
+  hasBlank,
+  blankCount: _blankCount,
+  blankSelected,
+  onApply,
+  onCancel,
+}: ValueFilterListProps): React.ReactElement {
+  // Initialize checked state from engine-provided selected metadata.
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
+    return new Set(items.filter((item) => item.selected).map((item) => valueToKey(item.value)));
+  });
+  const [isBlankChecked, setIsBlankChecked] = useState(blankSelected);
+
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    setCheckedKeys(
+      new Set(items.filter((item) => item.selected).map((item) => valueToKey(item.value))),
+    );
+    setIsBlankChecked(blankSelected);
+  }, [items, blankSelected]);
+
+  // Filter values by search term (supports Excel wildcards: * and ?)
+  const filteredItems = useMemo(() => {
+    if (!searchTerm.trim()) return items;
+    return items.filter((item) => {
+      const display = item.displayText || formatValue(item.value);
+      return matchesSearch(display, searchTerm);
+    });
+  }, [items, searchTerm]);
+
+  const blankVisible = useMemo(() => {
+    if (!hasBlank) return false;
+    if (!searchTerm.trim()) return true;
+    return matchesSearch('(Blank)', searchTerm);
+  }, [hasBlank, searchTerm]);
+
+  // Computed states
+  const allSelected = useMemo(() => {
+    return (
+      filteredItems.every((item) => checkedKeys.has(valueToKey(item.value))) &&
+      (!blankVisible || isBlankChecked)
+    );
+  }, [filteredItems, checkedKeys, blankVisible, isBlankChecked]);
+
+  const hasAnySelected = useMemo(
+    () => checkedKeys.size > 0 || (hasBlank && isBlankChecked),
+    [checkedKeys.size, hasBlank, isBlankChecked],
+  );
+
+  // Handlers
+  const handleToggle = useCallback((value: CellValue) => {
+    const key = valueToKey(value);
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      // Add all filtered values
+      for (const item of filteredItems) {
+        next.add(valueToKey(item.value));
+      }
+      return next;
+    });
+    if (blankVisible) setIsBlankChecked(true);
+  }, [filteredItems, blankVisible]);
+
+  const handleSelectNone = useCallback(() => {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      // Remove all filtered values
+      for (const item of filteredItems) {
+        next.delete(valueToKey(item.value));
+      }
+      return next;
+    });
+    if (blankVisible) setIsBlankChecked(false);
+  }, [filteredItems, blankVisible]);
+
+  const handleApply = useCallback(() => {
+    // Convert checked keys back to values
+    const selectedVals = items
+      .filter((item) => checkedKeys.has(valueToKey(item.value)))
+      .map((item) => item.value);
+    onApply({ values: selectedVals, includeBlanks: hasBlank && isBlankChecked });
+  }, [items, checkedKeys, hasBlank, isBlankChecked, onApply]);
+
+  const selectedCount = checkedKeys.size + (hasBlank && isBlankChecked ? 1 : 0);
+  const totalSelectable = items.length + (hasBlank ? 1 : 0);
+
+  return (
+    <div className="value-filter-list flex min-h-0 flex-col gap-2" data-testid="filter-value-list">
+      {/* Search input - supports Excel wildcards (* and ?) */}
+      <input
+        type="text"
+        placeholder="Search (* and ? wildcards)"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.currentTarget.value)}
+        className="w-full px-2 py-1 border border-ss-border rounded text-body-sm focus:outline-none focus:ring-1 focus:ring-ss-primary"
+        autoFocus
+        title="Use * to match any characters, ? to match a single character"
+      />
+
+      {/* Select All / Select None buttons */}
+      <div className="flex gap-2 text-caption">
+        <button
+          type="button"
+          data-testid="filter-value-select-all"
+          onClick={handleSelectAll}
+          disabled={allSelected}
+          className="px-2 py-1 text-ss-primary hover:underline disabled:text-ss-text-secondary disabled:no-underline"
+        >
+          Select All
+        </button>
+        <span className="text-ss-text-secondary">|</span>
+        <button
+          type="button"
+          data-testid="filter-value-clear"
+          onClick={handleSelectNone}
+          disabled={!hasAnySelected}
+          className="px-2 py-1 text-ss-primary hover:underline disabled:text-ss-text-secondary disabled:no-underline"
+        >
+          Clear
+        </button>
+      </div>
+
+      {/* Value list with checkboxes */}
+      <div
+        className="border border-ss-border rounded overflow-y-auto bg-ss-surface"
+        style={{ maxHeight: '200px', minHeight: '100px' }}
+      >
+        {!blankVisible && filteredItems.length === 0 ? (
+          <div className="p-3 text-center text-ss-text-secondary text-body-sm">No values found</div>
+        ) : (
+          <>
+            {blankVisible && (
+              <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-ss-surface-hover">
+                <input
+                  type="checkbox"
+                  data-testid="filter-value-blank"
+                  aria-label="(Blank)"
+                  checked={isBlankChecked}
+                  onChange={() => setIsBlankChecked((checked) => !checked)}
+                  className="w-4 h-4 accent-primary"
+                />
+                <span
+                  className="text-body-sm truncate flex-1 text-ss-text-secondary italic"
+                  title="(Blank)"
+                >
+                  (Blank)
+                </span>
+              </label>
+            )}
+            {filteredItems.map((item) => {
+              const value = item.value;
+              const key = valueToKey(value);
+              const display = item.displayText || formatValue(value);
+              const isChecked = checkedKeys.has(key);
+
+              return (
+                <label
+                  key={key}
+                  className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-ss-surface-hover"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggle(value)}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-body-sm truncate flex-1" title={display}>
+                    {display}
+                  </span>
+                </label>
+              );
+            })}
+          </>
+        )}
+      </div>
+
+      {/* Summary */}
+      <div className="text-caption text-ss-text-secondary">
+        {selectedCount} of {totalSelectable} selected
+      </div>
+
+      {/* Action buttons */}
+      <div className="sticky bottom-0 z-10 flex gap-2 border-t border-ss-border bg-ss-surface pt-2 pb-1">
+        {onCancel && (
+          <button
+            type="button"
+            data-testid="filter-value-cancel"
+            onClick={onCancel}
+            className="flex-1 px-3 py-1.5 border border-ss-border rounded text-body-sm hover:bg-ss-surface-hover"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="filter-value-apply"
+          onClick={handleApply}
+          disabled={!hasAnySelected}
+          className="flex-1 px-3 py-1.5 bg-ss-primary text-ss-text-inverse rounded text-body-sm hover:bg-ss-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default ValueFilterList;

@@ -1,0 +1,18 @@
+[package]
+name = "compute-formats"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Excel-compatible number format engine with locale, color, and currency pattern support"
+
+[dependencies]
+value-types = { path = "../types/value-types" }
+chrono = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+proptest = "1"

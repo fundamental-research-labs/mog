@@ -1,0 +1,132 @@
+/* shell/src/styles/globals.css - BASE STYLES FOR ALL APPS
+ *
+ * This file contains truly global styles that apply to any app running in the shell.
+ * App-specific styles (like spreadsheet ribbon tokens) belong in each app's own styles.
+ *
+ * Contents:
+ * - Tailwind import
+ * - Base reset (html, body, #root)
+ * - Scrollbar styling
+ * - Selection highlight
+ */
+/* Set the scan root to the workspace so Tailwind auto-detects classes
+ * from ALL packages (shell, apps/*, dev-app, etc.) without per-package @source.
+ * ../../.. from shell/src/styles/ = repo root
+ * Respects .gitignore — node_modules, target/, etc. are excluded automatically. */
+@import 'tailwindcss' source('../../..');
+
+/* Explicit source for shell/src: when this CSS is imported via the @mog/shell
+ * symlink in node_modules, Tailwind resolves source('../../..') relative to the
+ * SYMLINK path (dev/app/node_modules/@mog/shell/src/styles/) rather than the
+ * real file path — landing in node_modules/@mog/ which it then ignores.
+ * This @source ensures shell components are always scanned, regardless of the
+ * import path used. '../' is relative to this file = shell/src/. */
+@source '../';
+
+/* Base font - apps can override */
+@theme inline {
+  --font-ss-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ss-mono: 'Consolas', 'Monaco', monospace;
+}
+
+/* ============================================
+ * BASE STYLES
+ * Must be in @layer base so utilities can override
+ * ============================================ */
+@layer base {
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font-ss-sans);
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Selection highlight */
+  ::selection {
+    background-color: rgba(33, 115, 70, 0.2);
+  }
+
+  /* Scrollbar styling - consistent across all apps */
+  ::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 7px;
+  }
+
+  ::-webkit-scrollbar-track:hover {
+    background: #f1f3f4;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 7px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 150ms ease-out;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9aa0a6;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background: #5f6368;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: #f8f9fa;
+  }
+
+  /* Auto-hide scrollbar support */
+  .scrollbar-auto-hide::-webkit-scrollbar-thumb {
+    background: rgba(193, 193, 193, 0);
+    transition: background-color 300ms ease-out;
+  }
+
+  .scrollbar-auto-hide:hover::-webkit-scrollbar-thumb,
+  .scrollbar-auto-hide.scrolling::-webkit-scrollbar-thumb {
+    background: rgba(193, 193, 193, 1);
+  }
+
+  .scrollbar-auto-hide::-webkit-scrollbar-thumb:hover {
+    background: rgba(154, 160, 166, 1);
+  }
+
+  .scrollbar-auto-hide::-webkit-scrollbar-thumb:active {
+    background: rgba(95, 99, 104, 1);
+  }
+}
+
+/* ============================================
+ * UTILITY CLASSES
+ * ============================================ */
+@layer utilities {
+  /* Prevent text selection on UI elements during drag */
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Hide scrollbar while keeping scroll functionality */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

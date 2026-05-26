@@ -1,0 +1,4 @@
+# Generated benchmark files (can be regenerated with pnpm bench:*:generate)
+generated/
+results/
+*.xlsx

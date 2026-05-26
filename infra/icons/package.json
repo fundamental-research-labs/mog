@@ -1,0 +1,33 @@
+{
+  "name": "@mog/icons",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./svg/*": "./src/*"
+  },
+  "dependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/react": "^19.0.0",
+    "@svgr/cli": "^8.0.0"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "ensure-generated": "node scripts/ensure-generated.mjs",
+    "build": "node scripts/generate.mjs && tsc -b .",
+    "typecheck": "node scripts/ensure-generated.mjs && tsc -b ."
+  }
+}

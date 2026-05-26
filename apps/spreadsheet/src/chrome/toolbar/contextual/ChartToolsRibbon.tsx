@@ -1,0 +1,318 @@
+/**
+ * ChartToolsRibbon
+ *
+ * Contextual ribbon tab shown when a chart is selected.
+ * Provides chart type, data, and element controls.
+ *
+ * Groups:
+ * - Type: Change chart type button/dropdown
+ * - Data: Select Data, Switch Row/Column buttons
+ * - Chart Elements: Add/remove title, legend, labels (toggles)
+ * - Arrange: Z-order controls (Bring Forward, Send Backward, etc.)
+ */
+
+import { useCallback, useState } from 'react';
+import { useStore } from 'zustand';
+import { dispatch, useDocumentContext } from '../../../internal-api';
+
+import type { ChartType } from '@mog/charts';
+
+import { Checkbox } from '@mog/shell';
+import { useChartUI } from '../../../hooks/charts/use-chart';
+import { useCharts } from '../../../hooks/charts/use-charts';
+import { useActionDependencies } from '../../../hooks/toolbar/use-action-dependencies';
+import { RibbonButton } from '../primitives/RibbonButton';
+import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
+import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import {
+  BringForwardIcon,
+  BringToFrontIcon,
+  ChartBarIcon,
+  ChartColumnIcon,
+  ChartIcon,
+  ChartLineIcon,
+  ChartPieIcon,
+  DeleteIcon,
+  DropdownArrowIcon,
+  SendBackwardIcon,
+  SendToBackIcon,
+} from '../primitives/ToolbarIcons';
+import type { ContextualTabProps } from './contextual-tab-registry';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+interface ChartTypeOption {
+  type: ChartType;
+  label: string;
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const CHART_TYPES: ChartTypeOption[] = [
+  { type: 'column', label: 'Column' },
+  { type: 'bar', label: 'Bar' },
+  { type: 'line', label: 'Line' },
+  { type: 'area', label: 'Area' },
+  { type: 'pie', label: 'Pie' },
+  { type: 'doughnut', label: 'Doughnut' },
+  { type: 'scatter', label: 'Scatter' },
+  { type: 'combo', label: 'Combo' },
+];
+
+// =============================================================================
+// Component
+// =============================================================================
+
+export function ChartToolsRibbon(_props: ContextualTabProps) {
+  const deps = useActionDependencies();
+  const { uiStore } = useDocumentContext();
+  const activeSheetId = useStore(uiStore, (s) => s.activeSheetId);
+  const { selectedChartId, deleteSelectedChart } = useChartUI();
+  const { charts, updateChart } = useCharts({ sheetId: activeSheetId });
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+
+  // Get the selected chart
+  const selectedChart = charts.find((c) => c.id === selectedChartId);
+  const currentType = selectedChart?.type ?? 'column';
+
+  // Check if chart has title/legend
+  const hasTitle = Boolean(selectedChart?.config.title);
+  const hasLegend = selectedChart?.config.legend?.show !== false;
+
+  // ==========================================================================
+  // Handlers
+  // ==========================================================================
+
+  const handleChangeType = useCallback(
+    (type: ChartType) => {
+      if (selectedChartId) {
+        dispatch('CHANGE_CHART_TYPE', deps, { chartId: selectedChartId, chartType: type });
+      }
+      setTypeDropdownOpen(false);
+    },
+    [selectedChartId, deps],
+  );
+
+  const handleToggleTitle = useCallback(() => {
+    if (selectedChartId && selectedChart) {
+      // Toggle title - set to default title if none exists, or clear if it does
+      const newTitle = hasTitle ? undefined : 'Chart Title';
+      updateChart(selectedChartId, { title: newTitle });
+    }
+  }, [selectedChartId, selectedChart, hasTitle, updateChart]);
+
+  const handleToggleLegend = useCallback(() => {
+    if (selectedChartId && selectedChart) {
+      const currentLegend = selectedChart.config.legend ?? { show: true, position: 'bottom' };
+      updateChart(selectedChartId, {
+        legend: { ...currentLegend, show: !hasLegend },
+      });
+    }
+  }, [selectedChartId, selectedChart, hasLegend, updateChart]);
+
+  const handleSwitchRowColumn = useCallback(() => {
+    if (selectedChartId && selectedChart) {
+      const currentOrientation = selectedChart.config.seriesOrientation ?? 'columns';
+      const newOrientation = currentOrientation === 'columns' ? 'rows' : 'columns';
+      updateChart(selectedChartId, { seriesOrientation: newOrientation });
+    }
+  }, [selectedChartId, selectedChart, updateChart]);
+
+  const handleSelectData = useCallback(() => {
+    if (selectedChartId) {
+      // Open the chart editor which allows data range selection
+      dispatch('EDIT_CHART', deps, { chartId: selectedChartId });
+    }
+  }, [selectedChartId, deps]);
+
+  const handleBringToFront = useCallback(() => {
+    if (selectedChartId) {
+      dispatch('BRING_CHART_TO_FRONT', deps, { chartId: selectedChartId });
+    }
+  }, [selectedChartId, deps]);
+
+  const handleSendToBack = useCallback(() => {
+    if (selectedChartId) {
+      dispatch('SEND_CHART_TO_BACK', deps, { chartId: selectedChartId });
+    }
+  }, [selectedChartId, deps]);
+
+  const handleBringForward = useCallback(() => {
+    if (selectedChartId) {
+      dispatch('BRING_CHART_FORWARD', deps, { chartId: selectedChartId });
+    }
+  }, [selectedChartId, deps]);
+
+  const handleSendBackward = useCallback(() => {
+    if (selectedChartId) {
+      dispatch('SEND_CHART_BACKWARD', deps, { chartId: selectedChartId });
+    }
+  }, [selectedChartId, deps]);
+
+  const handleDelete = useCallback(() => {
+    deleteSelectedChart();
+  }, [deleteSelectedChart]);
+
+  // Get icon for current chart type
+  const getChartTypeIcon = () => {
+    switch (currentType) {
+      case 'column':
+        return <ChartColumnIcon />;
+      case 'bar':
+        return <ChartBarIcon />;
+      case 'line':
+        return <ChartLineIcon />;
+      case 'pie':
+      case 'doughnut':
+        return <ChartPieIcon />;
+      default:
+        return <ChartIcon />;
+    }
+  };
+
+  return (
+    <>
+      {/* Type Group */}
+      <ToolbarGroup label="Type">
+        <div className="relative inline-flex">
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            data-testid="ribbon-dropdown-chart-type"
+            icon={getChartTypeIcon()}
+            label="Change Type"
+            hasDropdown
+            isOpen={typeDropdownOpen}
+            onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+            title="Change chart type"
+            aria-label="Change chart type"
+          />
+
+          <RibbonDropdownPanel open={typeDropdownOpen} onClose={() => setTypeDropdownOpen(false)}>
+            <div
+              data-testid="ribbon-dropdown-menu-chart-type"
+              className="bg-ss-surface border border-ss-border rounded shadow-ss-md py-1 min-w-[140px]"
+            >
+              {CHART_TYPES.map((ct) => (
+                <RibbonDropdownItem
+                  key={ct.type}
+                  dataValue={ct.type}
+                  onClick={() => handleChangeType(ct.type)}
+                  isSelected={currentType === ct.type}
+                  closeOnClick
+                >
+                  {ct.label}
+                </RibbonDropdownItem>
+              ))}
+            </div>
+          </RibbonDropdownPanel>
+        </div>
+      </ToolbarGroup>
+
+      {/* Data Group */}
+      <ToolbarGroup label="Data">
+        <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
+          <RibbonButton
+            layout="horizontal"
+            height="half"
+            icon={<DropdownArrowIcon />}
+            label="Select Data"
+            onClick={handleSelectData}
+            title="Select data range for the chart"
+            aria-label="Select Data"
+          />
+          <RibbonButton
+            layout="horizontal"
+            height="half"
+            icon={<DropdownArrowIcon />}
+            label="Switch Row/Column"
+            onClick={handleSwitchRowColumn}
+            title="Switch between rows and columns as data series"
+            aria-label="Switch Row/Column"
+          />
+        </div>
+      </ToolbarGroup>
+
+      {/* Chart Elements Group */}
+      <ToolbarGroup label="Chart Elements">
+        <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
+          <Checkbox
+            checked={hasTitle}
+            onChange={handleToggleTitle}
+            label="Chart Title"
+            className="text-ribbon"
+          />
+          <Checkbox
+            checked={hasLegend}
+            onChange={handleToggleLegend}
+            label="Legend"
+            className="text-ribbon"
+          />
+        </div>
+      </ToolbarGroup>
+
+      {/* Arrange Group - Z-Order controls */}
+      <ToolbarGroup label="Arrange">
+        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+          <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
+            <RibbonButton
+              layout="horizontal"
+              height="half"
+              icon={<BringToFrontIcon />}
+              label="Bring to Front"
+              onClick={handleBringToFront}
+              title="Bring chart to front (highest layer)"
+              aria-label="Bring to Front"
+            />
+            <RibbonButton
+              layout="horizontal"
+              height="half"
+              icon={<SendToBackIcon />}
+              label="Send to Back"
+              onClick={handleSendToBack}
+              title="Send chart to back (lowest layer)"
+              aria-label="Send to Back"
+            />
+          </div>
+          <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
+            <RibbonButton
+              layout="horizontal"
+              height="half"
+              icon={<BringForwardIcon />}
+              label="Bring Forward"
+              onClick={handleBringForward}
+              title="Bring chart forward one layer"
+              aria-label="Bring Forward"
+            />
+            <RibbonButton
+              layout="horizontal"
+              height="half"
+              icon={<SendBackwardIcon />}
+              label="Send Backward"
+              onClick={handleSendBackward}
+              title="Send chart backward one layer"
+              aria-label="Send Backward"
+            />
+          </div>
+        </div>
+      </ToolbarGroup>
+
+      {/* Delete Group */}
+      <ToolbarGroup label="Actions" isLast>
+        <RibbonButton
+          layout="vertical"
+          height="full"
+          icon={<DeleteIcon />}
+          label="Delete"
+          onClick={handleDelete}
+          title="Delete selected chart"
+          aria-label="Delete Chart"
+        />
+      </ToolbarGroup>
+    </>
+  );
+}

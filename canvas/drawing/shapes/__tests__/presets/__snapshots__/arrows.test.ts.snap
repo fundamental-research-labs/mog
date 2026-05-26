@@ -1,0 +1,44 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Arrow Shape Presets right arrow (rightArrow) should generate snapshot-stable path 1`] = `
+[
+  {
+    "type": "M",
+    "x": 0,
+    "y": 25,
+  },
+  {
+    "type": "L",
+    "x": 50,
+    "y": 25,
+  },
+  {
+    "type": "L",
+    "x": 50,
+    "y": 0,
+  },
+  {
+    "type": "L",
+    "x": 100,
+    "y": 50,
+  },
+  {
+    "type": "L",
+    "x": 50,
+    "y": 100,
+  },
+  {
+    "type": "L",
+    "x": 50,
+    "y": 75,
+  },
+  {
+    "type": "L",
+    "x": 0,
+    "y": 75,
+  },
+  {
+    "type": "Z",
+  },
+]
+`;

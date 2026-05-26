@@ -1,0 +1,16 @@
+[package]
+name = "compute-charts"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Chart data transforms — statistics, regression, density, binning, stacking, grouping"
+
+[dependencies]
+compute-stats = { path = "../compute-stats" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

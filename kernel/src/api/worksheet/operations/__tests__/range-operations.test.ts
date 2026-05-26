@@ -1,0 +1,163 @@
+/**
+ * Range Operations Unit Tests
+ *
+ * Tests for range read/write/clear operations.
+ */
+
+import { jest } from '@jest/globals';
+
+import { sheetId } from '@mog-sdk/contracts/core';
+
+import * as RangeOps from '../range-operations';
+
+// ---------------------------------------------------------------------------
+// Mock compute bridge
+// ---------------------------------------------------------------------------
+
+function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
+  return {
+    computeBridge: {
+      queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
+      setCellsByPosition: jest.fn().mockResolvedValue(undefined),
+      clearRangeByPosition: jest.fn().mockResolvedValue(undefined),
+      ...overrides,
+    },
+  };
+}
+
+const SHEET_ID = sheetId('sheet-1');
+
+// ---------------------------------------------------------------------------
+// clearRange
+// ---------------------------------------------------------------------------
+
+describe('clearRange', () => {
+  it('calls clearRangeByPosition with correct bounds', async () => {
+    const ctx = createMockCtx();
+    const result = await RangeOps.clearRange(ctx, SHEET_ID, {
+      sheetId: SHEET_ID,
+      startRow: 0,
+      startCol: 0,
+      endRow: 2,
+      endCol: 3,
+    });
+
+    expect(result.cellCount).toBe(12);
+    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(SHEET_ID, 0, 0, 2, 3);
+  });
+
+  it('throws on swapped range bounds (startRow > endRow)', async () => {
+    const ctx = createMockCtx();
+    await expect(
+      RangeOps.clearRange(ctx, SHEET_ID, {
+        sheetId: SHEET_ID,
+        startRow: 5,
+        startCol: 3,
+        endRow: 2,
+        endCol: 1,
+      }),
+    ).rejects.toThrow();
+
+    expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
+  });
+
+  it('throws on invalid range (negative indices)', async () => {
+    const ctx = createMockCtx();
+    await expect(
+      RangeOps.clearRange(ctx, SHEET_ID, {
+        sheetId: SHEET_ID,
+        startRow: -1,
+        startCol: 0,
+        endRow: 2,
+        endCol: 2,
+      }),
+    ).rejects.toThrow();
+
+    expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
+  });
+
+  it('propagates bridge errors', async () => {
+    const ctx = createMockCtx({
+      clearRangeByPosition: jest.fn().mockRejectedValue(new Error('bridge error')),
+    });
+    await expect(
+      RangeOps.clearRange(ctx, SHEET_ID, {
+        sheetId: SHEET_ID,
+        startRow: 0,
+        startCol: 0,
+        endRow: 1,
+        endCol: 1,
+      }),
+    ).rejects.toThrow('bridge error');
+  });
+
+  it('returns correct cell count', async () => {
+    const ctx = createMockCtx();
+    const result = await RangeOps.clearRange(ctx, SHEET_ID, {
+      sheetId: SHEET_ID,
+      startRow: 0,
+      startCol: 0,
+      endRow: 1,
+      endCol: 1,
+    });
+
+    // 2x2 = 4 cells
+    expect(result.cellCount).toBe(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setRange
+// ---------------------------------------------------------------------------
+
+describe('setRange', () => {
+  it('converts 2D array to typed CellInput edits and calls setCellsByPosition', async () => {
+    const ctx = createMockCtx();
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [
+      ['hello', 42],
+      [true, null],
+    ]);
+
+    // value goes through `toCellInput` — no \x00 sentinel.
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
+      { row: 0, col: 0, input: { kind: 'parse', text: 'hello' } },
+      { row: 0, col: 1, input: { kind: 'parse', text: '42' } },
+      { row: 1, col: 0, input: { kind: 'parse', text: 'true' } },
+      { row: 1, col: 1, input: { kind: 'clear' } },
+    ]);
+  });
+
+  it('empty-string and null both clear (Excel convention via ergonomic helper)', async () => {
+    // `setRange` is the ergonomic / primitive-accepting surface. Both `''`
+    // and `null` map to Clear to match Excel / Google Sheets. The rare
+    // "store empty text" intent is available via the typed-SDK path —
+    // callers use `computeBridge.setCellsByPosition` with an explicit
+    // `{ kind: 'literal', text: '' }` instead of this helper.
+    const ctx = createMockCtx();
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [['', null]]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
+      { row: 0, col: 0, input: { kind: 'clear' } },
+      { row: 0, col: 1, input: { kind: 'clear' } },
+    ]);
+  });
+
+  it('preserves formulas starting with =', async () => {
+    const ctx = createMockCtx();
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [['=SUM(A1:A10)']]);
+
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
+      { row: 0, col: 0, input: { kind: 'parse', text: '=SUM(A1:A10)' } },
+    ]);
+  });
+
+  it('throws on invalid start address', async () => {
+    const ctx = createMockCtx();
+    await expect(RangeOps.setRange(ctx, SHEET_ID, -1, 0, [['x']])).rejects.toThrow();
+  });
+
+  it('skips empty values array', async () => {
+    const ctx = createMockCtx();
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, []);
+    expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
+  });
+});

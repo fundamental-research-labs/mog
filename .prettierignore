@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+target/
+dist/
+build/
+pkg/
+*.wasm
+*.node
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Generated files
+*.gen.ts
+*.gen.js
+runtime/sdk/src/generated/
+
+# Markdown
+*.md
+
+# Rust source (formatted by rustfmt)
+**/*.rs
+
+# Lock files
+pnpm-lock.yaml
+
+# Local corpus data
+plans/data/
+
+# Tool output data
+output/
+
+# Logo generated assets
+logo/generated/
+
+# OOXML spec data
+file-io/ooxml/spec/
+
+# Dev corpus data
+dev/corpus/
+dev/app/public/
+
+# Tauri generated schemas
+runtime/src-tauri/gen/

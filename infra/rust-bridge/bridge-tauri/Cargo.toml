@@ -1,0 +1,21 @@
+[package]
+name = "bridge-tauri"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "Tauri generator for rust-bridge: generate!() -> #[tauri::command] functions"
+
+[dependencies]
+bridge-tauri-macros = { path = "macros" }
+bridge-types = { path = "../bridge-types" }
+
+[dev-dependencies]
+parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Test-only shim for the generated `#[tauri::command]`, `tauri::State`, and
+# `tauri::ipc::Response` public paths. Production consumers still compile
+# against the real Tauri crate; the full `spreadsheet-os`/`kv-tauri` gates cover
+# that path when the host has the required GTK/WebKit pkg-config packages.
+tauri = { path = "tests/support/tauri" }
+trybuild = "1"

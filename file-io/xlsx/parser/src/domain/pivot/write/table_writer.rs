@@ -1,0 +1,268 @@
+//! Pivot Table Writer implementation.
+//!
+//! This module contains the PivotTableWriter struct for generating pivot table
+//! definition XML files.
+
+use super::types::*;
+use crate::write::xml_writer::XmlWriter;
+
+/// SpreadsheetML namespace URI
+const SPREADSHEETML_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+// ============================================================================
+// Pivot Table Writer
+// ============================================================================
+
+/// Pivot table writer
+#[derive(Debug, Clone)]
+pub struct PivotTableWriter {
+    /// Pivot table name
+    pub name: String,
+    /// Cache ID
+    pub cache_id: u32,
+    /// Location
+    pub location: PivotLocation,
+    /// Pivot fields
+    pub fields: Vec<PivotFieldDef>,
+    /// Row field indices
+    pub row_fields: Vec<i32>,
+    /// Column field indices
+    pub col_fields: Vec<i32>,
+    /// Page (filter) fields
+    pub page_fields: Vec<PageFieldDef>,
+    /// Data fields
+    pub data_fields: Vec<DataFieldDef>,
+    /// Row items for output
+    pub row_items: Vec<RowColItem>,
+    /// Column items for output
+    pub col_items: Vec<RowColItem>,
+    /// Style
+    pub style: Option<PivotStyle>,
+    /// Data on rows (true) or columns (false)
+    pub data_on_rows: bool,
+    /// Data caption
+    pub data_caption: String,
+}
+
+impl PivotTableWriter {
+    /// Create a new pivot table writer
+    pub fn new(name: &str, cache_id: u32) -> Self {
+        Self {
+            name: name.to_string(),
+            cache_id,
+            location: PivotLocation::default(),
+            fields: Vec::new(),
+            row_fields: Vec::new(),
+            col_fields: Vec::new(),
+            page_fields: Vec::new(),
+            data_fields: Vec::new(),
+            row_items: Vec::new(),
+            col_items: Vec::new(),
+            style: None,
+            data_on_rows: false,
+            data_caption: "Values".to_string(),
+        }
+    }
+
+    /// Set pivot table location
+    pub fn set_location(&mut self, location: PivotLocation) -> &mut Self {
+        self.location = location;
+        self
+    }
+
+    /// Add a pivot field
+    pub fn add_field(&mut self, field: PivotFieldDef) -> &mut Self {
+        self.fields.push(field);
+        self
+    }
+
+    /// Add row field by index
+    pub fn add_row_field(&mut self, field_index: u32) -> &mut Self {
+        self.row_fields.push(field_index as i32);
+        self
+    }
+
+    /// Add column field by index
+    pub fn add_col_field(&mut self, field_index: u32) -> &mut Self {
+        self.col_fields.push(field_index as i32);
+        self
+    }
+
+    /// Add page/filter field by index (simple variant)
+    pub fn add_page_field(&mut self, field_index: u32) -> &mut Self {
+        self.page_fields.push(PageFieldDef {
+            field_index: field_index as i32,
+            ..Default::default()
+        });
+        self
+    }
+
+    /// Add a full page field definition
+    pub fn add_page_field_def(&mut self, page_field: PageFieldDef) -> &mut Self {
+        self.page_fields.push(page_field);
+        self
+    }
+
+    /// Add data field
+    pub fn add_data_field(&mut self, data_field: DataFieldDef) -> &mut Self {
+        self.data_fields.push(data_field);
+        self
+    }
+
+    /// Add row item
+    pub fn add_row_item(&mut self, item: RowColItem) -> &mut Self {
+        self.row_items.push(item);
+        self
+    }
+
+    /// Add column item
+    pub fn add_col_item(&mut self, item: RowColItem) -> &mut Self {
+        self.col_items.push(item);
+        self
+    }
+
+    /// Set style
+    pub fn set_style(&mut self, style: PivotStyle) -> &mut Self {
+        self.style = Some(style);
+        self
+    }
+
+    /// Set data caption
+    pub fn set_data_caption(&mut self, caption: &str) -> &mut Self {
+        self.data_caption = caption.to_string();
+        self
+    }
+
+    /// Generate pivotTable.xml
+    pub fn to_xml(&self) -> Vec<u8> {
+        let mut w = XmlWriter::new();
+
+        w.write_declaration();
+
+        // Start pivotTableDefinition
+        w.start_element("pivotTableDefinition")
+            .attr("xmlns", SPREADSHEETML_NS)
+            .attr("name", &self.name)
+            .attr_num("cacheId", self.cache_id)
+            .attr_bool("dataOnRows", self.data_on_rows)
+            .attr_bool("applyNumberFormats", false)
+            .attr_bool("applyBorderFormats", false)
+            .attr_bool("applyFontFormats", false)
+            .attr_bool("applyPatternFormats", false)
+            .attr_bool("applyAlignmentFormats", false)
+            .attr_bool("applyWidthHeightFormats", true)
+            .attr("dataCaption", &self.data_caption)
+            .attr_num("updatedVersion", 8)
+            .attr_num("minRefreshableVersion", 3)
+            .attr_bool("useAutoFormatting", true)
+            .attr_bool("itemPrintTitles", true)
+            .attr_bool("outline", true)
+            .attr_bool("outlineData", true)
+            .end_attrs();
+
+        // Write location
+        self.location.write_xml(&mut w);
+
+        // Write pivot fields
+        if !self.fields.is_empty() {
+            w.start_element("pivotFields")
+                .attr_num("count", self.fields.len())
+                .end_attrs();
+
+            for field in &self.fields {
+                field.write_xml(&mut w);
+            }
+
+            w.end_element("pivotFields");
+        }
+
+        // Write row fields
+        if !self.row_fields.is_empty() {
+            w.start_element("rowFields")
+                .attr_num("count", self.row_fields.len())
+                .end_attrs();
+
+            for x in &self.row_fields {
+                let x_str = x.to_string();
+                w.empty_element("field", &[("x", &x_str)]);
+            }
+
+            w.end_element("rowFields");
+        }
+
+        // Write row items
+        if !self.row_items.is_empty() {
+            w.start_element("rowItems")
+                .attr_num("count", self.row_items.len())
+                .end_attrs();
+
+            for item in &self.row_items {
+                item.write_xml(&mut w);
+            }
+
+            w.end_element("rowItems");
+        }
+
+        // Write column fields
+        if !self.col_fields.is_empty() {
+            w.start_element("colFields")
+                .attr_num("count", self.col_fields.len())
+                .end_attrs();
+
+            for x in &self.col_fields {
+                let x_str = x.to_string();
+                w.empty_element("field", &[("x", &x_str)]);
+            }
+
+            w.end_element("colFields");
+        }
+
+        // Write column items
+        if !self.col_items.is_empty() {
+            w.start_element("colItems")
+                .attr_num("count", self.col_items.len())
+                .end_attrs();
+
+            for item in &self.col_items {
+                item.write_xml(&mut w);
+            }
+
+            w.end_element("colItems");
+        }
+
+        // Write page fields
+        if !self.page_fields.is_empty() {
+            w.start_element("pageFields")
+                .attr_num("count", self.page_fields.len())
+                .end_attrs();
+
+            for pf in &self.page_fields {
+                pf.write_xml(&mut w);
+            }
+
+            w.end_element("pageFields");
+        }
+
+        // Write data fields
+        if !self.data_fields.is_empty() {
+            w.start_element("dataFields")
+                .attr_num("count", self.data_fields.len())
+                .end_attrs();
+
+            for df in &self.data_fields {
+                df.write_xml(&mut w);
+            }
+
+            w.end_element("dataFields");
+        }
+
+        // Write style info
+        if let Some(ref style) = self.style {
+            style.write_xml(&mut w);
+        }
+
+        w.end_element("pivotTableDefinition");
+
+        w.finish()
+    }
+}

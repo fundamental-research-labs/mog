@@ -1,0 +1,32 @@
+{
+  "name": "@mog/platform-memory",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "index.ts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b .",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@mog/platform": "workspace:*",
+    "@mog-sdk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.0.0"
+  }
+}

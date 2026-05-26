@@ -1,0 +1,60 @@
+{
+  "name": "@mog/xlsx-parser",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "src"
+  ],
+  "description": "TypeScript bridge for the Rust XLSX parser — WASM lifecycle, XML/ZIP bridges, worker orchestration",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lyfegame/shortcut.git",
+    "directory": "file-io/xlsx/bridge"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./progress": {
+      "development": "./src/progress.ts",
+      "types": "./dist/progress.d.ts",
+      "import": "./dist/progress.js"
+    },
+    "./types": {
+      "development": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./worker/types": {
+      "development": "./src/worker/types.ts",
+      "types": "./dist/worker/types.d.ts",
+      "import": "./dist/worker/types.js"
+    },
+    "./xlsx-parser/core": {
+      "development": "./src/xlsx-parser/core.ts",
+      "types": "./dist/xlsx-parser/core.d.ts",
+      "import": "./dist/xlsx-parser/core.js"
+    },
+    "./xlsx-parser/data-validation": {
+      "development": "./src/xlsx-parser/data-validation.ts",
+      "types": "./dist/xlsx-parser/data-validation.d.ts",
+      "import": "./dist/xlsx-parser/data-validation.js"
+    }
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@mog/bridge-ts": "workspace:*"
+  },
+  "devDependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

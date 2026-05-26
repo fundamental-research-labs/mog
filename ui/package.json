@@ -1,0 +1,112 @@
+{
+  "name": "@mog/ui",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./data-views": {
+      "development": "./src/data-views/index.ts",
+      "types": "./dist/data-views/index.d.ts",
+      "import": "./dist/data-views/index.js"
+    },
+    "./data-views/kanban": {
+      "development": "./src/data-views/kanban/index.ts",
+      "types": "./dist/data-views/kanban/index.d.ts",
+      "import": "./dist/data-views/kanban/index.js"
+    },
+    "./data-views/kanban/types": {
+      "development": "./src/data-views/kanban/types.ts",
+      "types": "./dist/data-views/kanban/types.d.ts",
+      "import": "./dist/data-views/kanban/types.js"
+    },
+    "./data-views/calendar": {
+      "development": "./src/data-views/calendar/index.ts",
+      "types": "./dist/data-views/calendar/index.d.ts",
+      "import": "./dist/data-views/calendar/index.js"
+    },
+    "./data-views/timeline": {
+      "development": "./src/data-views/timeline/index.ts",
+      "types": "./dist/data-views/timeline/index.d.ts",
+      "import": "./dist/data-views/timeline/index.js"
+    },
+    "./data-views/timeline/types": {
+      "development": "./src/data-views/timeline/types.ts",
+      "types": "./dist/data-views/timeline/types.d.ts",
+      "import": "./dist/data-views/timeline/types.js"
+    },
+    "./data-views/gallery": {
+      "development": "./src/data-views/gallery/index.ts",
+      "types": "./dist/data-views/gallery/index.d.ts",
+      "import": "./dist/data-views/gallery/index.js"
+    },
+    "./record": {
+      "development": "./src/record/index.ts",
+      "types": "./dist/record/index.d.ts",
+      "import": "./dist/record/index.js"
+    },
+    "./record/RecordDetail": {
+      "development": "./src/record/RecordDetail.tsx",
+      "types": "./dist/record/RecordDetail.d.ts",
+      "import": "./dist/record/RecordDetail.js"
+    },
+    "./record/RecordCard": {
+      "development": "./src/record/RecordCard.tsx",
+      "types": "./dist/record/RecordCard.d.ts",
+      "import": "./dist/record/RecordCard.js"
+    },
+    "./table": {
+      "development": "./src/table/index.ts",
+      "types": "./dist/table/index.d.ts",
+      "import": "./dist/table/index.js"
+    },
+    "./table/FilterBar": {
+      "development": "./src/table/FilterBar.tsx",
+      "types": "./dist/table/FilterBar.d.ts",
+      "import": "./dist/table/FilterBar.js"
+    },
+    "./table/SortMenu": {
+      "development": "./src/table/SortMenu.tsx",
+      "types": "./dist/table/SortMenu.d.ts",
+      "import": "./dist/table/SortMenu.js"
+    },
+    "./fields": {
+      "development": "./src/fields/index.ts",
+      "types": "./dist/fields/index.d.ts",
+      "import": "./dist/fields/index.js"
+    },
+    "./types": {
+      "development": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b .",
+    "test": "jest",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b ."
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jest": "^30.3.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  }
+}

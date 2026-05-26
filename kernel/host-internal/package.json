@@ -1,0 +1,29 @@
+{
+  "name": "@mog/kernel-host-internal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "description": "Workspace-private trusted-adapter entry for host-backed kernel document construction. NOT a public @mog-sdk/kernel subpath.",
+  "dependencies": {
+    "@mog-sdk/kernel": "workspace:*",
+    "@mog-sdk/types-host": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog-sdk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

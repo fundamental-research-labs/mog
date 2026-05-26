@@ -1,0 +1,8 @@
+<svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <!-- Win bars (green) -->
+  <rect x="2" y="5" width="3" height="5" rx="0.5" fill="var(--icon-accent-green, #16a34a)"/>
+  <rect x="10" y="5" width="3" height="5" rx="0.5" fill="var(--icon-accent-green, #16a34a)"/>
+  <rect x="14" y="5" width="3" height="5" rx="0.5" fill="var(--icon-accent-green, #16a34a)"/>
+  <!-- Loss bar (red) -->
+  <rect x="6" y="10" width="3" height="5" rx="0.5" fill="var(--icon-accent-red, #dc2626)"/>
+</svg>

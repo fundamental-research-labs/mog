@@ -1,0 +1,26 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Complex Equation Layouts snapshot tests for standard equations snapshot: Euler identity 1`] = `
+{
+  "baseline": 11,
+  "height": 11,
+  "width": 56,
+}
+`;
+
+exports[`Complex Equation Layouts snapshot tests for standard equations snapshot: Pythagorean theorem 1`] = `
+{
+  "baseline": 10,
+  "height": 11,
+  "width": 60,
+}
+`;
+
+exports[`Complex Equation Layouts snapshot tests for standard equations snapshot: quadratic formula 1`] = `
+{
+  "baseline": 18,
+  "childCount": 3,
+  "height": 28,
+  "width": 90,
+}
+`;

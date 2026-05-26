@@ -1,0 +1,352 @@
+{
+  "$schema": "02a-host-surface-disposition",
+  "description": "Machine-checkable disposition matrix for raw authority surfaces",
+  "platformVerificationMatrix": {
+    "@mog-sdk/kernel:DocumentFactory.createFromHostContext": {
+      "disposition": "removed",
+      "status": "verified",
+      "verification": "kernel public root exports a DocumentFactory facade without createFromHostContext; internal monorepo path remains in kernel/src/api/document/document-factory.ts",
+      "artifact": "kernel/src/api/document/__tests__/sdk-conformance/sdk-negative-boundaries.test.ts",
+    },
+    "@mog/kernel-host-internal:createHostBackedDocument": {
+      "disposition": "authorized-materialization-api",
+      "status": "complete",
+      "verification": "pnpm --filter @mog-sdk/kernel test -- host-import-source public-source-handling host-integration host-no-globals-sentinel --runInBand",
+      "artifact": "kernel/host-internal/src/create.ts",
+    },
+    "shell:standalone-browser-host-backed-import": {
+      "disposition": "authorized-materialization-api",
+      "status": "complete",
+      "verification": "pnpm --filter @mog/shell test -- create-document-manager.test.ts",
+      "artifact": "shell/src/host-adapters/standalone-browser-host.ts",
+    },
+    "runtime/src-tauri:tauri-desktop-host-adapter": {
+      "disposition": "downstream-blocker",
+      "status": "blocked",
+      "blockedBy": "desktop native command authorization and tauri-file-provider materializer",
+      "artifact": "runtime/src-tauri/host-adapters/tauri-host-skeleton.ts",
+    },
+  },
+  "surfaces": {
+    "@mog-sdk/kernel": {
+      "CallableDisposable": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CellData": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CellFormat": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CellRawValue": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CellValue": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CellWriteData": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CollaborationPresenceState": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CollaborationSidecar": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CollaborationSidecarConfig": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CollaborationSidecarStatus": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "CopyWorkbookLinkSourceResult": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted workbook-link public facade DTO; copy-source denies or redacts when the host scope lacks authority.",
+      },
+      "CreateWorkbookOptions": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "DocumentFactory": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "DocumentHandle": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "FilterExpression": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "FormulaA1": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "FunctionInfo": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "IDisposable": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "IMogDocumentFactory": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "IUndoService": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "KernelCellData": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "MogDocument": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "MogDocumentCreateOptions": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "MogDocumentFactory": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "MogSdkError": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "MogSdkEventFacade": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "RecordValues": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "Result": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "SheetId": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "StoreCellData": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "TableRecord": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "UndoError": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "UndoServiceState": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "UndoStackItem": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "UndoStateChangeEvent": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "Utils": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "ViewportReader": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "ViewportRegion": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "Workbook": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "WorkbookExternalLinkUsageView": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted workbook-link usage DTO returned by the public Workbook.links facade.",
+      },
+      "WorkbookExternalPackageArtifactView": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted workbook-link package diagnostic DTO returned by the public Workbook.links facade.",
+      },
+      "WorkbookLinkResolveRequest": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Host resolver request contract; only trusted runtime/host adapters should resolve cross-workbook targets.",
+      },
+      "WorkbookLinkResolver": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Trusted runtime/host capability for resolving cross-workbook links.",
+      },
+      "WorkbookLinkStatusScope": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Carries actor/principal scope for workbook-link resolution and refresh; public Workbook.links wraps this internally.",
+      },
+      "WorkbookLinkView": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted workbook-link public facade DTO returned by Workbook.links.",
+      },
+      "WorkbookLinks": {
+        "disposition": "public-host-facade",
+        "reason": "Public Workbook.links facade; methods derive actor/principal scope from the workbook context.",
+      },
+      "WorkbookSnapshot": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "WorkbookViewport": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "WorkbookViewportBounds": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "Worksheet": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "colToLetter": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "createWorkbook": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "getFunctionCatalog": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "getFunctionInfo": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "getWorkbookSnapshot": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "parseCellAddress": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "parseCellRange": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "rangeToA1": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "toA1": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "toMogSdkError": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+    },
+    "@mog-sdk/kernel/storage": {
+      "DocumentByteSyncPort": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage/provider raw byte synchronization contract; only trusted platform adapters should wire it.",
+      },
+      "EvictionEvent": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage eviction diagnostics surface installed by trusted shell/runtime adapters.",
+      },
+      "IndexedDBProvider": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "IndexedDBProviderOptions": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "MetaState": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "Provider": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "ProviderAttachMode": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "ProviderAttachReturn": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "ProviderCheckpointMode": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "ProviderCheckpointReturn": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "ProviderDoc": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "RecentDoc": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "clearMeta": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "emptyMeta": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "forgetDoc": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "hasPersistedSnapshot": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "installEvictionSink": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Installs storage eviction diagnostics sink for trusted shell/runtime adapters.",
+      },
+      "readMeta": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+      "touchDoc": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Storage provider surface; only trusted platform adapters should construct or wire providers.",
+      },
+    },
+  },
+}

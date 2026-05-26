@@ -1,0 +1,107 @@
+/* Shell styles for embedding (no Tailwind import)
+ *
+ * Use when embedding the mog/ engine in a host app that provides its own Tailwind.
+ * Includes: font tokens, scoped scrollbar styles, selection highlight.
+ * Does NOT include: @import 'tailwindcss', html/body/root resets.
+ *
+ * For standalone apps (mog/dev/app), use globals.css instead.
+ */
+
+@theme inline {
+  --font-ss-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ss-mono: 'Consolas', 'Monaco', monospace;
+}
+
+@layer base {
+  [data-mog-engine] ::selection {
+    background-color: rgba(33, 115, 70, 0.2);
+  }
+
+  [data-mog-engine] ::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 7px;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-track:hover {
+    background: #f1f3f4;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 7px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 150ms ease-out;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-thumb:hover {
+    background: #9aa0a6;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-thumb:active {
+    background: #5f6368;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  [data-mog-engine] ::-webkit-scrollbar-corner {
+    background: #f8f9fa;
+  }
+
+  [data-mog-engine] .scrollbar-auto-hide::-webkit-scrollbar-thumb {
+    background: rgba(193, 193, 193, 0);
+    transition: background-color 300ms ease-out;
+  }
+  [data-mog-engine] .scrollbar-auto-hide:hover::-webkit-scrollbar-thumb,
+  [data-mog-engine] .scrollbar-auto-hide.scrolling::-webkit-scrollbar-thumb {
+    background: rgba(193, 193, 193, 1);
+  }
+  [data-mog-engine] .scrollbar-auto-hide::-webkit-scrollbar-thumb:hover {
+    background: rgba(154, 160, 166, 1);
+  }
+  [data-mog-engine] .scrollbar-auto-hide::-webkit-scrollbar-thumb:active {
+    background: rgba(95, 99, 104, 1);
+  }
+}
+
+@layer utilities {
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Z-index utilities: Tailwind v4 does not auto-generate z-* utilities from
+   * custom --z-* @theme tokens (only the built-in numeric scale is generated).
+   * Values must match the @theme declarations in tokens.css. */
+  .z-ss-sticky {
+    z-index: 200;
+  }
+  .z-ss-overlay {
+    z-index: 300;
+  }
+  .z-ss-modal {
+    z-index: 1000;
+  }
+  .z-ss-popover {
+    z-index: 1050;
+  }
+  .z-ss-toast {
+    z-index: 1100;
+  }
+  .z-ss-tooltip {
+    z-index: 1200;
+  }
+
+  /* Transition-duration utilities: Tailwind v4 does not auto-generate duration-*
+   * utilities from custom --duration-* @theme tokens. */
+  .duration-ss-fast {
+    transition-duration: 100ms;
+  }
+  .duration-ss {
+    transition-duration: 150ms;
+  }
+  .duration-ss-slow {
+    transition-duration: 300ms;
+  }
+}

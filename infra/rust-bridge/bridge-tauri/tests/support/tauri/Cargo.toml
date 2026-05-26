@@ -1,0 +1,8 @@
+[package]
+name = "tauri"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+
+[dependencies]
+tauri-macros = { path = "../tauri-macros" }

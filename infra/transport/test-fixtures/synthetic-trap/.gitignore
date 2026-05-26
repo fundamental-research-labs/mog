@@ -1,0 +1,5 @@
+# The vendored synthetic-trap WASM binary is intentionally checked into
+# git so trap-recovery tests don't gate on a binaryen / wat2wasm install
+# in CI. The repo-root .gitignore excludes `*.wasm` everywhere; this
+# negation re-includes the one .wasm we ship as a test fixture.
+!synthetic-trap.wasm

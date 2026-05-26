@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "incremental": true,
+    "noEmit": false,
+    "rootDir": "./",
+    "outDir": "./dist"
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "benchmarks/**/*.ts", "benchmark*.ts"],
+  "exclude": ["node_modules", "dist", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+  "references": [{ "path": "../bridge" }]
+}

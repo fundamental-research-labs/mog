@@ -1,0 +1,108 @@
+/**
+ * Kernel Error Code Registry
+ *
+ * Every error code the kernel can produce. Grouped by domain prefix.
+ * Each domain owns its prefix exclusively — no two domains can define
+ * codes in each other's namespace.
+ */
+
+export type KernelErrorCode =
+  // === API / Validation (API_*) ===
+  | 'API_INVALID_CELL_ADDRESS'
+  | 'API_INVALID_RANGE'
+  | 'API_INVALID_ADDRESS'
+  | 'API_INVALID_SHEET_ID'
+  | 'API_INVALID_VALUE_TYPE'
+  | 'API_VALUE_TOO_LONG'
+  | 'API_ROW_OUT_OF_BOUNDS'
+  | 'API_COLUMN_OUT_OF_BOUNDS'
+  | 'API_SHEET_NOT_FOUND'
+  | 'API_SHEET_NAME_EXISTS'
+  | 'API_PROTECTED_RANGE'
+  | 'API_PROTECTED_SHEET'
+  | 'API_PROTECTED_WORKBOOK'
+  | 'API_INVALID_ARGUMENT'
+  | 'API_UNSUPPORTED_OPERATION'
+  // === Formula (FORMULA_*) ===
+  | 'FORMULA_PARSE_ERROR'
+  | 'FORMULA_CIRCULAR_REFERENCE'
+  | 'FORMULA_UNKNOWN_FUNCTION'
+  // === Table (TABLE_*) ===
+  | 'TABLE_NOT_FOUND'
+  | 'TABLE_RANGE_NOT_FOUND'
+  | 'TABLE_INVALID_NAME'
+  | 'TABLE_INVALID_RESIZE'
+  | 'TABLE_STYLE_EXISTS'
+  | 'TABLE_STYLE_NOT_FOUND'
+  | 'TABLE_RECORD_NOT_FOUND'
+  // === Execution (EXEC_*) ===
+  | 'EXEC_CANCELLED'
+  | 'EXEC_UNKNOWN_METHOD'
+  | 'EXEC_REQUIRES_SHEET'
+  // === Comment (COMMENT_*) ===
+  | 'COMMENT_NOT_FOUND'
+  // === Pivot (PIVOT_*) ===
+  | 'PIVOT_NOT_FOUND'
+  | 'PIVOT_INVALID_DATA_SOURCE'
+  | 'PIVOT_UNRESOLVED_FIELD_REFERENCES'
+  // === Scenario (SCENARIO_*) ===
+  | 'SCENARIO_ACTIVE_STATE_READ_ONLY'
+  // === Domain (DOMAIN_*) ===
+  | 'DOMAIN_FILTER_CREATE_FAILED'
+  | 'DOMAIN_GROUPING_MAX_LEVEL'
+  | 'DOMAIN_DEFINED_NAME_NOT_FOUND'
+  | 'DOMAIN_SPARKLINE_NOT_INITIALIZED'
+  | 'DOMAIN_CELL_STYLE_INVALID'
+  // === Filesystem (FS_*) ===
+  | 'FS_INVALID_PATH'
+  // === Registry (REGISTRY_*) ===
+  | 'REGISTRY_DRIVER_EXISTS'
+  | 'REGISTRY_DRIVER_NOT_FOUND'
+  // === Object (OBJ_*) — Charts, Shapes, Drawings, Equations ===
+  | 'OBJ_NOT_FOUND'
+  | 'OBJ_INVALID_CONFIG'
+  | 'OBJ_CHART_NOT_FOUND'
+  | 'OBJ_CHART_INVALID_CONFIG'
+  | 'OBJ_SHAPE_NOT_FOUND'
+  | 'OBJ_SHAPE_INVALID_CONFIG'
+  | 'OBJ_DRAWING_NOT_FOUND'
+  | 'OBJ_EQUATION_NOT_FOUND'
+  | 'OBJ_TEXT_EFFECT_NOT_FOUND'
+  | 'OBJ_DIAGRAM_NOT_FOUND'
+  | 'OBJ_GROUP_TOO_FEW'
+  // === Bridge / Transport (BRIDGE_*) ===
+  | 'BRIDGE_NOT_AVAILABLE'
+  | 'BRIDGE_COMMAND_FAILED'
+  | 'BRIDGE_TRANSPORT_ERROR'
+  | 'BRIDGE_WASM_LOAD_FAILED'
+  | 'BRIDGE_NOT_STARTED'
+  | 'BRIDGE_DISPOSED'
+  | 'BRIDGE_ALREADY_STARTED'
+  | 'BRIDGE_MUTATION_REJECTED'
+  | 'BRIDGE_PHASE_INSUFFICIENT'
+  // === Capability (CAP_*) ===
+  | 'CAP_DENIED'
+  | 'CAP_SCOPE_MISMATCH'
+  | 'CAP_EXPIRED'
+  | 'CAP_NOT_GRANTED'
+  | 'CAP_REQUIRES_AUTH'
+  | 'CAP_INVALID_SCOPE'
+  | 'CAP_UNBOUNDED_WILDCARD'
+  // === Document Lifecycle (DOC_*) ===
+  | 'DOC_NOT_READY'
+  | 'DOC_DISPOSED'
+  | 'DOC_ENGINE_CREATE_FAILED'
+  | 'DOC_HYDRATION_FAILED'
+  | 'DOC_LIFECYCLE_ERROR'
+  | 'DOC_HOST_CONTEXT_VALIDATION'
+  | 'DOC_LEGACY_OPTION_REJECTED'
+  // === Compute (COMPUTE_*) ===
+  | 'COMPUTE_ERROR'
+  // === Configuration (CONFIG_*) ===
+  | 'CONFIG_MISSING_USER_TIMEZONE'
+  | 'CONFIG_INVALID_USER_TIMEZONE'
+  // === Storage / Write Gate (WRITE_GATE_*) ===
+  | 'WRITE_GATE_BLOCKED'
+  // === Generic ===
+  | 'OPERATION_FAILED'
+  | 'NOT_IMPLEMENTED';

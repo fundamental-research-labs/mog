@@ -1,0 +1,165 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Default)]
+pub struct PrintSettings {
+    pub paper_size: Option<u32>,
+    /// "portrait", "landscape"
+    pub orientation: Option<String>,
+    /// Percentage
+    pub scale: Option<u32>,
+    pub fit_to_width: Option<u32>,
+    pub fit_to_height: Option<u32>,
+    pub gridlines: bool,
+    pub headings: bool,
+    pub h_centered: bool,
+    pub v_centered: bool,
+    pub margins: Option<PageMargins>,
+    pub header_footer: Option<HeaderFooter>,
+    pub black_and_white: bool,
+    pub draft: bool,
+    pub first_page_number: Option<u32>,
+    /// Page order: "downThenOver" or "overThenDown".
+    /// None means the original had no pageOrder attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_order: Option<String>,
+    /// Whether to use printer defaults (ECMA-376 default is true).
+    /// None means the original had no usePrinterDefaults attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_printer_defaults: Option<bool>,
+    /// Horizontal DPI for printing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizontal_dpi: Option<u32>,
+    /// Vertical DPI for printing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_dpi: Option<u32>,
+    /// Printer settings relationship ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r_id: Option<String>,
+    /// Whether a `<printOptions>` element was present in the original XML.
+    /// When true, the writer emits `<printOptions/>` even if all values are defaults.
+    #[serde(default)]
+    pub has_print_options: bool,
+    /// Whether to use the first page number instead of auto numbering.
+    #[serde(default)]
+    pub use_first_page_number: bool,
+    /// Whether a `<pageSetup>` element was present in the original XML.
+    #[serde(default)]
+    pub has_page_setup: bool,
+    /// How to print cell comments: "none", "atEnd", "asDisplayed".
+    /// None means the attribute was absent (defaults to "none").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_comments: Option<String>,
+    /// How to print cell errors: "displayed", "blank", "dash", "NA".
+    /// None means the attribute was absent (defaults to "displayed").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub print_errors: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageMargins {
+    pub top: f64,
+    pub bottom: f64,
+    pub left: f64,
+    pub right: f64,
+    pub header: f64,
+    pub footer: f64,
+}
+
+impl Default for PageMargins {
+    fn default() -> Self {
+        Self {
+            top: 0.75,
+            bottom: 0.75,
+            left: 0.7,
+            right: 0.7,
+            header: 0.3,
+            footer: 0.3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Default)]
+pub struct HeaderFooter {
+    pub odd_header: Option<String>,
+    pub odd_footer: Option<String>,
+    pub even_header: Option<String>,
+    pub even_footer: Option<String>,
+    pub first_header: Option<String>,
+    pub first_footer: Option<String>,
+    pub different_odd_even: bool,
+    pub different_first: bool,
+    /// Whether header/footer should scale with document scaling.
+    /// None means not specified (ECMA-376 default is true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_with_doc: Option<bool>,
+    /// Whether header/footer should align with page margins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align_with_margins: Option<bool>,
+}
+
+/// A single page break entry preserving all OOXML attributes for round-trip fidelity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageBreakEntry {
+    /// Row or column index where the break occurs.
+    pub id: u32,
+    /// Minimum row/column for the break.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub min: u32,
+    /// Maximum row/column for the break.
+    pub max: u32,
+    /// Whether this is a manual break.
+    #[serde(default)]
+    pub manual: bool,
+    /// Whether this is a page-to-page break.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pt: bool,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PageBreaks {
+    pub row_breaks: Vec<PageBreakEntry>,
+    pub col_breaks: Vec<PageBreakEntry>,
+}
+
+/// Position of a header/footer image in the page layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HfImagePosition {
+    LeftHeader,
+    CenterHeader,
+    RightHeader,
+    LeftFooter,
+    CenterFooter,
+    RightFooter,
+}
+
+/// Header/footer image metadata stored in the compute engine document.
+///
+/// Follows the floating-object pattern: stores image references (path or data-URL),
+/// not binary blobs. Image binaries live in BinaryPassthrough (round-trip) or are
+/// decoded from data-URLs on export (API-created).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeaderFooterImageInfo {
+    pub position: HfImagePosition,
+    /// Image source — resolved path (e.g., "../media/image1.png") for imported,
+    /// or data-URL ("data:image/png;base64,...") for API-created.
+    pub src: String,
+    /// Descriptive title.
+    pub title: String,
+    /// Width in points.
+    pub width_pt: f64,
+    /// Height in points.
+    pub height_pt: f64,
+}

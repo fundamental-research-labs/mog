@@ -1,0 +1,33 @@
+error[E0277]: the trait bound `AsyncNotCloneService: Clone` is not satisfied
+  --> tests/ui/async_not_clone_service_fail.rs:18:9
+   |
+18 | /         $gen! {
+19 | |             bridge_version = 1;
+20 | |             group = ops;
+21 | |             service = AsyncNotCloneService;
+...  |
+33 | |         }
+   | |_________^ the trait `Clone` is not implemented for `AsyncNotCloneService`
+...
+37 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncNotCloneService_ops);
+   |   ---------------------------------------------------------------------------- in this macro invocation
+   |
+note: required by a bound in `TauriRegistry::<T>::clone_for_async`
+  --> tests/ui/async_not_clone_service_fail.rs:18:9
+   |
+18 | /         $gen! {
+19 | |             bridge_version = 1;
+20 | |             group = ops;
+21 | |             service = AsyncNotCloneService;
+...  |
+33 | |         }
+   | |_________^ required by this bound in `TauriRegistry::<T>::clone_for_async`
+...
+37 |   bridge_tauri::generate!(crate::__bridge_descriptor_AsyncNotCloneService_ops);
+   |   ---------------------------------------------------------------------------- in this macro invocation
+   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `AsyncNotCloneService` with `#[derive(Clone)]`
+   |
+ 1 + #[derive(Clone)]
+ 2 | pub struct AsyncNotCloneService {
+   |

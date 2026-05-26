@@ -1,0 +1,43 @@
+{
+  "name": "@mog/types-culture",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "development": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
+    },
+    "./number-formats/constants": {
+      "development": "./src/number-formats/constants.ts",
+      "types": "./dist/number-formats/constants.d.ts",
+      "import": "./dist/number-formats/constants.js",
+      "default": "./dist/number-formats/constants.js"
+    },
+    "./number-formats/constants.gen": {
+      "development": "./src/number-formats/constants.gen.ts",
+      "types": "./dist/number-formats/constants.gen.d.ts",
+      "import": "./dist/number-formats/constants.gen.js",
+      "default": "./dist/number-formats/constants.gen.js"
+    }
+  },
+  "description": "Locale primitives (CultureInfo, locale options) and Rust-generated number-format constants. Tier 0 foundation; no intra-contracts dependencies.",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

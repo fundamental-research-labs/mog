@@ -1,0 +1,16 @@
+error: method wrong_shape: scope = "cell" requires either `addr: CellAddr` or `row: u32, col: u32`
+  --> tests/ui/cell_scope_without_celladdr.rs:27:13
+   |
+27 |               method read wrong_shape {
+   |               ^^^^^^
+...
+36 | / bridge_delegate::delegate!(
+37 | |     target = StubService,
+38 | |     dispatch = dispatch,
+39 | |     gated = true,
+40 | |     skip_default_imports = true,
+41 | |     crate::__desc_cell_no_celladdr,
+42 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_cell_no_celladdr` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

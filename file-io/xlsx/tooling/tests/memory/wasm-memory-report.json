@@ -1,0 +1,94 @@
+{
+  "version": "0.1.0",
+  "timestamp": "2026-02-05T23:52:38.017Z",
+  "platform": "darwin arm64 Node v24.10.0",
+  "profiles": [
+    {
+      "file": "smoke-bench.xlsx",
+      "fileSize": 11456,
+      "cellCount": 1002,
+      "sheetCount": 1,
+      "wasmMemory": {
+        "cellBufferSize": 200000,
+        "stringBufferSize": 1000000,
+        "totalAllocated": 1200000,
+        "bytesPerCell": 1197.6047904191616
+      },
+      "featureBreakdown": {
+        "cells": 20040,
+        "strings": 1000000,
+        "overhead": 0
+      },
+      "peakMemory": 15539104,
+      "parseTimeMs": 2.4346249999999827,
+      "timestamp": "2026-02-05T23:52:37.947Z"
+    },
+    {
+      "file": "small-bench.xlsx",
+      "fileSize": 81389,
+      "cellCount": 9997,
+      "sheetCount": 1,
+      "wasmMemory": {
+        "cellBufferSize": 1000000,
+        "stringBufferSize": 5000000,
+        "totalAllocated": 6000000,
+        "bytesPerCell": 600.1800540162048
+      },
+      "featureBreakdown": {
+        "cells": 199940,
+        "strings": 5000000,
+        "overhead": 0
+      },
+      "peakMemory": 16524304,
+      "parseTimeMs": 4.022041999999999,
+      "timestamp": "2026-02-05T23:52:37.966Z"
+    },
+    {
+      "file": "smoke-test.xlsx",
+      "fileSize": 53517,
+      "cellCount": 4909,
+      "sheetCount": 1,
+      "wasmMemory": {
+        "cellBufferSize": 2000000,
+        "stringBufferSize": 10000000,
+        "totalAllocated": 12000000,
+        "bytesPerCell": 2444.489712772459
+      },
+      "featureBreakdown": {
+        "cells": 98180,
+        "strings": 10000000,
+        "overhead": 0
+      },
+      "peakMemory": 17504688,
+      "parseTimeMs": 3.697833000000003,
+      "timestamp": "2026-02-05T23:52:37.971Z"
+    },
+    {
+      "file": "small-test.xlsx",
+      "fileSize": 524193,
+      "cellCount": 49897,
+      "sheetCount": 1,
+      "wasmMemory": {
+        "cellBufferSize": 10000000,
+        "stringBufferSize": 50000000,
+        "totalAllocated": 60000000,
+        "bytesPerCell": 1202.4771028318337
+      },
+      "featureBreakdown": {
+        "cells": 997940,
+        "strings": 50000000,
+        "overhead": 0
+      },
+      "peakMemory": 14743184,
+      "parseTimeMs": 33.894334000000015,
+      "timestamp": "2026-02-05T23:52:38.011Z"
+    }
+  ],
+  "summary": {
+    "totalFilesProcessed": 4,
+    "totalCellsParsed": 65805,
+    "averageBytesPerCell": 1361.1879150099148,
+    "peakMemoryUsed": 17504688,
+    "averageParseTimeMs": 11.0122085
+  }
+}

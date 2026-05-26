@@ -1,0 +1,52 @@
+{
+  "name": "@mog/xlsx-tooling",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "*.ts",
+    "benchmarks"
+  ],
+  "private": true,
+  "description": "Dev tooling for the XLSX parser — benchmarks, memory tests, corpus scripts, profiling",
+  "type": "module",
+  "scripts": {
+    "test:memory": "cd ../.. && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-budget.test.ts",
+    "test:memory:wasm": "cd ../.. && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-wasm.test.ts",
+    "test:memory:heap": "cd ../.. && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-heap.test.ts",
+    "test:memory:leak": "cd ../.. && npx tsx --expose-gc xlsx/tooling/tests/memory/leak-detection.test.ts",
+    "test:memory:all": "cd ../.. && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-wasm.test.ts && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-heap.test.ts && npx tsx --expose-gc xlsx/tooling/tests/memory/leak-detection.test.ts && npx tsx --expose-gc xlsx/tooling/tests/memory/memory-budget.test.ts",
+    "bench:node": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmark.ts",
+    "bench:large": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/large-files.ts",
+    "bench:large:generate": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/large-files.ts --generate",
+    "bench:features": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/feature-benchmarks.ts",
+    "bench:features:generate": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/feature-benchmarks.ts --generate",
+    "bench:real": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/real-world.ts",
+    "bench:real:generate": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/real-world.ts --generate",
+    "bench:compare": "cd ../.. && npx tsx xlsx/tooling/benchmarks/compare.ts",
+    "bench:all": "cd ../.. && npx tsx --expose-gc xlsx/tooling/benchmarks/large-files.ts && npx tsx --expose-gc xlsx/tooling/benchmarks/feature-benchmarks.ts && npx tsx --expose-gc xlsx/tooling/benchmarks/real-world.ts && npx tsx xlsx/tooling/benchmarks/compare.ts",
+    "verify": "cd ../.. && npx tsx xlsx/tooling/scripts/excel-verify.ts",
+    "binary-diff": "cd ../.. && npx tsx xlsx/tooling/scripts/binary-diff.ts",
+    "corpus:generate": "cd ../.. && npx tsx xlsx/tooling/scripts/generate-test-files.ts && npx tsx xlsx/tooling/scripts/generate-realistic-files.ts && npx tsx xlsx/tooling/scripts/generate-edge-cases.ts",
+    "corpus:generate:features": "cd ../.. && npx tsx xlsx/tooling/scripts/generate-test-files.ts",
+    "corpus:generate:realistic": "cd ../.. && npx tsx xlsx/tooling/scripts/generate-realistic-files.ts",
+    "corpus:generate:edge-cases": "cd ../.. && npx tsx xlsx/tooling/scripts/generate-edge-cases.ts",
+    "corpus:validate": "cd ../.. && npx tsx xlsx/tooling/scripts/validate-corpus.ts",
+    "corpus:all": "cd ../.. && npx tsx xlsx/tooling/scripts/generate-test-files.ts && npx tsx xlsx/tooling/scripts/generate-realistic-files.ts && npx tsx xlsx/tooling/scripts/generate-edge-cases.ts && npx tsx xlsx/tooling/scripts/validate-corpus.ts",
+    "xlsx-fidelity": "cd ../.. && npx tsx xlsx/tooling/scripts/xlsx-fidelity.ts",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b ."
+  },
+  "devDependencies": {
+    "@mog/xlsx-parser": "workspace:*",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.5.9",
+    "jszip": "^3.10.1"
+  }
+}

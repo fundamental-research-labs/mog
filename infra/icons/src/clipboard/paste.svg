@@ -1,0 +1,41 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 16 16"
+  fill="none"
+>
+  <!-- Clipboard body (orange border) -->
+  <rect
+    x="1.5"
+    y="2.5"
+    width="7"
+    height="11"
+    rx="1"
+    stroke="var(--icon-accent-orange, #ea580c)"
+    stroke-width="1.25"
+    fill="none"
+  />
+  <!-- Clip at top of clipboard -->
+  <rect
+    x="3"
+    y="1"
+    width="4"
+    height="2.5"
+    rx="0.75"
+    stroke="var(--icon-accent-orange, #ea580c)"
+    stroke-width="1.25"
+    fill="white"
+  />
+  <!-- Front document (overlapping) -->
+  <rect
+    x="6"
+    y="5"
+    width="8.5"
+    height="9.5"
+    rx="1"
+    stroke="currentColor"
+    stroke-width="1.25"
+    fill="white"
+  />
+</svg>

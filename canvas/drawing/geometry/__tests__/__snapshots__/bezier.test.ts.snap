@@ -1,0 +1,119 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Bezier operations splitCubicAt t=0.5 snapshot 1`] = `
+{
+  "p0": {
+    "x": 0,
+    "y": 0,
+  },
+  "p1": {
+    "x": 0,
+    "y": 50,
+  },
+  "p2": {
+    "x": 25,
+    "y": 75,
+  },
+  "p3": {
+    "x": 50,
+    "y": 75,
+  },
+}
+`;
+
+exports[`Bezier operations splitCubicAt t=0.5 snapshot 2`] = `
+{
+  "p0": {
+    "x": 50,
+    "y": 75,
+  },
+  "p1": {
+    "x": 75,
+    "y": 75,
+  },
+  "p2": {
+    "x": 100,
+    "y": 50,
+  },
+  "p3": {
+    "x": 100,
+    "y": 0,
+  },
+}
+`;
+
+exports[`Bezier operations splitCubicAt t=0.25 snapshot 1`] = `
+{
+  "p0": {
+    "x": 0,
+    "y": 0,
+  },
+  "p1": {
+    "x": 0,
+    "y": 25,
+  },
+  "p2": {
+    "x": 6.25,
+    "y": 43.75,
+  },
+  "p3": {
+    "x": 15.625,
+    "y": 56.25,
+  },
+}
+`;
+
+exports[`Bezier operations splitCubicAt t=0.25 snapshot 2`] = `
+{
+  "p0": {
+    "x": 15.625,
+    "y": 56.25,
+  },
+  "p1": {
+    "x": 43.75,
+    "y": 93.75,
+  },
+  "p2": {
+    "x": 100,
+    "y": 75,
+  },
+  "p3": {
+    "x": 100,
+    "y": 0,
+  },
+}
+`;
+
+exports[`Bezier operations splitQuadraticAt t=0.5 snapshot 1`] = `
+{
+  "p0": {
+    "x": 0,
+    "y": 0,
+  },
+  "p1": {
+    "x": 25,
+    "y": 50,
+  },
+  "p2": {
+    "x": 50,
+    "y": 50,
+  },
+}
+`;
+
+exports[`Bezier operations splitQuadraticAt t=0.5 snapshot 2`] = `
+{
+  "p0": {
+    "x": 50,
+    "y": 50,
+  },
+  "p1": {
+    "x": 75,
+    "y": 50,
+  },
+  "p2": {
+    "x": 100,
+    "y": 0,
+  },
+}
+`;

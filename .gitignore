@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build outputs
+# Cargo target dirs split by triple to avoid lock contention.
+# `target/` is kept ignored as a safety net for any cargo invocation whose
+# CWD doesn't resolve `.cargo/config.toml` — drop once we've confirmed there
+# are no such call sites.
+target-native/
+target-wasm/
+target/
+dist/
+build/
+.next/
+pkg/
+/artifacts/
+*.wasm
+*.node
+*.tsbuildinfo
+
+# Stale tsc composite outputs that land alongside source when `tsc -b` is
+# invoked from a referencing project. The real build (tsup) emits to dist/.
+kernel/src/**/*.d.ts
+kernel/src/**/*.d.ts.map
+kernel/src/**/*.js
+kernel/src/**/*.js.map
+
+# Testing
+coverage/
+
+# IDE
+.DS_Store
+*.pem
+.idea/
+.vscode/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.so
+*.dylib
+*.pyd
+*.whl
+
+# Environment
+.env*
+!.env.example
+
+# Misc
+.mcp.json
+# Legacy corpus data is resolved locally via @mog/corpus → ~/.mog/data/<SHA>/.
+# See dev/corpus/README.md.
+# Exception: scale-fixtures is committed in-tree
+# so the corpus can be reproduced byte-for-byte from its generator script.
+# Single-digit MB so size isn't a concern.
+plans/data/*
+!plans/data/scale-fixtures/
+plans/logo/
+logo/generated/
+dev/api-eval/output/
+dev/xlsx-roundtrip/output/
+rust_out
+dev/colab-eval/output/
+.wrangler/
+
+# wasm-pack bootstrap lockfile (ensureWasmBuilt plugin in dev/app/vite.config.ts)
+.wasm-pack.lock
+apps/task-tracker/node_modules
+
+# Local verdaccio / npm registry dev artifacts
+scripts/htpasswd
+scripts/verdaccio-htpasswd
+scripts/verdaccio-storage/
+*.bak
+.dev-link-state.json

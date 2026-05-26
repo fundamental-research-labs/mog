@@ -1,0 +1,92 @@
+{
+  "name": "@mog/types-viewport",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./geometry": {
+      "development": "./src/geometry.ts",
+      "types": "./dist/geometry.d.ts",
+      "import": "./dist/geometry.js"
+    },
+    "./grid-canvas": {
+      "development": "./src/grid-canvas.ts",
+      "types": "./dist/grid-canvas.d.ts",
+      "import": "./dist/grid-canvas.js"
+    },
+    "./rendering/bounds": {
+      "development": "./src/rendering/bounds.ts",
+      "types": "./dist/rendering/bounds.d.ts",
+      "import": "./dist/rendering/bounds.js"
+    },
+    "./rendering/constants": {
+      "development": "./src/rendering/constants.ts",
+      "types": "./dist/rendering/constants.d.ts",
+      "import": "./dist/rendering/constants.js"
+    },
+    "./rendering/data-source-types": {
+      "development": "./src/rendering/data-source-types.ts",
+      "types": "./dist/rendering/data-source-types.d.ts",
+      "import": "./dist/rendering/data-source-types.js"
+    },
+    "./rendering/grid-region": {
+      "development": "./src/rendering/grid-region.ts",
+      "types": "./dist/rendering/grid-region.d.ts",
+      "import": "./dist/rendering/grid-region.js"
+    },
+    "./rendering/grid-renderer-primitives": {
+      "development": "./src/rendering/grid-renderer-primitives.ts",
+      "types": "./dist/rendering/grid-renderer-primitives.d.ts",
+      "import": "./dist/rendering/grid-renderer-primitives.js"
+    },
+    "./rendering/primitives": {
+      "development": "./src/rendering/primitives.ts",
+      "types": "./dist/rendering/primitives.d.ts",
+      "import": "./dist/rendering/primitives.js"
+    },
+    "./viewport": {
+      "development": "./src/viewport.ts",
+      "types": "./dist/viewport.d.ts",
+      "import": "./dist/viewport.js"
+    },
+    "./viewport-config": {
+      "development": "./src/viewport-config.ts",
+      "types": "./dist/viewport-config.d.ts",
+      "import": "./dist/viewport-config.js"
+    },
+    "./viewport/reader": {
+      "development": "./src/viewport/reader.ts",
+      "types": "./dist/viewport/reader.d.ts",
+      "import": "./dist/viewport/reader.js"
+    },
+    "./views": {
+      "development": "./src/views/index.ts",
+      "types": "./dist/views/index.d.ts",
+      "import": "./dist/views/index.js"
+    },
+    "./views/types": {
+      "development": "./src/views/types.ts",
+      "types": "./dist/views/types.d.ts",
+      "import": "./dist/views/types.js"
+    }
+  },
+  "description": "Viewport geometry (Point, Rect, Bounds), views metadata, and the pure-primitive portion of rendering (LayerName, RenderPriority, CellCoord, GridRegion, ChromeTheme, rendering constants). Tier 1 leaf of the domain graph; depends only on @mog/types-core.",
+  "dependencies": {
+    "@mog/types-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

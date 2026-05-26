@@ -1,0 +1,45 @@
+{
+  "name": "@mog-sdk/runtime-service-contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./error-envelope": {
+      "development": "./src/error-envelope.ts",
+      "types": "./dist/error-envelope.d.ts",
+      "import": "./dist/error-envelope.js"
+    },
+    "./audit-event": {
+      "development": "./src/audit-event.ts",
+      "types": "./dist/audit-event.d.ts",
+      "import": "./dist/audit-event.js"
+    },
+    "./service-contracts": {
+      "development": "./src/service-contracts.ts",
+      "types": "./dist/service-contracts.d.ts",
+      "import": "./dist/service-contracts.js"
+    },
+    "./protocol-version": {
+      "development": "./src/protocol-version.ts",
+      "types": "./dist/protocol-version.d.ts",
+      "import": "./dist/protocol-version.js"
+    },
+    "./deployment": {
+      "development": "./src/deployment.ts",
+      "types": "./dist/deployment.d.ts",
+      "import": "./dist/deployment.js"
+    }
+  },
+  "description": "Shared type contracts for Mog runtime services: error envelopes, audit events, service boundary types, protocol versioning, and deployment profiles. Types only, no implementation.",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

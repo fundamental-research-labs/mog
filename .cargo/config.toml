@@ -1,0 +1,11 @@
+# Workspace-wide cargo target dir.
+#
+# Splits build artifacts by triple to avoid cargo's per-target-dir file lock
+# (`target/.cargo-lock`) serializing builders that target different triples.
+#
+# - Host triple builds (napi, Tauri, host tests, host CLIs) -> `target-native/`.
+# - wasm32-unknown-unknown builds (wasm-pack)              -> `target-wasm/`,
+#   set via `compute/wasm/.cargo/config.toml` and an explicit env-var belt
+#   (`CARGO_TARGET_DIR`) in every wasm-pack call site.
+[build]
+target-dir = "target-native"

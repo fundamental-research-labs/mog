@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "noCheck": true,
+    "composite": false,
+    "incremental": false
+  },
+  "include": [
+    "src/index.ts",
+    "src/api/index.ts",
+    "src/api/app/index.ts",
+    "src/contracts/api.ts",
+    "src/security/index.ts",
+    "src/services/capabilities/index.ts",
+    "src/storage/index.ts",
+    "src/testing/index.ts",
+    "src/host-lifecycle-internal.ts"
+  ],
+  "references": []
+}

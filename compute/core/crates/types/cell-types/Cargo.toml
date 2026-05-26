@@ -1,0 +1,26 @@
+[package]
+name = "cell-types"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+rust-version = "1.85"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Cell identity and grid addressing types (CellId, SheetId, CellPos, RangePos)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+siphasher = "1"
+uuid = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
+# Drives the `tests/no_bare_f64_at_boundary.rs` build-time gate.
+finite-at-boundary-walker = { path = "../finite-at-boundary-walker" }
+
+[[bench]]
+name = "benchmarks"
+harness = false

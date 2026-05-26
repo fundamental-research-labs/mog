@@ -1,0 +1,27 @@
+{
+  "name": "@mog/pdf-layout",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b ."
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6"
+  }
+}

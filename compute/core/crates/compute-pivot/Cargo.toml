@@ -1,0 +1,42 @@
+[package]
+name = "compute-pivot"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pivot table engine for the compute engine — pure-function pivot computation"
+
+[dependencies]
+# Foundation types (CellValue, CellError, date_serial, etc.)
+value-types = { path = "../types/value-types" }
+
+# Cell position/range types (SheetRange, etc.)
+cell-types = { path = "../types/cell-types" }
+
+# Shared analytical primitives (aggregation, filtering, sorting, value semantics)
+compute-stats = { path = "../compute-stats" }
+
+# Pivot types (standalone, dependency-light crate)
+pivot-types = { path = "../types/pivot-types" }
+
+# Relational compute engine (GROUP BY, aggregation, window functions)
+compute-relational = { path = "../compute-relational" }
+
+# Snapshot types (PivotTableDef for GETPIVOTDATA)
+snapshot-types = { path = "../types/snapshot-types" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Date/time (used for date grouping)
+chrono = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "pivot_benchmarks"
+harness = false

@@ -1,0 +1,248 @@
+/**
+ * useRendererSync Effect Hook
+ *
+ * Handles synchronization between the renderer and external factors:
+ * - ResizeObserver for container dimension changes
+ * - Visibility change for suspend/resume
+ * - Sheet switching
+ * - Zoom level sync
+ * - Input dependencies (including synchronous setScrollPosition callback)
+ * - Keyboard and resize dependencies
+ * - Cleanup on unmount
+ *
+ * @see 09-SPREADSHEET-GRID-DECOMPOSITION.md
+ */
+
+import type { RefObject } from 'react';
+import { useEffect } from 'react';
+
+import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
+import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
+
+/**
+ * Workbook settings for scrollbar visibility.
+ */
+interface WorkbookSettings {
+  showHorizontalScrollbar: boolean;
+  showVerticalScrollbar: boolean;
+}
+
+/**
+ * Options for the useRendererSync hook.
+ */
+export interface UseRendererSyncOptions {
+  /** Container ref for ResizeObserver */
+  containerRef: RefObject<HTMLDivElement | null>;
+  /** Whether renderer is ready */
+  isReady: boolean;
+  /** Current sheet ID from renderer */
+  currentSheetId: string | null;
+  /** Active sheet ID from React state */
+  activeSheetId: string;
+  /** Current zoom level for the active sheet (already resolved from UIStore) */
+  currentZoom: number;
+  /** Workbook settings for scrollbar visibility */
+  workbookSettings: WorkbookSettings;
+  /** The sheet coordinator instance */
+  coordinator: SheetCoordinator;
+  /** Resize callback from renderer hook */
+  resize: (width: number, height: number) => void;
+  /** Suspend callback from renderer hook */
+  suspend: () => void;
+  /** Resume callback from renderer hook */
+  resume: () => void;
+  /** Switch sheet callback from renderer hook */
+  switchSheet: (sheetId: string) => void;
+  /** Set zoom callback from renderer hook */
+  setZoom: (zoom: number) => void;
+  /** Unmount callback from renderer hook */
+  unmount: () => void;
+}
+
+/**
+ * Handles renderer synchronization with external factors.
+ *
+ * This hook sets up multiple effects for:
+ * - ResizeObserver to track container size changes
+ * - Visibility change listener for suspend/resume
+ * - Sheet switching when activeSheetId changes
+ * - Zoom level sync from UIStore
+ * - Input, keyboard, and resize dependencies
+ * - Scroll state sync from InputCoordinator
+ * - Cleanup on unmount
+ *
+ * @param options - Configuration options
+ */
+export function useRendererSync(options: UseRendererSyncOptions): void {
+  const {
+    containerRef,
+    isReady,
+    currentSheetId,
+    activeSheetId,
+    currentZoom,
+    workbookSettings,
+    coordinator,
+    resize,
+    suspend,
+    resume,
+    switchSheet,
+    setZoom,
+    unmount,
+  } = options;
+
+  // ResizeObserver effect
+  // Note: Capture resize function at mount to avoid re-creating observer on every render
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Capture resize function at effect setup time
+    const resizeFn = resize;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const { width, height } = entry.contentRect;
+        const MAX_REASONABLE_DIMENSION = 16384;
+
+        // Log ResizeObserver dimensions with integrated lifecycle debug
+        lifecycleDebug.resizeObserverFired(width, height, 'contentRect');
+
+        if (width > 0 && height > 0) {
+          // Sanity check: don't pass absurd dimensions to the renderer
+          if (width > MAX_REASONABLE_DIMENSION || height > MAX_REASONABLE_DIMENSION) {
+            lifecycleDebug.dimensionsRejected(
+              width,
+              height,
+              'ResizeObserver contentRect exceeds MAX_REASONABLE_DIMENSION',
+            );
+            return;
+          }
+          // Update state machine with new dimensions
+          lifecycleDebug.dimensionsAccepted(width, height, 'ResizeObserver');
+          // The machine's RESIZE handler will call renderer.resize() via resizeRenderer action
+          resizeFn(width, height);
+        }
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [containerRef, resize]);
+
+  // Scrollbar visibility change effect
+  // When scrollbar visibility changes, trigger a resize so the canvas
+  // viewport expands to fill the freed space (or contracts when shown).
+  // Issue 7: View Options - Scrollbar Visibility Wiring
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !isReady) return;
+
+    // Trigger resize with current container dimensions
+    // The renderer will recompute viewport accounting for scrollbar presence
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      resize(rect.width, rect.height);
+    }
+  }, [
+    workbookSettings.showHorizontalScrollbar,
+    workbookSettings.showVerticalScrollbar,
+    isReady,
+    resize,
+    containerRef,
+  ]);
+
+  // Visibility change effect
+  // Note: Capture suspend/resume functions at mount to avoid re-attaching listener on every render
+  useEffect(() => {
+    // Capture functions at effect setup time
+    const suspendFn = suspend;
+    const resumeFn = resume;
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        suspendFn();
+      } else {
+        resumeFn();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [suspend, resume]);
+
+  // Sheet switching effect
+  useEffect(() => {
+    // Only switch if we're ready and it's a different sheet
+    if (isReady && currentSheetId !== activeSheetId) {
+      switchSheet(activeSheetId);
+    }
+    // Note: Use specific properties instead of entire renderer object to avoid infinite loops
+  }, [isReady, currentSheetId, activeSheetId, switchSheet]);
+
+  // Zoom sync effect
+  // Syncs zoom level from UIStore to the renderer.
+  // - Applies stored zoom when renderer becomes ready
+  // - Applies stored zoom when switching sheets
+  // - Updates renderer when zoom level changes
+  // PERFORMANCE: currentZoom is already resolved from zoomLevels[activeSheetId]
+  // by the caller, so this hook only re-runs when the active sheet's zoom changes,
+  // not when any sheet's zoom changes.
+  useEffect(() => {
+    if (!isReady) return;
+
+    // Apply zoom to renderer
+    setZoom(currentZoom);
+  }, [isReady, currentZoom, setZoom]);
+
+  // Input dependencies effect
+  // Sets up InputCoordinator dependencies when renderer is ready.
+  // This enables trackpad scrolling, touch gestures, and pan functionality.
+  useEffect(() => {
+    if (!isReady) return;
+
+    const sheetView = coordinator.renderer.getSheetView();
+    if (!sheetView) return;
+
+    coordinator.input.setInputDependencies({
+      hitTest: sheetView.hitTest,
+      viewport: sheetView.viewport,
+      geometry: sheetView.geometry,
+      commands: sheetView.commands,
+      forwardToSheet: (_event) => {
+        // Route input events (cell clicks, resize starts, fill handle) to grid-editing system.
+        // For now, this is a no-op bridge — the grid system handles pointer events through
+        // its own React event listeners. Full event forwarding will be wired in a follow-up.
+      },
+      requestRender: () => coordinator.renderer.invalidate('scroll'),
+      requestFrame: () => sheetView.render.requestFrame('scroll'),
+      // Wire setScrollPosition directly — replaces the React useEffect scroll bridge.
+      // This ensures scroll position changes (wheel, momentum, scrollTo, scrollBy)
+      // synchronously propagate to RendererExecution for layout recomputation.
+      setScrollPosition: (position) => coordinator.renderer.setScrollPosition(position),
+    });
+  }, [isReady, coordinator, activeSheetId]);
+
+  // Note: Keyboard is enabled via config.enableKeyboard at coordinator construction time
+  // See SheetCoordinatorConfig in engine/src/state/coordinator/types.ts
+
+  // Note: Resize dependencies removed - ResizeCoordinator dependencies can be set at construction time
+  // via config when needed. Currently this feature is not actively wired up.
+
+  // Cleanup effect
+  // Note: We use renderer.unmount directly without renderer in deps to avoid
+  // infinite loops. The unmount function is stable (created with useCallback).
+  useEffect(() => {
+    // Capture the unmount function at mount time
+    const unmountFn = unmount;
+    return () => {
+      unmountFn();
+    };
+  }, [unmount]);
+
+  // NOTE: The scroll state sync useEffect that was here has been removed.
+  // Scroll position now propagates synchronously via the setScrollPosition callback
+  // wired in setInputDependencies above. This eliminates the React effect delay
+  // and ensures layout recomputation happens in the same call stack as scroll changes.
+  // onScrollChange remains available for non-rendering subscribers (debug, overlays).
+}

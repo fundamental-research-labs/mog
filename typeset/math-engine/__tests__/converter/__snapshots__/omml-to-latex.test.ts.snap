@@ -1,0 +1,5 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`OMML to LaTeX Converter snapshot tests Euler identity snapshot 1`] = `"e^{i\\pi}+1=0"`;
+
+exports[`OMML to LaTeX Converter snapshot tests quadratic formula snapshot 1`] = `"x=\\frac{-b\\pm\\sqrt{b^{2}-4ac}}{2a}"`;

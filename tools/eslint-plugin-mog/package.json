@@ -1,0 +1,17 @@
+{
+  "name": "eslint-plugin-mog",
+  "version": "0.0.0",
+  "license": "MIT",
+  "files": [
+    "*.cjs"
+  ],
+  "private": true,
+  "description": "Local ESLint rules for the mog monorepo mirror guards.",
+  "main": "index.cjs",
+  "exports": {
+    ".": "./index.cjs"
+  },
+  "peerDependencies": {
+    "eslint": ">=8"
+  }
+}

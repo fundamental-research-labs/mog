@@ -1,0 +1,21 @@
+[package]
+name = "compute-screenshot"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Headless sheet screenshot — tiny-skia rasterizer over ViewportRenderData"
+
+[dependencies]
+compute-wire = { path = "../compute-wire" }
+compute-layout-index = { path = "../compute-layout-index" }
+compute-text-measurement = { path = "../compute-text-measurement" }
+domain-types = { path = "../../../../domain-types", default-features = false }
+ooxml-types = { path = "../../../../file-io/ooxml/types" }
+tiny-skia = "0.11"
+tiny-skia-path = "0.11"
+png = "0.17"
+ttf-parser = "0.25"
+rustybuzz = "0.20"

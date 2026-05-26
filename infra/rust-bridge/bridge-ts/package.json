@@ -1,0 +1,24 @@
+{
+  "name": "@mog/bridge-ts",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src",
+    "generated"
+  ],
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./generated/ooxml-types": {
+      "development": "./generated/ooxml-types.ts",
+      "types": "./dist/ooxml-types.d.ts",
+      "import": "./dist/ooxml-types.js"
+    },
+    "./generated/xlsx-types": {
+      "development": "./generated/xlsx-types.ts",
+      "types": "./dist/xlsx-types.d.ts",
+      "import": "./dist/xlsx-types.js"
+    }
+  },
+  "dependencies": {}
+}

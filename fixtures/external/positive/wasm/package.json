@@ -1,0 +1,15 @@
+{
+  "name": "fixture-wasm",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck"
+  },
+  "dependencies": {
+    "@mog-sdk/wasm": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

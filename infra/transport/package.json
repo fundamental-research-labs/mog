@@ -1,0 +1,47 @@
+{
+  "name": "@mog/transport",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "node": {
+        "development": "./src/index.ts",
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "development": "./src/index.browser.ts",
+      "types": "./dist/index.browser.d.ts",
+      "import": "./dist/index.browser.js"
+    },
+    "./napi": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rust-bridge/client": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
+    "@mog-sdk/wasm": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@mog/compute-core-napi": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.0",
+    "jest": "^30.3.0",
+    "tsup": "^8.5.1"
+  }
+}

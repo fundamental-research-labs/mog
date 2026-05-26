@@ -1,0 +1,13 @@
+[package]
+name = "bridge-ir"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "Target-neutral descriptor IR shared across downstream bridge-* target crates"
+
+[lib]
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"

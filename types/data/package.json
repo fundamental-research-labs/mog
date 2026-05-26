@@ -1,0 +1,85 @@
+{
+  "name": "@mog/types-data",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./data": {
+      "development": "./src/data/index.ts",
+      "types": "./dist/data/index.d.ts",
+      "import": "./dist/data/index.js"
+    },
+    "./data/charts": {
+      "development": "./src/data/charts.ts",
+      "types": "./dist/data/charts.d.ts",
+      "import": "./dist/data/charts.js"
+    },
+    "./data/filter": {
+      "development": "./src/data/filter.ts",
+      "types": "./dist/data/filter.d.ts",
+      "import": "./dist/data/filter.js"
+    },
+    "./data/grouping": {
+      "development": "./src/data/grouping.ts",
+      "types": "./dist/data/grouping.d.ts",
+      "import": "./dist/data/grouping.js"
+    },
+    "./data/named-ranges": {
+      "development": "./src/data/named-ranges.ts",
+      "types": "./dist/data/named-ranges.d.ts",
+      "import": "./dist/data/named-ranges.js"
+    },
+    "./data/pivot": {
+      "development": "./src/data/pivot.ts",
+      "types": "./dist/data/pivot.d.ts",
+      "import": "./dist/data/pivot.js"
+    },
+    "./data/slicers": {
+      "development": "./src/data/slicers.ts",
+      "types": "./dist/data/slicers.d.ts",
+      "import": "./dist/data/slicers.js"
+    },
+    "./data/sorting": {
+      "development": "./src/data/sorting.ts",
+      "types": "./dist/data/sorting.d.ts",
+      "import": "./dist/data/sorting.js"
+    },
+    "./data/sparklines": {
+      "development": "./src/data/sparklines.ts",
+      "types": "./dist/data/sparklines.d.ts",
+      "import": "./dist/data/sparklines.js"
+    },
+    "./data/tables": {
+      "development": "./src/data/tables.ts",
+      "types": "./dist/data/tables.d.ts",
+      "import": "./dist/data/tables.js"
+    },
+    "./data/trace-arrows": {
+      "development": "./src/data/trace-arrows.ts",
+      "types": "./dist/data/trace-arrows.d.ts",
+      "import": "./dist/data/trace-arrows.js"
+    }
+  },
+  "description": "Structured-data features: tables, named ranges, filters, sorting, pivot, charts, grouping, sparklines, slicers, trace arrows. Tier 1; depends on @mog/types-core, @mog/types-formatting (CF rules), and @mog/types-objects (ObjectPosition for slicers).",
+  "dependencies": {
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-formatting": "workspace:*",
+    "@mog/types-objects": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

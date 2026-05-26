@@ -1,0 +1,685 @@
+/**
+ * Alignment Group
+ *
+ * Self-sufficient toolbar group for alignment operations.
+ * Includes horizontal/vertical alignment, word wrap, merge cells,
+ * text orientation, and indent controls.
+ *
+ * Text formatting dispatch: every onClick routes through `useDispatch`
+ * — the same hook form ArrangeGroup uses. The horizontal-alignment
+ * three-button cluster is now a single `<SegmentedControl>` instance.
+ *
+ * COLLAPSE SUPPORT (
+ * - Passes ALIGNMENT_COLLAPSE_CONFIG to ToolbarGroup
+ * - Priority 2 - essential formatting
+ *
+ * KEYTIPS:
+ * - AL = Align Left
+ * - AC = Align Center
+ * - AR = Align Right
+ * - AT = Align Top
+ * - AM = Align Middle
+ * - AB = Align Bottom
+ * - W = Word Wrap
+ * - M = Merge & Center
+ * - O = Orientation
+ * - 5 = Decrease Indent
+ * - 6 = Increase Indent
+ *
+ * PERFORMANCE: Wrapped with React.memo to prevent re-renders from parent.
+ *
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useActiveSheetId, useFeatureGate, useUIStore, useWorkbook } from '../../../internal-api';
+
+import { SegmentedControl, Tooltip } from '@mog/shell';
+import { ALIGNMENT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
+import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
+import { getCenterAcrossSelectionAvailability } from '../../../actions/handlers/formatting/center-across-selection';
+import { keyTipRegistry } from '../keytips';
+import {
+  AngleClockwiseIcon,
+  AngleCounterclockwiseIcon,
+  DecreaseIndentIcon,
+  IncreaseIndentIcon,
+  RotateTextDownIcon,
+  RotateTextUpIcon,
+  TextOrientationIcon,
+  VerticalTextIcon,
+} from '../primitives/HomeAlignmentIcons';
+import { RibbonButton } from '../primitives/RibbonButton';
+import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
+import { SplitButton } from '../primitives/SplitButton';
+import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import {
+  AlignBottomIcon,
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignMiddleIcon,
+  AlignRightIcon,
+  AlignTopIcon,
+  MergeAcrossIcon,
+  MergeAndCenterIcon,
+  MergeCellsIcon,
+  UnmergeCellsIcon,
+  WordWrapIcon,
+} from '../primitives/ToolbarIcons';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+type HorizontalAlign = 'left' | 'center' | 'right' | 'justify';
+type VerticalAlign = 'top' | 'middle' | 'bottom';
+
+// =============================================================================
+// Component
+// =============================================================================
+
+/**
+ * Alignment toolbar group - self-sufficient, no props required.
+ *
+ * Features:
+ * - Row 1: Horizontal alignment (left, center, right)
+ * - Row 2: Vertical alignment (top, middle, bottom) + word wrap + merge dropdown
+ * - Row 3: Text orientation dropdown + indent controls
+ *
+ * Memoized to prevent re-renders when parent re-renders.
+ */
+export const AlignmentGroup = React.memo(function AlignmentGroup() {
+  const isEnabled = useFeatureGate('groups', 'alignment');
+
+  // ===========================================================================
+  // Dispatch (unified action system - hook form per ArrangeGroup convention)
+  // ===========================================================================
+
+  const dispatch = useDispatch();
+
+  // ===========================================================================
+  // Derived alignment state — granular Zustand selectors. Horizontal alignment
+  // binds the SegmentedControl to the *raw* engine value: when raw is
+  // 'general'/'fill'/'centerContinuous'/'justify'/'distributed' (none of which
+  // map to a Row-1 segment), no segment is highlighted — matching Excel's
+  // unset-state visual. Vertical alignment still uses the mapped form because
+  // its three icon-only buttons are not yet a SegmentedControl.
+  // ===========================================================================
+
+  const rawHAlign = useUIStore((s) => s.activeCellFormat?.horizontalAlign ?? 'general');
+
+  // CellFormat uses canonical tokens (top|middle|bottom|justify|distributed).
+  // The button row UI is icon-labelled "Middle" (CSS naming), so we collapse the
+  // unrenderable "justify"/"distributed" variants onto the middle icon for
+  // active-state highlighting. Legacy raw `center` is treated as middle.
+  const rawVAlign = useUIStore((s) => s.activeCellFormat?.verticalAlign ?? 'bottom');
+  const verticalAlign: VerticalAlign =
+    rawVAlign === 'top' ? 'top' : rawVAlign === 'bottom' ? 'bottom' : 'middle';
+
+  const wordWrap = useUIStore((s) => s.activeCellFormat?.wrapText ?? false);
+  const textRotation = useUIStore((s) => s.activeCellFormat?.textRotation ?? 0);
+  const indent = useUIStore((s) => s.activeCellFormat?.indent ?? 0);
+
+  // ===========================================================================
+  // Merge state derivation — inlined from the deleted use-merge hook. Reads
+  // toolbarRanges (idle-gated by the
+  // coordinator so this only updates when selection settles) and viewport
+  // merges for sync detection.
+  //
+  // PERFORMANCE: same toolbarRanges path as the deleted hook used; idle
+  // gating prevents cascading re-renders during selection drag.
+  // @see engine/src/state/coordinator/setup/toolbar-coordination-builder.ts
+  // @see docs/spreadsheet/ARCHITECTURE-CHECKLIST.md §15 (Render Isolation)
+  // ===========================================================================
+
+  const wb = useWorkbook();
+  const activeSheetId = useActiveSheetId();
+  const ranges = useUIStore((s) => s.toolbarRanges);
+  const [canFormatCells, setCanFormatCells] = useState(true);
+
+  const { canMerge, canUnmerge, isMerged } = useMemo(() => {
+    if (!ranges || ranges.length === 0) {
+      return { canMerge: false, canUnmerge: false, isMerged: false };
+    }
+    const r = ranges[0];
+    const startRow = Math.min(r.startRow, r.endRow);
+    const startCol = Math.min(r.startCol, r.endCol);
+    const endRow = Math.max(r.startRow, r.endRow);
+    const endCol = Math.max(r.startCol, r.endCol);
+
+    const ws = wb.getSheetById(activeSheetId);
+    const viewportMerges = ws.viewport.getMerges();
+    const findMergeForCell = (row: number, col: number) =>
+      viewportMerges.find(
+        (m) => row >= m.start_row && row <= m.end_row && col >= m.start_col && col <= m.end_col,
+      ) ?? null;
+
+    const isSingleCell = startRow === endRow && startCol === endCol;
+    if (isSingleCell) {
+      const merge = findMergeForCell(startRow, startCol);
+      return { canMerge: false, canUnmerge: merge !== null, isMerged: merge !== null };
+    }
+
+    const originMerge = findMergeForCell(startRow, startCol);
+    const exactMerged =
+      originMerge !== null &&
+      originMerge.start_row === startRow &&
+      originMerge.start_col === startCol &&
+      originMerge.end_row === endRow &&
+      originMerge.end_col === endCol;
+
+    let overlapsMerge = false;
+    for (const region of viewportMerges) {
+      if (
+        region.start_row <= endRow &&
+        region.end_row >= startRow &&
+        region.start_col <= endCol &&
+        region.end_col >= startCol
+      ) {
+        overlapsMerge = true;
+        break;
+      }
+    }
+
+    return {
+      canMerge: !exactMerged,
+      canUnmerge: overlapsMerge,
+      isMerged: exactMerged,
+    };
+  }, [wb, activeSheetId, ranges]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void wb
+      .getSheetById(activeSheetId)
+      .protection.canDoStructureOp('formatCells')
+      .then((allowed) => {
+        if (!cancelled) setCanFormatCells(allowed);
+      })
+      .catch(() => {
+        if (!cancelled) setCanFormatCells(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wb, activeSheetId, ranges]);
+
+  const centerAcrossAvailability = useMemo(() => {
+    const shapeAvailability = getCenterAcrossSelectionAvailability(ranges ?? []);
+    if (!shapeAvailability.enabled) return shapeAvailability;
+    if (!canFormatCells) {
+      return {
+        enabled: false,
+        reason: 'Formatting cells is disabled on this protected sheet' as const,
+      };
+    }
+    return shapeAvailability;
+  }, [ranges, canFormatCells]);
+
+  // ===========================================================================
+  // Local State (dropdown visibility)
+  //
+  // lifted into the ribbonDropdowns slice so the keytip chords (Alt+H,M
+  // for merge, Alt+H,O for orientation) can open them via OPEN_RIBBON_DROPDOWN.
+  // ===========================================================================
+
+  const mergeDropdownOpen = useUIStore((s) => s.ribbonDropdowns['home.merge'] ?? false);
+  const orientationDropdownOpen = useUIStore((s) => s.ribbonDropdowns['home.orientation'] ?? false);
+  const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
+  const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
+  const setMergeDropdownOpen = useCallback(
+    (open: boolean) =>
+      open ? openRibbonDropdown('home.merge') : closeRibbonDropdown('home.merge'),
+    [openRibbonDropdown, closeRibbonDropdown],
+  );
+  const setOrientationDropdownOpen = useCallback(
+    (open: boolean) =>
+      open ? openRibbonDropdown('home.orientation') : closeRibbonDropdown('home.orientation'),
+    [openRibbonDropdown, closeRibbonDropdown],
+  );
+
+  // ===========================================================================
+  // KeyTip Registration (display-only — keytip overlay reads `key`,
+  // `tabId`, `elementId` here; the unified keyboard system fires the action
+  // via typed `KeyboardShortcut` entries in
+  // `keyboard/definitions/keytips-home-groups.ts`.)
+  // ===========================================================================
+
+  useEffect(() => {
+    keyTipRegistry.register({ key: 'AL', tabId: 'home', elementId: 'align-left' });
+    keyTipRegistry.register({ key: 'AC', tabId: 'home', elementId: 'align-center' });
+    keyTipRegistry.register({ key: 'AR', tabId: 'home', elementId: 'align-right' });
+    keyTipRegistry.register({ key: 'AT', tabId: 'home', elementId: 'align-top' });
+    keyTipRegistry.register({ key: 'AM', tabId: 'home', elementId: 'align-middle' });
+    keyTipRegistry.register({ key: 'AB', tabId: 'home', elementId: 'align-bottom' });
+    keyTipRegistry.register({ key: 'W', tabId: 'home', elementId: 'word-wrap' });
+    keyTipRegistry.register({ key: 'M', tabId: 'home', elementId: 'merge-center' });
+    keyTipRegistry.register({ key: 'O', tabId: 'home', elementId: 'orientation' });
+    keyTipRegistry.register({ key: '5', tabId: 'home', elementId: 'decrease-indent' });
+    keyTipRegistry.register({ key: '6', tabId: 'home', elementId: 'increase-indent' });
+
+    return () => {
+      keyTipRegistry.unregister('AL', 'home');
+      keyTipRegistry.unregister('AC', 'home');
+      keyTipRegistry.unregister('AR', 'home');
+      keyTipRegistry.unregister('AT', 'home');
+      keyTipRegistry.unregister('AM', 'home');
+      keyTipRegistry.unregister('AB', 'home');
+      keyTipRegistry.unregister('W', 'home');
+      keyTipRegistry.unregister('M', 'home');
+      keyTipRegistry.unregister('O', 'home');
+      keyTipRegistry.unregister('5', 'home');
+      keyTipRegistry.unregister('6', 'home');
+    };
+  }, []);
+
+  // ===========================================================================
+  // Render
+  // ===========================================================================
+
+  if (!isEnabled) return null;
+
+  return (
+    <ToolbarGroup
+      label="Alignment"
+      collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
+      dropdownIcon={<AlignCenterIcon />}
+      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
+      dialogLaunchTitle="Alignment Settings"
+    >
+      <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
+        {/* Row 1: Horizontal alignment + Vertical alignment */}
+        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+          {/* Bind to the *raw* alignment, not the mapped textAlign: Radix
+ RadioGroup suppresses onValueChange when clicking the already-
+ selected segment (radios don't uncheck on re-click), so mapping
+ 'general' → 'left' would silence the keytip-driven synthetic
+ click on `align-left`. Excel shows the unset state as no segment
+ highlighted, which matches this binding by construction. */}
+          <SegmentedControl
+            id="horizontal-align"
+            ariaLabel="Horizontal alignment"
+            value={rawHAlign}
+            onChange={(v) => dispatch('SET_HORIZONTAL_ALIGN', { align: v as HorizontalAlign })}
+            options={[
+              {
+                value: 'left',
+                id: 'align-left',
+                ariaLabel: 'Align left',
+                tooltip: 'Align Left',
+                label: <AlignLeftIcon />,
+              },
+              {
+                value: 'center',
+                id: 'align-center',
+                ariaLabel: 'Align center',
+                tooltip: 'Align Center',
+                label: <AlignCenterIcon />,
+              },
+              {
+                value: 'right',
+                id: 'align-right',
+                ariaLabel: 'Align right',
+                tooltip: 'Align Right',
+                label: <AlignRightIcon />,
+              },
+            ]}
+          />
+
+          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
+
+          <Tooltip title="Align Top">
+            <RibbonButton
+              id="align-top"
+              layout="icon-only"
+              icon={<AlignTopIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
+              isOpen={verticalAlign === 'top'}
+              aria-label="Align top"
+              aria-pressed={verticalAlign === 'top'}
+            />
+          </Tooltip>
+          <Tooltip title="Align Middle">
+            <RibbonButton
+              id="align-middle"
+              layout="icon-only"
+              icon={<AlignMiddleIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
+              isOpen={verticalAlign === 'middle'}
+              aria-label="Align middle"
+              aria-pressed={verticalAlign === 'middle'}
+            />
+          </Tooltip>
+          <Tooltip title="Align Bottom">
+            <RibbonButton
+              id="align-bottom"
+              layout="icon-only"
+              icon={<AlignBottomIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
+              isOpen={verticalAlign === 'bottom'}
+              aria-label="Align bottom"
+              aria-pressed={verticalAlign === 'bottom'}
+            />
+          </Tooltip>
+        </div>
+
+        {/* Row 2: Wrap + Merge + Orientation + Indent */}
+        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+          <Tooltip title="Word Wrap">
+            <RibbonButton
+              id="word-wrap"
+              layout="icon-only"
+              icon={<WordWrapIcon />}
+              onClick={() => dispatch('TOGGLE_WRAP_TEXT')}
+              isOpen={wordWrap}
+              aria-label="Word wrap"
+              aria-pressed={wordWrap}
+            />
+          </Tooltip>
+
+          {/* Merge Cells Split Button: direct-action + dropdown.
+ Main button toggles merge & center vs unmerge (matches MERGE_AND_CENTER
+ handler's internal toggle behavior). */}
+          <div className="relative inline-flex">
+            <Tooltip title="Merge & Center" shortcut="Ctrl+Shift+M">
+              <SplitButton
+                id="merge-center"
+                icon={<MergeCellsIcon />}
+                variant="small"
+                isOpen={isMerged || mergeDropdownOpen}
+                disabled={!canMerge && !canUnmerge}
+                aria-label="Merge & Center"
+                onMainClick={() => {
+                  if (isMerged || canUnmerge) {
+                    dispatch('UNMERGE_CELLS');
+                  } else if (canMerge) {
+                    dispatch('MERGE_AND_CENTER');
+                  }
+                }}
+                onDropdownClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+                dropdownTestId="merge-dropdown-trigger"
+              />
+            </Tooltip>
+            <RibbonDropdownPanel
+              open={mergeDropdownOpen}
+              onClose={() => setMergeDropdownOpen(false)}
+            >
+              <div data-testid="ribbon-dropdown-menu-merge" className="py-1 min-w-[180px]">
+                {/* Merge & Center */}
+                <button
+                  type="button"
+                  data-value="merge-and-center"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors
+ ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+ `}
+                  onClick={() => {
+                    if (canMerge) {
+                      dispatch('MERGE_AND_CENTER');
+                      setMergeDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!canMerge}
+                >
+                  <MergeAndCenterIcon />
+                  <span>Merge & Center</span>
+                </button>
+                {/* Merge Across */}
+                <button
+                  type="button"
+                  data-value="merge-across"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors
+ ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+ `}
+                  onClick={() => {
+                    if (canMerge) {
+                      dispatch('MERGE_ACROSS');
+                      setMergeDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!canMerge}
+                >
+                  <MergeAcrossIcon />
+                  <span>Merge Across</span>
+                </button>
+                {/* Merge Cells (plain — no center alignment) */}
+                <button
+                  type="button"
+                  data-value="merge-cells"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors
+ ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+ `}
+                  onClick={() => {
+                    if (canMerge) {
+                      dispatch('MERGE_CELLS');
+                      setMergeDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!canMerge}
+                >
+                  <MergeCellsIcon />
+                  <span>Merge Cells</span>
+                </button>
+                {/* Divider */}
+                <div className="h-px bg-ss-surface-tertiary my-1" />
+                {/* Unmerge Cells */}
+                <button
+                  type="button"
+                  data-value="unmerge"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors
+ ${canUnmerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+ `}
+                  onClick={() => {
+                    if (canUnmerge) {
+                      dispatch('UNMERGE_CELLS');
+                      setMergeDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!canUnmerge}
+                >
+                  <UnmergeCellsIcon />
+                  <span>Unmerge Cells</span>
+                </button>
+                {/* Center Across Selection */}
+                <button
+                  type="button"
+                  data-value="center-across-selection"
+                  data-testid="merge-menu-center-across-selection"
+                  aria-describedby={
+                    !centerAcrossAvailability.enabled
+                      ? 'merge-center-across-disabled-reason'
+                      : undefined
+                  }
+                  data-disabled-reason={centerAcrossAvailability.reason}
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors
+ ${centerAcrossAvailability.enabled ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+ `}
+                  onClick={() => {
+                    if (centerAcrossAvailability.enabled) {
+                      dispatch('SET_HORIZONTAL_ALIGN', { align: 'centerContinuous' });
+                      setMergeDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!centerAcrossAvailability.enabled}
+                >
+                  <AlignCenterIcon />
+                  <span>Center Across Selection</span>
+                </button>
+                {!centerAcrossAvailability.enabled && (
+                  <span id="merge-center-across-disabled-reason" className="sr-only">
+                    {centerAcrossAvailability.reason}
+                  </span>
+                )}
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+
+          {/* Text Orientation Dropdown */}
+          <div className="relative inline-flex">
+            <Tooltip title="Orientation">
+              <RibbonButton
+                id="orientation"
+                layout="icon-only"
+                data-testid="ribbon-dropdown-orientation"
+                icon={<TextOrientationIcon />}
+                onClick={() => setOrientationDropdownOpen(!orientationDropdownOpen)}
+                isOpen={orientationDropdownOpen}
+                hasDropdown
+                aria-label="Text orientation"
+                aria-expanded={orientationDropdownOpen}
+              />
+            </Tooltip>
+            <RibbonDropdownPanel
+              open={orientationDropdownOpen}
+              onClose={() => setOrientationDropdownOpen(false)}
+            >
+              <div data-testid="ribbon-dropdown-menu-orientation" className="py-1 min-w-[180px]">
+                <button
+                  type="button"
+                  data-value="angle-counterclockwise"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === 45 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: 45 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <AngleCounterclockwiseIcon />
+                  <span>Angle Counterclockwise</span>
+                </button>
+                <button
+                  type="button"
+                  data-value="angle-clockwise"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === -45 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: -45 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <AngleClockwiseIcon />
+                  <span>Angle Clockwise</span>
+                </button>
+                <button
+                  type="button"
+                  data-value="vertical-text"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === 255 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: 255 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <VerticalTextIcon />
+                  <span>Vertical Text</span>
+                </button>
+                <button
+                  type="button"
+                  data-value="rotate-text-up"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === 90 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: 90 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <RotateTextUpIcon />
+                  <span>Rotate Text Up</span>
+                </button>
+                <button
+                  type="button"
+                  data-value="rotate-text-down"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === -90 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: -90 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <RotateTextDownIcon />
+                  <span>Rotate Text Down</span>
+                </button>
+                <div className="h-px bg-ss-surface-tertiary my-1" />
+                <button
+                  type="button"
+                  data-value="no-rotation"
+                  className={`
+ w-full px-3 py-2 text-left text-dropdown
+ flex items-center gap-2
+ transition-colors hover:bg-ss-surface-hover
+ ${textRotation === 0 ? 'bg-ss-surface-selected' : ''}
+ `}
+                  onClick={() => {
+                    dispatch('SET_TEXT_ROTATION', { rotation: 0 });
+                    setOrientationDropdownOpen(false);
+                  }}
+                >
+                  <span className="w-4" />
+                  <span>No Rotation</span>
+                </button>
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+
+          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
+
+          {/* Decrease Indent */}
+          <Tooltip title="Decrease Indent">
+            <RibbonButton
+              id="decrease-indent"
+              layout="icon-only"
+              icon={<DecreaseIndentIcon />}
+              onClick={() => dispatch('DECREASE_INDENT')}
+              disabled={indent === 0}
+              aria-label="Decrease indent"
+            />
+          </Tooltip>
+
+          {/* Increase Indent */}
+          <Tooltip title="Increase Indent">
+            <RibbonButton
+              id="increase-indent"
+              layout="icon-only"
+              icon={<IncreaseIndentIcon />}
+              onClick={() => dispatch('INCREASE_INDENT')}
+              aria-label="Increase indent"
+            />
+          </Tooltip>
+        </div>
+      </div>
+    </ToolbarGroup>
+  );
+});

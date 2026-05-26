@@ -1,0 +1,18 @@
+[package]
+name = "finite-at-boundary-walker"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Test-only walker that scans Rust source for bare `f64` fields inside `#[derive(Serialize/Deserialize)]` types. Drives the `no_bare_f64_at_boundary` build-time gate in each type crate."
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits", "visit"] }
+walkdir = "2"
+quote = "1"
+# `span-locations` enables `Span::byte_range()` outside the proc-macro context,
+# which the walker needs to map offsets in parsed `.rs` files back to 1-based
+# line numbers for diagnostic output.
+proc-macro2 = { version = "1", features = ["span-locations"] }

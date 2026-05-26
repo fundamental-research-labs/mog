@@ -1,0 +1,111 @@
+{
+  "name": "@mog-sdk/kernel",
+  "version": "0.5.0",
+  "private": true,
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./security": {
+      "types": "./dist/security/index.d.ts",
+      "development": "./src/security/index.ts",
+      "import": "./dist/security/index.js"
+    },
+    "./keyboard": {
+      "types": "./dist/keyboard/index.d.ts",
+      "development": "./src/keyboard/index.ts",
+      "import": "./dist/keyboard/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "development": "./src/storage/index.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "development": "./src/testing/index.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "development": "./src/api/index.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./app-api": {
+      "types": "./dist/api/app/index.d.ts",
+      "import": "./dist/api/app/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "development": "./src/internal.ts",
+      "import": "./dist/internal.js"
+    },
+    "./services/capabilities": {
+      "types": "./dist/services/capabilities/index.d.ts",
+      "development": "./src/services/capabilities/index.ts",
+      "import": "./dist/services/capabilities/index.js"
+    },
+    "./contracts/api": {
+      "types": "./dist/contracts/api.d.ts",
+      "development": "./src/contracts/api.ts",
+      "import": "./dist/contracts/api.js"
+    },
+    "./host-lifecycle-internal": {
+      "types": "./dist/host-lifecycle-internal.d.ts",
+      "development": "./src/host-lifecycle-internal.ts",
+      "import": "./dist/host-lifecycle-internal.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && pnpm exec tsc -p tsconfig.public-types.json && pnpm exec tsc -p tsconfig.keyboard-types.json && node ../tools/fix-dts-extensions.mjs dist && node scripts/validate-public-export-types.mjs",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "typecheck": "tsc --noEmit",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog-sdk/wasm": "workspace:*",
+    "xstate": "^5.4.1"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
+    "@mog/kernel-host-internal": "workspace:*",
+    "@mog/test-host": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog-sdk/types-host": "workspace:*",
+    "@mog/canvas-engine": "workspace:*",
+    "@mog/charts": "workspace:*",
+    "@mog/culture": "workspace:*",
+    "@mog/drawing-engine": "workspace:*",
+    "@mog/env": "workspace:*",
+    "@mog/geometry": "workspace:*",
+    "@mog/ink-engine": "workspace:*",
+    "@mog/math-engine": "workspace:*",
+    "@mog/shape-engine": "workspace:*",
+    "@mog/diagram-engine": "workspace:*",
+    "@mog/spreadsheet-utils": "workspace:*",
+    "@mog/table-engine": "workspace:*",
+    "@mog/transport": "workspace:*",
+    "@mog/text-effects-engine": "workspace:*",
+    "@rust-bridge/client": "workspace:*",
+    "@mog/spreadsheet-testing": "workspace:*",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.12.0",
+    "fake-indexeddb": "^6.2.5",
+    "jest": "^30.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal",
+    "directory": "kernel"
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "name": "@mog/types-rendering",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./canvas-bridge-types": {
+      "development": "./src/canvas-bridge-types.ts",
+      "types": "./dist/canvas-bridge-types.d.ts",
+      "import": "./dist/canvas-bridge-types.js"
+    },
+    "./coordinates": {
+      "development": "./src/coordinates.ts",
+      "types": "./dist/coordinates.d.ts",
+      "import": "./dist/coordinates.js"
+    },
+    "./coordinator-interfaces": {
+      "development": "./src/coordinator-interfaces.ts",
+      "types": "./dist/coordinator-interfaces.d.ts",
+      "import": "./dist/coordinator-interfaces.js"
+    },
+    "./data-sources": {
+      "development": "./src/data-sources.ts",
+      "types": "./dist/data-sources.d.ts",
+      "import": "./dist/data-sources.js"
+    },
+    "./grid-renderer": {
+      "development": "./src/grid-renderer.ts",
+      "types": "./dist/grid-renderer.d.ts",
+      "import": "./dist/grid-renderer.js"
+    },
+    "./grouping": {
+      "development": "./src/grouping.ts",
+      "types": "./dist/grouping.d.ts",
+      "import": "./dist/grouping.js"
+    },
+    "./hit-test": {
+      "development": "./src/hit-test.ts",
+      "types": "./dist/hit-test.d.ts",
+      "import": "./dist/hit-test.js"
+    },
+    "./hit-test-service": {
+      "development": "./src/hit-test-service.ts",
+      "types": "./dist/hit-test-service.d.ts",
+      "import": "./dist/hit-test-service.js"
+    },
+    "./interactive-elements": {
+      "development": "./src/interactive-elements.ts",
+      "types": "./dist/interactive-elements.d.ts",
+      "import": "./dist/interactive-elements.js"
+    },
+    "./render-context": {
+      "development": "./src/render-context.ts",
+      "types": "./dist/render-context.d.ts",
+      "import": "./dist/render-context.js"
+    },
+    "./rendering": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./text-measurement-service": {
+      "development": "./src/text-measurement-service.ts",
+      "types": "./dist/text-measurement-service.d.ts",
+      "import": "./dist/text-measurement-service.js"
+    }
+  },
+  "description": "Integration portion of rendering: GridRenderer, RenderContext config, CellDataSource, coordinator interfaces, hit-test, interactive-elements, text-measurement service, canvas-bridge-types, coordinates (branded coordinate-space types), grouping. Tier 2; composes over @mog/types-{core,culture,data,document,formatting,objects,viewport} + @mog/types-bridges + @mog/types-events + @mog/types-machines.",
+  "dependencies": {
+    "@mog/types-bridges": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-culture": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-events": "workspace:*",
+    "@mog/types-formatting": "workspace:*",
+    "@mog/types-machines": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

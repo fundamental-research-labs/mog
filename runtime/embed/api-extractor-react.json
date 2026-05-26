@@ -1,0 +1,73 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+
+  "projectFolder": ".",
+
+  "mainEntryPointFilePath": "<projectFolder>/dist/react.d.ts",
+
+  "compiler": {
+    "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
+  },
+
+  "bundledPackages": [
+    "@mog-sdk/contracts",
+    "@mog-sdk/kernel",
+    "@mog-sdk/sheet-view",
+    "@mog/types-api",
+    "@mog/types-bridges",
+    "@mog/types-commands",
+    "@mog/types-connections",
+    "@mog/types-core",
+    "@mog/types-culture",
+    "@mog/types-data",
+    "@mog-sdk/types-document",
+    "@mog/types-editor",
+    "@mog/types-events",
+    "@mog/types-formatting",
+    "@mog/types-machines",
+    "@mog/types-objects",
+    "@mog/types-rendering",
+    "@mog/types-viewport"
+  ],
+
+  "apiReport": {
+    "enabled": false
+  },
+
+  "docModel": {
+    "enabled": false
+  },
+
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "<projectFolder>/dist/.rollup/react.d.ts"
+  },
+
+  "tsdocMetadata": {
+    "enabled": false
+  },
+
+  "messages": {
+    "compilerMessageReporting": {
+      "default": {
+        "logLevel": "warning"
+      }
+    },
+    "extractorMessageReporting": {
+      "default": {
+        "logLevel": "warning"
+      },
+      "ae-missing-release-tag": {
+        "logLevel": "none"
+      },
+      "ae-unresolved-link": {
+        "logLevel": "none"
+      }
+    },
+    "tsdocMessageReporting": {
+      "default": {
+        "logLevel": "none"
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Table grid -->
+  <path d="M4.5 2C3.11929 2 2 3.11929 2 4.5V11.5C2 12.8807 3.11929 14 4.5 14H6.25716C5.47182 13.0491 5 11.8296 5 10.5C5 9.32259 5.36997 8.23159 6 7.33692V6L7.33692 6C8.2316 5.36997 9.32259 5 10.5 5C11.8296 5 13.0491 5.47182 14 6.25716V4.5C14 3.11929 12.8807 2 11.5 2H4.5ZM3 11H5V13H4.5C3.67157 13 3 12.3284 3 11.5V11ZM3 6H5V10H3V6ZM10 5L6 5V3H10V5ZM4.5 3H5V5H3V4.5C3 3.67157 3.67157 3 4.5 3ZM13 4.5V5H11V3H11.5C12.3284 3 13 3.67157 13 4.5Z" fill="currentColor"/>
+  <!-- Green circle with plus -->
+  <circle cx="10.5" cy="10.5" r="4.5" fill="var(--icon-accent-green, #16a34a)"/>
+  <path d="M10.5 8v5M8 10.5h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Preset Shapes Visual Test</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        color: #333;
+      }
+      #info {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #666;
+        font-size: 14px;
+      }
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+      .shape-card {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 8px;
+        text-align: center;
+        transition: box-shadow 0.2s;
+      }
+      .shape-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      .shape-card canvas {
+        display: block;
+        margin: 0 auto 6px;
+        background: #fafafa;
+        border-radius: 3px;
+      }
+      .shape-name {
+        font-size: 10px;
+        color: #555;
+        word-break: break-all;
+        line-height: 1.3;
+      }
+      .error {
+        color: #c00;
+        font-size: 9px;
+      }
+      #loading {
+        text-align: center;
+        font-size: 18px;
+        color: #888;
+        margin-top: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OOXML Preset Shapes (186)</h1>
+    <div id="info">Loading...</div>
+    <div id="loading">Loading shape data...</div>
+    <div id="grid"></div>
+
+    <script>
+      // =============================================================================
+      // OOXML Guide Formula Evaluator (ported from custom-geometry.ts)
+      // =============================================================================
+
+      function evaluateGuides(guides, width, height) {
+        const vars = new Map();
+
+        // Built-in variables
+        vars.set('w', width);
+        vars.set('h', height);
+        vars.set('wd2', width / 2);
+        vars.set('hd2', height / 2);
+        vars.set('wd4', width / 4);
+        vars.set('hd4', height / 4);
+        vars.set('wd5', width / 5);
+        vars.set('hd5', height / 5);
+        vars.set('wd6', width / 6);
+        vars.set('hd6', height / 6);
+        vars.set('wd8', width / 8);
+        vars.set('hd8', height / 8);
+        vars.set('wd10', width / 10);
+        vars.set('hd10', height / 10);
+        vars.set('wd12', width / 12);
+        vars.set('wd32', width / 32);
+        vars.set('hd32', height / 32);
+        vars.set('l', 0);
+        vars.set('t', 0);
+        vars.set('r', width);
+        vars.set('b', height);
+        vars.set('ss', Math.min(width, height));
+        vars.set('ls', Math.max(width, height));
+        vars.set('ssd2', Math.min(width, height) / 2);
+        vars.set('ssd4', Math.min(width, height) / 4);
+        vars.set('ssd6', Math.min(width, height) / 6);
+        vars.set('ssd8', Math.min(width, height) / 8);
+        vars.set('ssd16', Math.min(width, height) / 16);
+        vars.set('ssd32', Math.min(width, height) / 32);
+        // Additional computed built-ins
+        vars.set('vc', height / 2);
+        vars.set('hc', width / 2);
+        // OOXML angle constants in 60000ths of a degree
+        vars.set('cd2', 10800000);
+        vars.set('cd4', 5400000);
+        vars.set('cd8', 2700000);
+        vars.set('3cd4', 16200000);
+        vars.set('3cd8', 8100000);
+        vars.set('5cd8', 13500000);
+        vars.set('7cd8', 18900000);
+
+        function resolveArg(arg) {
+          const num = Number(arg);
+          if (!isNaN(num)) return num;
+          return vars.get(arg) || 0;
+        }
+
+        function ooxml60kToRad(val) {
+          return (val * Math.PI) / (180 * 60000);
+        }
+
+        function radToOoxml60k(rad) {
+          return (rad * 180 * 60000) / Math.PI;
+        }
+
+        for (const guide of guides) {
+          const formula = guide.fmla.trim();
+          const parts = formula.split(/\s+/);
+          const op = parts[0];
+          const a = parts[1] !== undefined ? resolveArg(parts[1]) : 0;
+          const b = parts[2] !== undefined ? resolveArg(parts[2]) : 0;
+          const c = parts[3] !== undefined ? resolveArg(parts[3]) : 0;
+
+          let result;
+
+          switch (op) {
+            case 'val':
+              result = a;
+              break;
+            case '*/':
+              result = c !== 0 ? (a * b) / c : 0;
+              break;
+            case '+-':
+              result = a + b - c;
+              break;
+            case '+/':
+              result = c !== 0 ? (a + b) / c : 0;
+              break;
+            case 'sin':
+              result = a * Math.sin(ooxml60kToRad(b));
+              break;
+            case 'cos':
+              result = a * Math.cos(ooxml60kToRad(b));
+              break;
+            case 'tan':
+              result = a * Math.tan(ooxml60kToRad(b));
+              break;
+            case 'at2':
+              result = radToOoxml60k(Math.atan2(b, a));
+              break;
+            case 'cat2':
+              result = a * Math.cos(Math.atan2(c, b));
+              break;
+            case 'sat2':
+              result = a * Math.sin(Math.atan2(c, b));
+              break;
+            case '?:':
+              result = a > 0 ? b : c;
+              break;
+            case 'min':
+              result = Math.min(a, b);
+              break;
+            case 'max':
+              result = Math.max(a, b);
+              break;
+            case 'abs':
+              result = Math.abs(a);
+              break;
+            case 'sqrt':
+              result = Math.sqrt(Math.abs(a));
+              break;
+            case 'mod':
+              result = Math.sqrt(a * a + b * b + c * c);
+              break;
+            case 'pin':
+              result = b < a ? a : b > c ? c : b;
+              break;
+            default:
+              result = 0;
+              break;
+          }
+
+          vars.set(guide.name, result);
+        }
+
+        return vars;
+      }
+
+      // =============================================================================
+      // Path Resolver: OOXML string coords -> numeric coords
+      // =============================================================================
+
+      function resolveCoord(coord, guideMap) {
+        const num = Number(coord);
+        if (!isNaN(num)) return num;
+        return guideMap.get(coord) || 0;
+      }
+
+      // =============================================================================
+      // Arc-to-Bezier conversion
+      // =============================================================================
+
+      function arcToBeziers(
+        ctx,
+        currentX,
+        currentY,
+        rxRaw,
+        ryRaw,
+        startAngle60k,
+        sweepAngle60k,
+        scaleX,
+        scaleY,
+      ) {
+        const startAngleRad = (startAngle60k * Math.PI) / (180 * 60000);
+        const sweepAngleRad = (sweepAngle60k * Math.PI) / (180 * 60000);
+        const rx = rxRaw * scaleX;
+        const ry = ryRaw * scaleY;
+
+        if (rx === 0 || ry === 0 || sweepAngleRad === 0) {
+          return { x: currentX, y: currentY };
+        }
+
+        // Arc center from current point
+        const cx = currentX - rx * Math.cos(startAngleRad);
+        const cy = currentY - ry * Math.sin(startAngleRad);
+
+        const numSegments = Math.max(1, Math.ceil(Math.abs(sweepAngleRad) / (Math.PI / 2)));
+        const segmentSweep = sweepAngleRad / numSegments;
+
+        let angle = startAngleRad;
+        let curX = currentX,
+          curY = currentY;
+
+        for (let s = 0; s < numSegments; s++) {
+          const nextAngle = angle + segmentSweep;
+          const alpha = (4 / 3) * Math.tan(segmentSweep / 4);
+
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+          const cosB = Math.cos(nextAngle);
+          const sinB = Math.sin(nextAngle);
+
+          const p1x = cx + rx * (cosA - alpha * sinA);
+          const p1y = cy + ry * (sinA + alpha * cosA);
+          const p2x = cx + rx * (cosB + alpha * sinB);
+          const p2y = cy + ry * (sinB - alpha * cosB);
+          const p3x = cx + rx * cosB;
+          const p3y = cy + ry * sinB;
+
+          ctx.bezierCurveTo(p1x, p1y, p2x, p2y, p3x, p3y);
+
+          angle = nextAngle;
+          curX = p3x;
+          curY = p3y;
+        }
+
+        return { x: curX, y: curY };
+      }
+
+      // =============================================================================
+      // Render a single shape onto a canvas
+      // =============================================================================
+
+      function renderShape(canvas, shapeDef) {
+        const W = canvas.width;
+        const H = canvas.height;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, W, H);
+
+        const shapeW = W;
+        const shapeH = H;
+
+        // Merge avLst (defaults) and gdLst (computed guides)
+        const allGuides = [...(shapeDef.avLst || []), ...(shapeDef.gdLst || [])];
+        const guideMap = evaluateGuides(allGuides, shapeW, shapeH);
+
+        const paths = shapeDef.pathLst || [];
+
+        for (const pathDef of paths) {
+          const pathW = pathDef.w != null ? pathDef.w : shapeW;
+          const pathH = pathDef.h != null ? pathDef.h : shapeH;
+          const scaleX = pathW !== 0 ? shapeW / pathW : 1;
+          const scaleY = pathH !== 0 ? shapeH / pathH : 1;
+          const commands = pathDef.commands || [];
+
+          const shouldFill = pathDef.fill !== 'none';
+          const shouldStroke = pathDef.stroke !== false;
+
+          ctx.beginPath();
+          let curX = 0,
+            curY = 0;
+
+          for (const cmd of commands) {
+            switch (cmd.type) {
+              case 'moveTo': {
+                const x = resolveCoord(cmd.x, guideMap) * scaleX;
+                const y = resolveCoord(cmd.y, guideMap) * scaleY;
+                ctx.moveTo(x, y);
+                curX = x;
+                curY = y;
+                break;
+              }
+              case 'lineTo': {
+                const x = resolveCoord(cmd.x, guideMap) * scaleX;
+                const y = resolveCoord(cmd.y, guideMap) * scaleY;
+                ctx.lineTo(x, y);
+                curX = x;
+                curY = y;
+                break;
+              }
+              case 'cubicBezTo': {
+                const x1 = resolveCoord(cmd.x1, guideMap) * scaleX;
+                const y1 = resolveCoord(cmd.y1, guideMap) * scaleY;
+                const x2 = resolveCoord(cmd.x2, guideMap) * scaleX;
+                const y2 = resolveCoord(cmd.y2, guideMap) * scaleY;
+                const x = resolveCoord(cmd.x3, guideMap) * scaleX;
+                const y = resolveCoord(cmd.y3, guideMap) * scaleY;
+                ctx.bezierCurveTo(x1, y1, x2, y2, x, y);
+                curX = x;
+                curY = y;
+                break;
+              }
+              case 'quadBezTo': {
+                const x1 = resolveCoord(cmd.x1, guideMap) * scaleX;
+                const y1 = resolveCoord(cmd.y1, guideMap) * scaleY;
+                const x = resolveCoord(cmd.x2, guideMap) * scaleX;
+                const y = resolveCoord(cmd.y2, guideMap) * scaleY;
+                ctx.quadraticCurveTo(x1, y1, x, y);
+                curX = x;
+                curY = y;
+                break;
+              }
+              case 'arcTo': {
+                const rxRaw = resolveCoord(cmd.wR, guideMap);
+                const ryRaw = resolveCoord(cmd.hR, guideMap);
+                const stAng = resolveCoord(cmd.stAng, guideMap);
+                const swAng = resolveCoord(cmd.swAng, guideMap);
+                const pos = arcToBeziers(
+                  ctx,
+                  curX,
+                  curY,
+                  rxRaw,
+                  ryRaw,
+                  stAng,
+                  swAng,
+                  scaleX,
+                  scaleY,
+                );
+                curX = pos.x;
+                curY = pos.y;
+                break;
+              }
+              case 'close':
+                ctx.closePath();
+                break;
+            }
+          }
+
+          if (shouldFill) {
+            ctx.fillStyle = '#d0e8ff';
+            ctx.fill('evenodd');
+          }
+          if (shouldStroke) {
+            ctx.strokeStyle = '#2266aa';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // =============================================================================
+      // Main: load data and render grid
+      // =============================================================================
+
+      async function main() {
+        const infoEl = document.getElementById('info');
+        const loadingEl = document.getElementById('loading');
+        const gridEl = document.getElementById('grid');
+
+        let data;
+        try {
+          const resp = await fetch('../src/presets/preset-shape-data.json');
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          data = await resp.json();
+        } catch (e) {
+          loadingEl.textContent = 'Failed to load preset-shape-data.json: ' + e.message;
+          return;
+        }
+
+        const names = Object.keys(data).sort();
+        infoEl.textContent = `${names.length} shapes loaded`;
+        loadingEl.style.display = 'none';
+
+        const CANVAS_W = 140;
+        const CANVAS_H = 100;
+
+        let errorCount = 0;
+
+        for (const name of names) {
+          const card = document.createElement('div');
+          card.className = 'shape-card';
+
+          const canvas = document.createElement('canvas');
+          canvas.width = CANVAS_W;
+          canvas.height = CANVAS_H;
+          card.appendChild(canvas);
+
+          const label = document.createElement('div');
+          label.className = 'shape-name';
+          label.textContent = name;
+          card.appendChild(label);
+
+          try {
+            renderShape(canvas, data[name]);
+          } catch (e) {
+            errorCount++;
+            const err = document.createElement('div');
+            err.className = 'error';
+            err.textContent = e.message;
+            card.appendChild(err);
+          }
+
+          gridEl.appendChild(card);
+        }
+
+        if (errorCount > 0) {
+          infoEl.textContent += ` (${errorCount} errors)`;
+        }
+      }
+
+      main();
+    </script>
+  </body>
+</html>

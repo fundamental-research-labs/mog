@@ -1,0 +1,188 @@
+use serde::{Deserialize, Serialize};
+
+use super::formatting::{ChartColorData, ChartFormatData};
+use super::{ChartType, DataLabelData, ErrorBarData, TrendlineData};
+
+/// Runtime series data — carries both range references and visual config.
+/// bridge-ts generates the TS equivalent, replacing hand-written SeriesConfig.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesData {
+    /// Series name (from c:tx)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Series-specific chart type override (for combo charts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<ChartType>,
+    /// Fill/line color (hex, e.g., "#4472C4")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+
+    // -- Data ranges (A1-notation formulas from OOXML c:f elements) --
+    /// Values range: c:val (bar/line/pie) or c:yVal (scatter/bubble)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<String>,
+    /// Categories range: c:cat (bar/line/pie) or c:xVal (scatter/bubble)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categories: Option<String>,
+    /// Bubble sizes range: c:bubbleSize (bubble only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bubble_size: Option<String>,
+
+    // -- Visual properties --
+    /// Smooth line (line, scatter)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smooth: Option<bool>,
+    /// Explosion percentage for pie slices (0-400)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explosion: Option<u32>,
+    /// Invert fill for negative values (bar)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invert_if_negative: Option<bool>,
+    /// Which Y-axis this series binds to (0 = primary, 1 = secondary)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y_axis_index: Option<u8>,
+
+    // -- Markers --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_markers: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker_style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_width: Option<f64>,
+
+    // -- Per-point overrides --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub points: Option<Vec<PointFormatData>>,
+
+    // -- Series-level data labels --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_labels: Option<DataLabelData>,
+
+    // -- Trendlines --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trendlines: Option<Vec<TrendlineData>>,
+
+    // -- Error bars --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_bars: Option<ErrorBarData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_error_bars: Option<ErrorBarData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y_error_bars: Option<ErrorBarData>,
+
+    // -- OOXML plot ordering --
+    /// Series index (c:idx)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idx: Option<u32>,
+    /// Plot order (c:order)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
+
+    // -- Rich formatting --
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<ChartFormatData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bar_shape: Option<String>,
+    /// Color used for inverted (negative-value) data points.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub invert_color: Option<ChartColorData>,
+
+    // -- Additional series properties --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_background_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_foreground_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub filtered: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_shadow: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_connector_lines: Option<bool>,
+
+    // -- Leader lines --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub leader_line_format: Option<ChartFormatData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_leader_lines: Option<bool>,
+}
+
+/// Per-point formatting override.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointFormatData {
+    #[serde(default)]
+    pub idx: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border: Option<ChartBorderData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_label: Option<DataLabelData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visual_format: Option<ChartFormatData>,
+    // -- Additional point properties --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_background_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_foreground_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_style: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartBorderData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+}
+
+/// Histogram-specific configuration (ChartEx histogram series).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HistogramConfigData {
+    /// Number of bins.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bin_count: Option<u32>,
+    /// Bin width (overrides bin_count when set).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bin_width: Option<f64>,
+    /// Whether an overflow bin is enabled.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub overflow_bin: Option<bool>,
+    /// Overflow bin threshold value.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub overflow_bin_value: Option<f64>,
+    /// Whether an underflow bin is enabled.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub underflow_bin: Option<bool>,
+    /// Underflow bin threshold value.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub underflow_bin_value: Option<f64>,
+}
+
+/// Boxplot-specific configuration (box-and-whisker charts).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BoxplotConfigData {
+    /// Whether to show outlier points.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_outlier_points: Option<bool>,
+    /// Whether to show mean markers.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_mean_markers: Option<bool>,
+    /// Whether to show mean lines.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_mean_line: Option<bool>,
+    /// Quartile calculation method: "exclusive" or "inclusive".
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub quartile_method: Option<String>,
+}

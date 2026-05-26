@@ -1,0 +1,1250 @@
+{
+  "name": "@mog-sdk/contracts",
+  "version": "0.6.0",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./accessibility": {
+      "development": "./src/accessibility/index.ts",
+      "types": "./dist/accessibility/index.d.ts",
+      "import": "./dist/accessibility/index.js"
+    },
+    "./app": {
+      "development": "./src/app/index.ts",
+      "types": "./dist/app/index.d.ts",
+      "import": "./dist/app/index.js"
+    },
+    "./actions": {
+      "development": "./src/actions/index.ts",
+      "types": "./dist/actions/index.d.ts",
+      "import": "./dist/actions/index.js"
+    },
+    "./actors": {
+      "development": "./src/actors/index.ts",
+      "types": "./dist/actors/index.d.ts",
+      "import": "./dist/actors/index.js"
+    },
+    "./actors/chart": {
+      "development": "./src/actors/chart.ts",
+      "types": "./dist/actors/chart.d.ts",
+      "import": "./dist/actors/chart.js"
+    },
+    "./actors/clipboard": {
+      "development": "./src/actors/clipboard.ts",
+      "types": "./dist/actors/clipboard.d.ts",
+      "import": "./dist/actors/clipboard.js"
+    },
+    "./actors/comment": {
+      "development": "./src/actors/comment.ts",
+      "types": "./dist/actors/comment.d.ts",
+      "import": "./dist/actors/comment.js"
+    },
+    "./actors/commands": {
+      "development": "./src/actors/commands.ts",
+      "types": "./dist/actors/commands.d.ts",
+      "import": "./dist/actors/commands.js"
+    },
+    "./actors/draw-border": {
+      "development": "./src/actors/draw-border.ts",
+      "types": "./dist/actors/draw-border.d.ts",
+      "import": "./dist/actors/draw-border.js"
+    },
+    "./actors/editor": {
+      "development": "./src/actors/editor.ts",
+      "types": "./dist/actors/editor.d.ts",
+      "import": "./dist/actors/editor.js"
+    },
+    "./actors/find-replace": {
+      "development": "./src/actors/find-replace.ts",
+      "types": "./dist/actors/find-replace.d.ts",
+      "import": "./dist/actors/find-replace.js"
+    },
+    "./actors/focus": {
+      "development": "./src/actors/focus.ts",
+      "types": "./dist/actors/focus.d.ts",
+      "import": "./dist/actors/focus.js"
+    },
+    "./actors/input": {
+      "development": "./src/actors/input.ts",
+      "types": "./dist/actors/input.d.ts",
+      "import": "./dist/actors/input.js"
+    },
+    "./actors/object": {
+      "development": "./src/actors/object.ts",
+      "types": "./dist/actors/object.d.ts",
+      "import": "./dist/actors/object.js"
+    },
+    "./actors/page-break": {
+      "development": "./src/actors/page-break.ts",
+      "types": "./dist/actors/page-break.d.ts",
+      "import": "./dist/actors/page-break.js"
+    },
+    "./actors/pane-focus": {
+      "development": "./src/actors/pane-focus.ts",
+      "types": "./dist/actors/pane-focus.d.ts",
+      "import": "./dist/actors/pane-focus.js"
+    },
+    "./actors/renderer": {
+      "development": "./src/actors/renderer.ts",
+      "types": "./dist/actors/renderer.d.ts",
+      "import": "./dist/actors/renderer.js"
+    },
+    "./actors/selection": {
+      "development": "./src/actors/selection.ts",
+      "types": "./dist/actors/selection.d.ts",
+      "import": "./dist/actors/selection.js"
+    },
+    "./actors/slicer": {
+      "development": "./src/actors/slicer.ts",
+      "types": "./dist/actors/slicer.d.ts",
+      "import": "./dist/actors/slicer.js"
+    },
+    "./actors/object-interaction": {
+      "development": "./src/actors/object-interaction.ts",
+      "types": "./dist/actors/object-interaction.d.ts",
+      "import": "./dist/actors/object-interaction.js"
+    },
+    "./api": {
+      "development": "./src/api/index.ts",
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./api/mutation-receipt": {
+      "development": "./src/api/mutation-receipt.ts",
+      "types": "./dist/api/mutation-receipt.d.ts",
+      "import": "./dist/api/mutation-receipt.js"
+    },
+    "./api-errors": {
+      "development": "./src/api-errors.ts",
+      "types": "./dist/api-errors.d.ts",
+      "import": "./dist/api-errors.js"
+    },
+    "./apps": {
+      "development": "./src/apps/index.ts",
+      "types": "./dist/apps/index.d.ts",
+      "import": "./dist/apps/index.js"
+    },
+    "./apps/api": {
+      "development": "./src/apps/api.ts",
+      "types": "./dist/apps/api.d.ts",
+      "import": "./dist/apps/api.js"
+    },
+    "./bridges": {
+      "development": "./src/bridges/index.ts",
+      "types": "./dist/bridges/index.d.ts",
+      "import": "./dist/bridges/index.js"
+    },
+    "./capabilities": {
+      "development": "./src/capabilities/index.ts",
+      "types": "./dist/capabilities/index.d.ts",
+      "import": "./dist/capabilities/index.js"
+    },
+    "./cell-identity": {
+      "development": "./src/cells/cell-identity.ts",
+      "types": "./dist/cells/cell-identity.d.ts",
+      "import": "./dist/cells/cell-identity.js"
+    },
+    "./cell-style": {
+      "development": "./src/cells/cell-style.ts",
+      "types": "./dist/cells/cell-style.d.ts",
+      "import": "./dist/cells/cell-style.js"
+    },
+    "./cells/cell-style": {
+      "development": "./src/cells/cell-style.ts",
+      "types": "./dist/cells/cell-style.d.ts",
+      "import": "./dist/cells/cell-style.js"
+    },
+    "./commands": {
+      "development": "./src/core/commands.ts",
+      "types": "./dist/core/commands.d.ts",
+      "import": "./dist/core/commands.js"
+    },
+    "./comments": {
+      "development": "./src/document/comments.ts",
+      "types": "./dist/document/comments.d.ts",
+      "import": "./dist/document/comments.js"
+    },
+    "./conditional-format": {
+      "development": "./src/conditional-format/index.ts",
+      "types": "./dist/conditional-format/index.d.ts",
+      "import": "./dist/conditional-format/index.js"
+    },
+    "./connections": {
+      "development": "./src/connections/index.ts",
+      "types": "./dist/connections/index.d.ts",
+      "import": "./dist/connections/index.js"
+    },
+    "./core": {
+      "development": "./src/core/index.ts",
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./culture": {
+      "development": "./src/culture/index.ts",
+      "types": "./dist/culture/index.d.ts",
+      "import": "./dist/culture/index.js"
+    },
+    "./diagnostics": {
+      "development": "./src/diagnostics/index.ts",
+      "types": "./dist/diagnostics/index.d.ts",
+      "import": "./dist/diagnostics/index.js"
+    },
+    "./document": {
+      "development": "./src/document/index.ts",
+      "types": "./dist/document/index.d.ts",
+      "import": "./dist/document/index.js"
+    },
+    "./drawing": {
+      "development": "./src/objects/drawing-object.ts",
+      "types": "./dist/objects/drawing-object.d.ts",
+      "import": "./dist/objects/drawing-object.js"
+    },
+    "./drawing/three-d": {
+      "development": "./src/drawing/three-d.ts",
+      "types": "./dist/drawing/three-d.d.ts",
+      "import": "./dist/drawing/three-d.js"
+    },
+    "./drag": {
+      "development": "./src/editor/drag.ts",
+      "types": "./dist/editor/drag.d.ts",
+      "import": "./dist/editor/drag.js"
+    },
+    "./editor": {
+      "development": "./src/editor/index.ts",
+      "types": "./dist/editor/index.d.ts",
+      "import": "./dist/editor/index.js"
+    },
+    "./event-base": {
+      "development": "./src/core/event-base.ts",
+      "types": "./dist/core/event-base.d.ts",
+      "import": "./dist/core/event-base.js"
+    },
+    "./equation": {
+      "development": "./src/equation/index.ts",
+      "types": "./dist/equation/index.d.ts",
+      "import": "./dist/equation/index.js"
+    },
+    "./equation/errors": {
+      "development": "./src/equation/errors.ts",
+      "types": "./dist/equation/errors.d.ts",
+      "import": "./dist/equation/errors.js"
+    },
+    "./equation/omml-ast": {
+      "development": "./src/equation/omml-ast.ts",
+      "types": "./dist/equation/omml-ast.d.ts",
+      "import": "./dist/equation/omml-ast.js"
+    },
+    "./equation/types": {
+      "development": "./src/equation/types.ts",
+      "types": "./dist/equation/types.d.ts",
+      "import": "./dist/equation/types.js"
+    },
+    "./events": {
+      "development": "./src/events.ts",
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./execution": {
+      "development": "./src/core/execution.ts",
+      "types": "./dist/core/execution.d.ts",
+      "import": "./dist/core/execution.js"
+    },
+    "./filesystem": {
+      "development": "./src/filesystem/index.ts",
+      "types": "./dist/filesystem/index.d.ts",
+      "import": "./dist/filesystem/index.js"
+    },
+    "./feature-gates": {
+      "development": "./src/feature-gates.ts",
+      "types": "./dist/feature-gates.d.ts",
+      "import": "./dist/feature-gates.js"
+    },
+    "./fill": {
+      "development": "./src/fill/index.ts",
+      "types": "./dist/fill/index.d.ts",
+      "import": "./dist/fill/index.js"
+    },
+    "./filter": {
+      "development": "./src/data/filter.ts",
+      "types": "./dist/data/filter.d.ts",
+      "import": "./dist/data/filter.js"
+    },
+    "./canvas-object": {
+      "development": "./src/objects/canvas-object.ts",
+      "types": "./dist/objects/canvas-object.d.ts",
+      "import": "./dist/objects/canvas-object.js"
+    },
+    "./objects/canvas-object": {
+      "development": "./src/objects/canvas-object.ts",
+      "types": "./dist/objects/canvas-object.d.ts",
+      "import": "./dist/objects/canvas-object.js"
+    },
+    "./floating-objects": {
+      "development": "./src/objects/floating-objects.ts",
+      "types": "./dist/objects/floating-objects.d.ts",
+      "import": "./dist/objects/floating-objects.js"
+    },
+    "./objects/floating-objects": {
+      "development": "./src/objects/floating-objects.ts",
+      "types": "./dist/objects/floating-objects.d.ts",
+      "import": "./dist/objects/floating-objects.js"
+    },
+    "./objects/object-bounds-reader": {
+      "development": "./src/objects/object-bounds-reader.ts",
+      "types": "./dist/objects/object-bounds-reader.d.ts",
+      "import": "./dist/objects/object-bounds-reader.js"
+    },
+    "./objects/scene-graph-reader": {
+      "development": "./src/objects/scene-graph-reader.ts",
+      "types": "./dist/objects/scene-graph-reader.d.ts",
+      "import": "./dist/objects/scene-graph-reader.js"
+    },
+    "./objects/floating-objects-view": {
+      "development": "./src/objects/floating-objects-view.ts",
+      "types": "./dist/objects/floating-objects-view.d.ts",
+      "import": "./dist/objects/floating-objects-view.js"
+    },
+    "./form-controls": {
+      "development": "./src/editor/form-controls.ts",
+      "types": "./dist/editor/form-controls.d.ts",
+      "import": "./dist/editor/form-controls.js"
+    },
+    "./format-registry": {
+      "development": "./src/formatting/format-registry.ts",
+      "types": "./dist/formatting/format-registry.d.ts",
+      "import": "./dist/formatting/format-registry.js"
+    },
+    "./geometry": {
+      "development": "./src/viewport/geometry.ts",
+      "types": "./dist/viewport/geometry.d.ts",
+      "import": "./dist/viewport/geometry.js"
+    },
+    "./grid-canvas": {
+      "development": "./src/viewport/grid-canvas.ts",
+      "types": "./dist/viewport/grid-canvas.d.ts",
+      "import": "./dist/viewport/grid-canvas.js"
+    },
+    "./grouping": {
+      "development": "./src/data/grouping.ts",
+      "types": "./dist/data/grouping.d.ts",
+      "import": "./dist/data/grouping.js"
+    },
+    "./ink": {
+      "development": "./src/ink/index.ts",
+      "types": "./dist/ink/index.d.ts",
+      "import": "./dist/ink/index.js"
+    },
+    "./kernel": {
+      "development": "./src/kernel/index.ts",
+      "types": "./dist/kernel/index.d.ts",
+      "import": "./dist/kernel/index.js"
+    },
+    "./keyboard": {
+      "development": "./src/keyboard/index.ts",
+      "types": "./dist/keyboard/index.d.ts",
+      "import": "./dist/keyboard/index.js"
+    },
+    "./machines": {
+      "development": "./src/machines/index.ts",
+      "types": "./dist/machines/index.d.ts",
+      "import": "./dist/machines/index.js"
+    },
+    "./machines/types": {
+      "development": "./src/machines/types.ts",
+      "types": "./dist/machines/types.d.ts",
+      "import": "./dist/machines/types.js"
+    },
+    "./named-ranges": {
+      "development": "./src/data/named-ranges.ts",
+      "types": "./dist/data/named-ranges.d.ts",
+      "import": "./dist/data/named-ranges.js"
+    },
+    "./number-formats": {
+      "development": "./src/number-formats/index.ts",
+      "types": "./dist/number-formats/index.d.ts",
+      "import": "./dist/number-formats/index.js"
+    },
+    "./number-formats/constants": {
+      "development": "./src/number-formats/constants.ts",
+      "types": "./dist/number-formats/constants.d.ts",
+      "import": "./dist/number-formats/constants.js"
+    },
+    "./performance": {
+      "development": "./src/performance/index.ts",
+      "types": "./dist/performance/index.d.ts",
+      "import": "./dist/performance/index.js"
+    },
+    "./platform": {
+      "development": "./src/platform/index.ts",
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js"
+    },
+    "./pivot": {
+      "development": "./src/data/pivot.ts",
+      "types": "./dist/data/pivot.d.ts",
+      "import": "./dist/data/pivot.js"
+    },
+    "./protection": {
+      "development": "./src/document/protection.ts",
+      "types": "./dist/document/protection.d.ts",
+      "import": "./dist/document/protection.js"
+    },
+    "./query": {
+      "development": "./src/connections/query.ts",
+      "types": "./dist/connections/query.d.ts",
+      "import": "./dist/connections/query.js"
+    },
+    "./range-ref": {
+      "development": "./src/cells/range-ref.ts",
+      "types": "./dist/cells/range-ref.d.ts",
+      "import": "./dist/cells/range-ref.js"
+    },
+    "./rendering": {
+      "development": "./src/rendering/index.ts",
+      "types": "./dist/rendering/index.d.ts",
+      "import": "./dist/rendering/index.js"
+    },
+    "./rendering/sheet-view-skin": {
+      "development": "./src/rendering/sheet-view-skin.ts",
+      "types": "./dist/rendering/sheet-view-skin.d.ts",
+      "import": "./dist/rendering/sheet-view-skin.js"
+    },
+    "./rendering/coordinates": {
+      "development": "./src/rendering/coordinates.ts",
+      "types": "./dist/rendering/coordinates.d.ts",
+      "import": "./dist/rendering/coordinates.js"
+    },
+    "./rendering/constants": {
+      "development": "./src/rendering/constants.ts",
+      "types": "./dist/rendering/constants.d.ts",
+      "import": "./dist/rendering/constants.js"
+    },
+    "./ribbon": {
+      "development": "./src/ribbon/index.ts",
+      "types": "./dist/ribbon/index.d.ts",
+      "import": "./dist/ribbon/index.js"
+    },
+    "./rich-text": {
+      "development": "./src/cells/rich-text.ts",
+      "types": "./dist/cells/rich-text.d.ts",
+      "import": "./dist/cells/rich-text.js"
+    },
+    "./schema": {
+      "development": "./src/core/schema.ts",
+      "types": "./dist/core/schema.d.ts",
+      "import": "./dist/core/schema.js"
+    },
+    "./search": {
+      "development": "./src/document/search.ts",
+      "types": "./dist/document/search.d.ts",
+      "import": "./dist/document/search.js"
+    },
+    "./sdk": {
+      "development": "./src/sdk/index.ts",
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    },
+    "./security": {
+      "development": "./src/security/index.ts",
+      "types": "./dist/security/index.d.ts",
+      "import": "./dist/security/index.js"
+    },
+    "./selection": {
+      "development": "./src/selection/index.ts",
+      "types": "./dist/selection/index.d.ts",
+      "import": "./dist/selection/index.js"
+    },
+    "./selectors": {
+      "development": "./src/selectors/index.ts",
+      "types": "./dist/selectors/index.d.ts",
+      "import": "./dist/selectors/index.js"
+    },
+    "./services": {
+      "development": "./src/services/index.ts",
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
+    },
+    "./slicers": {
+      "development": "./src/data/slicers.ts",
+      "types": "./dist/data/slicers.d.ts",
+      "import": "./dist/data/slicers.js"
+    },
+    "./sorting": {
+      "development": "./src/data/sorting.ts",
+      "types": "./dist/data/sorting.d.ts",
+      "import": "./dist/data/sorting.js"
+    },
+    "./sparklines": {
+      "development": "./src/data/sparklines.ts",
+      "types": "./dist/data/sparklines.d.ts",
+      "import": "./dist/data/sparklines.js"
+    },
+    "./spill": {
+      "development": "./src/cells/spill.ts",
+      "types": "./dist/cells/spill.d.ts",
+      "import": "./dist/cells/spill.js"
+    },
+    "./storage": {
+      "development": "./src/storage/index.ts",
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./storage/high-water-mark": {
+      "development": "./src/storage/high-water-mark.ts",
+      "types": "./dist/storage/high-water-mark.d.ts",
+      "import": "./dist/storage/high-water-mark.js"
+    },
+    "./store": {
+      "development": "./src/store/index.ts",
+      "types": "./dist/store/index.d.ts",
+      "import": "./dist/store/index.js"
+    },
+    "./styles": {
+      "development": "./src/styles/index.ts",
+      "types": "./dist/styles/index.d.ts",
+      "import": "./dist/styles/index.js"
+    },
+    "./tables": {
+      "development": "./src/data/tables.ts",
+      "types": "./dist/data/tables.d.ts",
+      "import": "./dist/data/tables.js"
+    },
+    "./testing": {
+      "development": "./src/core/testing.ts",
+      "types": "./dist/core/testing.d.ts",
+      "import": "./dist/core/testing.js"
+    },
+    "./theme": {
+      "development": "./src/formatting/theme.ts",
+      "types": "./dist/formatting/theme.d.ts",
+      "import": "./dist/formatting/theme.js"
+    },
+    "./formatting/theme": {
+      "development": "./src/formatting/theme.ts",
+      "types": "./dist/formatting/theme.d.ts",
+      "import": "./dist/formatting/theme.js"
+    },
+    "./trace-arrows": {
+      "development": "./src/data/trace-arrows.ts",
+      "types": "./dist/data/trace-arrows.d.ts",
+      "import": "./dist/data/trace-arrows.js"
+    },
+    "./viewport": {
+      "development": "./src/viewport/index.ts",
+      "types": "./dist/viewport/index.d.ts",
+      "import": "./dist/viewport/index.js"
+    },
+    "./viewport-config": {
+      "development": "./src/viewport/viewport-config.ts",
+      "types": "./dist/viewport/viewport-config.d.ts",
+      "import": "./dist/viewport/viewport-config.js"
+    },
+    "./what-if": {
+      "development": "./src/what-if/index.ts",
+      "types": "./dist/what-if/index.d.ts",
+      "import": "./dist/what-if/index.js"
+    },
+    "./text-effects": {
+      "development": "./src/text-effects/index.ts",
+      "types": "./dist/text-effects/index.d.ts",
+      "import": "./dist/text-effects/index.js"
+    },
+    "./workflows": {
+      "development": "./src/workflows/index.ts",
+      "types": "./dist/workflows/index.d.ts",
+      "import": "./dist/workflows/index.js"
+    },
+    "./views": {
+      "development": "./src/views/index.ts",
+      "types": "./dist/views/index.d.ts",
+      "import": "./dist/views/index.js"
+    },
+    "./extensions": {
+      "development": "./src/extensions/index.ts",
+      "types": "./dist/extensions/index.d.ts",
+      "import": "./dist/extensions/index.js"
+    },
+    "./context-menu": {
+      "development": "./src/context-menu/index.ts",
+      "types": "./dist/context-menu/index.d.ts",
+      "import": "./dist/context-menu/index.js"
+    },
+    "./data": {
+      "development": "./src/data/index.ts",
+      "types": "./dist/data/index.d.ts",
+      "import": "./dist/data/index.js"
+    },
+    "./data/charts": {
+      "development": "./src/data/charts.ts",
+      "types": "./dist/data/charts.d.ts",
+      "import": "./dist/data/charts.js"
+    },
+    "./utils": {
+      "development": "./src/utils/index.ts",
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
+    },
+    "./utils/function-registry": {
+      "development": "./src/utils/function-registry.ts",
+      "types": "./dist/utils/function-registry.d.ts",
+      "import": "./dist/utils/function-registry.js"
+    },
+    "./utils/a1": {
+      "development": "./src/utils/a1.ts",
+      "types": "./dist/utils/a1.d.ts",
+      "import": "./dist/utils/a1.js"
+    },
+    "./cells": {
+      "development": "./src/cells/index.ts",
+      "types": "./dist/cells/index.d.ts",
+      "import": "./dist/cells/index.js"
+    },
+    "./cells/formula-string": {
+      "development": "./src/cells/formula-string.ts",
+      "types": "./dist/cells/formula-string.d.ts",
+      "import": "./dist/cells/formula-string.js"
+    },
+    "./api/worksheet/handles": {
+      "development": "./src/api/worksheet/handles/index.ts",
+      "types": "./dist/api/worksheet/handles/index.d.ts",
+      "import": "./dist/api/worksheet/handles/index.js"
+    },
+    "./api/worksheet/handles/index": {
+      "development": "./src/api/worksheet/handles/index.ts",
+      "types": "./dist/api/worksheet/handles/index.d.ts",
+      "import": "./dist/api/worksheet/handles/index.js"
+    },
+    "./objects": {
+      "development": "./src/objects/index.ts",
+      "types": "./dist/objects/index.d.ts",
+      "import": "./dist/objects/index.js"
+    },
+    "./objects/object-mutator": {
+      "development": "./src/objects/object-mutator.ts",
+      "types": "./dist/objects/object-mutator.d.ts",
+      "import": "./dist/objects/object-mutator.js"
+    },
+    "./data/slicers": {
+      "development": "./src/data/slicers.ts",
+      "types": "./dist/data/slicers.d.ts",
+      "import": "./dist/data/slicers.js"
+    },
+    "./data/named-ranges": {
+      "development": "./src/data/named-ranges.ts",
+      "types": "./dist/data/named-ranges.d.ts",
+      "import": "./dist/data/named-ranges.js"
+    },
+    "./core/core": {
+      "development": "./src/core/core.ts",
+      "types": "./dist/core/core.d.ts",
+      "import": "./dist/core/core.js"
+    },
+    "./ink/types": {
+      "development": "./src/ink/types.ts",
+      "types": "./dist/ink/types.d.ts",
+      "import": "./dist/ink/types.js"
+    },
+    "./viewport/viewport-config": {
+      "development": "./src/viewport/viewport-config.ts",
+      "types": "./dist/viewport/viewport-config.d.ts",
+      "import": "./dist/viewport/viewport-config.js"
+    },
+    "./actors/diagram": {
+      "development": "./src/actors/diagram.ts",
+      "types": "./dist/actors/diagram.d.ts",
+      "import": "./dist/actors/diagram.js"
+    },
+    "./diagram": {
+      "development": "./src/diagram/index.ts",
+      "types": "./dist/diagram/index.d.ts",
+      "import": "./dist/diagram/index.js"
+    },
+    "./diagram/types": {
+      "development": "./src/diagram/types.ts",
+      "types": "./dist/diagram/types.d.ts",
+      "import": "./dist/diagram/types.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
+    "build": "node scripts/check-no-source-dts.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/rollup-public-dts.mjs && node scripts/fix-dts-extensions.mjs && node ../tools/check-contracts-declaration-identity.mjs && node scripts/verify-runtime-exports.mjs && node ../tools/check-contracts-runtime-inventory.mjs && node ../tools/check-contract-runtime-imports.mjs",
+    "check:runtime-inventory": "node ../tools/check-contracts-runtime-inventory.mjs",
+    "check:runtime-imports": "node ../tools/check-contract-runtime-imports.mjs",
+    "verify:runtime-exports": "node scripts/verify-runtime-exports.mjs",
+    "prepare-publish": "node scripts/prepare-publish.mjs",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@mog/types-api": "workspace:*",
+    "@mog/types-bridges": "workspace:*",
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-connections": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-culture": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-editor": "workspace:*",
+    "@mog/types-events": "workspace:*",
+    "@mog/types-formatting": "workspace:*",
+    "@mog/types-machines": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-rendering": "workspace:*",
+    "@mog/types-viewport": "workspace:*",
+    "@mog/math-engine": "workspace:*",
+    "@microsoft/api-extractor": "^7.58.7",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.0.0",
+    "@mog/diagram-engine": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./accessibility": {
+        "types": "./dist/accessibility/index.d.ts",
+        "import": "./dist/accessibility/index.js"
+      },
+      "./app": {
+        "types": "./dist/app/index.d.ts",
+        "import": "./dist/app/index.js"
+      },
+      "./actions": {
+        "types": "./dist/actions/index.d.ts",
+        "import": "./dist/actions/index.js"
+      },
+      "./actors": {
+        "types": "./dist/actors/index.d.ts",
+        "import": "./dist/actors/index.js"
+      },
+      "./actors/chart": {
+        "types": "./dist/actors/chart.d.ts",
+        "import": "./dist/actors/chart.js"
+      },
+      "./actors/clipboard": {
+        "types": "./dist/actors/clipboard.d.ts",
+        "import": "./dist/actors/clipboard.js"
+      },
+      "./actors/comment": {
+        "types": "./dist/actors/comment.d.ts",
+        "import": "./dist/actors/comment.js"
+      },
+      "./actors/commands": {
+        "types": "./dist/actors/commands.d.ts",
+        "import": "./dist/actors/commands.js"
+      },
+      "./actors/draw-border": {
+        "types": "./dist/actors/draw-border.d.ts",
+        "import": "./dist/actors/draw-border.js"
+      },
+      "./actors/editor": {
+        "types": "./dist/actors/editor.d.ts",
+        "import": "./dist/actors/editor.js"
+      },
+      "./actors/find-replace": {
+        "types": "./dist/actors/find-replace.d.ts",
+        "import": "./dist/actors/find-replace.js"
+      },
+      "./actors/focus": {
+        "types": "./dist/actors/focus.d.ts",
+        "import": "./dist/actors/focus.js"
+      },
+      "./actors/input": {
+        "types": "./dist/actors/input.d.ts",
+        "import": "./dist/actors/input.js"
+      },
+      "./actors/object": {
+        "types": "./dist/actors/object.d.ts",
+        "import": "./dist/actors/object.js"
+      },
+      "./actors/page-break": {
+        "types": "./dist/actors/page-break.d.ts",
+        "import": "./dist/actors/page-break.js"
+      },
+      "./actors/pane-focus": {
+        "types": "./dist/actors/pane-focus.d.ts",
+        "import": "./dist/actors/pane-focus.js"
+      },
+      "./actors/renderer": {
+        "types": "./dist/actors/renderer.d.ts",
+        "import": "./dist/actors/renderer.js"
+      },
+      "./actors/selection": {
+        "types": "./dist/actors/selection.d.ts",
+        "import": "./dist/actors/selection.js"
+      },
+      "./actors/slicer": {
+        "types": "./dist/actors/slicer.d.ts",
+        "import": "./dist/actors/slicer.js"
+      },
+      "./actors/object-interaction": {
+        "types": "./dist/actors/object-interaction.d.ts",
+        "import": "./dist/actors/object-interaction.js"
+      },
+      "./api": {
+        "types": "./dist/api/index.d.ts",
+        "import": "./dist/api/index.js"
+      },
+      "./api/mutation-receipt": {
+        "types": "./dist/api/mutation-receipt.d.ts",
+        "import": "./dist/api/mutation-receipt.js"
+      },
+      "./api-errors": {
+        "types": "./dist/api-errors.d.ts",
+        "import": "./dist/api-errors.js"
+      },
+      "./apps": {
+        "types": "./dist/apps/index.d.ts",
+        "import": "./dist/apps/index.js"
+      },
+      "./apps/api": {
+        "types": "./dist/apps/api.d.ts",
+        "import": "./dist/apps/api.js"
+      },
+      "./bridges": {
+        "types": "./dist/bridges/index.d.ts",
+        "import": "./dist/bridges/index.js"
+      },
+      "./capabilities": {
+        "types": "./dist/capabilities/index.d.ts",
+        "import": "./dist/capabilities/index.js"
+      },
+      "./cell-identity": {
+        "types": "./dist/cells/cell-identity.d.ts",
+        "import": "./dist/cells/cell-identity.js"
+      },
+      "./cell-style": {
+        "types": "./dist/cells/cell-style.d.ts",
+        "import": "./dist/cells/cell-style.js"
+      },
+      "./cells/cell-style": {
+        "types": "./dist/cells/cell-style.d.ts",
+        "import": "./dist/cells/cell-style.js"
+      },
+      "./commands": {
+        "types": "./dist/core/commands.d.ts",
+        "import": "./dist/core/commands.js"
+      },
+      "./comments": {
+        "types": "./dist/document/comments.d.ts",
+        "import": "./dist/document/comments.js"
+      },
+      "./conditional-format": {
+        "types": "./dist/conditional-format/index.d.ts",
+        "import": "./dist/conditional-format/index.js"
+      },
+      "./connections": {
+        "types": "./dist/connections/index.d.ts",
+        "import": "./dist/connections/index.js"
+      },
+      "./core": {
+        "types": "./dist/core/index.d.ts",
+        "import": "./dist/core/index.js"
+      },
+      "./culture": {
+        "types": "./dist/culture/index.d.ts",
+        "import": "./dist/culture/index.js"
+      },
+      "./diagnostics": {
+        "types": "./dist/diagnostics/index.d.ts",
+        "import": "./dist/diagnostics/index.js"
+      },
+      "./document": {
+        "types": "./dist/document/index.d.ts",
+        "import": "./dist/document/index.js"
+      },
+      "./drawing": {
+        "types": "./dist/objects/drawing-object.d.ts",
+        "import": "./dist/objects/drawing-object.js"
+      },
+      "./drawing/three-d": {
+        "types": "./dist/drawing/three-d.d.ts",
+        "import": "./dist/drawing/three-d.js"
+      },
+      "./drag": {
+        "types": "./dist/editor/drag.d.ts",
+        "import": "./dist/editor/drag.js"
+      },
+      "./editor": {
+        "types": "./dist/editor/index.d.ts",
+        "import": "./dist/editor/index.js"
+      },
+      "./event-base": {
+        "types": "./dist/core/event-base.d.ts",
+        "import": "./dist/core/event-base.js"
+      },
+      "./equation": {
+        "types": "./dist/equation/index.d.ts",
+        "import": "./dist/equation/index.js"
+      },
+      "./equation/errors": {
+        "types": "./dist/equation/errors.d.ts",
+        "import": "./dist/equation/errors.js"
+      },
+      "./equation/omml-ast": {
+        "types": "./dist/equation/omml-ast.d.ts",
+        "import": "./dist/equation/omml-ast.js"
+      },
+      "./equation/types": {
+        "types": "./dist/equation/types.d.ts",
+        "import": "./dist/equation/types.js"
+      },
+      "./events": {
+        "types": "./dist/events.d.ts",
+        "import": "./dist/events.js"
+      },
+      "./execution": {
+        "types": "./dist/core/execution.d.ts",
+        "import": "./dist/core/execution.js"
+      },
+      "./filesystem": {
+        "types": "./dist/filesystem/index.d.ts",
+        "import": "./dist/filesystem/index.js"
+      },
+      "./feature-gates": {
+        "types": "./dist/feature-gates.d.ts",
+        "import": "./dist/feature-gates.js"
+      },
+      "./fill": {
+        "types": "./dist/fill/index.d.ts",
+        "import": "./dist/fill/index.js"
+      },
+      "./filter": {
+        "types": "./dist/data/filter.d.ts",
+        "import": "./dist/data/filter.js"
+      },
+      "./canvas-object": {
+        "types": "./dist/objects/canvas-object.d.ts",
+        "import": "./dist/objects/canvas-object.js"
+      },
+      "./objects/canvas-object": {
+        "types": "./dist/objects/canvas-object.d.ts",
+        "import": "./dist/objects/canvas-object.js"
+      },
+      "./floating-objects": {
+        "types": "./dist/objects/floating-objects.d.ts",
+        "import": "./dist/objects/floating-objects.js"
+      },
+      "./objects/floating-objects": {
+        "types": "./dist/objects/floating-objects.d.ts",
+        "import": "./dist/objects/floating-objects.js"
+      },
+      "./objects/object-bounds-reader": {
+        "types": "./dist/objects/object-bounds-reader.d.ts",
+        "import": "./dist/objects/object-bounds-reader.js"
+      },
+      "./objects/scene-graph-reader": {
+        "types": "./dist/objects/scene-graph-reader.d.ts",
+        "import": "./dist/objects/scene-graph-reader.js"
+      },
+      "./objects/floating-objects-view": {
+        "types": "./dist/objects/floating-objects-view.d.ts",
+        "import": "./dist/objects/floating-objects-view.js"
+      },
+      "./form-controls": {
+        "types": "./dist/editor/form-controls.d.ts",
+        "import": "./dist/editor/form-controls.js"
+      },
+      "./format-registry": {
+        "types": "./dist/formatting/format-registry.d.ts",
+        "import": "./dist/formatting/format-registry.js"
+      },
+      "./geometry": {
+        "types": "./dist/viewport/geometry.d.ts",
+        "import": "./dist/viewport/geometry.js"
+      },
+      "./grid-canvas": {
+        "types": "./dist/viewport/grid-canvas.d.ts",
+        "import": "./dist/viewport/grid-canvas.js"
+      },
+      "./grouping": {
+        "types": "./dist/data/grouping.d.ts",
+        "import": "./dist/data/grouping.js"
+      },
+      "./ink": {
+        "types": "./dist/ink/index.d.ts",
+        "import": "./dist/ink/index.js"
+      },
+      "./kernel": {
+        "types": "./dist/kernel/index.d.ts",
+        "import": "./dist/kernel/index.js"
+      },
+      "./keyboard": {
+        "types": "./dist/keyboard/index.d.ts",
+        "import": "./dist/keyboard/index.js"
+      },
+      "./machines": {
+        "types": "./dist/machines/index.d.ts",
+        "import": "./dist/machines/index.js"
+      },
+      "./machines/types": {
+        "types": "./dist/machines/types.d.ts",
+        "import": "./dist/machines/types.js"
+      },
+      "./named-ranges": {
+        "types": "./dist/data/named-ranges.d.ts",
+        "import": "./dist/data/named-ranges.js"
+      },
+      "./number-formats": {
+        "types": "./dist/number-formats/index.d.ts",
+        "import": "./dist/number-formats/index.js"
+      },
+      "./number-formats/constants": {
+        "types": "./dist/number-formats/constants.d.ts",
+        "import": "./dist/number-formats/constants.js"
+      },
+      "./performance": {
+        "types": "./dist/performance/index.d.ts",
+        "import": "./dist/performance/index.js"
+      },
+      "./platform": {
+        "types": "./dist/platform/index.d.ts",
+        "import": "./dist/platform/index.js"
+      },
+      "./pivot": {
+        "types": "./dist/data/pivot.d.ts",
+        "import": "./dist/data/pivot.js"
+      },
+      "./protection": {
+        "types": "./dist/document/protection.d.ts",
+        "import": "./dist/document/protection.js"
+      },
+      "./query": {
+        "types": "./dist/connections/query.d.ts",
+        "import": "./dist/connections/query.js"
+      },
+      "./range-ref": {
+        "types": "./dist/cells/range-ref.d.ts",
+        "import": "./dist/cells/range-ref.js"
+      },
+      "./rendering": {
+        "types": "./dist/rendering/index.d.ts",
+        "import": "./dist/rendering/index.js"
+      },
+      "./rendering/sheet-view-skin": {
+        "types": "./dist/rendering/sheet-view-skin.d.ts",
+        "import": "./dist/rendering/sheet-view-skin.js"
+      },
+      "./rendering/coordinates": {
+        "types": "./dist/rendering/coordinates.d.ts",
+        "import": "./dist/rendering/coordinates.js"
+      },
+      "./rendering/constants": {
+        "types": "./dist/rendering/constants.d.ts",
+        "import": "./dist/rendering/constants.js"
+      },
+      "./ribbon": {
+        "types": "./dist/ribbon/index.d.ts",
+        "import": "./dist/ribbon/index.js"
+      },
+      "./rich-text": {
+        "types": "./dist/cells/rich-text.d.ts",
+        "import": "./dist/cells/rich-text.js"
+      },
+      "./schema": {
+        "types": "./dist/core/schema.d.ts",
+        "import": "./dist/core/schema.js"
+      },
+      "./search": {
+        "types": "./dist/document/search.d.ts",
+        "import": "./dist/document/search.js"
+      },
+      "./sdk": {
+        "types": "./dist/sdk/index.d.ts",
+        "import": "./dist/sdk/index.js"
+      },
+      "./security": {
+        "types": "./dist/security/index.d.ts",
+        "import": "./dist/security/index.js"
+      },
+      "./selection": {
+        "types": "./dist/selection/index.d.ts",
+        "import": "./dist/selection/index.js"
+      },
+      "./selectors": {
+        "types": "./dist/selectors/index.d.ts",
+        "import": "./dist/selectors/index.js"
+      },
+      "./services": {
+        "types": "./dist/services/index.d.ts",
+        "import": "./dist/services/index.js"
+      },
+      "./slicers": {
+        "types": "./dist/data/slicers.d.ts",
+        "import": "./dist/data/slicers.js"
+      },
+      "./sorting": {
+        "types": "./dist/data/sorting.d.ts",
+        "import": "./dist/data/sorting.js"
+      },
+      "./sparklines": {
+        "types": "./dist/data/sparklines.d.ts",
+        "import": "./dist/data/sparklines.js"
+      },
+      "./spill": {
+        "types": "./dist/cells/spill.d.ts",
+        "import": "./dist/cells/spill.js"
+      },
+      "./storage": {
+        "types": "./dist/storage/index.d.ts",
+        "import": "./dist/storage/index.js"
+      },
+      "./storage/high-water-mark": {
+        "types": "./dist/storage/high-water-mark.d.ts",
+        "import": "./dist/storage/high-water-mark.js"
+      },
+      "./store": {
+        "types": "./dist/store/index.d.ts",
+        "import": "./dist/store/index.js"
+      },
+      "./styles": {
+        "types": "./dist/styles/index.d.ts",
+        "import": "./dist/styles/index.js"
+      },
+      "./tables": {
+        "types": "./dist/data/tables.d.ts",
+        "import": "./dist/data/tables.js"
+      },
+      "./testing": {
+        "types": "./dist/core/testing.d.ts",
+        "import": "./dist/core/testing.js"
+      },
+      "./theme": {
+        "types": "./dist/formatting/theme.d.ts",
+        "import": "./dist/formatting/theme.js"
+      },
+      "./formatting/theme": {
+        "types": "./dist/formatting/theme.d.ts",
+        "import": "./dist/formatting/theme.js"
+      },
+      "./trace-arrows": {
+        "types": "./dist/data/trace-arrows.d.ts",
+        "import": "./dist/data/trace-arrows.js"
+      },
+      "./viewport": {
+        "types": "./dist/viewport/index.d.ts",
+        "import": "./dist/viewport/index.js"
+      },
+      "./viewport-config": {
+        "types": "./dist/viewport/viewport-config.d.ts",
+        "import": "./dist/viewport/viewport-config.js"
+      },
+      "./what-if": {
+        "types": "./dist/what-if/index.d.ts",
+        "import": "./dist/what-if/index.js"
+      },
+      "./text-effects": {
+        "types": "./dist/text-effects/index.d.ts",
+        "import": "./dist/text-effects/index.js"
+      },
+      "./workflows": {
+        "types": "./dist/workflows/index.d.ts",
+        "import": "./dist/workflows/index.js"
+      },
+      "./views": {
+        "types": "./dist/views/index.d.ts",
+        "import": "./dist/views/index.js"
+      },
+      "./extensions": {
+        "types": "./dist/extensions/index.d.ts",
+        "import": "./dist/extensions/index.js"
+      },
+      "./context-menu": {
+        "types": "./dist/context-menu/index.d.ts",
+        "import": "./dist/context-menu/index.js"
+      },
+      "./data": {
+        "types": "./dist/data/index.d.ts",
+        "import": "./dist/data/index.js"
+      },
+      "./data/charts": {
+        "types": "./dist/data/charts.d.ts",
+        "import": "./dist/data/charts.js"
+      },
+      "./utils": {
+        "types": "./dist/utils/index.d.ts",
+        "import": "./dist/utils/index.js"
+      },
+      "./utils/function-registry": {
+        "types": "./dist/utils/function-registry.d.ts",
+        "import": "./dist/utils/function-registry.js"
+      },
+      "./utils/a1": {
+        "types": "./dist/utils/a1.d.ts",
+        "import": "./dist/utils/a1.js"
+      },
+      "./cells": {
+        "types": "./dist/cells/index.d.ts",
+        "import": "./dist/cells/index.js"
+      },
+      "./cells/formula-string": {
+        "types": "./dist/cells/formula-string.d.ts",
+        "import": "./dist/cells/formula-string.js"
+      },
+      "./api/worksheet/handles": {
+        "types": "./dist/api/worksheet/handles/index.d.ts",
+        "import": "./dist/api/worksheet/handles/index.js"
+      },
+      "./api/worksheet/handles/index": {
+        "types": "./dist/api/worksheet/handles/index.d.ts",
+        "import": "./dist/api/worksheet/handles/index.js"
+      },
+      "./objects": {
+        "types": "./dist/objects/index.d.ts",
+        "import": "./dist/objects/index.js"
+      },
+      "./objects/object-mutator": {
+        "types": "./dist/objects/object-mutator.d.ts",
+        "import": "./dist/objects/object-mutator.js"
+      },
+      "./data/slicers": {
+        "types": "./dist/data/slicers.d.ts",
+        "import": "./dist/data/slicers.js"
+      },
+      "./data/named-ranges": {
+        "types": "./dist/data/named-ranges.d.ts",
+        "import": "./dist/data/named-ranges.js"
+      },
+      "./core/core": {
+        "types": "./dist/core/core.d.ts",
+        "import": "./dist/core/core.js"
+      },
+      "./ink/types": {
+        "types": "./dist/ink/types.d.ts",
+        "import": "./dist/ink/types.js"
+      },
+      "./viewport/viewport-config": {
+        "types": "./dist/viewport/viewport-config.d.ts",
+        "import": "./dist/viewport/viewport-config.js"
+      },
+      "./actors/diagram": {
+        "types": "./dist/actors/diagram.d.ts",
+        "import": "./dist/actors/diagram.js"
+      },
+      "./diagram": {
+        "types": "./dist/diagram/index.d.ts",
+        "import": "./dist/diagram/index.js"
+      },
+      "./diagram/types": {
+        "types": "./dist/diagram/types.d.ts",
+        "import": "./dist/diagram/types.js"
+      }
+    }
+  }
+}

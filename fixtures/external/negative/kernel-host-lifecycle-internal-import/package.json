@@ -1,0 +1,11 @@
+{
+  "name": "fixture-neg-kernel-host-lifecycle-internal-import",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mog-sdk/kernel": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

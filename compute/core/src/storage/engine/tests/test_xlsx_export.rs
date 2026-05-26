@@ -1,0 +1,726 @@
+//! Group 11: XLSX export round-trip.
+
+use super::super::*;
+use super::helpers::*;
+use crate::snapshot::{
+    CellData, DataTableOoxmlFlags, DataTableRegionDef, RangeData, SheetSnapshot,
+};
+use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
+use domain_types::{
+    AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
+};
+use formula_types::CellRef;
+use value_types::{CellValue, FiniteF64};
+
+fn worksheet_sort_state() -> SortState {
+    SortState {
+        range_ref: "A25:AR27".to_string(),
+        conditions: vec![SortCondition {
+            range_ref: "E25:E27".to_string(),
+            descending: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+fn nested_auto_filter_sort_state() -> SortState {
+    SortState {
+        range_ref: "A1:B10".to_string(),
+        conditions: vec![SortCondition {
+            range_ref: "B2:B10".to_string(),
+            sort_by: SortConditionBy::CellColor,
+            dxf_id: Some(2),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+fn worksheet_sort_state_parse_output(include_nested_auto_filter_sort: bool) -> ParseOutput {
+    let auto_filter = include_nested_auto_filter_sort.then(|| AutoFilter {
+        range_ref: "A1:B10".to_string(),
+        columns: Vec::new(),
+        sort: Some(nested_auto_filter_sort_state()),
+        xr_uid: None,
+    });
+
+    ParseOutput {
+        sheets: vec![SheetData {
+            name: "SortState".to_string(),
+            rows: 30,
+            cols: 44,
+            cells: Vec::new(),
+            dimensions: SheetDimensions::default(),
+            auto_filter,
+            sort_state: Some(worksheet_sort_state()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+fn assemble_engine_from_parse_output_storage(
+    storage: crate::storage::YrsStorage,
+    workbook_snap: crate::snapshot::WorkbookSnapshot,
+) -> YrsComputeEngine {
+    let mut mirror =
+        crate::mirror::CellMirror::from_snapshot(workbook_snap.clone()).expect("mirror");
+    let mut compute = crate::scheduler::ComputeCore::new();
+    compute
+        .init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())
+        .expect("compute init");
+    super::super::construction::assemble_engine(
+        storage,
+        mirror,
+        compute,
+        &workbook_snap,
+        Some(domain_types::RoundTripContext::default()),
+    )
+    .expect("assemble engine")
+}
+
+fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComputeEngine {
+    let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
+    let mut storage = crate::storage::YrsStorage::new();
+    let id_map = storage
+        .hydrate_from_parse_output(output, &mut allocator)
+        .expect("hydrate parse output");
+    let workbook_snap = crate::import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
+        output,
+        Some(&id_map),
+        &mut allocator,
+    );
+
+    assemble_engine_from_parse_output_storage(storage, workbook_snap)
+}
+
+fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {
+    use crate::storage::infra::hydration::{
+        DefaultIdAllocator, HydrationIdMap, allocate_sheet_ids,
+    };
+
+    let mut allocator = DefaultIdAllocator::new();
+    let allocations: Vec<_> = output
+        .sheets
+        .iter()
+        .map(|sheet| allocate_sheet_ids(sheet, &mut allocator))
+        .collect();
+
+    let mut id_map = HydrationIdMap::default();
+    for alloc in &allocations {
+        id_map.sheet_ids.push(alloc.sheet_id);
+        id_map.cell_ids.push(alloc.cell_ids.clone());
+        id_map.row_ids.push(alloc.row_ids.clone());
+        id_map.col_ids.push(alloc.col_ids.clone());
+        for identity in &alloc.identity_only_cells {
+            id_map.identity_only_cells.push((
+                alloc.sheet_id,
+                identity.cell_id,
+                identity.row,
+                identity.col,
+            ));
+        }
+    }
+
+    let workbook_snap = crate::import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
+        output,
+        Some(&id_map),
+        &mut allocator,
+    );
+    let ranged_positions = output
+        .sheets
+        .iter()
+        .map(|_| std::collections::HashSet::new())
+        .collect::<Vec<_>>();
+    let range_data_per_sheet = workbook_snap
+        .sheets
+        .iter()
+        .map(|sheet| sheet.ranges.clone())
+        .collect::<Vec<_>>();
+    let range_style_positions = output
+        .sheets
+        .iter()
+        .map(|_| std::collections::HashSet::new())
+        .collect::<Vec<_>>();
+    let range_styles_per_sheet = output.sheets.iter().map(|_| Vec::new()).collect::<Vec<_>>();
+
+    let mut storage = crate::storage::YrsStorage::new();
+    storage
+        .hydrate_from_parse_output_with_ranges(
+            output,
+            &allocations,
+            &ranged_positions,
+            &range_style_positions,
+            &range_data_per_sheet,
+            &range_styles_per_sheet,
+            &mut allocator,
+        )
+        .expect("hydrate ranged parse output");
+
+    assemble_engine_from_parse_output_storage(storage, workbook_snap)
+}
+
+// -------------------------------------------------------------------
+// Test: XLSX export round-trip -- export then re-parse and verify contents
+// -------------------------------------------------------------------
+
+#[test]
+fn test_xlsx_export_roundtrip() {
+    // 1. Create engine from a snapshot with diverse cell types
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "RoundTrip".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                // A1: number
+                CellData {
+                    cell_id: "a0000000-0000-0000-0000-000000000001".to_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Number(FiniteF64::must(42.5)),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                // B1: text
+                CellData {
+                    cell_id: "a0000000-0000-0000-0000-000000000002".to_string(),
+                    row: 0,
+                    col: 1,
+                    value: CellValue::Text("Hello".into()),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                // A2: boolean
+                CellData {
+                    cell_id: "a0000000-0000-0000-0000-000000000003".to_string(),
+                    row: 1,
+                    col: 0,
+                    value: CellValue::Boolean(true),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                // B2: formula =1+2 (cached value 0, will be recalculated)
+                CellData {
+                    cell_id: "a0000000-0000-0000-0000-000000000004".to_string(),
+                    row: 1,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::must(0.0)),
+                    formula: Some("=1+2".to_string()),
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+
+    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    // 2. Add a merge region: A3:B3 (row=2, col 0..1)
+    let merge_result = engine.merge_range(&sid, 2, 0, 2, 1);
+    assert!(merge_result.is_ok(), "merge_range should succeed");
+
+    // 3. Export to XLSX bytes
+    let xlsx_bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("export_to_xlsx_bytes should succeed");
+    assert!(!xlsx_bytes.is_empty(), "exported bytes should be non-empty");
+
+    // 4. Re-parse the exported XLSX
+    let parsed = xlsx_api::parse(&xlsx_bytes).expect("re-parsing exported XLSX should succeed");
+
+    // 5. Verify sheet count and name (ParseOutput uses domain_types)
+    assert_eq!(
+        parsed.output.sheets.len(),
+        1,
+        "should have exactly one sheet"
+    );
+    let sheet = &parsed.output.sheets[0];
+    assert_eq!(
+        sheet.name, "RoundTrip",
+        "sheet name should survive round-trip"
+    );
+
+    // 6. Verify cell count -- at least our 4 data cells
+    assert!(
+        sheet.cells.len() >= 4,
+        "should have at least 4 cells, got {}",
+        sheet.cells.len()
+    );
+
+    // Build a lookup by (row, col) for easier assertions
+    let cell_map: std::collections::HashMap<(u32, u32), &domain_types::CellData> =
+        sheet.cells.iter().map(|c| ((c.row, c.col), c)).collect();
+
+    // A1: number 42.5
+    let a1 = cell_map.get(&(0, 0)).expect("A1 should exist");
+    match &a1.value {
+        value_types::CellValue::Number(n) => {
+            assert!((n.get() - 42.5).abs() < 0.001, "A1 should be 42.5")
+        }
+        other => panic!("A1 should be Number, got {:?}", other),
+    }
+
+    // B1: text "Hello"
+    let b1 = cell_map.get(&(0, 1)).expect("B1 should exist");
+    match &b1.value {
+        value_types::CellValue::Text(s) => assert_eq!(&**s, "Hello"),
+        other => panic!("B1 should be Text, got {:?}", other),
+    }
+
+    // A2: boolean true
+    let a2 = cell_map.get(&(1, 0)).expect("A2 should exist");
+    match &a2.value {
+        value_types::CellValue::Boolean(b) => assert!(*b, "A2 should be true"),
+        other => panic!("A2 should be Boolean, got {:?}", other),
+    }
+
+    // B2: formula =1+2 with computed value 3
+    let b2 = cell_map.get(&(1, 1)).expect("B2 should exist");
+    assert_eq!(
+        b2.formula.as_deref(),
+        Some("1+2"),
+        "B2 should preserve formula '1+2' (export strips '=' prefix)"
+    );
+
+    // 7. Verify merge region A3:B3
+    assert!(
+        !sheet.merges.is_empty(),
+        "should have at least one merge region"
+    );
+    let merge = &sheet.merges[0];
+    assert_eq!(merge.start_row, 2, "merge start_row should be 2");
+    assert_eq!(merge.start_col, 0, "merge start_col should be 0");
+    assert_eq!(merge.end_row, 2, "merge end_row should be 2");
+    assert_eq!(merge.end_col, 1, "merge end_col should be 1");
+}
+
+// -------------------------------------------------------------------
+// Test: XLSX export produces valid, re-parseable bytes from simple_snapshot
+// -------------------------------------------------------------------
+
+#[test]
+fn test_xlsx_export_simple_snapshot_reparseable() {
+    // 1. Create engine from the standard simple_snapshot (A1=10, B1=20, A2==A1+B1)
+    let snap = simple_snapshot();
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    // 2. Export to XLSX bytes
+    let xlsx_bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("export should succeed");
+    assert!(xlsx_bytes.len() > 100, "XLSX output should be non-trivial");
+
+    // 3. Re-parse the exported bytes
+    let parsed = xlsx_api::parse(&xlsx_bytes).expect("re-parsing exported XLSX should succeed");
+
+    // 4. Verify structure (ParseOutput uses domain_types)
+    assert_eq!(parsed.output.sheets.len(), 1);
+    let sheet = &parsed.output.sheets[0];
+    assert_eq!(sheet.name, "Sheet1");
+
+    // 5. Verify cells
+    assert_eq!(sheet.cells.len(), 3, "should have 3 cells (A1, B1, A2)");
+
+    let cell_map: std::collections::HashMap<(u32, u32), &domain_types::CellData> =
+        sheet.cells.iter().map(|c| ((c.row, c.col), c)).collect();
+
+    // A1 = 10
+    let a1 = cell_map.get(&(0, 0)).expect("A1 should exist");
+    match &a1.value {
+        value_types::CellValue::Number(n) => assert!((n.get() - 10.0).abs() < 0.001),
+        other => panic!("A1 should be Number(10), got {:?}", other),
+    }
+
+    // B1 = 20
+    let b1 = cell_map.get(&(0, 1)).expect("B1 should exist");
+    match &b1.value {
+        value_types::CellValue::Number(n) => assert!((n.get() - 20.0).abs() < 0.001),
+        other => panic!("B1 should be Number(20), got {:?}", other),
+    }
+
+    // A2 = =A1+B1, computed value 30
+    let a2 = cell_map.get(&(1, 0)).expect("A2 should exist");
+    assert_eq!(a2.formula.as_deref(), Some("A1+B1"));
+}
+
+fn range_export_row_id(row: u32) -> RowId {
+    RowId::from_raw((row + 1) as u128)
+}
+
+fn range_export_col_id(rows: u32, col: u32) -> ColId {
+    ColId::from_raw((rows + col + 1) as u128)
+}
+
+fn range_export_snapshot() -> WorkbookSnapshot {
+    let rows = 4;
+    let cols = 3;
+    let row_ids: Vec<RowId> = (0..rows).map(range_export_row_id).collect();
+    let col_ids: Vec<ColId> = (0..cols)
+        .map(|col| range_export_col_id(rows, col))
+        .collect();
+    let mut payload = Vec::new();
+    for row in 0..rows {
+        for col in 0..cols {
+            let value = (row * 10 + col + 1) as f64;
+            payload.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+
+    WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "RangeExport".to_string(),
+            rows,
+            cols,
+            cells: vec![],
+            ranges: vec![RangeData {
+                range_id: RangeId::from_uuid_str("b2000000-0000-4000-8000-000000000001").unwrap(),
+                kind: RangeKind::Data,
+                anchor: RangeAnchor::Elastic {
+                    start_row: row_ids[0],
+                    end_row: row_ids[(rows - 1) as usize],
+                    start_col: col_ids[0],
+                    end_col: col_ids[(cols - 1) as usize],
+                },
+                encoding: PayloadEncoding::F64Le,
+                payload,
+                row_axis: None,
+                col_axis: None,
+                row_ids,
+                col_ids,
+            }],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    }
+}
+
+fn exported_cell_map(
+    engine: &YrsComputeEngine,
+) -> std::collections::HashMap<(u32, u32), domain_types::CellData> {
+    let exported = engine
+        .export_to_parse_output()
+        .expect("range-backed export should succeed")
+        .parse_output;
+    exported.sheets[0]
+        .cells
+        .iter()
+        .cloned()
+        .map(|cell| ((cell.row, cell.col), cell))
+        .collect()
+}
+
+fn assert_exported_number(
+    cells: &std::collections::HashMap<(u32, u32), domain_types::CellData>,
+    row: u32,
+    col: u32,
+    expected: f64,
+) {
+    let cell = cells
+        .get(&(row, col))
+        .unwrap_or_else(|| panic!("expected exported cell at ({row}, {col})"));
+    match &cell.value {
+        CellValue::Number(n) => assert!(
+            (n.get() - expected).abs() < 0.001,
+            "expected ({row}, {col}) to export {expected}, got {}",
+            n.get()
+        ),
+        other => panic!("expected ({row}, {col}) to be Number, got {other:?}"),
+    }
+}
+
+#[test]
+fn range_backed_defined_name_exports_without_virtual_cell_ref() {
+    let rows = 400;
+    let cols = 8;
+    let mut cells = Vec::with_capacity((rows * cols) as usize);
+    for row in 0..rows {
+        for col in 0..cols {
+            cells.push(domain_types::CellData {
+                row,
+                col,
+                value: CellValue::Number(FiniteF64::must((row * 10 + col) as f64)),
+                ..Default::default()
+            });
+        }
+    }
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Proppant Inventory".to_string(),
+            rows,
+            cols,
+            cells,
+            dimensions: SheetDimensions::default(),
+            ..Default::default()
+        }],
+        named_ranges: vec![domain_types::NamedRange {
+            name: "_xlnm.Print_Area".to_string(),
+            refers_to: "'Proppant Inventory'!$A$374:$H$377".to_string(),
+            local_sheet_id: Some(0),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_with_ranges(&input);
+    let exported = engine
+        .export_to_parse_output()
+        .expect("range-backed defined-name export should succeed")
+        .parse_output;
+
+    assert_eq!(exported.named_ranges.len(), 1);
+    assert_eq!(exported.named_ranges[0].name, "_xlnm.Print_Area");
+    assert_eq!(exported.named_ranges[0].local_sheet_id, Some(0));
+    assert_eq!(
+        exported.named_ranges[0].refers_to,
+        "'Proppant Inventory'!$A$374:$H$377"
+    );
+}
+
+#[test]
+fn test_xlsx_export_streams_range_backed_cells_without_grid_entries() {
+    let (engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let cells = exported_cell_map(&engine);
+
+    assert_eq!(cells.len(), 12, "all range payload cells should export");
+    assert_exported_number(&cells, 0, 0, 1.0);
+    assert_exported_number(&cells, 2, 1, 22.0);
+    assert_exported_number(&cells, 3, 2, 33.0);
+}
+
+#[test]
+fn test_xlsx_export_range_override_matches_dense_materialization() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let sid = sheet_id();
+    let override_id = CellId::virtual_at(sid, range_export_row_id(1), range_export_col_id(4, 1));
+
+    engine
+        .set_cell(
+            &sid,
+            override_id,
+            1,
+            1,
+            crate::bridge_types::CellInput::Parse { text: "999".into() },
+        )
+        .expect("range-backed override edit should succeed");
+
+    let dense_value = engine
+        .mirror()
+        .get_sheet(&sid)
+        .and_then(|sheet| sheet.get_column_slice(1))
+        .and_then(|col| col.get(1))
+        .cloned()
+        .expect("dense column materialization should include override");
+    assert_eq!(dense_value, CellValue::Number(FiniteF64::must(999.0)));
+
+    let cells = exported_cell_map(&engine);
+    assert_exported_number(&cells, 1, 1, 999.0);
+}
+
+#[test]
+fn test_xlsx_export_blank_range_override_suppresses_payload_value() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let sid = sheet_id();
+    let override_id = CellId::virtual_at(sid, range_export_row_id(2), range_export_col_id(4, 2));
+
+    engine
+        .set_cell(
+            &sid,
+            override_id,
+            2,
+            2,
+            crate::bridge_types::CellInput::Clear,
+        )
+        .expect("range-backed clear override should succeed");
+
+    let dense_value = engine
+        .mirror()
+        .get_sheet(&sid)
+        .and_then(|sheet| sheet.get_column_slice(2))
+        .and_then(|col| col.get(2))
+        .cloned()
+        .expect("dense column materialization should include cleared override");
+    assert_eq!(dense_value, CellValue::Null);
+
+    let cells = exported_cell_map(&engine);
+    let cleared = cells
+        .get(&(2, 2))
+        .expect("cleared override should export as an explicit blank cell");
+    assert_eq!(cleared.value, CellValue::Null);
+    assert!(cleared.formula.is_none());
+}
+
+#[test]
+fn worksheet_sort_state_survives_normal_parse_output_hydration_export() {
+    let input = worksheet_sort_state_parse_output(false);
+    let engine = engine_from_parse_output_normal(&input);
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+
+    assert_eq!(exported.sheets[0].sort_state, input.sheets[0].sort_state);
+    assert!(
+        exported.sheets[0].auto_filter.is_none(),
+        "standalone worksheet sort state must not synthesize an autoFilter"
+    );
+}
+
+#[test]
+fn worksheet_sort_state_survives_range_aware_parse_output_hydration_export() {
+    let input = worksheet_sort_state_parse_output(false);
+    let engine = engine_from_parse_output_with_ranges(&input);
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+
+    assert_eq!(exported.sheets[0].sort_state, input.sheets[0].sort_state);
+    assert!(
+        exported.sheets[0].auto_filter.is_none(),
+        "range-aware hydration must keep worksheet sort state out of runtime filters"
+    );
+}
+
+#[test]
+fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter_sort() {
+    let input = worksheet_sort_state_parse_output(true);
+    let input_bytes = xlsx_api::export_from_parse_output(&input, None).expect("write input xlsx");
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes(&input_bytes, false)
+        .expect("import xlsx bytes");
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let parsed = xlsx_api::parse(&exported_bytes).expect("parse exported xlsx");
+
+    let sheet = &parsed.output.sheets[0];
+    assert_eq!(sheet.sort_state, Some(worksheet_sort_state()));
+    assert_eq!(
+        sheet.auto_filter.as_ref().and_then(|af| af.sort.clone()),
+        Some(nested_auto_filter_sort_state()),
+        "nested autoFilter sort state must remain nested, not replace worksheet sort state"
+    );
+}
+
+#[test]
+fn test_parse_output_export_preserves_yrs_data_table_regions() {
+    let row_input = CellRef::Positional {
+        sheet: sheet_id(),
+        row: 0,
+        col: 0,
+    };
+    let col_input = CellRef::Positional {
+        sheet: sheet_id(),
+        row: 0,
+        col: 1,
+    };
+    let mut snap = simple_snapshot();
+    snap.data_table_regions.push(DataTableRegionDef {
+        sheet: sheet_id().to_uuid_string(),
+        start_row: 1,
+        start_col: 1,
+        end_row: 3,
+        end_col: 3,
+        row_input_ref: Some(row_input),
+        col_input_ref: Some(col_input),
+        ooxml_flags: None,
+    });
+
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+
+    assert_eq!(
+        exported.data_table_regions.len(),
+        1,
+        "Yrs-backed ParseOutput export must carry data table regions"
+    );
+    let region = &exported.data_table_regions[0];
+    assert_eq!(region.sheet_index, 0);
+    assert_eq!((region.start_row, region.start_col), (1, 1));
+    assert_eq!((region.end_row, region.end_col), (3, 3));
+    assert_eq!(region.row_input_ref, Some(row_input));
+    assert_eq!(region.col_input_ref, Some(col_input));
+}
+
+#[test]
+fn test_parse_output_export_preserves_data_table_ooxml_flags() {
+    let row_input = CellRef::Positional {
+        sheet: sheet_id(),
+        row: 0,
+        col: 0,
+    };
+    let col_input = CellRef::Positional {
+        sheet: sheet_id(),
+        row: 0,
+        col: 1,
+    };
+    let mut snap = simple_snapshot();
+    snap.data_table_regions.push(DataTableRegionDef {
+        sheet: sheet_id().to_uuid_string(),
+        start_row: 1,
+        start_col: 1,
+        end_row: 3,
+        end_col: 3,
+        row_input_ref: Some(row_input),
+        col_input_ref: Some(col_input),
+        ooxml_flags: Some(DataTableOoxmlFlags {
+            r1: None,
+            r2: None,
+            aca: true,
+            ca: true,
+            bx: true,
+            dt2d: true,
+            dtr: true,
+            del1: true,
+            del2: true,
+        }),
+    });
+
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let exported = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+    let flags = exported.data_table_regions[0]
+        .ooxml_flags
+        .as_ref()
+        .expect("data table OOXML flags should export from canonical Yrs metadata");
+
+    assert!(flags.aca);
+    assert!(flags.ca);
+    assert!(flags.bx);
+    assert!(flags.dt2d);
+    assert!(flags.dtr);
+    assert!(flags.del1);
+    assert!(flags.del2);
+}

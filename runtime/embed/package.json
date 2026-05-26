@@ -1,0 +1,108 @@
+{
+  "name": "@mog-sdk/embed",
+  "version": "0.6.0",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Embeddable read-only Mog spreadsheet component",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./web-component": {
+      "import": {
+        "types": "./dist/web-component.d.ts",
+        "default": "./dist/web-component.js"
+      },
+      "require": {
+        "types": "./dist/web-component.d.cts",
+        "default": "./dist/web-component.cjs"
+      }
+    },
+    "./config": {
+      "import": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.js"
+      },
+      "require": {
+        "types": "./dist/config.d.cts",
+        "default": "./dist/config.cjs"
+      }
+    },
+    "./internal/views-host": {
+      "types": "./dist/internal/views-host.d.ts",
+      "import": "./dist/internal/views-host.js",
+      "require": "./dist/internal/views-host.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && node scripts/rollup-public-types.mjs && node scripts/copy-wasm-assets.mjs",
+    "build:dev": "tsup --no-dts",
+    "test": "jest --config jest.config.cjs",
+    "typecheck": "tsc -b .",
+    "check-types": "tsc -b .",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@mog-sdk/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@mog-sdk/types-host": "workspace:*",
+    "@microsoft/api-extractor": "^7.58.7",
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog-sdk/kernel": "workspace:*",
+    "@mog-sdk/sheet-view": "workspace:*",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.19.39",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "exceljs": "^4.4.0",
+    "jest": "^29.7.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ts-jest": "^29.1.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">= 18"
+  }
+}

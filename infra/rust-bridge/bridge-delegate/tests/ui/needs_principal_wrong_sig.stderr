@@ -1,0 +1,16 @@
+error: method add_policy: needs_principal requires trailing param `caller: &Principal`
+  --> tests/ui/needs_principal_wrong_sig.rs:27:13
+   |
+27 |               method write add_policy {
+   |               ^^^^^^
+...
+37 | / bridge_delegate::delegate!(
+38 | |     target = StubService,
+39 | |     dispatch = dispatch,
+40 | |     gated = true,
+41 | |     skip_default_imports = true,
+42 | |     crate::__desc_needs_principal_wrong_sig,
+43 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_needs_principal_wrong_sig` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

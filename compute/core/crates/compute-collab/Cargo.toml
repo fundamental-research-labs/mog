@@ -1,0 +1,13 @@
+[package]
+name = "compute-collab"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Yrs sync protocol for collaborative spreadsheet editing"
+
+[dependencies]
+yrs = { workspace = true }
+thiserror = { workspace = true }

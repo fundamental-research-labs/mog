@@ -1,0 +1,21 @@
+[package]
+name = "compute-relational"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Relational compute engine — GROUP BY, aggregation, window functions over tabular data"
+
+[dependencies]
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+compute-stats = { path = "../compute-stats" }
+pivot-types = { path = "../types/pivot-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]

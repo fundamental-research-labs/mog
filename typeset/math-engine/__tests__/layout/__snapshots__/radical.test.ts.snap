@@ -1,0 +1,9 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Radical Layout snapshot: simple radical layout 1`] = `
+{
+  "baseline": 7,
+  "height": 7,
+  "width": 14,
+}
+`;

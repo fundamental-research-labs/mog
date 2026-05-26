@@ -1,0 +1,53 @@
+{
+  "name": "@mog/compute-core-napi",
+  "version": "0.0.1",
+  "license": "MIT",
+  "files": [
+    "src",
+    "*.node"
+  ],
+  "private": true,
+  "main": "compute-core-napi.node",
+  "scripts": {
+    "build": "napi build --profile fast --manifest-path ../../Cargo.toml -p compute-core-napi",
+    "build:release": "napi build --release --manifest-path ../../Cargo.toml -p compute-core-napi",
+    "build:debug": "napi build --manifest-path ../../Cargo.toml -p compute-core-napi",
+    "smoke-test": "node smoke-test.mjs"
+  },
+  "napi": {
+    "name": "compute-core-napi",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
+        "x86_64-pc-windows-msvc"
+      ]
+    },
+    "package": {
+      "aarch64-apple-darwin": "@mog-sdk/darwin-arm64",
+      "x86_64-apple-darwin": "@mog-sdk/darwin-x64",
+      "x86_64-unknown-linux-gnu": "@mog-sdk/linux-x64-gnu",
+      "aarch64-unknown-linux-gnu": "@mog-sdk/linux-arm64-gnu",
+      "x86_64-unknown-linux-musl": "@mog-sdk/linux-x64-musl",
+      "aarch64-unknown-linux-musl": "@mog-sdk/linux-arm64-musl",
+      "x86_64-pc-windows-msvc": "@mog-sdk/win32-x64-msvc"
+    }
+  },
+  "optionalDependencies": {
+    "@mog-sdk/darwin-arm64": "workspace:*",
+    "@mog-sdk/darwin-x64": "workspace:*",
+    "@mog-sdk/linux-arm64-gnu": "workspace:*",
+    "@mog-sdk/linux-arm64-musl": "workspace:*",
+    "@mog-sdk/linux-x64-gnu": "workspace:*",
+    "@mog-sdk/linux-x64-musl": "workspace:*",
+    "@mog-sdk/win32-x64-msvc": "workspace:*"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.6.2"
+  }
+}

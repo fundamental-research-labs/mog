@@ -1,0 +1,24 @@
+[package]
+name = "compute-solver"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Domain-agnostic numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution"
+
+[dependencies]
+rand = { version = "0.8", default-features = false, features = ["std_rng"] }
+rand_chacha = "0.3"
+serde = { version = "1", features = ["derive"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
+[dev-dependencies]
+proptest = "1"
+
+[features]
+default = []
+serde = ["dep:serde"]

@@ -1,0 +1,149 @@
+{
+  "name": "@mog/types-machines",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/machines/index.ts",
+      "types": "./dist/machines/index.d.ts",
+      "import": "./dist/machines/index.js"
+    },
+    "./actors": {
+      "development": "./src/actors/index.ts",
+      "types": "./dist/actors/index.d.ts",
+      "import": "./dist/actors/index.js"
+    },
+    "./actors/chart": {
+      "development": "./src/actors/chart.ts",
+      "types": "./dist/actors/chart.d.ts",
+      "import": "./dist/actors/chart.js"
+    },
+    "./actors/clipboard": {
+      "development": "./src/actors/clipboard.ts",
+      "types": "./dist/actors/clipboard.d.ts",
+      "import": "./dist/actors/clipboard.js"
+    },
+    "./actors/commands": {
+      "development": "./src/actors/commands.ts",
+      "types": "./dist/actors/commands.d.ts",
+      "import": "./dist/actors/commands.js"
+    },
+    "./actors/comment": {
+      "development": "./src/actors/comment.ts",
+      "types": "./dist/actors/comment.d.ts",
+      "import": "./dist/actors/comment.js"
+    },
+    "./actors/draw-border": {
+      "development": "./src/actors/draw-border.ts",
+      "types": "./dist/actors/draw-border.d.ts",
+      "import": "./dist/actors/draw-border.js"
+    },
+    "./actors/editor": {
+      "development": "./src/actors/editor.ts",
+      "types": "./dist/actors/editor.d.ts",
+      "import": "./dist/actors/editor.js"
+    },
+    "./actors/find-replace": {
+      "development": "./src/actors/find-replace.ts",
+      "types": "./dist/actors/find-replace.d.ts",
+      "import": "./dist/actors/find-replace.js"
+    },
+    "./actors/focus": {
+      "development": "./src/actors/focus.ts",
+      "types": "./dist/actors/focus.d.ts",
+      "import": "./dist/actors/focus.js"
+    },
+    "./actors/input": {
+      "development": "./src/actors/input.ts",
+      "types": "./dist/actors/input.d.ts",
+      "import": "./dist/actors/input.js"
+    },
+    "./actors/object": {
+      "development": "./src/actors/object.ts",
+      "types": "./dist/actors/object.d.ts",
+      "import": "./dist/actors/object.js"
+    },
+    "./actors/object-interaction": {
+      "development": "./src/actors/object-interaction.ts",
+      "types": "./dist/actors/object-interaction.d.ts",
+      "import": "./dist/actors/object-interaction.js"
+    },
+    "./actors/page-break": {
+      "development": "./src/actors/page-break.ts",
+      "types": "./dist/actors/page-break.d.ts",
+      "import": "./dist/actors/page-break.js"
+    },
+    "./actors/pane-focus": {
+      "development": "./src/actors/pane-focus.ts",
+      "types": "./dist/actors/pane-focus.d.ts",
+      "import": "./dist/actors/pane-focus.js"
+    },
+    "./actors/renderer": {
+      "development": "./src/actors/renderer.ts",
+      "types": "./dist/actors/renderer.d.ts",
+      "import": "./dist/actors/renderer.js"
+    },
+    "./actors/selection": {
+      "development": "./src/actors/selection.ts",
+      "types": "./dist/actors/selection.d.ts",
+      "import": "./dist/actors/selection.js"
+    },
+    "./actors/slicer": {
+      "development": "./src/actors/slicer.ts",
+      "types": "./dist/actors/slicer.d.ts",
+      "import": "./dist/actors/slicer.js"
+    },
+    "./actors/diagram": {
+      "development": "./src/actors/diagram.ts",
+      "types": "./dist/actors/diagram.d.ts",
+      "import": "./dist/actors/diagram.js"
+    },
+    "./machines": {
+      "development": "./src/machines/index.ts",
+      "types": "./dist/machines/index.d.ts",
+      "import": "./dist/machines/index.js"
+    },
+    "./machines/snapshots": {
+      "development": "./src/machines/snapshots.ts",
+      "types": "./dist/machines/snapshots.d.ts",
+      "import": "./dist/machines/snapshots.js"
+    },
+    "./machines/types": {
+      "development": "./src/machines/types.ts",
+      "types": "./dist/machines/types.d.ts",
+      "import": "./dist/machines/types.js"
+    },
+    "./selectors": {
+      "development": "./src/selectors/index.ts",
+      "types": "./dist/selectors/index.d.ts",
+      "import": "./dist/selectors/index.js"
+    },
+    "./selectors/diagram": {
+      "development": "./src/selectors/diagram.ts",
+      "types": "./dist/selectors/diagram.d.ts",
+      "import": "./dist/selectors/diagram.js"
+    }
+  },
+  "description": "State-machine snapshots (SelectionSnapshot, EditorSnapshot, ClipboardSnapshot), actor payload contracts (chart, clipboard, editor, find-replace, object-interaction, page-break, renderer, selection, slicer, diagram, …), and selector shapes. Tier 2; composes over @mog/types-{core,commands,data,document,editor,objects,viewport} + @mog/types-events.",
+  "dependencies": {
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-editor": "workspace:*",
+    "@mog/types-events": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

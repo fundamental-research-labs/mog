@@ -1,0 +1,42 @@
+{
+  "name": "@mog-sdk/wasm",
+  "version": "0.6.0",
+  "description": "Mog compute engine for browsers — WASM build of compute-core with full formula, formatting, and XLSX support",
+  "type": "module",
+  "main": "compute_core_wasm.js",
+  "types": "compute_core_wasm.d.ts",
+  "files": [
+    "compute_core_wasm.js",
+    "compute_core_wasm_bg.wasm",
+    "compute_core_wasm.d.ts",
+    "compute_core_wasm_bg.wasm.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./compute_core_wasm.d.ts",
+      "import": "./compute_core_wasm.js",
+      "default": "./compute_core_wasm.js"
+    },
+    "./wasm": "./compute_core_wasm_bg.wasm"
+  },
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "wasm",
+    "formula",
+    "compute",
+    "browser"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog-internal",
+    "directory": "compute/wasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

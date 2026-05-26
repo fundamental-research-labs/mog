@@ -1,0 +1,19 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Delimiter Layout — TeXbook Rule 19 snapshot: delimiter layout with null delimiters 1`] = `
+{
+  "baseline": 5.17,
+  "childCount": 1,
+  "height": 5.17,
+  "width": 9.74,
+}
+`;
+
+exports[`Delimiter Layout — TeXbook Rule 19 snapshot: delimiter layout with parentheses 1`] = `
+{
+  "baseline": 5.17,
+  "childCount": 1,
+  "height": 5.17,
+  "width": 18.06,
+}
+`;

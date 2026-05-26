@@ -1,0 +1,194 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/spreadsheet"
+    },
+    {
+      "path": "./canvas/drawing-canvas"
+    },
+    {
+      "path": "./canvas/drawing/engine"
+    },
+    {
+      "path": "./canvas/drawing/geometry"
+    },
+    {
+      "path": "./canvas/drawing/ink"
+    },
+    {
+      "path": "./canvas/drawing/shapes"
+    },
+    {
+      "path": "./canvas/drawing/diagram"
+    },
+    {
+      "path": "./canvas/drawing/text-effects"
+    },
+    {
+      "path": "./canvas/engine"
+    },
+    {
+      "path": "./canvas/grid-canvas"
+    },
+    {
+      "path": "./canvas/grid-renderer"
+    },
+    {
+      "path": "./canvas/overlay"
+    },
+    {
+      "path": "./canvas/spatial"
+    },
+    {
+      "path": "./charts"
+    },
+    {
+      "path": "./contracts"
+    },
+    {
+      "path": "./contracts/runtime-services"
+    },
+    {
+      "path": "./file-io/pdf/graphics"
+    },
+    {
+      "path": "./file-io/pdf/layout"
+    },
+    {
+      "path": "./file-io/print-export"
+    },
+    {
+      "path": "./file-io/xlsx/bridge"
+    },
+    {
+      "path": "./file-io/xlsx/tooling"
+    },
+    {
+      "path": "./infra/culture"
+    },
+    {
+      "path": "./infra/env"
+    },
+    {
+      "path": "./infra/icons"
+    },
+    {
+      "path": "./infra/platform"
+    },
+    {
+      "path": "./infra/platform/memory"
+    },
+    {
+      "path": "./infra/rust-bridge/bridge-ts"
+    },
+    {
+      "path": "./infra/rust-bridge/client"
+    },
+    {
+      "path": "./infra/transport"
+    },
+    {
+      "path": "./kernel"
+    },
+    {
+      "path": "./kernel/host-internal"
+    },
+    {
+      "path": "./runtime/embed"
+    },
+    {
+      "path": "./runtime/sdk"
+    },
+    {
+      "path": "./runtime/spreadsheet-app"
+    },
+    {
+      "path": "./shell"
+    },
+    {
+      "path": "./spreadsheet-utils"
+    },
+    {
+      "path": "./table-engine"
+    },
+    {
+      "path": "./types/api"
+    },
+    {
+      "path": "./types/app-platform"
+    },
+    {
+      "path": "./types/bridges"
+    },
+    {
+      "path": "./types/commands"
+    },
+    {
+      "path": "./types/connections"
+    },
+    {
+      "path": "./types/core"
+    },
+    {
+      "path": "./types/culture"
+    },
+    {
+      "path": "./types/data"
+    },
+    {
+      "path": "./types/document"
+    },
+    {
+      "path": "./types/editor"
+    },
+    {
+      "path": "./types/events"
+    },
+    {
+      "path": "./types/formatting"
+    },
+    {
+      "path": "./types/host"
+    },
+    {
+      "path": "./types/machines"
+    },
+    {
+      "path": "./types/objects"
+    },
+    {
+      "path": "./types/rendering"
+    },
+    {
+      "path": "./types/viewport"
+    },
+    {
+      "path": "./typeset/math-engine"
+    },
+    {
+      "path": "./ui"
+    },
+    {
+      "path": "./views/sheet-view"
+    }
+  ]
+}

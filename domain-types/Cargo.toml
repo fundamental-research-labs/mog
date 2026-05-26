@@ -1,0 +1,34 @@
+[package]
+name = "domain-types"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors = ["Shortcut Team"]
+description = "Shared domain types for XLSX pipeline: parser produces, Yrs stores (structured), writer consumes. Single source of truth."
+
+[features]
+default = ["yrs"]
+yrs = ["dep:yrs"]
+
+[dependencies]
+# Foundation types
+value-types = { path = "../compute/core/crates/types/value-types" }
+cell-types = { path = "../compute/core/crates/types/cell-types" }
+# Typed cell references (CellRef) for data-table input refs (typed data-table input refs)
+formula-types = { path = "../compute/core/crates/types/formula-types" }
+# OOXML vocabulary (for lossless style round-tripping)
+ooxml-types = { path = "../file-io/ooxml/types" }
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Schema description derive macro (DescribeSchema)
+bridge-types = { path = "../infra/rust-bridge/bridge-types" }
+# Observability — Yrs read paths log unknown OOXML tokens (round-D follow-up)
+tracing = { workspace = true }
+
+# CRDT storage (feature-gated for environments without Yrs)
+yrs = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+yrs = { workspace = true }

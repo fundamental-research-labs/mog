@@ -1,0 +1,19 @@
+[package]
+name = "compute-text-measurement"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Text measurement engine — rustybuzz-based text shaping for autofit, PDF export"
+
+[dependencies]
+# Text shaping (HarfBuzz port — glyph selection + advances for all scripts)
+rustybuzz = "0.20"
+# Fast non-cryptographic hash (cache keys)
+rustc-hash = "2"
+# Ergonomic error types
+thiserror = { workspace = true }
+
+[dev-dependencies]

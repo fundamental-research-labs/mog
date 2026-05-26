@@ -1,0 +1,152 @@
+{
+  "name": "@mog/spreadsheet-utils",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./a1": {
+      "development": "./src/a1.ts",
+      "types": "./dist/a1.d.ts",
+      "import": "./dist/a1.js"
+    },
+    "./cell-identity": {
+      "development": "./src/cell-identity.ts",
+      "types": "./dist/cell-identity.d.ts",
+      "import": "./dist/cell-identity.js"
+    },
+    "./cells/cell-style": {
+      "development": "./src/cells/cell-style.ts",
+      "types": "./dist/cells/cell-style.d.ts",
+      "import": "./dist/cells/cell-style.js"
+    },
+    "./cells/formula-string": {
+      "development": "./src/cells/formula-string.ts",
+      "types": "./dist/cells/formula-string.d.ts",
+      "import": "./dist/cells/formula-string.js"
+    },
+    "./cf-presets": {
+      "development": "./src/cf-presets.ts",
+      "types": "./dist/cf-presets.d.ts",
+      "import": "./dist/cf-presets.js"
+    },
+    "./cf-range-utils": {
+      "development": "./src/cf-range-utils.ts",
+      "types": "./dist/cf-range-utils.d.ts",
+      "import": "./dist/cf-range-utils.js"
+    },
+    "./data/named-ranges": {
+      "development": "./src/data/named-ranges.ts",
+      "types": "./dist/data/named-ranges.d.ts",
+      "import": "./dist/data/named-ranges.js"
+    },
+    "./datetime": {
+      "development": "./src/datetime.ts",
+      "types": "./dist/datetime.d.ts",
+      "import": "./dist/datetime.js"
+    },
+    "./disposable": {
+      "development": "./src/disposable.ts",
+      "types": "./dist/disposable.d.ts",
+      "import": "./dist/disposable.js"
+    },
+    "./errors": {
+      "development": "./src/errors.ts",
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./formatting/theme": {
+      "development": "./src/formatting/theme.ts",
+      "types": "./dist/formatting/theme.d.ts",
+      "import": "./dist/formatting/theme.js"
+    },
+    "./function-catalog": {
+      "development": "./src/function-catalog.ts",
+      "types": "./dist/function-catalog.d.ts",
+      "import": "./dist/function-catalog.js"
+    },
+    "./function-registry": {
+      "development": "./src/function-registry.ts",
+      "types": "./dist/function-registry.d.ts",
+      "import": "./dist/function-registry.js"
+    },
+    "./ink/types": {
+      "development": "./src/ink/types.ts",
+      "types": "./dist/ink/types.d.ts",
+      "import": "./dist/ink/types.js"
+    },
+    "./machines/types": {
+      "development": "./src/machines/types.ts",
+      "types": "./dist/machines/types.d.ts",
+      "import": "./dist/machines/types.js"
+    },
+    "./number-formats": {
+      "development": "./src/number-formats/index.ts",
+      "types": "./dist/number-formats/index.d.ts",
+      "import": "./dist/number-formats/index.js"
+    },
+    "./objects/floating-objects": {
+      "development": "./src/objects/floating-objects.ts",
+      "types": "./dist/objects/floating-objects.d.ts",
+      "import": "./dist/objects/floating-objects.js"
+    },
+    "./protection": {
+      "development": "./src/protection.ts",
+      "types": "./dist/protection.d.ts",
+      "import": "./dist/protection.js"
+    },
+    "./range": {
+      "development": "./src/range.ts",
+      "types": "./dist/range.d.ts",
+      "import": "./dist/range.js"
+    },
+    "./rendering/constants": {
+      "development": "./src/rendering/constants.ts",
+      "types": "./dist/rendering/constants.d.ts",
+      "import": "./dist/rendering/constants.js"
+    },
+    "./rendering/coordinates": {
+      "development": "./src/rendering/coordinates.ts",
+      "types": "./dist/rendering/coordinates.d.ts",
+      "import": "./dist/rendering/coordinates.js"
+    },
+    "./result": {
+      "development": "./src/result.ts",
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js"
+    },
+    "./rich-text": {
+      "development": "./src/rich-text.ts",
+      "types": "./dist/rich-text.d.ts",
+      "import": "./dist/rich-text.js"
+    },
+    "./viewport/viewport-config": {
+      "development": "./src/viewport/viewport-config.ts",
+      "types": "./dist/viewport/viewport-config.d.ts",
+      "import": "./dist/viewport/viewport-config.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@mog/diagram-engine": "workspace:*",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "@types/jest": "^29.5.0",
+    "typescript": "^5.0.0"
+  }
+}

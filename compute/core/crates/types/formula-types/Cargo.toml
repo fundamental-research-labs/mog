@@ -1,0 +1,41 @@
+[package]
+name = "formula-types"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Foundation types for the compute engine (CellValue, CellError, CellId, etc.)"
+
+[dependencies]
+# Re-exported type crates
+value-types = { path = "../value-types" }
+cell-types = { path = "../cell-types" }
+workbook-types = { path = "../workbook-types" }
+
+# Serialization (IPC boundary)
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# UUID handling (CellId/SheetId string ↔ u128 at IPC boundary)
+uuid = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Fast non-cryptographic HashMap (FxHashMap — used in EvalValue::Lambda captured_scope)
+rustc-hash = "2"
+
+# High-performance float parsing (used in CellValue::coerce_to_number)
+fast-float = "0.2"
+
+# Date/time (Excel serial date <-> chrono::NaiveDate conversions)
+chrono = { workspace = true }
+
+# OOXML vocabulary types (enum↔string conversions for formatting, charts, CF)
+ooxml-types = { path = "../../../../../file-io/ooxml/types" }
+
+[dev-dependencies]
+# Drives the `tests/no_bare_f64_at_boundary.rs` build-time gate.
+finite-at-boundary-walker = { path = "../finite-at-boundary-walker" }

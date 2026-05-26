@@ -1,0 +1,15 @@
+[package]
+name = "bridge-napi-macros"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "Internal proc macros for bridge-napi"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+bridge-ir = { path = "../../bridge-ir" }

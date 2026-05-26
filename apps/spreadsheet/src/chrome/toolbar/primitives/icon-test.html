@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Icon Comparison</title>
+    <style>
+      body {
+        background: #2d2d2d;
+        display: flex;
+        gap: 40px;
+        padding: 40px;
+        align-items: center;
+        font-family: system-ui;
+      }
+      .icon-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .label {
+        color: #888;
+        font-size: 12px;
+      }
+      .icon-container {
+        background: #3d3d3d;
+        padding: 20px;
+        border-radius: 8px;
+      }
+      /* Scale up for easier comparison */
+      .icon-container svg {
+        width: 64px;
+        height: 64px;
+      }
+      .reference img {
+        width: 64px;
+        height: 64px;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="icon-box">
+      <div class="label">Reference (Excel)</div>
+      <div class="icon-container reference">
+        <img src="excel-wrap-text.png" alt="reference" />
+      </div>
+    </div>
+
+    <div class="icon-box">
+      <div class="label">My Attempt</div>
+      <div class="icon-container">
+        <svg viewBox="0 0 16 16" fill="none">
+          <!-- Letter "a" - tight kerning -->
+          <text
+            x="1"
+            y="5.5"
+            font-family="Segoe UI, Arial"
+            font-size="5.8"
+            font-weight="600"
+            fill="#5AAFEA"
+          >
+            a
+          </text>
+          <!-- Letter "b" - very close to a -->
+          <text
+            x="4.2"
+            y="5.5"
+            font-family="Segoe UI, Arial"
+            font-size="5.8"
+            font-weight="600"
+            fill="#5AAFEA"
+          >
+            b
+          </text>
+          <!-- Letter "c" - under a -->
+          <text
+            x="1"
+            y="12"
+            font-family="Segoe UI, Arial"
+            font-size="5.8"
+            font-weight="600"
+            fill="#5AAFEA"
+          >
+            c
+          </text>
+          <!-- Wrap arrow - starts at b height, smooth arc curving to left -->
+          <path
+            d="M7.8 3 L7.8 8.2 A 2.5 2.5 0 0 1 5.3 10.7 L4.8 10.7"
+            stroke="#5AAFEA"
+            stroke-width="1.1"
+            stroke-linecap="round"
+            fill="none"
+          />
+          <!-- Arrow head - horizontal chevron -->
+          <path
+            d="M6 9.5 L4.5 10.7 L6 11.9"
+            stroke="#5AAFEA"
+            stroke-width="1.1"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            fill="none"
+          />
+        </svg>
+      </div>
+    </div>
+  </body>
+</html>

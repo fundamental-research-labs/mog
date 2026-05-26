@@ -1,0 +1,77 @@
+{
+  "name": "@mog/types-bridges",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bridges": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./chart-bridge": {
+      "development": "./src/chart-bridge.ts",
+      "types": "./dist/chart-bridge.d.ts",
+      "import": "./dist/chart-bridge.js"
+    },
+    "./equation-bridge": {
+      "development": "./src/equation-bridge.ts",
+      "types": "./dist/equation-bridge.d.ts",
+      "import": "./dist/equation-bridge.js"
+    },
+    "./ink-recognition-bridge": {
+      "development": "./src/ink-recognition-bridge.ts",
+      "types": "./dist/ink-recognition-bridge.d.ts",
+      "import": "./dist/ink-recognition-bridge.js"
+    },
+    "./locale-bridge": {
+      "development": "./src/locale-bridge.ts",
+      "types": "./dist/locale-bridge.d.ts",
+      "import": "./dist/locale-bridge.js"
+    },
+    "./pivot-bridge": {
+      "development": "./src/pivot-bridge.ts",
+      "types": "./dist/pivot-bridge.d.ts",
+      "import": "./dist/pivot-bridge.js"
+    },
+    "./schema-bridge": {
+      "development": "./src/schema-bridge.ts",
+      "types": "./dist/schema-bridge.d.ts",
+      "import": "./dist/schema-bridge.js"
+    },
+    "./diagram-bridge": {
+      "development": "./src/diagram-bridge.ts",
+      "types": "./dist/diagram-bridge.d.ts",
+      "import": "./dist/diagram-bridge.js"
+    },
+    "./text-effect-rendering-bridge": {
+      "development": "./src/text-effect-rendering-bridge.ts",
+      "types": "./dist/text-effect-rendering-bridge.d.ts",
+      "import": "./dist/text-effect-rendering-bridge.js"
+    }
+  },
+  "description": "Bridge interfaces (chart, equation, ink-recognition, locale, pivot, schema, diagram, text-effects) — the adapter contracts between the host runtime and external engines. Tier 2; composes over @mog/types-{core,commands,culture,data,objects} and @mog/types-events (schema-bridge re-derives a type from ValidationRecalcAnnotationsEvent).",
+  "dependencies": {
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-culture": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog/types-events": "workspace:*",
+    "@mog/types-objects": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

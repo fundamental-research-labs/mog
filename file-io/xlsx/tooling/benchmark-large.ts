@@ -1,0 +1,563 @@
+/**
+ * XLSX Parser WASM Benchmark - Large Files Edition
+ *
+ * Tests performance at scale: 500K, 1M, and 5M cells
+ *
+ * Usage:
+ *   node --expose-gc --max-old-space-size=8192 --import tsx xlsx/tooling/benchmark-large.ts
+ *
+ * Metrics:
+ *   - Parse latency (mean, min, max, p95)
+ *   - Memory usage (peak, retained)
+ *   - Throughput (cells/second)
+ *   - Comparison with fast-xml-parser (optional, can be slow)
+ */
+
+import { XMLParser } from 'fast-xml-parser';
+import JSZip from 'jszip';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
+
+// Types for WASM module (bridge-generated parse_xlsx_full)
+interface FullParseResult {
+  readonly stats: {
+    readonly total_cells: number;
+    readonly total_sheets: number;
+    readonly parse_time_us: number;
+  };
+  readonly sheets: unknown[];
+}
+
+interface WasmModule {
+  parse_xlsx_full(xlsxData: Uint8Array): FullParseResult;
+  version(): string;
+}
+
+interface BenchmarkResult {
+  file: string;
+  fileSize: number;
+  cellCount: number;
+  sheetCount: number;
+  iterations: number;
+  latency: {
+    mean: number;
+    min: number;
+    max: number;
+    p95: number;
+    stdDev: number;
+  };
+  memory: {
+    peakHeapUsed: number;
+    retainedHeapUsed: number;
+  };
+  throughput: {
+    cellsPerSecond: number;
+    bytesPerSecond: number;
+  };
+}
+
+// Helper to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Helper to format numbers with commas
+function formatNumber(num: number): string {
+  return num.toLocaleString('en-US');
+}
+
+// Calculate statistics from an array of numbers
+function calculateStats(values: number[]): {
+  mean: number;
+  min: number;
+  max: number;
+  p95: number;
+  stdDev: number;
+} {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+
+  return {
+    mean,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    p95: sorted[Math.floor(sorted.length * 0.95)],
+    stdDev: Math.sqrt(variance),
+  };
+}
+
+// Force garbage collection if available
+function forceGC(): void {
+  if (typeof global.gc === 'function') {
+    global.gc();
+  }
+}
+
+// Get current memory usage
+function getMemoryUsage(): { heapUsed: number; external: number } {
+  const mem = process.memoryUsage();
+  return {
+    heapUsed: mem.heapUsed,
+    external: mem.external,
+  };
+}
+
+// Load WASM module for Node.js
+async function loadWasmModule(): Promise<WasmModule> {
+  const wasmPath = join(process.cwd(), 'compute/wasm/npm/compute_core_wasm_bg.wasm');
+
+  // Read the WASM binary
+  const wasmBytes = readFileSync(wasmPath);
+
+  // Import the JS wrapper
+  const jsModulePath = join(process.cwd(), 'compute/wasm/npm/compute_core_wasm.js');
+
+  // We need to use dynamic import with file URL
+  const { pathToFileURL } = await import('node:url');
+  const jsModuleUrl = pathToFileURL(jsModulePath).href;
+
+  const wasmJsModule = await import(jsModuleUrl);
+
+  // Initialize with the WASM bytes (panic hook is auto-set via #[wasm_bindgen(start)])
+  await wasmJsModule.default(wasmBytes);
+
+  return wasmJsModule as unknown as WasmModule;
+}
+
+// Run benchmark for a single file - optimized for large files
+async function benchmarkFile(
+  wasm: WasmModule,
+  filePath: string,
+  iterations: number = 5,
+  warmupIterations: number = 2,
+): Promise<BenchmarkResult> {
+  const fileStats = statSync(filePath);
+  const fileSize = fileStats.size;
+  const fileName = basename(filePath);
+
+  console.log(`\nBenchmarking: ${fileName} (${formatBytes(fileSize)})`);
+  console.log('='.repeat(60));
+
+  // Read file into memory
+  const xlsxBytes = readFileSync(filePath);
+  const xlsxData = new Uint8Array(xlsxBytes);
+
+  // Warmup runs
+  console.log(`Running ${warmupIterations} warmup iterations...`);
+  let cellCount = 0;
+  let sheetCount = 0;
+
+  for (let i = 0; i < warmupIterations; i++) {
+    forceGC();
+    const result = wasm.parse_xlsx_full(xlsxData);
+    cellCount = result.stats.total_cells;
+    sheetCount = result.stats.total_sheets;
+  }
+
+  console.log(`  Actual cells: ${formatNumber(cellCount)}, Sheets: ${sheetCount}`);
+
+  // Force GC before measurements
+  forceGC();
+  const baselineMemory = getMemoryUsage();
+
+  // Benchmark runs
+  console.log(`Running ${iterations} benchmark iterations...`);
+  const timings: number[] = [];
+  let peakHeapUsed = baselineMemory.heapUsed;
+
+  for (let i = 0; i < iterations; i++) {
+    // Force GC before each iteration for more accurate measurements
+    forceGC();
+
+    const startTime = performance.now();
+    wasm.parse_xlsx_full(xlsxData);
+    const endTime = performance.now();
+
+    const parseTimeMs = endTime - startTime;
+    timings.push(parseTimeMs);
+
+    // Track peak memory
+    const currentMemory = getMemoryUsage();
+    peakHeapUsed = Math.max(peakHeapUsed, currentMemory.heapUsed);
+
+    // Progress indicator
+    console.log(`  Iteration ${i + 1}/${iterations}: ${parseTimeMs.toFixed(2)}ms`);
+  }
+
+  // Final GC and measure retained memory
+  forceGC();
+  const finalMemory = getMemoryUsage();
+
+  // Calculate statistics
+  const stats = calculateStats(timings);
+
+  const result: BenchmarkResult = {
+    file: fileName,
+    fileSize,
+    cellCount,
+    sheetCount,
+    iterations,
+    latency: {
+      mean: stats.mean,
+      min: stats.min,
+      max: stats.max,
+      p95: stats.p95,
+      stdDev: stats.stdDev,
+    },
+    memory: {
+      peakHeapUsed: peakHeapUsed - baselineMemory.heapUsed,
+      retainedHeapUsed: finalMemory.heapUsed - baselineMemory.heapUsed,
+    },
+    throughput: {
+      cellsPerSecond: cellCount / (stats.mean / 1000),
+      bytesPerSecond: fileSize / (stats.mean / 1000),
+    },
+  };
+
+  return result;
+}
+
+// Print benchmark results
+function printResults(results: BenchmarkResult[]): void {
+  console.log('\n');
+  console.log('='.repeat(80));
+  console.log('BENCHMARK RESULTS');
+  console.log('='.repeat(80));
+
+  for (const r of results) {
+    console.log(`\n${r.file}`);
+    console.log('-'.repeat(60));
+
+    console.log('\nFile Info:');
+    console.log(`  Size:       ${formatBytes(r.fileSize)}`);
+    console.log(`  Cells:      ${formatNumber(r.cellCount)}`);
+    console.log(`  Sheets:     ${r.sheetCount}`);
+    console.log(`  Iterations: ${r.iterations}`);
+
+    console.log('\nLatency (ms):');
+    console.log(`  Mean:   ${r.latency.mean.toFixed(3)}`);
+    console.log(`  Min:    ${r.latency.min.toFixed(3)}`);
+    console.log(`  Max:    ${r.latency.max.toFixed(3)}`);
+    console.log(`  P95:    ${r.latency.p95.toFixed(3)}`);
+    console.log(`  StdDev: ${r.latency.stdDev.toFixed(3)}`);
+
+    console.log('\nMemory:');
+    console.log(`  Peak Heap:     ${formatBytes(r.memory.peakHeapUsed)}`);
+    console.log(`  Retained Heap: ${formatBytes(r.memory.retainedHeapUsed)}`);
+
+    console.log('\nThroughput:');
+    console.log(`  Cells/sec:  ${formatNumber(Math.round(r.throughput.cellsPerSecond))}`);
+    console.log(`  Bytes/sec:  ${formatBytes(r.throughput.bytesPerSecond)}/s`);
+  }
+
+  // Summary table
+  console.log('\n');
+  console.log('='.repeat(100));
+  console.log('SUMMARY TABLE');
+  console.log('='.repeat(100));
+  console.log(
+    '\n' +
+      'File'.padEnd(25) +
+      'Size'.padStart(12) +
+      'Cells'.padStart(14) +
+      'Mean (ms)'.padStart(12) +
+      'P95 (ms)'.padStart(12) +
+      'Cells/sec'.padStart(18) +
+      'Peak Heap'.padStart(12),
+  );
+  console.log('-'.repeat(100));
+
+  for (const r of results) {
+    console.log(
+      r.file.slice(0, 24).padEnd(25) +
+        formatBytes(r.fileSize).padStart(12) +
+        formatNumber(r.cellCount).padStart(14) +
+        r.latency.mean.toFixed(2).padStart(12) +
+        r.latency.p95.toFixed(2).padStart(12) +
+        formatNumber(Math.round(r.throughput.cellsPerSecond)).padStart(18) +
+        formatBytes(r.memory.peakHeapUsed).padStart(12),
+    );
+  }
+}
+
+// ==========================================
+// JSZip + fast-xml-parser baseline benchmark
+// ==========================================
+
+// XML parser for fast-xml-parser comparison
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  textNodeName: '#text',
+  parseAttributeValue: true,
+  trimValues: true,
+});
+
+interface FastXmlBenchmarkResult {
+  file: string;
+  fileSize: number;
+  cellCount: number;
+  latency: {
+    mean: number;
+    min: number;
+    max: number;
+    p95: number;
+    stdDev: number;
+  };
+  throughput: {
+    cellsPerSecond: number;
+    bytesPerSecond: number;
+  };
+}
+
+// Count cells in a worksheet using fast-xml-parser
+function countCellsInWorksheetXml(worksheetXml: string): number {
+  const worksheet = xmlParser.parse(worksheetXml);
+  let count = 0;
+
+  const rows = worksheet?.worksheet?.sheetData?.row;
+  if (!rows) return 0;
+
+  const rowArray = Array.isArray(rows) ? rows : [rows];
+  for (const row of rowArray) {
+    if (!row) continue;
+    const cells = row.c;
+    if (!cells) continue;
+    const cellArray = Array.isArray(cells) ? cells : [cells];
+    count += cellArray.filter((c: unknown) => c !== null && c !== undefined).length;
+  }
+
+  return count;
+}
+
+// Benchmark JSZip + fast-xml-parser
+async function benchmarkFastXmlParser(
+  filePath: string,
+  iterations: number = 3,
+  warmupIterations: number = 1,
+): Promise<FastXmlBenchmarkResult> {
+  const fileStats = statSync(filePath);
+  const fileSize = fileStats.size;
+  const fileName = basename(filePath);
+
+  console.log(`\nBenchmarking fast-xml-parser: ${fileName} (${formatBytes(fileSize)})`);
+  console.log('='.repeat(60));
+
+  // Read file into memory
+  const xlsxBytes = readFileSync(filePath);
+
+  // Warmup runs
+  console.log(`Running ${warmupIterations} warmup iterations...`);
+  let totalCells = 0;
+
+  for (let i = 0; i < warmupIterations; i++) {
+    const zip = await JSZip.loadAsync(xlsxBytes);
+    let cells = 0;
+
+    // Parse each worksheet
+    const sheetFiles = Object.keys(zip.files).filter(
+      (f) => f.startsWith('xl/worksheets/sheet') && f.endsWith('.xml'),
+    );
+
+    for (const sheetFile of sheetFiles) {
+      const xml = await zip.file(sheetFile)?.async('string');
+      if (xml) {
+        cells += countCellsInWorksheetXml(xml);
+      }
+    }
+
+    totalCells = cells;
+  }
+
+  console.log(`  Cells: ${formatNumber(totalCells)}`);
+
+  // Benchmark runs
+  console.log(`Running ${iterations} benchmark iterations...`);
+  const timings: number[] = [];
+
+  for (let i = 0; i < iterations; i++) {
+    forceGC();
+
+    const startTime = performance.now();
+
+    // Full parse: JSZip + fast-xml-parser
+    const zip = await JSZip.loadAsync(xlsxBytes);
+
+    // Parse worksheets
+    const sheetFiles = Object.keys(zip.files).filter(
+      (f) => f.startsWith('xl/worksheets/sheet') && f.endsWith('.xml'),
+    );
+
+    for (const sheetFile of sheetFiles) {
+      const xml = await zip.file(sheetFile)?.async('string');
+      if (xml) {
+        // Parse the XML (we don't process it further to measure pure parsing)
+        xmlParser.parse(xml);
+      }
+    }
+
+    const endTime = performance.now();
+    const elapsed = endTime - startTime;
+    timings.push(elapsed);
+    console.log(`  Iteration ${i + 1}/${iterations}: ${elapsed.toFixed(2)}ms`);
+  }
+
+  // Calculate statistics
+  const stats = calculateStats(timings);
+
+  return {
+    file: fileName,
+    fileSize,
+    cellCount: totalCells,
+    latency: stats,
+    throughput: {
+      cellsPerSecond: totalCells / (stats.mean / 1000),
+      bytesPerSecond: fileSize / (stats.mean / 1000),
+    },
+  };
+}
+
+// Print comparison results
+function printComparisonResults(
+  wasmResults: BenchmarkResult[],
+  fastXmlResults: FastXmlBenchmarkResult[],
+): void {
+  console.log('\n');
+  console.log('='.repeat(100));
+  console.log('COMPARISON: WASM vs fast-xml-parser');
+  console.log('='.repeat(100));
+
+  console.log(
+    '\n' +
+      'File'.padEnd(25) +
+      'WASM (ms)'.padStart(12) +
+      'FXP (ms)'.padStart(12) +
+      'Speedup'.padStart(10) +
+      'WASM cells/s'.padStart(18) +
+      'FXP cells/s'.padStart(18),
+  );
+  console.log('-'.repeat(100));
+
+  for (let i = 0; i < wasmResults.length; i++) {
+    const wasm = wasmResults[i];
+    const fxp = fastXmlResults[i];
+
+    if (!wasm || !fxp) continue;
+
+    const speedup = fxp.latency.mean / wasm.latency.mean;
+    const speedupStr =
+      speedup >= 1 ? `${speedup.toFixed(2)}x` : `${(1 / speedup).toFixed(2)}x slower`;
+
+    console.log(
+      wasm.file.slice(0, 24).padEnd(25) +
+        wasm.latency.mean.toFixed(2).padStart(12) +
+        fxp.latency.mean.toFixed(2).padStart(12) +
+        speedupStr.padStart(10) +
+        formatNumber(Math.round(wasm.throughput.cellsPerSecond)).padStart(18) +
+        formatNumber(Math.round(fxp.throughput.cellsPerSecond)).padStart(18),
+    );
+  }
+}
+
+// Test file configurations
+interface TestFileConfig {
+  filename: string;
+  expectedCells: number;
+  runFastXml: boolean; // Skip fast-xml for very large files
+}
+
+const TEST_FILES: TestFileConfig[] = [
+  { filename: 'medium-bench.xlsx', expectedCells: 500_000, runFastXml: true },
+  { filename: 'large-bench.xlsx', expectedCells: 1_000_000, runFastXml: true },
+  { filename: 'extreme-bench.xlsx', expectedCells: 5_000_000, runFastXml: false }, // Too slow for fast-xml
+];
+
+// Main benchmark function
+async function main(): Promise<void> {
+  console.log('XLSX Parser WASM Benchmark - Large Files Edition');
+  console.log('='.repeat(50) + '\n');
+
+  // Check for --expose-gc flag
+  if (typeof global.gc !== 'function') {
+    console.warn('Warning: --expose-gc flag not set. Memory measurements may be less accurate.');
+    console.warn('Run with: node --expose-gc --max-old-space-size=8192 benchmark-large.ts\n');
+  }
+
+  // Load WASM module
+  console.log('Loading WASM module...');
+  const wasm = await loadWasmModule();
+  console.log(`WASM module loaded. Version: ${wasm.version()}`);
+
+  const fixturesDir = join(process.cwd(), 'performance/fixtures');
+
+  const wasmResults: BenchmarkResult[] = [];
+  const fastXmlResults: FastXmlBenchmarkResult[] = [];
+
+  // Run WASM benchmarks
+  console.log('\n' + '='.repeat(80));
+  console.log('WASM PARSER BENCHMARKS');
+  console.log('='.repeat(80));
+
+  for (const config of TEST_FILES) {
+    const filePath = join(fixturesDir, config.filename);
+    if (!existsSync(filePath)) {
+      console.log(`\nSkipping ${config.filename} - file not found`);
+      continue;
+    }
+    try {
+      const result = await benchmarkFile(wasm, filePath, 5, 2);
+      wasmResults.push(result);
+    } catch (error) {
+      console.error(`Error benchmarking ${config.filename}:`, error);
+    }
+  }
+
+  // Run fast-xml-parser benchmarks for comparison (only on smaller files)
+  console.log('\n' + '='.repeat(80));
+  console.log('FAST-XML-PARSER BENCHMARKS (JSZip + fast-xml-parser)');
+  console.log('='.repeat(80));
+
+  for (const config of TEST_FILES) {
+    if (!config.runFastXml) {
+      console.log(`\nSkipping ${config.filename} - too large for fast-xml-parser`);
+      fastXmlResults.push({
+        file: config.filename,
+        fileSize: 0,
+        cellCount: 0,
+        latency: { mean: 0, min: 0, max: 0, p95: 0, stdDev: 0 },
+        throughput: { cellsPerSecond: 0, bytesPerSecond: 0 },
+      });
+      continue;
+    }
+
+    const filePath = join(fixturesDir, config.filename);
+    if (!existsSync(filePath)) {
+      continue;
+    }
+    try {
+      const result = await benchmarkFastXmlParser(filePath, 3, 1);
+      fastXmlResults.push(result);
+    } catch (error) {
+      console.error(`Error benchmarking ${config.filename} with fast-xml-parser:`, error);
+    }
+  }
+
+  // Print WASM results
+  printResults(wasmResults);
+
+  // Print comparison (only for files that have both results)
+  const comparableWasm = wasmResults.filter((_, i) => TEST_FILES[i]?.runFastXml);
+  const comparableFxp = fastXmlResults.filter((r) => r.cellCount > 0);
+  if (comparableWasm.length > 0 && comparableFxp.length > 0) {
+    printComparisonResults(comparableWasm, comparableFxp);
+  }
+
+  console.log('\nBenchmark complete!');
+}
+
+// Run
+main().catch(console.error);

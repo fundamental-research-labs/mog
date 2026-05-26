@@ -1,0 +1,11 @@
+{
+  "name": "fixture-neg-app-spreadsheet",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mog-sdk/node": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

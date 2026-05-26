@@ -1,0 +1,88 @@
+{
+  "name": "@mog/platform",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "keyboard",
+    "menu",
+    "tauri",
+    "filesystem-errors.ts",
+    "filesystem-paths.ts",
+    "identity.ts",
+    "index.ts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./identity": {
+      "development": "./identity.ts",
+      "types": "./dist/identity.d.ts",
+      "import": "./dist/identity.js"
+    },
+    "./filesystem-errors": {
+      "development": "./filesystem-errors.ts",
+      "types": "./dist/filesystem-errors.d.ts",
+      "import": "./dist/filesystem-errors.js"
+    },
+    "./filesystem-paths": {
+      "development": "./filesystem-paths.ts",
+      "types": "./dist/filesystem-paths.d.ts",
+      "import": "./dist/filesystem-paths.js"
+    },
+    "./keyboard/layout": {
+      "development": "./keyboard/layout.ts",
+      "types": "./dist/keyboard/layout.d.ts",
+      "import": "./dist/keyboard/layout.js"
+    },
+    "./menu/menu-sync": {
+      "development": "./menu/menu-sync.ts",
+      "types": "./dist/menu/menu-sync.d.ts",
+      "import": "./dist/menu/menu-sync.js"
+    },
+    "./tauri": {
+      "development": "./tauri/index.ts",
+      "types": "./dist/tauri/index.d.ts",
+      "import": "./dist/tauri/index.js"
+    },
+    "./tauri/credentials": {
+      "development": "./tauri/credentials.ts",
+      "types": "./dist/tauri/credentials.d.ts",
+      "import": "./dist/tauri/credentials.js"
+    },
+    "./tauri/detection": {
+      "development": "./tauri/detection.ts",
+      "types": "./dist/tauri/detection.d.ts",
+      "import": "./dist/tauri/detection.js"
+    },
+    "./tauri/secure-invoke": {
+      "development": "./tauri/secure-invoke.ts",
+      "types": "./dist/tauri/secure-invoke.d.ts",
+      "import": "./dist/tauri/secure-invoke.js"
+    }
+  },
+  "scripts": {
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --config jest.config.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog/env": "workspace:*",
+    "@mog/spreadsheet-utils": "workspace:*",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.0.0",
+    "@tauri-apps/plugin-notification": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0"
+  }
+}

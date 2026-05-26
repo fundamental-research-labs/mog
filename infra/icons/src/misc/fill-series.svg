@@ -1,0 +1,7 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+<text x="1" y="8" font-size="6" font-weight="600">1</text>
+<text x="6" y="8" font-size="6" font-weight="600">2</text>
+<text x="11" y="8" font-size="6" font-weight="600">3</text>
+<path d="M3 10h10v1H3z"/>
+<path d="M3 12h6" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/>
+</svg>

@@ -1,0 +1,16 @@
+error: method get_cell: missing scope = "cell" | "range" | "sheet" | "workbook" under gated = true
+  --> tests/ui/missing_scope_read.rs:43:13
+   |
+43 |               method read get_cell {
+   |               ^^^^^^
+...
+51 | / bridge_delegate::delegate!(
+52 | |     target = StubService,
+53 | |     dispatch = dispatch,
+54 | |     gated = true,
+55 | |     skip_default_imports = true,
+56 | |     crate::__desc_missing_scope_read,
+57 | | );
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `crate::__desc_missing_scope_read` which comes from the expansion of the macro `bridge_delegate::delegate` (in Nightly builds, run with -Z macro-backtrace for more info)

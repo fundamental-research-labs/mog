@@ -1,0 +1,257 @@
+/**
+ * Ink Toolbar Styles
+ *
+ * Styles for the floating ink toolbar that appears when ink mode is active.
+ * Uses CSS variables for theming and dark mode support.
+ *
+ * Wave 5: Ink Actions & UI System
+ */
+
+/* CSS Variables for theming - references semantic design tokens */
+:root {
+  --ink-toolbar-bg: var(--color-ss-surface);
+  --ink-toolbar-border: var(--color-ss-border);
+  --ink-toolbar-shadow: var(--shadow-ss-md);
+  --ink-toolbar-button-hover: var(--color-ss-surface-hover);
+  --ink-toolbar-button-active: var(--color-ss-primary-light);
+  --ink-toolbar-button-active-border: var(--color-ss-primary);
+  --ink-toolbar-separator: var(--color-ss-border);
+  --ink-toolbar-danger: var(--color-ss-error);
+  --ink-toolbar-danger-hover: var(--color-ss-error);
+}
+
+/* Dark mode support */
+/* TODO: Add dark mode semantic tokens */
+.dark,
+[data-theme='dark'] {
+  --ink-toolbar-bg: #1e1e1e;
+  --ink-toolbar-border: #424242;
+  --ink-toolbar-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --ink-toolbar-button-hover: #333333;
+  --ink-toolbar-button-active: #1e3a5f;
+  --ink-toolbar-button-active-border: #64b5f6;
+  --ink-toolbar-separator: #424242;
+  --ink-toolbar-danger: #ef5350;
+  --ink-toolbar-danger-hover: #f44336;
+}
+
+/* Main toolbar container */
+.ink-toolbar {
+  position: fixed;
+  top: 120px; /* Below ribbon */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-ss-modal);
+
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-ss-1);
+  padding: var(--spacing-ss-2) var(--spacing-ss-3);
+
+  background-color: var(--ink-toolbar-bg);
+  border: 1px solid var(--ink-toolbar-border);
+  border-radius: var(--radius-ss-lg);
+  box-shadow: var(--ink-toolbar-shadow);
+}
+
+/* Toolbar sections */
+.ink-toolbar__section {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Tool buttons container */
+.ink-toolbar__tools {
+  gap: 2px;
+}
+
+/* Color buttons container */
+.ink-toolbar__colors {
+  gap: 4px;
+}
+
+/* Width buttons container */
+.ink-toolbar__widths {
+  gap: 4px;
+}
+
+/* Actions container */
+.ink-toolbar__actions {
+  gap: 4px;
+}
+
+/* Separator */
+.ink-toolbar__separator {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background-color: var(--ink-toolbar-separator);
+}
+
+/* Tool button base styles */
+.ink-toolbar__tool-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ink-toolbar__tool-button:hover {
+  background-color: var(--ink-toolbar-button-hover);
+}
+
+.ink-toolbar__tool-button--active {
+  background-color: var(--ink-toolbar-button-active);
+  border-color: var(--ink-toolbar-button-active-border);
+}
+
+.ink-toolbar__tool-button:focus-visible {
+  outline: 2px solid var(--ink-toolbar-button-active-border);
+  outline-offset: 1px;
+}
+
+/* Tool button icon sizing */
+.ink-toolbar__tool-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Color button styles */
+.ink-toolbar__color-button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    border-color 0.15s ease;
+}
+
+.ink-toolbar__color-button:hover {
+  transform: scale(1.1);
+}
+
+.ink-toolbar__color-button--active {
+  border-color: var(--ink-toolbar-button-active-border);
+  transform: scale(1.1);
+}
+
+.ink-toolbar__color-button:focus-visible {
+  outline: 2px solid var(--ink-toolbar-button-active-border);
+  outline-offset: 1px;
+}
+
+/* Width button styles */
+.ink-toolbar__width-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ink-toolbar__width-button:hover {
+  background-color: var(--ink-toolbar-button-hover);
+}
+
+.ink-toolbar__width-button--active {
+  background-color: var(--ink-toolbar-button-active);
+  border-color: var(--ink-toolbar-button-active-border);
+}
+
+.ink-toolbar__width-button:focus-visible {
+  outline: 2px solid var(--ink-toolbar-button-active-border);
+  outline-offset: 1px;
+}
+
+/* Width preview dot */
+.ink-toolbar__width-preview {
+  border-radius: 2px;
+}
+
+/* Action button styles */
+.ink-toolbar__action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ink-toolbar__action-button:hover {
+  background-color: var(--ink-toolbar-button-hover);
+}
+
+.ink-toolbar__action-button:focus-visible {
+  outline: 2px solid var(--ink-toolbar-button-active-border);
+  outline-offset: 1px;
+}
+
+.ink-toolbar__action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Danger variant for delete button */
+.ink-toolbar__action-button--danger {
+  color: var(--ink-toolbar-danger);
+}
+
+.ink-toolbar__action-button--danger:hover {
+  background-color: var(--ink-toolbar-danger);
+  color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .ink-toolbar {
+    top: auto;
+    bottom: 16px;
+    padding: 6px 10px;
+  }
+
+  .ink-toolbar__tool-button,
+  .ink-toolbar__action-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ink-toolbar__color-button {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ink-toolbar__width-button {
+    width: 24px;
+    height: 24px;
+  }
+}

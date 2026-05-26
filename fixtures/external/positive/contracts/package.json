@@ -1,0 +1,21 @@
+{
+  "name": "fixture-contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "TARBALL_PATH",
+    "@mog-sdk/node": "TARBALL_PATH",
+    "@mog-sdk/spreadsheet-app": "TARBALL_PATH",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

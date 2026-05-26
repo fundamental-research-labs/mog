@@ -1,0 +1,101 @@
+{
+  "name": "@mog-sdk/types-host",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./trusted": {
+      "development": "./src/trusted.ts",
+      "types": "./dist/trusted.d.ts",
+      "import": "./dist/trusted.js"
+    },
+    "./trust": {
+      "development": "./src/trust.ts",
+      "types": "./dist/trust.d.ts",
+      "import": "./dist/trust.js"
+    },
+    "./untrusted": {
+      "development": "./src/untrusted.ts",
+      "types": "./dist/untrusted.d.ts",
+      "import": "./dist/untrusted.js"
+    },
+    "./kernel": {
+      "development": "./src/kernel.ts",
+      "types": "./dist/kernel.d.ts",
+      "import": "./dist/kernel.js"
+    },
+    "./view": {
+      "development": "./src/view.ts",
+      "types": "./dist/view.d.ts",
+      "import": "./dist/view.js"
+    },
+    "./shell": {
+      "development": "./src/shell.ts",
+      "types": "./dist/shell.d.ts",
+      "import": "./dist/shell.js"
+    },
+    "./identity": {
+      "development": "./src/identity.ts",
+      "types": "./dist/identity.d.ts",
+      "import": "./dist/identity.js"
+    },
+    "./fingerprints": {
+      "development": "./src/fingerprints.ts",
+      "types": "./dist/fingerprints.d.ts",
+      "import": "./dist/fingerprints.js"
+    },
+    "./operations": {
+      "development": "./src/operations.ts",
+      "types": "./dist/operations.d.ts",
+      "import": "./dist/operations.js"
+    },
+    "./capabilities": {
+      "development": "./src/capabilities.ts",
+      "types": "./dist/capabilities.d.ts",
+      "import": "./dist/capabilities.js"
+    },
+    "./storage": {
+      "development": "./src/storage.ts",
+      "types": "./dist/storage.d.ts",
+      "import": "./dist/storage.js"
+    },
+    "./runtime": {
+      "development": "./src/runtime.ts",
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./diagnostics": {
+      "development": "./src/diagnostics.ts",
+      "types": "./dist/diagnostics.d.ts",
+      "import": "./dist/diagnostics.js"
+    },
+    "./bindings": {
+      "development": "./src/bindings.ts",
+      "types": "./dist/bindings.d.ts",
+      "import": "./dist/bindings.js"
+    }
+  },
+  "description": "Host boundary contract types: trusted/untrusted split, layer-specific context slices, identity, capabilities, diagnostics. Private workspace-internal type shard.",
+  "dependencies": {
+    "@mog-sdk/types-document": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b .",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --passWithNoTests"
+  }
+}

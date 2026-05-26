@@ -1,0 +1,156 @@
+/**
+ * WorksheetConditionalFormatting — Sub-API for conditional formatting operations.
+ *
+ * Provides methods to add, update, remove, and query conditional formats
+ * on a worksheet. Operates at the format level (not individual rules).
+ */
+import type { CellRange, CFRule, CFRuleInput, ConditionalFormat } from '../types';
+
+/** Update payload for a conditional format. */
+export interface ConditionalFormatUpdate {
+  /** Replace the rules array. */
+  rules?: CFRule[];
+  /** Replace the ranges this format applies to. */
+  ranges?: CellRange[];
+  /** Set stopIfTrue on all rules in this format. */
+  stopIfTrue?: boolean;
+}
+
+/** Sub-API for conditional formatting operations on a worksheet. */
+export interface WorksheetConditionalFormatting {
+  /**
+   * Add a new conditional format with ranges and rules.
+   * The API assigns IDs and priorities — callers provide rule configuration only.
+   *
+   * @param ranges - Cell ranges this format applies to
+   * @param rules - Rule inputs (without id/priority)
+   * @returns The created conditional format with assigned IDs and priorities
+   */
+  add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;
+
+  /**
+   * Get a conditional format by its ID.
+   *
+   * @param formatId - Format ID to look up
+   * @returns The conditional format, or null if not found
+   */
+  get(formatId: string): Promise<ConditionalFormat | null>;
+
+  /**
+   * Check if a conditional format exists by ID.
+   *
+   * @param formatId - Format ID to check
+   * @returns True if the format exists
+   */
+  has(formatId: string): Promise<boolean>;
+
+  /**
+   * Get the total number of conditional formats on this sheet.
+   *
+   * @returns The count of conditional formats
+   */
+  getCount(): Promise<number>;
+
+  /**
+   * Update an existing conditional format.
+   * Supports replacing rules, ranges, and setting stopIfTrue on all rules.
+   *
+   * @param formatId - Format ID to update
+   * @param updates - Object with optional rules, ranges, and stopIfTrue
+   */
+  update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;
+
+  /**
+   * Clear the style of a specific rule within a conditional format, resetting
+   * all style properties (font, fill, border, number format) to unset.
+   *
+   * @param formatId - Format ID containing the rule
+   * @param ruleId - Rule ID within the format to clear style for
+   */
+  clearRuleStyle(formatId: string, ruleId: string): Promise<void>;
+
+  /**
+   * Change the type and configuration of a specific rule within a conditional format,
+   * preserving its ID and priority. This is the equivalent of eight
+   * changeRuleTo*() methods, unified into one type-safe call using CFRuleInput.
+   *
+   * @param formatId - Format ID containing the rule
+   * @param ruleId - Rule ID to change
+   * @param newRule - New rule configuration (type + type-specific fields)
+   */
+  changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;
+
+  /**
+   * Get a conditional format by its index in the priority-ordered list.
+   *
+   * @param index - Zero-based index
+   * @returns The conditional format at that index, or null if out of bounds
+   */
+  getItemAt(index: number): Promise<ConditionalFormat | null>;
+
+  /**
+   * Remove a conditional format by ID.
+   *
+   * @param formatId - Format ID to remove
+   */
+  remove(formatId: string): Promise<void>;
+
+  /**
+   * Remove a single rule from a conditional format. If the removed rule was
+   * the last rule in the format, the conditional format itself is removed.
+   *
+   * @param formatId - Format ID containing the rule
+   * @param ruleId - Rule ID to remove
+   */
+  removeRule(formatId: string, ruleId: string): Promise<void>;
+
+  /**
+   * Get all conditional formats on the sheet.
+   *
+   * @returns Array of conditional format objects
+   */
+  list(): Promise<ConditionalFormat[]>;
+
+  /**
+   * Clear all conditional formats from the sheet.
+   */
+  clear(): Promise<void>;
+
+  /**
+   * Clear conditional formats that intersect with the given ranges.
+   *
+   * @param ranges - Ranges to clear conditional formats from
+   */
+  clearInRanges(ranges: (string | CellRange)[]): Promise<void>;
+
+  /**
+   * Reorder conditional formats by format ID array (first = highest priority).
+   *
+   * @param formatIds - Array of format IDs in the desired order
+   */
+  reorder(formatIds: string[]): Promise<void>;
+
+  /**
+   * Clone conditional formats from source to target with offset.
+   * Used by format painter and paste operations.
+   *
+   * @param sourceSheetId - Source sheet ID (for cut operation reference removal)
+   * @param relativeCFs - Relative CF formats with range offsets
+   * @param origin - Target paste origin (row, col)
+   * @param isCut - Whether this is a cut operation
+   */
+  cloneForPaste(
+    sourceSheetId: string,
+    relativeCFs: Array<{
+      rules: any[];
+      rangeOffsets: Array<{
+        startRowOffset: number;
+        startColOffset: number;
+        endRowOffset: number;
+        endColOffset: number;
+      }>;
+    }>,
+    origin: { row: number; col: number },
+    isCut: boolean,
+  ): Promise<void>;
+}

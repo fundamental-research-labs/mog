@@ -1,0 +1,22 @@
+[build]
+# Default target for this project
+target = "wasm32-unknown-unknown"
+
+[target.wasm32-unknown-unknown]
+# Enable SIMD for WASM target
+rustflags = [
+    # Enable SIMD (128-bit packed SIMD)
+    "-C", "target-feature=+simd128",
+    # Optimize for speed
+    "-C", "opt-level=3",
+]
+
+# For native testing (macOS/Linux)
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "target-cpu=native"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-cpu=native"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native"]

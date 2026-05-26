@@ -1,0 +1,10 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Fraction Layout snapshot: simple fraction layout 1`] = `
+{
+  "baseline": 16,
+  "childCount": 1,
+  "height": 25,
+  "width": 6,
+}
+`;

@@ -1,0 +1,17 @@
+{
+  "name": "fixture-embed-web-component",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "bundle": "esbuild smoke.ts --bundle --outfile=out.js --platform=browser --format=esm",
+    "test": "npm run typecheck && npm run bundle"
+  },
+  "dependencies": {
+    "@mog-sdk/embed": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "esbuild": "^0.21.0"
+  }
+}

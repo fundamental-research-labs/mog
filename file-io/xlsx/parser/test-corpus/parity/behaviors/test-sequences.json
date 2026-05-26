@@ -1,0 +1,272 @@
+{
+  "nav-basic.xlsx": {
+    "description": "Arrow key navigation across a 5x5 data grid",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "key",
+        "key": "ArrowRight",
+        "repeat": 3,
+        "expect_active": "D1"
+      },
+      {
+        "action": "key",
+        "key": "ArrowDown",
+        "repeat": 2,
+        "expect_active": "D3"
+      },
+      {
+        "action": "key",
+        "key": "ArrowLeft",
+        "repeat": 3,
+        "expect_active": "A3"
+      },
+      {
+        "action": "key",
+        "key": "ArrowUp",
+        "repeat": 2,
+        "expect_active": "A1"
+      }
+    ]
+  },
+  "nav-merged-cells.xlsx": {
+    "description": "Navigate into and across merged cell regions",
+    "start_cell": "A2",
+    "steps": [
+      {
+        "action": "key",
+        "key": "ArrowRight",
+        "expect_active": "B2",
+        "note": "Enter horizontal merge"
+      },
+      {
+        "action": "key",
+        "key": "ArrowRight",
+        "expect_active": "E2",
+        "note": "Exit merge, skip to E2"
+      }
+    ]
+  },
+  "nav-ctrl-arrow.xlsx": {
+    "description": "Ctrl+Arrow jumps to data boundaries in sparse grid",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Ctrl+ArrowDown",
+        "expect_active": "A10",
+        "note": "Jump to last filled before gap"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+ArrowDown",
+        "expect_active": "A16",
+        "note": "Jump to first filled after gap"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+ArrowDown",
+        "expect_active": "A20",
+        "note": "Jump to last filled"
+      }
+    ]
+  },
+  "nav-ctrl-home-end.xlsx": {
+    "description": "Ctrl+Home and Ctrl+End navigation",
+    "start_cell": "C25",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Ctrl+End",
+        "expect_active": "E50"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+Home",
+        "expect_active": "A1"
+      }
+    ]
+  },
+  "select-shift-arrow.xlsx": {
+    "description": "Shift+Arrow extends selection",
+    "start_cell": "B2",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Shift+ArrowRight",
+        "repeat": 2,
+        "expect_selection": "B2:D2"
+      },
+      {
+        "action": "key",
+        "key": "Shift+ArrowDown",
+        "repeat": 2,
+        "expect_selection": "B2:D4"
+      }
+    ]
+  },
+  "edit-type-confirm.xlsx": {
+    "description": "Type value and press Enter to confirm",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "type",
+        "text": "hello",
+        "then": "Enter"
+      },
+      {
+        "expect_value": {
+          "A1": "hello"
+        },
+        "expect_active": "A2"
+      }
+    ]
+  },
+  "edit-escape-cancel.xlsx": {
+    "description": "Escape cancels in-progress edit",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "type",
+        "text": "Changed"
+      },
+      {
+        "action": "key",
+        "key": "Escape"
+      },
+      {
+        "expect_value": {
+          "A1": "Original"
+        },
+        "note": "Value should be unchanged"
+      }
+    ]
+  },
+  "undo-redo.xlsx": {
+    "description": "Ctrl+Z undo and Ctrl+Y redo",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "type",
+        "text": "Changed",
+        "then": "Enter"
+      },
+      {
+        "expect_value": {
+          "A1": "Changed"
+        }
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+Z"
+      },
+      {
+        "expect_value": {
+          "A1": "Original"
+        },
+        "note": "Undo restores original"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+Y"
+      },
+      {
+        "expect_value": {
+          "A1": "Changed"
+        },
+        "note": "Redo restores edit"
+      }
+    ]
+  },
+  "delete-clear.xlsx": {
+    "description": "Delete key clears value but preserves formatting",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Delete"
+      },
+      {
+        "expect_value": {
+          "A1": ""
+        },
+        "note": "Value cleared, formatting preserved"
+      }
+    ]
+  },
+  "clipboard-copy-paste.xlsx": {
+    "description": "Ctrl+C copy, Ctrl+V paste with value and formatting",
+    "start_cell": "A1",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Ctrl+C"
+      },
+      {
+        "action": "click",
+        "cell": "C3"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+V"
+      },
+      {
+        "expect_value": {
+          "C3": "CopyMe"
+        },
+        "note": "Value and formatting should transfer"
+      }
+    ]
+  },
+  "sheet-tab-switch.xlsx": {
+    "description": "Ctrl+PageDown/PageUp switches sheets",
+    "start_sheet": "Sheet1",
+    "steps": [
+      {
+        "action": "key",
+        "key": "Ctrl+PageDown",
+        "expect_sheet": "Sheet2"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+PageDown",
+        "expect_sheet": "Sheet3"
+      },
+      {
+        "action": "key",
+        "key": "Ctrl+PageUp",
+        "expect_sheet": "Sheet2"
+      }
+    ]
+  },
+  "sort-filter.xlsx": {
+    "description": "Sort by Score ascending",
+    "steps": [
+      {
+        "action": "sort",
+        "column": "B",
+        "order": "ascending"
+      },
+      {
+        "expect_order": ["Eve", "Charlie", "Bob", "Dave", "Alice"]
+      }
+    ]
+  },
+  "fill-handle-series.xlsx": {
+    "description": "Drag fill handle to extend numeric series",
+    "start_selection": "A1:A2",
+    "steps": [
+      {
+        "action": "fill_drag",
+        "to": "A5"
+      },
+      {
+        "expect_value": {
+          "A3": 3,
+          "A4": 4,
+          "A5": 5
+        }
+      }
+    ]
+  }
+}

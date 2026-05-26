@@ -1,0 +1,203 @@
+{
+  "name": "@mog/types-events",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./canvas-object-events": {
+      "development": "./src/canvas-object-events.ts",
+      "types": "./dist/canvas-object-events.d.ts",
+      "import": "./dist/canvas-object-events.js"
+    },
+    "./cell-events": {
+      "development": "./src/cell-events.ts",
+      "types": "./dist/cell-events.d.ts",
+      "import": "./dist/cell-events.js"
+    },
+    "./chart-events": {
+      "development": "./src/chart-events.ts",
+      "types": "./dist/chart-events.d.ts",
+      "import": "./dist/chart-events.js"
+    },
+    "./comment-events": {
+      "development": "./src/comment-events.ts",
+      "types": "./dist/comment-events.d.ts",
+      "import": "./dist/comment-events.js"
+    },
+    "./conditional-formatting-events": {
+      "development": "./src/conditional-formatting-events.ts",
+      "types": "./dist/conditional-formatting-events.d.ts",
+      "import": "./dist/conditional-formatting-events.js"
+    },
+    "./data-tools-events": {
+      "development": "./src/data-tools-events.ts",
+      "types": "./dist/data-tools-events.d.ts",
+      "import": "./dist/data-tools-events.js"
+    },
+    "./events": {
+      "development": "./src/events.ts",
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./file-io-events": {
+      "development": "./src/file-io-events.ts",
+      "types": "./dist/file-io-events.d.ts",
+      "import": "./dist/file-io-events.js"
+    },
+    "./filter-events": {
+      "development": "./src/filter-events.ts",
+      "types": "./dist/filter-events.d.ts",
+      "import": "./dist/filter-events.js"
+    },
+    "./floating-object-events": {
+      "development": "./src/floating-object-events.ts",
+      "types": "./dist/floating-object-events.d.ts",
+      "import": "./dist/floating-object-events.js"
+    },
+    "./grouping-events": {
+      "development": "./src/grouping-events.ts",
+      "types": "./dist/grouping-events.d.ts",
+      "import": "./dist/grouping-events.js"
+    },
+    "./ink-collaboration-events": {
+      "development": "./src/ink-collaboration-events.ts",
+      "types": "./dist/ink-collaboration-events.d.ts",
+      "import": "./dist/ink-collaboration-events.js"
+    },
+    "./ink-events": {
+      "development": "./src/ink-events.ts",
+      "types": "./dist/ink-events.d.ts",
+      "import": "./dist/ink-events.js"
+    },
+    "./ink-recognition-events": {
+      "development": "./src/ink-recognition-events.ts",
+      "types": "./dist/ink-recognition-events.d.ts",
+      "import": "./dist/ink-recognition-events.js"
+    },
+    "./ink-stroke-events": {
+      "development": "./src/ink-stroke-events.ts",
+      "types": "./dist/ink-stroke-events.d.ts",
+      "import": "./dist/ink-stroke-events.js"
+    },
+    "./merge-events": {
+      "development": "./src/merge-events.ts",
+      "types": "./dist/merge-events.d.ts",
+      "import": "./dist/merge-events.js"
+    },
+    "./named-range-events": {
+      "development": "./src/named-range-events.ts",
+      "types": "./dist/named-range-events.d.ts",
+      "import": "./dist/named-range-events.js"
+    },
+    "./pivot-events": {
+      "development": "./src/pivot-events.ts",
+      "types": "./dist/pivot-events.d.ts",
+      "import": "./dist/pivot-events.js"
+    },
+    "./print-events": {
+      "development": "./src/print-events.ts",
+      "types": "./dist/print-events.d.ts",
+      "import": "./dist/print-events.js"
+    },
+    "./recalc-events": {
+      "development": "./src/recalc-events.ts",
+      "types": "./dist/recalc-events.d.ts",
+      "import": "./dist/recalc-events.js"
+    },
+    "./scenario-events": {
+      "development": "./src/scenario-events.ts",
+      "types": "./dist/scenario-events.d.ts",
+      "import": "./dist/scenario-events.js"
+    },
+    "./security-events": {
+      "development": "./src/security-events.ts",
+      "types": "./dist/security-events.d.ts",
+      "import": "./dist/security-events.js"
+    },
+    "./selection-events": {
+      "development": "./src/selection-events.ts",
+      "types": "./dist/selection-events.d.ts",
+      "import": "./dist/selection-events.js"
+    },
+    "./settings-events": {
+      "development": "./src/settings-events.ts",
+      "types": "./dist/settings-events.d.ts",
+      "import": "./dist/settings-events.js"
+    },
+    "./sheet-events": {
+      "development": "./src/sheet-events.ts",
+      "types": "./dist/sheet-events.d.ts",
+      "import": "./dist/sheet-events.js"
+    },
+    "./slicer-events": {
+      "development": "./src/slicer-events.ts",
+      "types": "./dist/slicer-events.d.ts",
+      "import": "./dist/slicer-events.js"
+    },
+    "./diagram-events": {
+      "development": "./src/diagram-events.ts",
+      "types": "./dist/diagram-events.d.ts",
+      "import": "./dist/diagram-events.js"
+    },
+    "./sparkline-events": {
+      "development": "./src/sparkline-events.ts",
+      "types": "./dist/sparkline-events.d.ts",
+      "import": "./dist/sparkline-events.js"
+    },
+    "./store-events": {
+      "development": "./src/store-events.ts",
+      "types": "./dist/store-events.d.ts",
+      "import": "./dist/store-events.js"
+    },
+    "./structure-events": {
+      "development": "./src/structure-events.ts",
+      "types": "./dist/structure-events.d.ts",
+      "import": "./dist/structure-events.js"
+    },
+    "./table-events": {
+      "development": "./src/table-events.ts",
+      "types": "./dist/table-events.d.ts",
+      "import": "./dist/table-events.js"
+    },
+    "./validation-events": {
+      "development": "./src/validation-events.ts",
+      "types": "./dist/validation-events.d.ts",
+      "import": "./dist/validation-events.js"
+    },
+    "./view-events": {
+      "development": "./src/view-events.ts",
+      "types": "./dist/view-events.d.ts",
+      "import": "./dist/view-events.js"
+    },
+    "./text-effect-events": {
+      "development": "./src/text-effect-events.ts",
+      "types": "./dist/text-effect-events.d.ts",
+      "import": "./dist/text-effect-events.js"
+    }
+  },
+  "description": "SpreadsheetEvent union and per-domain event payload types (cell/chart/pivot/selection/view/settings/ink/diagram/text-effects/…). Tier 2; composes across domains, so depends on @mog/types-{core,commands,data,document,formatting,objects,viewport}.",
+  "dependencies": {
+    "@mog/types-commands": "workspace:*",
+    "@mog/types-core": "workspace:*",
+    "@mog/types-data": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/types-formatting": "workspace:*",
+    "@mog/types-objects": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

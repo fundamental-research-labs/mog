@@ -1,0 +1,11 @@
+{
+  "name": "fixture-neg-sheet-view-deep",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mog-sdk/sheet-view": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

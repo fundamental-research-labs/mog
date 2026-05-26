@@ -1,0 +1,16 @@
+[package]
+name = "compute-layout-index"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Spatial layout index: Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping"
+
+[dependencies]
+domain-types = { path = "../../../../domain-types", default-features = false }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"

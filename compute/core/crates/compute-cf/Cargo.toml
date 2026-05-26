@@ -1,0 +1,31 @@
+[package]
+name = "compute-cf"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Conditional formatting visual rule engine — predicates, visual encoding, cascade"
+
+[dependencies]
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+domain-types = { path = "../../../../domain-types", default-features = false }
+# Needed by `types/value.rs::CfValue::Formula(FormulaSource)` (typed formula boundary).
+compute-parser = { path = "../compute-parser" }
+# Direct dep so that compute-cf references CF enums (CfOperator, CfTimePeriod, …)
+# by their canonical path. Round-D deletes the `pub use ooxml_types` re-export
+# on `domain-types`; consumers that previously reached through it must now
+# depend on ooxml-types directly.
+ooxml-types = { path = "../../../../file-io/ooxml/types" }
+serde = { workspace = true, features = ["derive"] }
+# `CfValue::from_json_value` + tagged-form `Deserialize` pull `serde_json::Value`
+# into the public API surface of `types/value.rs` (typed formula boundary). Was previously
+# a dev-dep only.
+serde_json = { workspace = true }
+chrono = { workspace = true }
+rustc-hash = "2"
+
+[dev-dependencies]
+proptest = "1.0"

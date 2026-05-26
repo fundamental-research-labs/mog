@@ -1,0 +1,23 @@
+[package]
+name = "compute-table"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Table engine — filters, sort, slicers, structured refs, styles"
+
+[dependencies]
+value-types = { path = "../types/value-types" }
+cell-types = { path = "../types/cell-types" }
+formula-types = { path = "../types/formula-types" }
+domain-types = { path = "../../../../domain-types", default-features = false }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+rustc-hash = "2.1"
+chrono = { workspace = true }
+
+[dev-dependencies]
+compute-parser = { path = "../compute-parser", features = ["test-utils"] }

@@ -1,0 +1,203 @@
+{
+  "name": "@mog/types-objects",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./drawing": {
+      "development": "./src/drawing/index.ts",
+      "types": "./dist/drawing/index.d.ts",
+      "import": "./dist/drawing/index.js"
+    },
+    "./drawing/three-d": {
+      "development": "./src/drawing/three-d.ts",
+      "types": "./dist/drawing/three-d.d.ts",
+      "import": "./dist/drawing/three-d.js"
+    },
+    "./equation": {
+      "development": "./src/equation/index.ts",
+      "types": "./dist/equation/index.d.ts",
+      "import": "./dist/equation/index.js"
+    },
+    "./equation/errors": {
+      "development": "./src/equation/errors.ts",
+      "types": "./dist/equation/errors.d.ts",
+      "import": "./dist/equation/errors.js"
+    },
+    "./equation/omml-ast": {
+      "development": "./src/equation/omml-ast.ts",
+      "types": "./dist/equation/omml-ast.d.ts",
+      "import": "./dist/equation/omml-ast.js"
+    },
+    "./equation/templates": {
+      "development": "./src/equation/templates.ts",
+      "types": "./dist/equation/templates.d.ts",
+      "import": "./dist/equation/templates.js"
+    },
+    "./equation/types": {
+      "development": "./src/equation/types.ts",
+      "types": "./dist/equation/types.d.ts",
+      "import": "./dist/equation/types.js"
+    },
+    "./ink": {
+      "development": "./src/ink/index.ts",
+      "types": "./dist/ink/index.d.ts",
+      "import": "./dist/ink/index.js"
+    },
+    "./ink/spatial-index": {
+      "development": "./src/ink/spatial-index.ts",
+      "types": "./dist/ink/spatial-index.d.ts",
+      "import": "./dist/ink/spatial-index.js"
+    },
+    "./ink/types": {
+      "development": "./src/ink/types.ts",
+      "types": "./dist/ink/types.d.ts",
+      "import": "./dist/ink/types.js"
+    },
+    "./objects": {
+      "development": "./src/objects/index.ts",
+      "types": "./dist/objects/index.d.ts",
+      "import": "./dist/objects/index.js"
+    },
+    "./objects/canvas-object": {
+      "development": "./src/objects/canvas-object.ts",
+      "types": "./dist/objects/canvas-object.d.ts",
+      "import": "./dist/objects/canvas-object.js"
+    },
+    "./objects/drawing-object": {
+      "development": "./src/objects/drawing-object.ts",
+      "types": "./dist/objects/drawing-object.d.ts",
+      "import": "./dist/objects/drawing-object.js"
+    },
+    "./objects/floating-object-manager": {
+      "development": "./src/objects/floating-object-manager.ts",
+      "types": "./dist/objects/floating-object-manager.d.ts",
+      "import": "./dist/objects/floating-object-manager.js"
+    },
+    "./objects/floating-object-types": {
+      "development": "./src/objects/floating-object-types.ts",
+      "types": "./dist/objects/floating-object-types.d.ts",
+      "import": "./dist/objects/floating-object-types.js"
+    },
+    "./objects/floating-objects": {
+      "development": "./src/objects/floating-objects.ts",
+      "types": "./dist/objects/floating-objects.d.ts",
+      "import": "./dist/objects/floating-objects.js"
+    },
+    "./objects/floating-objects-view": {
+      "development": "./src/objects/floating-objects-view.ts",
+      "types": "./dist/objects/floating-objects-view.d.ts",
+      "import": "./dist/objects/floating-objects-view.js"
+    },
+    "./objects/object-bounds-reader": {
+      "development": "./src/objects/object-bounds-reader.ts",
+      "types": "./dist/objects/object-bounds-reader.d.ts",
+      "import": "./dist/objects/object-bounds-reader.js"
+    },
+    "./objects/object-mutator": {
+      "development": "./src/objects/object-mutator.ts",
+      "types": "./dist/objects/object-mutator.d.ts",
+      "import": "./dist/objects/object-mutator.js"
+    },
+    "./objects/scene-graph-reader": {
+      "development": "./src/objects/scene-graph-reader.ts",
+      "types": "./dist/objects/scene-graph-reader.d.ts",
+      "import": "./dist/objects/scene-graph-reader.js"
+    },
+    "./diagrams": {
+      "development": "./src/diagrams/index.ts",
+      "types": "./dist/diagrams/index.d.ts",
+      "import": "./dist/diagrams/index.js"
+    },
+    "./diagrams/layouts": {
+      "development": "./src/diagrams/layouts.ts",
+      "types": "./dist/diagrams/layouts.d.ts",
+      "import": "./dist/diagrams/layouts.js"
+    },
+    "./diagrams/ooxml-algorithm-types": {
+      "development": "./src/diagrams/ooxml-algorithm-types.ts",
+      "types": "./dist/diagrams/ooxml-algorithm-types.d.ts",
+      "import": "./dist/diagrams/ooxml-algorithm-types.js"
+    },
+    "./diagrams/ooxml-data-model-types": {
+      "development": "./src/diagrams/ooxml-data-model-types.ts",
+      "types": "./dist/diagrams/ooxml-data-model-types.d.ts",
+      "import": "./dist/diagrams/ooxml-data-model-types.js"
+    },
+    "./diagrams/ooxml-drawing-types": {
+      "development": "./src/diagrams/ooxml-drawing-types.ts",
+      "types": "./dist/diagrams/ooxml-drawing-types.d.ts",
+      "import": "./dist/diagrams/ooxml-drawing-types.js"
+    },
+    "./diagrams/ooxml-engine-types": {
+      "development": "./src/diagrams/ooxml-engine-types.ts",
+      "types": "./dist/diagrams/ooxml-engine-types.d.ts",
+      "import": "./dist/diagrams/ooxml-engine-types.js"
+    },
+    "./diagrams/ooxml-layout-types": {
+      "development": "./src/diagrams/ooxml-layout-types.ts",
+      "types": "./dist/diagrams/ooxml-layout-types.d.ts",
+      "import": "./dist/diagrams/ooxml-layout-types.js"
+    },
+    "./diagrams/ooxml-style-types": {
+      "development": "./src/diagrams/ooxml-style-types.ts",
+      "types": "./dist/diagrams/ooxml-style-types.d.ts",
+      "import": "./dist/diagrams/ooxml-style-types.js"
+    },
+    "./diagrams/styles": {
+      "development": "./src/diagrams/styles.ts",
+      "types": "./dist/diagrams/styles.d.ts",
+      "import": "./dist/diagrams/styles.js"
+    },
+    "./diagrams/types": {
+      "development": "./src/diagrams/types.ts",
+      "types": "./dist/diagrams/types.d.ts",
+      "import": "./dist/diagrams/types.js"
+    },
+    "./text-effects": {
+      "development": "./src/text-effects/index.ts",
+      "types": "./dist/text-effects/index.d.ts",
+      "import": "./dist/text-effects/index.js"
+    },
+    "./text-effects/bridge": {
+      "development": "./src/text-effects/bridge.ts",
+      "types": "./dist/text-effects/bridge.d.ts",
+      "import": "./dist/text-effects/bridge.js"
+    },
+    "./text-effects/effects": {
+      "development": "./src/text-effects/effects.ts",
+      "types": "./dist/text-effects/effects.d.ts",
+      "import": "./dist/text-effects/effects.js"
+    },
+    "./text-effects/presets": {
+      "development": "./src/text-effects/presets.ts",
+      "types": "./dist/text-effects/presets.d.ts",
+      "import": "./dist/text-effects/presets.js"
+    },
+    "./text-effects/types": {
+      "development": "./src/text-effects/types.ts",
+      "types": "./dist/text-effects/types.d.ts",
+      "import": "./dist/text-effects/types.js"
+    }
+  },
+  "description": "Canvas objects (floating objects, drawing, ink, text effects, diagrams, equation) and their shared 3D scene + geometry primitives. Tier 1; depends on @mog/types-core and @mog/types-viewport.",
+  "dependencies": {
+    "@mog/types-core": "workspace:*",
+    "@mog/types-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

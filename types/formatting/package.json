@@ -1,0 +1,98 @@
+{
+  "name": "@mog/types-formatting",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./conditional-format": {
+      "development": "./src/conditional-format/index.ts",
+      "types": "./dist/conditional-format/index.d.ts",
+      "import": "./dist/conditional-format/index.js"
+    },
+    "./conditional-format/presets": {
+      "development": "./src/conditional-format/presets.ts",
+      "types": "./dist/conditional-format/presets.d.ts",
+      "import": "./dist/conditional-format/presets.js"
+    },
+    "./conditional-format/render-types": {
+      "development": "./src/conditional-format/render-types.ts",
+      "types": "./dist/conditional-format/render-types.d.ts",
+      "import": "./dist/conditional-format/render-types.js"
+    },
+    "./conditional-format/rules": {
+      "development": "./src/conditional-format/rules.ts",
+      "types": "./dist/conditional-format/rules.d.ts",
+      "import": "./dist/conditional-format/rules.js"
+    },
+    "./formatting": {
+      "development": "./src/formatting/index.ts",
+      "types": "./dist/formatting/index.d.ts",
+      "import": "./dist/formatting/index.js"
+    },
+    "./formatting/format-registry": {
+      "development": "./src/formatting/format-registry.ts",
+      "types": "./dist/formatting/format-registry.d.ts",
+      "import": "./dist/formatting/format-registry.js"
+    },
+    "./formatting/theme": {
+      "development": "./src/formatting/theme.ts",
+      "types": "./dist/formatting/theme.d.ts",
+      "import": "./dist/formatting/theme.js"
+    },
+    "./number-formats": {
+      "development": "./src/number-formats/index.ts",
+      "types": "./dist/number-formats/index.d.ts",
+      "import": "./dist/number-formats/index.js"
+    },
+    "./number-formats/locale": {
+      "development": "./src/number-formats/locale/index.ts",
+      "types": "./dist/number-formats/locale/index.d.ts",
+      "import": "./dist/number-formats/locale/index.js"
+    },
+    "./number-formats/locale/locale-defaults": {
+      "development": "./src/number-formats/locale/locale-defaults.ts",
+      "types": "./dist/number-formats/locale/locale-defaults.d.ts",
+      "import": "./dist/number-formats/locale/locale-defaults.js"
+    },
+    "./number-formats/registry": {
+      "development": "./src/number-formats/registry.ts",
+      "types": "./dist/number-formats/registry.d.ts",
+      "import": "./dist/number-formats/registry.js"
+    },
+    "./number-formats/types": {
+      "development": "./src/number-formats/types.ts",
+      "types": "./dist/number-formats/types.d.ts",
+      "import": "./dist/number-formats/types.js"
+    },
+    "./styles": {
+      "development": "./src/styles/index.ts",
+      "types": "./dist/styles/index.d.ts",
+      "import": "./dist/styles/index.js"
+    },
+    "./styles/built-in-styles": {
+      "development": "./src/styles/built-in-styles.ts",
+      "types": "./dist/styles/built-in-styles.d.ts",
+      "import": "./dist/styles/built-in-styles.js"
+    }
+  },
+  "description": "Cell formatting: theme, format registry, number format catalog, workbook style presets, and conditional formatting rules/presets/render types. Tier 1; depends on @mog/types-core and @mog/types-culture.",
+  "dependencies": {
+    "@mog/types-core": "workspace:*",
+    "@mog/types-culture": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  }
+}

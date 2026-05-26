@@ -1,0 +1,43 @@
+[package]
+name = "value-types"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+rust-version = "1.85"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Universal data value primitives (CellValue, CellError, FiniteF64, Color, date_serial)"
+
+[features]
+# Enable double-double (f64x2) precision for intermediate arithmetic.
+# When enabled, FiniteF64 carries an error-term lo field alongside the
+# primary hi value, giving ~31 decimal digits for compensated summation.
+dd-precision = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+fast-float = "0.2"
+# Track R3 bridge tagged-error contract: ComputeError implements
+# bridge_types::BridgeStructuredError so every transport (WASM, NAPI,
+# Tauri) emits the same tagged-JSON envelope.
+bridge-types = { path = "../../../../../infra/rust-bridge/bridge-types" }
+# Marker proc-attribute for the `no_bare_f64_at_boundary` build-time gate.
+# `FiniteF64::val` and `F64x2::{hi, lo}` are the only legitimate bare-`f64`
+# fields in the type-crate boundary surface; they self-apply
+# `#[finite_at_boundary::allowed_bare_f64]`.
+finite-at-boundary = { path = "../finite-at-boundary" }
+
+[dev-dependencies]
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+# Drives the `tests/no_bare_f64_at_boundary.rs` build-time gate.
+finite-at-boundary-walker = { path = "../finite-at-boundary-walker" }
+
+[[bench]]
+name = "value_types_bench"
+harness = false

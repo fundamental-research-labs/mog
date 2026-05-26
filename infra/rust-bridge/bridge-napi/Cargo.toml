@@ -1,0 +1,14 @@
+[package]
+name = "bridge-napi"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "napi-rs generator for rust-bridge: generate!() -> #[napi] functions"
+
+[dependencies]
+bridge-napi-macros = { path = "macros" }
+bridge-types = { path = "../bridge-types" }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

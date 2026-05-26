@@ -1,0 +1,37 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Script Layout Snapshots snapshot: pre-script _a^b X 1`] = `
+{
+  "baseline": 10.79,
+  "childCount": 3,
+  "height": 13.75,
+  "width": 14.38,
+}
+`;
+
+exports[`Script Layout Snapshots snapshot: x^2 1`] = `
+{
+  "baseline": 10.37,
+  "childCount": 2,
+  "height": 10.37,
+  "width": 11.06,
+}
+`;
+
+exports[`Script Layout Snapshots snapshot: x_i 1`] = `
+{
+  "baseline": 5.17,
+  "childCount": 2,
+  "height": 8.8,
+  "width": 9.76,
+}
+`;
+
+exports[`Script Layout Snapshots snapshot: x_i^n 1`] = `
+{
+  "baseline": 8.58,
+  "childCount": 3,
+  "height": 12.2,
+  "width": 11.9,
+}
+`;

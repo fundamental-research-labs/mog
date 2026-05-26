@@ -1,0 +1,10 @@
+[package]
+name = "bridge-wasm"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description = "WASM generator for rust-bridge: generate!() -> #[wasm_bindgen] functions"
+
+[dependencies]
+bridge-wasm-macros = { path = "macros" }
+bridge-types = { path = "../bridge-types" }

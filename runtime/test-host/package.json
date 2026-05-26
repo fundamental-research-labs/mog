@@ -1,0 +1,32 @@
+{
+  "name": "@mog/test-host",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "description": "Deterministic trusted test host for host-contract integration testing. Workspace-private, NOT re-exported by public packages.",
+  "dependencies": {
+    "@mog-sdk/types-host": "workspace:*",
+    "@mog-sdk/types-document": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b .",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --passWithNoTests"
+  }
+}

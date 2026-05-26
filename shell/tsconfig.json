@@ -21,7 +21,7 @@
   "references": [
     { "path": "../types/host" },
     { "path": "../contracts" },
-    { "path": "../dev/devtools" },
+    { "path": "../tools/devtools" },
     { "path": "../infra/env" },
     { "path": "../infra/icons" },
     { "path": "../infra/platform" },

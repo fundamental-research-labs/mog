@@ -5,7 +5,7 @@
  * - __OS_DEVTOOLS__: Installed by @mog/devtools' setupGlobalHook() in dev mode.
  *   Typed here structurally (not imported from @mog/devtools) so that
  *   compute-core packages do not gain a runtime dependency on devtools.
- *   The canonical shape is `OSDevToolsHook` in dev/devtools/src/types.ts;
+ *   The canonical shape is `OSDevToolsHook` in @mog/devtools;
  *   the structural subset below must stay in sync with methods invoked
  *   across kernel/shell/apps/spreadsheet/canvas.
  * - __SHELL__: Installed by dev/app's bootstrap (window.__SHELL__ = shell)

@@ -19,7 +19,7 @@ All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 1. Fork the repository.
 2. Create a feature branch from `dev` (not `main`): `git checkout -b my-feature dev`
 3. Make your changes.
-4. Ensure all checks pass (see Testing below).
+4. Run the relevant checks for your change (see Testing below).
 5. Commit with a descriptive message following the conventions below.
 6. Push your branch and open a pull request against `dev`.
 
@@ -28,7 +28,9 @@ All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 - PRs must target the `dev` branch.
 - Include a clear description of what the PR does and why.
 - Link to any related issues.
-- All CI checks must pass before merge.
+- Feature PRs should pass the relevant fast checks for the area changed.
+- `dev` is an integration branch and may be temporarily red while related work lands.
+- `main` is the trusted branch. Changes reach `main` through a promotion from `dev` after the full gate is green.
 - A maintainer will review your PR. Be prepared for feedback and iteration.
 
 ## Development Setup
@@ -99,7 +101,9 @@ See the platform plan documentation for the full package boundary specification.
 
 ## Testing
 
-Before submitting a PR, verify:
+Before submitting a PR, run the smallest relevant checks for your change. For
+changes near public APIs, package boundaries, or release-facing behavior, widen
+to the applicable full checks:
 
 ```bash
 # TypeScript type checking
@@ -118,7 +122,8 @@ cargo fmt --check
 cargo clippy
 ```
 
-All of these must pass. PRs that fail CI will not be reviewed.
+Feature PRs should pass the relevant fast checks before merge to `dev`.
+Promotion from `dev` to `main` requires the full gate to be green.
 
 ## Commit Conventions
 

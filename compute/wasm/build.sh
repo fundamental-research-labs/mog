@@ -133,17 +133,48 @@ EOF
   fi
 }
 
-# Locate the wasm-bindgen-cli binary needed by the dev path.
-# Order: `wasm-bindgen` on PATH (e.g. `cargo install wasm-bindgen-cli`), then
-# wasm-pack's cached download. wasm-pack stashes its copy under
-# `~/Library/Caches/.wasm-pack/` (macOS) or `~/.cache/.wasm-pack/` (Linux).
-# The version is pinned by wasm-pack to whatever Cargo.lock says; running
-# `wasm-pack build` once is enough to populate the cache.
-find_wasm_bindgen() {
-  if command -v wasm-bindgen &>/dev/null; then
-    command -v wasm-bindgen
+# Read the wasm-bindgen crate version selected by Cargo. The generated
+# wasm-bindgen CLI must match exactly or it fails with an opaque schema-version
+# error after spending time compiling the Rust crate.
+required_wasm_bindgen_version() {
+  local lock_file="../../Cargo.lock"
+  if [[ ! -f "$lock_file" ]]; then
     return
   fi
+  awk '
+    BEGIN { in_package = 0 }
+    /^\[\[package\]\]/ { in_package = 0 }
+    /^name = "wasm-bindgen"$/ { in_package = 1 }
+    in_package && /^version = / {
+      gsub(/"/, "", $3)
+      print $3
+      exit
+    }
+  ' "$lock_file"
+}
+
+wasm_bindgen_cli_version() {
+  "$1" --version 2>/dev/null | awk '{ print $2 }'
+}
+
+# Locate the wasm-bindgen-cli binary needed by the dev path. We only accept an
+# exact version match against Cargo.lock. Stale PATH binaries are intentionally
+# ignored so local machines don't fail after a long Rust compile.
+find_wasm_bindgen() {
+  local required_version="$1"
+  local candidate
+  local candidate_version
+
+  if command -v wasm-bindgen &>/dev/null; then
+    candidate="$(command -v wasm-bindgen)"
+    candidate_version="$(wasm_bindgen_cli_version "$candidate")"
+    if [[ "$candidate_version" == "$required_version" ]]; then
+      echo "$candidate"
+      return
+    fi
+    echo "  Ignoring wasm-bindgen on PATH ($candidate_version; need $required_version): $candidate" >&2
+  fi
+
   local cache_dirs=(
     "$HOME/Library/Caches/.wasm-pack"
     "$HOME/.cache/.wasm-pack"
@@ -152,11 +183,14 @@ find_wasm_bindgen() {
   for cache_root in "${cache_dirs[@]}"; do
     if [[ -d "$cache_root" ]]; then
       local found
-      found=$(find "$cache_root" -maxdepth 2 -name 'wasm-bindgen' -type f 2>/dev/null | head -1)
-      if [[ -n "$found" && -x "$found" ]]; then
-        echo "$found"
-        return
-      fi
+      while IFS= read -r found; do
+        [[ -x "$found" ]] || continue
+        candidate_version="$(wasm_bindgen_cli_version "$found")"
+        if [[ "$candidate_version" == "$required_version" ]]; then
+          echo "$found"
+          return
+        fi
+      done < <(find "$cache_root" -maxdepth 2 -name 'wasm-bindgen' -type f 2>/dev/null)
     fi
   done
 }
@@ -168,20 +202,30 @@ find_wasm_bindgen() {
 case "$PROFILE" in
   dev)
     echo "Building @mog-sdk/wasm (--profile dev → cargo profile.wasm-dev)..."
+    REQUIRED_WBG_VERSION="$(required_wasm_bindgen_version)"
+    if [[ -z "$REQUIRED_WBG_VERSION" ]]; then
+      cargo metadata --format-version=1 >/dev/null
+      REQUIRED_WBG_VERSION="$(required_wasm_bindgen_version)"
+    fi
+    if [[ -z "$REQUIRED_WBG_VERSION" ]]; then
+      echo "✗ Could not determine wasm-bindgen version from Cargo metadata." >&2
+      exit 1
+    fi
+
+    WBG=$(find_wasm_bindgen "$REQUIRED_WBG_VERSION")
+    if [[ -z "$WBG" ]]; then
+      echo "✗ wasm-bindgen-cli $REQUIRED_WBG_VERSION not found." >&2
+      echo "  Either:" >&2
+      echo "    - run \`bash compute/wasm/build.sh --profile release\` once to populate wasm-pack's cache, OR" >&2
+      echo "    - \`cargo install -f wasm-bindgen-cli --version $REQUIRED_WBG_VERSION\`" >&2
+      exit 1
+    fi
+    echo "  Using wasm-bindgen-cli $REQUIRED_WBG_VERSION: $WBG"
+
     # Direct cargo invocation — see header note about wasm-pack 0.13.1's
     # `--profile` bug. The `wasm-dev` cargo profile is defined in the
     # workspace Cargo.toml.
     cargo build --lib --target wasm32-unknown-unknown --profile wasm-dev
-
-    WBG=$(find_wasm_bindgen)
-    if [[ -z "$WBG" ]]; then
-      echo "✗ wasm-bindgen-cli not found." >&2
-      echo "  Either:" >&2
-      echo "    - run \`bash compute/wasm/build.sh --profile release\` once to populate wasm-pack's cache, OR" >&2
-      echo "    - \`cargo install wasm-bindgen-cli\`" >&2
-      exit 1
-    fi
-    echo "  Using wasm-bindgen-cli: $WBG"
 
     RAW_WASM="$CARGO_TARGET_DIR/wasm32-unknown-unknown/wasm-dev/compute_core_wasm.wasm"
 

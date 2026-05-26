@@ -2,7 +2,7 @@
  * Conformance tests — package boundary validation.
  */
 
-import { TASK_TRACKER_MANIFEST } from '@mog/app-task-tracker/src/manifest';
+import { TASK_TRACKER_MANIFEST } from '../fixtures/task-tracker-manifest';
 
 import { createPackageBoundaryValidator } from '../../package-boundary-validator';
 

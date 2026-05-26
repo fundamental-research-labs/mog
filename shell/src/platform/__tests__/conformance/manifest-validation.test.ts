@@ -3,7 +3,7 @@
  */
 
 import { validateManifest } from '../../manifest-validator';
-import { TASK_TRACKER_MANIFEST } from '@mog/app-task-tracker/src/manifest';
+import { TASK_TRACKER_MANIFEST } from '../fixtures/task-tracker-manifest';
 import { SPREADSHEET_CANONICAL_MANIFEST } from '@mog/app-spreadsheet/src/canonical-manifest';
 import type { AppManifest } from '../../types';
 

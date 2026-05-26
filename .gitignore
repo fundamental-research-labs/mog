@@ -62,24 +62,12 @@ __pycache__/
 
 # Misc
 .mcp.json
-# Legacy corpus data is resolved locally via @mog/corpus → ~/.mog/data/<SHA>/.
-# See dev/corpus/README.md.
-# Exception: scale-fixtures is committed in-tree
-# so the corpus can be reproduced byte-for-byte from its generator script.
-# Single-digit MB so size isn't a concern.
-plans/data/*
-!plans/data/scale-fixtures/
-plans/logo/
 logo/generated/
-dev/api-eval/output/
-dev/xlsx-roundtrip/output/
 rust_out
-dev/colab-eval/output/
 .wrangler/
 
-# wasm-pack bootstrap lockfile (ensureWasmBuilt plugin in dev/app/vite.config.ts)
+# wasm-pack bootstrap lockfile
 .wasm-pack.lock
-apps/task-tracker/node_modules
 
 # Local verdaccio / npm registry dev artifacts
 scripts/htpasswd

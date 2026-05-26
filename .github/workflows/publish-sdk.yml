@@ -18,12 +18,29 @@ permissions:
 
 jobs:
   publish:
-    name: Publish SDK packages
+    name: Publish ${{ matrix.package_dir }}
     runs-on: ubuntu-latest
     environment: npm-production
     concurrency:
       group: npm-production
       cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        package_dir:
+          - contracts
+          - runtime/sdk
+          - runtime/embed
+          - runtime/spreadsheet-app
+          - views/sheet-view
+          - compute/wasm/npm
+          - compute/napi/npm/darwin-arm64
+          - compute/napi/npm/darwin-x64
+          - compute/napi/npm/linux-arm64-gnu
+          - compute/napi/npm/linux-arm64-musl
+          - compute/napi/npm/linux-x64-gnu
+          - compute/napi/npm/linux-x64-musl
+          - compute/napi/npm/win32-x64-msvc
 
     steps:
       - uses: actions/checkout@v4
@@ -51,30 +68,10 @@ jobs:
           exit 1
 
       - name: Publish package
+        working-directory: ${{ matrix.package_dir }}
         run: |
-          package_dirs=(
-            contracts
-            runtime/sdk
-            runtime/embed
-            runtime/spreadsheet-app
-            views/sheet-view
-            compute/wasm/npm
-            compute/napi/npm/darwin-arm64
-            compute/napi/npm/darwin-x64
-            compute/napi/npm/linux-arm64-gnu
-            compute/napi/npm/linux-arm64-musl
-            compute/napi/npm/linux-x64-gnu
-            compute/napi/npm/linux-x64-musl
-            compute/napi/npm/win32-x64-msvc
-          )
-
-          publish_args=(--access public)
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            publish_args+=(--dry-run)
+            npm publish --access public --dry-run
+          else
+            npm publish --access public
           fi
-
-          for package_dir in "${package_dirs[@]}"; do
-            echo "::group::Publish ${package_dir}"
-            (cd "${package_dir}" && npm publish "${publish_args[@]}")
-            echo "::endgroup::"
-          done

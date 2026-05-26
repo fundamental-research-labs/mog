@@ -1,8 +1,8 @@
 # Contributing
 
-> **Status: skeleton — content pending package stabilization**
-
-How to contribute to Mog. This guide covers developer environment setup and workflow. For contribution policies (CLA, code of conduct, review process), see the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
+This guide covers the local workflow for making public changes in this
+repository. For contribution policies, see the root
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## Prerequisites
 
@@ -13,47 +13,120 @@ How to contribute to Mog. This guide covers developer environment setup and work
 
 ## Clone and Build
 
-How to clone the repository, install dependencies, and build all packages. Expected build time and system requirements.
+Install JavaScript dependencies from the repository root:
 
 ```bash
-# example: git clone, pnpm install, build steps
+pnpm install --frozen-lockfile
+```
+
+For Rust work, use locked workspace checks when possible:
+
+```bash
+cargo check --workspace --locked
 ```
 
 ## Repository Structure
 
-Top-level directory layout: `packages/` (TypeScript), `crates/` (Rust), `docs/`, and `infra/`. How to navigate the monorepo.
+Mog is a monorepo with package directories organized by product surface:
+
+| Area | Paths |
+| --- | --- |
+| Public SDK contracts | `contracts`, `types` |
+| Kernel and services | `kernel` |
+| Runtime and embeds | `runtime`, `views` |
+| Spreadsheet app | `apps/spreadsheet`, `shell` |
+| Canvas and rendering | `canvas`, `charts` |
+| Compute and file I/O | `compute`, `file-io`, `table-engine` |
+| Tooling and docs | `tools`, `infra`, `docs` |
 
 ## Development Workflow
 
 ### Running the App Locally
 
-Start the development server, open the spreadsheet app in a browser. Hot module replacement behavior.
+Use the package-level script for the app or surface you are changing. Prefer a
+targeted command first, then widen to repo-level checks before opening a pull
+request.
 
 ### Running Tests
 
-Unit tests (Rust: `cargo test`, TypeScript package tests) and integration tests.
+Run the smallest relevant test command for the changed package:
+
+```bash
+pnpm --filter @mog-sdk/node test
+pnpm --filter @mog-sdk/embed test
+pnpm --filter @mog-sdk/sheet-view test
+```
+
+For broader TypeScript coverage, run:
+
+```bash
+pnpm typecheck
+pnpm test
+```
+
+For Rust compute changes, run the targeted crate checks first:
+
+```bash
+cargo check -p compute-core --lib --locked
+cargo test -p compute-core --locked
+```
 
 ### Building WASM
 
-How to rebuild the WASM bridge after Rust changes. Common pitfalls (stale artifacts, target directory layout).
+If a Rust change affects generated bridge artifacts, rebuild the public
+artifacts before running SDK or external fixture checks:
+
+```bash
+pnpm build:public-artifacts
+```
 
 ### Linting and Formatting
 
-ESLint, Prettier (TypeScript). `cargo fmt`, `cargo clippy` (Rust). Pre-commit hooks.
+Use the root scripts for repository-wide JavaScript and TypeScript checks:
+
+```bash
+pnpm check:ci:format
+pnpm check:ci:lint
+pnpm check:ci:typecheck
+pnpm check:ci:public-boundaries
+```
+
+Use `cargo fmt` and the relevant `cargo check` or `cargo test` command for Rust
+changes.
 
 ## Making Changes
 
 ### Branch Naming
 
-Convention for branch names. Feature branches, fix branches.
+Use short names that describe the public change, such as
+`docs/contributing-workflow` or `fix/sdk-disposal-error`.
 
 ### Commit Messages
 
-Commit message format. Conventional commits if applicable.
+Use concise, imperative commit messages:
+
+```text
+docs: clarify public contribution workflow
+fix: reject disposed workbook reads
+```
 
 ### Pull Requests
 
-PR target branch (`dev`, not `main`). What to include in the PR description. Review process.
+Open pull requests against `dev`.
+
+Include:
+
+- What changed and why.
+- The user-facing or package-facing surface affected.
+- The verification commands you ran.
+- Any checks you intentionally did not run and why.
+
+Before publishing the PR, run the fast public readiness gate when the change
+touches public package boundaries, package names, or release-facing docs:
+
+```bash
+pnpm check:publish-readiness:fast
+```
 
 ## Architecture Orientation
 

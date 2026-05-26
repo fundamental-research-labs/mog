@@ -3,7 +3,7 @@
  */
 
 import { PackageRegistryService } from '../../package-registry';
-import { TASK_TRACKER_MANIFEST } from '@mog/app-task-tracker/src/manifest';
+import { TASK_TRACKER_MANIFEST } from '../fixtures/task-tracker-manifest';
 import type { AppId, AppLoader } from '../../types';
 
 const dummyLoader: AppLoader = () =>

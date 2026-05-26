@@ -9,7 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lyfegame/shortcut.git",
+    "url": "https://github.com/fundamental-research-labs/mog.git",
     "directory": "file-io/xlsx/bridge"
   },
   "type": "module",

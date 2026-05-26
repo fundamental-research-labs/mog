@@ -7,27 +7,9 @@ workbook-aware agents, automations, and embedded spreadsheet experiences.
 
 | I want to... | Start here | Useful command |
 | --- | --- | --- |
-| Run the Mog spreadsheet app | [Run the app](#run-the-app) | `pnpm dev` |
+| Build Mog from source | [Develop Mog](#develop-mog) | `pnpm typecheck` |
 | Use Mog in my agent or app | [Use Mog as a library](#use-mog-as-a-library) | `pnpm add @mog-sdk/node` |
-| Contribute or navigate the repo | [Develop Mog](#develop-mog) | `pnpm check:ci:list` |
-
-## Run The App
-
-Prerequisites: Node.js, pnpm, Rust, and `wasm-pack`.
-
-```bash
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-`pnpm dev` runs the spreadsheet development app (`@mog/spreadsheet-dev`) with
-Vite. The default local URL is `http://localhost:3002`.
-
-For the explicit package command:
-
-```bash
-pnpm --filter @mog/spreadsheet-dev dev
-```
+| Contribute or navigate the repo | [Develop Mog](#develop-mog) | `pnpm check:publish-readiness:fast` |
 
 ## Use Mog As A Library
 
@@ -74,11 +56,10 @@ cargo test -p compute-core --locked
 Common package checks:
 
 ```bash
-pnpm check:ci:list
-pnpm check:ci:inventory
 pnpm --filter @mog-sdk/node test
 pnpm --filter @mog-sdk/embed test
 pnpm --filter @mog-sdk/sheet-view test
+pnpm check:publish-readiness:fast
 pnpm check:external-fixtures
 ```
 

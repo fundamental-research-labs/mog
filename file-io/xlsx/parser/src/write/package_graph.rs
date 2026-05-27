@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::relationships::{Relationship, RelationshipManager};
-use super::write_error::WriteError;
+use super::write_error::{PackageIntegrityIssue, WriteError};
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
@@ -110,6 +110,85 @@ pub struct ResolvedPackageGraph {
 }
 
 impl ResolvedPackageGraph {
+    pub fn validate_for_export(&self) -> Result<(), WriteError> {
+        let mut errors = Vec::new();
+        let mut relationship_ids_by_owner: HashMap<&str, HashSet<&str>> = HashMap::new();
+
+        for part in self.parts.values() {
+            if part.content_type.is_none() && part.default_extension.is_none() {
+                errors.push(PackageIntegrityIssue::MissingPartContentType {
+                    part_path: part.path.clone(),
+                });
+            }
+            if let Some((extension, content_type)) = &part.default_extension
+                && (extension.is_empty() || content_type.is_empty())
+            {
+                errors.push(PackageIntegrityIssue::MissingPartContentType {
+                    part_path: part.path.clone(),
+                });
+            }
+            if matches!(part.kind, PackagePartKind::OpaqueClean) && part.bytes.is_none() {
+                errors.push(PackageIntegrityIssue::MissingOpaquePartBytes {
+                    part_path: part.path.clone(),
+                });
+            }
+            validate_required_content_type(part, &mut errors);
+        }
+
+        for rel in &self.relationships {
+            let ids = relationship_ids_by_owner
+                .entry(rel.owner_rels_path.as_str())
+                .or_default();
+            if !ids.insert(rel.id.as_str()) {
+                errors.push(PackageIntegrityIssue::DuplicateRelationshipId {
+                    rels_path: rel.owner_rels_path.clone(),
+                    id: rel.id.clone(),
+                });
+            }
+
+            if let Some(Some(owner_part)) = owner_part_path_from_rels_path(&rel.owner_rels_path)
+                && !self.parts.contains_key(&owner_part)
+            {
+                errors.push(PackageIntegrityIssue::MissingRelationshipOwner {
+                    rels_path: rel.owner_rels_path.clone(),
+                    owner_path: owner_part,
+                });
+            }
+
+            if rel.target_mode.as_deref() == Some("External") {
+                continue;
+            }
+
+            match relationship_target_part_path(&rel.owner_rels_path, &rel.target) {
+                Ok(Some(target_path)) if !self.parts.contains_key(&target_path) => {
+                    errors.push(PackageIntegrityIssue::MissingRelationshipTarget {
+                        rels_path: rel.owner_rels_path.clone(),
+                        id: rel.id.clone(),
+                        target: rel.target.clone(),
+                        resolved_path: target_path,
+                    });
+                }
+                Ok(_) => {}
+                Err(reason) => errors.push(PackageIntegrityIssue::InvalidRelationshipTarget {
+                    rels_path: rel.owner_rels_path.clone(),
+                    id: rel.id.clone(),
+                    target: rel.target.clone(),
+                    reason,
+                }),
+            }
+        }
+
+        for part in self.parts.values() {
+            validate_modeled_part_owner_relationship(part, &self.relationships, &mut errors);
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(WriteError::PackageIntegrityIssues(errors))
+        }
+    }
+
     pub fn relationship_manager_for_owner(&self, owner: &PackageOwner) -> RelationshipManager {
         let owner_rels_path = owner_rels_path(owner);
         let relationships: Vec<_> = self
@@ -1239,6 +1318,286 @@ fn validate_internal_target_is_registered(
         }
     }
     Ok(())
+}
+
+fn validate_required_content_type(part: &PackagePart, errors: &mut Vec<PackageIntegrityIssue>) {
+    let Some(expected) = required_content_type_for_modeled_part(&part.path) else {
+        return;
+    };
+    if part.content_type.as_deref() != Some(expected) {
+        errors.push(PackageIntegrityIssue::MissingRequiredContentType {
+            part_path: part.path.clone(),
+            expected_content_type: expected.to_string(),
+        });
+    }
+}
+
+fn validate_modeled_part_owner_relationship(
+    part: &PackagePart,
+    relationships: &[ResolvedPackageRelationship],
+    errors: &mut Vec<PackageIntegrityIssue>,
+) {
+    if !matches!(part.kind, PackagePartKind::Modeled) {
+        return;
+    }
+    let Some(required) = required_owner_relationship_for_modeled_part(&part.path) else {
+        return;
+    };
+    let found = relationships.iter().any(|rel| {
+        required
+            .rels_path
+            .as_deref()
+            .is_none_or(|rels_path| rel.owner_rels_path == rels_path)
+            && rel.relationship_type == required.relationship_type
+            && rel.target_mode.as_deref() != Some("External")
+            && relationship_target_part_path(&rel.owner_rels_path, &rel.target)
+                .ok()
+                .flatten()
+                .as_deref()
+                == Some(part.path.as_str())
+    });
+    if !found {
+        errors.push(PackageIntegrityIssue::MissingRequiredRelationship {
+            rels_path: required.rels_path.unwrap_or_else(|| "*".to_string()),
+            relationship_type: required.relationship_type.to_string(),
+            target_path: part.path.clone(),
+        });
+    }
+}
+
+struct RequiredRelationship {
+    rels_path: Option<String>,
+    relationship_type: &'static str,
+}
+
+fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRelationship> {
+    let workbook_rels = "xl/_rels/workbook.xml.rels";
+
+    if path == "xl/workbook.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some("_rels/.rels".to_string()),
+            relationship_type: REL_OFFICE_DOCUMENT,
+        });
+    }
+    if path == "docProps/core.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some("_rels/.rels".to_string()),
+            relationship_type: REL_CORE_PROPERTIES,
+        });
+    }
+    if path == "docProps/app.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some("_rels/.rels".to_string()),
+            relationship_type: REL_EXTENDED_PROPERTIES,
+        });
+    }
+    if path == "docProps/custom.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some("_rels/.rels".to_string()),
+            relationship_type: REL_CUSTOM_PROPERTIES,
+        });
+    }
+    if path.starts_with("xl/worksheets/sheet") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_WORKSHEET,
+        });
+    }
+    if path == "xl/sharedStrings.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_SHARED_STRINGS,
+        });
+    }
+    if path == "xl/styles.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_STYLES,
+        });
+    }
+    if path == "xl/theme/theme1.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_THEME,
+        });
+    }
+    if path == "xl/metadata.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_METADATA,
+        });
+    }
+    if path == "xl/persons/person.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: super::REL_PERSON,
+        });
+    }
+    if path.starts_with("xl/externalLinks/externalLink") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_EXTERNAL_LINK,
+        });
+    }
+    if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_PIVOT_CACHE,
+        });
+    }
+    if let Some(relationship_type) = relationship_type_for_worksheet_child(path) {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type,
+        });
+    }
+    if path.starts_with("xl/charts/chartEx") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: REL_CHART_EX,
+        });
+    }
+    if path.starts_with("xl/charts/chart") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: REL_CHART,
+        });
+    }
+    if path.starts_with("xl/charts/style") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: "http://schemas.microsoft.com/office/2011/relationships/chartStyle",
+        });
+    }
+    if path.starts_with("xl/charts/color") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle",
+        });
+    }
+    if path.starts_with("xl/media/") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: REL_IMAGE,
+        });
+    }
+    if path.starts_with("xl/pivotCache/pivotCacheRecords") && path.ends_with(".xml") {
+        let idx = path
+            .trim_start_matches("xl/pivotCache/pivotCacheRecords")
+            .trim_end_matches(".xml");
+        return Some(RequiredRelationship {
+            rels_path: Some(format!(
+                "xl/pivotCache/_rels/pivotCacheDefinition{idx}.xml.rels"
+            )),
+            relationship_type: REL_PIVOT_CACHE_RECORDS,
+        });
+    }
+
+    None
+}
+
+fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
+    if path == "xl/workbook.xml" {
+        Some(CT_WORKBOOK)
+    } else if path.starts_with("xl/worksheets/sheet") && path.ends_with(".xml") {
+        Some(CT_WORKSHEET)
+    } else if path == "xl/sharedStrings.xml" {
+        Some(CT_SHARED_STRINGS)
+    } else if path == "xl/styles.xml" {
+        Some(CT_STYLES)
+    } else if path == "xl/theme/theme1.xml" {
+        Some(CT_THEME)
+    } else if path == "docProps/core.xml" {
+        Some(CT_CORE_PROPERTIES)
+    } else if path == "docProps/app.xml" {
+        Some(CT_EXTENDED_PROPERTIES)
+    } else if path == "docProps/custom.xml" {
+        Some(CT_CUSTOM_PROPERTIES)
+    } else if path == "xl/metadata.xml" {
+        Some(CT_METADATA)
+    } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
+        Some(CT_TABLE)
+    } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
+        Some(CT_COMMENTS)
+    } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
+        Some(CT_THREADED_COMMENTS)
+    } else if path.starts_with("xl/drawings/drawing") && path.ends_with(".xml") {
+        Some(CT_DRAWING)
+    } else if path.starts_with("xl/charts/chartEx") && path.ends_with(".xml") {
+        Some(CT_CHART_EX)
+    } else if path.starts_with("xl/charts/chart") && path.ends_with(".xml") {
+        Some(CT_CHART)
+    } else if path.starts_with("xl/charts/style") && path.ends_with(".xml") {
+        Some(CT_CHART_STYLE)
+    } else if path.starts_with("xl/charts/color") && path.ends_with(".xml") {
+        Some(CT_CHART_COLOR_STYLE)
+    } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {
+        Some(CONTENT_TYPE_CTRL_PROP)
+    } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
+        Some(CT_PIVOT_TABLE)
+    } else if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
+        Some(CT_PIVOT_CACHE)
+    } else if path.starts_with("xl/pivotCache/pivotCacheRecords") && path.ends_with(".xml") {
+        Some(CT_PIVOT_CACHE_RECORDS)
+    } else if path == "docMetadata/LabelInfo.xml" {
+        Some(CT_DOC_METADATA_LABEL_INFO)
+    } else {
+        None
+    }
+}
+
+fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
+    if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
+        Some(REL_TABLE)
+    } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
+        Some(REL_COMMENTS)
+    } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
+        Some(REL_THREADED_COMMENT)
+    } else if path.starts_with("xl/drawings/drawing") && path.ends_with(".xml") {
+        Some(REL_DRAWING)
+    } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {
+        Some(REL_CTRL_PROP)
+    } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
+        Some(REL_PIVOT_TABLE)
+    } else if path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin") {
+        Some(REL_PRINTER_SETTINGS)
+    } else if path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml") {
+        Some(REL_VML_DRAWING)
+    } else {
+        None
+    }
+}
+
+fn relationship_target_part_path(
+    owner_rels_path: &str,
+    target: &str,
+) -> Result<Option<String>, String> {
+    if target.starts_with('#') {
+        return Ok(None);
+    }
+    let target_part = target.split_once('#').map_or(target, |(part, _)| part);
+    if target_part.is_empty() {
+        return Ok(None);
+    }
+    let owner_part = owner_part_path_from_rels_path(owner_rels_path)
+        .ok_or_else(|| format!("invalid relationship owner path {owner_rels_path}"))?;
+    crate::infra::opc::resolve_relationship_target(owner_part.as_deref(), target_part)
+        .map_err(|err| format!("{err:?}"))
+        .map(|path| normalize_part_path(&path))
+        .map(Some)
+}
+
+fn owner_part_path_from_rels_path(owner_rels_path: &str) -> Option<Option<String>> {
+    if owner_rels_path == "_rels/.rels" {
+        return Some(None);
+    }
+    let (dir, file) = owner_rels_path.rsplit_once("/_rels/")?;
+    let owner_file = file.strip_suffix(".rels")?;
+    Some(Some(if dir.is_empty() {
+        owner_file.to_string()
+    } else {
+        format!("{dir}/{owner_file}")
+    }))
 }
 
 #[cfg(test)]

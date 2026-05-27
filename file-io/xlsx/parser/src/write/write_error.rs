@@ -9,8 +9,105 @@ pub enum WriteError {
     Zip(String),
     /// Exported package violates OPC relationship/content integrity.
     PackageIntegrity(String),
+    /// Exported package graph violates OPC relationship/content integrity.
+    PackageIntegrityIssues(Vec<PackageIntegrityIssue>),
     /// General I/O error.
     Io(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackageIntegrityIssue {
+    MissingRelationshipOwner {
+        rels_path: String,
+        owner_path: String,
+    },
+    DuplicateRelationshipId {
+        rels_path: String,
+        id: String,
+    },
+    InvalidRelationshipTarget {
+        rels_path: String,
+        id: String,
+        target: String,
+        reason: String,
+    },
+    MissingRelationshipTarget {
+        rels_path: String,
+        id: String,
+        target: String,
+        resolved_path: String,
+    },
+    MissingRequiredRelationship {
+        rels_path: String,
+        relationship_type: String,
+        target_path: String,
+    },
+    MissingRequiredContentType {
+        part_path: String,
+        expected_content_type: String,
+    },
+    MissingPartContentType {
+        part_path: String,
+    },
+    MissingOpaquePartBytes {
+        part_path: String,
+    },
+}
+
+impl std::fmt::Display for PackageIntegrityIssue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingRelationshipOwner {
+                rels_path,
+                owner_path,
+            } => write!(
+                f,
+                "relationship part {rels_path} has missing owner part {owner_path}"
+            ),
+            Self::DuplicateRelationshipId { rels_path, id } => {
+                write!(f, "relationship part {rels_path} has duplicate Id {id}")
+            }
+            Self::InvalidRelationshipTarget {
+                rels_path,
+                id,
+                target,
+                reason,
+            } => write!(
+                f,
+                "relationship {id} in {rels_path} has invalid target {target}: {reason}"
+            ),
+            Self::MissingRelationshipTarget {
+                rels_path,
+                id,
+                target,
+                resolved_path,
+            } => write!(
+                f,
+                "relationship {id} in {rels_path} targets missing part {resolved_path} from target {target}"
+            ),
+            Self::MissingRequiredRelationship {
+                rels_path,
+                relationship_type,
+                target_path,
+            } => write!(
+                f,
+                "relationship part {rels_path} is missing required relationship type {relationship_type} targeting {target_path}"
+            ),
+            Self::MissingRequiredContentType {
+                part_path,
+                expected_content_type,
+            } => write!(
+                f,
+                "part {part_path} is missing required content type {expected_content_type}"
+            ),
+            Self::MissingPartContentType { part_path } => {
+                write!(f, "part {part_path} has no registered content type")
+            }
+            Self::MissingOpaquePartBytes { part_path } => {
+                write!(f, "opaque part {part_path} has no bytes to emit")
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for WriteError {
@@ -19,6 +116,14 @@ impl std::fmt::Display for WriteError {
             WriteError::Deserialization(msg) => write!(f, "Deserialization error: {}", msg),
             WriteError::Zip(msg) => write!(f, "ZIP error: {}", msg),
             WriteError::PackageIntegrity(msg) => write!(f, "Package integrity error: {}", msg),
+            WriteError::PackageIntegrityIssues(issues) => {
+                let message = issues
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                write!(f, "Package integrity error: {message}")
+            }
             WriteError::Io(msg) => write!(f, "I/O error: {}", msg),
         }
     }

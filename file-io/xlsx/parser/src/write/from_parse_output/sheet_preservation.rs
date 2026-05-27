@@ -126,8 +126,25 @@ fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> boo
     if xml.contains("<tableParts") {
         return false;
     }
+    if raw_worksheet_element_contains_unresolved_relationship(xml) {
+        return false;
+    }
 
     !xml.contains("<extLst") || raw_worksheet_ext_lst_is_compatible(sheet_data, xml)
+}
+
+fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
+    [
+        "<customProperties",
+        "<drawing",
+        "<legacyDrawing",
+        "<legacyDrawingHF",
+        "<controls",
+        "<oleObjects",
+        "<picture",
+    ]
+    .iter()
+    .any(|marker| xml.contains(marker))
 }
 
 fn raw_worksheet_ext_lst_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {

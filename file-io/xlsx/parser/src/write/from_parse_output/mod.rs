@@ -1988,6 +1988,7 @@ pub fn write_xlsx_from_parse_output(
         &pivot_data,
     )?;
     let package_graph = package_graph_builder.resolve()?;
+    package_graph.validate_for_export()?;
 
     for (sheet_idx, drawing_writer) in drawing_writer_data.iter_mut().enumerate() {
         let Some(drawing_writer) = drawing_writer else {

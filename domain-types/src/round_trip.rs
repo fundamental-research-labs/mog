@@ -1,3 +1,8 @@
+//! Round-trip preservation types.
+//!
+//! Field ownership and deprecation policy is recorded in
+//! `round_trip_field_inventory.md` next to this module.
+
 use ooxml_types::styles::Stylesheet;
 use ooxml_types::themes::{ColorScheme, FontScheme, FormatScheme};
 use serde::{Deserialize, Serialize};
@@ -44,27 +49,40 @@ pub struct RoundTripContext {
     #[serde(default)]
     pub styles_namespace_attrs: Vec<(String, String)>,
 
-    // OPC packaging.
-    //
-    // AUDIT WARNING: package-level rels/content-types are currently broad
-    // preservation hooks. Under the RoundTripContext invariant above they may
-    // only describe opaque, unmodeled subgraphs. They must not be treated as
-    // authoritative for workbook, worksheet, styles, sharedStrings, theme,
-    // metadata, comments, tables, drawings, pivots, or any other modeled part.
-    #[serde(default)]
+    /// Deprecated compatibility-only input for legacy snapshots.
+    ///
+    /// Broad package content-type defaults must not be package authority. New
+    /// export paths derive content types from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_defaults: Vec<(String, String)>,
-    #[serde(default)]
+    /// Deprecated compatibility-only input for legacy snapshots.
+    ///
+    /// Broad package content-type overrides must not be package authority. New
+    /// export paths derive content types from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_overrides: Vec<(String, String)>,
-    #[serde(default)]
+    /// Deprecated compatibility-only input for legacy snapshots.
+    ///
+    /// Root relationships must not be replayed as package authority. New export
+    /// paths derive relationships from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_relationships: Vec<OpcRelationship>,
-    #[serde(default)]
+    /// Deprecated compatibility-only input for legacy snapshots.
+    ///
+    /// Workbook relationships must not be replayed as package authority. New
+    /// export paths derive relationships from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_relationships: Vec<OpcRelationship>,
 
     /// Original relationship IDs per sheet from workbook.xml, in document order.
     ///
     /// Non-authoritative hint only. Sheet relationships for modeled worksheets
     /// must be generated from the exported workbook graph.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet_workbook_r_ids: Vec<String>,
 
     // Workbook-level preserved blobs
@@ -228,10 +246,12 @@ pub struct RoundTripContext {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetRoundTripContext {
-    /// AUDIT WARNING: sheet relationships may only preserve opaque sheet-owned
-    /// subgraphs. Relationships for modeled sheet features must be generated
-    /// from domain state.
-    #[serde(default)]
+    /// Deprecated compatibility-only input for legacy snapshots.
+    ///
+    /// Sheet relationships must not be replayed as package authority. New export
+    /// paths derive relationships from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet_opc_rels: Vec<OpcRelationship>,
     /// Compatibility input only. Comment VML and header/footer image VML may
     /// seed modeled/owned outputs, but stale raw VML must not emit by itself.
@@ -745,5 +765,62 @@ mod tests {
             round_tripped.pivot_package.workbook_cache_entries[0].ownership,
             PivotPackageOwnership::CleanImported
         );
+    }
+
+    #[test]
+    fn deprecated_package_authority_fields_deserialize_from_legacy_snapshot() {
+        let ctx: RoundTripContext = serde_json::from_str(
+            r#"{
+                "sheets": [{
+                    "sheetOpcRels": [{
+                        "id": "rIdSheetLegacy",
+                        "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
+                        "target": "../drawings/drawing99.xml",
+                        "targetMode": null
+                    }]
+                }],
+                "contentTypeDefaults": [["bin", "application/octet-stream"]],
+                "contentTypeOverrides": [["/xl/legacy.xml", "application/vnd.legacy+xml"]],
+                "rootRelationships": [{
+                    "id": "rIdRootLegacy",
+                    "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+                    "target": "xl/workbook.xml",
+                    "targetMode": null
+                }],
+                "workbookRelationships": [{
+                    "id": "rIdWorkbookLegacy",
+                    "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+                    "target": "worksheets/sheet99.xml",
+                    "targetMode": null
+                }],
+                "sheetWorkbookRIds": ["rIdWorkbookLegacy"]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(ctx.content_type_defaults.len(), 1);
+        assert_eq!(ctx.content_type_overrides.len(), 1);
+        assert_eq!(ctx.root_relationships[0].id, "rIdRootLegacy");
+        assert_eq!(ctx.workbook_relationships[0].id, "rIdWorkbookLegacy");
+        assert_eq!(ctx.sheet_workbook_r_ids, ["rIdWorkbookLegacy"]);
+        assert_eq!(ctx.sheets[0].sheet_opc_rels[0].id, "rIdSheetLegacy");
+    }
+
+    #[test]
+    fn empty_deprecated_package_authority_fields_are_not_serialized() {
+        let json = serde_json::to_value(RoundTripContext {
+            sheets: vec![SheetRoundTripContext::default()],
+            ..Default::default()
+        })
+        .unwrap();
+
+        let object = json.as_object().unwrap();
+        assert!(!object.contains_key("contentTypeDefaults"));
+        assert!(!object.contains_key("contentTypeOverrides"));
+        assert!(!object.contains_key("rootRelationships"));
+        assert!(!object.contains_key("workbookRelationships"));
+        assert!(!object.contains_key("sheetWorkbookRIds"));
+        let sheet = object["sheets"].as_array().unwrap()[0].as_object().unwrap();
+        assert!(!sheet.contains_key("sheetOpcRels"));
     }
 }

@@ -1448,6 +1448,49 @@ fn stale_content_type_override_for_missing_part_is_not_exported() {
 }
 
 #[test]
+fn stale_root_relationship_to_missing_part_is_not_exported_or_reserved() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        root_relationships: vec![domain_types::OpcRelationship {
+            id: "rId1".to_string(),
+            rel_type: "http://example.invalid/relationships/privateRootFeature".to_string(),
+            target: "/xl/private/rootFeature.xml".to_string(),
+            target_mode: None,
+        }],
+        content_type_overrides: vec![(
+            "/xl/private/rootFeature.xml".to_string(),
+            "application/vnd.example.private+xml".to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let root_rels_bytes = archive.read_file("_rels/.rels").unwrap();
+    let root_rels_xml = String::from_utf8(root_rels_bytes.clone()).unwrap();
+    let root_rels = crate::domain::workbook::read::parse_all_rels(&root_rels_bytes);
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/private/rootFeature.xml"));
+    assert!(!root_rels_xml.contains("privateRootFeature"));
+    assert!(!root_rels_xml.contains("/xl/private/rootFeature.xml"));
+    assert!(!content_types.contains("/xl/private/rootFeature.xml"));
+    assert_eq!(
+        root_rels
+            .iter()
+            .filter(|rel| rel.id == "rId1" && rel.rel_type == crate::write::REL_OFFICE_DOCUMENT)
+            .count(),
+        1,
+        "stale root relationship ID must not reserve rId1 away from the generated officeDocument relationship",
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_workbook_relationship_to_missing_modeled_part_is_not_exported() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -1483,6 +1526,48 @@ fn stale_workbook_relationship_to_missing_modeled_part_is_not_exported() {
     assert!(!workbook_rels.contains(crate::write::REL_SHARED_STRINGS));
     assert!(!workbook_rels.contains("Target=\"sharedStrings.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/sharedStrings.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_sheet_workbook_relationship_ids_do_not_reserve_ids_or_change_sheet_paths() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheet_workbook_r_ids: vec!["rId44".to_string()],
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId44".to_string(),
+            rel_type: crate::write::REL_WORKSHEET.to_string(),
+            target: "worksheets/sheet44.xml".to_string(),
+            target_mode: None,
+        }],
+        content_type_overrides: vec![(
+            "/xl/worksheets/sheet44.xml".to_string(),
+            crate::write::CT_WORKSHEET.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels_bytes = archive.read_file("xl/_rels/workbook.xml.rels").unwrap();
+    let workbook_rels_xml = String::from_utf8(workbook_rels_bytes.clone()).unwrap();
+    let workbook_rels = crate::domain::workbook::read::parse_all_rels(&workbook_rels_bytes);
+    let worksheet_rel = workbook_rels
+        .iter()
+        .find(|rel| rel.rel_type == crate::write::REL_WORKSHEET)
+        .expect("generated workbook relationships should include Sheet1");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/worksheets/sheet1.xml"));
+    assert!(!archive.contains("xl/worksheets/sheet44.xml"));
+    assert_eq!(worksheet_rel.target, "worksheets/sheet1.xml");
+    assert_ne!(worksheet_rel.id, "rId44");
+    assert!(!workbook_rels_xml.contains("worksheets/sheet44.xml"));
+    assert!(!content_types.contains("/xl/worksheets/sheet44.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1734,6 +1819,55 @@ fn stale_preserved_table_parts_are_not_replayed_when_modeled_tables_are_deleted(
     assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
     assert!(!archive.contains("xl/tables/table9.xml"));
     assert!(!content_types.contains("PartName=\"/xl/tables/table9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_preserved_relationship_bearing_sheet_xml_is_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rIdCustom".to_string(),
+                rel_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty"
+                    .to_string(),
+                target: "../customProperty/item1.xml".to_string(),
+                target_mode: None,
+            }],
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0colBreaks\0customProperties".to_string(),
+                r#"<customProperties><customPr r:id="rIdCustom" name="StaleProperty"/></customProperties>"#
+                    .to_string(),
+            )],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/customProperty/item1.xml".to_string(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml"
+                .to_string(),
+        )],
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/customProperty/item1.xml".to_string(),
+            data: b"<customProperty/>".to_vec(),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(!sheet_xml.contains("<customProperties"));
+    assert!(!sheet_xml.contains("rIdCustom"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/customProperty/item1.xml"));
+    assert!(!content_types.contains("/xl/customProperty/item1.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

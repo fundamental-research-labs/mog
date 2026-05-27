@@ -456,11 +456,15 @@ fn build_opaque_package_subgraphs(
     custom_xml_parts: &[BlobPart],
     web_extension_parts: &[BlobPart],
     binary_blobs: &[BlobPart],
+    content_type_overrides: &[(String, String)],
     sheet_contexts: &[SheetRoundTripContext],
     sheet_data: &[domain_types::SheetData],
-    root_relationships: &[ooxml_types::shared::OpcRelationship],
-    workbook_relationships: &[ooxml_types::shared::OpcRelationship],
+    package_relationships: (
+        &[ooxml_types::shared::OpcRelationship],
+        &[ooxml_types::shared::OpcRelationship],
+    ),
 ) -> Vec<OpaquePackageSubgraph> {
+    let (root_relationships, workbook_relationships) = package_relationships;
     let mut subgraphs = Vec::new();
     subgraphs.extend(build_web_extension_opaque_subgraphs(
         web_extension_parts,
@@ -475,7 +479,121 @@ fn build_opaque_package_subgraphs(
         sheet_contexts,
         sheet_data,
     ));
+    subgraphs.extend(build_worksheet_custom_property_opaque_subgraphs(
+        binary_blobs,
+        content_type_overrides,
+        sheet_contexts,
+    ));
     subgraphs
+}
+
+const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
+const CT_WORKSHEET_CUSTOM_PROPERTY: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml";
+
+fn build_worksheet_custom_property_opaque_subgraphs(
+    binary_blobs: &[BlobPart],
+    content_type_overrides: &[(String, String)],
+    sheet_contexts: &[SheetRoundTripContext],
+) -> Vec<OpaquePackageSubgraph> {
+    let binary_blobs_by_path: HashMap<_, _> = binary_blobs
+        .iter()
+        .map(|part| (normalize_package_path(&part.path), part))
+        .collect();
+    let clean_custom_property_paths: HashSet<_> = content_type_overrides
+        .iter()
+        .filter(|(_, content_type)| *content_type == CT_WORKSHEET_CUSTOM_PROPERTY)
+        .map(|(path, _)| normalize_package_path(path))
+        .collect();
+
+    let mut subgraphs = Vec::new();
+    for (sheet_idx, sheet_rt) in sheet_contexts.iter().enumerate() {
+        let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+        let owner = OpaquePackageOwner::Worksheet {
+            index: sheet_idx,
+            path: owner_path.clone(),
+        };
+        let relationship_ids = sheet_rt
+            .custom_properties_xml
+            .as_deref()
+            .map(custom_property_relationship_ids)
+            .unwrap_or_default();
+        for relationship_id in relationship_ids {
+            let Some(rel) = sheet_rt.sheet_opc_rels.iter().find(|rel| {
+                rel.id == relationship_id && rel.rel_type == REL_WORKSHEET_CUSTOM_PROPERTY
+            }) else {
+                continue;
+            };
+            if rel
+                .target_mode
+                .as_deref()
+                .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
+            {
+                continue;
+            }
+            let Some(path) =
+                crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target)
+                    .ok()
+                    .map(|path| normalize_package_path(&path))
+            else {
+                continue;
+            };
+            if !clean_custom_property_paths.contains(&path) {
+                continue;
+            }
+            let Some(blob) = binary_blobs_by_path.get(&path) else {
+                continue;
+            };
+            subgraphs.push(OpaquePackageSubgraph {
+                owner: owner.clone(),
+                owner_relationship: OpaquePackageRelationship {
+                    owner: owner.clone(),
+                    relationship_type: REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+                    target: OpaqueRelationshipTarget::InternalPart { path: path.clone() },
+                    relationship_id_hint: Some(relationship_id),
+                },
+                parts: vec![OpaquePackagePart {
+                    part: BlobPart {
+                        path,
+                        data: blob.data.clone(),
+                    },
+                    content_type: Some(CT_WORKSHEET_CUSTOM_PROPERTY.to_string()),
+                    default_extension: None,
+                    ownership: OpaquePackageOwnership::CleanImported,
+                }],
+                relationships: Vec::new(),
+                ownership: OpaquePackageOwnership::CleanImported,
+            });
+        }
+    }
+    subgraphs
+        .into_iter()
+        .filter(closed_opaque_subgraph)
+        .collect()
+}
+
+fn custom_property_relationship_ids(xml: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = xml.as_bytes();
+    while let Some(pos) = find_subslice(rest, b"customPr") {
+        rest = &rest[pos + b"customPr".len()..];
+        let Some(tag_end) = memchr::memchr(b'>', rest) else {
+            break;
+        };
+        let tag = &rest[..tag_end];
+        if let Some(id) = crate::infra::xml::parse_string_attr(tag, b"r:id") {
+            ids.push(id);
+        }
+        rest = &rest[tag_end..];
+    }
+    ids
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn build_worksheet_drawing_opaque_subgraphs(
@@ -900,10 +1018,10 @@ pub(super) fn build_round_trip_context(
         &custom_xml_parts,
         &web_extension_parts,
         &binary_blobs,
+        &result.content_type_overrides,
         &sheet_contexts,
         sheet_data,
-        &result.root_relationships,
-        &result.workbook_relationships,
+        (&result.root_relationships, &result.workbook_relationships),
     );
 
     RoundTripContext {

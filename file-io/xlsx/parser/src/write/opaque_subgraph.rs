@@ -13,6 +13,8 @@ const REL_CUSTOM_XML: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
 const CT_PIVOT_CACHE_RECORDS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
+const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
 
 pub fn register_round_trip_opaque_subgraphs(
     graph: &mut PackageGraphBuilder,
@@ -54,6 +56,7 @@ fn opaque_subgraphs(
         );
     }
     subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
+    subgraphs.retain(|subgraph| !is_worksheet_custom_property_subgraph(subgraph));
     subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
 }
@@ -75,6 +78,15 @@ fn is_shadowed_worksheet_drawing_subgraph(
         .sheets
         .get(*index)
         .is_some_and(|sheet| !sheet.charts.is_empty() || !sheet.floating_objects.is_empty())
+}
+
+fn is_worksheet_custom_property_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
+    subgraph.ownership == OpaquePackageOwnership::CleanImported
+        && subgraph.owner_relationship.relationship_type == REL_WORKSHEET_CUSTOM_PROPERTY
+        && matches!(
+            subgraph.owner_relationship.owner,
+            OpaquePackageOwner::Worksheet { .. }
+        )
 }
 
 fn normalize_explicit_opaque_subgraph(

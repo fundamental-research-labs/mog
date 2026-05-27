@@ -267,6 +267,49 @@ fn clean_imported_unknown_drawing_roundtrips_as_opaque_subgraph() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn clean_imported_worksheet_custom_property_roundtrips_as_opaque_subgraph() {
+    const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
+
+    let source = imported_worksheet_custom_property_xlsx();
+    let (output, ctx, _diagnostics) =
+        parse_xlsx_to_output(&source).expect("source XLSX should parse");
+
+    assert!(
+        ctx.opaque_package_subgraphs.iter().any(|subgraph| {
+            subgraph.owner_relationship.relationship_type == REL_WORKSHEET_CUSTOM_PROPERTY
+        }),
+        "clean imported worksheet custom property should lower into an opaque package subgraph"
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx))
+        .expect("worksheet custom property export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(sheet_xml.contains(
+        r#"<customProperties><customPr r:id="rIdCustom" name="MogCustom"/></customProperties>"#
+    ));
+    assert!(sheet_rels.contains(r#"Id="rIdCustom""#));
+    assert!(sheet_rels.contains(r#"Target="../customProperty/item1.xml""#));
+    assert_eq!(
+        archive.read_file("xl/customProperty/item1.xml").unwrap(),
+        b"<customProperty name=\"MogCustom\"/>".to_vec()
+    );
+    assert!(content_types.contains(r#"PartName="/xl/customProperty/item1.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn imported_unknown_drawing_xlsx() -> Vec<u8> {
     let mut zip = ZipBuilder::new();
     zip.add_stored(
@@ -334,6 +377,65 @@ fn imported_unknown_drawing_xlsx() -> Vec<u8> {
 </Relationships>"#,
     )
     .add_stored("xl/media/image7.png", b"opaque image bytes");
+
+    zip.build()
+}
+
+fn imported_worksheet_custom_property_xlsx() -> Vec<u8> {
+    let mut zip = ZipBuilder::new();
+    zip.add_stored(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/customProperty/item1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml"/>
+</Types>"#,
+    )
+    .add_stored(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rIdSheet"/>
+  </sheets>
+</workbook>"#,
+    )
+    .add_stored(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetData/>
+  <customProperties><customPr r:id="rIdCustom" name="MogCustom"/></customProperties>
+</worksheet>"#,
+    )
+    .add_stored(
+        "xl/worksheets/_rels/sheet1.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdCustom" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty" Target="../customProperty/item1.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/customProperty/item1.xml",
+        b"<customProperty name=\"MogCustom\"/>",
+    );
 
     zip.build()
 }

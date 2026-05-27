@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use domain_types::{BlobPart, OpcRelationship, RoundTripContext, SheetRoundTripContext};
+use domain_types::{
+    OpaquePackageOwner, OpaquePackageOwnership, OpaquePackageRelationship,
+    OpaqueRelationshipTarget, RoundTripContext, SheetRoundTripContext,
+};
 
 pub(super) const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
@@ -32,38 +35,15 @@ pub(super) fn custom_properties_for_export(
         return None;
     }
 
-    let blob_by_path: HashMap<&str, &BlobPart> = round_trip_ctx
-        .binary_blobs
-        .iter()
-        .map(|blob| (blob.path.as_str(), blob))
-        .collect();
-    let content_types: HashMap<&str, &str> = round_trip_ctx
-        .content_type_overrides
-        .iter()
-        .map(|(path, content_type)| (path.trim_start_matches('/'), content_type.as_str()))
-        .collect();
+    let clean_parts = clean_opaque_custom_property_parts(round_trip_ctx, sheet_idx);
 
     let mut parts = Vec::with_capacity(relationship_ids.len());
     for relationship_id in relationship_ids {
-        let rel = sheet_rt.sheet_opc_rels.iter().find(|rel| {
-            rel.id == relationship_id && rel.rel_type == REL_WORKSHEET_CUSTOM_PROPERTY
-        })?;
-        if rel
-            .target_mode
-            .as_deref()
-            .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
-        {
-            return None;
-        }
-        let path = custom_property_part_path(sheet_idx, rel)?;
-        let blob = blob_by_path.get(path.as_str())?;
-        if content_types.get(path.as_str()).copied() != Some(CT_WORKSHEET_CUSTOM_PROPERTY) {
-            return None;
-        }
+        let (path, data) = clean_parts.get(&relationship_id)?;
         parts.push(WorksheetCustomPropertyPart {
-            path,
+            path: path.clone(),
             relationship_id_hint: relationship_id,
-            data: blob.data.clone(),
+            data: data.clone(),
         });
     }
 
@@ -85,12 +65,56 @@ pub(super) fn with_resolved_relationship_ids(
     remapped
 }
 
-fn custom_property_part_path(sheet_idx: usize, rel: &OpcRelationship) -> Option<String> {
-    crate::infra::opc::resolve_relationship_target(
-        Some(&format!("xl/worksheets/sheet{}.xml", sheet_idx + 1)),
-        &rel.target,
-    )
-    .ok()
+fn clean_opaque_custom_property_parts(
+    round_trip_ctx: &RoundTripContext,
+    sheet_idx: usize,
+) -> HashMap<String, (String, Vec<u8>)> {
+    let mut parts_by_relationship_id = HashMap::new();
+    for subgraph in &round_trip_ctx.opaque_package_subgraphs {
+        if subgraph.ownership != OpaquePackageOwnership::CleanImported {
+            continue;
+        }
+        let mut relationships = Vec::with_capacity(1 + subgraph.relationships.len());
+        relationships.push(&subgraph.owner_relationship);
+        relationships.extend(subgraph.relationships.iter());
+        for relationship in relationships {
+            if !is_worksheet_custom_property_relationship(relationship, sheet_idx) {
+                continue;
+            }
+            let Some(relationship_id) = relationship.relationship_id_hint.clone() else {
+                continue;
+            };
+            let OpaqueRelationshipTarget::InternalPart { path } = &relationship.target else {
+                continue;
+            };
+            let Some(part) = subgraph.parts.iter().find(|part| {
+                part.content_type.as_deref() == Some(CT_WORKSHEET_CUSTOM_PROPERTY)
+                    && part.part.path.trim_start_matches('/') == path.trim_start_matches('/')
+                    && part.ownership == OpaquePackageOwnership::CleanImported
+            }) else {
+                continue;
+            };
+            parts_by_relationship_id.insert(
+                relationship_id,
+                (
+                    part.part.path.trim_start_matches('/').to_string(),
+                    part.part.data.clone(),
+                ),
+            );
+        }
+    }
+    parts_by_relationship_id
+}
+
+pub(super) fn is_worksheet_custom_property_relationship(
+    relationship: &OpaquePackageRelationship,
+    sheet_idx: usize,
+) -> bool {
+    relationship.relationship_type == REL_WORKSHEET_CUSTOM_PROPERTY
+        && matches!(
+            relationship.owner,
+            OpaquePackageOwner::Worksheet { index, .. } if index == sheet_idx
+        )
 }
 
 fn custom_property_relationship_ids(xml: &str) -> Vec<String> {

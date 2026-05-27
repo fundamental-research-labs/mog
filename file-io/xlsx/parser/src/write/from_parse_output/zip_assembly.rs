@@ -2,7 +2,7 @@ use domain_types::{ParseOutput, RoundTripContext};
 
 use super::assembly::{
     ChartEntry, ChartExEntry, SheetExtras, WorksheetDrawingGraphEntry,
-    WorksheetFormControlVmlGraphEntry,
+    WorksheetFormControlVmlGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
 use super::{
     WriteError, chart_allows_auxiliary_replay, chart_auxiliary, external_links, vml_merge,
@@ -42,6 +42,7 @@ pub(super) fn write_zip_package(
     drawing_rels_should_emit: &[bool],
     worksheet_form_control_vml_relationships: &[WorksheetFormControlVmlGraphEntry],
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
+    worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
 ) -> Result<Vec<u8>, WriteError> {
     // Build content types with knowledge of comments, tables, theme, and props.
     let has_any_comments = sheet_extras.iter().any(|e| e.comments.is_some());
@@ -148,7 +149,6 @@ pub(super) fn write_zip_package(
     let mut zip_vml_idx: usize = 0;
     let mut zip_comment_idx: usize = 0;
     let mut zip_ctrl_prop_idx: usize = 0;
-    let mut zip_tc_idx: usize = 0;
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
         zip.add_file(&format!("xl/worksheets/sheet{}.xml", sheet_num), sheet_xml);
@@ -263,13 +263,16 @@ pub(super) fn write_zip_package(
 
         // Threaded comment XML
         if let Some(ref tc_xml) = sheet_extras[idx].threaded_comments {
-            zip_tc_idx += 1;
-            add_registered_part(
-                package_graph,
-                &mut zip,
-                &format!("xl/threadedComments/threadedComment{}.xml", zip_tc_idx),
-                tc_xml.clone(),
-            )?;
+            let tc_entry = worksheet_threaded_comments_relationships
+                .iter()
+                .find(|entry| entry.sheet_idx == idx)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing graph-registered threaded comments part for sheet {}",
+                        idx + 1
+                    ))
+                })?;
+            add_registered_part(package_graph, &mut zip, &tc_entry.path, tc_xml.clone())?;
         }
 
         if let Some(custom_properties) = &sheet_extras[idx].custom_properties {

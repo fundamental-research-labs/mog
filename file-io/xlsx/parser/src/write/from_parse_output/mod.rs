@@ -24,6 +24,7 @@ mod sheet_builder;
 mod sheet_parts;
 mod sheet_preservation;
 mod styles;
+mod threaded_comments;
 mod vml_merge;
 mod workbook_parts;
 mod worksheet_custom_properties;
@@ -586,27 +587,14 @@ pub fn write_xlsx_from_parse_output(
         // Threaded comment rels (must come after legacy comment rels)
         if has_threaded_comments {
             global_tc_idx += 1;
-            let path = format!("xl/threadedComments/threadedComment{}.xml", global_tc_idx);
-            let target = worksheet_relative_target(&path);
-            let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
-                original_sheet_rels,
-                REL_THREADED_COMMENT,
-                &target,
-                None,
-            )
-            .filter(|r_id| rels.get_by_id(r_id).is_none())
-            {
-                rels.add_with_id(&r_id, REL_THREADED_COMMENT, &target);
-                Some(r_id)
-            } else {
-                Some(rels.add(REL_THREADED_COMMENT, &target))
-            };
-            worksheet_threaded_comments_relationships.push(WorksheetThreadedCommentsGraphEntry {
-                sheet_idx,
-                path,
-                target,
-                relationship_id_hint,
-            });
+            worksheet_threaded_comments_relationships.push(
+                threaded_comments::add_relationship_for_export(
+                    sheet_idx,
+                    global_tc_idx,
+                    original_sheet_rels,
+                    &mut rels,
+                ),
+            );
         }
 
         // Table rels
@@ -1926,6 +1914,7 @@ pub fn write_xlsx_from_parse_output(
         &drawing_rels_should_emit,
         &worksheet_form_control_vml_relationships,
         &worksheet_drawing_relationships,
+        &worksheet_threaded_comments_relationships,
     )
 }
 

@@ -657,7 +657,43 @@ fn closed_opaque_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
         } else {
             true
         }
-    })
+    }) && clean_owned_subgraph_has_no_unreachable_parts(subgraph, &part_paths)
+}
+
+fn clean_owned_subgraph_has_no_unreachable_parts(
+    subgraph: &OpaquePackageSubgraph,
+    part_paths: &HashSet<String>,
+) -> bool {
+    if subgraph.ownership != OpaquePackageOwnership::CleanImported {
+        return true;
+    }
+    let OpaqueRelationshipTarget::InternalPart { path } = &subgraph.owner_relationship.target
+    else {
+        return part_paths.is_empty();
+    };
+
+    let mut reachable = HashSet::new();
+    let mut stack = vec![normalize_path(path)];
+    while let Some(path) = stack.pop() {
+        if !part_paths.contains(&path) || !reachable.insert(path.clone()) {
+            continue;
+        }
+        for relationship in &subgraph.relationships {
+            let OpaquePackageOwner::Part { path: owner_path } = &relationship.owner else {
+                continue;
+            };
+            if normalize_path(owner_path) != path {
+                continue;
+            }
+            if let OpaqueRelationshipTarget::InternalPart { path: target_path } =
+                &relationship.target
+            {
+                stack.push(normalize_path(target_path));
+            }
+        }
+    }
+
+    part_paths.iter().all(|path| reachable.contains(path))
 }
 
 fn is_relationship_part(path: &str) -> bool {

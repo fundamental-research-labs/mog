@@ -725,7 +725,7 @@ fn current_formula_metadata<'a>(
     if let Some(formula) = cell
         .cell_formula
         .as_ref()
-        .filter(|formula| formula_metadata_matches_current_cell(cell, formula))
+        .filter(|formula| current_formula_metadata_matches_current_cell(cell, formula))
     {
         return Some(formula);
     }
@@ -742,7 +742,7 @@ fn formula_round_trip_hints_match_current_cell(
     }
 
     if let Some(formula) = cell.cell_formula.as_ref() {
-        return formula_metadata_matches_current_cell(cell, formula);
+        return current_formula_metadata_matches_current_cell(cell, formula);
     }
 
     if let Some(formula) = imported_formula {
@@ -772,6 +772,43 @@ fn imported_formula_metadata_matches_current_cell(
     }
 }
 
+fn current_formula_metadata_matches_current_cell(
+    cell: &DomainCellData,
+    formula: &ooxml_types::worksheet::CellFormula,
+) -> bool {
+    use ooxml_types::worksheet::CellFormulaType;
+
+    if !formula_metadata_matches_current_cell(cell, formula) {
+        return false;
+    }
+
+    match formula.t {
+        CellFormulaType::Shared => formula
+            .r#ref
+            .as_deref()
+            .is_some_and(|r| single_cell_ref_matches(r, cell.row, cell.col)),
+        CellFormulaType::Array => current_array_formula_ref_matches(cell, formula),
+        _ => true,
+    }
+}
+
+fn current_array_formula_ref_matches(
+    cell: &DomainCellData,
+    formula: &ooxml_types::worksheet::CellFormula,
+) -> bool {
+    let Some(ref_text) = formula.r#ref.as_deref() else {
+        return false;
+    };
+
+    if single_cell_ref_matches(ref_text, cell.row, cell.col) {
+        return true;
+    }
+
+    cell.array_ref.as_deref().is_some_and(|array_ref| {
+        formulas_match(array_ref, ref_text) && range_starts_at(ref_text, cell.row, cell.col)
+    })
+}
+
 fn formula_metadata_matches_current_cell(
     cell: &DomainCellData,
     formula: &ooxml_types::worksheet::CellFormula,
@@ -797,6 +834,11 @@ fn formula_metadata_matches_current_cell(
         CellFormulaType::Shared | CellFormulaType::Array => false,
         _ => true,
     }
+}
+
+fn range_starts_at(ref_text: &str, row: u32, col: u32) -> bool {
+    crate::infra::a1::parse_a1_range(ref_text)
+        .is_some_and(|(start_row, start_col, _, _)| start_row == row && start_col == col)
 }
 
 fn formulas_match(current: &str, imported: &str) -> bool {

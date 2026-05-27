@@ -130,6 +130,70 @@ fn stale_merge_context_does_not_create_deleted_modeled_merges() {
 }
 
 #[test]
+fn outline_properties_roundtrip_from_modeled_state() {
+    let mut output = make_single_sheet(
+        "Outline",
+        vec![cell(0, 0, CellValue::Text(Arc::from("Grouped")))],
+    );
+    output.sheets[0].outline_properties = Some(ooxml_types::worksheet::OutlineProperties {
+        apply_styles: true,
+        summary_below: false,
+        summary_right: false,
+        show_outline_symbols: false,
+    });
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<sheetPr><outlinePr"));
+    assert!(sheet_xml.contains(r#"applyStyles="1""#));
+    assert!(sheet_xml.contains(r#"summaryBelow="0""#));
+    assert!(sheet_xml.contains(r#"summaryRight="0""#));
+    assert!(sheet_xml.contains(r#"showOutlineSymbols="0""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+
+    let (rt, _ctx, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert_eq!(
+        rt.sheets[0].outline_properties,
+        output.sheets[0].outline_properties
+    );
+}
+
+#[test]
+fn stale_sheet_pr_context_does_not_create_deleted_outline_properties() {
+    let output = make_single_sheet(
+        "Outline",
+        vec![cell(0, 0, CellValue::Text(Arc::from("Ungrouped")))],
+    );
+    let ctx = RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0first\0sheetPr".to_string(),
+                r#"<sheetPr><outlinePr applyStyles="1" summaryBelow="0"/></sheetPr>"#.to_string(),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<sheetPr"));
+    assert!(!sheet_xml.contains("<outlinePr"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+
+    let (rt, _ctx, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert!(rt.sheets[0].outline_properties.is_none());
+}
+
+#[test]
 fn roundtrip_single_cell_merge() {
     // Edge case: a merge region that spans just 2 cells
     let mut output = make_single_sheet(

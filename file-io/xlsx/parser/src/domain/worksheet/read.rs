@@ -7,6 +7,7 @@ use crate::infra::scanner;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use crate::output::results::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
+use ooxml_types::worksheet::OutlineProperties;
 
 // =============================================================================
 // Merge Cells
@@ -71,6 +72,35 @@ pub fn merge_cells_has_count(xml: &[u8]) -> bool {
         }
     }
     false
+}
+
+// =============================================================================
+// Sheet Properties
+// =============================================================================
+
+/// Parse `<sheetPr><outlinePr .../></sheetPr>` from worksheet XML.
+pub fn parse_outline_properties(xml: &[u8]) -> Option<OutlineProperties> {
+    let outline_start = find_tag_simd(xml, b"outlinePr", 0)?;
+    let outline_end = find_gt_simd(xml, outline_start)
+        .map(|p| p + 1)
+        .unwrap_or(xml.len());
+    let element = &xml[outline_start..outline_end];
+
+    let mut props = OutlineProperties::default();
+    if let Some(v) = parse_bool_attr_opt(element, b"applyStyles=\"") {
+        props.apply_styles = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(element, b"summaryBelow=\"") {
+        props.summary_below = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(element, b"summaryRight=\"") {
+        props.summary_right = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(element, b"showOutlineSymbols=\"") {
+        props.show_outline_symbols = v;
+    }
+
+    Some(props)
 }
 
 // =============================================================================

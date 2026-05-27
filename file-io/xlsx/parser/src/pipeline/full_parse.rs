@@ -1100,6 +1100,7 @@ fn process_sheet_core(
 
     // Extract original <dimension ref="..."/> for round-trip fidelity
     let original_dimension = parse_dimension_ref(pre_sd);
+    let outline_properties = crate::domain::worksheet::read::parse_outline_properties(pre_sd);
 
     // Detect empty <extLst/> for round-trip fidelity
     let has_empty_ext_lst = memchr::memmem::find(worksheet_xml, b"<extLst/>").is_some();
@@ -1329,6 +1330,7 @@ fn process_sheet_core(
         row_heights,
         frozen_pane,
         view_options,
+        outline_properties,
         charts,
         smartart_diagrams,
         slicers,
@@ -1497,6 +1499,8 @@ fn parse_sheets_sequential(
 
         // Extract original <dimension ref="..."/> for round-trip fidelity
         let original_dimension = parse_dimension_ref(pre_sd_early);
+        let outline_properties =
+            crate::domain::worksheet::read::parse_outline_properties(pre_sd_early);
 
         // Detect empty <extLst/> for round-trip fidelity
         let has_empty_ext_lst = memchr::memmem::find(&worksheet_xml, b"<extLst/>").is_some();
@@ -1862,6 +1866,7 @@ fn parse_sheets_sequential(
             row_heights,
             frozen_pane,
             view_options,
+            outline_properties,
             charts,
             smartart_diagrams,
             slicers,

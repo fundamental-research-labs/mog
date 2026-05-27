@@ -887,3 +887,58 @@ fn threading_result(
         file_sharing: None,
     }
 }
+
+#[test]
+fn workbook_views_populate_parse_output_and_round_trip_context() {
+    let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
+    result.workbook_views = vec![
+        ooxml_types::workbook::BookView {
+            active_tab: 2,
+            first_sheet: 1,
+            visibility: ooxml_types::workbook::Visibility::Hidden,
+            minimized: true,
+            show_horizontal_scroll: false,
+            show_vertical_scroll: true,
+            show_sheet_tabs: false,
+            auto_filter_date_grouping: false,
+            x_window: Some(120),
+            y_window: Some(240),
+            window_width: Some(14400),
+            window_height: Some(9000),
+            tab_ratio: Some(725.5),
+            xr_uid: Some("{VIEW-1}".to_string()),
+            ext_lst: None,
+        },
+        ooxml_types::workbook::BookView {
+            active_tab: 0,
+            first_sheet: 0,
+            window_width: Some(8000),
+            ..Default::default()
+        },
+    ];
+
+    let (output, round_trip, _diagnostics) = full_parse_result_to_parse_output(&result);
+
+    assert_eq!(output.workbook_views.len(), 2);
+    assert_eq!(round_trip.workbook_views, output.workbook_views);
+
+    let primary = &output.workbook_views[0];
+    assert_eq!(primary.active_tab, 2);
+    assert_eq!(primary.first_sheet, 1);
+    assert_eq!(
+        primary.visibility,
+        domain_types::domain::workbook::WorkbookViewVisibility::Hidden
+    );
+    assert!(primary.minimized);
+    assert!(!primary.show_horizontal_scroll);
+    assert!(primary.show_vertical_scroll);
+    assert!(!primary.show_sheet_tabs);
+    assert!(!primary.auto_filter_date_grouping);
+    assert_eq!(primary.x_window, Some(120));
+    assert_eq!(primary.y_window, Some(240));
+    assert_eq!(primary.window_width, Some(14400));
+    assert_eq!(primary.window_height, Some(9000));
+    assert_eq!(primary.tab_ratio, Some(725.5));
+    assert_eq!(primary.uid.as_deref(), Some("{VIEW-1}"));
+    assert_eq!(output.workbook_views[1].window_width, Some(8000));
+}

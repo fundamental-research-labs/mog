@@ -21,7 +21,7 @@ use crate::domain::print::write::format_f64;
 use crate::infra::a1::to_a1;
 use crate::write::sheet::SheetFormatPr;
 use crate::write::xml_writer::XmlWriter;
-use ooxml_types::worksheet::{Selection, SheetView};
+use ooxml_types::worksheet::{OutlineProperties, Selection, SheetView};
 
 // ============================================================================
 // Public write helpers
@@ -42,6 +42,30 @@ pub fn write_dimensions(w: &mut XmlWriter, dimension: Option<(u32, u32, u32, u32
             .attr("ref", &ref_str)
             .self_close();
     }
+}
+
+/// Write modeled worksheet properties currently represented in `SheetData`.
+pub fn write_sheet_properties(w: &mut XmlWriter, outline_properties: Option<&OutlineProperties>) {
+    let Some(outline_properties) = outline_properties else {
+        return;
+    };
+
+    w.start_element("sheetPr").end_attrs();
+    w.start_element("outlinePr");
+    if outline_properties.apply_styles {
+        w.attr("applyStyles", "1");
+    }
+    if !outline_properties.summary_below {
+        w.attr("summaryBelow", "0");
+    }
+    if !outline_properties.summary_right {
+        w.attr("summaryRight", "0");
+    }
+    if !outline_properties.show_outline_symbols {
+        w.attr("showOutlineSymbols", "0");
+    }
+    w.self_close();
+    w.end_element("sheetPr");
 }
 
 /// Write the `<sheetViews>` element including frozen-pane and selection children.

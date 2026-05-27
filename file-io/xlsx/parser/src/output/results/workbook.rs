@@ -247,6 +247,9 @@ pub struct FullParsedSheet {
     /// Sheet view options (gridlines, headers visibility).
     /// Multiple `<sheetView>` elements are preserved for round-trip fidelity.
     pub view_options: Vec<SheetViewOutput>,
+    /// Outline properties from `<sheetPr><outlinePr>`.
+    #[serde(skip)]
+    pub outline_properties: Option<ooxml_types::worksheet::OutlineProperties>,
     /// Charts embedded in this sheet
     pub charts: Vec<domain_types::ChartSpec>,
     /// SmartArt diagrams embedded in this sheet (raw XML parts for TS-side rendering)

@@ -27,10 +27,11 @@ use super::xml_writer::XmlWriter;
 pub use crate::common::range::{ColWidth, MergeRange, SheetPane};
 use crate::domain::print::write::{PrintWriter, format_f64};
 use crate::domain::worksheet::write::{
-    write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_views,
+    write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_properties,
+    write_sheet_views,
 };
 use domain_types::AuthoredStyleRun;
-pub use ooxml_types::worksheet::{Selection, SheetView, SheetViewType};
+pub use ooxml_types::worksheet::{OutlineProperties, Selection, SheetView, SheetViewType};
 use std::collections::BTreeMap;
 
 /// XML namespace for SpreadsheetML
@@ -69,6 +70,8 @@ pub struct SheetWriter {
     merge_cells_emit_count: bool,
     /// Sheet view settings (one or more `<sheetView>` elements)
     sheet_views: Vec<SheetView>,
+    /// Modeled worksheet properties emitted as `<sheetPr>`.
+    outline_properties: Option<OutlineProperties>,
     /// Print settings (margins, page setup, header/footer, print options, breaks)
     print_writer: Option<PrintWriter>,
     /// Sheet format properties (default row height, column width)
@@ -133,6 +136,7 @@ impl SheetWriter {
             merges: Vec::new(),
             merge_cells_emit_count: true,
             sheet_views: vec![SheetView::default()],
+            outline_properties: None,
             print_writer: None,
             sheet_format_pr: SheetFormatPr::default(),
             uid: None,
@@ -638,6 +642,12 @@ impl SheetWriter {
         self
     }
 
+    /// Set modeled worksheet outline properties.
+    pub fn set_outline_properties(&mut self, outline_properties: OutlineProperties) -> &mut Self {
+        self.outline_properties = Some(outline_properties);
+        self
+    }
+
     /// Set print settings for this sheet.
     pub fn set_print_writer(&mut self, pw: PrintWriter) -> &mut Self {
         self.print_writer = Some(pw);
@@ -941,6 +951,8 @@ impl SheetWriter {
                 w.raw_str(&elem.raw_xml);
             }
         }
+
+        write_sheet_properties(&mut w, self.outline_properties.as_ref());
 
         // Write dimension
         self.write_dimension(&mut w);

@@ -1269,7 +1269,7 @@ fn convert_sheet(
         data_validations_x_window: sheet.data_validations_x_window,
         data_validations_y_window: sheet.data_validations_y_window,
         outline_groups,
-        outline_properties: None, // TODO: populate from parsed <sheetPr><outlinePr> when available
+        outline_properties: sheet.outline_properties.clone(),
         extra_sheet_views,
     };
 

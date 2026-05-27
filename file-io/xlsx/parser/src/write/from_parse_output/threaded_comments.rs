@@ -47,7 +47,16 @@ fn original_threaded_comments_path(
         .and_then(|rel| {
             crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target).ok()
         })
-        .filter(|path| {
-            path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml")
-        })
+        .filter(|path| is_threaded_comments_part_path(path))
+}
+
+fn is_threaded_comments_part_path(path: &str) -> bool {
+    let Some(number) = path
+        .strip_prefix("xl/threadedComments/threadedComment")
+        .and_then(|rest| rest.strip_suffix(".xml"))
+    else {
+        return false;
+    };
+
+    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
 }

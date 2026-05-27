@@ -35,6 +35,9 @@ pub(super) fn build_sheet(
     emit_cell_metadata_refs: bool,
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
+    if let Some(outline_properties) = &sheet_data.outline_properties {
+        writer.set_outline_properties(outline_properties.clone());
+    }
 
     // ── Sheet format properties (default row height, column width) ─────
     {

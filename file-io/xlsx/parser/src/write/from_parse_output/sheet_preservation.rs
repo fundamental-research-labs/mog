@@ -123,6 +123,11 @@ pub(super) fn empty_ext_lst_for_export(
 }
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
+    if raw_xml_contains_element(xml, "sheetPr")
+        && (sheet_data.outline_properties.is_some() || raw_xml_contains_element(xml, "outlinePr"))
+    {
+        return false;
+    }
     if raw_worksheet_element_contains_modeled_child(xml) {
         return false;
     }

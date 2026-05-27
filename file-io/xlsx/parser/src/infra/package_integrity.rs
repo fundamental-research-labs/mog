@@ -18,12 +18,13 @@ use crate::write::{
     CT_EXTENDED_PROPERTIES, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WORKSHEET,
     REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_DRAWING,
     REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
-    REL_THEME, REL_THREADED_COMMENT, REL_WORKSHEET,
+    REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
 };
 use crate::zip::XlsxArchive;
 
 const CT_CHART_EX: &str = "application/vnd.ms-office.chartex+xml";
 const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
+const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageIntegrityError {
@@ -361,6 +362,9 @@ fn validate_modeled_part_invariants(
         } else if is_comment_part(path) {
             require_any_relationship_to_path(relationships_by_part, REL_COMMENTS, path, errors);
             require_content_type(archive, path, CT_COMMENTS, errors);
+        } else if is_vml_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_VML_DRAWING, path, errors);
+            require_content_type(archive, path, CT_VML_DRAWING, errors);
         } else if is_threaded_comment_part(path) {
             require_any_relationship_to_path(
                 relationships_by_part,
@@ -656,6 +660,10 @@ fn is_threaded_comment_part(path: &str) -> bool {
 
 fn is_drawing_part(path: &str) -> bool {
     path.starts_with("xl/drawings/drawing") && path.ends_with(".xml")
+}
+
+fn is_vml_part(path: &str) -> bool {
+    path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml")
 }
 
 fn is_chart_part(path: &str) -> bool {
@@ -980,7 +988,9 @@ mod tests {
 
     #[test]
     fn vml_image_relid_without_matching_vml_relationship_fails() {
-        let content_types = valid_content_types("");
+        let content_types = valid_content_types(
+            r#"<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>"#,
+        );
         let workbook_rels = workbook_rels("");
         let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
         let archive = archive(&[
@@ -1016,8 +1026,71 @@ mod tests {
     }
 
     #[test]
-    fn vml_image_relid_with_matching_vml_relationship_passes() {
+    fn vml_part_without_content_type_fails() {
         let content_types = valid_content_types("");
+        let workbook_rels = workbook_rels("");
+        let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><legacyDrawing r:id="rIdVml"/></worksheet>"#,
+            ),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels),
+            ("xl/drawings/vmlDrawing1.vml", br#"<xml/>"#),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("VML content type missing");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingRequiredContentType {
+                part_path,
+                content_type
+            } if part_path == "xl/drawings/vmlDrawing1.vml"
+                && *content_type == CT_VML_DRAWING
+        )));
+    }
+
+    #[test]
+    fn vml_part_without_sheet_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            ("xl/worksheets/sheet1.xml", br#"<worksheet/>"#),
+            ("xl/drawings/vmlDrawing1.vml", br#"<xml/>"#),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("VML relationship missing");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingRequiredRelationship {
+                rels_path,
+                rel_type,
+                target_path
+            } if rels_path == "*"
+                && *rel_type == REL_VML_DRAWING
+                && target_path == "xl/drawings/vmlDrawing1.vml"
+        )));
+    }
+
+    #[test]
+    fn vml_image_relid_with_matching_vml_relationship_passes() {
+        let content_types = valid_content_types(
+            r#"<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/><Default Extension="png" ContentType="image/png"/>"#,
+        );
         let workbook_rels = workbook_rels("");
         let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
         let vml_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#;

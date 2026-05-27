@@ -67,11 +67,7 @@ module.exports = {
     {
       // Ban raw import.meta.env — must use @mog/env (getEnvVar, isDev, isProd)
       files: ['**/*.{ts,tsx}'],
-      excludedFiles: [
-        'infra/env/src/index.ts',
-        '**/*.test.{ts,tsx}',
-        '**/*.spec.{ts,tsx}',
-      ],
+      excludedFiles: ['infra/env/src/index.ts', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
       rules: {
         'no-restricted-syntax': [
           'error',

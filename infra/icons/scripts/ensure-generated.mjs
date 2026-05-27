@@ -47,7 +47,9 @@ function collectSvgInputs() {
 
   for (const category of categories) {
     const categoryDir = join(srcDir, category);
-    for (const file of readdirSync(categoryDir).filter((entry) => entry.endsWith('.svg')).sort()) {
+    for (const file of readdirSync(categoryDir)
+      .filter((entry) => entry.endsWith('.svg'))
+      .sort()) {
       const componentName = svgToPascal(file);
       inputs.push({
         svgPath: join(categoryDir, file),

@@ -362,18 +362,20 @@ pub(super) fn write_zip_package(
             entry.records_xml.clone(),
         )?;
         // Pivot cache definition rels (definition → records relationship).
-        let cache_rels_xml = package_graph
-            .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Part {
+        let cache_rels = package_graph.relationship_manager_for_owner(
+            &crate::write::package_graph::PackageOwner::Part {
                 path: format!("xl/pivotCache/pivotCacheDefinition{}.xml", entry.global_idx),
-            })
-            .to_xml();
-        zip.add_file(
-            &format!(
-                "xl/pivotCache/_rels/pivotCacheDefinition{}.xml.rels",
-                entry.global_idx
-            ),
-            cache_rels_xml,
+            },
         );
+        if !cache_rels.is_empty() {
+            zip.add_file(
+                &format!(
+                    "xl/pivotCache/_rels/pivotCacheDefinition{}.xml.rels",
+                    entry.global_idx
+                ),
+                cache_rels.to_xml(),
+            );
+        }
     }
 
     // Chart XML files + auxiliary files (style, colors, .rels)

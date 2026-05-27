@@ -479,6 +479,11 @@ fn build_opaque_package_subgraphs(
         sheet_contexts,
         sheet_data,
     ));
+    subgraphs.extend(build_header_footer_vml_opaque_subgraphs(
+        binary_blobs,
+        sheet_contexts,
+        sheet_data,
+    ));
     subgraphs.extend(build_worksheet_custom_property_opaque_subgraphs(
         binary_blobs,
         content_type_overrides,
@@ -491,6 +496,132 @@ const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
 const CT_WORKSHEET_CUSTOM_PROPERTY: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml";
+const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
+
+fn build_header_footer_vml_opaque_subgraphs(
+    binary_blobs: &[BlobPart],
+    sheet_contexts: &[SheetRoundTripContext],
+    sheet_data: &[domain_types::SheetData],
+) -> Vec<OpaquePackageSubgraph> {
+    let binary_blobs_by_path: HashMap<_, _> = binary_blobs
+        .iter()
+        .map(|part| (normalize_package_path(&part.path), part))
+        .collect();
+    let mut subgraphs = Vec::new();
+
+    for (sheet_idx, sheet_rt) in sheet_contexts.iter().enumerate() {
+        if sheet_data
+            .get(sheet_idx)
+            .is_none_or(|sheet| sheet.hf_images.is_empty())
+        {
+            continue;
+        }
+        let comment_vml_path = comment_vml_path(sheet_idx, sheet_rt);
+        for vml_part in &sheet_rt.raw_vml_drawings {
+            if comment_vml_path.as_deref() == Some(vml_part.path.as_str()) {
+                continue;
+            }
+            let rels_path = vml_part.rels.as_ref().map(|rels| rels.path.as_str());
+            let rels_data = vml_part.rels.as_ref().map(|rels| rels.data.as_slice());
+            let Some(parsed) = crate::domain::print::hf_images::parse_hf_vml_context(
+                &vml_part.path,
+                &vml_part.data,
+                rels_path,
+                rels_data,
+            ) else {
+                continue;
+            };
+
+            let mut parts = vec![OpaquePackagePart {
+                part: BlobPart {
+                    path: normalize_package_path(&vml_part.path),
+                    data: vml_part.data.clone(),
+                },
+                content_type: None,
+                default_extension: Some(("vml".to_string(), CT_VML_DRAWING.to_string())),
+                ownership: OpaquePackageOwnership::CleanImported,
+            }];
+            let mut relationships = Vec::new();
+            for (relationship_id, target) in parsed.image_targets {
+                let Some(target_path) = normalize_hf_image_target(&vml_part.path, &target) else {
+                    continue;
+                };
+                let Some(blob) = binary_blobs_by_path.get(&target_path) else {
+                    continue;
+                };
+                if !parts
+                    .iter()
+                    .any(|part| normalize_package_path(&part.part.path) == target_path)
+                {
+                    parts.push(binary_opaque_part(blob));
+                }
+                relationships.push(OpaquePackageRelationship {
+                    owner: OpaquePackageOwner::Part {
+                        path: normalize_package_path(&vml_part.path),
+                    },
+                    relationship_type:
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+                            .to_string(),
+                    target: OpaqueRelationshipTarget::InternalPart { path: target_path },
+                    relationship_id_hint: Some(relationship_id),
+                });
+            }
+
+            subgraphs.push(OpaquePackageSubgraph {
+                owner: OpaquePackageOwner::Part {
+                    path: normalize_package_path(&vml_part.path),
+                },
+                owner_relationship: OpaquePackageRelationship {
+                    owner: OpaquePackageOwner::Part {
+                        path: normalize_package_path(&vml_part.path),
+                    },
+                    relationship_type: String::new(),
+                    target: OpaqueRelationshipTarget::InternalPath {
+                        target: String::new(),
+                    },
+                    relationship_id_hint: None,
+                },
+                parts,
+                relationships,
+                ownership: OpaquePackageOwnership::OrphanCleanPackageData,
+            });
+        }
+    }
+
+    subgraphs
+        .into_iter()
+        .filter(closed_opaque_subgraph)
+        .collect()
+}
+
+fn comment_vml_path(sheet_idx: usize, sheet_rt: &SheetRoundTripContext) -> Option<String> {
+    let legacy_drawing_r_id = sheet_rt.legacy_drawing_r_id.as_ref()?;
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    sheet_rt
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| {
+            &rel.id == legacy_drawing_r_id
+                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.target_mode.as_deref() != Some("External")
+        })
+        .and_then(|rel| {
+            crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target).ok()
+        })
+        .map(|path| normalize_package_path(&path))
+}
+
+fn normalize_hf_image_target(vml_path: &str, target: &str) -> Option<String> {
+    if target.starts_with("data:") {
+        return None;
+    }
+    if target.trim_start_matches('/').starts_with("xl/") {
+        return Some(normalize_package_path(target));
+    }
+    crate::infra::opc::resolve_relationship_target(Some(vml_path), target)
+        .ok()
+        .map(|path| normalize_package_path(&path))
+}
 
 fn build_worksheet_custom_property_opaque_subgraphs(
     binary_blobs: &[BlobPart],

@@ -450,6 +450,9 @@ pub(super) fn build_sheet_parts(
                             if comment_vml_path.as_ref() == Some(&vml_part.path) {
                                 continue;
                             }
+                            if !has_clean_opaque_part(round_trip_ctx, &vml_part.path) {
+                                continue;
+                            }
                             let rels_path = vml_part.rels.as_ref().map(|r| r.path.as_str());
                             let rels_data = vml_part.rels.as_ref().map(|r| r.data.as_slice());
                             if let Some(parsed) =

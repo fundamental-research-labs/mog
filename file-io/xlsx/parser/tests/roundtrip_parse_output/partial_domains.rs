@@ -310,6 +310,52 @@ fn clean_imported_worksheet_custom_property_roundtrips_as_opaque_subgraph() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn clean_imported_header_footer_vml_roundtrips_as_opaque_authorized_part() {
+    let source = imported_header_footer_vml_xlsx();
+    let (output, ctx, _diagnostics) =
+        parse_xlsx_to_output(&source).expect("source XLSX should parse");
+
+    assert_eq!(output.sheets[0].hf_images.len(), 1);
+    assert!(
+        ctx.opaque_package_subgraphs.iter().any(|subgraph| {
+            subgraph
+                .parts
+                .iter()
+                .any(|part| part.part.path == "xl/drawings/vmlDrawing9.vml")
+        }),
+        "clean imported header/footer VML should lower into an opaque package subgraph"
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx))
+        .expect("header/footer VML export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let vml_rels = String::from_utf8(
+        archive
+            .read_file("xl/drawings/_rels/vmlDrawing9.vml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert_eq!(
+        archive.read_file("xl/media/hf-image.png").unwrap(),
+        b"hf image bytes".to_vec()
+    );
+    assert!(sheet_xml.contains("<legacyDrawingHF "));
+    assert!(sheet_rels.contains(r#"Target="../drawings/vmlDrawing9.vml""#));
+    assert!(vml_rels.contains(r#"Target="../media/hf-image.png""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn imported_unknown_drawing_xlsx() -> Vec<u8> {
     let mut zip = ZipBuilder::new();
     zip.add_stored(
@@ -377,6 +423,80 @@ fn imported_unknown_drawing_xlsx() -> Vec<u8> {
 </Relationships>"#,
     )
     .add_stored("xl/media/image7.png", b"opaque image bytes");
+
+    zip.build()
+}
+
+fn imported_header_footer_vml_xlsx() -> Vec<u8> {
+    let hf_image = xlsx_parser::domain::print::hf_images::HeaderFooterImage {
+        position: xlsx_parser::domain::print::hf_images::HfImagePosition::LeftHeader,
+        image_rel_id: "rIdImage".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let vml = xlsx_parser::domain::print::hf_images::write_hf_images_vml(&[hf_image], "1", 13313);
+
+    let mut zip = ZipBuilder::new();
+    zip.add_stored(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#,
+    )
+    .add_stored(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rIdSheet"/>
+  </sheets>
+</workbook>"#,
+    )
+    .add_stored(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetData/>
+  <legacyDrawingHF r:id="rIdHfVml"/>
+</worksheet>"#,
+    )
+    .add_stored(
+        "xl/worksheets/_rels/sheet1.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdHfVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing9.vml"/>
+</Relationships>"#,
+    )
+    .add_stored("xl/drawings/vmlDrawing9.vml", &vml)
+    .add_stored(
+        "xl/drawings/_rels/vmlDrawing9.vml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/hf-image.png"/>
+</Relationships>"#,
+    )
+    .add_stored("xl/media/hf-image.png", b"hf image bytes");
 
     zip.build()
 }

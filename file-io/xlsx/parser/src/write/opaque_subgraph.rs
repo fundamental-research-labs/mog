@@ -57,6 +57,7 @@ fn opaque_subgraphs(
     }
     subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
     subgraphs.retain(|subgraph| !is_worksheet_custom_property_subgraph(subgraph));
+    remove_feature_owned_hf_vml_parts(ctx, output, &mut subgraphs);
     subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
 }
@@ -87,6 +88,79 @@ fn is_worksheet_custom_property_subgraph(subgraph: &OpaquePackageSubgraph) -> bo
             subgraph.owner_relationship.owner,
             OpaquePackageOwner::Worksheet { .. }
         )
+}
+
+fn remove_feature_owned_hf_vml_parts(
+    ctx: &RoundTripContext,
+    output: &domain_types::ParseOutput,
+    subgraphs: &mut Vec<OpaquePackageSubgraph>,
+) {
+    let hf_vml_paths = feature_owned_hf_vml_paths(ctx, output);
+    if hf_vml_paths.is_empty() {
+        return;
+    }
+    for subgraph in subgraphs.iter_mut() {
+        subgraph
+            .parts
+            .retain(|part| !hf_vml_paths.contains(&normalize_path(&part.part.path)));
+        subgraph.relationships.retain(|relationship| {
+            !matches!(
+                &relationship.owner,
+                OpaquePackageOwner::Part { path } if hf_vml_paths.contains(&normalize_path(path))
+            )
+        });
+    }
+    subgraphs.retain(|subgraph| {
+        !subgraph.parts.is_empty()
+            || !subgraph.relationships.is_empty()
+            || subgraph.ownership == OpaquePackageOwnership::CleanImported
+    });
+}
+
+fn feature_owned_hf_vml_paths(
+    ctx: &RoundTripContext,
+    _output: &domain_types::ParseOutput,
+) -> HashSet<String> {
+    ctx.sheets
+        .iter()
+        .enumerate()
+        .flat_map(|(sheet_idx, sheet_rt)| {
+            let comment_vml_path = comment_vml_path(sheet_idx, sheet_rt);
+            sheet_rt
+                .raw_vml_drawings
+                .iter()
+                .filter(move |vml| comment_vml_path.as_deref() != Some(vml.path.as_str()))
+                .filter(|vml| {
+                    let rels_path = vml.rels.as_ref().map(|rels| rels.path.as_str());
+                    let rels_data = vml.rels.as_ref().map(|rels| rels.data.as_slice());
+                    crate::domain::print::hf_images::parse_hf_vml_context(
+                        &vml.path, &vml.data, rels_path, rels_data,
+                    )
+                    .is_some()
+                })
+                .map(|vml| normalize_path(&vml.path))
+        })
+        .collect()
+}
+
+fn comment_vml_path(
+    sheet_idx: usize,
+    sheet_rt: &domain_types::SheetRoundTripContext,
+) -> Option<String> {
+    let legacy_drawing_r_id = sheet_rt.legacy_drawing_r_id.as_ref()?;
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    sheet_rt
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| {
+            &rel.id == legacy_drawing_r_id
+                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.target_mode.as_deref() != Some("External")
+        })
+        .and_then(|rel| {
+            crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target).ok()
+        })
+        .map(|path| normalize_path(&path))
 }
 
 fn normalize_explicit_opaque_subgraph(

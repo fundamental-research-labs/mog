@@ -86,6 +86,16 @@ struct PerfBudget {
     reason: Option<String>,
 }
 
+#[derive(Debug)]
+struct BaselineRegression {
+    metric: String,
+    previous: f64,
+    current: f64,
+    delta: f64,
+    delta_percent: f64,
+    fingerprint: FailureFingerprint,
+}
+
 pub fn run_perf_gate(options: PerfGateOptions) -> (GateReport, i32) {
     let started = Instant::now();
     let budgets = load_budget_file(options.budget_path.as_deref());
@@ -241,10 +251,32 @@ fn run_perf_fixture(
         );
     }
 
-    let baseline_fingerprints = evaluate_baseline(&fixture.id, &metrics, baseline);
-    if !baseline_fingerprints.is_empty() {
+    let baseline_regressions = evaluate_baseline(&fixture.id, &metrics, baseline);
+    if !baseline_regressions.is_empty() {
         status = GateStatus::Failed;
-        fingerprints.extend(baseline_fingerprints);
+        metrics.insert(
+            "baseline_regression_count".to_string(),
+            MetricValue::Integer(baseline_regressions.len() as i64),
+        );
+        for regression in baseline_regressions {
+            metrics.insert(
+                format!("baseline.{}.previous", regression.metric),
+                MetricValue::Float(regression.previous),
+            );
+            metrics.insert(
+                format!("baseline.{}.current", regression.metric),
+                MetricValue::Float(regression.current),
+            );
+            metrics.insert(
+                format!("baseline.{}.delta", regression.metric),
+                MetricValue::Float(regression.delta),
+            );
+            metrics.insert(
+                format!("baseline.{}.delta_percent", regression.metric),
+                MetricValue::Float(regression.delta_percent),
+            );
+            fingerprints.push(regression.fingerprint);
+        }
     }
 
     metrics.insert(
@@ -843,7 +875,7 @@ fn evaluate_baseline(
     id: &str,
     metrics: &BTreeMap<String, MetricValue>,
     baseline: Option<&GateReport>,
-) -> Vec<FailureFingerprint> {
+) -> Vec<BaselineRegression> {
     let Some(baseline) = baseline else {
         return Vec::new();
     };
@@ -857,7 +889,15 @@ fn evaluate_baseline(
             let current = metric_as_f64(metrics.get(*metric))?;
             let prior = metric_as_f64(previous.metrics.get(*metric))?;
             if prior > 0.0 && current > prior * 1.20 {
-                Some(regression_fingerprint(id, metric, prior, current))
+                let delta = current - prior;
+                Some(BaselineRegression {
+                    metric: (*metric).to_string(),
+                    previous: prior,
+                    current,
+                    delta,
+                    delta_percent: delta / prior * 100.0,
+                    fingerprint: regression_fingerprint(id, metric, prior, current),
+                })
             } else {
                 None
             }
@@ -872,7 +912,9 @@ fn budget_fingerprint(id: &str, budget: &BudgetResult) -> FailureFingerprint {
             sanitize_id(id),
             sanitize_id(&budget.name)
         ),
-        FingerprintCategory::Performance(PerformanceFingerprintCategory::HarnessMeasurementBug),
+        FingerprintCategory::Performance(classify_perf_metric(normalize_budget_metric(
+            &budget.name,
+        ))),
         FingerprintSeverity::Regression,
         FingerprintOwner::Performance,
         format!("performance budget failed for {}", budget.name),

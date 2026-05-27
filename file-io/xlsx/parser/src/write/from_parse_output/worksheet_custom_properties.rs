@@ -17,7 +17,6 @@ pub(super) struct WorksheetCustomProperties {
 #[derive(Clone)]
 pub(super) struct WorksheetCustomPropertyPart {
     pub path: String,
-    pub target: String,
     pub relationship_id_hint: String,
     pub data: Vec<u8>,
 }
@@ -55,7 +54,6 @@ pub(super) fn custom_properties_for_export(
             return None;
         }
         parts.push(WorksheetCustomPropertyPart {
-            target: rel.target.clone(),
             path,
             relationship_id_hint: relationship_id,
             data: blob.data.clone(),

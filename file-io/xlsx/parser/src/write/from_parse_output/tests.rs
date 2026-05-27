@@ -1107,6 +1107,15 @@ fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids()
                     target_mode: None,
                 },
             ],
+            legacy_drawing_r_id: Some("rId8".to_string()),
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing1.vml".to_string(),
+                data: b"<xml><rawVmlSentinel/></xml>".to_vec(),
+                rels: Some(domain_types::VmlRels {
+                    path: "xl/drawings/_rels/vmlDrawing1.vml.rels".to_string(),
+                    data: b"<Relationships><rawVmlRelsSentinel/></Relationships>".to_vec(),
+                }),
+            }],
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -1128,8 +1137,11 @@ fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids()
     .unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let vml_xml =
+        String::from_utf8(archive.read_file("xl/drawings/vmlDrawing1.vml").unwrap()).unwrap();
 
     assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(!archive.contains("xl/drawings/_rels/vmlDrawing1.vml.rels"));
     assert!(!archive.contains("xl/comments9.xml"));
     assert!(sheet_rels.contains("Id=\"rId7\""));
     assert!(sheet_rels.contains("Target=\"../comments1.xml\""));
@@ -1139,6 +1151,8 @@ fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids()
     assert!(sheet_xml.contains("<legacyDrawing r:id=\"rId8\"/>"));
     assert!(content_types.contains("PartName=\"/xl/comments1.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/comments9.xml\""));
+    assert!(vml_xml.contains("ObjectType=\"Note\""));
+    assert!(!vml_xml.contains("rawVmlSentinel"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1259,6 +1273,15 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
                     target_mode: None,
                 },
             ],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing1.vml".to_string(),
+                data: b"<xml><rawFormControlVmlSentinel/></xml>".to_vec(),
+                rels: Some(domain_types::VmlRels {
+                    path: "xl/drawings/_rels/vmlDrawing1.vml.rels".to_string(),
+                    data: b"<Relationships><rawFormControlVmlRelsSentinel/></Relationships>"
+                        .to_vec(),
+                }),
+            }],
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -1279,6 +1302,8 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let vml_xml =
+        String::from_utf8(archive.read_file("xl/drawings/vmlDrawing1.vml").unwrap()).unwrap();
     let ctrl_prop_rel = rels
         .iter()
         .find(|rel| rel.rel_type == REL_CTRL_PROP && rel.target == "../ctrlProps/ctrlProp1.xml")
@@ -1291,6 +1316,7 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     assert!(archive.contains("xl/ctrlProps/ctrlProp1.xml"));
     assert!(!archive.contains("xl/ctrlProps/ctrlProp9.xml"));
     assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(!archive.contains("xl/drawings/_rels/vmlDrawing1.vml.rels"));
     assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
     assert!(sheet_rels.contains("Target=\"../ctrlProps/ctrlProp1.xml\""));
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
@@ -1300,6 +1326,7 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     assert!(sheet_xml.contains(&format!(r#"<legacyDrawing r:id="{}"/>"#, vml_rel.id)));
     assert!(content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp1.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp9.xml\""));
+    assert!(!vml_xml.contains("rawFormControlVmlSentinel"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

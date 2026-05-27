@@ -590,14 +590,7 @@ pub fn write_xlsx_from_parse_output(
                     original_authors,
                     root_ns_attrs,
                 );
-            // Prefer raw VML bytes from RoundTripContext for lossless round-tripping
-            // (preserves original shape IDs, colors, dimensions, etc.).
-            let vml_xml = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .and_then(|sheet_rt| sheet_rt.raw_vml_drawings.first())
-                .map(|vml_part| vml_part.data.clone())
-                .unwrap_or(generated_vml_xml);
-            Some((comments_xml, vml_xml))
+            Some((comments_xml, generated_vml_xml))
         } else {
             None
         };
@@ -2779,22 +2772,6 @@ pub fn write_xlsx_from_parse_output(
                 .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", zip_vml_idx));
             zip.add_file(&comment_path, comments_xml.clone());
             zip.add_file(&vml_path, vml_xml.clone());
-
-            // Write comment VML .rels if available from round-trip context
-            if let Some(ctx) = round_trip_ctx {
-                if let Some(sheet_rt) = ctx.sheets.get(idx) {
-                    if let Some(comment_vml_path) = &sheet_extras[idx].original_vml_path {
-                        for vml_part in &sheet_rt.raw_vml_drawings {
-                            if &vml_part.path == comment_vml_path {
-                                if let Some(ref rels) = vml_part.rels {
-                                    zip.add_file(&rels.path, rels.data.clone());
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // Header/footer image VML — generated from domain types
@@ -2849,25 +2826,8 @@ pub fn write_xlsx_from_parse_output(
                             idx + 1
                         ))
                     })?;
-                if let Some(ctx) = round_trip_ctx
-                    && let Some(sheet_rt) = ctx.sheets.get(idx)
-                    && let Some(vml_part) = sheet_rt
-                        .raw_vml_drawings
-                        .iter()
-                        .find(|part| part.path == vml_entry.path)
-                {
-                    if let Some(n) = extract_vml_drawing_number(&vml_part.path) {
-                        zip_vml_idx = zip_vml_idx.max(n);
-                    }
-                    zip.add_file(&vml_part.path, vml_part.data.clone());
-                    if let Some(ref rels) = vml_part.rels {
-                        zip.add_file(&rels.path, rels.data.clone());
-                    }
-                } else {
-                    let vml_xml = controls_writer.write_vml_form_controls(base_shape_id);
-
-                    zip.add_file(&vml_entry.path, vml_xml);
-                }
+                let vml_xml = controls_writer.write_vml_form_controls(base_shape_id);
+                zip.add_file(&vml_entry.path, vml_xml);
             }
         }
 

@@ -14,11 +14,12 @@ use domain_types::domain::floating_object::{
 use domain_types::{
     AxisBound, AxisBoundLabel, CFCellRange, CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar,
     CFIconSet, CFIconThreshold, CFRule, CFStyle, ChartDefinition, ChartSpec, ConditionalFormat,
-    DataTableRegion, EmptyCellDisplay, ErrorStyle, HeaderFooter, OutlineGroup, PageBreaks,
-    PageMargins, PrintSettings, RichTextRun, Sparkline as DtSparkline, SparklineAxisSettings,
-    SparklineCellAddress, SparklineDataRange, SparklineGroup as DtSparklineGroup,
-    SparklineType as DtSparklineType, SparklineVisualSettings, TableColumnSpec, TableSpec,
-    TotalsFunction, ValidationOperator, ValidationRule, ValidationSpec,
+    DataTableRegion, EmptyCellDisplay, ErrorStyle, HeaderFooter, ImportedPrinterSettingsIdentity,
+    OutlineGroup, PageBreaks, PageMargins, PrintSettings, PrinterSettingsPageSetupFingerprint,
+    RichTextRun, Sparkline as DtSparkline, SparklineAxisSettings, SparklineCellAddress,
+    SparklineDataRange, SparklineGroup as DtSparklineGroup, SparklineType as DtSparklineType,
+    SparklineVisualSettings, TableColumnSpec, TableSpec, TotalsFunction, ValidationOperator,
+    ValidationRule, ValidationSpec,
     chart::{AnchorPosition, ObjectSize},
 };
 

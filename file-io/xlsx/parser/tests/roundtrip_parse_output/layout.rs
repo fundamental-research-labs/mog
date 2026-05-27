@@ -482,6 +482,7 @@ fn roundtrip_print_settings_from_modeled_state() {
         horizontal_dpi: Some(300),
         vertical_dpi: Some(600),
         r_id: None,
+        imported_printer_settings: None,
         has_print_options: true,
         use_first_page_number: true,
         has_page_setup: true,

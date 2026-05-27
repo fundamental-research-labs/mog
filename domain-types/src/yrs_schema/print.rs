@@ -8,7 +8,9 @@ use yrs::types::map::MapRef;
 use yrs::{Any, Map, ReadTxn, TransactionMut};
 
 use super::helpers::*;
-use crate::domain::print::{HeaderFooter, PageMargins, PrintSettings};
+use crate::domain::print::{
+    HeaderFooter, ImportedPrinterSettingsIdentity, PageMargins, PrintSettings,
+};
 
 pub const KEY_PAPER_SIZE: &str = "paperSize";
 pub const KEY_ORIENTATION: &str = "orientation";
@@ -24,6 +26,7 @@ pub const KEY_HEADER_FOOTER: &str = "headerFooter";
 pub const KEY_BLACK_AND_WHITE: &str = "blackAndWhite";
 pub const KEY_DRAFT: &str = "draft";
 pub const KEY_FIRST_PAGE_NUMBER: &str = "firstPageNumber";
+pub const KEY_IMPORTED_PRINTER_SETTINGS: &str = "importedPrinterSettings";
 
 /// Convert a [`PrintSettings`] to Yrs prelim entries for initial hydration.
 pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
@@ -82,6 +85,11 @@ pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
     if let Some(r_id) = &settings.r_id {
         entries.push(("rId", Any::String(Arc::from(r_id.as_str()))));
     }
+    if let Some(imported) = &settings.imported_printer_settings
+        && let Ok(json) = serde_json::to_string(imported)
+    {
+        entries.push((KEY_IMPORTED_PRINTER_SETTINGS, Any::String(Arc::from(json))));
+    }
     if settings.use_first_page_number {
         entries.push(("useFirstPageNumber", Any::Bool(true)));
     }
@@ -124,6 +132,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<PrintSettings> 
         horizontal_dpi: read_u32(map, txn, "horizontalDpi"),
         vertical_dpi: read_u32(map, txn, "verticalDpi"),
         r_id: read_string(map, txn, "rId"),
+        imported_printer_settings: read_string(map, txn, KEY_IMPORTED_PRINTER_SETTINGS)
+            .and_then(|s| serde_json::from_str::<ImportedPrinterSettingsIdentity>(&s).ok()),
         has_print_options: read_bool(map, txn, "hasPrintOptions").unwrap_or(false),
         has_page_setup: read_bool(map, txn, "hasPageSetup").unwrap_or(false),
         use_first_page_number: read_bool(map, txn, "useFirstPageNumber").unwrap_or(false),

@@ -37,6 +37,11 @@ pub struct PrintSettings {
     /// Printer settings relationship ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r_id: Option<String>,
+    /// Imported printer-settings binary identity. This is a non-authoritative
+    /// hint: export may reuse the binary path only while the current modeled
+    /// pageSetup fields still match this snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_printer_settings: Option<ImportedPrinterSettingsIdentity>,
     /// Whether a `<printOptions>` element was present in the original XML.
     /// When true, the writer emits `<printOptions/>` even if all values are defaults.
     #[serde(default)]
@@ -55,6 +60,60 @@ pub struct PrintSettings {
     /// None means the attribute was absent (defaults to "displayed").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub print_errors: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Default)]
+pub struct ImportedPrinterSettingsIdentity {
+    pub path: String,
+    pub relationship_id: Option<String>,
+    pub page_setup: PrinterSettingsPageSetupFingerprint,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Default)]
+pub struct PrinterSettingsPageSetupFingerprint {
+    pub paper_size: Option<u32>,
+    pub orientation: Option<String>,
+    pub scale: Option<u32>,
+    pub fit_to_width: Option<u32>,
+    pub fit_to_height: Option<u32>,
+    pub black_and_white: bool,
+    pub draft: bool,
+    pub first_page_number: Option<u32>,
+    pub page_order: Option<String>,
+    pub use_printer_defaults: Option<bool>,
+    pub horizontal_dpi: Option<u32>,
+    pub vertical_dpi: Option<u32>,
+    pub use_first_page_number: bool,
+    pub has_page_setup: bool,
+    pub cell_comments: Option<String>,
+    pub print_errors: Option<String>,
+}
+
+impl PrinterSettingsPageSetupFingerprint {
+    pub fn from_print_settings(settings: &PrintSettings) -> Self {
+        Self {
+            paper_size: settings.paper_size,
+            orientation: settings.orientation.clone(),
+            scale: settings.scale,
+            fit_to_width: settings.fit_to_width,
+            fit_to_height: settings.fit_to_height,
+            black_and_white: settings.black_and_white,
+            draft: settings.draft,
+            first_page_number: settings.first_page_number,
+            page_order: settings.page_order.clone(),
+            use_printer_defaults: settings.use_printer_defaults,
+            horizontal_dpi: settings.horizontal_dpi,
+            vertical_dpi: settings.vertical_dpi,
+            use_first_page_number: settings.use_first_page_number,
+            has_page_setup: settings.has_page_setup,
+            cell_comments: settings.cell_comments.clone(),
+            print_errors: settings.print_errors.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

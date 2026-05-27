@@ -85,6 +85,7 @@ pub fn round_trip_opaque_subgraphs(
     let mut subgraphs = explicit_or_legacy_opaque_subgraphs(ctx);
     subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
     subgraphs.retain(|subgraph| !is_worksheet_custom_property_subgraph(subgraph));
+    subgraphs.retain(|subgraph| !is_stale_printer_settings_subgraph(output, subgraph));
     remove_feature_owned_hf_vml_parts(ctx, output, &mut subgraphs);
     subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
@@ -151,6 +152,42 @@ fn is_worksheet_custom_property_subgraph(subgraph: &OpaquePackageSubgraph) -> bo
             subgraph.owner_relationship.owner,
             OpaquePackageOwner::Worksheet { .. }
         )
+}
+
+fn is_stale_printer_settings_subgraph(
+    output: &domain_types::ParseOutput,
+    subgraph: &OpaquePackageSubgraph,
+) -> bool {
+    let Some(path) = opaque_subgraph_single_part_path(subgraph) else {
+        return false;
+    };
+    if !path.starts_with("xl/printerSettings/") {
+        return false;
+    }
+
+    output.sheets.iter().any(|sheet| {
+        let Some(print_settings) = &sheet.print_settings else {
+            return false;
+        };
+        let Some(identity) = &print_settings.imported_printer_settings else {
+            return false;
+        };
+        normalize_path(&identity.path) == path
+            && identity.page_setup
+                != domain_types::PrinterSettingsPageSetupFingerprint::from_print_settings(
+                    print_settings,
+                )
+    })
+}
+
+fn opaque_subgraph_single_part_path(subgraph: &OpaquePackageSubgraph) -> Option<String> {
+    match &subgraph.owner {
+        OpaquePackageOwner::Part { path } => Some(normalize_path(path)),
+        _ => subgraph
+            .parts
+            .first()
+            .map(|part| normalize_path(&part.part.path)),
+    }
 }
 
 fn remove_feature_owned_hf_vml_parts(

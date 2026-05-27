@@ -5,7 +5,10 @@ use super::*;
 // =============================================================================
 
 /// Convert parser `PrintSettingsOutput` into domain `PrintSettings`.
-pub(crate) fn convert_print_settings(ps: &PrintSettingsOutput) -> PrintSettings {
+pub(crate) fn convert_print_settings(
+    ps: &PrintSettingsOutput,
+    sheet_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> PrintSettings {
     let margins = ps.margins.as_ref().map(|m| PageMargins {
         top: m.top,
         bottom: m.bottom,
@@ -52,7 +55,7 @@ pub(crate) fn convert_print_settings(ps: &PrintSettingsOutput) -> PrintSettings 
         (None, None, None, None, false, false, None)
     };
 
-    PrintSettings {
+    let mut settings = PrintSettings {
         paper_size: ps.paper_size.map(|p| p as u32),
         orientation,
         scale,
@@ -77,7 +80,32 @@ pub(crate) fn convert_print_settings(ps: &PrintSettingsOutput) -> PrintSettings 
         has_page_setup: ps.has_page_setup,
         cell_comments: ps.cell_comments.clone(),
         print_errors: ps.print_errors.clone(),
-    }
+        imported_printer_settings: None,
+    };
+    settings.imported_printer_settings =
+        imported_printer_settings_identity(&settings, sheet_relationships);
+    settings
+}
+
+fn imported_printer_settings_identity(
+    settings: &PrintSettings,
+    sheet_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> Option<ImportedPrinterSettingsIdentity> {
+    let relationship_id = settings.r_id.as_ref()?;
+    let path = sheet_relationships
+        .iter()
+        .find(|rel| {
+            rel.id == *relationship_id
+                && rel.rel_type == crate::write::REL_PRINTER_SETTINGS
+                && rel.target_mode.as_deref() != Some("External")
+        })
+        .map(|rel| crate::infra::opc::opc_target_to_zip_path(&rel.target, "xl/worksheets"))?;
+
+    Some(ImportedPrinterSettingsIdentity {
+        path: path.trim_start_matches('/').to_string(),
+        relationship_id: Some(relationship_id.clone()),
+        page_setup: PrinterSettingsPageSetupFingerprint::from_print_settings(settings),
+    })
 }
 
 // =============================================================================

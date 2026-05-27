@@ -1208,7 +1208,10 @@ fn convert_sheet(
     // Slicers and anchors are already ooxml-types — pass through directly
     let slicers = sheet.slicers.clone();
     let slicer_anchors = sheet.slicer_anchors.clone();
-    let print_settings = sheet.print_settings.as_ref().map(convert_print_settings);
+    let print_settings = sheet
+        .print_settings
+        .as_ref()
+        .map(|settings| convert_print_settings(settings, &sheet.sheet_opc_rels));
     let page_breaks = sheet.page_breaks.as_ref().map(convert_page_breaks);
     let (sparklines, sparkline_groups) =
         convert_sparkline_groups(&sheet.sparkline_groups, &sheet.name);

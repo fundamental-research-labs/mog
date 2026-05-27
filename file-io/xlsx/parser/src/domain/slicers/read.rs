@@ -780,6 +780,7 @@ pub fn build_rel_id_map(rels_xml: &[u8]) -> std::collections::HashMap<String, St
 
 fn ph_extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
     use crate::infra::scanner::extract_quoted_value;
+
     let mut pos = 0;
     while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
         let rel_end = find_gt_simd(rels_xml, rel_start)
@@ -791,7 +792,7 @@ fn ph_extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
             let value_start = type_pos + 6;
             if let Some((ts, te)) = extract_quoted_value(rel_elem, value_start) {
                 let type_str = &rel_elem[ts..te];
-                if memchr::memmem::find(type_str, b"drawing").is_some() {
+                if type_str == crate::write::REL_DRAWING.as_bytes() {
                     if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
                         let tgt_start = target_pos + 8;
                         if let Some((tgs, tge)) = extract_quoted_value(rel_elem, tgt_start) {
@@ -1134,6 +1135,23 @@ mod tests {
         assert_eq!(a.to.col_off, 304800);
         assert_eq!(a.to.row, 15);
         assert_eq!(a.to.row_off, 0);
+    }
+
+    #[test]
+    fn test_extract_drawing_target_ignores_vml_drawing_relationship() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments3.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
+
+        assert_eq!(ph_extract_drawing_target(rels), None);
+    }
+
+    #[test]
+    fn test_extract_drawing_target_matches_drawing_relationship() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#;
+
+        assert_eq!(
+            ph_extract_drawing_target(rels).as_deref(),
+            Some("../drawings/drawing1.xml")
+        );
     }
 
     #[test]

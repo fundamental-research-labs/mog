@@ -80,12 +80,13 @@ pub(super) fn extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
             .unwrap_or(rels_xml.len());
         let rel_elem = &rels_xml[rel_start..rel_end];
 
-        // Check if Type contains "drawing"
+        // Match the DrawingML worksheet relationship exactly. Legacy VML uses
+        // `/vmlDrawing` and must not be promoted into DrawingML state.
         if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
             let value_start = type_pos + 6; // len of 'Type="'
             if let Some((ts, te)) = extract_quoted_value(rel_elem, value_start) {
                 let type_str = &rel_elem[ts..te];
-                if memchr::memmem::find(type_str, b"drawing").is_some() {
+                if type_str == crate::write::REL_DRAWING.as_bytes() {
                     // Extract Target attribute
                     if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
                         let tgt_start = target_pos + 8; // len of 'Target="'
@@ -684,4 +685,26 @@ fn parse_client_data_attrs(anchor_bytes: &[u8]) -> (Option<bool>, Option<bool>) 
     let locks = extract_attr(el, b"fLocksWithSheet=\"");
     let prints = extract_attr(el, b"fPrintsWithSheet=\"");
     (locks, prints)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_drawing_target;
+
+    #[test]
+    fn extract_drawing_target_matches_only_drawing_relationship() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#;
+
+        assert_eq!(
+            extract_drawing_target(rels).as_deref(),
+            Some("../drawings/drawing1.xml")
+        );
+    }
+
+    #[test]
+    fn extract_drawing_target_does_not_match_vml_drawing_relationship() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments3.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
+
+        assert_eq!(extract_drawing_target(rels), None);
+    }
 }

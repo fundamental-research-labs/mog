@@ -281,6 +281,7 @@ pub fn write_xlsx_from_parse_output(
             && !has_pivot_tables
         {
             drawing_xml_data.push(None);
+            drawing_writer_data.push(None);
             continue;
         }
 

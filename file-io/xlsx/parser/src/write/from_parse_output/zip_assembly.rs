@@ -1,7 +1,7 @@
 use domain_types::{ParseOutput, RoundTripContext};
 
 use super::assembly::{
-    ChartEntry, ChartExEntry, SheetExtras, WorksheetDrawingGraphEntry,
+    ChartEntry, ChartExEntry, SheetExtras, WorksheetCommentsGraphEntry, WorksheetDrawingGraphEntry,
     WorksheetFormControlVmlGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
 use super::{
@@ -36,6 +36,7 @@ pub(super) fn write_zip_package(
     all_chart_ex_entries: &[Vec<ChartExEntry>],
     all_image_blobs: Vec<(String, Vec<u8>)>,
     drawing_xml_data: &[Option<Vec<u8>>],
+    worksheet_comments_relationships: &[WorksheetCommentsGraphEntry],
     worksheet_form_control_vml_relationships: &[WorksheetFormControlVmlGraphEntry],
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
     worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
@@ -162,8 +163,6 @@ pub(super) fn write_zip_package(
     #[cfg(not(feature = "parallel"))]
     let sheet_xmls: Vec<Vec<u8>> = sheet_writers.into_iter().map(|sw| sw.to_xml()).collect();
 
-    let mut zip_vml_idx: usize = 0;
-    let mut zip_comment_idx: usize = 0;
     let mut zip_ctrl_prop_idx: usize = 0;
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
@@ -189,18 +188,21 @@ pub(super) fn write_zip_package(
 
         // Comment XML + VML
         if let Some((ref comments_xml, ref vml_xml)) = sheet_extras[idx].comments {
-            zip_vml_idx += 1;
-            zip_comment_idx += 1;
-            // Use original paths from round-trip context when available
-            let comment_path = sheet_extras[idx]
-                .original_comment_path
-                .clone()
-                .unwrap_or_else(|| format!("xl/comments{}.xml", zip_comment_idx));
-            let vml_path = sheet_extras[idx]
-                .original_vml_path
-                .clone()
-                .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", zip_vml_idx));
-            add_registered_part(package_graph, &mut zip, &comment_path, comments_xml.clone())?;
+            let comments_entry = worksheet_comments_relationships
+                .iter()
+                .find(|entry| entry.sheet_idx == idx)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing graph-registered comments parts for sheet {}",
+                        idx + 1
+                    ))
+                })?;
+            add_registered_part(
+                package_graph,
+                &mut zip,
+                &comments_entry.comments_path,
+                comments_xml.clone(),
+            )?;
             let merged_vml = if !sheet_extras[idx].form_controls.is_empty() {
                 let base_shape_id =
                     vml_merge::form_control_base_shape_id(&output.sheets[idx].comments);
@@ -220,7 +222,12 @@ pub(super) fn write_zip_package(
             } else {
                 vml_xml.clone()
             };
-            add_registered_part(package_graph, &mut zip, &vml_path, merged_vml)?;
+            add_registered_part(
+                package_graph,
+                &mut zip,
+                &comments_entry.vml_path,
+                merged_vml,
+            )?;
         }
 
         // Header/footer image VML — generated from domain types

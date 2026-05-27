@@ -1855,6 +1855,7 @@ pub fn write_xlsx_from_parse_output(
         &all_chart_ex_entries,
         all_image_blobs,
         &drawing_xml_data,
+        &worksheet_comments_relationships,
         &worksheet_form_control_vml_relationships,
         &worksheet_drawing_relationships,
         &worksheet_threaded_comments_relationships,

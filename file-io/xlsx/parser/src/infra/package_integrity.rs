@@ -39,12 +39,14 @@ pub enum PackageIntegrityError {
     InvalidRelationshipTarget {
         rels_path: String,
         id: String,
+        rel_type: String,
         target: String,
         reason: String,
     },
     MissingRelationshipTarget {
         rels_path: String,
         id: String,
+        rel_type: String,
         target: String,
         resolved_path: String,
     },
@@ -90,20 +92,24 @@ impl std::fmt::Display for PackageIntegrityError {
             Self::InvalidRelationshipTarget {
                 rels_path,
                 id,
+                rel_type,
                 target,
                 reason,
             } => write!(
                 f,
-                "relationship {id} in {rels_path} has invalid target {target}: {reason}"
+                "owner {} relationship {id} type {rel_type} in {rels_path} has invalid target {target}: {reason}",
+                relationship_owner_label(rels_path)
             ),
             Self::MissingRelationshipTarget {
                 rels_path,
                 id,
+                rel_type,
                 target,
                 resolved_path,
             } => write!(
                 f,
-                "relationship {id} in {rels_path} targets missing part {resolved_path} from target {target}"
+                "owner {} relationship {id} type {rel_type} in {rels_path} targets missing part {resolved_path} from target {target}",
+                relationship_owner_label(rels_path)
             ),
             Self::MissingRequiredRelationship {
                 rels_path,
@@ -111,7 +117,8 @@ impl std::fmt::Display for PackageIntegrityError {
                 target_path,
             } => write!(
                 f,
-                "relationship part {rels_path} is missing required relationship type {rel_type} targeting {target_path}"
+                "owner {} relationship part {rels_path} is missing required relationship type {rel_type} targeting {target_path}",
+                relationship_owner_label(rels_path)
             ),
             Self::MissingRequiredContentType {
                 part_path,
@@ -133,7 +140,8 @@ impl std::fmt::Display for PackageIntegrityError {
                 id,
             } => write!(
                 f,
-                "worksheet {worksheet_path} references relationship {id}, but {rels_path} does not define it"
+                "worksheet {worksheet_path} references relationship {id}, but owner {} relationship part {rels_path} does not define it",
+                relationship_owner_label(rels_path)
             ),
             Self::MissingPartRelationshipReference {
                 part_path,
@@ -142,13 +150,25 @@ impl std::fmt::Display for PackageIntegrityError {
                 attr_name,
             } => write!(
                 f,
-                "part {part_path} references relationship {id} through {attr_name}, but {rels_path} does not define it"
+                "part {part_path} references relationship {id} through {attr_name}, but owner {} relationship part {rels_path} does not define it",
+                relationship_owner_label(rels_path)
             ),
         }
     }
 }
 
 impl std::error::Error for PackageIntegrityError {}
+
+fn relationship_owner_label(rels_path: &str) -> String {
+    if rels_path == "*" {
+        return "any modeled owner".to_string();
+    }
+    match relationship_owner_from_rels_path(rels_path) {
+        Some(owner_path) => format!("part={owner_path}"),
+        None if rels_path == "_rels/.rels" => "Root".to_string(),
+        None => "unknown".to_string(),
+    }
+}
 
 pub fn validate_archive_package_integrity(
     archive: &XlsxArchive<'_>,
@@ -202,6 +222,7 @@ pub fn validate_archive_package_integrity(
                     errors.push(PackageIntegrityError::InvalidRelationshipTarget {
                         rels_path: rels_path.to_string(),
                         id: rel.id.clone(),
+                        rel_type: rel.rel_type.clone(),
                         target: rel.target.clone(),
                         reason: format_resolution_error(err),
                     });
@@ -213,6 +234,7 @@ pub fn validate_archive_package_integrity(
                 errors.push(PackageIntegrityError::MissingRelationshipTarget {
                     rels_path: rels_path.to_string(),
                     id: rel.id,
+                    rel_type: rel.rel_type,
                     target: rel.target,
                     resolved_path: resolved,
                 });
@@ -763,9 +785,13 @@ mod tests {
         let errors = validate_archive_package_integrity(&archive).expect_err("target is missing");
         assert!(matches!(
             errors.as_slice(),
-            [PackageIntegrityError::MissingRelationshipTarget { resolved_path, .. }]
-                if resolved_path == "xl/worksheets/missing.xml"
+            [PackageIntegrityError::MissingRelationshipTarget {
+                rel_type,
+                resolved_path,
+                ..
+            }] if rel_type == REL_WORKSHEET && resolved_path == "xl/worksheets/missing.xml"
         ));
+        assert!(errors[0].to_string().contains("owner part=xl/workbook.xml"));
     }
 
     #[test]

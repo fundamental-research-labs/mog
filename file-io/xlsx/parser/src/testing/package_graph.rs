@@ -1,6 +1,6 @@
 //! Parser adapter for the shared package graph validation contract.
 
-use crate::infra::package_integrity::{PackageIntegrityError, validate_archive_package_integrity};
+use crate::infra::package_integrity::{validate_archive_package_integrity, PackageIntegrityError};
 use crate::zip::XlsxArchive;
 use xlsx_test_contracts::{
     PackageGraphValidationReport, PackageGraphViolation, PackageGraphViolationCode,
@@ -53,6 +53,7 @@ impl From<PackageIntegrityError> for PackageGraphViolation {
             PackageIntegrityError::InvalidRelationshipTarget {
                 rels_path,
                 id,
+                rel_type,
                 target,
                 ..
             } => Self {
@@ -61,12 +62,13 @@ impl From<PackageIntegrityError> for PackageGraphViolation {
                 rels_path: Some(rels_path),
                 part_path: None,
                 relationship_id: Some(id),
-                relationship_type: None,
+                relationship_type: Some(rel_type),
                 target: Some(target),
             },
             PackageIntegrityError::MissingRelationshipTarget {
                 rels_path,
                 id,
+                rel_type,
                 target,
                 resolved_path,
             } => Self {
@@ -75,7 +77,7 @@ impl From<PackageIntegrityError> for PackageGraphViolation {
                 rels_path: Some(rels_path),
                 part_path: Some(resolved_path),
                 relationship_id: Some(id),
-                relationship_type: None,
+                relationship_type: Some(rel_type),
                 target: Some(target),
             },
             PackageIntegrityError::MissingRequiredRelationship {

@@ -536,9 +536,9 @@ pub fn write_xlsx_from_parse_output(
 
             // ── Floating objects (images, shapes, text boxes, groups, connectors, SmartArt) ──
             // IMPORTANT: Image rels must be registered BEFORE chart rels so that
-            // `add_with_id` bumps `next_id` past the original rIds. Otherwise
+            // `add_with_id` bumps `next_id` past the provisional image rIds. Otherwise
             // chart `add()` calls would generate rId1/rId2/… that collide with
-            // existing image relationship IDs, causing images to be lost.
+            // image relationship IDs already embedded in the provisional drawing XML.
             //
             // Floating object anchors are deferred (not added to DrawingWriter yet)
             // so they can be interleaved with chart anchors in their original drawing
@@ -553,9 +553,8 @@ pub fn write_xlsx_from_parse_output(
 
                 // Add image relationships for images whose bytes are emitted
                 // from modeled floating-object image blobs below.
-                // Uses add_with_id to preserve original relationship IDs for round-trip fidelity.
-                // Must be registered before chart rels to reserve original rIds.
-                // Skip if already present (from from_original).
+                // Register provisional image ids before chart rels so later
+                // graph-resolution can remap drawing XML without local id collisions.
                 for (r_id, image_path) in &drawing_data.image_rels {
                     if drawing_rels.find_by_target(image_path).is_none() {
                         drawing_rels.add_with_id(

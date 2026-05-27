@@ -392,13 +392,6 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
     let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
-    let drawing_rel = rels
-        .iter()
-        .find(|rel| rel.rel_type == REL_DRAWING && rel.target == "../drawings/drawing1.xml")
-        .expect("generated drawing relationship should target the graph-registered part");
-
-    assert!(archive.contains("xl/drawings/drawing1.xml"));
-    assert!(!archive.contains("xl/drawings/drawing9.xml"));
     let drawing_xml =
         String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
     let drawing_rels = String::from_utf8(
@@ -407,6 +400,13 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
             .unwrap(),
     )
     .unwrap();
+    let drawing_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_DRAWING && rel.target == "../drawings/drawing1.xml")
+        .expect("generated drawing relationship should target the graph-registered part");
+
+    assert!(archive.contains("xl/drawings/drawing1.xml"));
+    assert!(!archive.contains("xl/drawings/drawing9.xml"));
     assert_ne!(drawing_rel.id, "rId9");
     assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
     assert!(!sheet_rels.contains("drawing9.xml"));
@@ -521,12 +521,19 @@ fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
 
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let drawing_rels = String::from_utf8(
-        archive
-            .read_file("xl/drawings/_rels/drawing1.xml.rels")
-            .unwrap(),
-    )
-    .unwrap();
+    let drawing_rels_bytes = archive
+        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+        .unwrap();
+    let drawing_rels = String::from_utf8(drawing_rels_bytes.clone()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_bytes);
+    let image_rel = rels
+        .iter()
+        .find(|rel| {
+            rel.rel_type
+                == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+                && rel.target == "../media/image7.png"
+        })
+        .expect("modeled image relationship should be emitted");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
@@ -534,7 +541,7 @@ fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
         archive.read_file("xl/media/image7.png").unwrap(),
         vec![1, 2, 3, 4]
     );
-    assert!(drawing_rels.contains(r#"Id="rId5""#));
+    assert_ne!(image_rel.id, "rId5");
     assert!(drawing_rels.contains(r#"Target="../media/image7.png""#));
     assert!(content_types.contains(r#"Extension="png""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

@@ -47,9 +47,9 @@ pub struct SheetDrawingData {
     /// Image blobs: `(relationship_target_path, image_bytes)`.
     /// The caller is responsible for writing these to the ZIP and creating rels.
     pub image_blobs: Vec<(String, Vec<u8>)>,
-    /// Image relationship entries: `(original_r_id, target_path)`.
-    /// The original rId is preserved for round-trip fidelity.
-    /// Bytes are already handled by binary_blobs passthrough (no need to re-emit).
+    /// Image relationship entries: `(provisional_r_id, target_path)`.
+    /// The provisional id is remapped after `PackageGraphBuilder` resolves the
+    /// final drawing relationship ids.
     pub image_rels: Vec<(String, String)>,
 }
 
@@ -342,12 +342,14 @@ fn convert_floating_object(
         FloatingObjectData::Picture(pic_data) => {
             // Use the typed SpreadsheetPicture directly from ooxml props (no JSON deserialization).
             if let Some(ref ooxml) = pic_data.ooxml {
-                let image_props =
+                let mut image_props =
                     crate::domain::drawings::write::convert::picture_to_image_props(&ooxml.picture);
                 // Register image relationship and emit the imported media bytes
                 // carried in `src` as modeled picture state.
                 if let Some(ref image_path) = ooxml.image_path {
-                    image_rels.push((image_props.r_id.clone(), image_path.clone()));
+                    let r_id = next_available_image_r_id(image_rels);
+                    image_props.r_id = r_id.clone();
+                    image_rels.push((r_id, image_path.clone()));
                     push_image_blob_if_data_url(image_blobs, image_path, &pic_data.src);
                 }
                 DrawingObject::Picture(image_props)
@@ -1054,7 +1056,7 @@ mod tests {
 
         assert_eq!(
             result.image_rels,
-            vec![("rId5".to_string(), "../media/image7.png".to_string())]
+            vec![("rId1".to_string(), "../media/image7.png".to_string())]
         );
         assert_eq!(
             result.image_blobs,

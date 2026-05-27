@@ -14,6 +14,9 @@ use domain_types::{
     ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
+use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
+use xlsx_parser::write::write_xlsx_from_parse_output;
+use xlsx_parser::zip::XlsxArchive;
 
 #[test]
 fn document_properties_roundtrip_from_modeled_state() {
@@ -63,6 +66,55 @@ fn calculation_properties_roundtrip_from_modeled_state() {
     let round_tripped = roundtrip(&output);
 
     assert_eq!(round_tripped.calculation, output.calculation);
+}
+
+#[test]
+fn calculation_properties_regenerate_workbook_xml_from_modeled_state() {
+    let mut output = make_single_sheet("Sheet1", Vec::new());
+    output.calculation = CalculationProperties {
+        iterate: true,
+        iterate_count: 100,
+        iterate_delta: 0.001,
+        calc_mode: CalcMode::Manual,
+        full_calc_on_load: true,
+        ref_mode: RefMode::R1C1,
+        full_precision: false,
+        calc_completed: false,
+        calc_on_save: false,
+        concurrent_calc: false,
+        concurrent_manual_count: Some(2),
+        calc_id: Some(191029),
+        force_full_calc: true,
+        has_explicit_iterate_count: true,
+        has_explicit_iterate_delta: true,
+    };
+    let ctx = RoundTripContext {
+        workbook_preserved_elements: vec![(
+            "workbook\0after\0definedNames\0calcPr".to_string(),
+            r#"<calcPr calcId="999999" calcMode="auto" iterate="0"/>"#.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<calcPr calcId="191029""#));
+    assert!(workbook_xml.contains(r#"calcMode="manual""#));
+    assert!(workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(workbook_xml.contains(r#"refMode="R1C1""#));
+    assert!(workbook_xml.contains(r#"iterate="1""#));
+    assert!(workbook_xml.contains(r#"iterateCount="100""#));
+    assert!(workbook_xml.contains(r#"iterateDelta="0.001""#));
+    assert!(workbook_xml.contains(r#"fullPrecision="0""#));
+    assert!(workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(workbook_xml.contains(r#"calcOnSave="0""#));
+    assert!(workbook_xml.contains(r#"concurrentCalc="0""#));
+    assert!(workbook_xml.contains(r#"concurrentManualCount="2""#));
+    assert!(workbook_xml.contains(r#"forceFullCalc="1""#));
+    assert!(!workbook_xml.contains("999999"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 // =============================================================================

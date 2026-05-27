@@ -1221,6 +1221,158 @@ mod tests {
         );
     }
 
+    #[test]
+    fn edited_formula_export_does_not_replay_stale_shared_group_metadata() {
+        let output = domain_types::ParseOutput {
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                rows: 2,
+                cols: 1,
+                cells: vec![domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: number(10.0),
+                    formula: Some("SUM(A2:A10)".to_string()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let round_trip_context = domain_types::RoundTripContext {
+            sheets: vec![domain_types::SheetRoundTripContext {
+                cell_formulas: vec![(
+                    (0, 0),
+                    ooxml_types::worksheet::CellFormula {
+                        t: ooxml_types::worksheet::CellFormulaType::Shared,
+                        si: Some(7),
+                        r#ref: Some("A1:A2".to_string()),
+                        text: "SUM(A2:A10)".to_string(),
+                        ..Default::default()
+                    },
+                )],
+                xml_space_formula_cells: vec![(0, 0)],
+                force_recalc_cells: vec![(0, 0)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (mut engine, sheet_id) =
+            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let cell_id = engine
+            .stores
+            .grid_indexes
+            .get(&sheet_id)
+            .and_then(|grid| {
+                grid.cells()
+                    .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
+            })
+            .expect("A1 cell id");
+
+        engine
+            .set_cell(
+                &sheet_id,
+                cell_id,
+                0,
+                0,
+                crate::bridge_types::CellInput::Parse {
+                    text: "=SUM(B2:B10)".into(),
+                },
+            )
+            .expect("formula edit should succeed");
+
+        let xlsx = engine
+            .export_to_xlsx_bytes()
+            .expect("export_to_xlsx_bytes should succeed");
+        let archive = xlsx_parser::XlsxArchive::new(&xlsx).expect("exported XLSX archive");
+        xlsx_parser::infra::package_integrity::validate_archive_package_integrity(&archive)
+            .expect("exported package should be valid");
+        let sheet_xml =
+            String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+        assert!(sheet_xml.contains("<f>SUM(B2:B10)</f>"));
+        assert!(!sheet_xml.contains(r#"t="shared""#));
+        assert!(!sheet_xml.contains(r#"si="7""#));
+        assert!(!sheet_xml.contains(r#"ref="A1:A2""#));
+        assert!(!sheet_xml.contains(r#"ca="1""#));
+        assert!(!sheet_xml.contains(r#"xml:space="preserve""#));
+    }
+
+    #[test]
+    fn edited_formula_export_does_not_replay_stale_array_group_metadata() {
+        let output = domain_types::ParseOutput {
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                rows: 2,
+                cols: 1,
+                cells: vec![domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: number(10.0),
+                    formula: Some("SUM(A2:A10)".to_string()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let round_trip_context = domain_types::RoundTripContext {
+            sheets: vec![domain_types::SheetRoundTripContext {
+                cell_formulas: vec![(
+                    (0, 0),
+                    ooxml_types::worksheet::CellFormula {
+                        t: ooxml_types::worksheet::CellFormulaType::Array,
+                        r#ref: Some("A1:A2".to_string()),
+                        text: "SUM(A2:A10)".to_string(),
+                        aca: true,
+                        ..Default::default()
+                    },
+                )],
+                force_recalc_cells: vec![(0, 0)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (mut engine, sheet_id) =
+            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let cell_id = engine
+            .stores
+            .grid_indexes
+            .get(&sheet_id)
+            .and_then(|grid| {
+                grid.cells()
+                    .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
+            })
+            .expect("A1 cell id");
+
+        engine
+            .set_cell(
+                &sheet_id,
+                cell_id,
+                0,
+                0,
+                crate::bridge_types::CellInput::Parse {
+                    text: "=SUM(B2:B10)".into(),
+                },
+            )
+            .expect("formula edit should succeed");
+
+        let xlsx = engine
+            .export_to_xlsx_bytes()
+            .expect("export_to_xlsx_bytes should succeed");
+        let archive = xlsx_parser::XlsxArchive::new(&xlsx).expect("exported XLSX archive");
+        xlsx_parser::infra::package_integrity::validate_archive_package_integrity(&archive)
+            .expect("exported package should be valid");
+        let sheet_xml =
+            String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+        assert!(sheet_xml.contains("<f>SUM(B2:B10)</f>"));
+        assert!(!sheet_xml.contains(r#"t="array""#));
+        assert!(!sheet_xml.contains(r#"ref="A1:A2""#));
+        assert!(!sheet_xml.contains(r#"aca="1""#));
+        assert!(!sheet_xml.contains(r#"ca="1""#));
+    }
+
     fn one_value_pivot_result(value: CellValue) -> PivotTableResult {
         PivotTableResult {
             column_headers: vec![],

@@ -292,6 +292,166 @@ fn stale_calc_chain_round_trip_metadata_is_not_exported_without_calc_chain_part(
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn stale_workbook_rels_without_shared_strings_are_repaired_when_text_cells_emit_sst() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(0, 0, DomainValue::Text(Arc::from("hello")))],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheet_workbook_r_ids: vec!["rId1".to_string()],
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId1".to_string(),
+            rel_type: crate::write::REL_WORKSHEET.to_string(),
+            target: "worksheets/sheet1.xml".to_string(),
+            target_mode: None,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/sharedStrings.xml"));
+    assert!(workbook_rels.contains(crate::write::REL_SHARED_STRINGS));
+    assert!(workbook_rels.contains("Target=\"sharedStrings.xml\""));
+    assert!(content_types.contains("PartName=\"/xl/sharedStrings.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_content_type_override_for_missing_part_is_not_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        content_type_overrides: vec![(
+            "/xl/missingModeledPart.xml".to_string(),
+            crate::write::CT_WORKSHEET.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/missingModeledPart.xml"));
+    assert!(!content_types.contains("missingModeledPart.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_workbook_relationship_to_missing_modeled_part_is_not_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheet_workbook_r_ids: vec!["rId1".to_string()],
+        workbook_relationships: vec![
+            domain_types::OpcRelationship {
+                id: "rId1".to_string(),
+                rel_type: crate::write::REL_WORKSHEET.to_string(),
+                target: "worksheets/sheet1.xml".to_string(),
+                target_mode: None,
+            },
+            domain_types::OpcRelationship {
+                id: "rId8".to_string(),
+                rel_type: crate::write::REL_SHARED_STRINGS.to_string(),
+                target: "sharedStrings.xml".to_string(),
+                target_mode: None,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/sharedStrings.xml"));
+    assert!(!workbook_rels.contains(crate::write::REL_SHARED_STRINGS));
+    assert!(!workbook_rels.contains("Target=\"sharedStrings.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_referenced() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId4".to_string(),
+                rel_type: crate::write::REL_TABLE.to_string(),
+                target: "../tables/table9.xml".to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/tables/table9.xml"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!sheet_xml.contains("r:id=\"rId4\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn duplicate_original_workbook_relationship_ids_do_not_leak_to_generated_relationships() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(0, 0, DomainValue::Text(Arc::from("hello")))],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheet_workbook_r_ids: vec!["rId1".to_string()],
+        workbook_relationships: vec![
+            domain_types::OpcRelationship {
+                id: "rId1".to_string(),
+                rel_type: crate::write::REL_WORKSHEET.to_string(),
+                target: "worksheets/sheet1.xml".to_string(),
+                target_mode: None,
+            },
+            domain_types::OpcRelationship {
+                id: "rId1".to_string(),
+                rel_type: crate::write::REL_SHARED_STRINGS.to_string(),
+                target: "sharedStrings.xml".to_string(),
+                target_mode: None,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels = archive.read_file("xl/_rels/workbook.xml.rels").unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&workbook_rels);
+    let mut ids = std::collections::HashSet::new();
+
+    for rel in rels {
+        assert!(ids.insert(rel.id), "relationship IDs must be unique");
+    }
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn make_formula_cell(row: u32, col: u32, formula: &str, cached: DomainValue) -> DomainCellData {
     DomainCellData {
         row,

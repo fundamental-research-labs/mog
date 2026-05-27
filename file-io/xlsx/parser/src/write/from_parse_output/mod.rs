@@ -10,6 +10,7 @@
 
 #![allow(clippy::string_slice)]
 
+mod package_authority;
 mod pivot_package;
 mod sheet_builder;
 mod styles;
@@ -883,7 +884,15 @@ pub fn write_xlsx_from_parse_output(
             let ooxml_rels: Vec<ooxml_types::shared::OpcRelationship> = srt
                 .sheet_opc_rels
                 .iter()
-                .filter(|r| pivot_package::keep_sheet_relationship(&pivot_data, r))
+                .filter(|r| {
+                    pivot_package::keep_sheet_relationship(&pivot_data, r)
+                        && package_authority::keep_original_sheet_relationship(
+                            &pivot_data,
+                            sheet_idx,
+                            extras,
+                            r,
+                        )
+                })
                 .map(|r| ooxml_types::shared::OpcRelationship {
                     id: r.id.clone(),
                     rel_type: r.rel_type.clone(),
@@ -1964,23 +1973,17 @@ pub fn write_xlsx_from_parse_output(
     }
     // Replay original Override entries from RoundTripContext for order fidelity,
     // then fill in any overrides for parts that weren't in the original.
-    let used_rt_overrides = if let Some(ctx) = round_trip_ctx {
-        if !ctx.content_type_overrides.is_empty() {
-            for (part_name, ct) in &ctx.content_type_overrides {
-                if !pivot_package::keep_content_type_override(&pivot_data, part_name, ct)
-                    || part_name == "/xl/calcChain.xml"
-                {
-                    continue;
-                }
-                content_types.add_override(part_name, ct);
+    if let Some(ctx) = round_trip_ctx {
+        for (part_name, ct) in &ctx.content_type_overrides {
+            if !pivot_package::keep_content_type_override(&pivot_data, part_name, ct)
+                || part_name == "/xl/calcChain.xml"
+                || !package_authority::round_trip_content_type_part_is_emitted(ctx, part_name)
+            {
+                continue;
             }
-            true
-        } else {
-            false
+            content_types.add_override(part_name, ct);
         }
-    } else {
-        false
-    };
+    }
     if !content_types.has_override("/xl/workbook.xml") {
         content_types.add_workbook();
     }
@@ -2203,59 +2206,69 @@ pub fn write_xlsx_from_parse_output(
             }
         }
     }
-    // Web extension content types (skip if already replayed from RT overrides)
+    // Web extension content types.
     let has_web_extensions = round_trip_ctx
         .map(|ctx| !ctx.web_extension_parts.is_empty())
         .unwrap_or(false);
-    if has_web_extensions && !used_rt_overrides {
+    if has_web_extensions {
         if let Some(ctx) = round_trip_ctx {
             for part in &ctx.web_extension_parts {
                 if part.path.ends_with("taskpanes.xml") {
+                    let path = format!("/{}", part.path);
+                    if content_types.has_override(&path) {
+                        continue;
+                    }
                     content_types.add_override(
-                        &format!("/{}", part.path),
+                        &path,
                         crate::domain::web_extensions::read::CT_WEB_EXTENSION_TASKPANES,
                     );
                 } else if part.path.ends_with(".xml") && !part.path.contains("_rels/") {
-                    content_types.add_override(
-                        &format!("/{}", part.path),
-                        crate::domain::web_extensions::read::CT_WEB_EXTENSION,
-                    );
+                    let path = format!("/{}", part.path);
+                    if content_types.has_override(&path) {
+                        continue;
+                    }
+                    content_types
+                        .add_override(&path, crate::domain::web_extensions::read::CT_WEB_EXTENSION);
                 }
             }
         }
     }
-    // CustomXml content types (skip if already replayed from RT overrides)
+    // CustomXml content types.
     let has_custom_xml = round_trip_ctx
         .map(|ctx| !ctx.custom_xml_parts.is_empty())
         .unwrap_or(false);
-    if has_custom_xml && !used_rt_overrides {
+    if has_custom_xml {
         if let Some(ctx) = round_trip_ctx {
             for part in &ctx.custom_xml_parts {
                 if part.path.contains("itemProps")
                     && part.path.ends_with(".xml")
                     && !part.path.contains("_rels/")
                 {
+                    let path = format!("/{}", part.path);
+                    if content_types.has_override(&path) {
+                        continue;
+                    }
                     content_types.add_override(
-                        &format!("/{}", part.path),
+                        &path,
                         "application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
                     );
                 }
             }
         }
     }
-    // External link content types (skip if already replayed from RT overrides)
+    // External link content types.
     let has_external_links = !external_link_exports.is_empty();
-    if has_external_links && !used_rt_overrides {
+    if has_external_links {
         for (_, part_name) in &external_link_exports {
-            content_types.add_override(
-                &format!("/{}", external_link_zip_path(part_name)),
-                crate::domain::external::write::CT_EXTERNAL_LINK,
-            );
+            let path = format!("/{}", external_link_zip_path(part_name));
+            if !content_types.has_override(&path) {
+                content_types.add_override(&path, crate::domain::external::write::CT_EXTERNAL_LINK);
+            }
         }
     }
     let content_types_xml = content_types.to_xml();
 
-    let root_rels = if let Some(ctx) = round_trip_ctx {
+    let mut root_rels = if let Some(ctx) = round_trip_ctx {
         if !ctx.root_relationships.is_empty() {
             use ooxml_types::shared::OpcRelationship as OoOpc;
             let opc_rels: Vec<OoOpc> = ctx
@@ -2299,6 +2312,12 @@ pub fn write_xlsx_from_parse_output(
         }
         rels
     };
+    package_authority::ensure_root_relationships(
+        &mut root_rels,
+        has_doc_props,
+        has_custom_props,
+        has_web_extensions,
+    );
     let root_rels_xml = root_rels.to_xml();
 
     // Build workbook relationships (xl/_rels/workbook.xml.rels).
@@ -2322,7 +2341,11 @@ pub fn write_xlsx_from_parse_output(
             .iter()
             .filter(|r| {
                 pivot_package::keep_workbook_relationship(&pivot_data, r)
-                    && r.rel_type != super::REL_CALC_CHAIN
+                    && package_authority::keep_original_workbook_relationship(
+                        ctx,
+                        output.sheets.len(),
+                        r,
+                    )
             })
             .map(|r| OoOpc {
                 id: r.id.clone(),
@@ -2397,6 +2420,15 @@ pub fn write_xlsx_from_parse_output(
         }
         rels
     };
+
+    package_authority::ensure_workbook_modeled_relationships(
+        &mut workbook_rels,
+        round_trip_ctx,
+        output.sheets.len(),
+        has_theme,
+        !shared_strings.is_empty(),
+        metadata_xml.is_some(),
+    );
 
     // Build persons.xml if we have person data (Excel can store persons
     // without threaded comments; gate only on persons being present).

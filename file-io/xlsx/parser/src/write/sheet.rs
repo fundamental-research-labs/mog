@@ -1249,9 +1249,20 @@ impl SheetWriter {
         // Tier 2: Emit preserved elements after sheetData.
         // When preserved elements contain sheetProtection, prefer the preserved
         // (verbatim original) version over the domain-generated one for round-trip fidelity.
+        let skip_table_parts = self.table_parts_xml.is_some();
+        let skip_pivot_table_definitions = !self.pivot_table_r_ids.is_empty();
         let mut protection_emitted_from_preserved = false;
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("worksheet", "sheetData") {
+                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
+                    continue;
+                }
+                if self.should_skip_preserved_pivot_table_definition(
+                    &elem.raw_xml,
+                    skip_pivot_table_definitions,
+                ) {
+                    continue;
+                }
                 if elem.raw_xml.contains("<sheetProtection") {
                     protection_emitted_from_preserved = true;
                 }
@@ -1282,6 +1293,15 @@ impl SheetWriter {
         // Drain preserved elements positioned after mergeCells (e.g. phoneticPr)
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("worksheet", "mergeCells") {
+                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
+                    continue;
+                }
+                if self.should_skip_preserved_pivot_table_definition(
+                    &elem.raw_xml,
+                    skip_pivot_table_definitions,
+                ) {
+                    continue;
+                }
                 w.raw_str(&elem.raw_xml);
             }
         }
@@ -1330,8 +1350,6 @@ impl SheetWriter {
         // Drain preserved elements positioned after print-related elements
         // (e.g. ignoredErrors after pageMargins/pageSetup, before drawing)
         // Skip structured elements we regenerate explicitly to avoid stale references.
-        let skip_table_parts = self.table_parts_xml.is_some();
-        let skip_pivot_table_definitions = !self.pivot_table_r_ids.is_empty();
         if let Some(ref preserved) = self.preserved_elements {
             for after in &[
                 "printOptions",

@@ -3,13 +3,27 @@
 //! This module validates cross-part package invariants that individual feature
 //! writers cannot prove locally.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use crate::domain::content_types::read::ContentTypes;
+use crate::domain::web_extensions::read::{
+    CT_WEB_EXTENSION_TASKPANES, REL_WEB_EXTENSION_TASKPANES,
+};
 use crate::domain::workbook::read::parse_all_rels;
 use crate::infra::opc::{
     OpcTargetResolutionError, relationship_owner_from_rels_path, resolve_relationship_target,
 };
+use crate::write::{
+    CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
+    CT_EXTENDED_PROPERTIES, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WORKSHEET,
+    REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_DRAWING,
+    REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
+    REL_THEME, REL_THREADED_COMMENT, REL_WORKSHEET,
+};
 use crate::zip::XlsxArchive;
+
+const CT_CHART_EX: &str = "application/vnd.ms-office.chartex+xml";
+const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageIntegrityError {
@@ -32,6 +46,24 @@ pub enum PackageIntegrityError {
         id: String,
         target: String,
         resolved_path: String,
+    },
+    MissingRequiredRelationship {
+        rels_path: String,
+        rel_type: &'static str,
+        target_path: String,
+    },
+    MissingRequiredContentType {
+        part_path: String,
+        content_type: &'static str,
+    },
+    ContentTypeForMissingPart {
+        part_path: String,
+        content_type: String,
+    },
+    MissingWorksheetRelationshipReference {
+        worksheet_path: String,
+        rels_path: String,
+        id: String,
     },
 }
 
@@ -66,6 +98,36 @@ impl std::fmt::Display for PackageIntegrityError {
                 f,
                 "relationship {id} in {rels_path} targets missing part {resolved_path} from target {target}"
             ),
+            Self::MissingRequiredRelationship {
+                rels_path,
+                rel_type,
+                target_path,
+            } => write!(
+                f,
+                "relationship part {rels_path} is missing required relationship type {rel_type} targeting {target_path}"
+            ),
+            Self::MissingRequiredContentType {
+                part_path,
+                content_type,
+            } => write!(
+                f,
+                "part {part_path} is missing required content type {content_type}"
+            ),
+            Self::ContentTypeForMissingPart {
+                part_path,
+                content_type,
+            } => write!(
+                f,
+                "[Content_Types].xml contains override {content_type} for missing part {part_path}"
+            ),
+            Self::MissingWorksheetRelationshipReference {
+                worksheet_path,
+                rels_path,
+                id,
+            } => write!(
+                f,
+                "worksheet {worksheet_path} references relationship {id}, but {rels_path} does not define it"
+            ),
         }
     }
 }
@@ -76,6 +138,8 @@ pub fn validate_archive_package_integrity(
     archive: &XlsxArchive<'_>,
 ) -> Result<(), Vec<PackageIntegrityError>> {
     let mut errors = Vec::new();
+    let mut relationships_by_part: HashMap<String, Vec<ooxml_types::shared::OpcRelationship>> =
+        HashMap::new();
 
     for entry in archive.entries() {
         let rels_path = entry.name.as_str();
@@ -98,6 +162,7 @@ pub fn validate_archive_package_integrity(
             Err(_) => continue,
         };
         let rels = parse_all_rels(&rels_xml);
+        relationships_by_part.insert(rels_path.to_string(), rels.clone());
         let mut seen_ids = HashSet::new();
         for rel in rels {
             if !seen_ids.insert(rel.id.clone()) {
@@ -139,6 +204,11 @@ pub fn validate_archive_package_integrity(
         }
     }
 
+    validate_content_types(archive, &mut errors);
+    if archive.contains("[Content_Types].xml") && archive.contains("_rels/.rels") {
+        validate_modeled_part_invariants(archive, &relationships_by_part, &mut errors);
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -146,8 +216,328 @@ pub fn validate_archive_package_integrity(
     }
 }
 
+fn validate_content_types(archive: &XlsxArchive<'_>, errors: &mut Vec<PackageIntegrityError>) {
+    let Ok(xml) = archive.read_file("[Content_Types].xml") else {
+        return;
+    };
+    let Ok(content_types) = ContentTypes::parse(&xml) else {
+        return;
+    };
+
+    for (part_path, content_type) in content_types.overrides() {
+        if !archive.contains(part_path) {
+            errors.push(PackageIntegrityError::ContentTypeForMissingPart {
+                part_path: part_path.to_string(),
+                content_type: content_type.to_string(),
+            });
+        }
+    }
+}
+
+fn validate_modeled_part_invariants(
+    archive: &XlsxArchive<'_>,
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    require_relationship(
+        relationships_by_part,
+        "_rels/.rels",
+        REL_OFFICE_DOCUMENT,
+        "xl/workbook.xml",
+        errors,
+    );
+
+    if archive.contains("docProps/core.xml") {
+        require_relationship(
+            relationships_by_part,
+            "_rels/.rels",
+            REL_CORE_PROPERTIES,
+            "docProps/core.xml",
+            errors,
+        );
+        require_content_type(archive, "docProps/core.xml", CT_CORE_PROPERTIES, errors);
+    }
+    if archive.contains("docProps/app.xml") {
+        require_relationship(
+            relationships_by_part,
+            "_rels/.rels",
+            REL_EXTENDED_PROPERTIES,
+            "docProps/app.xml",
+            errors,
+        );
+        require_content_type(archive, "docProps/app.xml", CT_EXTENDED_PROPERTIES, errors);
+    }
+    if archive.contains("docProps/custom.xml") {
+        require_relationship(
+            relationships_by_part,
+            "_rels/.rels",
+            REL_CUSTOM_PROPERTIES,
+            "docProps/custom.xml",
+            errors,
+        );
+        require_content_type(archive, "docProps/custom.xml", CT_CUSTOM_PROPERTIES, errors);
+    }
+    if archive.contains("xl/webextensions/taskpanes.xml") {
+        require_relationship(
+            relationships_by_part,
+            "_rels/.rels",
+            REL_WEB_EXTENSION_TASKPANES,
+            "xl/webextensions/taskpanes.xml",
+            errors,
+        );
+        require_content_type(
+            archive,
+            "xl/webextensions/taskpanes.xml",
+            CT_WEB_EXTENSION_TASKPANES,
+            errors,
+        );
+    }
+
+    let workbook_rels = "xl/_rels/workbook.xml.rels";
+    if archive.contains("xl/sharedStrings.xml") {
+        require_relationship(
+            relationships_by_part,
+            workbook_rels,
+            REL_SHARED_STRINGS,
+            "xl/sharedStrings.xml",
+            errors,
+        );
+        require_content_type(archive, "xl/sharedStrings.xml", CT_SHARED_STRINGS, errors);
+    }
+    if archive.contains("xl/styles.xml") {
+        require_relationship(
+            relationships_by_part,
+            workbook_rels,
+            REL_STYLES,
+            "xl/styles.xml",
+            errors,
+        );
+        require_content_type(archive, "xl/styles.xml", CT_STYLES, errors);
+    }
+    if archive.contains("xl/theme/theme1.xml") {
+        require_relationship(
+            relationships_by_part,
+            workbook_rels,
+            REL_THEME,
+            "xl/theme/theme1.xml",
+            errors,
+        );
+        require_content_type(archive, "xl/theme/theme1.xml", CT_THEME, errors);
+    }
+
+    for entry in archive.entries() {
+        let path = entry.name.as_str();
+        if is_worksheet_part(path) {
+            require_relationship(
+                relationships_by_part,
+                workbook_rels,
+                REL_WORKSHEET,
+                path,
+                errors,
+            );
+            require_content_type(archive, path, CT_WORKSHEET, errors);
+            validate_worksheet_r_ids(archive, path, relationships_by_part, errors);
+        } else if is_table_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_TABLE, path, errors);
+            require_content_type(archive, path, CT_TABLE, errors);
+        } else if is_comment_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_COMMENTS, path, errors);
+            require_content_type(archive, path, CT_COMMENTS, errors);
+        } else if is_threaded_comment_part(path) {
+            require_any_relationship_to_path(
+                relationships_by_part,
+                REL_THREADED_COMMENT,
+                path,
+                errors,
+            );
+            require_content_type(archive, path, CT_THREADED_COMMENTS, errors);
+        } else if is_drawing_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_DRAWING, path, errors);
+            require_content_type(archive, path, CT_DRAWING, errors);
+        } else if is_chart_ex_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_CHART_EX, path, errors);
+            require_content_type(archive, path, CT_CHART_EX, errors);
+        } else if is_chart_part(path) {
+            require_any_relationship_to_path(relationships_by_part, REL_CHART, path, errors);
+            require_content_type(archive, path, CT_CHART, errors);
+        }
+    }
+}
+
+fn require_content_type(
+    archive: &XlsxArchive<'_>,
+    part_path: &str,
+    content_type: &'static str,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    let Ok(xml) = archive.read_file("[Content_Types].xml") else {
+        return;
+    };
+    let Ok(content_types) = ContentTypes::parse(&xml) else {
+        return;
+    };
+    if content_types.get_type(part_path) != Some(content_type) {
+        errors.push(PackageIntegrityError::MissingRequiredContentType {
+            part_path: part_path.to_string(),
+            content_type,
+        });
+    }
+}
+
+fn require_relationship(
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    rels_path: &'static str,
+    rel_type: &'static str,
+    target_path: &str,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    if has_relationship_to_path(relationships_by_part, rels_path, rel_type, target_path) {
+        return;
+    }
+    errors.push(PackageIntegrityError::MissingRequiredRelationship {
+        rels_path: rels_path.to_string(),
+        rel_type,
+        target_path: target_path.to_string(),
+    });
+}
+
+fn require_any_relationship_to_path(
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    rel_type: &'static str,
+    target_path: &str,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    if relationships_by_part.keys().any(|rels_path| {
+        has_relationship_to_path(relationships_by_part, rels_path, rel_type, target_path)
+    }) {
+        return;
+    }
+    errors.push(PackageIntegrityError::MissingRequiredRelationship {
+        rels_path: "*".to_string(),
+        rel_type,
+        target_path: target_path.to_string(),
+    });
+}
+
+fn has_relationship_to_path(
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    rels_path: &str,
+    rel_type: &str,
+    target_path: &str,
+) -> bool {
+    let owner = relationship_owner_from_rels_path(rels_path);
+    relationships_by_part
+        .get(rels_path)
+        .into_iter()
+        .flatten()
+        .any(|rel| {
+            rel.rel_type == rel_type
+                && rel.target_mode.as_deref() != Some("External")
+                && relationship_target_part(&rel.target)
+                    .and_then(|target| resolve_relationship_target(owner.as_deref(), target).ok())
+                    .as_deref()
+                    == Some(target_path)
+        })
+}
+
+fn validate_worksheet_r_ids(
+    archive: &XlsxArchive<'_>,
+    worksheet_path: &str,
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    let Ok(xml) = archive.read_file(worksheet_path) else {
+        return;
+    };
+    let rels_path = worksheet_rels_path(worksheet_path);
+    let defined_ids: HashSet<&str> = relationships_by_part
+        .get(&rels_path)
+        .into_iter()
+        .flatten()
+        .map(|rel| rel.id.as_str())
+        .collect();
+    for id in extract_r_ids(&xml) {
+        if !defined_ids.contains(id.as_str()) {
+            errors.push(
+                PackageIntegrityError::MissingWorksheetRelationshipReference {
+                    worksheet_path: worksheet_path.to_string(),
+                    rels_path: rels_path.clone(),
+                    id,
+                },
+            );
+        }
+    }
+}
+
+fn extract_r_ids(xml: &[u8]) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = xml;
+    while let Some(pos) = find_subslice(rest, b"r:id=") {
+        rest = &rest[pos + b"r:id=".len()..];
+        let Some((&quote, after_quote)) = rest.split_first() else {
+            break;
+        };
+        if quote != b'"' && quote != b'\'' {
+            continue;
+        }
+        let Some(end) = after_quote.iter().position(|b| *b == quote) else {
+            break;
+        };
+        ids.push(String::from_utf8_lossy(&after_quote[..end]).into_owned());
+        rest = &after_quote[end + 1..];
+    }
+    ids
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn worksheet_rels_path(worksheet_path: &str) -> String {
+    let (dir, file) = worksheet_path
+        .rsplit_once('/')
+        .unwrap_or(("", worksheet_path));
+    if dir.is_empty() {
+        format!("_rels/{file}.rels")
+    } else {
+        format!("{dir}/_rels/{file}.rels")
+    }
+}
+
 fn is_relationship_part(path: &str) -> bool {
     path == "_rels/.rels" || (path.contains("/_rels/") && path.ends_with(".rels"))
+}
+
+fn is_worksheet_part(path: &str) -> bool {
+    path.starts_with("xl/worksheets/sheet") && path.ends_with(".xml")
+}
+
+fn is_table_part(path: &str) -> bool {
+    path.starts_with("xl/tables/table") && path.ends_with(".xml")
+}
+
+fn is_comment_part(path: &str) -> bool {
+    path.starts_with("xl/comments") && path.ends_with(".xml")
+}
+
+fn is_threaded_comment_part(path: &str) -> bool {
+    path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml")
+}
+
+fn is_drawing_part(path: &str) -> bool {
+    path.starts_with("xl/drawings/drawing") && path.ends_with(".xml")
+}
+
+fn is_chart_part(path: &str) -> bool {
+    path.starts_with("xl/charts/chart")
+        && !path.starts_with("xl/charts/chartEx")
+        && path.ends_with(".xml")
+}
+
+fn is_chart_ex_part(path: &str) -> bool {
+    path.starts_with("xl/charts/chartEx") && path.ends_with(".xml")
 }
 
 fn relationship_target_part(target: &str) -> Option<&str> {
@@ -183,6 +573,31 @@ mod tests {
         let bytes = zip.finish().expect("zip should finish");
         let leaked = Box::leak(bytes.into_boxed_slice());
         XlsxArchive::new(leaked).expect("archive should open")
+    }
+
+    fn valid_content_types(extra: &str) -> Vec<u8> {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+{extra}</Types>"#
+        )
+        .into_bytes()
+    }
+
+    fn root_rels() -> &'static [u8] {
+        br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="/xl/workbook.xml"/></Relationships>"#
+    }
+
+    fn workbook_rels(extra: &str) -> Vec<u8> {
+        format!(
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>{extra}</Relationships>"#
+        )
+        .into_bytes()
     }
 
     #[test]
@@ -276,5 +691,133 @@ mod tests {
             [PackageIntegrityError::MissingRelationshipOwner { owner_path, .. }]
                 if owner_path == "xl/worksheets/sheet1.xml"
         ));
+    }
+
+    #[test]
+    fn content_type_override_for_missing_part_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/missing.xml" ContentType="application/xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            ("xl/worksheets/sheet1.xml", b"<worksheet/>"),
+        ]);
+
+        let errors = validate_archive_package_integrity(&archive).expect_err("override is stale");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::ContentTypeForMissingPart { part_path, .. }
+                if part_path == "xl/missing.xml"
+        )));
+    }
+
+    #[test]
+    fn emitted_shared_strings_without_workbook_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            ("xl/sharedStrings.xml", b"<sst/>"),
+            ("xl/worksheets/sheet1.xml", b"<worksheet/>"),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("shared strings rel missing");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingRequiredRelationship { rel_type, target_path, .. }
+                if *rel_type == REL_SHARED_STRINGS && target_path == "xl/sharedStrings.xml"
+        )));
+    }
+
+    #[test]
+    fn worksheet_r_id_without_matching_sheet_relationship_fails() {
+        let content_types = valid_content_types("");
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rId9"/></worksheet>"#,
+            ),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("worksheet r:id is dangling");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingWorksheetRelationshipReference { id, .. }
+                if id == "rId9"
+        )));
+    }
+
+    #[test]
+    fn emitted_taskpanes_without_root_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/webextensions/taskpanes.xml" ContentType="application/vnd.ms-office.webextensiontaskpanes+xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            ("xl/worksheets/sheet1.xml", b"<worksheet/>"),
+            ("xl/webextensions/taskpanes.xml", b"<wetp:taskpanes/>"),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("taskpanes rel missing");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingRequiredRelationship { rel_type, target_path, .. }
+                if *rel_type == REL_WEB_EXTENSION_TASKPANES
+                    && target_path == "xl/webextensions/taskpanes.xml"
+        )));
+    }
+
+    #[test]
+    fn emitted_threaded_comment_without_sheet_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/threadedComments/threadedComment1.xml" ContentType="application/vnd.ms-excel.threadedcomments+xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            ("xl/worksheets/sheet1.xml", b"<worksheet/>"),
+            (
+                "xl/threadedComments/threadedComment1.xml",
+                b"<ThreadedComments/>",
+            ),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("threaded comment rel missing");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingRequiredRelationship { rel_type, target_path, .. }
+                if *rel_type == REL_THREADED_COMMENT
+                    && target_path == "xl/threadedComments/threadedComment1.xml"
+        )));
     }
 }

@@ -2,6 +2,10 @@
 // Relationship Type Constants
 // =============================================================================
 
+use std::collections::HashMap;
+
+use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
+
 /// Relationship type for worksheets.
 pub const REL_WORKSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
@@ -123,8 +127,463 @@ pub const REL_THREADED_COMMENT: &str =
 /// Relationship type for the person list (xl/persons/person.xml).
 pub const REL_PERSON: &str = "http://schemas.microsoft.com/office/2017/10/relationships/person";
 
+/// Relationship type for chart style sidecar parts.
+pub const REL_CHART_STYLE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
+
+/// Relationship type for chart color style sidecar parts.
+pub const REL_CHART_COLOR_STYLE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
+
+/// Relationship type for images.
+pub const REL_IMAGE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+
+/// Relationship type for pivot cache records.
+pub const REL_PIVOT_CACHE_RECORDS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
+
+/// Relationship type for form control property parts.
+pub const REL_CTRL_PROP: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/ctrlProp";
+
+/// Relationship type for worksheet custom property parts.
+pub const REL_CUSTOM_PROPERTY: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
+
 /// XML namespace for package relationship parts.
 pub const RELATIONSHIPS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PackageOwner {
+    Root,
+    Workbook,
+    Worksheet { sheet_index: usize, path: String },
+    Drawing { path: String },
+    Chart { path: String },
+    VmlDrawing { path: String },
+    PivotTable { path: String },
+    PivotCache { path: String },
+    ExternalLink { path: String },
+    CustomPart { path: String },
+}
+
+impl PackageOwner {
+    pub fn owner_part_path(&self) -> Option<&str> {
+        match self {
+            Self::Root => None,
+            Self::Workbook => Some("xl/workbook.xml"),
+            Self::Worksheet { path, .. }
+            | Self::Drawing { path }
+            | Self::Chart { path }
+            | Self::VmlDrawing { path }
+            | Self::PivotTable { path }
+            | Self::PivotCache { path }
+            | Self::ExternalLink { path }
+            | Self::CustomPart { path } => Some(path),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum OoxmlRelationshipType {
+    OfficeDocument,
+    Worksheet,
+    Styles,
+    Theme,
+    SharedStrings,
+    CalcChain,
+    Comments,
+    ThreadedComments,
+    VmlDrawing,
+    Drawing,
+    Chart,
+    ChartEx,
+    ChartStyle,
+    ChartColorStyle,
+    Image,
+    Table,
+    PivotTable,
+    PivotCacheDefinition,
+    PivotCacheRecords,
+    Hyperlink,
+    PrinterSettings,
+    CtrlProp,
+    CustomProperty,
+    ExternalLink,
+    DiagramData,
+    DiagramLayout,
+    DiagramColors,
+    DiagramQuickStyle,
+    DiagramDrawing,
+    Slicer,
+    SlicerCache,
+    Metadata,
+    OleObject,
+    Person,
+    Unknown(String),
+}
+
+impl OoxmlRelationshipType {
+    pub fn from_uri(uri: &str) -> Self {
+        match uri {
+            REL_OFFICE_DOCUMENT => Self::OfficeDocument,
+            REL_WORKSHEET => Self::Worksheet,
+            REL_STYLES => Self::Styles,
+            REL_THEME => Self::Theme,
+            REL_SHARED_STRINGS => Self::SharedStrings,
+            REL_CALC_CHAIN => Self::CalcChain,
+            REL_COMMENTS => Self::Comments,
+            REL_THREADED_COMMENT => Self::ThreadedComments,
+            REL_VML_DRAWING => Self::VmlDrawing,
+            REL_DRAWING => Self::Drawing,
+            REL_CHART => Self::Chart,
+            REL_CHART_EX => Self::ChartEx,
+            REL_CHART_STYLE => Self::ChartStyle,
+            REL_CHART_COLOR_STYLE => Self::ChartColorStyle,
+            REL_IMAGE => Self::Image,
+            REL_TABLE => Self::Table,
+            REL_PIVOT_TABLE => Self::PivotTable,
+            REL_PIVOT_CACHE => Self::PivotCacheDefinition,
+            REL_PIVOT_CACHE_RECORDS => Self::PivotCacheRecords,
+            REL_HYPERLINK => Self::Hyperlink,
+            REL_PRINTER_SETTINGS => Self::PrinterSettings,
+            REL_CTRL_PROP => Self::CtrlProp,
+            REL_CUSTOM_PROPERTY => Self::CustomProperty,
+            REL_EXTERNAL_LINK => Self::ExternalLink,
+            REL_DIAGRAM_DATA => Self::DiagramData,
+            REL_DIAGRAM_LAYOUT => Self::DiagramLayout,
+            REL_DIAGRAM_COLORS => Self::DiagramColors,
+            REL_DIAGRAM_QUICK_STYLE => Self::DiagramQuickStyle,
+            REL_DIAGRAM_DRAWING => Self::DiagramDrawing,
+            REL_SLICER => Self::Slicer,
+            REL_SLICER_CACHE => Self::SlicerCache,
+            REL_METADATA => Self::Metadata,
+            REL_OLE_OBJECT => Self::OleObject,
+            REL_PERSON => Self::Person,
+            other => Self::Unknown(other.to_string()),
+        }
+    }
+
+    pub fn uri(&self) -> &str {
+        match self {
+            Self::OfficeDocument => REL_OFFICE_DOCUMENT,
+            Self::Worksheet => REL_WORKSHEET,
+            Self::Styles => REL_STYLES,
+            Self::Theme => REL_THEME,
+            Self::SharedStrings => REL_SHARED_STRINGS,
+            Self::CalcChain => REL_CALC_CHAIN,
+            Self::Comments => REL_COMMENTS,
+            Self::ThreadedComments => REL_THREADED_COMMENT,
+            Self::VmlDrawing => REL_VML_DRAWING,
+            Self::Drawing => REL_DRAWING,
+            Self::Chart => REL_CHART,
+            Self::ChartEx => REL_CHART_EX,
+            Self::ChartStyle => REL_CHART_STYLE,
+            Self::ChartColorStyle => REL_CHART_COLOR_STYLE,
+            Self::Image => REL_IMAGE,
+            Self::Table => REL_TABLE,
+            Self::PivotTable => REL_PIVOT_TABLE,
+            Self::PivotCacheDefinition => REL_PIVOT_CACHE,
+            Self::PivotCacheRecords => REL_PIVOT_CACHE_RECORDS,
+            Self::Hyperlink => REL_HYPERLINK,
+            Self::PrinterSettings => REL_PRINTER_SETTINGS,
+            Self::CtrlProp => REL_CTRL_PROP,
+            Self::CustomProperty => REL_CUSTOM_PROPERTY,
+            Self::ExternalLink => REL_EXTERNAL_LINK,
+            Self::DiagramData => REL_DIAGRAM_DATA,
+            Self::DiagramLayout => REL_DIAGRAM_LAYOUT,
+            Self::DiagramColors => REL_DIAGRAM_COLORS,
+            Self::DiagramQuickStyle => REL_DIAGRAM_QUICK_STYLE,
+            Self::DiagramDrawing => REL_DIAGRAM_DRAWING,
+            Self::Slicer => REL_SLICER,
+            Self::SlicerCache => REL_SLICER_CACHE,
+            Self::Metadata => REL_METADATA,
+            Self::OleObject => REL_OLE_OBJECT,
+            Self::Person => REL_PERSON,
+            Self::Unknown(uri) => uri,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RelationshipTargetMode {
+    Internal,
+    External,
+}
+
+impl RelationshipTargetMode {
+    pub fn from_attr(value: Option<&str>) -> Self {
+        match value {
+            Some(mode) if mode.eq_ignore_ascii_case("External") => Self::External,
+            _ => Self::Internal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationshipTarget {
+    Internal {
+        raw: String,
+        path: String,
+    },
+    External {
+        raw: String,
+    },
+    InvalidInternal {
+        raw: String,
+        error: OpcTargetResolutionError,
+    },
+}
+
+impl RelationshipTarget {
+    pub fn raw(&self) -> &str {
+        match self {
+            Self::Internal { raw, .. }
+            | Self::External { raw }
+            | Self::InvalidInternal { raw, .. } => raw,
+        }
+    }
+
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::Internal { path, .. } => Some(path),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedRelationship {
+    pub owner: PackageOwner,
+    pub id: String,
+    pub rel_type: OoxmlRelationshipType,
+    pub rel_type_uri: String,
+    pub target_mode: RelationshipTargetMode,
+    pub target: RelationshipTarget,
+}
+
+pub fn parse_owned_relationships(owner: PackageOwner, xml: &[u8]) -> Vec<OwnedRelationship> {
+    let mut relationships = Vec::new();
+    let mut pos = 0;
+    while let Some(rel_start) = find_tag_simd(xml, b"Relationship", pos) {
+        let rel_end = find_gt_simd(xml, rel_start)
+            .map(|p| p + 1)
+            .unwrap_or(xml.len());
+        let rel_elem = &xml[rel_start..rel_end];
+
+        if let (Some(id), Some(rel_type_uri), Some(raw_target)) = (
+            rel_attr(rel_elem, b"Id=\""),
+            rel_attr(rel_elem, b"Type=\""),
+            rel_attr(rel_elem, b"Target=\""),
+        ) {
+            let target_mode =
+                RelationshipTargetMode::from_attr(rel_attr(rel_elem, b"TargetMode=\"").as_deref());
+            let target = match target_mode {
+                RelationshipTargetMode::External => RelationshipTarget::External {
+                    raw: raw_target.clone(),
+                },
+                RelationshipTargetMode::Internal => {
+                    match resolve_relationship_target(owner.owner_part_path(), &raw_target) {
+                        Ok(path) => RelationshipTarget::Internal {
+                            raw: raw_target.clone(),
+                            path,
+                        },
+                        Err(error) => RelationshipTarget::InvalidInternal {
+                            raw: raw_target.clone(),
+                            error,
+                        },
+                    }
+                }
+            };
+
+            relationships.push(OwnedRelationship {
+                owner: owner.clone(),
+                id,
+                rel_type: OoxmlRelationshipType::from_uri(&rel_type_uri),
+                rel_type_uri,
+                target_mode,
+                target,
+            });
+        }
+
+        pos = rel_end;
+    }
+    relationships
+}
+
+fn rel_attr(element: &[u8], attr: &[u8]) -> Option<String> {
+    let pos = find_attr_simd(element, attr, 0)?;
+    let (start, end) = extract_quoted_value(element, pos + attr.len())?;
+    std::str::from_utf8(&element[start..end])
+        .ok()
+        .map(decode_xml_text)
+}
+
+fn decode_xml_text(text: &str) -> String {
+    if !text.contains('&') {
+        return text.to_string();
+    }
+
+    text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+}
+
+macro_rules! rel_view {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy)]
+        pub struct $name<'a> {
+            relationships: &'a [OwnedRelationship],
+        }
+
+        impl<'a> $name<'a> {
+            pub fn new(relationships: &'a [OwnedRelationship]) -> Self {
+                Self { relationships }
+            }
+
+            pub fn all(&self) -> &'a [OwnedRelationship] {
+                self.relationships
+            }
+
+            pub fn unknown(&self) -> Vec<&'a OwnedRelationship> {
+                self.relationships
+                    .iter()
+                    .filter(|rel| matches!(rel.rel_type, OoxmlRelationshipType::Unknown(_)))
+                    .collect()
+            }
+
+            pub fn by_id(&self, id: &str) -> Option<&'a OwnedRelationship> {
+                self.relationships.iter().find(|rel| rel.id == id)
+            }
+        }
+    };
+}
+
+rel_view!(WorkbookRelationships);
+rel_view!(WorksheetRelationships);
+rel_view!(DrawingRelationships);
+rel_view!(ChartRelationships);
+rel_view!(VmlDrawingRelationships);
+
+impl<'a> WorkbookRelationships<'a> {
+    pub fn worksheets(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Worksheet)
+            .collect()
+    }
+}
+
+impl<'a> WorksheetRelationships<'a> {
+    pub fn drawing(&self) -> Option<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .find(|rel| rel.rel_type == OoxmlRelationshipType::Drawing)
+    }
+
+    pub fn legacy_vml_drawings(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::VmlDrawing)
+            .collect()
+    }
+
+    pub fn comments(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Comments)
+            .collect()
+    }
+
+    pub fn tables(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Table)
+            .collect()
+    }
+
+    pub fn hyperlinks(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Hyperlink)
+            .collect()
+    }
+
+    pub fn printer_settings(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::PrinterSettings)
+            .collect()
+    }
+}
+
+impl<'a> DrawingRelationships<'a> {
+    pub fn charts(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Chart)
+            .collect()
+    }
+
+    pub fn chart_ex(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::ChartEx)
+            .collect()
+    }
+
+    pub fn images(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Image)
+            .collect()
+    }
+
+    pub fn diagram_drawing(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::DiagramDrawing)
+            .collect()
+    }
+
+    pub fn typed_target_map(&self, rel_types: &[OoxmlRelationshipType]) -> HashMap<String, String> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel_types.iter().any(|rel_type| rel.rel_type == *rel_type))
+            .filter_map(|rel| {
+                rel.target
+                    .path()
+                    .map(|path| (rel.id.clone(), path.to_string()))
+            })
+            .collect()
+    }
+}
+
+impl<'a> ChartRelationships<'a> {
+    pub fn chart_style(&self) -> Option<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .find(|rel| rel.rel_type == OoxmlRelationshipType::ChartStyle)
+    }
+
+    pub fn chart_color_style(&self) -> Option<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .find(|rel| rel.rel_type == OoxmlRelationshipType::ChartColorStyle)
+    }
+}
+
+impl<'a> VmlDrawingRelationships<'a> {
+    pub fn images(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Image)
+            .collect()
+    }
+}
 
 /// Convert an OPC relationship target to a ZIP archive path.
 ///
@@ -196,10 +655,10 @@ pub fn resolve_relationship_target(
     if target.starts_with('/') {
         push_normalized_segments(&mut segments, target.trim_start_matches('/'))?;
     } else {
-        if let Some(owner) = owner_part
-            && let Some((dir, _)) = owner.rsplit_once('/')
-        {
-            push_normalized_segments(&mut segments, dir)?;
+        if let Some(owner) = owner_part {
+            if let Some((dir, _)) = owner.rsplit_once('/') {
+                push_normalized_segments(&mut segments, dir)?;
+            }
         }
         push_normalized_segments(&mut segments, target)?;
     }
@@ -307,6 +766,84 @@ mod tests {
         assert_eq!(
             resolve_relationship_target(Some("xl/workbook.xml"), "../../evil.xml"),
             Err(OpcTargetResolutionError::EscapesPackageRoot)
+        );
+    }
+
+    #[test]
+    fn typed_relationships_keep_drawing_and_vml_distinct() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments3.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>"#;
+        let relationships = parse_owned_relationships(
+            PackageOwner::Worksheet {
+                sheet_index: 3,
+                path: "xl/worksheets/sheet3.xml".to_string(),
+            },
+            rels,
+        );
+        let worksheet = WorksheetRelationships::new(&relationships);
+
+        assert_eq!(
+            worksheet.drawing().and_then(|rel| rel.target.path()),
+            Some("xl/drawings/drawing1.xml")
+        );
+        assert_eq!(worksheet.legacy_vml_drawings().len(), 1);
+        assert_eq!(
+            worksheet.legacy_vml_drawings()[0].target.path(),
+            Some("xl/drawings/vmlDrawing1.vml")
+        );
+    }
+
+    #[test]
+    fn typed_relationships_do_not_classify_near_miss_uris() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://example.invalid/relationships/not-a-drawing" Target="../drawings/drawing1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>
+</Relationships>"#;
+        let relationships = parse_owned_relationships(
+            PackageOwner::Worksheet {
+                sheet_index: 1,
+                path: "xl/worksheets/sheet1.xml".to_string(),
+            },
+            rels,
+        );
+        let worksheet = WorksheetRelationships::new(&relationships);
+
+        assert!(worksheet.drawing().is_none());
+        assert_eq!(worksheet.legacy_vml_drawings().len(), 1);
+        assert!(matches!(
+            worksheet.by_id("rId1").map(|rel| &rel.rel_type),
+            Some(OoxmlRelationshipType::Unknown(uri)) if uri == "http://example.invalid/relationships/not-a-drawing"
+        ));
+    }
+
+    #[test]
+    fn typed_relationships_resolve_external_and_owner_relative_targets() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+</Relationships>"#;
+        let relationships = parse_owned_relationships(
+            PackageOwner::Drawing {
+                path: "xl/drawings/drawing1.xml".to_string(),
+            },
+            rels,
+        );
+        let drawing = DrawingRelationships::new(&relationships);
+
+        assert_eq!(
+            drawing.charts()[0].target.path(),
+            Some("xl/charts/chart1.xml")
+        );
+        assert_eq!(
+            drawing.by_id("rId2").map(|rel| rel.target_mode),
+            Some(RelationshipTargetMode::External)
+        );
+        assert_eq!(
+            drawing.by_id("rId2").map(|rel| rel.target.raw()),
+            Some("https://example.com")
         );
     }
 }

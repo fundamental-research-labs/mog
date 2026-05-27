@@ -2,7 +2,7 @@
 
 use crate::zip::XlsxArchive;
 
-use super::xml_parsing::{extract_drawing_target, resolve_relative_path};
+use super::xml_parsing::extract_drawing_path_for_sheet;
 
 #[derive(Debug, Clone, Copy)]
 struct ConnectorAnchor {
@@ -37,13 +37,12 @@ pub fn parse_connectors_for_sheet(
         Err(_) => return connectors,
     };
 
-    let drawing_target = match extract_drawing_target(&rels_xml) {
-        Some(t) => t,
+    let drawing_path = match extract_drawing_path_for_sheet(sheet_num, &rels_xml) {
+        Some(path) => path,
         None => return connectors,
     };
 
     // Step 2: Read the drawing XML
-    let drawing_path = resolve_relative_path("xl/worksheets", &drawing_target);
     let drawing_xml = match archive.read_file(&drawing_path) {
         Ok(xml) => xml,
         Err(_) => return connectors,

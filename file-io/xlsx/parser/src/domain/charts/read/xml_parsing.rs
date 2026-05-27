@@ -8,6 +8,10 @@
 
 use std::collections::HashMap;
 
+use crate::infra::opc::{
+    DrawingRelationships, OoxmlRelationshipType, PackageOwner, RelationshipTarget,
+    WorksheetRelationships, parse_owned_relationships,
+};
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 
 /// Info about a chart reference found in a drawing.
@@ -72,36 +76,57 @@ pub struct ChartRefInfo {
 }
 
 /// Extract drawing relationship target from sheet .rels XML.
+#[cfg(test)]
 pub(super) fn extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
-    let mut pos = 0;
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
+    let relationships = parse_owned_relationships(
+        PackageOwner::Worksheet {
+            sheet_index: 0,
+            path: "xl/worksheets/sheet1.xml".to_string(),
+        },
+        rels_xml,
+    );
+    WorksheetRelationships::new(&relationships)
+        .drawing()
+        .map(|rel| rel.target.raw().to_string())
+}
 
-        // Match the DrawingML worksheet relationship exactly. Legacy VML uses
-        // `/vmlDrawing` and must not be promoted into DrawingML state.
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            let value_start = type_pos + 6; // len of 'Type="'
-            if let Some((ts, te)) = extract_quoted_value(rel_elem, value_start) {
-                let type_str = &rel_elem[ts..te];
-                if type_str == crate::infra::opc::REL_DRAWING.as_bytes() {
-                    // Extract Target attribute
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        let tgt_start = target_pos + 8; // len of 'Target="'
-                        if let Some((tgs, tge)) = extract_quoted_value(rel_elem, tgt_start) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[tgs..tge]) {
-                                return Some(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        pos = rel_end;
+pub(super) fn extract_drawing_path_for_sheet(sheet_num: usize, rels_xml: &[u8]) -> Option<String> {
+    let relationships = parse_owned_relationships(
+        PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
+        rels_xml,
+    );
+    WorksheetRelationships::new(&relationships)
+        .drawing()
+        .and_then(|rel| rel.target.path().map(ToOwned::to_owned))
+}
+
+pub(super) fn typed_drawing_relationships(
+    drawing_path: &str,
+    rels_xml: &[u8],
+) -> Vec<crate::infra::opc::OwnedRelationship> {
+    parse_owned_relationships(
+        PackageOwner::Drawing {
+            path: drawing_path.to_string(),
+        },
+        rels_xml,
+    )
+}
+
+pub(super) fn chart_rel_id_target_map(
+    drawing_relationships: &[crate::infra::opc::OwnedRelationship],
+) -> HashMap<String, String> {
+    DrawingRelationships::new(drawing_relationships)
+        .typed_target_map(&[OoxmlRelationshipType::Chart])
+}
+
+pub(super) fn internal_target_path(rel: &crate::infra::opc::OwnedRelationship) -> Option<String> {
+    match &rel.target {
+        RelationshipTarget::Internal { path, .. } => Some(path.clone()),
+        _ => None,
     }
-    None
 }
 
 /// Build a map of rId -> target from a .rels XML file.

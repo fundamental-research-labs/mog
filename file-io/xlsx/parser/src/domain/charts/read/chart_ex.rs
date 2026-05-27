@@ -2,8 +2,11 @@
 
 use crate::zip::XlsxArchive;
 
+use crate::infra::opc::DrawingRelationships;
+
 use super::xml_parsing::{
-    extract_drawing_target, extract_rel_id_target_map_bytes, resolve_relative_path,
+    extract_drawing_path_for_sheet, extract_rel_id_target_map_bytes, internal_target_path,
+    resolve_relative_path, typed_drawing_relationships,
 };
 
 /// Parse ChartEx parts for a given sheet by reading the drawing .rels.
@@ -26,13 +29,12 @@ pub fn parse_chart_ex_for_sheet(
         Err(_) => return result,
     };
 
-    let drawing_target = match extract_drawing_target(&rels_xml) {
-        Some(t) => t,
+    let drawing_path = match extract_drawing_path_for_sheet(sheet_num, &rels_xml) {
+        Some(path) => path,
         None => return result,
     };
 
     // Step 2: Read the drawing .rels
-    let drawing_path = resolve_relative_path("xl/worksheets", &drawing_target);
     let drawing_filename = drawing_path.rsplit('/').next().unwrap_or(&drawing_path);
     let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
     let drawing_rels_xml = match archive.read_file(&drawing_rels_path) {
@@ -41,21 +43,12 @@ pub fn parse_chart_ex_for_sheet(
     };
 
     // Step 3: Find chartEx relationship targets
-    let chartex_rel_type = b"http://schemas.microsoft.com/office/2014/relationships/chartEx";
-    let all_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_xml);
+    let drawing_relationships = typed_drawing_relationships(&drawing_path, &drawing_rels_xml);
 
-    for rel in &all_rels {
-        if !rel
-            .rel_type
-            .as_bytes()
-            .windows(chartex_rel_type.len())
-            .any(|w| w == chartex_rel_type.as_slice())
-        {
+    for rel in DrawingRelationships::new(&drawing_relationships).chart_ex() {
+        let Some(chart_ex_path) = internal_target_path(rel) else {
             continue;
-        }
-
-        // Resolve chartEx path relative to drawings directory
-        let chart_ex_path = resolve_relative_path("xl/drawings", &rel.target);
+        };
 
         // Read and parse the chartEx XML
         let chart_ex_xml = match archive.read_file(&chart_ex_path) {

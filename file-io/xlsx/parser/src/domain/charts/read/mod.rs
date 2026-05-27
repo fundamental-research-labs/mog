@@ -13,8 +13,8 @@ mod xml_parsing;
 use crate::zip::XlsxArchive;
 
 use xml_parsing::{
-    extract_chart_refs_from_drawing, extract_drawing_target, extract_rel_id_target_map_bytes,
-    resolve_relative_path,
+    chart_rel_id_target_map, extract_chart_refs_from_drawing, extract_drawing_path_for_sheet,
+    extract_rel_id_target_map_bytes, resolve_relative_path, typed_drawing_relationships,
 };
 
 use conversion::convert_chart_to_chart_spec;
@@ -46,15 +46,12 @@ pub fn parse_charts_for_sheet(
         Err(_) => return charts,
     };
 
-    // Find drawing target in rels
-    let drawing_target = extract_drawing_target(&rels_xml);
-    let drawing_target = match drawing_target {
-        Some(t) => t,
+    let drawing_path = match extract_drawing_path_for_sheet(sheet_num, &rels_xml) {
+        Some(path) => path,
         None => return charts,
     };
 
     // Step 2: Read the drawing XML
-    let drawing_path = resolve_relative_path("xl/worksheets", &drawing_target);
     let drawing_xml = match archive.read_file(&drawing_path) {
         Ok(xml) => xml,
         Err(_) => return charts,
@@ -64,14 +61,15 @@ pub fn parse_charts_for_sheet(
     let drawing_filename = drawing_path.rsplit('/').next().unwrap_or(&drawing_path);
     let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
     let drawing_rels_xml = archive.read_file(&drawing_rels_path).unwrap_or_default();
-    let rels_map = extract_rel_id_target_map_bytes(&drawing_rels_xml);
+    let drawing_relationships = typed_drawing_relationships(&drawing_path, &drawing_rels_xml);
+    let rels_map = chart_rel_id_target_map(&drawing_relationships);
 
     // Step 4: Find chart references in drawing XML (graphicFrame elements)
     let chart_refs = extract_chart_refs_from_drawing(&drawing_xml, &rels_map);
 
     // Step 5: Parse each chart and convert to ChartSpec
     for chart_ref in chart_refs {
-        let chart_path = resolve_relative_path("xl/drawings", &chart_ref.target);
+        let chart_path = chart_ref.target.clone();
         let chart_xml = match archive.read_file(&chart_path) {
             Ok(xml) => xml,
             Err(_) => continue,
@@ -107,13 +105,12 @@ pub fn parse_drawing_and_charts_for_sheet(
         Err(_) => return (None, Vec::new()),
     };
 
-    let drawing_target = match extract_drawing_target(&rels_xml) {
-        Some(t) => t,
+    let drawing_path = match extract_drawing_path_for_sheet(sheet_num, &rels_xml) {
+        Some(path) => path,
         None => return (None, Vec::new()),
     };
 
     // Step 2: Read the drawing XML
-    let drawing_path = resolve_relative_path("xl/worksheets", &drawing_target);
     let drawing_xml = match archive.read_file(&drawing_path) {
         Ok(xml) => xml,
         Err(_) => return (None, Vec::new()),
@@ -133,7 +130,8 @@ pub fn parse_drawing_and_charts_for_sheet(
     if drawing.has_rels_file {
         drawing.raw_drawing_rels_xml = Some(drawing_rels_xml.clone());
     }
-    let rels_map = extract_rel_id_target_map_bytes(&drawing_rels_xml);
+    let drawing_relationships = typed_drawing_relationships(&drawing_path, &drawing_rels_xml);
+    let rels_map = chart_rel_id_target_map(&drawing_relationships);
 
     // Store drawing OPC relationships for round-trip fidelity (image refs, etc.)
     drawing.opc_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_xml);
@@ -146,7 +144,7 @@ pub fn parse_drawing_and_charts_for_sheet(
     let mut charts = Vec::with_capacity(chart_refs.len());
 
     for chart_ref in chart_refs {
-        let chart_path = resolve_relative_path("xl/drawings", &chart_ref.target);
+        let chart_path = chart_ref.target;
         let chart_xml = match archive.read_file(&chart_path) {
             Ok(xml) => xml,
             Err(_) => continue,

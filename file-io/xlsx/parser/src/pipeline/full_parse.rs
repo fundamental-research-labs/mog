@@ -468,7 +468,7 @@ fn parse_xlsx_full_native_impl(
             let raw_vml_drawings: Vec<(String, Vec<u8>, Option<(String, Vec<u8>)>)> =
                 sheet_opc_rels
                     .iter()
-                    .filter(|r| r.rel_type.ends_with("/vmlDrawing"))
+                    .filter(|r| r.rel_type == crate::infra::opc::REL_VML_DRAWING)
                     .filter_map(|rel| {
                         let zip_path = opc_target_to_zip_path(&rel.target, "xl/worksheets");
                         archive.read_file(&zip_path).ok().map(|bytes| {
@@ -1749,7 +1749,7 @@ fn parse_sheets_sequential(
         // another for embedded images referenced by those comments).
         let raw_vml_drawings: Vec<RawVmlDrawing> = sheet_opc_rels
             .iter()
-            .filter(|r| r.rel_type.ends_with("/vmlDrawing"))
+            .filter(|r| r.rel_type == crate::infra::opc::REL_VML_DRAWING)
             .filter_map(|rel| {
                 let zip_path = opc_target_to_zip_path(&rel.target, "xl/worksheets");
                 archive.read_file(&zip_path).ok().map(|bytes| {

@@ -1504,38 +1504,6 @@ fn build_rel_id_map(rels_xml: &[u8]) -> HashMap<String, String> {
     map
 }
 
-/// Extract all Target values from .rels XML where the Type matches the given type URI.
-fn ph_extract_rel_targets_by_type(rels_xml: &[u8], rel_type: &str) -> Vec<String> {
-    let mut targets = Vec::new();
-    let rel_type_bytes = rel_type.as_bytes();
-    let mut pos = 0;
-
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            if let Some((ts, te)) = extract_quoted_value(rel_elem, type_pos + 6) {
-                if &rel_elem[ts..te] == rel_type_bytes {
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        if let Some((tgs, tge)) = extract_quoted_value(rel_elem, target_pos + 8) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[tgs..tge]) {
-                                targets.push(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        pos = rel_end;
-    }
-
-    targets
-}
-
 fn ph_resolve_relative_path(base_dir: &str, relative: &str) -> String {
     if !relative.starts_with("..") {
         if let Some(stripped) = relative.strip_prefix('/') {
@@ -1792,21 +1760,25 @@ fn parse_vml_attr(xml: &[u8], attr_name: &[u8]) -> Option<String> {
 /// Parse VML drawing controls for a sheet (from the VML drawing file referenced in .rels).
 fn parse_vml_drawing_for_sheet(
     archive: &crate::zip::XlsxArchive,
-    _sheet_num: usize,
+    sheet_num: usize,
     rels_xml: &[u8],
 ) -> Vec<FormControl> {
-    // Find the VML drawing target in .rels
-    // VML relationship type: http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing
-    let vml_targets = ph_extract_rel_targets_by_type(
+    let relationships = crate::infra::opc::parse_owned_relationships(
+        crate::infra::opc::PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
         rels_xml,
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing",
     );
+    let worksheet_relationships = crate::infra::opc::WorksheetRelationships::new(&relationships);
 
     let mut all_vml_controls = Vec::new();
 
-    for target in &vml_targets {
-        let full_path = ph_resolve_relative_path("xl/worksheets", target);
-        if let Ok(vml_xml) = archive.read_file(&full_path) {
+    for rel in worksheet_relationships.legacy_vml_drawings() {
+        let Some(full_path) = rel.target.path() else {
+            continue;
+        };
+        if let Ok(vml_xml) = archive.read_file(full_path) {
             WorksheetControls::parse_vml_drawing(&vml_xml, &mut all_vml_controls);
         }
     }
@@ -1890,14 +1862,21 @@ pub fn parse_ole_objects_for_sheet(
         }
 
         // Step 4: Try to enrich with VML preview image data
-        let vml_targets = ph_extract_rel_targets_by_type(
+        let relationships = crate::infra::opc::parse_owned_relationships(
+            crate::infra::opc::PackageOwner::Worksheet {
+                sheet_index: sheet_num,
+                path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+            },
             &rels_xml,
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing",
         );
+        let worksheet_relationships =
+            crate::infra::opc::WorksheetRelationships::new(&relationships);
 
-        for target in &vml_targets {
-            let full_path = ph_resolve_relative_path("xl/worksheets", target);
-            if let Ok(vml_xml) = archive.read_file(&full_path) {
+        for rel in worksheet_relationships.legacy_vml_drawings() {
+            let Some(full_path) = rel.target.path() else {
+                continue;
+            };
+            if let Ok(vml_xml) = archive.read_file(full_path) {
                 let imagedata_map = parse_vml_imagedata(&vml_xml);
 
                 // Match VML shape IDs to OLE object shape IDs

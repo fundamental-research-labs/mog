@@ -1,10 +1,10 @@
 //! SmartArt parsing from drawings.
 
-use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::zip::XlsxArchive;
 
 use super::xml_parsing::{
-    extract_drawing_target, extract_rel_id_target_map_bytes, resolve_relative_path,
+    extract_drawing_path_for_sheet, extract_rel_id_target_map_bytes, resolve_relative_path,
+    typed_drawing_relationships,
 };
 
 /// Parse SmartArt diagrams embedded in a sheet's drawing.
@@ -18,7 +18,6 @@ pub fn parse_smartart_for_sheet(
     sheet_num: usize,
 ) -> Vec<crate::domain::drawings::SmartArtParts> {
     use crate::domain::drawings::{Anchor, DrawingContent, SmartArtParts};
-    use crate::write::relationships::REL_DIAGRAM_DRAWING;
 
     let mut diagrams = Vec::new();
 
@@ -30,13 +29,12 @@ pub fn parse_smartart_for_sheet(
     };
 
     // Find drawing target in rels
-    let drawing_target = match extract_drawing_target(&rels_xml) {
-        Some(t) => t,
+    let drawing_path = match extract_drawing_path_for_sheet(sheet_num, &rels_xml) {
+        Some(path) => path,
         None => return diagrams,
     };
 
     // Step 2: Read the drawing XML
-    let drawing_path = resolve_relative_path("xl/worksheets", &drawing_target);
     let drawing_xml = match archive.read_file(&drawing_path) {
         Ok(xml) => xml,
         Err(_) => return diagrams,
@@ -50,10 +48,15 @@ pub fn parse_smartart_for_sheet(
     let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
     let drawing_rels_xml = archive.read_file(&drawing_rels_path).unwrap_or_default();
     let rels_map = extract_rel_id_target_map_bytes(&drawing_rels_xml);
+    let drawing_relationships = typed_drawing_relationships(&drawing_path, &drawing_rels_xml);
 
     // Also build a type->target map for the 5th part (diagram drawing) which uses rel Type
-    let diagram_drawing_targets =
-        extract_rel_targets_by_type(&drawing_rels_xml, REL_DIAGRAM_DRAWING);
+    let diagram_drawing_targets: Vec<String> =
+        crate::infra::opc::DrawingRelationships::new(&drawing_relationships)
+            .diagram_drawing()
+            .into_iter()
+            .filter_map(|rel| rel.target.path().map(ToOwned::to_owned))
+            .collect();
 
     // Step 5: For each SmartArt anchor, resolve parts and read XML
     for (anchor_idx, anchor) in drawing.anchors.iter().enumerate() {
@@ -101,7 +104,7 @@ pub fn parse_smartart_for_sheet(
             // target is linked from the same rels file.
             // For simplicity, use the first diagram drawing target found (most files have one).
             if let Some(dd_target) = diagram_drawing_targets.first() {
-                let path = resolve_relative_path("xl/drawings", dd_target);
+                let path = dd_target.clone();
                 if let Ok(xml) = archive.read_file(&path) {
                     parts.drawing_xml = String::from_utf8(xml).ok();
                 }
@@ -112,38 +115,4 @@ pub fn parse_smartart_for_sheet(
     }
 
     diagrams
-}
-
-/// Extract all Target values from .rels XML where the Type matches the given type URI.
-pub(super) fn extract_rel_targets_by_type(rels_xml: &[u8], rel_type: &str) -> Vec<String> {
-    let mut targets = Vec::new();
-    let rel_type_bytes = rel_type.as_bytes();
-    let mut pos = 0;
-
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        // Check if Type matches
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            if let Some((ts, te)) = extract_quoted_value(rel_elem, type_pos + 6) {
-                if &rel_elem[ts..te] == rel_type_bytes {
-                    // Extract Target
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        if let Some((tgs, tge)) = extract_quoted_value(rel_elem, target_pos + 8) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[tgs..tge]) {
-                                targets.push(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        pos = rel_end;
-    }
-
-    targets
 }

@@ -20,7 +20,7 @@ use crate::range_manager::RangeSpatialIndex;
 use crate::scheduler::ComputeCore;
 use crate::storage::YrsStorage;
 
-use super::queries::MergeSpatialItem;
+use super::merge_index::MergeSpatialItem;
 
 /// Per-sheet cache of conditional formatting evaluation results.
 pub(crate) struct CFCacheEntry {

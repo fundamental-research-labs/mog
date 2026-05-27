@@ -29,7 +29,7 @@ use crate::storage::workbook::{
 use domain_types::{self, ImportedCellProjectionRole};
 use formula_types::{NamedRangeDef, Scope, WorkbookLookup};
 
-use super::queries::{MergeRangeRef, MergeSpatialItem};
+use super::merge_index::{MergeRangeRef, MergeSpatialItem};
 use super::settings::EngineSettings;
 use super::stores::EngineStores;
 use super::viewport::service::ViewportService;

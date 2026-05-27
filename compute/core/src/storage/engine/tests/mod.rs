@@ -32,4 +32,5 @@ mod test_sync;
 mod test_undo_observer_translation;
 mod test_undo_redo;
 mod test_viewport;
+mod test_workbook_settings;
 mod test_xlsx_export;

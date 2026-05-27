@@ -15,7 +15,7 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, merges};
 use compute_document::observe::{CellChange, CellChangeKind, DocumentChanges};
 
-use super::super::queries::{MergeRangeRef, MergeSpatialItem};
+use super::super::merge_index::{MergeRangeRef, MergeSpatialItem};
 
 /// Parse an A1-style range string (e.g., `"A1:C5"`) into 0-based
 /// `(start_row, start_col, end_row, end_col)`. Local helper for

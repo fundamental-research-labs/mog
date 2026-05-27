@@ -5,8 +5,8 @@ use std::sync::Arc;
 use yrs::types::map::MapRef;
 use yrs::{Any, Map, ReadTxn};
 
-use super::helpers::*;
 use crate::domain::floating_object::*;
+use crate::yrs_schema::helpers::*;
 
 const KEY_ANCHOR_ROW_OFFSET_EMU: &str = "anchorRowOffsetEmu";
 const KEY_ANCHOR_COL_OFFSET_EMU: &str = "anchorColOffsetEmu";

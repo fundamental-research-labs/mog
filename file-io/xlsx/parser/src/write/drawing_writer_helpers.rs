@@ -454,16 +454,17 @@ fn convert_image(
     common: &FloatingObjectCommon,
     picture_src: &str,
     image_blobs: &mut Vec<(String, Vec<u8>)>,
-    _image_rels: &mut Vec<(String, String)>,
+    image_rels: &mut Vec<(String, String)>,
 ) -> Option<DrawingObject> {
     // API-created pictures store image bytes as a data-URL in PictureData.src
     // (e.g. "data:image/png;base64,..."). Extract the bytes and write them to
     // xl/media/ so the XLSX archive is valid.
-    if let Some((ext, decoded)) = parse_data_url(picture_src) {
-        let image_idx = image_blobs.len() + 1;
-        let image_path = format!("../media/image{}.{}", image_idx, ext);
-        image_blobs.push((image_path, decoded));
-    }
+    let (ext, decoded) = parse_data_url(picture_src)?;
+    let image_idx = image_blobs.len() + 1;
+    let image_path = format!("../media/image{}.{}", image_idx, ext);
+    let r_id = next_available_image_r_id(image_rels);
+    image_rels.push((r_id.clone(), image_path.clone()));
+    image_blobs.push((image_path, decoded));
 
     let name = if common.name.is_empty() {
         "Image".to_string()
@@ -479,7 +480,7 @@ fn convert_image(
 
     let image_props = ImageProps {
         name,
-        r_id: "rId1".to_string(),
+        r_id,
         rotation,
         offset_x: 0,
         offset_y: 0,
@@ -497,6 +498,17 @@ fn convert_image(
     };
 
     Some(DrawingObject::Picture(image_props))
+}
+
+fn next_available_image_r_id(image_rels: &[(String, String)]) -> String {
+    let mut candidate = 1;
+    loop {
+        let r_id = format!("rId{candidate}");
+        if !image_rels.iter().any(|(existing, _)| existing == &r_id) {
+            return r_id;
+        }
+        candidate += 1;
+    }
 }
 
 fn push_image_blob_if_data_url(
@@ -1047,6 +1059,39 @@ mod tests {
         assert_eq!(
             result.image_blobs,
             vec![("../media/image7.png".to_string(), vec![1, 2, 3, 4])]
+        );
+    }
+
+    #[test]
+    fn api_picture_uses_relationship_id_registered_for_media_blob() {
+        let obj = FloatingObject {
+            common: make_common("API Picture"),
+            data: FloatingObjectData::Picture(PictureData {
+                src: "data:image/png;base64,AQIDBA==".to_string(),
+                original_width: None,
+                original_height: None,
+                crop: None,
+                adjustments: None,
+                border: None,
+                color_type: None,
+                ooxml: None,
+            }),
+        };
+
+        let result = build_sheet_drawing_data(&[obj]);
+        let (_, anchor) = result.anchors.first().expect("picture anchor should emit");
+        let DrawingAnchor::TwoCell(_, DrawingObject::Picture(image)) = anchor else {
+            panic!("expected picture anchor");
+        };
+
+        assert_eq!(image.r_id, "rId1");
+        assert_eq!(
+            result.image_rels,
+            vec![("rId1".to_string(), "../media/image1.png".to_string())]
+        );
+        assert_eq!(
+            result.image_blobs,
+            vec![("../media/image1.png".to_string(), vec![1, 2, 3, 4])]
         );
     }
 

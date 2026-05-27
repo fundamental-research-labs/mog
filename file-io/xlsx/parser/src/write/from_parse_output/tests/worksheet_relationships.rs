@@ -181,6 +181,113 @@ fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
 }
 
 #[test]
+fn generated_picture_embed_ids_match_graph_registered_media_relationships() {
+    let mut imported_picture = ooxml_types::drawings::SpreadsheetPicture::default();
+    imported_picture.blip_fill.embed_id = Some("rId5".to_string());
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![
+            domain_types::domain::floating_object::FloatingObject {
+                common: domain_types::domain::floating_object::FloatingObjectCommon {
+                    name: "Imported Picture".to_string(),
+                    anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                        anchor_mode: domain_types::domain::floating_object::AnchorMode::TwoCell,
+                        end_row: Some(4),
+                        end_col: Some(4),
+                        ..Default::default()
+                    },
+                    width: 100.0,
+                    height: 80.0,
+                    ..Default::default()
+                },
+                data: domain_types::domain::floating_object::FloatingObjectData::Picture(
+                    domain_types::domain::floating_object::PictureData {
+                        src: "data:image/png;base64,AQIDBA==".to_string(),
+                        original_width: None,
+                        original_height: None,
+                        crop: None,
+                        adjustments: None,
+                        border: None,
+                        color_type: None,
+                        ooxml: Some(domain_types::domain::floating_object::PictureOoxmlProps {
+                            picture: imported_picture,
+                            image_path: Some("../media/image7.png".to_string()),
+                            ..Default::default()
+                        }),
+                    },
+                ),
+            },
+            domain_types::domain::floating_object::FloatingObject {
+                common: domain_types::domain::floating_object::FloatingObjectCommon {
+                    name: "Generated Picture".to_string(),
+                    anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                        anchor_mode: domain_types::domain::floating_object::AnchorMode::TwoCell,
+                        anchor_row: 5,
+                        anchor_col: 5,
+                        end_row: Some(9),
+                        end_col: Some(9),
+                        ..Default::default()
+                    },
+                    width: 100.0,
+                    height: 80.0,
+                    ..Default::default()
+                },
+                data: domain_types::domain::floating_object::FloatingObjectData::Picture(
+                    domain_types::domain::floating_object::PictureData {
+                        src: "data:image/png;base64,BQYHCA==".to_string(),
+                        original_width: None,
+                        original_height: None,
+                        crop: None,
+                        adjustments: None,
+                        border: None,
+                        color_type: None,
+                        ooxml: None,
+                    },
+                ),
+            },
+        ],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml = String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap())
+        .expect("drawing XML should be UTF-8");
+    let drawing_rels_bytes = archive
+        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+        .unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_bytes);
+    let rel_ids: std::collections::HashSet<_> =
+        drawing_rels.iter().map(|rel| rel.id.as_str()).collect();
+
+    assert_eq!(
+        archive.read_file("xl/media/image7.png").unwrap(),
+        vec![1, 2, 3, 4]
+    );
+    assert_eq!(
+        archive.read_file("xl/media/image2.png").unwrap(),
+        vec![5, 6, 7, 8]
+    );
+    assert_eq!(
+        drawing_rels
+            .iter()
+            .filter(|rel| {
+                rel.rel_type
+                    == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            })
+            .count(),
+        2
+    );
+    for embed_id in drawing_embed_ids(&drawing_xml) {
+        assert!(
+            rel_ids.contains(embed_id.as_str()),
+            "drawing r:embed {embed_id} must have a matching drawing relationship"
+        );
+    }
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_referenced() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -1299,4 +1406,18 @@ fn duplicate_original_workbook_relationship_ids_do_not_leak_to_generated_relatio
         assert!(ids.insert(rel.id), "relationship IDs must be unique");
     }
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+fn drawing_embed_ids(xml: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = xml;
+    while let Some(pos) = rest.find("r:embed=\"") {
+        rest = &rest[pos + "r:embed=\"".len()..];
+        let Some(end) = rest.find('"') else {
+            break;
+        };
+        ids.push(rest[..end].to_string());
+        rest = &rest[end..];
+    }
+    ids
 }

@@ -554,15 +554,18 @@ fn stale_raw_metadata_xml_is_dropped_without_current_cell_metadata_references() 
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(!archive.contains("xl/metadata.xml"));
     assert!(!workbook_rels.contains(crate::write::relationships::REL_METADATA));
     assert!(!content_types.contains("/xl/metadata.xml"));
+    assert!(!sheet_xml.contains(r#" vm="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
-fn raw_metadata_xml_exports_only_when_current_cells_reference_metadata() {
+fn raw_metadata_xml_is_not_replayed_for_current_cell_metadata_references() {
     let mut metadata_cell = make_cell(0, 0, DomainValue::Text(Arc::from("dynamic")));
     metadata_cell.cm = true;
     let output = make_parse_output(vec![SheetData {
@@ -587,10 +590,10 @@ fn raw_metadata_xml_exports_only_when_current_cells_reference_metadata() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(archive.contains("xl/metadata.xml"));
-    assert!(workbook_rels.contains(crate::write::relationships::REL_METADATA));
-    assert!(content_types.contains("/xl/metadata.xml"));
-    assert!(sheet_xml.contains(r#" cm="1""#));
+    assert!(!archive.contains("xl/metadata.xml"));
+    assert!(!workbook_rels.contains(crate::write::relationships::REL_METADATA));
+    assert!(!content_types.contains("/xl/metadata.xml"));
+    assert!(!sheet_xml.contains(r#" cm="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1272,10 +1275,13 @@ fn raw_metadata_xml_is_dropped_when_current_value_metadata_refs_are_unsupported(
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(!archive.contains("xl/metadata.xml"));
     assert!(!workbook_rels.contains(crate::write::relationships::REL_METADATA));
     assert!(!content_types.contains("/xl/metadata.xml"));
+    assert!(!sheet_xml.contains(r#" vm="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -4812,6 +4818,7 @@ fn test_col_styles_roundtrip() {
         None,
         &no_dt_bodies,
         &no_dt_regions,
+        true,
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(
@@ -4829,6 +4836,7 @@ fn test_col_styles_roundtrip() {
         None,
         &no_dt_bodies,
         &no_dt_regions,
+        true,
     );
     let xml2 = String::from_utf8(writer2.to_xml()).unwrap();
     // In lossy path, palette index 15 should become cellXfs index 16

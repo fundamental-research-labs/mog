@@ -345,6 +345,10 @@ pub fn write_xlsx_from_parse_output(
     // Collected image blobs from floating objects: (zip_path, bytes).
     let mut all_image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
 
+    // Metadata refs are emitted only with an authoritative metadata part.
+    // Raw `xl/metadata.xml` replay is intentionally disabled until the metadata
+    // domain has a modeled writer.
+    let emit_cell_metadata_refs = false;
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_num = sheet_idx + 1;
 
@@ -397,6 +401,7 @@ pub fn write_xlsx_from_parse_output(
             sheet_rt,
             &data_table_body_positions,
             &sheet_data_table_regions,
+            emit_cell_metadata_refs,
         );
 
         // Preserve whether <mergeCells> had a count attribute

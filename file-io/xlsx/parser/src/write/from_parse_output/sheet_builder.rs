@@ -31,6 +31,7 @@ pub(super) fn build_sheet(
     sheet_rt: Option<&SheetRoundTripContext>,
     data_table_body_positions: &HashSet<(u32, u32)>,
     data_table_regions: &[DataTableRegion],
+    emit_cell_metadata_refs: bool,
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
 
@@ -351,7 +352,12 @@ pub(super) fn build_sheet(
             if sanitized.style_id.is_none() {
                 sanitized.style_id = authored_style_at(sanitized.row, sanitized.col);
             }
-            convert_cell(&sanitized, shared_strings, lossless_styles)
+            convert_cell_with_metadata_refs(
+                &sanitized,
+                shared_strings,
+                lossless_styles,
+                emit_cell_metadata_refs,
+            )
         } else {
             let mut canonical = cell.clone();
             if canonical.style_id.is_none() {
@@ -366,7 +372,12 @@ pub(super) fn build_sheet(
                     canonical.formula = Some(data_table_formula_text(cell_formula));
                 }
             }
-            convert_cell(&canonical, shared_strings, lossless_styles)
+            convert_cell_with_metadata_refs(
+                &canonical,
+                shared_strings,
+                lossless_styles,
+                emit_cell_metadata_refs,
+            )
         };
         let mut writer_cell = writer_cell;
         if xml_space_value_set.contains(&key) {
@@ -718,10 +729,20 @@ fn is_data_table_body_formula(cell: &DomainCellData, is_data_table_master: bool)
 /// from the parsed XLSX, so `style_id` is already the raw cellXf index and
 /// needs no offset. When false (lossy palette path), a default style was
 /// inserted at cellXfs[0], so we offset by +1.
+#[cfg(test)]
 pub(super) fn convert_cell(
     cell: &DomainCellData,
     shared_strings: &mut SharedStringsWriter,
     lossless_styles: bool,
+) -> CellData {
+    convert_cell_with_metadata_refs(cell, shared_strings, lossless_styles, true)
+}
+
+fn convert_cell_with_metadata_refs(
+    cell: &DomainCellData,
+    shared_strings: &mut SharedStringsWriter,
+    lossless_styles: bool,
+    emit_cell_metadata_refs: bool,
 ) -> CellData {
     let style_index = if lossless_styles {
         // Lossless: style_id is already the raw cellXf index
@@ -833,8 +854,8 @@ pub(super) fn convert_cell(
             authored_numeric_value
         },
         force_recalc: false,
-        cm: cell.cm,
-        vm: cell.vm,
+        cm: emit_cell_metadata_refs && cell.cm,
+        vm: emit_cell_metadata_refs.then_some(cell.vm).flatten(),
         preserve_space_formula: false,
         preserve_space_value: false,
         explicit_type: if is_empty_string_cell {

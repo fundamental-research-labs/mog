@@ -195,6 +195,48 @@ fn workbook_metadata_is_exported_from_modeled_state_not_preserved_xml() {
 }
 
 #[test]
+fn stale_workbook_preserved_known_children_are_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        workbook_preserved_elements: vec![
+            (
+                "workbook\0after\0workbookPr\0bookViews".to_string(),
+                r#"<bookViews><workbookView activeTab="9" windowWidth="999"/></bookViews>"#
+                    .to_string(),
+            ),
+            (
+                "workbook\0after\0sheets\0workbookProtection".to_string(),
+                r#"<workbookProtection lockStructure="1"/>"#.to_string(),
+            ),
+            (
+                "workbook\0after\0workbookProtection\0definedNames".to_string(),
+                r#"<definedNames><definedName name="StaleName">Sheet1!$A$1</definedName></definedNames>"#
+                    .to_string(),
+            ),
+            (
+                "workbook\0after\0definedNames\0calcPr".to_string(),
+                r#"<calcPr calcId="999999"/>"#.to_string(),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(!workbook_xml.contains("activeTab=\"9\""));
+    assert!(!workbook_xml.contains("windowWidth=\"999\""));
+    assert!(!workbook_xml.contains("<workbookProtection"));
+    assert!(!workbook_xml.contains("StaleName"));
+    assert!(!workbook_xml.contains("999999"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_sheet_drawing_relationship_without_modeled_or_opaque_drawing_is_ignored() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

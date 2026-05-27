@@ -205,6 +205,10 @@ fn update_links_to_xml(update_links: UpdateLinks) -> &'static str {
     }
 }
 
+fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
+    raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
+}
+
 // ============================================================================
 // WorkbookWriter
 // ============================================================================
@@ -421,11 +425,20 @@ impl WorkbookWriter {
     }
 
     fn should_skip_preserved_element(&self, raw_xml: &str) -> bool {
-        (self.pivot_caches_xml.is_some() && raw_xml.contains("<pivotCaches"))
-            || raw_xml.contains("<fileVersion")
-            || raw_xml.contains("<fileSharing")
-            || raw_xml.contains("<workbookPr")
-            || raw_xml.contains("<externalReferences")
+        [
+            "fileVersion",
+            "fileSharing",
+            "workbookPr",
+            "bookViews",
+            "sheets",
+            "workbookProtection",
+            "externalReferences",
+            "definedNames",
+            "calcPr",
+            "pivotCaches",
+        ]
+        .iter()
+        .any(|name| raw_xml_contains_element(raw_xml, name))
     }
 
     /// Generate workbook.xml content

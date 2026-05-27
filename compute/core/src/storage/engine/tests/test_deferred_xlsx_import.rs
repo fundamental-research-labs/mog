@@ -130,6 +130,161 @@ fn style_only_empty_fill_fixture_xlsx() -> Vec<u8> {
         .expect("style-only empty fill fixture should be writable")
 }
 
+fn formula_text_fixture_xlsx() -> Vec<u8> {
+    let output = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Formulas".to_string(),
+            rows: 3,
+            cols: 4,
+            cells: vec![
+                domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: CellValue::number(10.0),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 1,
+                    value: CellValue::number(20.0),
+                    formula: Some("=A1*2".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+        .expect("formula text fixture should be writable")
+}
+
+fn sheets_type_conversion_fixture_xlsx() -> Vec<u8> {
+    let mut zip = ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#
+            .to_vec(),
+    )
+    .add_file(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:A6"/>
+  <sheetData>
+    <row r="1"><c r="A1"><f>EPOCHTODATE(0,1)</f><v>25569</v></c></row>
+    <row r="2"><c r="A2"><f>TO_DATE(1)</f><v>1</v></c></row>
+    <row r="3"><c r="A3"><f>TO_DOLLARS(12.5)</f><v>12.5</v></c></row>
+    <row r="4"><c r="A4"><f>TO_PERCENT(0.5)</f><v>0.5</v></c></row>
+    <row r="5"><c r="A5"><f>TO_PURE_NUMBER(50%)</f><v>0.5</v></c></row>
+    <row r="6"><c r="A6" t="str"><f>TO_TEXT(24)</f><v>24</v></c></row>
+  </sheetData>
+</worksheet>"#
+            .to_vec(),
+    );
+    zip.finish()
+        .expect("sheets type conversion fixture should be writable")
+}
+
+fn mixed_cbor_deferred_import_fixture_xlsx(rows: u32, cols: u32) -> Vec<u8> {
+    let mut cells = Vec::with_capacity((rows * cols) as usize);
+    for row in 0..rows {
+        for col in 0..cols {
+            cells.push(domain_types::CellData {
+                row,
+                col,
+                value: mixed_deferred_value(row, col),
+                ..Default::default()
+            });
+        }
+    }
+    let output = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Mixed".to_string(),
+            rows,
+            cols,
+            cells,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+        .expect("mixed-cbor fixture should be writable")
+}
+
+fn basic_import_fixture_xlsx() -> Vec<u8> {
+    let output = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Sheet1".to_string(),
+            rows: 4,
+            cols: 3,
+            cells: vec![
+                domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Text("Name".into()),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 1,
+                    value: CellValue::Text("Score".into()),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 1,
+                    col: 0,
+                    value: CellValue::Text("Alice".into()),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 1,
+                    col: 1,
+                    value: CellValue::number(42.0),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+        .expect("basic import fixture should be writable")
+}
+
 fn assert_viewport_empty_cell_fill(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,
@@ -456,9 +611,7 @@ fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_re
 
 #[test]
 fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/formulas.xlsx");
-    let bytes = std::fs::read(fixture).expect("formulas.xlsx fixture should be readable");
+    let bytes = formula_text_fixture_xlsx();
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -526,11 +679,7 @@ fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
 
 #[test]
 fn deferred_xlsx_import_recalculates_sheets_type_conversion_functions() {
-    // Deterministic fixture generated from hand-authored OOXML on 2026-05-24.
-    // It contains real XLSX formula cells in A1:A6 and no snapshot shortcut.
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/api-eval/fixtures/sheets-type-conversion-functions.xlsx");
-    let bytes = std::fs::read(fixture).expect("sheets type conversion fixture should be readable");
+    let bytes = sheets_type_conversion_fixture_xlsx();
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -590,9 +739,7 @@ fn deferred_xlsx_import_recalculates_sheets_type_conversion_functions() {
 fn deferred_xlsx_import_streams_long_mixed_cbor_ranges() {
     let rows = 1024;
     let cols = 3;
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/api-eval/fixtures/mixed-cbor-deferred-import.xlsx");
-    let bytes = std::fs::read(fixture).expect("mixed-cbor fixture should be readable");
+    let bytes = mixed_cbor_deferred_import_fixture_xlsx(rows, cols);
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -619,9 +766,7 @@ fn deferred_xlsx_import_streams_long_mixed_cbor_ranges() {
 
 #[test]
 fn deferred_xlsx_export_rejects_partial_workbook_until_full_hydration() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/multi-sheet.xlsx");
-    let bytes = std::fs::read(fixture).expect("multi-sheet.xlsx fixture should be readable");
+    let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -814,9 +959,7 @@ fn deferred_xlsx_import_emits_picture_floating_objects_before_full_hydration() {
 
 #[test]
 fn deferred_xlsx_import_and_completion_do_not_enqueue_provider_updates() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/basic.xlsx");
-    let bytes = std::fs::read(fixture).expect("basic.xlsx fixture should be readable");
+    let bytes = basic_import_fixture_xlsx();
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -866,9 +1009,7 @@ fn deferred_xlsx_import_and_completion_do_not_enqueue_provider_updates() {
 
 #[test]
 fn deferred_xlsx_full_hydration_provider_replay_restores_imported_values() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/basic.xlsx");
-    let bytes = std::fs::read(fixture).expect("basic.xlsx fixture should be readable");
+    let bytes = basic_import_fixture_xlsx();
 
     let (mut imported, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     imported
@@ -1008,9 +1149,7 @@ fn deferred_xlsx_provider_replay_preserves_named_range_formula_semantics() {
 
 #[test]
 fn deferred_xlsx_critical_provider_replay_restores_imported_values() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/basic.xlsx");
-    let bytes = std::fs::read(fixture).expect("basic.xlsx fixture should be readable");
+    let bytes = basic_import_fixture_xlsx();
 
     let (mut imported, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     imported
@@ -1071,9 +1210,7 @@ fn deferred_xlsx_critical_provider_replay_restores_imported_values() {
 fn deferred_xlsx_provider_replay_keeps_imported_values_after_later_edit_log() {
     use std::sync::{Arc, Mutex};
 
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dev/app-eval/scenarios/import-export/fixtures/basic.xlsx");
-    let bytes = std::fs::read(fixture).expect("basic.xlsx fixture should be readable");
+    let bytes = basic_import_fixture_xlsx();
 
     let (mut imported, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     imported

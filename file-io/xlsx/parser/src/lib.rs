@@ -366,7 +366,7 @@ mod tests {
     /// are correctly normalized to ZIP paths during export.
     #[test]
     fn test_chart_double_round_trip() {
-        let fixture = include_bytes!("../../../../dev/api-eval/fixtures/charts_showcase_2.xlsx");
+        let fixture = include_bytes!("../test-corpus/parity/charts/chart-bar.xlsx");
         let (output1, rt1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
         let charts_1: usize = output1.sheets.iter().map(|s| s.charts.len()).sum();
         assert!(charts_1 > 0, "original should have charts");

@@ -1,23 +1,51 @@
 //! Fixture-driven integration tests.
 //!
-//! Each test reads a fixture from `dev/app-eval/scenarios/csv-malformed/
-//! fixtures/` and locks the parser's behaviour against the assertions
-//! that the corresponding app-eval scenario will check at runtime. If
-//! the fixture-level test passes, the app-eval scenario passes — modulo
-//! viewport rendering, which the kernel handles uniformly for all data.
+//! Each test reads deterministic in-repo fixture bytes and locks the parser's
+//! behaviour against the assertions that app-level scenarios check at runtime.
+//! If the fixture-level test passes, the app scenario passes — modulo viewport
+//! rendering, which the kernel handles uniformly for all data.
 
 use csv_parser::{CsvImportOptions, CsvWarning, parse_csv_to_parse_output};
 use domain_types::{CellData, ParseOutput};
 use value_types::CellValue;
 
-const FIXTURE_DIR: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../dev/app-eval/scenarios/csv-malformed/fixtures",
-);
-
 fn read_fixture(name: &str) -> Vec<u8> {
-    let path = format!("{FIXTURE_DIR}/{name}");
-    std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {path}: {e}"))
+    match name {
+        "leading-zeros.csv" => b"sku,name\n00123,alpha\n00456,beta\n07890,gamma\n".to_vec(),
+        "leading-equals.csv" => {
+            b"name,formula\nalpha,=1+2\nbeta,=SUM(A1:A10)\ngamma,@1+2\ndelta,+1+2\n".to_vec()
+        }
+        "quote-escaping.csv" => {
+            b"name,quote\nalice,\"she said \"\"hi\"\" today\"\nbob,\"comma, inside\"\neve,\"newline\nhere\"\n"
+                .to_vec()
+        }
+        "mixed-line-endings.csv" => b"a,b,c\n1,2,3\r\n4,5,6\r7,8,9\n".to_vec(),
+        "mixed-types-in-column.csv" => {
+            b"mixed_col\n42\n3.14\nhello\n2026-05-26\nTRUE\n42\n".to_vec()
+        }
+        "empty-trailing-newlines.csv" => b"a,b,c\n1,2,3\n4,5,6\n\n\n".to_vec(),
+        "utf8-bom.csv" => b"\xEF\xBB\xBFname,value\nalpha,1\n".to_vec(),
+        "utf16-le-bom.csv" => {
+            let mut bytes = vec![0xFF, 0xFE];
+            for unit in "name,value\nalpha,1\n".encode_utf16() {
+                bytes.extend_from_slice(&unit.to_le_bytes());
+            }
+            bytes
+        }
+        "large-90kb.csv" => large_csv(3_000).into_bytes(),
+        "large-2mb.csv" => large_csv(60_000).into_bytes(),
+        other => panic!("unknown CSV fixture {other}"),
+    }
+}
+
+fn large_csv(rows: usize) -> String {
+    let mut csv = String::from("col1,col2,col3,col4,col5\n");
+    for row in 0..rows {
+        csv.push_str(&format!(
+            "1234567890,row-{row},true,2026-05-26,3.14159\n"
+        ));
+    }
+    csv
 }
 
 fn parse(name: &str) -> csv_parser::CsvParseResult {

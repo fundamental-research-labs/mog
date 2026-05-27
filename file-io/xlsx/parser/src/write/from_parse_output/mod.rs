@@ -177,6 +177,7 @@ pub fn write_xlsx_from_parse_output(
                 stylesheet,
                 ctx.styles_ext_lst_xml.as_deref(),
                 &ctx.styles_namespace_attrs,
+                output,
             );
             // When formats are mutated via the API on XLSX-imported cells,
             // their xlsxStyleId is cleared and the export adds new entries

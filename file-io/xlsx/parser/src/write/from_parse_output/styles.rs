@@ -1,5 +1,7 @@
 //! Style conversion: DocumentFormat / Stylesheet → StylesWriter.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat, ParseOutput,
     ProtectionFormat,
@@ -26,8 +28,10 @@ pub(super) fn build_styles_from_stylesheet(
     stylesheet: &ooxml_types::styles::Stylesheet,
     ext_lst_raw: Option<&[u8]>,
     namespace_attrs: &[(String, String)],
+    output: &ParseOutput,
 ) -> StylesWriter {
     let mut writer = StylesWriter::new();
+    let referenced_cell_xfs = referenced_cell_xf_ids(output);
 
     // Transfer all style components directly — same ooxml_types, zero conversion.
     writer.num_fmts = stylesheet.num_fmts.clone();
@@ -45,6 +49,8 @@ pub(super) fn build_styles_from_stylesheet(
     writer.known_fonts = stylesheet.known_fonts;
     writer.ext_lst_raw = ext_lst_raw.map(|b| b.to_vec());
 
+    sanitize_unreferenced_lossless_styles(&mut writer, &referenced_cell_xfs);
+
     // Reconstruct namespace map from preserved (prefix, uri) pairs.
     if !namespace_attrs.is_empty() {
         use crate::roundtrip::namespaces::NamespaceMap;
@@ -60,6 +66,166 @@ pub(super) fn build_styles_from_stylesheet(
     }
 
     writer
+}
+
+fn sanitize_unreferenced_lossless_styles(
+    writer: &mut StylesWriter,
+    referenced_cell_xfs: &BTreeSet<u32>,
+) {
+    if writer.cell_xfs.is_empty() {
+        return;
+    }
+
+    let mut kept_cell_xfs = writer.cell_xfs.clone();
+    for (idx, xf) in kept_cell_xfs.iter_mut().enumerate() {
+        if idx != 0 && !referenced_cell_xfs.contains(&(idx as u32)) {
+            *xf = default_cell_xf();
+        }
+    }
+
+    let mut referenced_cell_style_xfs = BTreeSet::from([0_u32]);
+    for xf in &kept_cell_xfs {
+        if let Some(xf_id) = xf.xf_id {
+            referenced_cell_style_xfs.insert(xf_id);
+        }
+    }
+
+    let mut kept_cell_style_xfs = writer.cell_style_xfs.clone();
+    for (idx, xf) in kept_cell_style_xfs.iter_mut().enumerate() {
+        if !referenced_cell_style_xfs.contains(&(idx as u32)) {
+            *xf = default_cell_style_xf();
+        }
+    }
+
+    let mut font_ids = BTreeSet::from([0_u32]);
+    let mut fill_ids = BTreeSet::from([0_u32]);
+    let mut border_ids = BTreeSet::from([0_u32]);
+    let mut num_fmt_ids = BTreeSet::new();
+    for xf in kept_cell_xfs.iter().chain(kept_cell_style_xfs.iter()) {
+        collect_xf_component_ids(
+            xf,
+            &mut font_ids,
+            &mut fill_ids,
+            &mut border_ids,
+            &mut num_fmt_ids,
+        );
+    }
+
+    let font_remap = prune_indexed_table(&mut writer.fonts, &font_ids);
+    let fill_remap = prune_indexed_table(&mut writer.fills, &fill_ids);
+    let border_remap = prune_indexed_table(&mut writer.borders, &border_ids);
+
+    remap_xf_component_ids(&mut kept_cell_xfs, &font_remap, &fill_remap, &border_remap);
+    remap_xf_component_ids(
+        &mut kept_cell_style_xfs,
+        &font_remap,
+        &fill_remap,
+        &border_remap,
+    );
+
+    writer.num_fmts.retain(|fmt| num_fmt_ids.contains(&fmt.id));
+    writer.cell_xfs = kept_cell_xfs;
+    writer.cell_style_xfs = kept_cell_style_xfs;
+}
+
+fn referenced_cell_xf_ids(output: &ParseOutput) -> BTreeSet<u32> {
+    let mut ids = BTreeSet::from([0_u32]);
+    for sheet in &output.sheets {
+        ids.extend(sheet.cells.iter().filter_map(|cell| cell.style_id));
+        ids.extend(sheet.authored_style_runs.iter().map(|run| run.style_id));
+        ids.extend(sheet.row_styles.iter().map(|row| row.style_id));
+        ids.extend(sheet.col_styles.iter().map(|col| col.style_id));
+        ids.extend(
+            sheet
+                .dimensions
+                .trailing_col_ranges
+                .iter()
+                .filter_map(|range| range.style_id),
+        );
+    }
+    ids
+}
+
+fn collect_xf_component_ids(
+    xf: &CellXfDef,
+    font_ids: &mut BTreeSet<u32>,
+    fill_ids: &mut BTreeSet<u32>,
+    border_ids: &mut BTreeSet<u32>,
+    num_fmt_ids: &mut BTreeSet<u32>,
+) {
+    if let Some(id) = xf.font_id {
+        font_ids.insert(id);
+    }
+    if let Some(id) = xf.fill_id {
+        fill_ids.insert(id);
+    }
+    if let Some(id) = xf.border_id {
+        border_ids.insert(id);
+    }
+    if let Some(id) = xf.num_fmt_id
+        && id >= 164
+    {
+        num_fmt_ids.insert(id);
+    }
+}
+
+fn prune_indexed_table<T: Clone>(
+    items: &mut Vec<T>,
+    keep_ids: &BTreeSet<u32>,
+) -> BTreeMap<u32, u32> {
+    if items.is_empty() {
+        return BTreeMap::new();
+    }
+
+    let old_items = std::mem::take(items);
+    let mut remap = BTreeMap::new();
+    for (old_idx, item) in old_items.into_iter().enumerate() {
+        let old_idx = old_idx as u32;
+        if keep_ids.contains(&old_idx) {
+            let new_idx = items.len() as u32;
+            items.push(item);
+            remap.insert(old_idx, new_idx);
+        }
+    }
+
+    if items.is_empty() {
+        return BTreeMap::new();
+    }
+    remap
+}
+
+fn remap_xf_component_ids(
+    xfs: &mut [CellXfDef],
+    font_remap: &BTreeMap<u32, u32>,
+    fill_remap: &BTreeMap<u32, u32>,
+    border_remap: &BTreeMap<u32, u32>,
+) {
+    for xf in xfs {
+        xf.font_id = xf.font_id.map(|id| *font_remap.get(&id).unwrap_or(&0));
+        xf.fill_id = xf.fill_id.map(|id| *fill_remap.get(&id).unwrap_or(&0));
+        xf.border_id = xf.border_id.map(|id| *border_remap.get(&id).unwrap_or(&0));
+    }
+}
+
+fn default_cell_xf() -> CellXfDef {
+    CellXfDef {
+        num_fmt_id: Some(0),
+        font_id: Some(0),
+        fill_id: Some(0),
+        border_id: Some(0),
+        xf_id: Some(0),
+        ..Default::default()
+    }
+}
+
+fn default_cell_style_xf() -> CellXfDef {
+    CellXfDef {
+        num_fmt_id: Some(0),
+        font_id: Some(0),
+        fill_id: Some(0),
+        border_id: Some(0),
+        ..Default::default()
+    }
 }
 
 /// Build a `StylesWriter` from a flat `DocumentFormat` palette (lossy fallback).

@@ -32,6 +32,7 @@ const REL_PIVOT_CACHE_RECORDS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
 const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
 const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
+const CT_DOC_METADATA_LABEL_INFO: &str = "application/vnd.ms-office.classificationlabels+xml";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -229,6 +230,7 @@ pub struct ModeledWorkbookGraphOptions {
     pub has_custom_props: bool,
     pub has_metadata: bool,
     pub has_persons: bool,
+    pub has_doc_metadata_label_info: bool,
 }
 
 impl PackageGraphBuilder {
@@ -542,6 +544,12 @@ fn register_modeled_workbook_graph(
                 "persons/person.xml",
             ),
         });
+    }
+    if options.has_doc_metadata_label_info {
+        graph.register_part(modeled_part(
+            "docMetadata/LabelInfo.xml",
+            CT_DOC_METADATA_LABEL_INFO,
+        ))?;
     }
 
     Ok(())
@@ -1201,6 +1209,7 @@ mod tests {
                 has_custom_props: false,
                 has_metadata: false,
                 has_persons: false,
+                has_doc_metadata_label_info: false,
             },
             Some(&ctx),
         )
@@ -1239,6 +1248,7 @@ mod tests {
                 has_custom_props: false,
                 has_metadata: false,
                 has_persons: false,
+                has_doc_metadata_label_info: false,
             },
             Some(&ctx),
         )
@@ -1280,6 +1290,30 @@ mod tests {
         let rel = rels.get_by_id("rId4").unwrap();
         assert_eq!(rel.target, "https://example.com");
         assert_eq!(rel.target_mode.as_deref(), Some("External"));
+    }
+
+    #[test]
+    fn registers_doc_metadata_label_info_content_type_when_emitted() {
+        let resolved = build_modeled_workbook_graph(
+            ModeledWorkbookGraphOptions {
+                sheet_count: 1,
+                has_theme: false,
+                has_shared_strings: false,
+                has_core_props: false,
+                has_app_props: false,
+                has_custom_props: false,
+                has_metadata: false,
+                has_persons: false,
+                has_doc_metadata_label_info: true,
+            },
+            None,
+        )
+        .unwrap();
+        let mut content_types = ContentTypesManager::new();
+
+        resolved.add_content_types_to(&mut content_types);
+
+        assert!(content_types.has_override("/docMetadata/LabelInfo.xml"));
     }
 
     #[test]

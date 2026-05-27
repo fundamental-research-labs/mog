@@ -1846,6 +1846,9 @@ pub fn write_xlsx_from_parse_output(
                 has_custom_props: custom_props_xml.is_some(),
                 has_metadata: metadata_xml.is_some(),
                 has_persons: persons_xml.is_some(),
+                has_doc_metadata_label_info: round_trip_ctx
+                    .and_then(|ctx| ctx.doc_metadata_label_info.as_ref())
+                    .is_some(),
             },
             round_trip_ctx,
         )?;
@@ -2365,13 +2368,9 @@ pub fn write_xlsx_from_parse_output(
         );
     }
     package_graph.add_content_types_to(&mut content_types);
-    if round_trip_ctx.map_or(false, |ctx| ctx.doc_metadata_label_info.is_some())
-        && !content_types.has_override("/docMetadata/LabelInfo.xml")
-    {
-        content_types.add_doc_metadata_label_info();
-    }
     // Comments, VML comment drawings, and threaded comments are registered
     // through the package graph when emitted.
+    // docMetadata/LabelInfo.xml is registered through the package graph when emitted.
     // persons.xml is registered through the package graph when emitted.
     // Table content types are registered through the package graph when emitted.
     // Pivot table and cache content types are registered through the package graph.

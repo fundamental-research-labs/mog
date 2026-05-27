@@ -210,6 +210,45 @@ fn stale_workbook_preserved_known_children_are_not_replayed() {
 }
 
 #[test]
+fn workbook_preserved_unknown_wrapper_with_modeled_children_is_not_replayed() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.named_ranges = vec![NamedRange {
+        name: "ModeledName".to_string(),
+        refers_to: "Sheet1!$A$1".to_string(),
+        ..Default::default()
+    }];
+    output.calculation = domain_types::CalculationProperties {
+        calc_mode: domain_types::CalcMode::Manual,
+        calc_id: Some(191029),
+        ..Default::default()
+    };
+    let ctx = domain_types::RoundTripContext {
+        workbook_preserved_elements: vec![(
+            "workbook\0after\0workbookPr\0vendorState".to_string(),
+            r#"<vendorState><definedNames><definedName name="StaleName">Sheet1!$Z$99</definedName></definedNames><calcPr calcId="999999" calcMode="auto"/></vendorState>"#
+                .to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(!workbook_xml.contains("vendorState"));
+    assert!(!workbook_xml.contains("StaleName"));
+    assert!(!workbook_xml.contains("999999"));
+    assert_eq!(workbook_xml.matches("<definedName ").count(), 1);
+    assert!(workbook_xml.contains(r#"name="ModeledName""#));
+    assert!(workbook_xml.contains(r#"<calcPr calcId="191029""#));
+    assert!(workbook_xml.contains(r#"calcMode="manual""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_sheet_drawing_relationship_without_modeled_or_opaque_drawing_is_ignored() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

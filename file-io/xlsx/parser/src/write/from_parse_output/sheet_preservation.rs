@@ -162,6 +162,10 @@ fn raw_worksheet_element_contains_modeled_child(xml: &str) -> bool {
 }
 
 fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
+    if raw_xml_contains_r_id_attr(xml) && !raw_xml_contains_element(xml, "pivotTableDefinition") {
+        return true;
+    }
+
     [
         "customProperties",
         "drawing",
@@ -177,6 +181,31 @@ fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
 
 fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
     raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
+}
+
+fn raw_xml_contains_r_id_attr(raw_xml: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let mut pos = 0;
+    while let Some(offset) = find_subslice(&bytes[pos..], b"r:id") {
+        pos += offset + b"r:id".len();
+        let mut cursor = pos;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if bytes.get(cursor) == Some(&b'=') {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn raw_worksheet_ext_lst_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
@@ -347,6 +376,20 @@ mod tests {
             sheet_preserved_elements: vec![(
                 "worksheet\0after\0sheetData".to_string(),
                 r#"<x:legacyDrawing r:id="rIdStale"/>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn drops_unknown_preserved_elements_with_raw_relationship_id_attributes() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData".to_string(),
+                r#"<vendor:state r:id = "rIdStale"/>"#.to_string(),
             )],
             ..Default::default()
         };

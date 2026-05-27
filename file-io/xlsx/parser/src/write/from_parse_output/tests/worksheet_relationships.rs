@@ -473,6 +473,33 @@ fn stale_preserved_relationship_bearing_sheet_xml_is_not_replayed() {
 }
 
 #[test]
+fn unknown_preserved_sheet_xml_with_raw_relationship_id_is_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData\0vendorState".to_string(),
+                r#"<vendor:state r:id = "rIdStale"/>"#.to_string(),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("vendor:state"));
+    assert!(!sheet_xml.contains("rIdStale"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn clean_worksheet_custom_properties_use_graph_registered_parts_and_resolved_ids() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

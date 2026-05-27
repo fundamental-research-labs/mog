@@ -1487,21 +1487,43 @@ pub fn write_xlsx_from_parse_output(
         drawing_xml_data[sheet_idx] = Some(drawing_writer.to_xml());
     }
 
-    for entry in &worksheet_hyperlink_relationships {
+    let mut resolved_hyperlink_ids_by_sheet_target: std::collections::HashMap<
+        (usize, String, Option<String>),
+        std::collections::VecDeque<String>,
+    > = std::collections::HashMap::new();
+    for sheet_idx in 0..output.sheets.len() {
         let owner = crate::write::package_graph::PackageOwner::Worksheet {
-            index: entry.sheet_idx,
-            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         };
-        let r_id = package_graph
-            .relationship_id(&owner, REL_HYPERLINK, &entry.target)
+        for rel in package_graph
+            .relationship_manager_for_owner(&owner)
+            .relationships()
+        {
+            if rel.rel_type == REL_HYPERLINK {
+                resolved_hyperlink_ids_by_sheet_target
+                    .entry((sheet_idx, rel.target.clone(), rel.target_mode.clone()))
+                    .or_default()
+                    .push_back(rel.id.clone());
+            }
+        }
+    }
+    for entry in &worksheet_hyperlink_relationships {
+        let target_mode = if entry.target.starts_with('#') {
+            None
+        } else {
+            Some("External".to_string())
+        };
+        let r_id = resolved_hyperlink_ids_by_sheet_target
+            .get_mut(&(entry.sheet_idx, entry.target.clone(), target_mode))
+            .and_then(|ids| ids.pop_front())
             .ok_or_else(|| {
                 WriteError::PackageIntegrity(format!(
                     "missing worksheet hyperlink relationship for sheet {} target {}",
                     entry.sheet_idx + 1,
                     entry.target
                 ))
-            })?
-            .to_string();
+            })?;
         if let Some(hyperlinks) = sheet_hyperlink_outputs[entry.sheet_idx].as_mut()
             && let Some(hyperlink) = hyperlinks.get_mut(entry.hyperlink_idx)
         {

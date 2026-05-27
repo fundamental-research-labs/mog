@@ -1661,6 +1661,67 @@ fn generated_hyperlink_relationship_uses_graph_resolved_id() {
 }
 
 #[test]
+fn duplicate_same_target_hyperlinks_use_distinct_graph_resolved_ids() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![
+            Hyperlink {
+                cell_ref: "A1".to_string(),
+                target: Some("https://example.com".to_string()),
+                display: Some("First".to_string()),
+                ..Default::default()
+            },
+            Hyperlink {
+                cell_ref: "A2".to_string(),
+                target: Some("https://example.com".to_string()),
+                display: Some("Second".to_string()),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId5".to_string(),
+                    rel_type: REL_HYPERLINK.to_string(),
+                    target: "https://example.com".to_string(),
+                    target_mode: Some("External".to_string()),
+                },
+                domain_types::OpcRelationship {
+                    id: "rId6".to_string(),
+                    rel_type: REL_HYPERLINK.to_string(),
+                    target: "https://example.com".to_string(),
+                    target_mode: Some("External".to_string()),
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId5\""));
+    assert!(sheet_xml.contains("<hyperlink ref=\"A2\" r:id=\"rId6\""));
+    assert_eq!(
+        sheet_rels.matches("Target=\"https://example.com\"").count(),
+        2
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn fragment_hyperlink_relationship_is_not_marked_external() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

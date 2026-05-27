@@ -6,11 +6,12 @@ use super::helpers::{
     assert_cells_match, cell, formula_cell, make_single_sheet, roundtrip, styled_cell,
 };
 use domain_types::{
-    AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
-    ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
-    ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
-    ValidationOperator, ValidationRule, ValidationSpec,
+    AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CalcMode,
+    CalculationProperties, CellData, ColDimension, Comment, CommentType, ConditionalFormat,
+    DocumentFormat, DocumentProperties, ErrorStyle, FillFormat, FontFormat, FrozenPane,
+    MergeRegion, NamedRange, ParseOutput, RefMode, RoundTripContext, RowDimension, SheetData,
+    SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule,
+    ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 
@@ -36,6 +37,32 @@ fn document_properties_roundtrip_from_modeled_state() {
         properties.custom,
         vec![("ReviewStatus".to_string(), "Approved".to_string())]
     );
+}
+
+#[test]
+fn calculation_properties_roundtrip_from_modeled_state() {
+    let mut output = make_single_sheet("Sheet1", Vec::new());
+    output.calculation = CalculationProperties {
+        iterate: true,
+        iterate_count: 250,
+        iterate_delta: 0.0005,
+        calc_mode: CalcMode::Manual,
+        full_calc_on_load: true,
+        ref_mode: RefMode::R1C1,
+        full_precision: false,
+        calc_completed: false,
+        calc_on_save: false,
+        concurrent_calc: false,
+        concurrent_manual_count: Some(4),
+        calc_id: Some(191029),
+        force_full_calc: true,
+        has_explicit_iterate_count: true,
+        has_explicit_iterate_delta: true,
+    };
+
+    let round_tripped = roundtrip(&output);
+
+    assert_eq!(round_tripped.calculation, output.calculation);
 }
 
 // =============================================================================

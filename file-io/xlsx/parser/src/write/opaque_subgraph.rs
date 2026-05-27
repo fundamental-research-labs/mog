@@ -17,9 +17,10 @@ const CT_PIVOT_CACHE_RECORDS: &str =
 pub fn register_round_trip_opaque_subgraphs(
     graph: &mut PackageGraphBuilder,
     round_trip_ctx: Option<&RoundTripContext>,
+    output: &domain_types::ParseOutput,
     _pivot_data: &crate::write::pivot_writer::PivotWriteData,
 ) -> Result<(), WriteError> {
-    for subgraph in opaque_subgraphs(round_trip_ctx) {
+    for subgraph in opaque_subgraphs(round_trip_ctx, output) {
         graph.register_opaque_subgraph(&subgraph)?;
     }
     Ok(())
@@ -34,7 +35,10 @@ pub fn write_opaque_parts(zip: &mut ZipWriter, graph: &ResolvedPackageGraph) {
     }
 }
 
-fn opaque_subgraphs(round_trip_ctx: Option<&RoundTripContext>) -> Vec<OpaquePackageSubgraph> {
+fn opaque_subgraphs(
+    round_trip_ctx: Option<&RoundTripContext>,
+    output: &domain_types::ParseOutput,
+) -> Vec<OpaquePackageSubgraph> {
     let Some(ctx) = round_trip_ctx else {
         return Vec::new();
     };
@@ -49,8 +53,28 @@ fn opaque_subgraphs(round_trip_ctx: Option<&RoundTripContext>) -> Vec<OpaquePack
                 .filter_map(normalize_explicit_opaque_subgraph),
         );
     }
+    subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
     subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
+}
+
+fn is_shadowed_worksheet_drawing_subgraph(
+    output: &domain_types::ParseOutput,
+    subgraph: &OpaquePackageSubgraph,
+) -> bool {
+    if subgraph.ownership != OpaquePackageOwnership::CleanImported {
+        return false;
+    }
+    if subgraph.owner_relationship.relationship_type != crate::write::REL_DRAWING {
+        return false;
+    }
+    let OpaquePackageOwner::Worksheet { index, .. } = &subgraph.owner_relationship.owner else {
+        return false;
+    };
+    output
+        .sheets
+        .get(*index)
+        .is_some_and(|sheet| !sheet.charts.is_empty() || !sheet.floating_objects.is_empty())
 }
 
 fn normalize_explicit_opaque_subgraph(

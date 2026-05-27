@@ -49,33 +49,8 @@ fn clean_imported_drawing_package_is_preserved_as_opaque_subgraph() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let owner = domain_types::OpaquePackageOwner::Worksheet {
-        index: 0,
-        path: "xl/worksheets/sheet1.xml".to_string(),
-    };
     let ctx = domain_types::RoundTripContext {
-        opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
-            owner: owner.clone(),
-            owner_relationship: domain_types::OpaquePackageRelationship {
-                owner,
-                relationship_type: REL_DRAWING.to_string(),
-                target: domain_types::OpaqueRelationshipTarget::InternalPart {
-                    path: "xl/drawings/drawing7.xml".to_string(),
-                },
-                relationship_id_hint: Some("rIdCleanDrawing".to_string()),
-            },
-            parts: vec![domain_types::OpaquePackagePart {
-                part: domain_types::BlobPart {
-                    path: "xl/drawings/drawing7.xml".to_string(),
-                    data: br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><cleanDrawingSentinel/></xdr:wsDr>"#.to_vec(),
-                },
-                content_type: Some(crate::write::CT_DRAWING.to_string()),
-                default_extension: None,
-                ownership: domain_types::OpaquePackageOwnership::CleanImported,
-            }],
-            relationships: Vec::new(),
-            ownership: domain_types::OpaquePackageOwnership::CleanImported,
-        }],
+        opaque_package_subgraphs: vec![clean_opaque_drawing_subgraph()],
         ..Default::default()
     };
 
@@ -101,6 +76,96 @@ fn clean_imported_drawing_package_is_preserved_as_opaque_subgraph() {
     assert!(sheet_xml.contains(r#"<drawing r:id="rIdCleanDrawing"/>"#));
     assert!(content_types.contains(r#"PartName="/xl/drawings/drawing7.xml""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn modeled_replacement_drawing_suppresses_clean_opaque_drawing_subgraph() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![make_chart(ChartType::Column, "Data!A1:B2")],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        opaque_package_subgraphs: vec![clean_opaque_drawing_subgraph()],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/drawings/drawing1.xml"));
+    assert!(!archive.contains("xl/drawings/drawing7.xml"));
+    assert!(!archive.contains("xl/media/staleOpaqueImage.png"));
+    assert!(sheet_rels.contains(r#"Target="../drawings/drawing1.xml""#));
+    assert!(!sheet_rels.contains("drawing7.xml"));
+    assert!(content_types.contains(r#"PartName="/xl/drawings/drawing1.xml""#));
+    assert!(!content_types.contains(r#"PartName="/xl/drawings/drawing7.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+fn clean_opaque_drawing_subgraph() -> domain_types::OpaquePackageSubgraph {
+    const REL_IMAGE: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+    let owner = domain_types::OpaquePackageOwner::Worksheet {
+        index: 0,
+        path: "xl/worksheets/sheet1.xml".to_string(),
+    };
+    domain_types::OpaquePackageSubgraph {
+        owner: owner.clone(),
+        owner_relationship: domain_types::OpaquePackageRelationship {
+            owner,
+            relationship_type: REL_DRAWING.to_string(),
+            target: domain_types::OpaqueRelationshipTarget::InternalPart {
+                path: "xl/drawings/drawing7.xml".to_string(),
+            },
+            relationship_id_hint: Some("rIdCleanDrawing".to_string()),
+        },
+        parts: vec![
+            domain_types::OpaquePackagePart {
+                part: domain_types::BlobPart {
+                    path: "xl/drawings/drawing7.xml".to_string(),
+                    data: br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><cleanDrawingSentinel/></xdr:wsDr>"#.to_vec(),
+                },
+                content_type: Some(crate::write::CT_DRAWING.to_string()),
+                default_extension: None,
+                ownership: domain_types::OpaquePackageOwnership::CleanImported,
+            },
+            domain_types::OpaquePackagePart {
+                part: domain_types::BlobPart {
+                    path: "xl/media/staleOpaqueImage.png".to_string(),
+                    data: b"stale opaque image".to_vec(),
+                },
+                content_type: Some("image/png".to_string()),
+                default_extension: Some(("png".to_string(), "image/png".to_string())),
+                ownership: domain_types::OpaquePackageOwnership::CleanImported,
+            },
+        ],
+        relationships: vec![domain_types::OpaquePackageRelationship {
+            owner: domain_types::OpaquePackageOwner::Part {
+                path: "xl/drawings/drawing7.xml".to_string(),
+            },
+            relationship_type: REL_IMAGE.to_string(),
+            target: domain_types::OpaqueRelationshipTarget::InternalPart {
+                path: "xl/media/staleOpaqueImage.png".to_string(),
+            },
+            relationship_id_hint: Some("rIdStaleImage".to_string()),
+        }],
+        ownership: domain_types::OpaquePackageOwnership::CleanImported,
+    }
 }
 
 #[test]

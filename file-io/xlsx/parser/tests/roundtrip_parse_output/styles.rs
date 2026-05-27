@@ -13,6 +13,10 @@ use domain_types::{
     ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
+use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
+use xlsx_parser::parse_xlsx_to_output;
+use xlsx_parser::write::write_xlsx_from_parse_output;
+use xlsx_parser::zip::XlsxArchive;
 
 #[test]
 fn roundtrip_font_formatting() {
@@ -66,6 +70,49 @@ fn roundtrip_font_formatting() {
             "Expected red color, got {color}"
         );
     }
+}
+
+#[test]
+fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
+    let mut imported = make_single_sheet(
+        "ImportedStyles",
+        vec![styled_cell(
+            0,
+            0,
+            CellValue::Text(Arc::from("delete me")),
+            0,
+        )],
+    );
+    imported.style_palette = vec![DocumentFormat {
+        font: Some(FontFormat {
+            name: Some("StaleFont".to_string()),
+            size: Some(16_000),
+            bold: Some(true),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }];
+
+    let imported_bytes =
+        write_xlsx_from_parse_output(&imported, None).expect("initial export should succeed");
+    let imported_archive =
+        XlsxArchive::new(&imported_bytes).expect("initial XLSX should be readable");
+    let imported_styles =
+        String::from_utf8(imported_archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    assert!(imported_styles.contains("StaleFont"));
+
+    let (mut output, round_trip_ctx, _diagnostics) =
+        parse_xlsx_to_output(&imported_bytes).expect("initial XLSX should parse");
+    output.sheets[0].cells.clear();
+
+    let exported = write_xlsx_from_parse_output(&output, Some(&round_trip_ctx))
+        .expect("mutated export should succeed");
+    let archive = XlsxArchive::new(&exported).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(!styles_xml.contains("StaleFont"));
+    assert!(styles_xml.contains(r#"<cellXfs count="1""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]

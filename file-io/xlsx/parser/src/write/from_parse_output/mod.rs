@@ -165,9 +165,14 @@ pub fn write_xlsx_from_parse_output(
         && round_trip_ctx
             .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
             .is_some();
+    let style_palette_for_export = if has_style_references {
+        output.style_palette.as_slice()
+    } else {
+        &[]
+    };
 
     let styles_writer = if let Some(ctx) = round_trip_ctx {
-        if has_style_references && let Some(ref stylesheet) = ctx.parsed_stylesheet {
+        if has_lossless_stylesheet && let Some(ref stylesheet) = ctx.parsed_stylesheet {
             let mut writer = build_styles_from_stylesheet(
                 stylesheet,
                 ctx.styles_ext_lst_xml.as_deref(),
@@ -177,15 +182,15 @@ pub fn write_xlsx_from_parse_output(
             // their xlsxStyleId is cleared and the export adds new entries
             // to style_palette. Append these as new cellXfs entries after
             // the original stylesheet entries.
-            if !output.style_palette.is_empty() {
-                append_palette_to_lossless_styles(&mut writer, &output.style_palette);
+            if !style_palette_for_export.is_empty() {
+                append_palette_to_lossless_styles(&mut writer, style_palette_for_export);
             }
             writer
         } else {
-            build_styles(&output.style_palette)
+            build_styles(style_palette_for_export)
         }
     } else {
-        build_styles(&output.style_palette)
+        build_styles(style_palette_for_export)
     };
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
@@ -225,7 +230,7 @@ pub fn write_xlsx_from_parse_output(
         Vec::new();
     let mut worksheet_drawing_relationships: Vec<WorksheetDrawingGraphEntry> = Vec::new();
     let opaque_worksheet_drawing_relationships =
-        opaque_worksheet_drawing::relationships_for_export(round_trip_ctx);
+        opaque_worksheet_drawing::relationships_for_export(round_trip_ctx, output);
     let mut drawing_relationships: Vec<DrawingRelationshipGraphEntry> = Vec::new();
     let mut chart_auxiliary_relationships: Vec<ChartAuxiliaryRelationshipGraphEntry> = Vec::new();
     let mut worksheet_printer_settings_relationships: Vec<WorksheetPrinterSettingsGraphEntry> =
@@ -1465,6 +1470,7 @@ pub fn write_xlsx_from_parse_output(
     crate::write::opaque_subgraph::register_round_trip_opaque_subgraphs(
         &mut package_graph_builder,
         round_trip_ctx,
+        output,
         &pivot_data,
     )?;
     let package_graph = package_graph_builder.resolve()?;

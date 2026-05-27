@@ -3,6 +3,7 @@ use crate::write::REL_DRAWING;
 
 pub(super) fn relationships_for_export(
     round_trip_ctx: Option<&domain_types::RoundTripContext>,
+    output: &domain_types::ParseOutput,
 ) -> Vec<WorksheetDrawingGraphEntry> {
     let Some(ctx) = round_trip_ctx else {
         return Vec::new();
@@ -22,6 +23,9 @@ pub(super) fn relationships_for_export(
             else {
                 return None;
             };
+            if sheet_has_modeled_drawing_content(output, *index) {
+                return None;
+            }
             let domain_types::OpaqueRelationshipTarget::InternalPart { path } =
                 &subgraph.owner_relationship.target
             else {
@@ -43,4 +47,11 @@ fn worksheet_relative_target(zip_path: &str) -> String {
     path.strip_prefix("xl/")
         .map(|rest| format!("../{rest}"))
         .unwrap_or_else(|| path.to_string())
+}
+
+fn sheet_has_modeled_drawing_content(output: &domain_types::ParseOutput, sheet_idx: usize) -> bool {
+    output
+        .sheets
+        .get(sheet_idx)
+        .is_some_and(|sheet| !sheet.charts.is_empty() || !sheet.floating_objects.is_empty())
 }

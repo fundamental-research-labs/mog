@@ -407,6 +407,7 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
             .unwrap(),
     )
     .unwrap();
+    assert_ne!(drawing_rel.id, "rId9");
     assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
     assert!(!sheet_rels.contains("drawing9.xml"));
     assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
@@ -461,9 +462,15 @@ fn generated_drawing_ignores_stale_original_drawing_path_without_imported_identi
     .unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes());
+    let drawing_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_DRAWING && rel.target == "../drawings/drawing1.xml")
+        .expect("generated drawing relationship should target the graph-registered part");
 
     assert!(archive.contains("xl/drawings/drawing1.xml"));
     assert!(!archive.contains("xl/drawings/drawing9.xml"));
+    assert_ne!(drawing_rel.id, "rId9");
     assert!(sheet_rels.contains(r#"Target="../drawings/drawing1.xml""#));
     assert!(!sheet_rels.contains("drawing9.xml"));
     assert!(content_types.contains("PartName=\"/xl/drawings/drawing1.xml\""));
@@ -592,6 +599,7 @@ fn generated_drawing_without_child_relationships_drops_empty_imported_rels_file(
 
     assert!(archive.contains("xl/drawings/drawing1.xml"));
     assert!(!archive.contains("xl/drawings/_rels/drawing1.xml.rels"));
+    assert_ne!(drawing_rel.id, "rId9");
     assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
     assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

@@ -17,7 +17,6 @@ mod external_links;
 mod form_controls;
 mod metadata;
 mod opaque_worksheet_drawing;
-mod package_authority;
 mod pivot_package;
 mod printer_settings;
 mod sheet_builder;
@@ -553,20 +552,7 @@ pub fn write_xlsx_from_parse_output(
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/drawing{}.xml", global_drawing_idx));
             let drawing_target = worksheet_relative_target(&drawing_path);
-            let drawing_relationship_id_hint = if let Some(r_id) =
-                package_authority::relationship_id_hint(
-                    original_sheet_rels,
-                    REL_DRAWING,
-                    &drawing_target,
-                    None,
-                )
-                .filter(|r_id| rels.get_by_id(r_id).is_none())
-            {
-                rels.add_with_id(&r_id, REL_DRAWING, &drawing_target);
-                Some(r_id)
-            } else {
-                Some(rels.add(REL_DRAWING, &drawing_target))
-            };
+            let drawing_relationship_id_hint = Some(rels.add(REL_DRAWING, &drawing_target));
             worksheet_drawing_relationships.push(WorksheetDrawingGraphEntry {
                 sheet_idx,
                 path: drawing_path.clone(),

@@ -20,133 +20,15 @@
 //! </Relationships>
 //! ```
 
-// =============================================================================
-// Relationship Type Constants
-// =============================================================================
-
-/// Relationship type for worksheets
-pub const REL_WORKSHEET: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
-
-/// Relationship type for styles
-pub const REL_STYLES: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
-
-/// Relationship type for theme
-pub const REL_THEME: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
-
-/// Relationship type for shared strings
-pub const REL_SHARED_STRINGS: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
-
-/// Relationship type for the main office document (workbook)
-pub const REL_OFFICE_DOCUMENT: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-
-/// Relationship type for core properties (metadata)
-pub const REL_CORE_PROPERTIES: &str =
-    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
-
-/// Relationship type for extended properties (app metadata)
-pub const REL_EXTENDED_PROPERTIES: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
-
-/// Relationship type for custom properties
-pub const REL_CUSTOM_PROPERTIES: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties";
-
-/// Relationship type for drawings
-pub const REL_DRAWING: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
-
-/// Relationship type for comments
-pub const REL_COMMENTS: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
-
-/// Relationship type for tables
-pub const REL_TABLE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
-
-/// Relationship type for charts
-pub const REL_CHART: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
-
-/// Relationship type for ChartEx (modern chart types)
-pub const REL_CHART_EX: &str = "http://schemas.microsoft.com/office/2014/relationships/chartEx";
-
-/// Relationship type for hyperlinks
-pub const REL_HYPERLINK: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
-
-/// Relationship type for OLE objects
-pub const REL_OLE_OBJECT: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
-
-/// Relationship type for pivot cache definitions
-pub const REL_PIVOT_CACHE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
-
-/// Relationship type for pivot tables
-pub const REL_PIVOT_TABLE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable";
-
-/// Relationship type for VML drawings (legacy, used for comments)
-pub const REL_VML_DRAWING: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing";
-
-/// Relationship type for printer settings
-pub const REL_PRINTER_SETTINGS: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings";
-
-/// Relationship type for external links
-pub const REL_EXTERNAL_LINK: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink";
-
-/// Relationship type for SmartArt diagram data
-pub const REL_DIAGRAM_DATA: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData";
-
-/// Relationship type for SmartArt diagram layout
-pub const REL_DIAGRAM_LAYOUT: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout";
-
-/// Relationship type for SmartArt diagram colors
-pub const REL_DIAGRAM_COLORS: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors";
-
-/// Relationship type for SmartArt diagram quick style
-pub const REL_DIAGRAM_QUICK_STYLE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle";
-
-/// Relationship type for SmartArt diagram drawing (Microsoft extension)
-pub const REL_DIAGRAM_DRAWING: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramDrawing";
-
-/// Relationship type for slicers (sheet-level, Microsoft extension)
-pub const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relationships/slicer";
-
-/// Relationship type for slicer caches (workbook-level, Microsoft extension)
-pub const REL_SLICER_CACHE: &str =
-    "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
-
-/// Relationship type for spreadsheet metadata (xl/metadata.xml)
-pub const REL_METADATA: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata";
-
-/// Relationship type for the calculation chain (xl/calcChain.xml)
-pub const REL_CALC_CHAIN: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
-
-/// Relationship type for threaded comments (modern Excel 365 comments)
-pub const REL_THREADED_COMMENT: &str =
-    "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment";
-
-/// Relationship type for the person list (xl/persons/person.xml)
-pub const REL_PERSON: &str = "http://schemas.microsoft.com/office/2017/10/relationships/person";
-
-/// XML namespace for relationships
-pub const RELATIONSHIPS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
+pub use crate::infra::opc::{
+    REL_CALC_CHAIN, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES,
+    REL_CUSTOM_PROPERTIES, REL_DIAGRAM_COLORS, REL_DIAGRAM_DATA, REL_DIAGRAM_DRAWING,
+    REL_DIAGRAM_LAYOUT, REL_DIAGRAM_QUICK_STYLE, REL_DRAWING, REL_EXTENDED_PROPERTIES,
+    REL_EXTERNAL_LINK, REL_HYPERLINK, REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT,
+    REL_PERSON, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS,
+    REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE, REL_THEME, REL_THREADED_COMMENT,
+    REL_VML_DRAWING, REL_WORKSHEET, RELATIONSHIPS_NS,
+};
 
 // =============================================================================
 // Relationship Struct

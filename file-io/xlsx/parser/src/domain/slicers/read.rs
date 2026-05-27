@@ -792,7 +792,7 @@ fn ph_extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
             let value_start = type_pos + 6;
             if let Some((ts, te)) = extract_quoted_value(rel_elem, value_start) {
                 let type_str = &rel_elem[ts..te];
-                if type_str == crate::write::REL_DRAWING.as_bytes() {
+                if type_str == crate::infra::opc::REL_DRAWING.as_bytes() {
                     if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
                         let tgt_start = target_pos + 8;
                         if let Some((tgs, tge)) = extract_quoted_value(rel_elem, tgt_start) {

@@ -11,14 +11,14 @@ use crate::domain::web_extensions::read::{
 };
 use crate::domain::workbook::read::parse_all_rels;
 use crate::infra::opc::{
-    OpcTargetResolutionError, relationship_owner_from_rels_path, resolve_relationship_target,
+    OpcTargetResolutionError, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES,
+    REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT,
+    REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_WORKSHEET, relationship_owner_from_rels_path, resolve_relationship_target,
 };
 use crate::write::{
     CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
     CT_EXTENDED_PROPERTIES, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WORKSHEET,
-    REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_DRAWING,
-    REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
-    REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
 };
 use crate::zip::XlsxArchive;
 

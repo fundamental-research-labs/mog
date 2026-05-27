@@ -460,8 +460,11 @@ pub(super) fn build_sheet_parts(
                                     rels_data,
                                 )
                             {
-                                hf_vml_parsed =
-                                    filter_hf_vml_to_clean_image_parts(parsed, round_trip_ctx);
+                                hf_vml_parsed = filter_hf_vml_to_modeled_clean_images(
+                                    parsed,
+                                    &sheet_data.hf_images,
+                                    round_trip_ctx,
+                                );
                                 break; // Only one HF VML per sheet
                             }
                         }
@@ -528,30 +531,103 @@ pub(super) fn build_sheet_parts(
     }
 }
 
-fn filter_hf_vml_to_clean_image_parts(
+fn filter_hf_vml_to_modeled_clean_images(
     mut hf_vml: crate::domain::print::hf_images::ParsedHfVml,
+    modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
     round_trip_ctx: Option<&RoundTripContext>,
 ) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
-    let allowed_rel_ids: std::collections::HashSet<String> = hf_vml
-        .image_targets
+    let modeled_by_target: std::collections::HashMap<
+        String,
+        &domain_types::domain::print::HeaderFooterImageInfo,
+    > = modeled_images
         .iter()
-        .filter_map(|(rel_id, target)| {
-            let target_path =
-                crate::infra::opc::resolve_relationship_target(Some(&hf_vml.vml_path), target)
-                    .ok()?;
-            has_clean_opaque_part(round_trip_ctx, &target_path).then(|| rel_id.clone())
+        .filter_map(|image| {
+            normalize_hf_image_target(&hf_vml.vml_path, &image.src).map(|target| (target, image))
         })
         .collect();
 
-    hf_vml
-        .images
-        .retain(|image| allowed_rel_ids.contains(&image.image_rel_id));
+    let modeled_by_rel_id: std::collections::HashMap<
+        String,
+        &domain_types::domain::print::HeaderFooterImageInfo,
+    > = hf_vml
+        .image_targets
+        .iter()
+        .filter_map(|(rel_id, target)| {
+            let target_path = normalize_hf_image_target(&hf_vml.vml_path, target)?;
+            let modeled = modeled_by_target.get(&target_path).copied()?;
+            (has_clean_opaque_part(round_trip_ctx, &target_path)
+                && modeled_hf_position_matches(modeled.position, rel_id, &hf_vml.images))
+            .then(|| (rel_id.clone(), modeled))
+        })
+        .collect();
+
+    hf_vml.images.retain_mut(|image| {
+        let Some(modeled) = modeled_by_rel_id.get(&image.image_rel_id) else {
+            return false;
+        };
+        if !hf_image_positions_match(image.position, modeled.position) {
+            return false;
+        }
+        image.title = modeled.title.clone();
+        image.width_pt = modeled.width_pt;
+        image.height_pt = modeled.height_pt;
+        true
+    });
     if hf_vml.images.is_empty() {
         return None;
     }
 
     hf_vml
         .image_targets
-        .retain(|(rel_id, _)| allowed_rel_ids.contains(rel_id));
+        .retain(|(rel_id, _)| modeled_by_rel_id.contains_key(rel_id));
     Some(hf_vml)
+}
+
+fn normalize_hf_image_target(vml_path: &str, target: &str) -> Option<String> {
+    if target.starts_with("data:") {
+        return None;
+    }
+    if target.trim_start_matches('/').starts_with("xl/") {
+        return Some(target.trim_start_matches('/').to_string());
+    }
+    crate::infra::opc::resolve_relationship_target(Some(vml_path), target).ok()
+}
+
+fn modeled_hf_position_matches(
+    position: domain_types::domain::print::HfImagePosition,
+    rel_id: &str,
+    images: &[crate::domain::print::hf_images::HeaderFooterImage],
+) -> bool {
+    images
+        .iter()
+        .find(|image| image.image_rel_id == rel_id)
+        .is_some_and(|image| hf_image_positions_match(image.position, position))
+}
+
+fn hf_image_positions_match(
+    parsed: crate::domain::print::hf_images::HfImagePosition,
+    modeled: domain_types::domain::print::HfImagePosition,
+) -> bool {
+    matches!(
+        (parsed, modeled),
+        (
+            crate::domain::print::hf_images::HfImagePosition::LeftHeader,
+            domain_types::domain::print::HfImagePosition::LeftHeader
+        ) | (
+            crate::domain::print::hf_images::HfImagePosition::CenterHeader,
+            domain_types::domain::print::HfImagePosition::CenterHeader
+        ) | (
+            crate::domain::print::hf_images::HfImagePosition::RightHeader,
+            domain_types::domain::print::HfImagePosition::RightHeader
+        ) | (
+            crate::domain::print::hf_images::HfImagePosition::LeftFooter,
+            domain_types::domain::print::HfImagePosition::LeftFooter
+        ) | (
+            crate::domain::print::hf_images::HfImagePosition::CenterFooter,
+            domain_types::domain::print::HfImagePosition::CenterFooter
+        ) | (
+            crate::domain::print::hf_images::HfImagePosition::RightFooter,
+            domain_types::domain::print::HfImagePosition::RightFooter
+        )
+    )
 }

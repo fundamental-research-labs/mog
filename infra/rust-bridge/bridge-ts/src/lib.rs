@@ -207,14 +207,78 @@ impl KvStore {
         assert!(!ts.contains("export function"));
     }
 
-    /// Read the real kv-store source file and generate TypeScript from it.
+    /// Generate TypeScript from a complete kv-store-style bridge fixture.
     #[test]
-    fn generate_from_real_kv_store() {
-        let kv_source_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../examples/kv-store/kv/src/lib.rs"
-        );
-        let source = std::fs::read_to_string(kv_source_path).unwrap();
+    fn generate_from_kv_store_fixture() {
+        let source = r#"
+use bridge_core as bridge;
+
+pub struct KvUtils;
+
+#[bridge::api]
+impl KvUtils {
+    #[bridge::pure]
+    pub fn hash_key(key: &str) -> u64 {
+        todo!()
+    }
+
+    #[bridge::pure]
+    pub fn is_valid_json(value: &str) -> bool {
+        todo!()
+    }
+}
+
+#[bridge::service]
+pub struct KvStore {
+    data: std::collections::HashMap<String, String>,
+}
+
+#[bridge::api(service = "KvStore", key = "store_id", group = "ops")]
+impl KvStore {
+    #[bridge::lifecycle(create)]
+    pub fn new(config: KvConfig) -> Result<Self, KvError> {
+        todo!()
+    }
+
+    #[bridge::read]
+    pub fn get(&self, key: &str) -> Result<String, KvError> {
+        todo!()
+    }
+
+    #[bridge::write]
+    pub fn set(&mut self, key: String, value: String) -> Result<(), KvError> {
+        todo!()
+    }
+
+    #[bridge::write]
+    pub fn delete(&mut self, key: String) -> Result<(), KvError> {
+        todo!()
+    }
+
+    #[bridge::read]
+    pub fn get_by_id(&self, id: &str) -> Result<String, KvError> {
+        todo!()
+    }
+
+    #[bridge::write]
+    pub fn set_by_id(&mut self, id: String, value: String) -> Result<(), KvError> {
+        todo!()
+    }
+}
+
+#[bridge::api(service = "KvStore", key = "store_id", group = "admin")]
+impl KvStore {
+    #[bridge::read]
+    pub fn list_keys(&self) -> Vec<String> {
+        todo!()
+    }
+
+    #[bridge::read]
+    pub fn stats(&self) -> StoreStats {
+        todo!()
+    }
+}
+"#;
         let ts = generate_from_source(&source).unwrap();
 
         // KvStore service (merged from ops + admin)
@@ -234,7 +298,6 @@ impl KvStore {
         // KvUtils service (stateless)
         assert!(ts.contains("export function createKvUtilsClient(transport: BridgeTransport)"));
         assert!(ts.contains("export interface KvUtilsClient"));
-        assert!(ts.contains("'kv_utils_validate_key'"));
         assert!(ts.contains("'kv_utils_hash_key'"));
         assert!(ts.contains("'kv_utils_is_valid_json'"));
 

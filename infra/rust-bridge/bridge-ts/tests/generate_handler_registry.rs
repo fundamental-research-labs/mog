@@ -154,6 +154,12 @@ fn handler_output_path() -> String {
     )
 }
 
+fn has_tauri_handler_output_path() -> bool {
+    std::path::Path::new(&handler_output_path())
+        .parent()
+        .is_some_and(|parent| parent.exists())
+}
+
 fn metadata_output_path() -> String {
     format!(
         "{}/../../../infra/transport/src/command-metadata.gen.ts",
@@ -260,8 +266,15 @@ fn generate() {
 
     let handler_content = emit_handler_registry(&handlers);
     let handler_path = handler_output_path();
-    std::fs::write(&handler_path, &handler_content).unwrap();
-    eprintln!("Written handler registry to: {}", handler_path);
+    if has_tauri_handler_output_path() {
+        std::fs::write(&handler_path, &handler_content).unwrap();
+        eprintln!("Written handler registry to: {}", handler_path);
+    } else {
+        eprintln!(
+            "Skipping handler registry write; Tauri output directory is not present at {}",
+            handler_path
+        );
+    }
 
     // ── Command metadata (TypeScript) ──
     let metadata_content = emit_command_metadata(&api, &recalc_exclusions(), &security_overrides());
@@ -284,16 +297,23 @@ fn verify_up_to_date() {
     let expected_handlers = emit_handler_registry(&handlers);
 
     let handler_path = handler_output_path();
-    let actual_handlers = std::fs::read_to_string(&handler_path).unwrap_or_else(|e| {
-        panic!(
-            "handlers.gen.rs not found at {}. Run:\n  pnpm generate:bridge\nError: {}",
-            handler_path, e
-        )
-    });
-    assert_eq!(
-        actual_handlers, expected_handlers,
-        "handlers.gen.rs is out of date! Regenerate with:\n  pnpm generate:bridge"
-    );
+    if has_tauri_handler_output_path() {
+        let actual_handlers = std::fs::read_to_string(&handler_path).unwrap_or_else(|e| {
+            panic!(
+                "handlers.gen.rs not found at {}. Run:\n  pnpm generate:bridge\nError: {}",
+                handler_path, e
+            )
+        });
+        assert_eq!(
+            actual_handlers, expected_handlers,
+            "handlers.gen.rs is out of date! Regenerate with:\n  pnpm generate:bridge"
+        );
+    } else {
+        eprintln!(
+            "Skipping handler registry verification; Tauri output directory is not present at {}",
+            handler_path
+        );
+    }
 
     // ── Command metadata ──
     let expected_metadata =

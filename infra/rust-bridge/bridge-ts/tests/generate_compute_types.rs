@@ -667,12 +667,24 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/view_3d.rs"),
         format!("{manifest_dir}/../../../domain-types/src/diagnostics.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/filter.rs"),
-        // SmartArt types — must come BEFORE floating_object.rs because SmartArtData
+        // SmartArt types — must come BEFORE floating object types because SmartArtData
         // references SmartArtDefinition and SmartArtCategory.
         format!("{manifest_dir}/../../../domain-types/src/domain/smartart.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object.rs"),
-        // WordArt types — must come AFTER floating_object.rs because both define
-        // GradientType/GradientStop/ShadowAlignment/OuterShadowEffect; floating_object.rs
+        // Floating object module — split from floating_object.rs into floating_object/.
+        // Keep style.rs before text_effects.rs because both define
+        // GradientType/GradientStop/ShadowAlignment/OuterShadowEffect; floating_object/style.rs
+        // has the canonical versions and text_effects.rs adds extras (e.g. GradientType::Path).
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/anchor.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/chart.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/common.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/drawing.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/objects.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/ooxml.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/shape_type.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/style.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/floating_object/mod.rs"),
+        // WordArt types — must come AFTER floating object style types because both define
+        // GradientType/GradientStop/ShadowAlignment/OuterShadowEffect; floating object style
         // has the canonical versions and text_effects.rs adds extras (e.g. GradientType::Path).
         // De-duplication keeps the first (floating_object) definition.
         format!("{manifest_dir}/../../../domain-types/src/domain/text_effects.rs"),

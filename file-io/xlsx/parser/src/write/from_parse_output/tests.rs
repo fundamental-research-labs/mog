@@ -860,6 +860,40 @@ fn legacy_custom_xml_with_dangling_sidecar_relationship_is_not_exported() {
 }
 
 #[test]
+fn legacy_custom_xml_without_workbook_owner_relationship_is_not_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        custom_xml_parts: vec![
+            domain_types::BlobPart {
+                path: "customXml/item1.xml".to_string(),
+                data: b"<item/>".to_vec(),
+            },
+            domain_types::BlobPart {
+                path: "customXml/itemProps1.xml".to_string(),
+                data: b"<props/>".to_vec(),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("customXml/item1.xml"));
+    assert!(!archive.contains("customXml/itemProps1.xml"));
+    assert!(!workbook_rels.contains("customXml"));
+    assert!(!content_types.contains("/customXml/item"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn clean_legacy_web_extension_package_is_emitted_as_structured_opaque_subgraph() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -908,6 +942,43 @@ fn clean_legacy_web_extension_package_is_emitted_as_structured_opaque_subgraph()
     assert!(taskpanes_rels.contains("webextension1.xml"));
     assert!(content_types.contains("/xl/webextensions/taskpanes.xml"));
     assert!(content_types.contains("/xl/webextensions/webextension1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn legacy_web_extension_without_root_owner_relationship_is_not_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        web_extension_parts: vec![
+            domain_types::BlobPart {
+                path: "xl/webextensions/taskpanes.xml".to_string(),
+                data: br#"<wetp:taskpanes xmlns:wetp="http://schemas.microsoft.com/office/webextensions/taskpanes/2010/11"><wetp:taskpane><wetp:webextensionref r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></wetp:taskpane></wetp:taskpanes>"#.to_vec(),
+            },
+            domain_types::BlobPart {
+                path: "xl/webextensions/_rels/taskpanes.xml.rels".to_string(),
+                data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2011/relationships/webextension" Target="webextension1.xml"/></Relationships>"#.to_vec(),
+            },
+            domain_types::BlobPart {
+                path: "xl/webextensions/webextension1.xml".to_string(),
+                data: br#"<we:webextension xmlns:we="http://schemas.microsoft.com/office/webextensions/webextension/2010/11"/>"#.to_vec(),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let root_rels = String::from_utf8(archive.read_file("_rels/.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/webextensions/taskpanes.xml"));
+    assert!(!archive.contains("xl/webextensions/webextension1.xml"));
+    assert!(!root_rels.contains("webextensiontaskpanes"));
+    assert!(!content_types.contains("/xl/webextensions/"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

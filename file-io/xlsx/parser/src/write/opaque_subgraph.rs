@@ -77,6 +77,14 @@ fn lower_legacy_web_extensions(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgr
     let Some(relationships) = relationships_from_legacy_sidecars(&ctx.web_extension_parts) else {
         return Vec::new();
     };
+    let Some(owner_relationship_id_hint) = relationship_hint(
+        &ctx.root_relationships,
+        None,
+        crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
+        &taskpanes.path,
+    ) else {
+        return Vec::new();
+    };
 
     vec![OpaquePackageSubgraph {
         owner: OpaquePackageOwner::Root,
@@ -87,11 +95,7 @@ fn lower_legacy_web_extensions(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgr
             target: OpaqueRelationshipTarget::InternalPart {
                 path: taskpanes.path.clone(),
             },
-            relationship_id_hint: relationship_hint(
-                &ctx.root_relationships,
-                crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
-                "/xl/webextensions/taskpanes.xml",
-            ),
+            relationship_id_hint: Some(owner_relationship_id_hint),
         },
         parts: ctx
             .web_extension_parts
@@ -137,6 +141,12 @@ fn lower_legacy_custom_xml(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph>
                 .cloned()
                 .collect::<Vec<_>>();
             let relationships = relationships_from_legacy_sidecars(&item_parts)?;
+            let owner_relationship_id_hint = relationship_hint(
+                &ctx.workbook_relationships,
+                Some("xl/workbook.xml"),
+                REL_CUSTOM_XML,
+                &item.path,
+            )?;
             Some(OpaquePackageSubgraph {
                 owner: OpaquePackageOwner::Workbook,
                 owner_relationship: OpaquePackageRelationship {
@@ -145,11 +155,7 @@ fn lower_legacy_custom_xml(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph>
                     target: OpaqueRelationshipTarget::InternalPart {
                         path: item.path.clone(),
                     },
-                    relationship_id_hint: relationship_hint(
-                        &ctx.workbook_relationships,
-                        REL_CUSTOM_XML,
-                        &format!("../{}", normalize_path(&item.path)),
-                    ),
+                    relationship_id_hint: Some(owner_relationship_id_hint),
                 },
                 parts: item_parts
                     .iter()
@@ -384,6 +390,11 @@ fn closed_opaque_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
         .iter()
         .map(|part| normalize_path(&part.part.path))
         .collect();
+    if let OpaqueRelationshipTarget::InternalPart { path } = &subgraph.owner_relationship.target
+        && !part_paths.contains(&normalize_path(path))
+    {
+        return false;
+    }
     subgraph.relationships.iter().all(|relationship| {
         if let OpaqueRelationshipTarget::InternalPart { path } = &relationship.target {
             part_paths.contains(&normalize_path(path))
@@ -449,12 +460,20 @@ fn relationships_xml(relationships: &[domain_types::OpcRelationship]) -> Vec<u8>
 
 fn relationship_hint(
     relationships: &[domain_types::OpcRelationship],
+    owner_path: Option<&str>,
     relationship_type: &str,
-    target: &str,
+    target_path: &str,
 ) -> Option<String> {
+    let target_path = normalize_path(target_path);
     relationships
         .iter()
-        .find(|rel| rel.rel_type == relationship_type && rel.target == target)
+        .find(|rel| {
+            rel.rel_type == relationship_type
+                && rel.target_mode.as_deref() != Some("External")
+                && crate::infra::opc::resolve_relationship_target(owner_path, &rel.target)
+                    .map(|resolved| normalize_path(&resolved) == target_path)
+                    .unwrap_or(false)
+        })
         .map(|rel| rel.id.clone())
 }
 

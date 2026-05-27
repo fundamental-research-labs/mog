@@ -181,6 +181,70 @@ fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
 }
 
 #[test]
+fn generated_drawing_without_child_relationships_drops_empty_imported_rels_file() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![domain_types::domain::floating_object::FloatingObject {
+            common: domain_types::domain::floating_object::FloatingObjectCommon {
+                name: "Modeled Shape".to_string(),
+                anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                    anchor_mode: domain_types::domain::floating_object::AnchorMode::TwoCell,
+                    end_row: Some(4),
+                    end_col: Some(4),
+                    end_row_offset: Some(0),
+                    end_col_offset: Some(0),
+                    ..Default::default()
+                },
+                width: 100.0,
+                height: 80.0,
+                ..Default::default()
+            },
+            data: domain_types::domain::floating_object::FloatingObjectData::Shape(
+                domain_types::domain::floating_object::ShapeData {
+                    shape_type: "rect".to_string(),
+                    ..Default::default()
+                },
+            ),
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId9".to_string(),
+                rel_type: REL_DRAWING.to_string(),
+                target: "../drawings/drawing1.xml".to_string(),
+                target_mode: None,
+            }],
+            original_drawing_path: Some("xl/drawings/drawing1.xml".to_string()),
+            has_drawing_rels_file: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let sheet_rels = String::from_utf8(sheet_rels_bytes.clone()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let drawing_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_DRAWING)
+        .expect("generated drawing should have worksheet relationship");
+
+    assert!(archive.contains("xl/drawings/drawing1.xml"));
+    assert!(!archive.contains("xl/drawings/_rels/drawing1.xml.rels"));
+    assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
+    assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_picture_embed_ids_match_graph_registered_media_relationships() {
     let mut imported_picture = ooxml_types::drawings::SpreadsheetPicture::default();
     imported_picture.blip_fill.embed_id = Some("rId5".to_string());

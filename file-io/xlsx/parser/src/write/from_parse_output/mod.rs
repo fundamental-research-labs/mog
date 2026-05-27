@@ -1061,13 +1061,7 @@ pub fn write_xlsx_from_parse_output(
 
             drawing_xml_data.push(None);
             drawing_writer_data.push(Some(drawing_writer));
-            // Emit drawing .rels when there are actual relationships OR when the
-            // original archive had a .rels file (even if empty) for round-trip fidelity.
-            let had_original_rels_file = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .map(|srt| srt.has_drawing_rels_file)
-                .unwrap_or(false);
-            if !drawing_rels.is_empty() || had_original_rels_file {
+            if !drawing_rels.is_empty() {
                 for rel in drawing_rels.relationships() {
                     let target_path = crate::infra::opc::resolve_relationship_target(
                         Some(&drawing_path),

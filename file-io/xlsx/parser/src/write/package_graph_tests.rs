@@ -126,6 +126,117 @@ fn ignores_sheet_id_hint_when_original_relationship_targets_stale_part() {
 }
 
 #[test]
+fn ignores_external_mode_root_relationship_hints_for_internal_package_parts() {
+    let ctx = RoundTripContext {
+        root_relationships: vec![domain_types::OpcRelationship {
+            id: "rId99".to_string(),
+            rel_type: crate::write::REL_OFFICE_DOCUMENT.to_string(),
+            target: "/xl/workbook.xml".to_string(),
+            target_mode: Some("External".to_string()),
+        }],
+        ..Default::default()
+    };
+
+    let resolved = build_modeled_workbook_graph(
+        ModeledWorkbookGraphOptions {
+            sheet_count: 1,
+            has_theme: false,
+            has_shared_strings: false,
+            has_core_props: false,
+            has_app_props: false,
+            has_custom_props: false,
+            has_metadata: false,
+            has_persons: false,
+            has_doc_metadata_label_info: false,
+        },
+        Some(&ctx),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolved.relationship_id(
+            &PackageOwner::Root,
+            crate::write::REL_OFFICE_DOCUMENT,
+            "/xl/workbook.xml"
+        ),
+        Some("rId1")
+    );
+}
+
+#[test]
+fn ignores_external_mode_workbook_relationship_hints_for_internal_package_parts() {
+    let ctx = RoundTripContext {
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId99".to_string(),
+            rel_type: REL_STYLES.to_string(),
+            target: "styles.xml".to_string(),
+            target_mode: Some("External".to_string()),
+        }],
+        ..Default::default()
+    };
+
+    let resolved = build_modeled_workbook_graph(
+        ModeledWorkbookGraphOptions {
+            sheet_count: 1,
+            has_theme: false,
+            has_shared_strings: false,
+            has_core_props: false,
+            has_app_props: false,
+            has_custom_props: false,
+            has_metadata: false,
+            has_persons: false,
+            has_doc_metadata_label_info: false,
+        },
+        Some(&ctx),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolved.relationship_id(&PackageOwner::Workbook, REL_STYLES, "styles.xml"),
+        Some("rId2")
+    );
+}
+
+#[test]
+fn ignores_external_mode_sheet_relationship_hints_for_internal_package_parts() {
+    let ctx = RoundTripContext {
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId99".to_string(),
+            rel_type: REL_WORKSHEET.to_string(),
+            target: "worksheets/sheet1.xml".to_string(),
+            target_mode: Some("External".to_string()),
+        }],
+        sheet_workbook_r_ids: vec!["rId99".to_string()],
+        ..Default::default()
+    };
+
+    let resolved = build_modeled_workbook_graph(
+        ModeledWorkbookGraphOptions {
+            sheet_count: 1,
+            has_theme: false,
+            has_shared_strings: false,
+            has_core_props: false,
+            has_app_props: false,
+            has_custom_props: false,
+            has_metadata: false,
+            has_persons: false,
+            has_doc_metadata_label_info: false,
+        },
+        Some(&ctx),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolved.relationship_id(
+            &PackageOwner::Workbook,
+            REL_WORKSHEET,
+            "worksheets/sheet1.xml"
+        ),
+        Some("rId1")
+    );
+}
+
+#[test]
 fn reuses_sheet_id_hint_when_original_relationship_targets_same_part() {
     let ctx = RoundTripContext {
         workbook_relationships: vec![domain_types::OpcRelationship {

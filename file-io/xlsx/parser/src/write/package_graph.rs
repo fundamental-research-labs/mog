@@ -1203,6 +1203,7 @@ fn root_relationship_hint(
         .and_then(|ctx| {
             ctx.root_relationships.iter().find(|rel| {
                 rel.rel_type == relationship_type
+                    && rel.target_mode.is_none()
                     && relationship_target_matches(None, &rel.target, target)
             })
         })
@@ -1218,6 +1219,7 @@ fn workbook_relationship_hint(
         .and_then(|ctx| {
             ctx.workbook_relationships.iter().find(|rel| {
                 rel.rel_type == relationship_type
+                    && rel.target_mode.is_none()
                     && relationship_target_matches(Some("xl/workbook.xml"), &rel.target, target)
             })
         })
@@ -1237,6 +1239,7 @@ fn sheet_relationship_hint(
             ctx.workbook_relationships.iter().find(|rel| {
                 rel.id == *r_id
                     && rel.rel_type == REL_WORKSHEET
+                    && rel.target_mode.is_none()
                     && relationship_target_matches(
                         Some("xl/workbook.xml"),
                         &rel.target,

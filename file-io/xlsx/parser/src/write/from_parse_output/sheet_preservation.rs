@@ -163,16 +163,16 @@ fn raw_worksheet_element_contains_modeled_child(xml: &str) -> bool {
 
 fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
     [
-        "<customProperties",
-        "<drawing",
-        "<legacyDrawing",
-        "<legacyDrawingHF",
-        "<controls",
-        "<oleObjects",
-        "<picture",
+        "customProperties",
+        "drawing",
+        "legacyDrawing",
+        "legacyDrawingHF",
+        "controls",
+        "oleObjects",
+        "picture",
     ]
     .iter()
-    .any(|marker| xml.contains(marker))
+    .any(|name| raw_xml_contains_element(xml, name))
 }
 
 fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
@@ -338,5 +338,33 @@ mod tests {
         };
 
         assert!(original_dimension_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn drops_prefixed_relationship_bearing_preserved_elements() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData".to_string(),
+                r#"<x:legacyDrawing r:id="rIdStale"/>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn keeps_unknown_prefixed_preserved_elements_without_relationships() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData".to_string(),
+                r#"<x:vendorState custom="1"/>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_some());
     }
 }

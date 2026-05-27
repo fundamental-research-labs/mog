@@ -61,6 +61,75 @@ fn roundtrip_merge_regions() {
 }
 
 #[test]
+fn merge_cells_count_attribute_omission_follows_roundtrip_context() {
+    let mut output = make_single_sheet(
+        "Merges",
+        vec![cell(0, 0, CellValue::Text(Arc::from("Merged")))],
+    );
+    output.sheets[0].merges = vec![MergeRegion {
+        start_row: 0,
+        start_col: 0,
+        end_row: 0,
+        end_col: 2,
+    }];
+    output.sheets[0].rows = 1;
+    output.sheets[0].cols = 3;
+    let ctx = RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            merge_cells_has_count: false,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<mergeCells>"));
+    assert!(!sheet_xml.contains("<mergeCells count="));
+    assert!(sheet_xml.contains(r#"<mergeCell ref="A1:C1"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+
+    let (rt, _ctx, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert_eq!(rt.sheets[0].merges, output.sheets[0].merges);
+}
+
+#[test]
+fn stale_merge_context_does_not_create_deleted_modeled_merges() {
+    let output = make_single_sheet(
+        "Merges",
+        vec![cell(0, 0, CellValue::Text(Arc::from("Unmerged")))],
+    );
+    let ctx = RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            merge_cells_has_count: true,
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData\0mergeCells".to_string(),
+                r#"<mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>"#.to_string(),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<mergeCells"));
+    assert!(!sheet_xml.contains("A1:C1"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+
+    let (rt, _ctx, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert!(rt.sheets[0].merges.is_empty());
+}
+
+#[test]
 fn roundtrip_single_cell_merge() {
     // Edge case: a merge region that spans just 2 cells
     let mut output = make_single_sheet(

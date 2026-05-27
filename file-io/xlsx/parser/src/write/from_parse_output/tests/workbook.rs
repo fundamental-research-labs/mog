@@ -451,6 +451,41 @@ fn external_link_imported_identity_cannot_move_part_outside_external_links_clust
 }
 
 #[test]
+fn external_link_owned_relationships_drop_unsupported_imported_relationship_types() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.external_links = vec![domain_types::domain::external_link::ExternalLink {
+        id: "1".to_string(),
+        file_path: Some("file:///workbook.xlsx".to_string()),
+        file_path_rid: Some("rId1".to_string()),
+        file_path_rel_type: Some("http://example.invalid/relationships/private".to_string()),
+        extra_rels: vec![domain_types::domain::external_link::ExternalLinkExtraRel {
+            id: "rId99".to_string(),
+            target: "https://example.invalid/private".to_string(),
+            rel_type: "http://example.invalid/relationships/private".to_string(),
+        }],
+        ..Default::default()
+    }];
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let link_rels = String::from_utf8(
+        archive
+            .read_file("xl/externalLinks/_rels/externalLink1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(link_rels.contains(crate::domain::external::write::REL_EXTERNAL_LINK_PATH));
+    assert!(link_rels.contains(r#"Target="file:///workbook.xlsx""#));
+    assert!(!link_rels.contains("example.invalid/relationships/private"));
+    assert!(!link_rels.contains("https://example.invalid/private"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn persons_are_exported_from_modeled_state_not_raw_person_xml() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

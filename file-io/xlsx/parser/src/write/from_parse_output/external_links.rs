@@ -49,10 +49,10 @@ pub(super) fn register_owned_relationships(
     link: &ExternalLink,
 ) {
     let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
-    let primary_rel_type = link
-        .file_path_rel_type
-        .as_deref()
-        .unwrap_or(default_rel_type);
+    let primary_rel_type = supported_external_link_relationship_type(
+        link.file_path_rel_type.as_deref(),
+        default_rel_type,
+    );
     if let Some(target) = &link.file_path {
         crate::write::package_graph::register_external_link_relationship(
             graph,
@@ -86,6 +86,9 @@ pub(super) fn register_owned_relationships(
         );
     }
     for extra in &link.extra_rels {
+        if !is_supported_external_link_relationship_type(&extra.rel_type) {
+            continue;
+        }
         crate::write::package_graph::register_external_link_relationship(
             graph,
             part_name,
@@ -103,10 +106,10 @@ pub(super) fn with_resolved_relationship_ids(
 ) -> ExternalLink {
     let mut link = link.clone();
     let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
-    let primary_rel_type = link
-        .file_path_rel_type
-        .as_deref()
-        .unwrap_or(default_rel_type);
+    let primary_rel_type = supported_external_link_relationship_type(
+        link.file_path_rel_type.as_deref(),
+        default_rel_type,
+    );
     if let Some(target) = &link.file_path {
         link.file_path_rid = package_graph
             .relationship_id(owner, primary_rel_type, target)
@@ -126,6 +129,21 @@ pub(super) fn with_resolved_relationship_ids(
             .or(link.relative_url_rid);
     }
     link
+}
+
+fn supported_external_link_relationship_type<'a>(
+    rel_type: Option<&'a str>,
+    default_rel_type: &'a str,
+) -> &'a str {
+    rel_type
+        .filter(|rel_type| is_supported_external_link_relationship_type(rel_type))
+        .unwrap_or(default_rel_type)
+}
+
+fn is_supported_external_link_relationship_type(rel_type: &str) -> bool {
+    rel_type.ends_with("/externalLinkPath")
+        || rel_type.ends_with("/externalLinkLongPath")
+        || rel_type.ends_with("/xlPathMissing")
 }
 
 pub(super) fn rels_path(zip_path: &str) -> String {

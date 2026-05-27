@@ -53,9 +53,12 @@ pub fn reconstruct_chart_space(spec: &ChartSpec) -> ChartSpace {
         chart: build_chart(spec),
         sp_pr: spec.chart_format.as_ref().and_then(build_shape_properties),
         tx_pr: spec.chart_format.as_ref().and_then(build_text_body),
-        external_data: rt.and_then(|r| r.external_data.clone().map(Into::into)),
+        // These nodes carry chart-owned r:ids. They are dropped until the XLSX
+        // writer registers and resolves their target relationships through the
+        // package graph.
+        external_data: None,
         pivot_source: rt.and_then(|r| r.pivot_source.clone().map(Into::into)),
-        user_shapes: rt.and_then(|r| r.user_shapes.clone()),
+        user_shapes: None,
         print_settings: rt.and_then(|r| r.print_settings.clone().map(Into::into)),
         extensions: rt
             .map(|r| r.chart_space_extensions.clone())

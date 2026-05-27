@@ -1,0 +1,25 @@
+pub(super) const KEY_ANCHOR_ROW_OFFSET_EMU: &str = "anchorRowOffsetEmu";
+pub(super) const KEY_ANCHOR_COL_OFFSET_EMU: &str = "anchorColOffsetEmu";
+pub(super) const KEY_END_ROW_OFFSET_EMU: &str = "endRowOffsetEmu";
+pub(super) const KEY_END_COL_OFFSET_EMU: &str = "endColOffsetEmu";
+pub(super) const KEY_EXTENT_CX_EMU: &str = "extentCxEmu";
+pub(super) const KEY_EXTENT_CY_EMU: &str = "extentCyEmu";
+
+pub(super) const FO_UPDATED_AT: &str = "updatedAt";
+pub(super) const FO_X: &str = "x";
+pub(super) const FO_Y: &str = "y";
+pub(super) const FO_WIDTH: &str = "width";
+pub(super) const FO_HEIGHT: &str = "height";
+pub(super) const FO_Z_INDEX: &str = "zIndex";
+pub(super) const FO_ROTATION: &str = "rotation";
+pub(super) const FO_LOCKED: &str = "locked";
+pub(super) const FO_FLIP_H: &str = "flipH";
+pub(super) const FO_FLIP_V: &str = "flipV";
+pub(super) const FO_OPACITY: &str = "opacity";
+pub(super) const FO_FILL: &str = "fill";
+pub(super) const FO_OUTLINE: &str = "outline";
+pub(super) const FO_TEXT: &str = "text";
+pub(super) const FO_SHADOW: &str = "shadow";
+pub(super) const FO_ADJUSTMENTS: &str = "adjustments";
+pub(super) const FO_CHILDREN: &str = "children";
+pub(super) const FO_EXTRA: &str = "_extra";

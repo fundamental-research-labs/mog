@@ -5,8 +5,8 @@ use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::{
-    chart_allows_auxiliary_replay, comments_have_imported_identity, has_clean_opaque_part,
-    sheet_preservation, should_reconstruct_chart_space, worksheet_custom_properties,
+    chart_allows_auxiliary_replay, comments_have_imported_identity, sheet_preservation,
+    should_reconstruct_chart_space, worksheet_custom_properties,
 };
 use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
@@ -440,38 +440,16 @@ pub(super) fn build_sheet_parts(
                         } else {
                             None
                         };
-                    // Parse imported header/footer image VML only while the
-                    // current modeled sheet still has header/footer images.
-                    // Otherwise stale raw VML would resurrect deleted images.
-                    let mut hf_vml_parsed: Option<crate::domain::print::hf_images::ParsedHfVml> =
-                        None;
-                    if !sheet_data.hf_images.is_empty() {
-                        for vml_part in &sheet_rt.raw_vml_drawings {
-                            if comment_vml_path.as_ref() == Some(&vml_part.path) {
-                                continue;
-                            }
-                            if !has_clean_opaque_part(round_trip_ctx, &vml_part.path) {
-                                continue;
-                            }
-                            let rels_path = vml_part.rels.as_ref().map(|r| r.path.as_str());
-                            let rels_data = vml_part.rels.as_ref().map(|r| r.data.as_slice());
-                            if let Some(parsed) =
-                                crate::domain::print::hf_images::parse_hf_vml_context(
-                                    &vml_part.path,
-                                    &vml_part.data,
-                                    rels_path,
-                                    rels_data,
-                                )
-                            {
-                                hf_vml_parsed = filter_hf_vml_to_modeled_clean_images(
-                                    parsed,
-                                    &sheet_data.hf_images,
-                                    round_trip_ctx,
-                                );
-                                break; // Only one HF VML per sheet
-                            }
-                        }
-                    }
+                    let hf_vml_parsed = (!sheet_data.hf_images.is_empty())
+                        .then(|| {
+                            header_footer_vml_from_opaque_subgraphs(
+                                round_trip_ctx,
+                                sheet_idx,
+                                comment_vml_path.as_deref(),
+                                &sheet_data.hf_images,
+                            )
+                        })
+                        .flatten();
                     (
                         None,
                         comment_vml_path,
@@ -534,10 +512,99 @@ pub(super) fn build_sheet_parts(
     }
 }
 
+fn header_footer_vml_from_opaque_subgraphs(
+    round_trip_ctx: Option<&RoundTripContext>,
+    sheet_idx: usize,
+    comment_vml_path: Option<&str>,
+    modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
+) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
+    let clean_subgraphs =
+        crate::write::opaque_subgraph::normalized_round_trip_opaque_subgraphs(round_trip_ctx);
+    for subgraph in clean_subgraphs {
+        if !emits_clean_opaque_part(subgraph.ownership) {
+            continue;
+        }
+        if !subgraph_allows_hf_vml_for_sheet(&subgraph, sheet_idx) {
+            continue;
+        }
+        for part in subgraph.parts.iter().filter(|part| {
+            emits_clean_opaque_part(part.ownership)
+                && part.part.path.ends_with(".vml")
+                && comment_vml_path != Some(part.part.path.as_str())
+        }) {
+            let rels_path = crate::write::package_graph::part_relationships_path(&part.part.path);
+            let rels_data = opaque_relationships_xml_for_owner(&subgraph, &part.part.path);
+            let Some(parsed) = crate::domain::print::hf_images::parse_hf_vml_context(
+                &part.part.path,
+                &part.part.data,
+                Some(&rels_path),
+                rels_data.as_deref(),
+            ) else {
+                continue;
+            };
+            if let Some(filtered) =
+                filter_hf_vml_to_modeled_clean_images(parsed, modeled_images, &subgraph)
+            {
+                return Some(filtered);
+            }
+        }
+    }
+    None
+}
+
+fn subgraph_allows_hf_vml_for_sheet(
+    subgraph: &domain_types::OpaquePackageSubgraph,
+    sheet_idx: usize,
+) -> bool {
+    match &subgraph.owner {
+        domain_types::OpaquePackageOwner::Worksheet { index, .. } => *index == sheet_idx,
+        _ => true,
+    }
+}
+
+fn opaque_relationships_xml_for_owner(
+    subgraph: &domain_types::OpaquePackageSubgraph,
+    owner_path: &str,
+) -> Option<Vec<u8>> {
+    let owner_path = normalize_path(owner_path);
+    let mut rels = crate::write::relationships::RelationshipManager::new();
+    let mut has_relationships = false;
+    for relationship in &subgraph.relationships {
+        let domain_types::OpaquePackageOwner::Part { path } = &relationship.owner else {
+            continue;
+        };
+        if normalize_path(path) != owner_path {
+            continue;
+        }
+        let target = match &relationship.target {
+            domain_types::OpaqueRelationshipTarget::InternalPart { path } => {
+                relative_target(&owner_path, path)
+            }
+            domain_types::OpaqueRelationshipTarget::InternalPath { target } => target.clone(),
+            domain_types::OpaqueRelationshipTarget::External { target } => target.clone(),
+        };
+        if let Some(id) = &relationship.relationship_id_hint {
+            rels.add_with_id(id, &relationship.relationship_type, &target);
+        } else {
+            rels.add(&relationship.relationship_type, &target);
+        }
+        has_relationships = true;
+    }
+    has_relationships.then(|| rels.to_xml())
+}
+
+fn emits_clean_opaque_part(ownership: domain_types::OpaquePackageOwnership) -> bool {
+    matches!(
+        ownership,
+        domain_types::OpaquePackageOwnership::CleanImported
+            | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
+    )
+}
+
 fn filter_hf_vml_to_modeled_clean_images(
     mut hf_vml: crate::domain::print::hf_images::ParsedHfVml,
     modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
-    round_trip_ctx: Option<&RoundTripContext>,
+    subgraph: &domain_types::OpaquePackageSubgraph,
 ) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
     let modeled_by_target: std::collections::HashMap<
         String,
@@ -558,7 +625,7 @@ fn filter_hf_vml_to_modeled_clean_images(
         .filter_map(|(rel_id, target)| {
             let target_path = normalize_hf_image_target(&hf_vml.vml_path, target)?;
             let modeled = modeled_by_target.get(&target_path).copied()?;
-            (has_clean_opaque_part(round_trip_ctx, &target_path)
+            (subgraph_contains_clean_part(subgraph, &target_path)
                 && modeled_hf_position_matches(modeled.position, rel_id, &hf_vml.images))
             .then(|| (rel_id.clone(), modeled))
         })
@@ -586,6 +653,16 @@ fn filter_hf_vml_to_modeled_clean_images(
     Some(hf_vml)
 }
 
+fn subgraph_contains_clean_part(
+    subgraph: &domain_types::OpaquePackageSubgraph,
+    path: &str,
+) -> bool {
+    let normalized = normalize_path(path);
+    subgraph.parts.iter().any(|part| {
+        emits_clean_opaque_part(part.ownership) && normalize_path(&part.part.path) == normalized
+    })
+}
+
 fn normalize_hf_image_target(vml_path: &str, target: &str) -> Option<String> {
     if target.starts_with("data:") {
         return None;
@@ -594,6 +671,32 @@ fn normalize_hf_image_target(vml_path: &str, target: &str) -> Option<String> {
         return Some(target.trim_start_matches('/').to_string());
     }
     crate::infra::opc::resolve_relationship_target(Some(vml_path), target).ok()
+}
+
+fn normalize_path(path: &str) -> String {
+    path.trim_start_matches('/').replace('\\', "/")
+}
+
+fn relative_target(owner_path: &str, target_path: &str) -> String {
+    let owner_path = normalize_path(owner_path);
+    let target_path = normalize_path(target_path);
+    let owner_dir = owner_path.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let from_components: Vec<_> = owner_dir
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    let to_components: Vec<_> = target_path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    let common = from_components
+        .iter()
+        .zip(&to_components)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut result = vec![".."; from_components.len() - common];
+    result.extend(to_components[common..].iter().copied());
+    result.join("/")
 }
 
 fn modeled_hf_position_matches(

@@ -403,7 +403,7 @@ fn preserved_pivot_part_paths(round_trip_ctx: Option<&RoundTripContext>) -> Hash
     paths
 }
 
-fn clean_pivot_package_is_closed(package: &domain_types::PivotPackageRoundTrip) -> bool {
+pub(super) fn clean_pivot_package_is_closed(package: &domain_types::PivotPackageRoundTrip) -> bool {
     let mut part_paths = HashSet::new();
     for cache in &package.cache_definitions {
         if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {

@@ -251,6 +251,21 @@ fn clean_opaque_hf_vml_subgraph(
         )),
         ownership: domain_types::OpaquePackageOwnership::CleanImported,
     }];
+    let media_relationships = media_parts
+        .iter()
+        .map(|(path, _)| domain_types::OpaquePackageRelationship {
+            owner: domain_types::OpaquePackageOwner::Part {
+                path: vml_path.to_string(),
+            },
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+                    .to_string(),
+            target: domain_types::OpaqueRelationshipTarget::InternalPart {
+                path: (*path).to_string(),
+            },
+            relationship_id_hint: Some(hf_media_relationship_id(path)),
+        })
+        .collect();
     parts.extend(
         media_parts
             .into_iter()
@@ -279,8 +294,23 @@ fn clean_opaque_hf_vml_subgraph(
             relationship_id_hint: None,
         },
         parts,
-        relationships: Vec::new(),
+        relationships: media_relationships,
         ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+    }
+}
+
+fn hf_media_relationship_id(path: &str) -> String {
+    let digits = path
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .chars()
+        .filter(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        "rId1".to_string()
+    } else {
+        format!("rId{digits}")
     }
 }
 
@@ -2119,6 +2149,81 @@ fn header_footer_vml_drops_media_from_dirty_opaque_subgraph() {
 
     assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
     assert!(!archive.contains("xl/media/image1.png"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!sheet_xml.contains("legacyDrawingHF"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn header_footer_vml_requires_closed_opaque_subgraph() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hf_images: vec![domain_types::domain::print::HeaderFooterImageInfo {
+            position: domain_types::domain::print::HfImagePosition::LeftHeader,
+            src: "../media/image1.png".to_string(),
+            title: "LH".to_string(),
+            width_pt: 46.0,
+            height_pt: 46.0,
+        }],
+        ..Default::default()
+    }]);
+    let hf_image = crate::domain::print::hf_images::HeaderFooterImage {
+        position: crate::domain::print::hf_images::HfImagePosition::LeftHeader,
+        image_rel_id: "rId1".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let hf_vml = crate::domain::print::hf_images::write_hf_images_vml(&[hf_image], "1", 13313);
+    let mut opaque_subgraph = clean_opaque_hf_vml_subgraph(
+        "xl/drawings/vmlDrawing9.vml",
+        hf_vml.clone(),
+        vec![("xl/media/image1.png", b"png bytes".to_vec())],
+    );
+    opaque_subgraph.parts.push(domain_types::OpaquePackagePart {
+        part: domain_types::BlobPart {
+            path: "xl/drawings/_rels/vmlDrawing9.vml.rels".to_string(),
+            data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/><Relationship Id="rIdDangling" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/missing.png"/></Relationships>"#
+                .to_vec(),
+        },
+        content_type: None,
+        default_extension: Some((
+            "rels".to_string(),
+            "application/vnd.openxmlformats-package.relationships+xml".to_string(),
+        )),
+        ownership: domain_types::OpaquePackageOwnership::CleanImported,
+    });
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId7".to_string(),
+                rel_type: REL_VML_DRAWING.to_string(),
+                target: "../drawings/vmlDrawing9.vml".to_string(),
+                target_mode: None,
+            }],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing9.vml".to_string(),
+                data: hf_vml.clone(),
+                rels: Some(domain_types::VmlRels {
+                    path: "xl/drawings/_rels/vmlDrawing9.vml.rels".to_string(),
+                    data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#
+                        .to_vec(),
+                }),
+            }],
+            ..Default::default()
+        }],
+        opaque_package_subgraphs: vec![opaque_subgraph],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(!archive.contains("xl/media/image1.png"));
+    assert!(!archive.contains("xl/media/missing.png"));
     assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
     assert!(!sheet_xml.contains("legacyDrawingHF"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

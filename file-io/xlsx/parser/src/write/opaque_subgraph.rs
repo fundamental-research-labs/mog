@@ -102,6 +102,15 @@ pub fn round_trip_worksheet_custom_property_subgraphs(
         .collect()
 }
 
+pub fn normalized_round_trip_opaque_subgraphs(
+    round_trip_ctx: Option<&RoundTripContext>,
+) -> Vec<OpaquePackageSubgraph> {
+    let Some(ctx) = round_trip_ctx else {
+        return Vec::new();
+    };
+    explicit_or_legacy_opaque_subgraphs(ctx)
+}
+
 fn explicit_or_legacy_opaque_subgraphs(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
     if ctx.opaque_package_subgraphs.is_empty() {
         let mut subgraphs = Vec::new();
@@ -349,7 +358,7 @@ fn lower_legacy_custom_xml(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph>
 
 fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
     let package = &ctx.pivot_package;
-    if package.is_empty() {
+    if package.is_empty() || !crate::write::pivot_writer::clean_pivot_package_is_closed(package) {
         return Vec::new();
     }
 

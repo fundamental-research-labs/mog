@@ -120,27 +120,6 @@ fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
                 .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some()))
 }
 
-pub(super) fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {
-    let Some(ctx) = round_trip_ctx else {
-        return false;
-    };
-    let normalized = path.trim_start_matches('/');
-    ctx.opaque_package_subgraphs.iter().any(|subgraph| {
-        matches!(
-            subgraph.ownership,
-            domain_types::OpaquePackageOwnership::CleanImported
-                | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
-        ) && subgraph.parts.iter().any(|part| {
-            part.part.path.trim_start_matches('/') == normalized
-                && matches!(
-                    part.ownership,
-                    domain_types::OpaquePackageOwnership::CleanImported
-                        | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
-                )
-        })
-    })
-}
-
 fn comments_have_imported_identity(sheet_data: &domain_types::SheetData) -> bool {
     sheet_data.comments.iter().any(|comment| {
         comment.shape_id.is_some() || comment.xr_uid.as_deref().is_some_and(|uid| !uid.is_empty())

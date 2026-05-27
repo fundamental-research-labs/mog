@@ -119,6 +119,68 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
 }
 
 #[test]
+fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
+    let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
+    picture.blip_fill.embed_id = Some("rId5".to_string());
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![domain_types::domain::floating_object::FloatingObject {
+            common: domain_types::domain::floating_object::FloatingObjectCommon {
+                name: "Imported Picture".to_string(),
+                anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                    anchor_mode: domain_types::domain::floating_object::AnchorMode::TwoCell,
+                    end_row: Some(4),
+                    end_col: Some(4),
+                    end_row_offset: Some(0),
+                    end_col_offset: Some(0),
+                    ..Default::default()
+                },
+                width: 100.0,
+                height: 80.0,
+                ..Default::default()
+            },
+            data: domain_types::domain::floating_object::FloatingObjectData::Picture(
+                domain_types::domain::floating_object::PictureData {
+                    src: "data:image/png;base64,AQIDBA==".to_string(),
+                    original_width: None,
+                    original_height: None,
+                    crop: None,
+                    adjustments: None,
+                    border: None,
+                    color_type: None,
+                    ooxml: Some(domain_types::domain::floating_object::PictureOoxmlProps {
+                        picture,
+                        image_path: Some("../media/image7.png".to_string()),
+                        ..Default::default()
+                    }),
+                },
+            ),
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_rels = String::from_utf8(
+        archive
+            .read_file("xl/drawings/_rels/drawing1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert_eq!(
+        archive.read_file("xl/media/image7.png").unwrap(),
+        vec![1, 2, 3, 4]
+    );
+    assert!(drawing_rels.contains(r#"Id="rId5""#));
+    assert!(drawing_rels.contains(r#"Target="../media/image7.png""#));
+    assert!(content_types.contains(r#"Extension="png""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_referenced() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -344,9 +344,11 @@ fn convert_floating_object(
             if let Some(ref ooxml) = pic_data.ooxml {
                 let image_props =
                     crate::domain::drawings::write::convert::picture_to_image_props(&ooxml.picture);
-                // Register image relationship (bytes handled by binary_blobs passthrough)
+                // Register image relationship and emit the imported media bytes
+                // carried in `src` as modeled picture state.
                 if let Some(ref image_path) = ooxml.image_path {
                     image_rels.push((image_props.r_id.clone(), image_path.clone()));
+                    push_image_blob_if_data_url(image_blobs, image_path, &pic_data.src);
                 }
                 DrawingObject::Picture(image_props)
             } else {
@@ -495,6 +497,20 @@ fn convert_image(
     };
 
     Some(DrawingObject::Picture(image_props))
+}
+
+fn push_image_blob_if_data_url(
+    image_blobs: &mut Vec<(String, Vec<u8>)>,
+    image_path: &str,
+    picture_src: &str,
+) {
+    let Some((_, decoded)) = parse_data_url(picture_src) else {
+        return;
+    };
+    if image_blobs.iter().any(|(path, _)| path == image_path) {
+        return;
+    }
+    image_blobs.push((image_path.to_string(), decoded));
 }
 
 /// Parse a `data:` URL into (file_extension, decoded_bytes).
@@ -998,6 +1014,40 @@ mod tests {
         };
         let result = build_sheet_drawing_data(&[shape, conn]);
         assert_eq!(result.anchors.len(), 2);
+    }
+
+    #[test]
+    fn imported_ooxml_picture_emits_modeled_media_blob() {
+        let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
+        picture.blip_fill.embed_id = Some("rId5".to_string());
+        let obj = FloatingObject {
+            common: make_common("Imported Picture"),
+            data: FloatingObjectData::Picture(PictureData {
+                src: "data:image/png;base64,AQIDBA==".to_string(),
+                original_width: None,
+                original_height: None,
+                crop: None,
+                adjustments: None,
+                border: None,
+                color_type: None,
+                ooxml: Some(PictureOoxmlProps {
+                    picture,
+                    image_path: Some("../media/image7.png".to_string()),
+                    ..Default::default()
+                }),
+            }),
+        };
+
+        let result = build_sheet_drawing_data(&[obj]);
+
+        assert_eq!(
+            result.image_rels,
+            vec![("rId5".to_string(), "../media/image7.png".to_string())]
+        );
+        assert_eq!(
+            result.image_blobs,
+            vec![("../media/image7.png".to_string(), vec![1, 2, 3, 4])]
+        );
     }
 
     #[test]

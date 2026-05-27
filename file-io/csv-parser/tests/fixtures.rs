@@ -41,9 +41,7 @@ fn read_fixture(name: &str) -> Vec<u8> {
 fn large_csv(rows: usize) -> String {
     let mut csv = String::from("col1,col2,col3,col4,col5\n");
     for row in 0..rows {
-        csv.push_str(&format!(
-            "1234567890,row-{row},true,2026-05-26,3.14159\n"
-        ));
+        csv.push_str(&format!("1234567890,row-{row},true,2026-05-26,3.14159\n"));
     }
     csv
 }

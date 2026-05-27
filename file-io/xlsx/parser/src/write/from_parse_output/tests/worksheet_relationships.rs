@@ -79,6 +79,38 @@ fn clean_imported_drawing_package_is_preserved_as_opaque_subgraph() {
 }
 
 #[test]
+fn opaque_worksheet_drawing_requires_closed_registered_subgraph() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let mut drawing_subgraph = clean_opaque_drawing_subgraph();
+    drawing_subgraph.owner_relationship.target =
+        domain_types::OpaqueRelationshipTarget::InternalPart {
+            path: "xl/drawings/missingDrawing.xml".to_string(),
+        };
+    let ctx = domain_types::RoundTripContext {
+        opaque_package_subgraphs: vec![drawing_subgraph],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/drawings/drawing7.xml"));
+    assert!(!archive.contains("xl/drawings/missingDrawing.xml"));
+    assert!(!archive.contains("xl/media/staleOpaqueImage.png"));
+    assert!(!sheet_xml.contains("<drawing "));
+    assert!(!content_types.contains("/xl/drawings/drawing7.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn modeled_replacement_drawing_suppresses_clean_opaque_drawing_subgraph() {
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),

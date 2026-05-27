@@ -5,11 +5,7 @@ pub(super) fn relationships_for_export(
     round_trip_ctx: Option<&domain_types::RoundTripContext>,
     output: &domain_types::ParseOutput,
 ) -> Vec<WorksheetDrawingGraphEntry> {
-    let Some(ctx) = round_trip_ctx else {
-        return Vec::new();
-    };
-
-    ctx.opaque_package_subgraphs
+    crate::write::opaque_subgraph::round_trip_opaque_subgraphs(round_trip_ctx, output)
         .iter()
         .filter_map(|subgraph| {
             if subgraph.ownership != domain_types::OpaquePackageOwnership::CleanImported {
@@ -23,9 +19,6 @@ pub(super) fn relationships_for_export(
             else {
                 return None;
             };
-            if sheet_has_modeled_drawing_content(output, *index) {
-                return None;
-            }
             let domain_types::OpaqueRelationshipTarget::InternalPart { path } =
                 &subgraph.owner_relationship.target
             else {
@@ -47,11 +40,4 @@ fn worksheet_relative_target(zip_path: &str) -> String {
     path.strip_prefix("xl/")
         .map(|rest| format!("../{rest}"))
         .unwrap_or_else(|| path.to_string())
-}
-
-fn sheet_has_modeled_drawing_content(output: &domain_types::ParseOutput, sheet_idx: usize) -> bool {
-    output
-        .sheets
-        .get(sheet_idx)
-        .is_some_and(|sheet| !sheet.charts.is_empty() || !sheet.floating_objects.is_empty())
 }

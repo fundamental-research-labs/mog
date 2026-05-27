@@ -25,7 +25,7 @@ pub fn register_round_trip_opaque_subgraphs(
     output: &domain_types::ParseOutput,
     _pivot_data: &crate::write::pivot_writer::PivotWriteData,
 ) -> Result<(), WriteError> {
-    for subgraph in opaque_subgraphs(round_trip_ctx, output) {
+    for subgraph in round_trip_opaque_subgraphs(round_trip_ctx, output) {
         graph.register_opaque_subgraph(&subgraph)?;
     }
     Ok(())
@@ -36,7 +36,7 @@ pub fn register_round_trip_opaque_parts(
     round_trip_ctx: Option<&RoundTripContext>,
     output: &domain_types::ParseOutput,
 ) -> Result<(), WriteError> {
-    for subgraph in opaque_subgraphs(round_trip_ctx, output) {
+    for subgraph in round_trip_opaque_subgraphs(round_trip_ctx, output) {
         if !emits_opaque_part(subgraph.ownership) {
             continue;
         }
@@ -75,7 +75,7 @@ fn emits_opaque_part(ownership: OpaquePackageOwnership) -> bool {
     )
 }
 
-fn opaque_subgraphs(
+pub fn round_trip_opaque_subgraphs(
     round_trip_ctx: Option<&RoundTripContext>,
     output: &domain_types::ParseOutput,
 ) -> Vec<OpaquePackageSubgraph> {

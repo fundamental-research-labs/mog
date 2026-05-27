@@ -462,6 +462,193 @@ fn raw_metadata_xml_exports_only_when_current_cells_reference_metadata() {
 }
 
 #[test]
+fn stale_raw_worksheet_ext_lst_modeled_extensions_are_dropped() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            ext_lst_xml: Some(
+                r#"<extLst><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations count="1"/></ext></extLst>"#
+                    .to_string(),
+            ),
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0tableParts\0extLst".to_string(),
+                r#"<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}"><x14:conditionalFormattings count="1"/></ext></extLst>"#
+                    .to_string(),
+            )],
+            has_empty_ext_lst: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<extLst"));
+    assert!(!sheet_xml.contains("dataValidations"));
+    assert!(!sheet_xml.contains("conditionalFormattings"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn unknown_raw_worksheet_ext_lst_is_preserved_without_modeled_owner() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            ext_lst_xml: Some(r#"<extLst><ext uri="{vendor-extension}"/></extLst>"#.to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<extLst><ext uri="{vendor-extension}"/></extLst>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_original_dimension_is_dropped_when_cells_change() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            original_dimension: Some("A1:Z99".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<dimension ref="A1:A1"/>"#));
+    assert!(!sheet_xml.contains("A1:Z99"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn matching_original_dimension_remains_as_identity_hint() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Number(FiniteF64::new(1.0).unwrap())),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(2.0).unwrap())),
+        ],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            original_dimension: Some("A1:B2".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<dimension ref="A1:B2"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_row_roundtrip_hints_do_not_create_deleted_rows() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            row_spans: [(9, "1:99".to_string())].into_iter().collect(),
+            row_thick_bot: vec![9],
+            row_thick_top: vec![9],
+            row_collapsed: [(9, true)].into_iter().collect(),
+            row_hidden_explicit_false: vec![9],
+            row_outline_level_zero: vec![9],
+            bare_empty_rows: vec![9],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains(r#"<row r="10""#));
+    assert!(!sheet_xml.contains("spans=\"1:99\""));
+    assert!(!sheet_xml.contains("thickBot"));
+    assert!(!sheet_xml.contains("thickTop"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn row_roundtrip_hints_decorate_current_modeled_rows() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            row_spans: [(0, "1:1".to_string())].into_iter().collect(),
+            row_thick_bot: vec![0],
+            row_thick_top: vec![0],
+            row_collapsed: [(0, false)].into_iter().collect(),
+            row_hidden_explicit_false: vec![0],
+            row_outline_level_zero: vec![0],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    let row_xml = sheet_xml
+        .split("<row ")
+        .find(|row| row.contains(r#"r="1""#))
+        .expect("modeled row should be emitted");
+    assert!(row_xml.contains(r#"spans="1:1""#));
+    assert!(row_xml.contains(r#"hidden="0""#));
+    assert!(row_xml.contains(r#"outlineLevel="0""#));
+    assert!(row_xml.contains(r#"collapsed="0""#));
+    assert!(row_xml.contains(r#"thickTop="1""#));
+    assert!(row_xml.contains(r#"thickBot="1""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn dirty_typed_opaque_subgraph_suppresses_legacy_custom_xml_passthrough() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -250,38 +250,52 @@ pub struct SheetRoundTripContext {
     pub comment_authors: Vec<String>,
     #[serde(default)]
     pub row_descents: HashMap<u32, f64>,
+    /// Compatibility identity hints for lexical row attributes.
+    /// Export may use them only to decorate rows that still exist in modeled
+    /// worksheet state; these hints must not create deleted rows by themselves.
     #[serde(default)]
     pub row_spans: HashMap<u32, String>,
     #[serde(default)]
     pub bare_empty_rows: Vec<u32>,
     /// Rows with thickBot="1" attribute for round-trip fidelity.
+    /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_thick_bot: Vec<u32>,
     /// Rows with thickTop="1" attribute for round-trip fidelity.
+    /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_thick_top: Vec<u32>,
     /// Rows with an explicit `collapsed` attribute for round-trip fidelity.
     /// Maps row index → collapsed value. Preserves both `collapsed="0"` and `collapsed="1"`.
+    /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_collapsed: HashMap<u32, bool>,
     /// Rows with explicit `hidden="0"` for round-trip fidelity.
     /// Normally `hidden="0"` (the default) is omitted; these rows had it explicitly.
+    /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_hidden_explicit_false: Vec<u32>,
     /// Rows with explicit `outlineLevel="0"` for round-trip fidelity.
     /// Normally `outlineLevel="0"` (the default) is omitted; these rows had it explicitly.
+    /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_outline_level_zero: Vec<u32>,
+    /// Compatibility identity hint for the imported `<dimension ref="..."/>`.
+    /// Export may use it only when it matches current modeled worksheet bounds;
+    /// stale imported dimensions must not override generated sheet state.
     pub original_dimension: Option<String>,
     /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
     #[serde(default)]
     pub zero_height: bool,
     /// Whether the original worksheet had an empty `<extLst/>` element.
-    /// Used for round-trip fidelity when there are no sparklines or other extensions.
+    /// Compatibility input only; emitted only when no modeled worksheet
+    /// extension owner is present.
     #[serde(default)]
     pub has_empty_ext_lst: bool,
-    /// Raw `<extLst>...</extLst>` XML from the worksheet for round-trip passthrough.
-    /// Captures extension elements (x14:dataValidations, x14:conditionalFormattings, etc.).
+    /// Raw `<extLst>...</extLst>` XML from the worksheet.
+    /// Compatibility input only. Known modeled extension owners such as
+    /// x14 data validations, conditional formatting, and sparklines are not
+    /// replayed from this raw sidecar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<String>,
     /// Preserved namespace declarations from the `<worksheet>` root element.

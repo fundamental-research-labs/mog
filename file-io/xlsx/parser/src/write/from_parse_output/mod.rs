@@ -14,6 +14,7 @@ mod doc_props;
 mod package_authority;
 mod pivot_package;
 mod sheet_builder;
+mod sheet_preservation;
 mod styles;
 
 use domain_types::Hyperlink;
@@ -391,56 +392,20 @@ pub fn write_xlsx_from_parse_output(
                     }
                     sheet_writer.set_preserved_namespaces(ns_map);
                 }
-                // Preserve original <dimension ref="..."/> for round-trip fidelity
-                if let Some(ref dim) = sheet_rt.original_dimension {
+                if let Some(dim) =
+                    sheet_preservation::original_dimension_for_export(sheet_data, sheet_rt)
+                {
                     sheet_writer.set_dimension_ref(dim.clone());
                 }
-                // Preserve original row spans attributes for round-trip fidelity
-                for (row, spans) in &sheet_rt.row_spans {
-                    sheet_writer.set_row_spans(*row, spans.clone());
-                }
-                // Preserve thickBot/thickTop row attributes for round-trip fidelity
-                for &row in &sheet_rt.row_thick_bot {
-                    sheet_writer.set_row_thick_bot(row, true);
-                }
-                for &row in &sheet_rt.row_thick_top {
-                    sheet_writer.set_row_thick_top(row, true);
-                }
-                // Preserve collapsed row attributes for round-trip fidelity
-                for (&row, &collapsed) in &sheet_rt.row_collapsed {
-                    sheet_writer.set_row_collapsed(row, collapsed);
-                }
-                // Preserve explicit hidden="0" for round-trip fidelity
-                for &row in &sheet_rt.row_hidden_explicit_false {
-                    sheet_writer.set_row_hidden(row, false);
-                }
-                // Preserve explicit outlineLevel="0" for round-trip fidelity
-                for &row in &sheet_rt.row_outline_level_zero {
-                    sheet_writer.set_row_outline_level(row, 0);
-                }
-                // Preserve bare empty rows (rows with no cells but with formatting)
-                for &row in &sheet_rt.bare_empty_rows {
-                    sheet_writer.mark_bare_empty_row(row);
-                }
-                // Preserve unknown XML elements (e.g., <sheetPr> with <tabColor>).
-                // When sparklines exist in domain data, filter out extLst from preserved
-                // elements to avoid duplicating the extLst (sparklines are written fresh
-                // via set_ext_lst_xml, so preserved extLst would be redundant).
-                if !sheet_rt.sheet_preserved_elements.is_empty() {
-                    let pairs: Vec<_> = if !sheet_data.sparklines.is_empty() {
-                        sheet_rt
-                            .sheet_preserved_elements
-                            .iter()
-                            .filter(|(_, xml)| !xml.contains("<extLst"))
-                            .cloned()
-                            .collect()
-                    } else {
-                        sheet_rt.sheet_preserved_elements.clone()
-                    };
-                    if !pairs.is_empty() {
-                        let preserved = crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(&pairs);
-                        sheet_writer.set_preserved_elements(preserved);
-                    }
+                sheet_preservation::apply_row_hints_for_export(
+                    &mut sheet_writer,
+                    sheet_data,
+                    sheet_rt,
+                );
+                if let Some(preserved) =
+                    sheet_preservation::preserved_elements_for_export(sheet_data, sheet_rt)
+                {
+                    sheet_writer.set_preserved_elements(preserved);
                 }
             }
         }
@@ -516,9 +481,11 @@ pub fn write_xlsx_from_parse_output(
         // apply_outline_groups_rows_only may override hidden=true for grouped rows
         // that were actually visible in the original (e.g., partially expanded groups).
         if let Some(sheet_rt) = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)) {
-            for &row in &sheet_rt.row_hidden_explicit_false {
-                sheet_writer.set_row_hidden(row, false);
-            }
+            sheet_preservation::apply_visible_row_hints_for_export(
+                &mut sheet_writer,
+                sheet_data,
+                sheet_rt,
+            );
         }
         // ── Auto Filter ─────────────────────────────────────────────────
         // Typed OOXML preservation: auto filter now reconstructs from the typed
@@ -543,36 +510,18 @@ pub fn write_xlsx_from_parse_output(
         // ── Sparklines / extLst ──────────────────────────────────────────
         let sheet_rt_for_ext = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
         if !sheet_data.sparklines.is_empty() {
-            if let Some(ext_xml) =
-                sheet_rt_for_ext.and_then(|sheet_rt| sheet_rt.ext_lst_xml.as_ref())
-            {
-                sheet_writer.set_ext_lst_xml(ext_xml.clone());
-            } else {
-                let xml = crate::domain::sparklines::write::sparklines_xml_from_domain(
-                    &sheet_data.name,
-                    &sheet_data.sparklines,
-                );
-                sheet_writer.set_ext_lst_xml(xml);
-            }
+            let xml = crate::domain::sparklines::write::sparklines_xml_from_domain(
+                &sheet_data.name,
+                &sheet_data.sparklines,
+            );
+            sheet_writer.set_ext_lst_xml(xml);
         } else {
-            let preserved_has_ext_lst = sheet_rt_for_ext
-                .map(|sheet_rt| {
-                    !sheet_rt.sheet_preserved_elements.is_empty()
-                        && sheet_rt
-                            .sheet_preserved_elements
-                            .iter()
-                            .any(|(_, xml)| xml.contains("<extLst"))
-                })
-                .unwrap_or(false);
-            if !preserved_has_ext_lst {
+            if let Some(sheet_rt) = sheet_rt_for_ext {
                 if let Some(ext_xml) =
-                    sheet_rt_for_ext.and_then(|sheet_rt| sheet_rt.ext_lst_xml.as_ref())
+                    sheet_preservation::standalone_ext_lst_for_export(sheet_data, sheet_rt)
                 {
                     sheet_writer.set_ext_lst_xml(ext_xml.clone());
-                } else if sheet_rt_for_ext
-                    .map(|sheet_rt| sheet_rt.has_empty_ext_lst)
-                    .unwrap_or(false)
-                {
+                } else if sheet_preservation::empty_ext_lst_for_export(sheet_data, sheet_rt) {
                     sheet_writer.set_ext_lst_xml("<extLst/>".to_string());
                 }
             }

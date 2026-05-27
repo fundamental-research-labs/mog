@@ -1294,6 +1294,7 @@ pub fn write_xlsx_from_parse_output(
                 let ooxml_rels: Vec<ooxml_types::shared::OpcRelationship> = srt
                     .drawing_opc_rels
                     .iter()
+                    .filter(|r| package_authority::keep_original_drawing_relationship(extras, r))
                     .map(|r| ooxml_types::shared::OpcRelationship {
                         id: r.id.clone(),
                         rel_type: r.rel_type.clone(),
@@ -1830,19 +1831,26 @@ pub fn write_xlsx_from_parse_output(
     } else {
         round_trip_ctx.and_then(|ctx| ctx.raw_persons_xml.clone())
     };
-    let package_graph = crate::write::package_graph::build_modeled_workbook_graph(
-        crate::write::package_graph::ModeledWorkbookGraphOptions {
-            sheet_count: output.sheets.len(),
-            has_theme,
-            has_shared_strings: !shared_strings.is_empty(),
-            has_core_props: core_props_xml.is_some(),
-            has_app_props: app_props_xml.is_some(),
-            has_custom_props: custom_props_xml.is_some(),
-            has_metadata: metadata_xml.is_some(),
-            has_persons: persons_xml.is_some(),
-        },
+    let mut package_graph_builder =
+        crate::write::package_graph::build_modeled_workbook_graph_builder(
+            crate::write::package_graph::ModeledWorkbookGraphOptions {
+                sheet_count: output.sheets.len(),
+                has_theme,
+                has_shared_strings: !shared_strings.is_empty(),
+                has_core_props: core_props_xml.is_some(),
+                has_app_props: app_props_xml.is_some(),
+                has_custom_props: custom_props_xml.is_some(),
+                has_metadata: metadata_xml.is_some(),
+                has_persons: persons_xml.is_some(),
+            },
+            round_trip_ctx,
+        )?;
+    crate::write::opaque_subgraph::register_round_trip_opaque_subgraphs(
+        &mut package_graph_builder,
         round_trip_ctx,
+        &pivot_data,
     )?;
+    let package_graph = package_graph_builder.resolve()?;
 
     // ── 4. Build workbook.xml ───────────────────────────────────────────
     let mut workbook_writer = WorkbookWriter::new();
@@ -1957,27 +1965,17 @@ pub fn write_xlsx_from_parse_output(
     let _total_table_count: usize = sheet_extras.iter().map(|e| e.tables.len()).sum();
 
     let mut content_types = ContentTypesManager::new();
-    // Replay original Default entries from RoundTripContext for round-trip fidelity.
-    // Original files may include defaults for image extensions, printerSettings, etc.
-    // that the writer wouldn't otherwise emit (e.g., when no images are present).
-    let used_rt_defaults = if let Some(ctx) = round_trip_ctx {
-        if !ctx.content_type_defaults.is_empty() {
-            for (ext, ct) in &ctx.content_type_defaults {
+    content_types.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    content_types.add_default("xml", "application/xml");
+    if let Some(ctx) = round_trip_ctx {
+        for (ext, ct) in &ctx.content_type_defaults {
+            if package_authority::round_trip_default_extension_is_emitted(ctx, &pivot_data, ext) {
                 content_types.add_default(ext, ct);
             }
-            true
-        } else {
-            false
         }
-    } else {
-        false
-    };
-    if !used_rt_defaults {
-        content_types.add_default(
-            "rels",
-            "application/vnd.openxmlformats-package.relationships+xml",
-        );
-        content_types.add_default("xml", "application/xml");
     }
     if has_any_comments {
         content_types.add_default(
@@ -2181,56 +2179,6 @@ pub fn write_xlsx_from_parse_output(
             }
         }
     }
-    // Web extension content types.
-    let has_web_extensions = round_trip_ctx
-        .map(|ctx| !ctx.web_extension_parts.is_empty())
-        .unwrap_or(false);
-    if has_web_extensions {
-        if let Some(ctx) = round_trip_ctx {
-            for part in &ctx.web_extension_parts {
-                if part.path.ends_with("taskpanes.xml") {
-                    let path = format!("/{}", part.path);
-                    if content_types.has_override(&path) {
-                        continue;
-                    }
-                    content_types.add_override(
-                        &path,
-                        crate::domain::web_extensions::read::CT_WEB_EXTENSION_TASKPANES,
-                    );
-                } else if part.path.ends_with(".xml") && !part.path.contains("_rels/") {
-                    let path = format!("/{}", part.path);
-                    if content_types.has_override(&path) {
-                        continue;
-                    }
-                    content_types
-                        .add_override(&path, crate::domain::web_extensions::read::CT_WEB_EXTENSION);
-                }
-            }
-        }
-    }
-    // CustomXml content types.
-    let has_custom_xml = round_trip_ctx
-        .map(|ctx| !ctx.custom_xml_parts.is_empty())
-        .unwrap_or(false);
-    if has_custom_xml {
-        if let Some(ctx) = round_trip_ctx {
-            for part in &ctx.custom_xml_parts {
-                if part.path.contains("itemProps")
-                    && part.path.ends_with(".xml")
-                    && !part.path.contains("_rels/")
-                {
-                    let path = format!("/{}", part.path);
-                    if content_types.has_override(&path) {
-                        continue;
-                    }
-                    content_types.add_override(
-                        &path,
-                        "application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
-                    );
-                }
-            }
-        }
-    }
     // External link content types.
     let has_external_links = !external_link_exports.is_empty();
     if has_external_links {
@@ -2243,37 +2191,14 @@ pub fn write_xlsx_from_parse_output(
     }
     let content_types_xml = content_types.to_xml();
 
-    let mut root_rels = package_graph
+    let root_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Root);
-    if has_web_extensions {
-        root_rels.add(
-            crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
-            "/xl/webextensions/taskpanes.xml",
-        );
-    }
     let root_rels_xml = root_rels.to_xml();
 
     // Build workbook relationships from the resolved package graph, then append
     // feature paths that have not migrated to the graph facade yet.
     let mut workbook_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
-    if has_custom_xml && let Some(ctx) = round_trip_ctx {
-        for part in &ctx.custom_xml_parts {
-            if part.path.starts_with("customXml/item")
-                && part.path.ends_with(".xml")
-                && !part.path.contains("itemProps")
-                && !part.path.contains("_rels/")
-            {
-                let target = format!("../{}", part.path);
-                if workbook_rels.find_by_target(&target).is_none() {
-                    workbook_rels.add(
-                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
-                        &target,
-                    );
-                }
-            }
-        }
-    }
     if has_external_links {
         for (link_def, part_name) in &external_link_exports {
             if let Some(imported) = &link_def.imported_identity {
@@ -2290,25 +2215,6 @@ pub fn write_xlsx_from_parse_output(
         }
     }
     if let Some(ctx) = round_trip_ctx {
-        const MANAGED_TYPES: &[&str] = &[
-            super::REL_WORKSHEET,
-            super::REL_STYLES,
-            super::REL_THEME,
-            super::REL_SHARED_STRINGS,
-            super::REL_METADATA,
-            super::REL_EXTERNAL_LINK,
-            super::REL_PIVOT_CACHE,
-            super::REL_PERSON,
-            super::REL_CALC_CHAIN,
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
-        ];
-        for orig_rel in &ctx.workbook_relationships {
-            if !MANAGED_TYPES.contains(&orig_rel.rel_type.as_str())
-                && workbook_rels.get_by_id(&orig_rel.id).is_none()
-            {
-                workbook_rels.add_with_id(&orig_rel.id, &orig_rel.rel_type, &orig_rel.target);
-            }
-        }
         for orig_rel in &ctx.workbook_relationships {
             if orig_rel.rel_type == super::REL_PIVOT_CACHE
                 && pivot_package::keep_workbook_relationship(&pivot_data, orig_rel)
@@ -2440,24 +2346,12 @@ pub fn write_xlsx_from_parse_output(
         }
     }
 
-    // Web extension parts passthrough
-    if let Some(ctx) = round_trip_ctx {
-        for part in &ctx.web_extension_parts {
-            zip.add_file(&part.path, part.data.clone());
-        }
-    }
-
-    // CustomXml parts passthrough
-    if let Some(ctx) = round_trip_ctx {
-        for part in &ctx.custom_xml_parts {
-            zip.add_file(&part.path, part.data.clone());
-        }
-    }
+    crate::write::opaque_subgraph::write_opaque_parts(&mut zip, &package_graph);
 
     // Binary blob passthrough (printerSettings, vbaProject, richData, media, etc.)
     if let Some(ctx) = round_trip_ctx {
         for part in &ctx.binary_blobs {
-            if !pivot_package::keep_binary_blob(&pivot_data, &part.path) {
+            if !package_authority::keep_round_trip_binary_blob(ctx, &pivot_data, &part.path) {
                 continue;
             }
             zip.add_file(&part.path, part.data.clone());

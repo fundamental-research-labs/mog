@@ -108,6 +108,19 @@ fn utf16_custom_xml_parts_are_preserved_as_verbatim_passthrough() {
             .expect("customXml item captured for passthrough");
         assert_eq!(&preserved.data, expected);
     }
+    assert!(
+        round_trip_ctx
+            .opaque_package_subgraphs
+            .iter()
+            .all(|subgraph| {
+                subgraph
+                    .parts
+                    .iter()
+                    .all(|part| !part.part.path.contains("/_rels/"))
+                    && !subgraph.relationships.is_empty()
+            }),
+        "customXml sidecar .rels should be lowered into structured opaque relationships"
+    );
 
     let exported = write_xlsx_from_parse_output(&parsed, Some(&round_trip_ctx)).expect("export");
     let exported_archive = XlsxArchive::new(&exported).expect("exported xlsx");
@@ -117,4 +130,11 @@ fn utf16_custom_xml_parts_are_preserved_as_verbatim_passthrough() {
             .expect("read exported customXml item");
         assert_eq!(&exported_custom_xml, expected);
     }
+    let item1_rels = String::from_utf8(
+        exported_archive
+            .read_file("customXml/_rels/item1.xml.rels")
+            .expect("read exported customXml item rels"),
+    )
+    .unwrap();
+    assert!(item1_rels.contains("Target=\"itemProps1.xml\""));
 }

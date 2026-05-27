@@ -117,6 +117,14 @@ pub struct RoundTripContext {
     pub custom_xml_parts: Vec<BlobPart>,
     #[serde(default)]
     pub web_extension_parts: Vec<BlobPart>,
+    /// Explicit clean opaque package subgraphs that may be emitted verbatim.
+    ///
+    /// Legacy raw fields such as `custom_xml_parts`, `web_extension_parts`, and
+    /// `binary_blobs` are compatibility inputs only. Exporters should preserve
+    /// opaque package data through these typed records once import can prove a
+    /// closed clean subgraph.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opaque_package_subgraphs: Vec<OpaquePackageSubgraph>,
     /// General-purpose binary blob passthrough for ZIP entries not modeled
     /// in the domain (printerSettings, vbaProject, richData, featurePropertyBag,
     /// customProperty, media, timelines, timelineCaches,
@@ -380,6 +388,83 @@ pub struct BlobPart {
     pub path: String,
     #[serde(with = "bytes_serde")]
     pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OpaquePackageOwner {
+    #[default]
+    Root,
+    Workbook,
+    Worksheet {
+        index: usize,
+        path: String,
+    },
+    Part {
+        path: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OpaquePackageOwnership {
+    #[default]
+    CleanImported,
+    DirtyImported,
+    Generated,
+    Deleted,
+    OrphanCleanPackageData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OpaqueRelationshipTarget {
+    InternalPart { path: String },
+    InternalPath { target: String },
+    External { target: String },
+}
+
+impl Default for OpaqueRelationshipTarget {
+    fn default() -> Self {
+        Self::InternalPath {
+            target: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpaquePackageRelationship {
+    pub owner: OpaquePackageOwner,
+    pub relationship_type: String,
+    pub target: OpaqueRelationshipTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id_hint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpaquePackagePart {
+    pub part: BlobPart,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_extension: Option<(String, String)>,
+    #[serde(default)]
+    pub ownership: OpaquePackageOwnership,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpaquePackageSubgraph {
+    pub owner: OpaquePackageOwner,
+    pub owner_relationship: OpaquePackageRelationship,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<OpaquePackagePart>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<OpaquePackageRelationship>,
+    #[serde(default)]
+    pub ownership: OpaquePackageOwnership,
 }
 
 /// A clean-imported worksheet DrawingML part with its optional `.rels` sidecar.

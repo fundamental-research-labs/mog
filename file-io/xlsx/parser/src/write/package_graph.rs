@@ -15,7 +15,10 @@ use super::{
     REL_SHARED_STRINGS, REL_STYLES, REL_THEME, REL_WORKSHEET,
 };
 use crate::domain::content_types::write::ContentTypesManager;
-use domain_types::RoundTripContext;
+use domain_types::{
+    OpaquePackageOwner, OpaquePackageOwnership, OpaquePackageSubgraph, OpaqueRelationshipTarget,
+    RoundTripContext,
+};
 
 pub type PackagePartPath = String;
 pub type RelationshipOwnerPath = String;
@@ -144,6 +147,60 @@ impl ResolvedPackageGraph {
             }
         }
     }
+
+    pub fn raw_opaque_parts(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.parts.values().filter_map(|part| {
+            if matches!(part.kind, PackagePartKind::OpaqueClean) {
+                part.bytes
+                    .as_deref()
+                    .map(|bytes| (part.path.as_str(), bytes))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn opaque_relationship_parts(&self) -> Vec<(String, Vec<u8>)> {
+        let opaque_owner_rels_paths: HashSet<_> = self
+            .parts
+            .values()
+            .filter(|part| matches!(part.kind, PackagePartKind::OpaqueClean))
+            .map(|part| {
+                owner_rels_path(&PackageOwner::Part {
+                    path: part.path.clone(),
+                })
+            })
+            .collect();
+        let mut rels_paths: Vec<_> = self
+            .relationships
+            .iter()
+            .filter(|rel| opaque_owner_rels_paths.contains(&rel.owner_rels_path))
+            .map(|rel| rel.owner_rels_path.clone())
+            .collect();
+        rels_paths.sort();
+        rels_paths.dedup();
+
+        rels_paths
+            .into_iter()
+            .map(|rels_path| {
+                let relationships: Vec<_> = self
+                    .relationships
+                    .iter()
+                    .filter(|rel| rel.owner_rels_path == rels_path)
+                    .map(|rel| ooxml_types::shared::OpcRelationship {
+                        id: rel.id.clone(),
+                        rel_type: rel.relationship_type.clone(),
+                        target: rel.target.clone(),
+                        target_mode: rel.target_mode.clone(),
+                    })
+                    .collect();
+                (
+                    rels_path,
+                    RelationshipManager::from_original(&relationships).to_xml(),
+                )
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -196,6 +253,12 @@ impl PackageGraphBuilder {
     fn register_part_inner(&mut self, mut part: PackagePart) -> Result<(), WriteError> {
         part.path = normalize_part_path(&part.path);
         if let Some(existing) = self.parts.get(&part.path) {
+            if existing.kind != part.kind {
+                return Err(WriteError::PackageIntegrity(format!(
+                    "package part path is owned by both modeled and opaque writers: {}",
+                    part.path
+                )));
+            }
             if existing.bytes.is_some() && part.bytes.is_some() && existing.bytes == part.bytes {
                 return Ok(());
             }
@@ -229,12 +292,53 @@ impl PackageGraphBuilder {
         Ok(())
     }
 
+    pub fn register_opaque_subgraph(
+        &mut self,
+        subgraph: &OpaquePackageSubgraph,
+    ) -> Result<(), WriteError> {
+        if !emits_opaque_ownership(subgraph.ownership) {
+            return Ok(());
+        }
+
+        if subgraph.ownership == OpaquePackageOwnership::CleanImported {
+            self.add_opaque_relationship(
+                package_relationship_from_opaque(&subgraph.owner_relationship),
+                OpaquePackageOwnershipState::Clean,
+            )?;
+        }
+        for part in &subgraph.parts {
+            if !emits_opaque_ownership(part.ownership) {
+                continue;
+            }
+            self.register_opaque_part(
+                PackagePart {
+                    path: normalize_part_path(&part.part.path),
+                    content_type: part.content_type.clone(),
+                    default_extension: part.default_extension.clone(),
+                    kind: PackagePartKind::OpaqueClean,
+                    bytes: Some(part.part.data.clone()),
+                },
+                OpaquePackageOwnershipState::Clean,
+            )?;
+        }
+        if subgraph.ownership == OpaquePackageOwnership::CleanImported {
+            for relationship in &subgraph.relationships {
+                self.add_opaque_relationship(
+                    package_relationship_from_opaque(relationship),
+                    OpaquePackageOwnershipState::Clean,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn resolve(self) -> Result<ResolvedPackageGraph, WriteError> {
         let mut used_ids_by_owner: HashMap<String, HashSet<String>> = HashMap::new();
         let mut next_id_by_owner: HashMap<String, u32> = HashMap::new();
         let mut relationships = Vec::with_capacity(self.relationships.len());
 
         for relationship in &self.relationships {
+            validate_internal_target_is_registered(relationship, &self.parts)?;
             let owner_rels_path = owner_rels_path(&relationship.owner);
             let id = allocate_relationship_id(
                 &owner_rels_path,
@@ -262,12 +366,32 @@ impl PackageGraphBuilder {
     }
 }
 
+pub fn build_modeled_workbook_graph_builder(
+    options: ModeledWorkbookGraphOptions,
+    round_trip_ctx: Option<&RoundTripContext>,
+) -> Result<PackageGraphBuilder, WriteError> {
+    let mut graph = PackageGraphBuilder::new();
+
+    register_modeled_workbook_graph(&mut graph, options, round_trip_ctx)?;
+    Ok(graph)
+}
+
 pub fn build_modeled_workbook_graph(
     options: ModeledWorkbookGraphOptions,
     round_trip_ctx: Option<&RoundTripContext>,
 ) -> Result<ResolvedPackageGraph, WriteError> {
     let mut graph = PackageGraphBuilder::new();
 
+    register_modeled_workbook_graph(&mut graph, options, round_trip_ctx)?;
+
+    graph.resolve()
+}
+
+fn register_modeled_workbook_graph(
+    graph: &mut PackageGraphBuilder,
+    options: ModeledWorkbookGraphOptions,
+    round_trip_ctx: Option<&RoundTripContext>,
+) -> Result<(), WriteError> {
     graph.register_part(modeled_part("xl/workbook.xml", CT_WORKBOOK))?;
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Root,
@@ -410,7 +534,7 @@ pub fn build_modeled_workbook_graph(
         });
     }
 
-    graph.resolve()
+    Ok(())
 }
 
 pub fn modeled_part(path: &str, content_type: &str) -> PackagePart {
@@ -590,6 +714,71 @@ fn normalize_part_path(path: &str) -> String {
     path.trim_start_matches('/').to_string()
 }
 
+fn emits_opaque_ownership(ownership: OpaquePackageOwnership) -> bool {
+    matches!(
+        ownership,
+        OpaquePackageOwnership::CleanImported | OpaquePackageOwnership::OrphanCleanPackageData
+    )
+}
+
+fn package_owner_from_opaque(owner: &OpaquePackageOwner) -> PackageOwner {
+    match owner {
+        OpaquePackageOwner::Root => PackageOwner::Root,
+        OpaquePackageOwner::Workbook => PackageOwner::Workbook,
+        OpaquePackageOwner::Worksheet { index, path } => PackageOwner::Worksheet {
+            index: *index,
+            path: normalize_part_path(path),
+        },
+        OpaquePackageOwner::Part { path } => PackageOwner::Part {
+            path: normalize_part_path(path),
+        },
+    }
+}
+
+fn package_relationship_from_opaque(
+    relationship: &domain_types::OpaquePackageRelationship,
+) -> PackageRelationship {
+    PackageRelationship {
+        owner: package_owner_from_opaque(&relationship.owner),
+        relationship_type: relationship.relationship_type.clone(),
+        target: match &relationship.target {
+            OpaqueRelationshipTarget::InternalPart { path } => {
+                PackageRelationshipTarget::InternalPart {
+                    path: normalize_part_path(path),
+                }
+            }
+            OpaqueRelationshipTarget::InternalPath { target } => {
+                PackageRelationshipTarget::InternalPath {
+                    target: target.clone(),
+                }
+            }
+            OpaqueRelationshipTarget::External { target } => PackageRelationshipTarget::External {
+                target: target.clone(),
+            },
+        },
+        identity_hint: relationship
+            .relationship_id_hint
+            .as_ref()
+            .map(RelationshipIdentityHint::new),
+    }
+}
+
+fn validate_internal_target_is_registered(
+    relationship: &PackageRelationship,
+    parts: &BTreeMap<String, PackagePart>,
+) -> Result<(), WriteError> {
+    if let PackageRelationshipTarget::InternalPart { path } = &relationship.target {
+        let normalized = normalize_part_path(path);
+        if !parts.contains_key(&normalized) {
+            return Err(WriteError::PackageIntegrity(format!(
+                "relationship target is not an emitted package part: {}",
+                normalized
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,6 +787,12 @@ mod tests {
     #[test]
     fn resolves_workbook_relationship_hints_without_collision() {
         let mut graph = PackageGraphBuilder::new();
+        graph
+            .register_part(modeled_part("xl/worksheets/sheet1.xml", CT_WORKSHEET))
+            .unwrap();
+        graph
+            .register_part(modeled_part("xl/styles.xml", CT_STYLES))
+            .unwrap();
         graph.add_relationship(PackageRelationship {
             owner: PackageOwner::Workbook,
             relationship_type: REL_WORKSHEET.to_string(),
@@ -650,6 +845,28 @@ mod tests {
         let mut part = modeled_part("/xl/workbook.xml", "application/xml");
         part.bytes = Some(vec![1, 2, 3]);
         graph.register_part(part).unwrap();
+    }
+
+    #[test]
+    fn rejects_modeled_opaque_path_conflicts_even_when_bytes_match() {
+        let mut graph = PackageGraphBuilder::new();
+        let mut modeled = modeled_part("xl/workbook.xml", "application/xml");
+        modeled.bytes = Some(vec![1, 2, 3]);
+        graph.register_part(modeled).unwrap();
+
+        let opaque = PackagePart {
+            path: "/xl/workbook.xml".to_string(),
+            content_type: Some("application/xml".to_string()),
+            default_extension: None,
+            kind: PackagePartKind::OpaqueClean,
+            bytes: Some(vec![1, 2, 3]),
+        };
+
+        assert!(
+            graph
+                .register_opaque_part(opaque, OpaquePackageOwnershipState::Clean)
+                .is_err()
+        );
     }
 
     #[test]
@@ -754,6 +971,21 @@ mod tests {
         let rel = rels.get_by_id("rId4").unwrap();
         assert_eq!(rel.target, "https://example.com");
         assert_eq!(rel.target_mode.as_deref(), Some("External"));
+    }
+
+    #[test]
+    fn rejects_dangling_internal_relationship_targets() {
+        let mut graph = PackageGraphBuilder::new();
+        graph.add_relationship(PackageRelationship {
+            owner: PackageOwner::Workbook,
+            relationship_type: REL_WORKSHEET.to_string(),
+            target: PackageRelationshipTarget::InternalPart {
+                path: "xl/worksheets/missing.xml".to_string(),
+            },
+            identity_hint: None,
+        });
+
+        assert!(graph.resolve().is_err());
     }
 
     #[test]

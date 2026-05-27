@@ -1,11 +1,13 @@
 //! Round-trip context, diagnostics, theme conversion, and named ranges.
 
 use domain_types::{
-    BlobPart, NamedRange, OpcRelationship as DtOpcRelationship, ParseDiagnostics,
-    ParseError as DtParseError, ParseStats as DtParseStats, PivotCacheDefinitionPackage,
-    PivotCacheSourceKind, PivotOrphanPackagePart, PivotPackageContentType, PivotPackageOwnership,
-    PivotPackageRoundTrip, PivotTablePackage, PivotWorkbookCacheEntry, RoundTripContext,
-    SheetRoundTripContext, ThemeColor, ThemeColorSource, ThemeData,
+    BlobPart, NamedRange, OpaquePackageOwner, OpaquePackageOwnership, OpaquePackagePart,
+    OpaquePackageRelationship, OpaquePackageSubgraph, OpaqueRelationshipTarget,
+    OpcRelationship as DtOpcRelationship, ParseDiagnostics, ParseError as DtParseError,
+    ParseStats as DtParseStats, PivotCacheDefinitionPackage, PivotCacheSourceKind,
+    PivotOrphanPackagePart, PivotPackageContentType, PivotPackageOwnership, PivotPackageRoundTrip,
+    PivotTablePackage, PivotWorkbookCacheEntry, RoundTripContext, SheetRoundTripContext,
+    ThemeColor, ThemeColorSource, ThemeData,
 };
 use std::collections::HashSet;
 
@@ -450,6 +452,248 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
     }
 }
 
+fn build_opaque_package_subgraphs(
+    custom_xml_parts: &[BlobPart],
+    web_extension_parts: &[BlobPart],
+    root_relationships: &[ooxml_types::shared::OpcRelationship],
+    workbook_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> Vec<OpaquePackageSubgraph> {
+    let mut subgraphs = Vec::new();
+    subgraphs.extend(build_web_extension_opaque_subgraphs(
+        web_extension_parts,
+        root_relationships,
+    ));
+    subgraphs.extend(build_custom_xml_opaque_subgraphs(
+        custom_xml_parts,
+        workbook_relationships,
+    ));
+    subgraphs
+}
+
+fn build_web_extension_opaque_subgraphs(
+    parts: &[BlobPart],
+    root_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> Vec<OpaquePackageSubgraph> {
+    let Some(taskpanes) = parts
+        .iter()
+        .find(|part| normalize_package_path(&part.path) == "xl/webextensions/taskpanes.xml")
+    else {
+        return Vec::new();
+    };
+    let Some(relationships) = relationships_from_legacy_sidecars(parts) else {
+        return Vec::new();
+    };
+
+    vec![OpaquePackageSubgraph {
+        owner: OpaquePackageOwner::Root,
+        owner_relationship: OpaquePackageRelationship {
+            owner: OpaquePackageOwner::Root,
+            relationship_type: crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES
+                .to_string(),
+            target: OpaqueRelationshipTarget::InternalPart {
+                path: taskpanes.path.clone(),
+            },
+            relationship_id_hint: relationship_hint(
+                root_relationships,
+                crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
+                "/xl/webextensions/taskpanes.xml",
+            ),
+        },
+        parts: parts
+            .iter()
+            .filter(|part| !is_relationship_part(&part.path))
+            .map(|part| {
+                let path = normalize_package_path(&part.path);
+                let content_type = if path.ends_with("taskpanes.xml") {
+                    Some(
+                        crate::domain::web_extensions::read::CT_WEB_EXTENSION_TASKPANES.to_string(),
+                    )
+                } else if path.ends_with(".xml") && !path.contains("/_rels/") {
+                    Some(crate::domain::web_extensions::read::CT_WEB_EXTENSION.to_string())
+                } else {
+                    None
+                };
+                opaque_part(part, content_type)
+            })
+            .collect(),
+        relationships,
+        ownership: OpaquePackageOwnership::CleanImported,
+    }]
+}
+
+fn build_custom_xml_opaque_subgraphs(
+    parts: &[BlobPart],
+    workbook_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> Vec<OpaquePackageSubgraph> {
+    const REL_CUSTOM_XML: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
+
+    parts
+        .iter()
+        .filter(|part| {
+            let path = normalize_package_path(&part.path);
+            path.starts_with("customXml/item")
+                && path.ends_with(".xml")
+                && !path.contains("itemProps")
+                && !path.contains("/_rels/")
+        })
+        .filter_map(|item| {
+            let item_parts = parts
+                .iter()
+                .filter(|part| custom_xml_part_belongs_to_item(&item.path, &part.path))
+                .cloned()
+                .collect::<Vec<_>>();
+            let relationships = relationships_from_legacy_sidecars(&item_parts)?;
+            Some(OpaquePackageSubgraph {
+                owner: OpaquePackageOwner::Workbook,
+                owner_relationship: OpaquePackageRelationship {
+                    owner: OpaquePackageOwner::Workbook,
+                    relationship_type: REL_CUSTOM_XML.to_string(),
+                    target: OpaqueRelationshipTarget::InternalPart {
+                        path: item.path.clone(),
+                    },
+                    relationship_id_hint: relationship_hint(
+                        workbook_relationships,
+                        REL_CUSTOM_XML,
+                        &format!("../{}", normalize_package_path(&item.path)),
+                    ),
+                },
+                parts: item_parts
+                    .iter()
+                    .filter(|part| !is_relationship_part(&part.path))
+                    .map(|part| {
+                        let path = normalize_package_path(&part.path);
+                        let content_type = if path.contains("itemProps")
+                            && path.ends_with(".xml")
+                            && !path.contains("/_rels/")
+                        {
+                            Some(
+                                "application/vnd.openxmlformats-officedocument.customXmlProperties+xml"
+                                    .to_string(),
+                            )
+                        } else {
+                            None
+                        };
+                        opaque_part(part, content_type)
+                    })
+                    .collect(),
+                relationships,
+                ownership: OpaquePackageOwnership::CleanImported,
+            })
+        })
+        .collect()
+}
+
+fn opaque_part(part: &BlobPart, content_type: Option<String>) -> OpaquePackagePart {
+    let path = normalize_package_path(&part.path);
+    OpaquePackagePart {
+        part: BlobPart {
+            path: path.clone(),
+            data: part.data.clone(),
+        },
+        content_type,
+        default_extension: if path.ends_with(".rels") {
+            Some((
+                "rels".to_string(),
+                "application/vnd.openxmlformats-package.relationships+xml".to_string(),
+            ))
+        } else if path.ends_with(".xml") {
+            Some(("xml".to_string(), "application/xml".to_string()))
+        } else {
+            None
+        },
+        ownership: OpaquePackageOwnership::CleanImported,
+    }
+}
+
+fn relationship_hint(
+    relationships: &[ooxml_types::shared::OpcRelationship],
+    relationship_type: &str,
+    target: &str,
+) -> Option<String> {
+    relationships
+        .iter()
+        .find(|rel| rel.rel_type == relationship_type && rel.target == target)
+        .map(|rel| rel.id.clone())
+}
+
+fn custom_xml_part_belongs_to_item(item_path: &str, candidate_path: &str) -> bool {
+    let item_path = normalize_package_path(item_path);
+    let candidate_path = normalize_package_path(candidate_path);
+    if candidate_path == item_path {
+        return true;
+    }
+    let Some(item_name) = item_path.rsplit('/').next() else {
+        return false;
+    };
+    let Some(item_number) = item_name
+        .strip_prefix("item")
+        .and_then(|name| name.strip_suffix(".xml"))
+    else {
+        return false;
+    };
+    candidate_path == format!("customXml/_rels/{item_name}.rels")
+        || candidate_path == format!("customXml/itemProps{item_number}.xml")
+}
+
+fn relationships_from_legacy_sidecars(
+    parts: &[BlobPart],
+) -> Option<Vec<OpaquePackageRelationship>> {
+    let part_paths: HashSet<_> = parts
+        .iter()
+        .filter(|part| !is_relationship_part(&part.path))
+        .map(|part| normalize_package_path(&part.path))
+        .collect();
+    let mut relationships = Vec::new();
+    for part in parts.iter().filter(|part| is_relationship_part(&part.path)) {
+        let owner_path = relationship_owner_path(&part.path)?;
+        for rel in crate::domain::workbook::read::parse_all_rels(&part.data) {
+            let target = if rel.target_mode.as_deref() == Some("External") {
+                OpaqueRelationshipTarget::External { target: rel.target }
+            } else {
+                let resolved =
+                    crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target)
+                        .ok()?;
+                let resolved = normalize_package_path(&resolved);
+                if !part_paths.contains(&resolved) {
+                    return None;
+                }
+                OpaqueRelationshipTarget::InternalPart { path: resolved }
+            };
+            relationships.push(OpaquePackageRelationship {
+                owner: OpaquePackageOwner::Part {
+                    path: owner_path.clone(),
+                },
+                relationship_type: rel.rel_type,
+                target,
+                relationship_id_hint: Some(rel.id),
+            });
+        }
+    }
+    Some(relationships)
+}
+
+fn is_relationship_part(path: &str) -> bool {
+    let path = normalize_package_path(path);
+    path.contains("/_rels/") && path.ends_with(".rels")
+}
+
+fn relationship_owner_path(rels_path: &str) -> Option<String> {
+    let rels_path = normalize_package_path(rels_path);
+    let (dir, file) = rels_path.rsplit_once('/')?;
+    let owner_file = file.strip_suffix(".rels")?;
+    let owner_dir = dir.strip_suffix("/_rels")?;
+    Some(if owner_dir.is_empty() {
+        owner_file.to_string()
+    } else {
+        format!("{owner_dir}/{owner_file}")
+    })
+}
+
+fn normalize_package_path(path: &str) -> String {
+    path.trim_start_matches('/').replace('\\', "/")
+}
+
 pub(super) fn build_round_trip_context(
     result: &FullParseResult,
     sheet_contexts: Vec<SheetRoundTripContext>,
@@ -460,6 +704,36 @@ pub(super) fn build_round_trip_context(
         .cloned()
         .map(domain_types::domain::workbook::WorkbookView::from)
         .collect();
+
+    let custom_xml_parts: Vec<BlobPart> = result
+        .custom_xml_parts
+        .iter()
+        .map(|(path, data)| BlobPart {
+            path: path.clone(),
+            data: data.clone(),
+        })
+        .collect();
+    let web_extension_parts: Vec<BlobPart> = result
+        .extensions
+        .as_ref()
+        .map(|ext| {
+            ext.binary_passthrough
+                .entries()
+                .iter()
+                .filter(|(path, _)| path.starts_with("xl/webextensions/"))
+                .map(|(path, data)| BlobPart {
+                    path: path.clone(),
+                    data: data.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let opaque_package_subgraphs = build_opaque_package_subgraphs(
+        &custom_xml_parts,
+        &web_extension_parts,
+        &result.root_relationships,
+        &result.workbook_relationships,
+    );
 
     RoundTripContext {
         sheets: sheet_contexts,
@@ -516,29 +790,9 @@ pub(super) fn build_round_trip_context(
         raw_metadata_xml: result.raw_metadata_xml.clone(),
         raw_persons_xml: result.raw_persons_xml.clone(),
         external_links: result.external_links.clone(),
-        custom_xml_parts: result
-            .custom_xml_parts
-            .iter()
-            .map(|(path, data)| BlobPart {
-                path: path.clone(),
-                data: data.clone(),
-            })
-            .collect(),
-        web_extension_parts: result
-            .extensions
-            .as_ref()
-            .map(|ext| {
-                ext.binary_passthrough
-                    .entries()
-                    .iter()
-                    .filter(|(path, _)| path.starts_with("xl/webextensions/"))
-                    .map(|(path, data)| BlobPart {
-                        path: path.clone(),
-                        data: data.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
+        custom_xml_parts,
+        web_extension_parts,
+        opaque_package_subgraphs,
         binary_blobs: result
             .extensions
             .as_ref()

@@ -94,7 +94,8 @@ pub fn build_pivot_data(
 ) -> PivotWriteData {
     let package = round_trip_ctx
         .map(|ctx| &ctx.pivot_package)
-        .filter(|package| !package.is_empty());
+        .filter(|package| !package.is_empty())
+        .filter(|package| clean_pivot_package_is_closed(package));
     let has_typed_package_contract = package.is_some();
     let preserved_pivot_table_entries = package
         .map(|package| {
@@ -366,6 +367,7 @@ fn preserved_pivot_part_paths(round_trip_ctx: Option<&RoundTripContext>) -> Hash
     let Some(package) = round_trip_ctx
         .map(|ctx| &ctx.pivot_package)
         .filter(|package| !package.is_empty())
+        .filter(|package| clean_pivot_package_is_closed(package))
     else {
         return HashSet::new();
     };
@@ -399,6 +401,100 @@ fn preserved_pivot_part_paths(round_trip_ctx: Option<&RoundTripContext>) -> Hash
         paths.insert(normalize_part_path(&orphan.part.path));
     }
     paths
+}
+
+fn clean_pivot_package_is_closed(package: &domain_types::PivotPackageRoundTrip) -> bool {
+    let mut part_paths = HashSet::new();
+    for cache in &package.cache_definitions {
+        if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {
+            continue;
+        }
+        part_paths.insert(normalize_part_path(&cache.definition_path));
+        if let Some(path) = &cache.definition_rels_path {
+            part_paths.insert(normalize_part_path(path));
+        }
+        if let Some(path) = &cache.records_path {
+            part_paths.insert(normalize_part_path(path));
+        }
+    }
+    for table in &package.pivot_tables {
+        if table.ownership != domain_types::PivotPackageOwnership::CleanImported {
+            continue;
+        }
+        part_paths.insert(normalize_part_path(&table.table_path));
+        if let Some(path) = &table.table_rels_path {
+            part_paths.insert(normalize_part_path(path));
+        }
+    }
+    for orphan in &package.orphan_parts {
+        if orphan.ownership != domain_types::PivotPackageOwnership::CleanImported {
+            continue;
+        }
+        part_paths.insert(normalize_part_path(&orphan.part.path));
+    }
+
+    package
+        .workbook_cache_entries
+        .iter()
+        .filter(|entry| entry.ownership == domain_types::PivotPackageOwnership::CleanImported)
+        .all(|entry| {
+            part_paths.contains(&normalize_workbook_child_target(&entry.relationship_target))
+        })
+        && package
+            .pivot_tables
+            .iter()
+            .filter(|table| table.ownership == domain_types::PivotPackageOwnership::CleanImported)
+            .all(|table| {
+                let sheet_target = crate::infra::opc::resolve_relationship_target(
+                    Some(&format!("xl/worksheets/sheet{}.xml", table.sheet_index + 1)),
+                    &table.sheet_relationship_target,
+                )
+                .map(|path| normalize_part_path(&path))
+                .ok();
+                sheet_target
+                    .as_ref()
+                    .is_some_and(|path| part_paths.contains(path))
+                    && pivot_relationships_are_closed(
+                        &table.table_path,
+                        &table.raw_relationships,
+                        &part_paths,
+                    )
+            })
+        && package
+            .cache_definitions
+            .iter()
+            .filter(|cache| cache.ownership == domain_types::PivotPackageOwnership::CleanImported)
+            .all(|cache| {
+                pivot_relationships_are_closed(
+                    &cache.definition_path,
+                    &cache.raw_relationships,
+                    &part_paths,
+                )
+            })
+}
+
+fn normalize_workbook_child_target(target: &str) -> String {
+    let normalized = normalize_part_path(target);
+    if normalized.starts_with("xl/") {
+        normalized
+    } else {
+        format!("xl/{normalized}")
+    }
+}
+
+fn pivot_relationships_are_closed(
+    owner_path: &str,
+    relationships: &[domain_types::OpcRelationship],
+    part_paths: &HashSet<String>,
+) -> bool {
+    relationships.iter().all(|rel| {
+        if rel.target_mode.as_deref() == Some("External") {
+            return true;
+        }
+        crate::infra::opc::resolve_relationship_target(Some(owner_path), &rel.target)
+            .map(|path| part_paths.contains(&normalize_part_path(&path)))
+            .unwrap_or(false)
+    })
 }
 
 fn is_clean_imported_pivot(

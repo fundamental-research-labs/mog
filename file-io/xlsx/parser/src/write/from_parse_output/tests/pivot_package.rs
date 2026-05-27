@@ -521,6 +521,70 @@ fn generated_pivot_preserves_clean_imported_pivot_package_contract() {
 }
 
 #[test]
+fn dangling_clean_pivot_package_does_not_reserve_generated_part_paths() {
+    let output = pivot_package_output(vec![make_pivot_config(
+        "pivot-generated",
+        "GeneratedPivot",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![
+            domain_types::SheetRoundTripContext::default(),
+            domain_types::SheetRoundTripContext::default(),
+        ],
+        pivot_package: domain_types::PivotPackageRoundTrip {
+            cache_definitions: vec![domain_types::PivotCacheDefinitionPackage {
+                cache_id: 77,
+                definition_path: "xl/pivotCache/pivotCacheDefinition1.xml".to_string(),
+                definition_rels_path: Some(
+                    "xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels".to_string(),
+                ),
+                source_kind: domain_types::PivotCacheSourceKind::External,
+                raw_definition_xml: b"stale cache definition".to_vec(),
+                raw_relationships: vec![domain_types::OpcRelationship {
+                    id: "rIdDangling".to_string(),
+                    rel_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords".to_string(),
+                    target: "missingRecords.xml".to_string(),
+                    target_mode: None,
+                }],
+                records_relationship_id: Some("rIdDangling".to_string()),
+                records_relationship_target: Some("missingRecords.xml".to_string()),
+                records_path: None,
+                raw_records_xml: None,
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            content_type_overrides: vec![domain_types::PivotPackageContentType {
+                part_name: "/xl/pivotCache/pivotCacheDefinition1.xml".to_string(),
+                content_type: CT_PIVOT_CACHE.to_string(),
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(archive.contains("xl/pivotTables/pivotTable1.xml"));
+    assert!(archive.contains("xl/pivotCache/pivotCacheDefinition1.xml"));
+    assert!(archive.contains("xl/pivotCache/pivotCacheRecords1.xml"));
+    assert!(!archive.contains("xl/pivotTables/pivotTable2.xml"));
+    assert!(!archive.contains("xl/pivotCache/pivotCacheDefinition2.xml"));
+    assert!(!workbook_rels.contains("rIdDangling"));
+    assert!(workbook_rels.contains("pivotCache/pivotCacheDefinition1.xml"));
+    assert!(content_types.contains("PartName=\"/xl/pivotCache/pivotCacheDefinition1.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",

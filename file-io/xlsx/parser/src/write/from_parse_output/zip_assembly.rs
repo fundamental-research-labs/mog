@@ -83,37 +83,57 @@ pub(super) fn write_zip_package(
 
     zip.add_file("[Content_Types].xml", content_types_xml);
     zip.add_file("_rels/.rels", root_rels_xml);
-    zip.add_file("xl/workbook.xml", workbook_xml);
+    add_registered_part(package_graph, &mut zip, "xl/workbook.xml", workbook_xml)?;
     zip.add_file("xl/_rels/workbook.xml.rels", workbook_rels_xml);
-    zip.add_file("xl/styles.xml", styles_xml);
+    add_registered_part(package_graph, &mut zip, "xl/styles.xml", styles_xml)?;
 
     if has_referenced_shared_strings {
-        zip.add_file("xl/sharedStrings.xml", shared_strings_xml);
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            "xl/sharedStrings.xml",
+            shared_strings_xml,
+        )?;
     }
 
     // Theme
     if let Some(ref theme) = theme_xml {
-        zip.add_file("xl/theme/theme1.xml", theme.clone());
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            "xl/theme/theme1.xml",
+            theme.clone(),
+        )?;
     }
 
     // Document Properties
     if let Some(ref core) = core_props_xml {
-        zip.add_file("docProps/core.xml", core.clone());
+        add_registered_part(package_graph, &mut zip, "docProps/core.xml", core.clone())?;
     }
     if let Some(ref app) = app_props_xml {
-        zip.add_file("docProps/app.xml", app.clone());
+        add_registered_part(package_graph, &mut zip, "docProps/app.xml", app.clone())?;
     }
     if let Some(ref custom) = custom_props_xml {
-        zip.add_file("docProps/custom.xml", custom.clone());
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            "docProps/custom.xml",
+            custom.clone(),
+        )?;
     }
 
     // Metadata passthrough
     if let Some(ref meta) = metadata_xml {
-        zip.add_file("xl/metadata.xml", meta.clone());
+        add_registered_part(package_graph, &mut zip, "xl/metadata.xml", meta.clone())?;
     }
     // Persons (threaded comments author list)
     if let Some(ref persons) = persons_xml {
-        zip.add_file("xl/persons/person.xml", persons.clone());
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            "xl/persons/person.xml",
+            persons.clone(),
+        )?;
     }
 
     // External links — serialize from domain types
@@ -151,7 +171,12 @@ pub(super) fn write_zip_package(
     let mut zip_ctrl_prop_idx: usize = 0;
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
-        zip.add_file(&format!("xl/worksheets/sheet{}.xml", sheet_num), sheet_xml);
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            &format!("xl/worksheets/sheet{}.xml", sheet_num),
+            sheet_xml,
+        )?;
 
         // Sheet rels
         if let Some(ref rels) = sheet_rels_data[idx] {
@@ -455,9 +480,8 @@ pub(super) fn write_zip_package(
                         idx + 1
                     ))
                 })?;
-            // Derive the .rels path from the drawing path
-            let drawing_filename = drawing_path.rsplit('/').next().unwrap_or("drawing.xml");
-            let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
+            let drawing_rels_path =
+                crate::write::package_graph::part_relationships_path(drawing_path);
 
             if let Some(ref drawing_xml) = drawing_xml_data[idx] {
                 add_registered_part(package_graph, &mut zip, drawing_path, drawing_xml.clone())?;

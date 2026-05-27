@@ -22,10 +22,7 @@ use domain_types::RoundTripContext;
 // but we don't need them as standalone imports — they're accessed via sheet_data.charts.
 
 use super::write_error::WriteError;
-use super::{
-    CompressionMethod, SharedStringsWriter, WorkbookWriter, ZipWriter,
-    create_root_rels_full_with_custom, create_workbook_rels,
-};
+use super::{CompressionMethod, SharedStringsWriter, WorkbookWriter, ZipWriter};
 use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::domain::content_types::write::ContentTypesManager;
@@ -1799,19 +1796,71 @@ pub fn write_xlsx_from_parse_output(
         }
     }
 
-    // ── 3. Build workbook.xml ───────────────────────────────────────────
+    // ── 3. Build package graph facts needed before workbook.xml ─────────
+    // Theme and properties are computed before workbook XML so relationship IDs
+    // come from a resolved graph instead of workbook-local guesses.
+    let theme_xml = output
+        .theme
+        .as_ref()
+        .map(|t| crate::domain::themes::write::theme_writer_from_domain(t, round_trip_ctx));
+    let has_theme = theme_xml.is_some();
+    let core_props_xml: Option<Vec<u8>> = round_trip_ctx
+        .and_then(|ctx| ctx.raw_doc_props_core_xml.clone())
+        .or_else(|| {
+            output
+                .properties
+                .as_ref()
+                .map(crate::domain::metadata::write::write_core_props_xml)
+        });
+    let app_props_xml: Option<Vec<u8>> = round_trip_ctx
+        .and_then(|ctx| ctx.raw_doc_props_app_xml.clone())
+        .or_else(|| {
+            output
+                .properties
+                .as_ref()
+                .map(|_| crate::domain::metadata::write::write_app_props_xml())
+        });
+    let custom_props_xml: Option<Vec<u8>> =
+        round_trip_ctx.and_then(|ctx| ctx.raw_doc_props_custom_xml.clone());
+    let metadata_xml: Option<Vec<u8>> = round_trip_ctx.and_then(|ctx| ctx.raw_metadata_xml.clone());
+    let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
+        Some(crate::domain::comments::write::persons_xml_from_domain(
+            &output.persons,
+        ))
+    } else {
+        round_trip_ctx.and_then(|ctx| ctx.raw_persons_xml.clone())
+    };
+    let package_graph = crate::write::package_graph::build_modeled_workbook_graph(
+        crate::write::package_graph::ModeledWorkbookGraphOptions {
+            sheet_count: output.sheets.len(),
+            has_theme,
+            has_shared_strings: !shared_strings.is_empty(),
+            has_core_props: core_props_xml.is_some(),
+            has_app_props: app_props_xml.is_some(),
+            has_custom_props: custom_props_xml.is_some(),
+            has_metadata: metadata_xml.is_some(),
+            has_persons: persons_xml.is_some(),
+        },
+        round_trip_ctx,
+    )?;
+
+    // ── 4. Build workbook.xml ───────────────────────────────────────────
     let mut workbook_writer = WorkbookWriter::new();
-    // Use original workbook rIds when available for round-trip fidelity,
-    // falling back to sequential rId1, rId2, ... for new workbooks.
-    let has_original_r_ids = round_trip_ctx
-        .map(|ctx| ctx.sheet_workbook_r_ids.len() == output.sheets.len())
-        .unwrap_or(false);
     for (idx, sheet_data) in output.sheets.iter().enumerate() {
-        let r_id = if has_original_r_ids {
-            round_trip_ctx.unwrap().sheet_workbook_r_ids[idx].clone()
-        } else {
-            format!("rId{}", idx + 1)
-        };
+        let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
+        let r_id = package_graph
+            .relationship_id(
+                &crate::write::package_graph::PackageOwner::Workbook,
+                super::REL_WORKSHEET,
+                &sheet_target,
+            )
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing workbook relationship for sheet {}",
+                    idx + 1
+                ))
+            })?
+            .to_string();
         let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
         workbook_writer.add_sheet_def(super::SheetDef::with_state(
             &sheet_data.name,
@@ -1886,41 +1935,6 @@ pub fn write_xlsx_from_parse_output(
         workbook_writer.set_calc_settings(calc);
     }
 
-    // ── 4. Build theme XML (optional) ────────────────────────────────
-    // Pass round_trip_ctx through so the theme writer can use the full parsed
-    // font scheme, format scheme, objectDefaults, etc. for lossless round-tripping.
-    let theme_xml = output
-        .theme
-        .as_ref()
-        .map(|t| crate::domain::themes::write::theme_writer_from_domain(t, round_trip_ctx));
-    let has_theme = theme_xml.is_some();
-
-    // ── 5. Build document properties XML (optional) ──────────────────
-    // Prefer raw XML blobs from RoundTripContext for lossless round-tripping.
-    let core_props_xml: Option<Vec<u8>> = round_trip_ctx
-        .and_then(|ctx| ctx.raw_doc_props_core_xml.clone())
-        .or_else(|| {
-            output
-                .properties
-                .as_ref()
-                .map(crate::domain::metadata::write::write_core_props_xml)
-        });
-    let app_props_xml: Option<Vec<u8>> = round_trip_ctx
-        .and_then(|ctx| ctx.raw_doc_props_app_xml.clone())
-        .or_else(|| {
-            output
-                .properties
-                .as_ref()
-                .map(|_| crate::domain::metadata::write::write_app_props_xml())
-        });
-    // has_doc_props: true when we actually have core/app XML to emit (from
-    // ParseOutput.properties OR from RoundTripContext raw blobs).
-    let has_doc_props = core_props_xml.is_some() || app_props_xml.is_some();
-    let custom_props_xml: Option<Vec<u8>> =
-        round_trip_ctx.and_then(|ctx| ctx.raw_doc_props_custom_xml.clone());
-    let has_custom_props = custom_props_xml.is_some();
-    // xl/metadata.xml passthrough
-    let metadata_xml: Option<Vec<u8>> = round_trip_ctx.and_then(|ctx| ctx.raw_metadata_xml.clone());
     let external_link_exports: Vec<(domain_types::domain::external_link::ExternalLink, String)> =
         round_trip_ctx
             .map(|ctx| {
@@ -1984,38 +1998,7 @@ pub fn write_xlsx_from_parse_output(
             content_types.add_override(part_name, ct);
         }
     }
-    if !content_types.has_override("/xl/workbook.xml") {
-        content_types.add_workbook();
-    }
-    for i in 1..=output.sheets.len() {
-        let path = format!("/xl/worksheets/sheet{}.xml", i);
-        if !content_types.has_override(&path) {
-            content_types.add_worksheet(i);
-        }
-    }
-    if !content_types.has_override("/xl/styles.xml") {
-        content_types.add_styles();
-    }
-    if !shared_strings.is_empty() && !content_types.has_override("/xl/sharedStrings.xml") {
-        content_types.add_shared_strings();
-    }
-    if has_theme && !content_types.has_override("/xl/theme/theme1.xml") {
-        content_types.add_theme();
-    }
-    if has_doc_props {
-        if !content_types.has_override("/docProps/core.xml") {
-            content_types.add_core_properties();
-        }
-        if !content_types.has_override("/docProps/app.xml") {
-            content_types.add_extended_properties();
-        }
-    }
-    if has_custom_props && !content_types.has_override("/docProps/custom.xml") {
-        content_types.add_custom_properties();
-    }
-    if metadata_xml.is_some() && !content_types.has_override("/xl/metadata.xml") {
-        content_types.add_metadata();
-    }
+    package_graph.add_content_types_to(&mut content_types);
     if round_trip_ctx.map_or(false, |ctx| ctx.doc_metadata_label_info.is_some())
         && !content_types.has_override("/docMetadata/LabelInfo.xml")
     {
@@ -2053,15 +2036,7 @@ pub fn write_xlsx_from_parse_output(
             }
         }
     }
-    // Emit persons.xml content type if we have person data, regardless of
-    // whether threaded comments exist (Excel can store persons without threads).
-    let has_persons = !output.persons.is_empty();
-    if has_persons {
-        content_types.add_override(
-            "/xl/persons/person.xml",
-            "application/vnd.ms-excel.person+xml",
-        );
-    }
+    // persons.xml is registered through the package graph when emitted.
     {
         let mut table_global = 0usize;
         for extras in &sheet_extras {
@@ -2268,186 +2243,85 @@ pub fn write_xlsx_from_parse_output(
     }
     let content_types_xml = content_types.to_xml();
 
-    let mut root_rels = if let Some(ctx) = round_trip_ctx {
-        if !ctx.root_relationships.is_empty() {
-            use ooxml_types::shared::OpcRelationship as OoOpc;
-            let opc_rels: Vec<OoOpc> = ctx
-                .root_relationships
-                .iter()
-                .map(|r| OoOpc {
-                    id: r.id.clone(),
-                    rel_type: r.rel_type.clone(),
-                    target: r.target.clone(),
-                    target_mode: r.target_mode.clone(),
-                })
-                .collect();
-            super::RelationshipManager::from_original(&opc_rels)
-        } else {
-            let mut rels = create_root_rels_full_with_custom(
-                "xl/workbook.xml",
-                has_doc_props,
-                has_doc_props,
-                has_custom_props,
-            );
-            if has_web_extensions {
-                rels.add(
-                    crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
-                    "/xl/webextensions/taskpanes.xml",
-                );
-            }
-            rels
-        }
-    } else {
-        let mut rels = create_root_rels_full_with_custom(
-            "xl/workbook.xml",
-            has_doc_props,
-            has_doc_props,
-            has_custom_props,
+    let mut root_rels = package_graph
+        .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Root);
+    if has_web_extensions {
+        root_rels.add(
+            crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
+            "/xl/webextensions/taskpanes.xml",
         );
-        if has_web_extensions {
-            rels.add(
-                crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
-                "/xl/webextensions/taskpanes.xml",
-            );
-        }
-        rels
-    };
-    package_authority::ensure_root_relationships(
-        &mut root_rels,
-        has_doc_props,
-        has_custom_props,
-        has_web_extensions,
-    );
+    }
     let root_rels_xml = root_rels.to_xml();
 
-    // Build workbook relationships (xl/_rels/workbook.xml.rels).
-    //
-    // When round-trip context has original rels AND the sheet count hasn't changed,
-    // replay the original relationships with their original IDs for fidelity.
-    // Otherwise, generate fresh sequential rIds.
-    let using_original_wb_rels = round_trip_ctx
-        .map(|ctx| {
-            !ctx.workbook_relationships.is_empty()
-                && !ctx.sheet_workbook_r_ids.is_empty()
-                && ctx.sheet_workbook_r_ids.len() == output.sheets.len()
-        })
-        .unwrap_or(false);
-
-    let mut workbook_rels = if using_original_wb_rels {
-        let ctx = round_trip_ctx.unwrap();
-        use ooxml_types::shared::OpcRelationship as OoOpc;
-        let opc_rels: Vec<OoOpc> = ctx
-            .workbook_relationships
-            .iter()
-            .filter(|r| {
-                pivot_package::keep_workbook_relationship(&pivot_data, r)
-                    && package_authority::keep_original_workbook_relationship(
-                        ctx,
-                        output.sheets.len(),
-                        r,
-                    )
-            })
-            .map(|r| OoOpc {
-                id: r.id.clone(),
-                rel_type: r.rel_type.clone(),
-                target: r.target.clone(),
-                target_mode: r.target_mode.clone(),
-            })
-            .collect();
-        super::RelationshipManager::from_original(&opc_rels)
-    } else {
-        let mut rels = create_workbook_rels(
-            output.sheets.len(),
-            true,
-            has_theme,
-            !shared_strings.is_empty(),
-        );
-        if metadata_xml.is_some() {
-            rels.add(super::REL_METADATA, "metadata.xml");
-        }
-        // Add customXml relationships
-        if has_custom_xml {
-            if let Some(ctx) = round_trip_ctx {
-                for part in &ctx.custom_xml_parts {
-                    if part.path.starts_with("customXml/item")
-                        && part.path.ends_with(".xml")
-                        && !part.path.contains("itemProps")
-                        && !part.path.contains("_rels/")
-                    {
-                        rels.add(
-                            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
-                            &format!("../{}", part.path),
-                        );
-                    }
+    // Build workbook relationships from the resolved package graph, then append
+    // feature paths that have not migrated to the graph facade yet.
+    let mut workbook_rels = package_graph
+        .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
+    if has_custom_xml && let Some(ctx) = round_trip_ctx {
+        for part in &ctx.custom_xml_parts {
+            if part.path.starts_with("customXml/item")
+                && part.path.ends_with(".xml")
+                && !part.path.contains("itemProps")
+                && !part.path.contains("_rels/")
+            {
+                let target = format!("../{}", part.path);
+                if workbook_rels.find_by_target(&target).is_none() {
+                    workbook_rels.add(
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+                        &target,
+                    );
                 }
             }
         }
-        // Add external link relationships
-        if has_external_links {
-            for (link_def, part_name) in &external_link_exports {
-                if let Some(imported) = &link_def.imported_identity {
-                    if rels.get_by_id(&imported.workbook_rel_id).is_none() {
-                        rels.add_with_id(
-                            &imported.workbook_rel_id,
-                            super::REL_EXTERNAL_LINK,
-                            part_name,
-                        );
-                    }
-                } else if rels.find_by_target(part_name).is_none() {
-                    rels.add(super::REL_EXTERNAL_LINK, part_name);
+    }
+    if has_external_links {
+        for (link_def, part_name) in &external_link_exports {
+            if let Some(imported) = &link_def.imported_identity {
+                if workbook_rels.get_by_id(&imported.workbook_rel_id).is_none() {
+                    workbook_rels.add_with_id(
+                        &imported.workbook_rel_id,
+                        super::REL_EXTERNAL_LINK,
+                        part_name,
+                    );
                 }
+            } else if workbook_rels.find_by_target(part_name).is_none() {
+                workbook_rels.add(super::REL_EXTERNAL_LINK, part_name);
             }
         }
-        // Copy over unmanaged relationship types from original context.
-        if let Some(ctx) = round_trip_ctx {
-            const MANAGED_TYPES: &[&str] = &[
-                super::REL_WORKSHEET,
-                super::REL_STYLES,
-                super::REL_THEME,
-                super::REL_SHARED_STRINGS,
-                super::REL_METADATA,
-                super::REL_EXTERNAL_LINK,
-                super::REL_PIVOT_CACHE,
-                super::REL_PERSON,
-                super::REL_CALC_CHAIN,
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
-            ];
-            for orig_rel in &ctx.workbook_relationships {
-                if !MANAGED_TYPES.contains(&orig_rel.rel_type.as_str()) {
-                    rels.add_with_id(&orig_rel.id, &orig_rel.rel_type, &orig_rel.target);
-                }
+    }
+    if let Some(ctx) = round_trip_ctx {
+        const MANAGED_TYPES: &[&str] = &[
+            super::REL_WORKSHEET,
+            super::REL_STYLES,
+            super::REL_THEME,
+            super::REL_SHARED_STRINGS,
+            super::REL_METADATA,
+            super::REL_EXTERNAL_LINK,
+            super::REL_PIVOT_CACHE,
+            super::REL_PERSON,
+            super::REL_CALC_CHAIN,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+        ];
+        for orig_rel in &ctx.workbook_relationships {
+            if !MANAGED_TYPES.contains(&orig_rel.rel_type.as_str())
+                && workbook_rels.get_by_id(&orig_rel.id).is_none()
+            {
+                workbook_rels.add_with_id(&orig_rel.id, &orig_rel.rel_type, &orig_rel.target);
             }
         }
-        rels
-    };
-
-    package_authority::ensure_workbook_modeled_relationships(
-        &mut workbook_rels,
-        round_trip_ctx,
-        output.sheets.len(),
-        has_theme,
-        !shared_strings.is_empty(),
-        metadata_xml.is_some(),
-    );
-
-    // Build persons.xml if we have person data (Excel can store persons
-    // without threaded comments; gate only on persons being present).
-    // Fall back to raw_persons_xml from RoundTripContext for lossless round-tripping
-    // (preserves empty personList elements that the domain model doesn't capture).
-    let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
-        let xml = crate::domain::comments::write::persons_xml_from_domain(&output.persons);
-        if !workbook_rels.has_rel_type(REL_PERSON) {
-            workbook_rels.add(REL_PERSON, "persons/person.xml");
+        for orig_rel in &ctx.workbook_relationships {
+            if orig_rel.rel_type == super::REL_PIVOT_CACHE
+                && pivot_package::keep_workbook_relationship(&pivot_data, orig_rel)
+                && workbook_rels.get_by_id(&orig_rel.id).is_none()
+            {
+                workbook_rels.add_with_id(&orig_rel.id, &orig_rel.rel_type, &orig_rel.target);
+            }
         }
-        Some(xml)
-    } else if let Some(raw) = round_trip_ctx.and_then(|ctx| ctx.raw_persons_xml.clone()) {
-        if !workbook_rels.has_rel_type(REL_PERSON) {
-            workbook_rels.add(REL_PERSON, "persons/person.xml");
-        }
-        Some(raw)
-    } else {
-        None
-    };
+    }
+
+    if persons_xml.is_some() && !workbook_rels.has_rel_type(REL_PERSON) {
+        workbook_rels.add(REL_PERSON, "persons/person.xml");
+    }
 
     // Pivot cache workbook rels + pivotCaches XML for workbook.xml.
     // Clean imported cache entries come from the typed package sidecar and keep

@@ -27,6 +27,7 @@ pub mod from_parse_output;
 pub mod mc_builder;
 
 pub mod drawing_writer_helpers;
+pub mod package_graph;
 pub mod pivot_writer;
 pub mod relationships;
 pub mod sheet;

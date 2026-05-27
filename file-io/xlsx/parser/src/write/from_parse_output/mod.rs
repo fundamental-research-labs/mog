@@ -169,6 +169,10 @@ struct WorksheetThreadedCommentsGraphEntry {
 }
 
 fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
+    if has_modeled_chart_space_state(chart_spec) {
+        return true;
+    }
+
     if matches!(
         chart_spec.definition,
         Some(domain_types::ChartDefinition::Chart(_))
@@ -177,23 +181,42 @@ fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool 
     }
 
     chart_spec.rt.is_some()
+}
+
+fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
+    chart_spec
+        .title
+        .as_deref()
+        .is_some_and(|title| !title.is_empty())
         || !chart_spec.series.is_empty()
         || chart_spec
             .data_range
             .as_deref()
-            .is_some_and(|r| !r.is_empty())
+            .is_some_and(|range| !range.is_empty())
         || chart_spec.axes.is_some()
         || chart_spec.legend.is_some()
         || chart_spec.data_labels.is_some()
         || chart_spec.data_table.is_some()
+        || chart_spec.style.is_some()
+        || chart_spec.rounded_corners.is_some()
+        || chart_spec.auto_title_deleted.is_some()
+        || chart_spec.show_data_labels_over_max.is_some()
+        || chart_spec.chart_format.is_some()
+        || chart_spec.plot_format.is_some()
+        || chart_spec.title_format.is_some()
+        || chart_spec.title_rich_text.is_some()
+        || chart_spec.title_formula.is_some()
+        || chart_spec.display_blanks_as.is_some()
+        || chart_spec.plot_visible_only.is_some()
 }
 
 fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
-    chart_spec.preserved_chart_xml.is_some()
-        || chart_spec
-            .rt
-            .as_ref()
-            .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some())
+    !should_reconstruct_chart_space(chart_spec)
+        && (chart_spec.preserved_chart_xml.is_some()
+            || chart_spec
+                .rt
+                .as_ref()
+                .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some()))
 }
 
 fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {

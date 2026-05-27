@@ -3743,6 +3743,9 @@ fn generated_chart_does_not_inherit_stale_auxiliary_parts_by_local_index() {
 fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace::default(),
+    ));
     imported_chart.preserved_chart_xml = Some(
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
@@ -3771,6 +3774,8 @@ fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
 #[test]
 fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
     imported_chart.preserved_chart_xml = Some(
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),

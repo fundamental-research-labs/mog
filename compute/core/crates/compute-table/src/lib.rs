@@ -44,7 +44,9 @@ pub mod structured_refs; // Resolution, adjustment, formatting
 
 // -- Styles --
 pub mod custom_styles;
-pub mod styles; // 60 built-in Excel table styles // Custom style CRUD
+pub mod styles; // Built-in Excel table styles
+#[cfg(test)]
+mod styles_tests;
 
 // -- Table features --
 pub mod auto_expansion; // Auto-expand on adjacent cell edit

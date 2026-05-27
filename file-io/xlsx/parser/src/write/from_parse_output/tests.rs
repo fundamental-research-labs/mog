@@ -4506,6 +4506,103 @@ fn conditional_format_dxf_reference_keeps_imported_stylesheet() {
 }
 
 #[test]
+fn clean_imported_stylesheet_ext_lst_is_preserved() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![{
+                let mut cell = make_cell(0, 0, DomainValue::Number(FiniteF64::new(1.0).unwrap()));
+                cell.style_id = Some(0);
+                cell
+            }],
+            ..Default::default()
+        }],
+        style_palette: Vec::new(),
+        ..Default::default()
+    };
+    let imported_styles = br#"
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+          <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+          <borders count="1"><border/></borders>
+          <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+          <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+          <dxfs count="0"/>
+          <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
+        </styleSheet>
+    "#;
+    let ctx = domain_types::RoundTripContext {
+        parsed_stylesheet: Some(crate::domain::styles::read::parse_styles(imported_styles)),
+        styles_ext_lst_xml: Some(
+            br#"<extLst><ext uri="{vendor-style-extension}"><vendor:styleHint value="kept"/></ext></extLst>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains("vendor-style-extension"));
+    assert!(styles_xml.contains("vendor:styleHint"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn mutated_imported_stylesheet_drops_raw_ext_lst() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![{
+                let mut cell = make_cell(0, 0, DomainValue::Number(FiniteF64::new(1.0).unwrap()));
+                cell.style_id = Some(0);
+                cell
+            }],
+            ..Default::default()
+        }],
+        style_palette: vec![DocumentFormat {
+            font: Some(FontFormat {
+                bold: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let imported_styles = br#"
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+          <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+          <borders count="1"><border/></borders>
+          <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+          <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+          <dxfs count="0"/>
+          <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
+        </styleSheet>
+    "#;
+    let ctx = domain_types::RoundTripContext {
+        parsed_stylesheet: Some(crate::domain::styles::read::parse_styles(imported_styles)),
+        styles_ext_lst_xml: Some(
+            br#"<extLst><ext uri="{stale-style-extension}"><vendor:staleStyleNode/></ext></extLst>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(!styles_xml.contains("stale-style-extension"));
+    assert!(!styles_xml.contains("staleStyleNode"));
+    assert!(styles_xml.contains("<b/>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn test_hex_to_color_def() {
     let c = hex_to_color_def("#FF0000");
     assert_eq!(

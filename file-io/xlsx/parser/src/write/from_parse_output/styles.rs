@@ -147,6 +147,10 @@ pub(super) fn append_palette_to_lossless_styles(
     writer: &mut StylesWriter,
     palette: &[DocumentFormat],
 ) {
+    if !palette.is_empty() {
+        writer.ext_lst_raw = None;
+    }
+
     for doc_fmt in palette {
         let font_id = doc_fmt
             .font

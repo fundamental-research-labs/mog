@@ -46,6 +46,7 @@
     "inventory:sdk-contract-graph": "node tools/inventory-sdk-contract-graph.mjs",
     "validate:all-boundaries": "pnpm check:ci:public-boundaries && pnpm build:public-artifacts && pnpm check:release-readiness-naming && pnpm check:binary-wrapper-surfaces && pnpm check:contracts-declaration-identity && pnpm check:declaration-rollups && pnpm check:api-snapshots && pnpm check:external-fixtures -- --skip-build",
     "gate:xlsx:list": "pnpm --filter @mog/xlsx-parser-wasm run gate:list",
+    "gate:xlsx:schedule": "pnpm --filter @mog/xlsx-parser-wasm run gate:schedule",
     "gate:xlsx:plan:smoke": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:smoke",
     "gate:xlsx:plan:golden": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:golden",
     "gate:xlsx:plan:full": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:full",

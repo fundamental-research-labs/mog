@@ -1,8 +1,8 @@
 use xlsx_test_contracts::{
-    enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
-    gate_suite_readiness, FailureFingerprint, FingerprintCategory, FingerprintOwner,
-    FingerprintSeverity, GateName, GateReport, GateScenario, GateStatus, GateSuiteName,
-    REPORT_SCHEMA_VERSION,
+    autonomous_full_run_schedule, enforce_rollout_report_policy, gate_command_contracts,
+    gate_suite_contract, gate_suite_readiness, FailureFingerprint, FingerprintCategory,
+    FingerprintOwner, FingerprintSeverity, GateName, GateReport, GateScenario, GateStatus,
+    GateSuiteName, REPORT_SCHEMA_VERSION,
 };
 
 #[test]
@@ -86,6 +86,21 @@ fn rollout_readiness_blocks_unimplemented_and_unapproved_heavy_gates() {
         .blockers
         .iter()
         .any(|blocker| blocker.code == "heavy-gate-requires-explicit-opt-in"));
+}
+
+#[test]
+fn autonomous_schedule_serializes_full_corpus_before_full_perf() {
+    let schedule = autonomous_full_run_schedule();
+
+    assert_eq!(schedule.name, "xlsx-autonomous-full");
+    assert_eq!(schedule.jobs.len(), 2);
+    assert_eq!(schedule.jobs[0].gate, GateName::CorpusFull);
+    assert_eq!(schedule.jobs[1].gate, GateName::PerfFull);
+    assert!(schedule.jobs.iter().all(|job| job.allow_heavy));
+    assert_ne!(
+        schedule.jobs[0].exclusive_resource_key,
+        schedule.jobs[1].exclusive_resource_key
+    );
 }
 
 #[test]

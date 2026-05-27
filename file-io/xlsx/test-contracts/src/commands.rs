@@ -374,3 +374,64 @@ pub fn gate_suite_contracts() -> Vec<GateSuiteContract> {
         gate_suite_contract(GateSuiteName::AutonomousFull),
     ]
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AutonomousRunSchedule {
+    pub name: String,
+    pub cadence: String,
+    pub execution_policy: String,
+    pub jobs: Vec<AutonomousRunJob>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AutonomousRunJob {
+    pub gate: GateName,
+    pub command: String,
+    pub sequence: u32,
+    pub allow_heavy: bool,
+    pub exclusive_resource_key: String,
+    pub output_report: String,
+    pub notes: Vec<String>,
+}
+
+pub fn autonomous_full_run_schedule() -> AutonomousRunSchedule {
+    let corpus_full = gate_command_contract(GateName::CorpusFull);
+    let perf_full = gate_command_contract(GateName::PerfFull);
+
+    AutonomousRunSchedule {
+        name: "xlsx-autonomous-full".to_string(),
+        cadence: "nightly-or-explicit-autonomous-worker".to_string(),
+        execution_policy:
+            "run correctness discovery before performance discovery; do not overlap perf-full with CPU-heavy corpus gates"
+                .to_string(),
+        jobs: vec![
+            AutonomousRunJob {
+                gate: GateName::CorpusFull,
+                command: corpus_full.command,
+                sequence: 1,
+                allow_heavy: true,
+                exclusive_resource_key: "xlsx-corpus-cpu-heavy".to_string(),
+                output_report: "xlsx-corpus-full-report.json".to_string(),
+                notes: vec![
+                    "map every failure to a stable fingerprint".to_string(),
+                    "promote recurring failures into Lane B matrix rows or explicit policy"
+                        .to_string(),
+                ],
+            },
+            AutonomousRunJob {
+                gate: GateName::PerfFull,
+                command: perf_full.command,
+                sequence: 2,
+                allow_heavy: true,
+                exclusive_resource_key: "xlsx-perf-cpu-exclusive".to_string(),
+                output_report: "xlsx-perf-full-report.json".to_string(),
+                notes: vec![
+                    "compare by workbook class and phase".to_string(),
+                    "budget changes require a named reason".to_string(),
+                ],
+            },
+        ],
+    }
+}

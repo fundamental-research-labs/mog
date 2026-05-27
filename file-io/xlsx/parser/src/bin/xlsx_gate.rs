@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use xlsx_parser::testing::{
-    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, GateSuiteName, MetricValue,
-    PerfGateOptions, enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
-    gate_suite_contracts, gate_suite_readiness, run_ooxml_contract_gate, run_perf_gate,
-    validate_package_graph_bytes,
+    autonomous_full_run_schedule, enforce_rollout_report_policy, gate_command_contracts,
+    gate_suite_contract, gate_suite_contracts, gate_suite_readiness, run_ooxml_contract_gate,
+    run_perf_gate, validate_package_graph_bytes, GateName, GateReport, GateReportDomain,
+    GateScenario, GateStatus, GateSuiteName, MetricValue, PerfGateOptions,
 };
 
 fn main() {
@@ -27,6 +27,10 @@ fn main() {
     }
     if gate_name == "--suites" {
         print_json(&gate_suite_contracts());
+        return;
+    }
+    if gate_name == "--schedule" {
+        print_json(&autonomous_full_run_schedule());
         return;
     }
     if gate_name == "--plan" {
@@ -243,6 +247,7 @@ fn print_usage() {
     );
     eprintln!("       xlsx-gate --list");
     eprintln!("       xlsx-gate --suites");
+    eprintln!("       xlsx-gate --schedule");
     eprintln!("       xlsx-gate --plan <local-smoke|ci-golden|autonomous-full>");
     eprintln!(
         "       xlsx-gate --check-suite <local-smoke|ci-golden|autonomous-full> [--allow-heavy]"

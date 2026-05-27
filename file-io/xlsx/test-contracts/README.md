@@ -39,6 +39,7 @@ shared command metadata and rollout suites from the Rust contracts:
 
 ```bash
 pnpm gate:xlsx:list
+pnpm gate:xlsx:schedule
 pnpm gate:xlsx:plan:smoke
 pnpm gate:xlsx:plan:golden
 pnpm gate:xlsx:plan:full

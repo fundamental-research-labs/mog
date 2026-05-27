@@ -82,22 +82,38 @@ pub fn round_trip_opaque_subgraphs(
     let Some(ctx) = round_trip_ctx else {
         return Vec::new();
     };
-    let mut subgraphs = Vec::new();
-    if ctx.opaque_package_subgraphs.is_empty() {
-        subgraphs.extend(lower_legacy_web_extensions(ctx));
-        subgraphs.extend(lower_legacy_custom_xml(ctx));
-    } else {
-        subgraphs.extend(
-            ctx.opaque_package_subgraphs
-                .iter()
-                .filter_map(normalize_explicit_opaque_subgraph),
-        );
-    }
+    let mut subgraphs = explicit_or_legacy_opaque_subgraphs(ctx);
     subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
     subgraphs.retain(|subgraph| !is_worksheet_custom_property_subgraph(subgraph));
     remove_feature_owned_hf_vml_parts(ctx, output, &mut subgraphs);
     subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
+}
+
+pub fn round_trip_worksheet_custom_property_subgraphs(
+    round_trip_ctx: Option<&RoundTripContext>,
+) -> Vec<OpaquePackageSubgraph> {
+    let Some(ctx) = round_trip_ctx else {
+        return Vec::new();
+    };
+    explicit_or_legacy_opaque_subgraphs(ctx)
+        .into_iter()
+        .filter(is_worksheet_custom_property_subgraph)
+        .collect()
+}
+
+fn explicit_or_legacy_opaque_subgraphs(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
+    if ctx.opaque_package_subgraphs.is_empty() {
+        let mut subgraphs = Vec::new();
+        subgraphs.extend(lower_legacy_web_extensions(ctx));
+        subgraphs.extend(lower_legacy_custom_xml(ctx));
+        subgraphs
+    } else {
+        ctx.opaque_package_subgraphs
+            .iter()
+            .filter_map(normalize_explicit_opaque_subgraph)
+            .collect()
+    }
 }
 
 fn is_shadowed_worksheet_drawing_subgraph(

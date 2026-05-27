@@ -70,10 +70,9 @@ fn clean_opaque_custom_property_parts(
     sheet_idx: usize,
 ) -> HashMap<String, (String, Vec<u8>)> {
     let mut parts_by_relationship_id = HashMap::new();
-    for subgraph in &round_trip_ctx.opaque_package_subgraphs {
-        if subgraph.ownership != OpaquePackageOwnership::CleanImported {
-            continue;
-        }
+    for subgraph in crate::write::opaque_subgraph::round_trip_worksheet_custom_property_subgraphs(
+        Some(round_trip_ctx),
+    ) {
         let mut relationships = Vec::with_capacity(1 + subgraph.relationships.len());
         relationships.push(&subgraph.owner_relationship);
         relationships.extend(subgraph.relationships.iter());

@@ -831,6 +831,50 @@ fn clean_worksheet_custom_properties_use_graph_registered_parts_and_resolved_ids
 }
 
 #[test]
+fn worksheet_custom_properties_require_closed_registered_subgraph() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let mut custom_property_subgraph = clean_opaque_worksheet_custom_property_subgraph("rIdCustom");
+    custom_property_subgraph.owner_relationship.target =
+        domain_types::OpaqueRelationshipTarget::InternalPart {
+            path: "xl/customProperty/missing.xml".to_string(),
+        };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rIdCustom".to_string(),
+                rel_type: worksheet_custom_properties::REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+                target: "../customProperty/missing.xml".to_string(),
+                target_mode: None,
+            }],
+            custom_properties_xml: Some(
+                r#"<customProperties><customPr r:id="rIdCustom" name="StaleProperty"/></customProperties>"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        opaque_package_subgraphs: vec![custom_property_subgraph],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(!sheet_xml.contains("<customProperties"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/customProperty/item1.xml"));
+    assert!(!archive.contains("xl/customProperty/missing.xml"));
+    assert!(!content_types.contains("/xl/customProperty/item1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn worksheet_custom_properties_xml_uses_graph_resolved_relationship_id_after_collision() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

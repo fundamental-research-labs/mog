@@ -19,6 +19,7 @@ mod pivot_package;
 mod sheet_builder;
 mod sheet_preservation;
 mod styles;
+mod vml_merge;
 
 use domain_types::Hyperlink;
 use domain_types::ParseOutput;
@@ -2181,8 +2182,20 @@ pub fn write_xlsx_from_parse_output(
                 .to_string();
             ctrl_prop_r_ids.push(r_id);
         }
-        let controls_writer = ControlsWriter::new(extras.form_controls.clone());
-        let ctrl_xml = controls_writer.write_worksheet_controls(1025, &ctrl_prop_r_ids);
+        let form_controls = if extras.comments.is_some() {
+            let base_shape_id =
+                vml_merge::form_control_base_shape_id(&output.sheets[sheet_idx].comments);
+            vml_merge::controls_with_shape_ids(&extras.form_controls, base_shape_id)
+        } else {
+            extras.form_controls.clone()
+        };
+        let controls_writer = ControlsWriter::new(form_controls);
+        let base_shape_id = if extras.comments.is_some() {
+            vml_merge::form_control_base_shape_id(&output.sheets[sheet_idx].comments)
+        } else {
+            1025
+        };
+        let ctrl_xml = controls_writer.write_worksheet_controls(base_shape_id, &ctrl_prop_r_ids);
         sheet_writers[sheet_idx].set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
     }
 
@@ -2715,7 +2728,26 @@ pub fn write_xlsx_from_parse_output(
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", zip_vml_idx));
             zip.add_file(&comment_path, comments_xml.clone());
-            zip.add_file(&vml_path, vml_xml.clone());
+            let merged_vml = if !sheet_extras[idx].form_controls.is_empty() {
+                let base_shape_id =
+                    vml_merge::form_control_base_shape_id(&output.sheets[idx].comments);
+                let form_controls = vml_merge::controls_with_shape_ids(
+                    &sheet_extras[idx].form_controls,
+                    base_shape_id,
+                );
+                let controls_writer = ControlsWriter::new(form_controls);
+                let form_control_vml = controls_writer.write_vml_form_controls(base_shape_id);
+                vml_merge::merge_form_controls_into_comment_vml(vml_xml, &form_control_vml)
+                    .ok_or_else(|| {
+                        WriteError::PackageIntegrity(format!(
+                            "failed to merge form-control VML into comment VML for sheet {}",
+                            idx + 1
+                        ))
+                    })?
+            } else {
+                vml_xml.clone()
+            };
+            zip.add_file(&vml_path, merged_vml);
         }
 
         // Header/footer image VML — generated from domain types
@@ -2742,9 +2774,17 @@ pub fn write_xlsx_from_parse_output(
 
         // Form controls: ctrlProp XML files and VML drawing
         if !sheet_extras[idx].form_controls.is_empty() {
-            let controls = &sheet_extras[idx].form_controls;
+            let base_shape_id = if sheet_extras[idx].comments.is_some() {
+                vml_merge::form_control_base_shape_id(&output.sheets[idx].comments)
+            } else {
+                1025
+            };
+            let controls = if sheet_extras[idx].comments.is_some() {
+                vml_merge::controls_with_shape_ids(&sheet_extras[idx].form_controls, base_shape_id)
+            } else {
+                sheet_extras[idx].form_controls.clone()
+            };
             let controls_writer = ControlsWriter::new(controls.clone());
-            let base_shape_id: u32 = 1025;
 
             // Write ctrlProp XML files
             for i in 0..controls.len() {

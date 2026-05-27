@@ -2742,6 +2742,103 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
 }
 
 #[test]
+fn comments_and_form_controls_share_generated_vml_without_raw_replay() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        comments: vec![Comment {
+            cell_ref: "A1".to_string(),
+            author: "Tester".to_string(),
+            content: Some("Header comment".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        floating_objects: vec![domain_types::domain::floating_object::FloatingObject {
+            common: domain_types::domain::floating_object::FloatingObjectCommon {
+                name: "Check Box 1".to_string(),
+                anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                    anchor_row: 1,
+                    anchor_col: 1,
+                    end_row: Some(3),
+                    end_col: Some(3),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            data: domain_types::domain::floating_object::FloatingObjectData::FormControl(
+                domain_types::domain::floating_object::FormControlData {
+                    control_type: "CheckBox".to_string(),
+                    cell_link: Some("$B$2".to_string()),
+                    input_range: None,
+                    ooxml: Some(
+                        domain_types::domain::floating_object::FormControlOoxmlProps {
+                            shape_id: 1025,
+                            checked: Some("Checked".to_string()),
+                            anchor_source: "Modern".to_string(),
+                            ..Default::default()
+                        },
+                    ),
+                },
+            ),
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId9".to_string(),
+                rel_type: REL_VML_DRAWING.to_string(),
+                target: "../drawings/vmlDrawing9.vml".to_string(),
+                target_mode: None,
+            }],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing9.vml".to_string(),
+                data: b"<xml><rawCombinedVmlSentinel/></xml>".to_vec(),
+                rels: None,
+            }],
+            worksheet_controls_xml: Some(
+                r#"<mc:AlternateContent><controls><control shapeId="1025" r:id="rId99" name="Raw Control"/></controls><rawControlsSentinel/></mc:AlternateContent>"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let vml_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_VML_DRAWING)
+        .expect("shared VML relationship should be emitted");
+    let vml_xml =
+        String::from_utf8(archive.read_file("xl/drawings/vmlDrawing1.vml").unwrap()).unwrap();
+
+    assert_eq!(
+        rels.iter()
+            .filter(|rel| rel.rel_type == REL_VML_DRAWING)
+            .count(),
+        1
+    );
+    assert!(sheet_xml.contains(&format!(r#"<legacyDrawing r:id="{}"/>"#, vml_rel.id)));
+    assert!(sheet_xml.contains(r#"shapeId="1026""#));
+    assert!(!sheet_xml.contains("rawControlsSentinel"));
+    assert!(!sheet_xml.contains(r#"shapeId="1025" r:id="rId99""#));
+    assert!(vml_xml.contains("ObjectType=\"Note\""));
+    assert!(vml_xml.contains("ObjectType=\"Checkbox\""));
+    assert!(vml_xml.contains("id=\"_x0000_s1025\""));
+    assert!(vml_xml.contains("id=\"_x0000_s1026\""));
+    assert!(!vml_xml.contains("rawCombinedVmlSentinel"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn header_footer_vml_relationship_uses_graph_registered_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

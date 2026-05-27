@@ -270,3 +270,140 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnClean));
     registry.register(Box::new(FnT));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{bool_val, err, null, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::{CellError, CellValue};
+
+    #[test]
+    fn test_upper_lower() {
+        assert_eq!(FnUpper.call(&[text("hello")]), text("HELLO"));
+        assert_eq!(FnLower.call(&[text("HELLO")]), text("hello"));
+    }
+
+    #[test]
+    fn test_trim() {
+        let f = FnTrim;
+        assert_eq!(f.call(&[text("  hello  world  ")]), text("hello world"));
+    }
+
+    #[test]
+    fn test_proper() {
+        let f = FnProper;
+        assert_eq!(f.call(&[text("hello world")]), text("Hello World"));
+        assert_eq!(f.call(&[text("HELLO WORLD")]), text("Hello World"));
+        assert_eq!(f.call(&[text("hello-world")]), text("Hello-World"));
+        assert_eq!(f.call(&[text("can't stop")]), text("Can'T Stop"));
+        assert_eq!(f.call(&[text("")]), text(""));
+        assert_eq!(f.call(&[num(123.0)]), text("123"));
+    }
+
+    #[test]
+    fn test_clean() {
+        let f = FnClean;
+        // Remove control characters (ASCII 0-31)
+        assert_eq!(f.call(&[text("hello\x00world")]), text("helloworld"));
+        assert_eq!(f.call(&[text("abc\x01\x02def")]), text("abcdef"));
+        assert_eq!(f.call(&[text("hello")]), text("hello"));
+    }
+
+    #[test]
+    fn test_t() {
+        let f = FnT;
+        assert_eq!(f.call(&[text("hello")]), text("hello"));
+        assert_eq!(f.call(&[num(42.0)]), text(""));
+        assert_eq!(f.call(&[bool_val(true)]), text(""));
+        assert_eq!(f.call(&[null()]), text(""));
+    }
+
+    #[test]
+    fn test_t_error_propagation() {
+        let f = FnT;
+        assert_eq!(f.call(&[err(CellError::Na)]), err(CellError::Na));
+    }
+
+    #[test]
+    fn test_trim_ascii_space_only() {
+        let f = FnTrim;
+        // Tab should be preserved (not treated as whitespace)
+        assert_eq!(f.call(&[text("hello\tworld")]), text("hello\tworld"));
+        // Newline should be preserved
+        assert_eq!(f.call(&[text("hello\nworld")]), text("hello\nworld"));
+        // Only ASCII spaces are trimmed and collapsed
+        assert_eq!(f.call(&[text("  hello   world  ")]), text("hello world"));
+        // Non-breaking space (U+00A0) should be preserved
+        assert_eq!(
+            f.call(&[text("hello\u{00A0}world")]),
+            text("hello\u{00A0}world")
+        );
+    }
+
+    #[test]
+    fn test_lower_array_preserves_structure() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![text("ABC"), text("DEF"), text("GHI")]]);
+        let result = reg.call("LOWER", &[arr]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.get(0, 0).unwrap(), &text("abc"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("def"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("ghi"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_upper_array_preserves_structure() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![text("abc")], vec![text("def")]]);
+        let result = reg.call("UPPER", &[arr]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("ABC"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("DEF"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_trim_array() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![text("  hello  "), text(" world ")]]);
+        let result = reg.call("TRIM", &[arr]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.get(0, 0).unwrap(), &text("hello"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("world"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_proper_array() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![text("hello world"), text("foo bar")]]);
+        let result = reg.call("PROPER", &[arr]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.get(0, 0).unwrap(), &text("Hello World"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("Foo Bar"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    // ===================================================================
+    // Comprehensive first-principles tests for text function submodules
+    // ===================================================================
+
+    // -------------------------------------------------------------------
+    // byte_ops.rs — DBCS byte-length functions (aliases in SBCS locale)
+    // -------------------------------------------------------------------
+}

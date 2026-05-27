@@ -772,3 +772,555 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnToPureNumber));
     registry.register(Box::new(FnToText));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{bool_val, control, err, null, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::{CellError, CellValue};
+
+    #[test]
+    fn test_char_code() {
+        assert_eq!(FnChar.call(&[num(65.0)]), text("A"));
+        assert_eq!(FnCode.call(&[text("A")]), num(65.0));
+    }
+
+    #[test]
+    fn test_value() {
+        let f = FnValue;
+        assert_eq!(f.call(&[text("42.5")]), num(42.5));
+        assert_eq!(f.call(&[text("hello")]), err(CellError::Value));
+        assert_eq!(f.call(&[text("$1,234.56")]), num(1234.56));
+    }
+
+    #[test]
+    fn test_dollar() {
+        let f = FnDollar;
+        assert_eq!(f.call(&[num(1234.567)]), text("$1,234.57"));
+        assert_eq!(f.call(&[num(1234.567), num(1.0)]), text("$1,234.6"));
+        assert_eq!(f.call(&[num(0.0)]), text("$0.00"));
+    }
+
+    #[test]
+    fn test_dollar_negative() {
+        let f = FnDollar;
+        assert_eq!(f.call(&[num(-1234.56)]), text("($1,234.56)"));
+    }
+
+    #[test]
+    fn test_fixed() {
+        let f = FnFixed;
+        assert_eq!(f.call(&[num(1234.567), num(2.0)]), text("1,234.57"));
+        assert_eq!(
+            f.call(&[num(1234.567), num(2.0), bool_val(true)]),
+            text("1234.57")
+        );
+        assert_eq!(f.call(&[num(1234.0)]), text("1,234.00"));
+    }
+
+    #[test]
+    fn test_numbervalue() {
+        let f = FnNumberValue;
+        assert_eq!(f.call(&[text("1,234.56")]), num(1234.56));
+        // European format: decimal=comma, group=period
+        assert_eq!(
+            f.call(&[text("1.234,56"), text(","), text(".")]),
+            num(1234.56)
+        );
+        // Percentage
+        assert_eq!(f.call(&[text("50%")]), num(0.5));
+        // Empty text -> 0 (Excel behavior)
+        assert_eq!(f.call(&[text("")]), num(0.0));
+    }
+
+    #[test]
+    fn test_valuetotext() {
+        let f = FnValueToText;
+        assert_eq!(f.call(&[text("hello")]), text("hello"));
+        assert_eq!(f.call(&[text("hello"), num(1.0)]), text("\"hello\""));
+        assert_eq!(f.call(&[num(42.0)]), text("42"));
+        assert_eq!(f.call(&[bool_val(true)]), text("TRUE"));
+        assert_eq!(f.call(&[null()]), text(""));
+    }
+
+    #[test]
+    fn test_sheets_to_format_conversions_direct_scalar_classes() {
+        let inputs = [
+            num(12.5),
+            text("12.5"),
+            bool_val(true),
+            null(),
+            control(true),
+            err(CellError::Div0),
+        ];
+        for function in [
+            &FnToDate as &dyn crate::PureFunction,
+            &FnToDollars,
+            &FnToPercent,
+            &FnToPureNumber,
+        ] {
+            for input in &inputs {
+                assert_eq!(
+                    function.call(std::slice::from_ref(input)),
+                    input.clone(),
+                    "{} should return {:?} unchanged",
+                    function.name(),
+                    input
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_to_text_direct_scalar_classes() {
+        let f = FnToText;
+        assert_eq!(f.call(&[num(24.0)]), text("24"));
+        assert_eq!(f.call(&[num(12.345678901234567)]), text("12.3456789012346"));
+        assert_eq!(f.call(&[text("hello")]), text("hello"));
+        assert_eq!(f.call(&[bool_val(false)]), bool_val(false));
+        assert_eq!(f.call(&[null()]), null());
+        assert_eq!(f.call(&[control(true)]), control(true));
+        assert_eq!(f.call(&[err(CellError::Na)]), err(CellError::Na));
+    }
+
+    #[test]
+    fn test_arraytotext_concise() {
+        let f = FnArrayToText;
+        let arr = CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0)]]);
+        assert_eq!(f.call(&[arr, num(0.0)]), text("1, 2, 3"));
+    }
+
+    #[test]
+    fn test_arraytotext_strict() {
+        let f = FnArrayToText;
+        // Single-row 2D array: {{1,"hello",3}}
+        let arr = CellValue::from_rows(vec![vec![num(1.0), text("hello"), num(3.0)]]);
+        assert_eq!(f.call(&[arr, num(1.0)]), text("{{1,\"hello\",3}}"));
+        // Multi-row 2D array: {{1,2};{3,4}}
+        let arr2 = CellValue::from_rows(vec![vec![num(1.0), num(2.0)], vec![num(3.0), num(4.0)]]);
+        assert_eq!(f.call(&[arr2, num(1.0)]), text("{{1,2};{3,4}}"));
+    }
+
+    #[test]
+    fn test_arraytotext_single_value() {
+        let f = FnArrayToText;
+        assert_eq!(f.call(&[num(42.0)]), text("42"));
+        assert_eq!(f.call(&[text("hi"), num(1.0)]), text("\"hi\""));
+    }
+
+    #[test]
+    fn test_numbervalue_empty_returns_zero() {
+        let f = FnNumberValue;
+        assert_eq!(f.call(&[text("")]), num(0.0));
+        assert_eq!(f.call(&[text("  ")]), num(0.0)); // whitespace-only also empty after trim
+    }
+
+    // -------------------------------------------------------------------
+    // TEXTBEFORE/TEXTAFTER overlapping match (non-overlapping per Excel)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_value_parenthetical_negative() {
+        let f = FnValue;
+        assert_eq!(f.call(&[text("(100)")]), num(-100.0));
+        assert_eq!(f.call(&[text("($1,234.56)")]), num(-1234.56));
+    }
+
+    #[test]
+    fn test_value_currency_symbols() {
+        let f = FnValue;
+        assert_eq!(f.call(&[text("$100")]), num(100.0));
+        // Euro symbol
+        assert_eq!(f.call(&[text("\u{20AC}100")]), num(100.0));
+        // Pound symbol
+        assert_eq!(f.call(&[text("\u{00A3}100")]), num(100.0));
+        // Yen symbol
+        assert_eq!(f.call(&[text("\u{00A5}100")]), num(100.0));
+    }
+
+    // -------------------------------------------------------------------
+    // TEXT: array-lifting via registry (SUMPRODUCT compatibility)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_char_uppercase_a() {
+        assert_eq!(FnChar.call(&[num(65.0)]), text("A"));
+    }
+
+    #[test]
+    fn test_char_lowercase_a() {
+        assert_eq!(FnChar.call(&[num(97.0)]), text("a"));
+    }
+
+    #[test]
+    fn test_char_newline() {
+        assert_eq!(FnChar.call(&[num(10.0)]), text("\n"));
+    }
+
+    #[test]
+    fn test_char_space() {
+        assert_eq!(FnChar.call(&[num(32.0)]), text(" "));
+    }
+
+    #[test]
+    fn test_char_out_of_range_zero() {
+        assert_eq!(FnChar.call(&[num(0.0)]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_char_out_of_range_256() {
+        assert_eq!(FnChar.call(&[num(256.0)]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_char_boundary_255() {
+        // Code 255 should work (max valid)
+        let result = FnChar.call(&[num(255.0)]);
+        assert!(matches!(result, CellValue::Text(_)));
+    }
+
+    #[test]
+    fn test_char_boundary_1() {
+        // Code 1 should work (min valid)
+        let result = FnChar.call(&[num(1.0)]);
+        assert!(matches!(result, CellValue::Text(_)));
+    }
+
+    #[test]
+    fn test_code_uppercase_a() {
+        assert_eq!(FnCode.call(&[text("A")]), num(65.0));
+    }
+
+    #[test]
+    fn test_code_lowercase_a() {
+        assert_eq!(FnCode.call(&[text("a")]), num(97.0));
+    }
+
+    #[test]
+    fn test_code_takes_first_char() {
+        // CODE only looks at the first character
+        assert_eq!(FnCode.call(&[text("ABC")]), num(65.0));
+    }
+
+    #[test]
+    fn test_code_empty_string_error() {
+        assert_eq!(FnCode.call(&[text("")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_code_unicode_char() {
+        // Euro sign U+20AC = 8364
+        assert_eq!(FnCode.call(&[text("\u{20AC}")]), num(8364.0));
+    }
+
+    #[test]
+    fn test_dollar_default_2_decimals() {
+        assert_eq!(FnDollar.call(&[num(1234.567)]), text("$1,234.57"));
+    }
+
+    #[test]
+    fn test_dollar_1_decimal() {
+        assert_eq!(FnDollar.call(&[num(1234.567), num(1.0)]), text("$1,234.6"));
+    }
+
+    #[test]
+    fn test_dollar_0_decimals() {
+        assert_eq!(FnDollar.call(&[num(1234.567), num(0.0)]), text("$1,235"));
+    }
+
+    #[test]
+    fn test_dollar_negative_value() {
+        assert_eq!(FnDollar.call(&[num(-1234.56)]), text("($1,234.56)"));
+    }
+
+    #[test]
+    fn test_dollar_zero() {
+        assert_eq!(FnDollar.call(&[num(0.0)]), text("$0.00"));
+    }
+
+    #[test]
+    fn test_dollar_error_propagation() {
+        assert_eq!(FnDollar.call(&[err(CellError::Div0)]), err(CellError::Div0));
+    }
+
+    #[test]
+    fn test_fixed_default_2_decimals_with_commas() {
+        // FIXED(1234.567) defaults to 2 decimals with commas
+        assert_eq!(FnFixed.call(&[num(1234.567)]), text("1,234.57"));
+    }
+
+    #[test]
+    fn test_fixed_2_decimals_with_commas() {
+        assert_eq!(FnFixed.call(&[num(1234.567), num(2.0)]), text("1,234.57"));
+    }
+
+    #[test]
+    fn test_fixed_2_decimals_no_commas() {
+        assert_eq!(
+            FnFixed.call(&[num(1234.567), num(2.0), bool_val(true)]),
+            text("1234.57")
+        );
+    }
+
+    #[test]
+    fn test_fixed_0_decimals() {
+        assert_eq!(FnFixed.call(&[num(1234.567), num(0.0)]), text("1,235"));
+    }
+
+    #[test]
+    fn test_fixed_negative_value() {
+        assert_eq!(FnFixed.call(&[num(-1234.56), num(2.0)]), text("-1,234.56"));
+    }
+
+    #[test]
+    fn test_fixed_error_propagation() {
+        assert_eq!(FnFixed.call(&[err(CellError::Na)]), err(CellError::Na));
+    }
+
+    #[test]
+    fn test_numbervalue_standard() {
+        assert_eq!(FnNumberValue.call(&[text("1,234.56")]), num(1234.56));
+    }
+
+    #[test]
+    fn test_numbervalue_european_format() {
+        assert_eq!(
+            FnNumberValue.call(&[text("1.234,56"), text(","), text(".")]),
+            num(1234.56)
+        );
+    }
+
+    #[test]
+    fn test_numbervalue_percentage() {
+        assert_eq!(FnNumberValue.call(&[text("50%")]), num(0.5));
+    }
+
+    #[test]
+    fn test_numbervalue_empty_is_zero() {
+        assert_eq!(FnNumberValue.call(&[text("")]), num(0.0));
+    }
+
+    #[test]
+    fn test_numbervalue_whitespace_is_zero() {
+        assert_eq!(FnNumberValue.call(&[text("   ")]), num(0.0));
+    }
+
+    #[test]
+    fn test_numbervalue_invalid_text() {
+        assert_eq!(FnNumberValue.call(&[text("abc")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_numbervalue_currency_stripped() {
+        assert_eq!(FnNumberValue.call(&[text("$100")]), num(100.0));
+        assert_eq!(FnNumberValue.call(&[text("\u{20AC}100")]), num(100.0));
+    }
+
+    #[test]
+    fn test_valuetotext_number() {
+        assert_eq!(FnValueToText.call(&[num(123.0)]), text("123"));
+    }
+
+    #[test]
+    fn test_valuetotext_boolean() {
+        assert_eq!(FnValueToText.call(&[bool_val(true)]), text("TRUE"));
+        assert_eq!(FnValueToText.call(&[bool_val(false)]), text("FALSE"));
+    }
+
+    #[test]
+    fn test_valuetotext_text_concise() {
+        assert_eq!(FnValueToText.call(&[text("hello")]), text("hello"));
+    }
+
+    #[test]
+    fn test_valuetotext_text_strict() {
+        assert_eq!(
+            FnValueToText.call(&[text("hello"), num(1.0)]),
+            text("\"hello\"")
+        );
+    }
+
+    #[test]
+    fn test_valuetotext_null() {
+        assert_eq!(FnValueToText.call(&[null()]), text(""));
+    }
+
+    #[test]
+    fn test_valuetotext_invalid_format() {
+        assert_eq!(
+            FnValueToText.call(&[text("x"), num(2.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_arraytotext_concise_multirow() {
+        let arr = CellValue::from_rows(vec![vec![num(1.0), num(2.0)], vec![num(3.0), num(4.0)]]);
+        assert_eq!(FnArrayToText.call(&[arr, num(0.0)]), text("1, 2; 3, 4"));
+    }
+
+    #[test]
+    fn test_arraytotext_strict_with_text() {
+        let arr = CellValue::from_rows(vec![vec![text("hi"), num(1.0)]]);
+        assert_eq!(FnArrayToText.call(&[arr, num(1.0)]), text("{{\"hi\",1}}"));
+    }
+
+    #[test]
+    fn test_arraytotext_boolean_value() {
+        let arr = CellValue::from_rows(vec![vec![bool_val(true), bool_val(false)]]);
+        assert_eq!(FnArrayToText.call(&[arr, num(0.0)]), text("TRUE, FALSE"));
+    }
+
+    #[test]
+    fn test_value_numeric_string() {
+        assert_eq!(FnValue.call(&[text("42.5")]), num(42.5));
+    }
+
+    #[test]
+    fn test_value_non_numeric_error() {
+        assert_eq!(FnValue.call(&[text("hello")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_value_currency() {
+        assert_eq!(FnValue.call(&[text("$1,234.56")]), num(1234.56));
+    }
+
+    #[test]
+    fn test_value_percentage() {
+        assert_eq!(FnValue.call(&[text("50%")]), num(0.5));
+    }
+
+    #[test]
+    fn test_value_empty_string_error() {
+        assert_eq!(FnValue.call(&[text("")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_value_number_passthrough() {
+        assert_eq!(FnValue.call(&[num(42.0)]), num(42.0));
+    }
+
+    #[test]
+    fn test_value_boolean_coercion() {
+        assert_eq!(FnValue.call(&[bool_val(true)]), num(1.0));
+        assert_eq!(FnValue.call(&[bool_val(false)]), num(0.0));
+    }
+
+    #[test]
+    fn test_value_parens_negative_number() {
+        assert_eq!(FnValue.call(&[text("(100)")]), num(-100.0));
+    }
+
+    // -------------------------------------------------------------------
+    // joining.rs — CONCATENATE, CONCAT, TEXTJOIN, REPT, EXACT
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_sheets_to_conversion_registry_array_lift() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![
+            vec![num(1.0), text("x")],
+            vec![bool_val(true), null()],
+        ]);
+
+        for name in ["TO_DATE", "TO_DOLLARS", "TO_PERCENT", "TO_PURE_NUMBER"] {
+            assert_eq!(reg.call(name, std::slice::from_ref(&arr)), arr);
+        }
+
+        assert_eq!(
+            reg.call("TO_TEXT", &[arr]),
+            CellValue::from_rows(vec![
+                vec![text("1"), text("x")],
+                vec![bool_val(true), null()]
+            ])
+        );
+    }
+
+    #[test]
+    fn test_text_array_numbers() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![num(1.5), num(2.7), num(3.1)]]);
+        let result = reg.call("TEXT", &[arr, text("0.0")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.get(0, 0).unwrap(), &text("1.5"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("2.7"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("3.1"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_text_array_dates() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![num(44562.0)], vec![num(44593.0)]]);
+        let result = reg.call("TEXT", &[arr, text("mmm-yy")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("Jan-22"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("Feb-22"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_text_array_with_errors() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![
+            num(1.0),
+            CellValue::Error(CellError::Div0, None),
+            num(3.0),
+        ]]);
+        let result = reg.call("TEXT", &[arr, text("0")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.get(0, 0).unwrap(), &text("1"));
+                assert_eq!(arr.get(0, 1).unwrap(), &err(CellError::Div0));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("3"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_text_array_preserves_2d_shape() {
+        let reg = crate::FunctionRegistry::new();
+        let arr = CellValue::from_rows(vec![vec![num(1.0), num(2.0)], vec![num(3.0), num(4.0)]]);
+        let result = reg.call("TEXT", &[arr, text("0")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.cols(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("1"));
+                assert_eq!(arr.get(1, 1).unwrap(), &text("4"));
+            }
+            other => panic!("Expected Array, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_text_scalar_unchanged() {
+        let f = FnText;
+        assert_eq!(f.call(&[num(0.5), text("0%")]), text("50%"));
+    }
+
+    // --- Bulk text function array tests ---
+
+    #[test]
+    fn test_text_format_number() {
+        assert_eq!(FnText.call(&[num(0.5), text("0%")]), text("50%"));
+    }
+
+    #[test]
+    fn test_text_at_sign_format() {
+        assert_eq!(FnText.call(&[num(1234.5), text("@")]), text("1234.5"));
+        assert_eq!(FnText.call(&[text("hello"), text("@")]), text("hello"));
+        assert_eq!(FnText.call(&[bool_val(true), text("@")]), text("TRUE"));
+        assert_eq!(FnText.call(&[null(), text("@")]), text(""));
+    }
+}

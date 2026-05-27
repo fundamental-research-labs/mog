@@ -91,3 +91,28 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnUnichar));
     registry.register(Box::new(FnUnicode));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{err, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::CellError;
+
+    #[test]
+    fn test_unichar() {
+        let f = FnUnichar;
+        assert_eq!(f.call(&[num(65.0)]), text("A"));
+        assert_eq!(f.call(&[num(8364.0)]), text("\u{20AC}")); // Euro sign
+        assert_eq!(f.call(&[num(0.0)]), err(CellError::Value));
+        assert_eq!(f.call(&[num(1114112.0)]), err(CellError::Value)); // above max
+    }
+
+    #[test]
+    fn test_unicode() {
+        let f = FnUnicode;
+        assert_eq!(f.call(&[text("A")]), num(65.0));
+        assert_eq!(f.call(&[text("\u{20AC}")]), num(8364.0)); // Euro sign
+        assert_eq!(f.call(&[text("")]), err(CellError::Value));
+    }
+}

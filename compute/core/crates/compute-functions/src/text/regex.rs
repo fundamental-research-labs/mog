@@ -504,3 +504,250 @@ pub(crate) fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnRegexMatch));
     registry.register(Box::new(FnRegexTest));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{bool_val, err, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::{CellError, CellValue};
+
+    #[test]
+    fn test_regextest_default_and_case_insensitive() {
+        assert_eq!(
+            FnRegexTest.call(&[text("Alpha-123"), text("[0-9]+")]),
+            bool_val(true)
+        );
+        assert_eq!(
+            FnRegexTest.call(&[text("Alpha"), text("alpha")]),
+            bool_val(false)
+        );
+        assert_eq!(
+            FnRegexTest.call(&[text("Alpha"), text("alpha"), num(1.0)]),
+            bool_val(true)
+        );
+    }
+
+    #[test]
+    fn test_regexmatch_boolean_match_and_no_match() {
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc123"), text("^[a-z]+[0-9]+$")]),
+            bool_val(true)
+        );
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text("[0-9]+")]),
+            bool_val(false)
+        );
+    }
+
+    #[test]
+    fn test_regexextract_return_modes() {
+        assert_eq!(
+            FnRegexExtract.call(&[text("id: A12, id: B345"), text("[A-Z][0-9]+")]),
+            text("A12")
+        );
+
+        let all = FnRegexExtract.call(&[text("id: A12, id: B345"), text("[A-Z][0-9]+"), num(1.0)]);
+        assert_eq!(
+            all,
+            CellValue::column_array(vec![text("A12"), text("B345")])
+        );
+
+        let captures = FnRegexExtract.call(&[
+            text("name=alice id=42"),
+            text("name=([a-z]+) id=([0-9]+)"),
+            num(2.0),
+        ]);
+        assert_eq!(
+            captures,
+            CellValue::row_array(vec![text("alice"), text("42")])
+        );
+    }
+
+    #[test]
+    fn test_regexextract_empty_and_unmatched_optional_captures() {
+        assert_eq!(
+            FnRegexExtract.call(&[text("a="), text("a=(.*)"), num(2.0)]),
+            CellValue::row_array(vec![text("")])
+        );
+        assert_eq!(
+            FnRegexExtract.call(&[text("a"), text("(a)(b)?"), num(2.0)]),
+            CellValue::row_array(vec![text("a"), text("")])
+        );
+    }
+
+    #[test]
+    fn test_regexextract_no_match_and_mode_errors() {
+        assert_eq!(
+            FnRegexExtract.call(&[text("abc"), text("[0-9]+")]),
+            err(CellError::Na)
+        );
+        assert_eq!(
+            FnRegexExtract.call(&[text("abc"), text("abc"), num(2.0)]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexExtract.call(&[text("abc"), text("abc"), num(3.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_regexreplace_all_positive_negative_and_case_insensitive_occurrence() {
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1 b22 c333"), text("[0-9]+"), text("x")]),
+            text("ax bx cx")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1 b22 c333"), text("[0-9]+"), text("x"), num(2.0)]),
+            text("a1 bx c333")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1 b22 c333"), text("[0-9]+"), text("x"), num(-1.0)]),
+            text("a1 b22 cx")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[
+                text("Cat cat CAT"),
+                text("cat"),
+                text("dog"),
+                num(2.0),
+                num(1.0)
+            ]),
+            text("Cat dog CAT")
+        );
+    }
+
+    #[test]
+    fn test_regexreplace_occurrence_validation_and_out_of_range() {
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1"), text("[0-9]+"), text("x"), num(2.0)]),
+            text("a1")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1"), text("[0-9]+"), text("x"), num(-2.0)]),
+            text("a1")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1"), text("[0-9]+"), text("x"), num(1.5)]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("a1"), text("[0-9]+"), text("x"), text("one")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_regexreplace_replacement_expansion_contract() {
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)([0-9]+)"), text("$0")]),
+            text("ab12")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)([0-9]+)"), text("$2-$1")]),
+            text("12-ab")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)([0-9]+)"), text("$$$1")]),
+            text("$ab")
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)"), text("$2")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)"), text("$")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("([a-z]+)"), text("$x")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexReplace.call(&[text("ab12"), text("(?P<word>[a-z]+)"), text("${word}")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_regex_invalid_and_unsupported_patterns() {
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text("(")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text("(?=a)")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text(r"(a)\1")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text(r"\p{L}+")]),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnRegexMatch.call(&[text("abc"), text("[[:alpha:]]+")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_regex_coerces_numeric_and_boolean_text_inputs() {
+        assert_eq!(
+            FnRegexMatch.call(&[num(123.0), text("[0-9]+")]),
+            bool_val(true)
+        );
+        assert_eq!(
+            FnRegexExtract.call(&[bool_val(true), text("TR..")]),
+            text("TRUE")
+        );
+    }
+
+    #[test]
+    fn test_regexextract_native_array_handling() {
+        let reg = crate::FunctionRegistry::new();
+        let input = CellValue::from_rows(vec![vec![text("a1")], vec![text("b")], vec![text("c3")]]);
+        let result = reg.call("REGEXEXTRACT", &[input, text("[0-9]+"), num(0.0)]);
+        assert_eq!(
+            result,
+            CellValue::from_rows(vec![
+                vec![text("1")],
+                vec![err(CellError::Na)],
+                vec![text("3")]
+            ])
+        );
+    }
+
+    #[test]
+    fn test_regexextract_rejects_nested_spills_for_array_inputs() {
+        let reg = crate::FunctionRegistry::new();
+        let input = CellValue::from_rows(vec![vec![text("a1 b2")]]);
+        assert_eq!(
+            reg.call("REGEXEXTRACT", &[input, text("[a-z][0-9]"), num(1.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_regex_scalar_functions_registry_array_lift() {
+        let reg = crate::FunctionRegistry::new();
+        let input = CellValue::from_rows(vec![vec![text("a1")], vec![text("b")]]);
+        assert_eq!(
+            reg.call("REGEXTEST", &[input, text("[0-9]")]),
+            CellValue::from_rows(vec![vec![bool_val(true)], vec![bool_val(false)]])
+        );
+
+        let input = CellValue::from_rows(vec![vec![text("a1")], vec![text("b2")]]);
+        assert_eq!(
+            reg.call("REGEXREPLACE", &[input, text("[0-9]"), text("x")]),
+            CellValue::from_rows(vec![vec![text("ax")], vec![text("bx")]])
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Registry-based tests (using FunctionRegistry::new())
+    // -------------------------------------------------------------------
+}

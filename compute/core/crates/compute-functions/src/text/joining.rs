@@ -381,3 +381,208 @@ mod join_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{bool_val, err, null, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::{CellError, CellValue};
+
+    #[test]
+    fn test_concatenate() {
+        let f = FnConcatenate;
+        assert_eq!(
+            f.call(&[text("hello"), text(" "), text("world")]),
+            text("hello world")
+        );
+        assert_eq!(
+            f.call(&[text("a"), num(1.0), bool_val(true)]),
+            text("a1TRUE")
+        );
+    }
+
+    #[test]
+    fn test_rept() {
+        let f = FnRept;
+        assert_eq!(f.call(&[text("ab"), num(3.0)]), text("ababab"));
+        assert_eq!(f.call(&[text("a"), num(0.0)]), text(""));
+    }
+
+    #[test]
+    fn test_exact() {
+        let f = FnExact;
+        assert_eq!(f.call(&[text("hello"), text("hello")]), bool_val(true));
+        assert_eq!(f.call(&[text("hello"), text("Hello")]), bool_val(false)); // case-sensitive
+    }
+
+    #[test]
+    fn test_concat() {
+        let f = FnConcat;
+        assert_eq!(
+            f.call(&[text("hello"), text(" "), text("world")]),
+            text("hello world")
+        );
+        // CONCAT supports arrays
+        let arr = CellValue::from_rows(vec![vec![text("a"), text("b"), text("c")]]);
+        assert_eq!(f.call(&[arr]), text("abc"));
+    }
+
+    #[test]
+    fn test_concatenate_basic() {
+        assert_eq!(
+            FnConcatenate.call(&[text("a"), text("b"), text("c")]),
+            text("abc")
+        );
+    }
+
+    #[test]
+    fn test_concatenate_with_numbers() {
+        assert_eq!(
+            FnConcatenate.call(&[text("val="), num(42.0)]),
+            text("val=42")
+        );
+    }
+
+    #[test]
+    fn test_concatenate_single_arg() {
+        assert_eq!(FnConcatenate.call(&[text("hello")]), text("hello"));
+    }
+
+    #[test]
+    fn test_concatenate_error_propagation() {
+        assert_eq!(
+            FnConcatenate.call(&[text("a"), err(CellError::Div0), text("c")]),
+            err(CellError::Div0)
+        );
+    }
+
+    #[test]
+    fn test_concat_basic() {
+        assert_eq!(FnConcat.call(&[text("a"), text("b")]), text("ab"));
+    }
+
+    #[test]
+    fn test_concat_flattens_arrays() {
+        let arr = CellValue::from_rows(vec![vec![text("x"), text("y")]]);
+        assert_eq!(FnConcat.call(&[text("a"), arr]), text("axy"));
+    }
+
+    #[test]
+    fn test_rept_basic() {
+        assert_eq!(FnRept.call(&[text("ab"), num(3.0)]), text("ababab"));
+    }
+
+    #[test]
+    fn test_rept_zero_times() {
+        assert_eq!(FnRept.call(&[text("x"), num(0.0)]), text(""));
+    }
+
+    #[test]
+    fn test_rept_one_time() {
+        assert_eq!(FnRept.call(&[text("hello"), num(1.0)]), text("hello"));
+    }
+
+    #[test]
+    fn test_rept_negative_error() {
+        assert_eq!(FnRept.call(&[text("x"), num(-1.0)]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_rept_empty_string() {
+        assert_eq!(FnRept.call(&[text(""), num(5.0)]), text(""));
+    }
+
+    #[test]
+    fn test_exact_identical() {
+        assert_eq!(
+            FnExact.call(&[text("hello"), text("hello")]),
+            bool_val(true)
+        );
+    }
+
+    #[test]
+    fn test_exact_case_sensitive() {
+        assert_eq!(
+            FnExact.call(&[text("Hello"), text("hello")]),
+            bool_val(false)
+        );
+    }
+
+    #[test]
+    fn test_exact_different_strings() {
+        assert_eq!(FnExact.call(&[text("abc"), text("xyz")]), bool_val(false));
+    }
+
+    #[test]
+    fn test_exact_empty_strings() {
+        assert_eq!(FnExact.call(&[text(""), text("")]), bool_val(true));
+    }
+
+    #[test]
+    fn test_exact_number_coercion() {
+        // Numbers coerced to string for comparison
+        assert_eq!(FnExact.call(&[num(1.0), text("1")]), bool_val(true));
+    }
+
+    #[test]
+    fn test_exact_error_propagation() {
+        assert_eq!(
+            FnExact.call(&[err(CellError::Ref), text("a")]),
+            err(CellError::Ref)
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // search.rs — FIND, SEARCH, SUBSTITUTE, REPLACE
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_textjoin() {
+        let f = FnTextJoin;
+        assert_eq!(
+            f.call(&[text(","), bool_val(true), text("a"), text("b"), text("c")]),
+            text("a,b,c")
+        );
+    }
+
+    #[test]
+    fn test_textjoin_ignore_empty_true() {
+        assert_eq!(
+            FnTextJoin.call(&[text(","), bool_val(true), text("a"), text(""), text("b")]),
+            text("a,b")
+        );
+    }
+
+    #[test]
+    fn test_textjoin_ignore_empty_false() {
+        assert_eq!(
+            FnTextJoin.call(&[text(","), bool_val(false), text("a"), text(""), text("b")]),
+            text("a,,b")
+        );
+    }
+
+    #[test]
+    fn test_textjoin_empty_delimiter() {
+        assert_eq!(
+            FnTextJoin.call(&[text(""), bool_val(false), text("a"), text("b"), text("c")]),
+            text("abc")
+        );
+    }
+
+    #[test]
+    fn test_textjoin_null_values_with_ignore() {
+        assert_eq!(
+            FnTextJoin.call(&[text(","), bool_val(true), text("a"), null(), text("b")]),
+            text("a,b")
+        );
+    }
+
+    #[test]
+    fn test_textjoin_error_in_delimiter() {
+        assert_eq!(
+            FnTextJoin.call(&[err(CellError::Na), bool_val(true), text("a")]),
+            err(CellError::Na)
+        );
+    }
+}

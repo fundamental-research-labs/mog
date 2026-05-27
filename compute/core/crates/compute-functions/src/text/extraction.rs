@@ -197,3 +197,74 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnRight));
     registry.register(Box::new(FnMid));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{err, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::CellError;
+
+    #[test]
+    fn test_len() {
+        let f = FnLen;
+        assert_eq!(f.call(&[text("hello")]), num(5.0));
+        assert_eq!(f.call(&[text("")]), num(0.0));
+        assert_eq!(f.call(&[num(123.0)]), num(3.0));
+    }
+
+    #[test]
+    fn test_left() {
+        let f = FnLeft;
+        assert_eq!(f.call(&[text("hello"), num(3.0)]), text("hel"));
+        assert_eq!(f.call(&[text("hello")]), text("h"));
+        assert_eq!(f.call(&[text("hello"), num(10.0)]), text("hello"));
+    }
+
+    #[test]
+    fn test_right() {
+        let f = FnRight;
+        assert_eq!(f.call(&[text("hello"), num(3.0)]), text("llo"));
+        assert_eq!(f.call(&[text("hello")]), text("o"));
+    }
+
+    #[test]
+    fn test_mid() {
+        let f = FnMid;
+        assert_eq!(f.call(&[text("hello"), num(2.0), num(3.0)]), text("ell"));
+        assert_eq!(
+            f.call(&[text("hello"), num(1.0), num(100.0)]),
+            text("hello")
+        );
+        assert_eq!(
+            f.call(&[text("hello"), num(0.0), num(3.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_left_negative_count() {
+        let f = FnLeft;
+        assert_eq!(f.call(&[text("hello"), num(-1.0)]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_error_propagation() {
+        let f = FnLen;
+        assert_eq!(f.call(&[err(CellError::Div0)]), err(CellError::Div0));
+    }
+
+    // -------------------------------------------------------------------
+    // Tests for new functions
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_len_unicode_chars() {
+        let f = FnLen;
+        // "cafe\u{0301}" = "cafe" + combining accent = 5 chars (not 6 bytes)
+        // "cafe\u{0301}" has 5 chars but "caf\u{00e9}" is a single precomposed char
+        assert_eq!(f.call(&[text("caf\u{00e9}")]), num(4.0)); // "cafe" with precomposed e-accent = 4 chars
+        assert_eq!(f.call(&[text("\u{1F600}")]), num(1.0)); // emoji = 1 char (4 bytes)
+        assert_eq!(f.call(&[text("\u{00FC}ber")]), num(4.0)); // "uber" with u-umlaut = 4 chars
+    }
+}

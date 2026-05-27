@@ -481,3 +481,537 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnTextAfter));
     registry.register(Box::new(FnTextSplit));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{bool_val, err, null, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::{CellError, CellValue};
+
+    #[test]
+    fn test_textbefore_basic() {
+        let f = FnTextBefore;
+        assert_eq!(f.call(&[text("hello-world"), text("-")]), text("hello"));
+        assert_eq!(f.call(&[text("hello"), text("-")]), err(CellError::Na));
+    }
+
+    #[test]
+    fn test_textbefore_instance_num() {
+        let f = FnTextBefore;
+        // Second instance of "-"
+        assert_eq!(f.call(&[text("a-b-c"), text("-"), num(2.0)]), text("a-b"));
+        // Negative instance (-1 = last)
+        assert_eq!(f.call(&[text("a-b-c"), text("-"), num(-1.0)]), text("a-b"));
+    }
+
+    #[test]
+    fn test_textbefore_case_insensitive() {
+        let f = FnTextBefore;
+        // match_mode=1 case-insensitive
+        assert_eq!(
+            f.call(&[text("helloXworld"), text("x"), num(1.0), num(1.0)]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_textafter_basic() {
+        let f = FnTextAfter;
+        assert_eq!(f.call(&[text("hello-world"), text("-")]), text("world"));
+        assert_eq!(f.call(&[text("hello"), text("-")]), err(CellError::Na));
+    }
+
+    #[test]
+    fn test_textafter_instance_num() {
+        let f = FnTextAfter;
+        // Second instance of "-"
+        assert_eq!(f.call(&[text("a-b-c"), text("-"), num(2.0)]), text("c"));
+    }
+
+    #[test]
+    fn test_textafter_if_not_found() {
+        let f = FnTextAfter;
+        // Custom if_not_found
+        assert_eq!(
+            f.call(&[
+                text("hello"),
+                text("-"),
+                num(1.0),
+                num(0.0),
+                num(0.0),
+                text("N/A")
+            ]),
+            text("N/A")
+        );
+    }
+
+    #[test]
+    fn test_textsplit_basic() {
+        let f = FnTextSplit;
+        let result = f.call(&[text("a,b,c"), text(",")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 1);
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array"),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_row_and_col() {
+        let f = FnTextSplit;
+        // "a,b;c,d" split by "," cols and ";" rows
+        let result = f.call(&[text("a,b;c,d"), text(","), text(";")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.row(0), &[text("a"), text("b")]);
+                assert_eq!(arr.row(1), &[text("c"), text("d")]);
+            }
+            _ => panic!("Expected array"),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_single_value() {
+        let f = FnTextSplit;
+        // No delimiter found -> single value
+        assert_eq!(f.call(&[text("hello"), text(",")]), text("hello"));
+    }
+
+    // -------------------------------------------------------------------
+    // Regression tests for UTF-8 / Unicode fixes
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_textbefore_unicode_no_panic() {
+        let f = FnTextBefore;
+        // Multi-byte delimiter and text: should not panic
+        assert_eq!(
+            f.call(&[text("caf\u{00e9}\u{2615}test"), text("\u{2615}")]),
+            text("caf\u{00e9}")
+        );
+        // Emoji delimiter
+        assert_eq!(
+            f.call(&[text("hello\u{1F600}world"), text("\u{1F600}")]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_textafter_unicode_no_panic() {
+        let f = FnTextAfter;
+        // Multi-byte delimiter and text: should not panic
+        assert_eq!(
+            f.call(&[text("caf\u{00e9}\u{2615}test"), text("\u{2615}")]),
+            text("test")
+        );
+        // Emoji delimiter
+        assert_eq!(
+            f.call(&[text("hello\u{1F600}world"), text("\u{1F600}")]),
+            text("world")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_case_insensitive_unicode() {
+        let f = FnTextBefore;
+        // Case-insensitive with multi-byte chars (German sharp s -> SS)
+        assert_eq!(
+            f.call(&[
+                text("hello\u{00DC}world"),
+                text("\u{00fc}"),
+                num(1.0),
+                num(1.0)
+            ]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_textsplit_unicode_no_panic() {
+        let f = FnTextSplit;
+        // Split on multi-byte delimiter
+        let result = f.call(&[text("a\u{2615}b\u{2615}c"), text("\u{2615}")]);
+        match result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 1);
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array"),
+        }
+    }
+
+    #[test]
+    fn test_textbefore_no_overlapping_matches() {
+        let f = FnTextBefore;
+        // TEXTBEFORE("aaa", "aa", 1) = "" (match at pos 0, text before is empty)
+        assert_eq!(f.call(&[text("aaa"), text("aa"), num(1.0)]), text(""));
+        // TEXTBEFORE("aaa", "aa", 2) = #VALUE! (only one non-overlapping match)
+        // Returns #N/A because instance not found (if_not_found defaults to #N/A)
+        assert_eq!(
+            f.call(&[text("aaa"), text("aa"), num(2.0)]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textafter_no_overlapping_matches() {
+        let f = FnTextAfter;
+        // TEXTAFTER("aaa", "aa", 1) = "a" (match at pos 0, text after "aa" is "a")
+        assert_eq!(f.call(&[text("aaa"), text("aa"), num(1.0)]), text("a"));
+    }
+
+    // -------------------------------------------------------------------
+    // VALUE: parenthetical negatives and currency symbols
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_textbefore_simple() {
+        assert_eq!(
+            FnTextBefore.call(&[text("hello-world"), text("-")]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_not_found_default_na() {
+        assert_eq!(
+            FnTextBefore.call(&[text("hello"), text("x")]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textbefore_instance_2() {
+        assert_eq!(
+            FnTextBefore.call(&[text("a-b-c"), text("-"), num(2.0)]),
+            text("a-b")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_negative_instance_from_end() {
+        // -1 means last delimiter occurrence
+        assert_eq!(
+            FnTextBefore.call(&[text("a-b-c"), text("-"), num(-1.0)]),
+            text("a-b")
+        );
+        // -2 means second-to-last
+        assert_eq!(
+            FnTextBefore.call(&[text("a-b-c"), text("-"), num(-2.0)]),
+            text("a")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_negative_instance_too_large() {
+        // -3 with only 2 occurrences
+        assert_eq!(
+            FnTextBefore.call(&[text("a-b-c"), text("-"), num(-3.0)]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textbefore_instance_zero_error() {
+        assert_eq!(
+            FnTextBefore.call(&[text("a-b"), text("-"), num(0.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_textbefore_case_insensitive_mode() {
+        // match_mode=1 for case-insensitive
+        assert_eq!(
+            FnTextBefore.call(&[text("HelloXworld"), text("x"), num(1.0), num(1.0)]),
+            text("Hello")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_case_sensitive_default() {
+        // match_mode=0 (default) is case-sensitive
+        assert_eq!(
+            FnTextBefore.call(&[text("HelloXworld"), text("x"), num(1.0), num(0.0)]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textbefore_if_not_found_custom() {
+        assert_eq!(
+            FnTextBefore.call(&[
+                text("hello"),
+                text("x"),
+                num(1.0),
+                num(0.0),
+                num(0.0),
+                text("NOT FOUND")
+            ]),
+            text("NOT FOUND")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_empty_delimiter_default() {
+        // Empty delimiter with match_end=0 => #VALUE!
+        assert_eq!(
+            FnTextBefore.call(&[text("hello"), text("")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_textbefore_empty_delimiter_match_end() {
+        // Empty delimiter with match_end=1 => return full text
+        assert_eq!(
+            FnTextBefore.call(&[text("hello"), text(""), num(1.0), num(0.0), num(1.0)]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_textbefore_delimiter_at_start() {
+        // Delimiter at the very start -> empty string before it
+        assert_eq!(FnTextBefore.call(&[text("-hello"), text("-")]), text(""));
+    }
+
+    #[test]
+    fn test_textafter_simple() {
+        assert_eq!(
+            FnTextAfter.call(&[text("hello-world"), text("-")]),
+            text("world")
+        );
+    }
+
+    #[test]
+    fn test_textafter_not_found_default_na() {
+        assert_eq!(
+            FnTextAfter.call(&[text("hello"), text("x")]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textafter_instance_2() {
+        assert_eq!(
+            FnTextAfter.call(&[text("a-b-c"), text("-"), num(2.0)]),
+            text("c")
+        );
+    }
+
+    #[test]
+    fn test_textafter_negative_instance() {
+        // -1 = last delimiter
+        assert_eq!(
+            FnTextAfter.call(&[text("a-b-c"), text("-"), num(-1.0)]),
+            text("c")
+        );
+        // -2 = second-to-last
+        assert_eq!(
+            FnTextAfter.call(&[text("a-b-c"), text("-"), num(-2.0)]),
+            text("b-c")
+        );
+    }
+
+    #[test]
+    fn test_textafter_instance_zero_error() {
+        assert_eq!(
+            FnTextAfter.call(&[text("a-b"), text("-"), num(0.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_textafter_case_insensitive() {
+        assert_eq!(
+            FnTextAfter.call(&[text("HelloXworld"), text("x"), num(1.0), num(1.0)]),
+            text("world")
+        );
+    }
+
+    #[test]
+    fn test_textafter_empty_delimiter_default() {
+        // Empty delimiter with match_end=0 => #VALUE!
+        assert_eq!(
+            FnTextAfter.call(&[text("hello"), text("")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_textafter_empty_delimiter_match_end() {
+        // Empty delimiter with match_end=1 => empty string
+        assert_eq!(
+            FnTextAfter.call(&[text("hello"), text(""), num(1.0), num(0.0), num(1.0)]),
+            text("")
+        );
+    }
+
+    #[test]
+    fn test_textafter_delimiter_at_end() {
+        // Delimiter at the very end -> empty string after it
+        assert_eq!(FnTextAfter.call(&[text("hello-"), text("-")]), text(""));
+    }
+
+    #[test]
+    fn test_textafter_if_not_found_custom() {
+        assert_eq!(
+            FnTextAfter.call(&[
+                text("hello"),
+                text("x"),
+                num(1.0),
+                num(0.0),
+                num(0.0),
+                text("MISSING")
+            ]),
+            text("MISSING")
+        );
+    }
+
+    #[test]
+    fn test_textafter_instance_exceeds_count() {
+        // Only 1 delimiter but asking for instance 2
+        assert_eq!(
+            FnTextAfter.call(&[text("a-b"), text("-"), num(2.0)]),
+            err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_textsplit_horizontal() {
+        let result = FnTextSplit.call(&[text("a,b,c"), text(",")]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 1);
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_2d_row_and_col() {
+        // "a,b;c,d" with col_delim="," row_delim=";"
+        let result = FnTextSplit.call(&[text("a,b;c,d"), text(","), text(";")]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.cols(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("c"));
+                assert_eq!(arr.get(1, 1).unwrap(), &text("d"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_no_match_single_value() {
+        assert_eq!(FnTextSplit.call(&[text("hello"), text(",")]), text("hello"));
+    }
+
+    #[test]
+    fn test_textsplit_ignore_empty_true() {
+        // "a,,b" with ignore_empty=TRUE should produce {"a","b"}
+        let result = FnTextSplit.call(&[text("a,,b"), text(","), null(), bool_val(true)]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.cols(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_ignore_empty_false() {
+        // "a,,b" with ignore_empty=FALSE should produce {"a","","b"}
+        let result = FnTextSplit.call(&[text("a,,b"), text(","), null(), bool_val(false)]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text(""));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("b"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_case_insensitive() {
+        // match_mode=1 case-insensitive split
+        let result =
+            FnTextSplit.call(&[text("aXbxC"), text("x"), null(), bool_val(false), num(1.0)]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("C"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_uneven_rows_padded() {
+        // "a,b;c" => row1=[a,b], row2=[c] -> padded with #N/A
+        let result = FnTextSplit.call(&[text("a,b;c"), text(","), text(";")]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 2);
+                assert_eq!(arr.cols(), 2);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("c"));
+                assert_eq!(arr.get(1, 1).unwrap(), &err(CellError::Na));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_only_row_delimiter() {
+        // col_delimiter is null, only row_delimiter
+        let result = FnTextSplit.call(&[text("a;b;c"), null(), text(";")]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 3);
+                assert_eq!(arr.cols(), 1);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("b"));
+                assert_eq!(arr.get(2, 0).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_error_propagation() {
+        assert_eq!(
+            FnTextSplit.call(&[err(CellError::Ref), text(",")]),
+            err(CellError::Ref)
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // conversion.rs — CHAR, CODE, DOLLAR, FIXED, NUMBERVALUE, etc.
+    // -------------------------------------------------------------------
+}

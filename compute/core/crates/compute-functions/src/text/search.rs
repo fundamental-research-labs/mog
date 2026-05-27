@@ -312,3 +312,325 @@ pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnSubstitute));
     registry.register(Box::new(FnReplace));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{err, num, text};
+    use super::*;
+    use crate::PureFunction;
+    use value_types::CellError;
+
+    #[test]
+    fn test_find() {
+        let f = FnFind;
+        assert_eq!(f.call(&[text("ll"), text("hello")]), num(3.0));
+        assert_eq!(f.call(&[text("LL"), text("hello")]), err(CellError::Value)); // case-sensitive
+        assert_eq!(f.call(&[text("xyz"), text("hello")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_search() {
+        let f = FnSearch;
+        assert_eq!(f.call(&[text("LL"), text("hello")]), num(3.0)); // case-insensitive
+    }
+
+    #[test]
+    fn test_substitute() {
+        let f = FnSubstitute;
+        assert_eq!(
+            f.call(&[text("hello world hello"), text("hello"), text("hi")]),
+            text("hi world hi")
+        );
+        assert_eq!(
+            f.call(&[
+                text("hello world hello"),
+                text("hello"),
+                text("hi"),
+                num(2.0)
+            ]),
+            text("hello world hi")
+        );
+    }
+
+    #[test]
+    fn test_replace() {
+        let f = FnReplace;
+        assert_eq!(
+            f.call(&[text("hello"), num(2.0), num(3.0), text("a")]),
+            text("hao")
+        );
+    }
+
+    #[test]
+    fn test_find_basic() {
+        // FIND("b", "abc") = 2
+        assert_eq!(FnFind.call(&[text("b"), text("abc")]), num(2.0));
+    }
+
+    #[test]
+    fn test_find_case_sensitive_not_found() {
+        // FIND("B", "abc") = #VALUE!
+        assert_eq!(
+            FnFind.call(&[text("B"), text("abc")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_find_at_beginning() {
+        assert_eq!(FnFind.call(&[text("a"), text("abc")]), num(1.0));
+    }
+
+    #[test]
+    fn test_find_at_end() {
+        assert_eq!(FnFind.call(&[text("c"), text("abc")]), num(3.0));
+    }
+
+    #[test]
+    fn test_find_multi_char() {
+        assert_eq!(FnFind.call(&[text("bc"), text("abcbc")]), num(2.0));
+    }
+
+    #[test]
+    fn test_find_empty_find_text() {
+        // FIND("", "abc") = 1 (Excel: empty string is found at position 1)
+        assert_eq!(FnFind.call(&[text(""), text("abc")]), num(1.0));
+    }
+
+    #[test]
+    fn test_find_with_start_num() {
+        // FIND("b", "abcabc", 3) = 5
+        assert_eq!(
+            FnFind.call(&[text("b"), text("abcabc"), num(3.0)]),
+            num(5.0)
+        );
+    }
+
+    #[test]
+    fn test_find_start_num_less_than_one() {
+        assert_eq!(
+            FnFind.call(&[text("a"), text("abc"), num(0.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_find_not_found() {
+        assert_eq!(
+            FnFind.call(&[text("xyz"), text("hello")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_search_case_insensitive() {
+        // SEARCH("b", "aBc") = 2
+        assert_eq!(FnSearch.call(&[text("b"), text("aBc")]), num(2.0));
+    }
+
+    #[test]
+    fn test_search_wildcard_star() {
+        // SEARCH("*", "abc") = 1
+        assert_eq!(FnSearch.call(&[text("*"), text("abc")]), num(1.0));
+    }
+
+    #[test]
+    fn test_search_wildcard_question_mark() {
+        // SEARCH("?b", "abc") = 1 (? matches 'a', then 'b')
+        assert_eq!(FnSearch.call(&[text("?b"), text("abc")]), num(1.0));
+    }
+
+    #[test]
+    fn test_search_wildcard_not_found() {
+        assert_eq!(
+            FnSearch.call(&[text("?z"), text("abc")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_search_with_start_num() {
+        assert_eq!(
+            FnSearch.call(&[text("o"), text("hello world"), num(6.0)]),
+            num(8.0)
+        );
+    }
+
+    #[test]
+    fn test_search_start_num_less_than_one() {
+        assert_eq!(
+            FnSearch.call(&[text("a"), text("abc"), num(0.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_substitute_all_occurrences() {
+        assert_eq!(
+            FnSubstitute.call(&[text("hello world"), text("world"), text("earth")]),
+            text("hello earth")
+        );
+    }
+
+    #[test]
+    fn test_substitute_multiple_occurrences() {
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b")]),
+            text("bbb")
+        );
+    }
+
+    #[test]
+    fn test_substitute_nth_instance() {
+        // Replace only 2nd "a" in "aaa"
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(2.0)]),
+            text("aba")
+        );
+    }
+
+    #[test]
+    fn test_substitute_1st_instance() {
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(1.0)]),
+            text("baa")
+        );
+    }
+
+    #[test]
+    fn test_substitute_3rd_instance() {
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(3.0)]),
+            text("aab")
+        );
+    }
+
+    #[test]
+    fn test_substitute_instance_not_found() {
+        // Instance 4 doesn't exist in "aaa" (only 3 'a's) - returns original
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(4.0)]),
+            text("aaa")
+        );
+    }
+
+    #[test]
+    fn test_substitute_empty_old_text() {
+        // Empty old_text -> return original unchanged
+        assert_eq!(
+            FnSubstitute.call(&[text("hello"), text(""), text("x")]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_substitute_instance_zero_error() {
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(0.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_substitute_negative_instance_error() {
+        assert_eq!(
+            FnSubstitute.call(&[text("aaa"), text("a"), text("b"), num(-1.0)]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_substitute_not_found() {
+        assert_eq!(
+            FnSubstitute.call(&[text("hello"), text("xyz"), text("abc")]),
+            text("hello")
+        );
+    }
+
+    #[test]
+    fn test_replace_basic() {
+        // REPLACE("abcdef", 3, 2, "XY") = "abXYef"
+        assert_eq!(
+            FnReplace.call(&[text("abcdef"), num(3.0), num(2.0), text("XY")]),
+            text("abXYef")
+        );
+    }
+
+    #[test]
+    fn test_replace_at_start() {
+        assert_eq!(
+            FnReplace.call(&[text("abcdef"), num(1.0), num(2.0), text("ZZ")]),
+            text("ZZcdef")
+        );
+    }
+
+    #[test]
+    fn test_replace_at_end() {
+        assert_eq!(
+            FnReplace.call(&[text("abcdef"), num(5.0), num(2.0), text("XY")]),
+            text("abcdXY")
+        );
+    }
+
+    #[test]
+    fn test_replace_zero_chars_insert() {
+        // num_chars=0 means insert without removing
+        assert_eq!(
+            FnReplace.call(&[text("abc"), num(2.0), num(0.0), text("X")]),
+            text("aXbc")
+        );
+    }
+
+    #[test]
+    fn test_replace_entire_string() {
+        assert_eq!(
+            FnReplace.call(&[text("abc"), num(1.0), num(3.0), text("XYZ")]),
+            text("XYZ")
+        );
+    }
+
+    #[test]
+    fn test_replace_start_less_than_one_error() {
+        assert_eq!(
+            FnReplace.call(&[text("abc"), num(0.0), num(1.0), text("X")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_replace_negative_num_chars_error() {
+        assert_eq!(
+            FnReplace.call(&[text("abc"), num(1.0), num(-1.0), text("X")]),
+            err(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn test_replace_with_longer_replacement() {
+        assert_eq!(
+            FnReplace.call(&[text("abc"), num(2.0), num(1.0), text("XXXX")]),
+            text("aXXXXc")
+        );
+    }
+
+    #[test]
+    fn test_replace_with_empty_replacement() {
+        // Delete characters
+        assert_eq!(
+            FnReplace.call(&[text("abcdef"), num(3.0), num(2.0), text("")]),
+            text("abef")
+        );
+    }
+
+    #[test]
+    fn test_replace_error_propagation() {
+        assert_eq!(
+            FnReplace.call(&[err(CellError::Div0), num(1.0), num(1.0), text("X")]),
+            err(CellError::Div0)
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // regex.rs — REGEXEXTRACT, REGEXREPLACE, REGEXMATCH, REGEXTEST
+    // -------------------------------------------------------------------
+}

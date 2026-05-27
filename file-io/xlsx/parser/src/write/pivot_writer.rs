@@ -974,14 +974,3 @@ pub fn build_pivot_cache_rels_xml(records_path: &str) -> Vec<u8> {
     );
     rels.to_xml()
 }
-
-/// Build a rels file for a pivot table → cache definition relationship.
-pub fn build_pivot_table_rels_xml(cache_def_idx: usize) -> Vec<u8> {
-    use crate::write::relationships::RelationshipManager;
-    let mut rels = RelationshipManager::new();
-    rels.add(
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition",
-        &format!("../pivotCache/pivotCacheDefinition{}.xml", cache_def_idx),
-    );
-    rels.to_xml()
-}

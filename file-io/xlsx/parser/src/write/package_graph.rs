@@ -33,6 +33,8 @@ const CT_PIVOT_CACHE_RECORDS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
 const REL_PIVOT_CACHE_RECORDS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
+const REL_PIVOT_CACHE_DEFINITION: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
 const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
 const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
 const CT_DOC_METADATA_LABEL_INFO: &str = "application/vnd.ms-office.classificationlabels+xml";
@@ -417,7 +419,10 @@ impl PackageGraphBuilder {
                 OpaquePackageOwnershipState::Clean,
             )?;
         }
-        if subgraph.ownership == OpaquePackageOwnership::CleanImported {
+        if matches!(
+            subgraph.ownership,
+            OpaquePackageOwnership::CleanImported | OpaquePackageOwnership::OrphanCleanPackageData
+        ) {
             for relationship in &subgraph.relationships {
                 self.add_opaque_relationship(
                     package_relationship_from_opaque(relationship),
@@ -1046,6 +1051,23 @@ pub fn register_generated_worksheet_pivot_table(
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
     Ok(())
+}
+
+pub fn register_generated_pivot_table_cache_relationship(
+    graph: &mut PackageGraphBuilder,
+    pivot_table_global_idx: usize,
+    cache_definition_global_idx: usize,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: format!("xl/pivotTables/pivotTable{pivot_table_global_idx}.xml"),
+        },
+        relationship_type: REL_PIVOT_CACHE_DEFINITION.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: format!("xl/pivotCache/pivotCacheDefinition{cache_definition_global_idx}.xml"),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new("rId1")),
+    });
 }
 
 pub fn register_preserved_worksheet_pivot_table(

@@ -5,7 +5,6 @@ use domain_types::{
 use std::collections::{HashMap, HashSet};
 
 use super::package_graph::{PackageGraphBuilder, ResolvedPackageGraph};
-use super::relationships::RelationshipManager;
 use super::write_error::WriteError;
 use super::zip_writer::ZipWriter;
 use crate::domain::content_types::write::{CT_PIVOT_CACHE, CT_PIVOT_TABLE};
@@ -227,15 +226,6 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
                     .or_else(|| Some(CT_PIVOT_CACHE_RECORDS.to_string())),
             ));
         }
-        if let Some(rels_path) = &cache.definition_rels_path
-            && !cache.raw_relationships.is_empty()
-        {
-            parts.push(opaque_pivot_part(
-                rels_path,
-                relationships_xml(&cache.raw_relationships),
-                None,
-            ));
-        }
     }
 
     for table in &package.pivot_tables {
@@ -250,15 +240,6 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
                 .cloned()
                 .or_else(|| Some(CT_PIVOT_TABLE.to_string())),
         ));
-        if let Some(rels_path) = &table.table_rels_path
-            && !table.raw_relationships.is_empty()
-        {
-            parts.push(opaque_pivot_part(
-                rels_path,
-                relationships_xml(&table.raw_relationships),
-                None,
-            ));
-        }
     }
 
     for orphan in &package.orphan_parts {
@@ -270,6 +251,36 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
             orphan.part.data.clone(),
             orphan.content_type.clone(),
         ));
+    }
+
+    let part_paths: HashSet<_> = parts
+        .iter()
+        .map(|part| normalize_path(&part.part.path))
+        .collect();
+    let mut relationships = Vec::new();
+    for cache in &package.cache_definitions {
+        if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {
+            continue;
+        }
+        let Some(rels) = pivot_package_relationships(
+            &cache.definition_path,
+            &cache.raw_relationships,
+            &part_paths,
+        ) else {
+            return Vec::new();
+        };
+        relationships.extend(rels);
+    }
+    for table in &package.pivot_tables {
+        if table.ownership != domain_types::PivotPackageOwnership::CleanImported {
+            continue;
+        }
+        let Some(rels) =
+            pivot_package_relationships(&table.table_path, &table.raw_relationships, &part_paths)
+        else {
+            return Vec::new();
+        };
+        relationships.extend(rels);
     }
 
     if parts.is_empty() {
@@ -291,7 +302,7 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
             relationship_id_hint: None,
         },
         parts,
-        relationships: Vec::new(),
+        relationships,
         ownership: OpaquePackageOwnership::OrphanCleanPackageData,
     }]
 }
@@ -384,6 +395,41 @@ fn relationships_from_opaque_sidecar_parts(
     relationships_from_legacy_sidecars(&blob_parts)
 }
 
+fn pivot_package_relationships(
+    owner_path: &str,
+    raw_relationships: &[domain_types::OpcRelationship],
+    part_paths: &HashSet<String>,
+) -> Option<Vec<OpaquePackageRelationship>> {
+    let owner_path = normalize_path(owner_path);
+    raw_relationships
+        .iter()
+        .map(|rel| {
+            let target = if rel.target_mode.as_deref() == Some("External") {
+                OpaqueRelationshipTarget::External {
+                    target: rel.target.clone(),
+                }
+            } else {
+                let resolved =
+                    crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target)
+                        .ok()?;
+                let resolved = normalize_path(&resolved);
+                if !part_paths.contains(&resolved) {
+                    return None;
+                }
+                OpaqueRelationshipTarget::InternalPart { path: resolved }
+            };
+            Some(OpaquePackageRelationship {
+                owner: OpaquePackageOwner::Part {
+                    path: owner_path.clone(),
+                },
+                relationship_type: rel.rel_type.clone(),
+                target,
+                relationship_id_hint: Some(rel.id.clone()),
+            })
+        })
+        .collect()
+}
+
 fn closed_opaque_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
     let part_paths: HashSet<_> = subgraph
         .parts
@@ -443,19 +489,6 @@ fn default_extension_for_path(path: &str) -> Option<(String, String)> {
     } else {
         None
     }
-}
-
-fn relationships_xml(relationships: &[domain_types::OpcRelationship]) -> Vec<u8> {
-    let rels: Vec<_> = relationships
-        .iter()
-        .map(|rel| ooxml_types::shared::OpcRelationship {
-            id: rel.id.clone(),
-            rel_type: rel.rel_type.clone(),
-            target: rel.target.clone(),
-            target_mode: rel.target_mode.clone(),
-        })
-        .collect();
-    RelationshipManager::from_original(&rels).to_xml()
 }
 
 fn relationship_hint(

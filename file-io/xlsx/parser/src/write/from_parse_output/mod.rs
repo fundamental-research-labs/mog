@@ -2028,6 +2028,20 @@ pub fn write_xlsx_from_parse_output(
             Some(relationship_id_hint),
         )?;
     }
+    let cache_id_to_global: std::collections::HashMap<u32, usize> = pivot_data
+        .pivot_cache_entries
+        .iter()
+        .map(|e| (e.cache_id, e.global_idx))
+        .collect();
+    for entry in &pivot_data.pivot_table_entries {
+        if let Some(&cache_global_idx) = cache_id_to_global.get(&entry.cache_id) {
+            crate::write::package_graph::register_generated_pivot_table_cache_relationship(
+                &mut package_graph_builder,
+                entry.global_idx,
+                cache_global_idx,
+            );
+        }
+    }
     crate::write::opaque_subgraph::register_round_trip_opaque_subgraphs(
         &mut package_graph_builder,
         round_trip_ctx,
@@ -2756,26 +2770,21 @@ pub fn write_xlsx_from_parse_output(
     }
 
     // Pivot table and cache XML files
-    // Build a cache_id → cache global_idx lookup for pivot table rels.
-    let cache_id_to_global: std::collections::HashMap<u32, usize> = pivot_data
-        .pivot_cache_entries
-        .iter()
-        .map(|e| (e.cache_id, e.global_idx))
-        .collect();
     for entry in &pivot_data.pivot_table_entries {
-        zip.add_file(
-            &format!("xl/pivotTables/pivotTable{}.xml", entry.global_idx),
-            entry.xml.clone(),
+        let pivot_table_path = format!("xl/pivotTables/pivotTable{}.xml", entry.global_idx);
+        zip.add_file(&pivot_table_path, entry.xml.clone());
+        let pt_rels = package_graph.relationship_manager_for_owner(
+            &crate::write::package_graph::PackageOwner::Part {
+                path: pivot_table_path,
+            },
         );
-        // Pivot table rels (table → cache definition).
-        if let Some(&cache_global_idx) = cache_id_to_global.get(&entry.cache_id) {
-            let pt_rels_xml = pivot_writer::build_pivot_table_rels_xml(cache_global_idx);
+        if !pt_rels.is_empty() {
             zip.add_file(
                 &format!(
                     "xl/pivotTables/_rels/pivotTable{}.xml.rels",
                     entry.global_idx
                 ),
-                pt_rels_xml,
+                pt_rels.to_xml(),
             );
         }
     }

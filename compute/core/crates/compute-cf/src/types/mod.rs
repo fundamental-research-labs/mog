@@ -20,5 +20,5 @@ pub use value::*;
 pub use wire::*;
 
 #[cfg(test)]
-#[path = "../types_tests.rs"]
+#[path = "../types_tests/mod.rs"]
 mod tests;

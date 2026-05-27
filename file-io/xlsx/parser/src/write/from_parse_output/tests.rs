@@ -7,9 +7,10 @@ use crate::write::REL_PIVOT_TABLE;
 use domain_types::{
     AlignmentFormat, AnchorPosition, AuthoredStyleRun, BorderFormat,
     BorderSide as DomainBorderSide, CellData as DomainCellData, CellValue as DomainValue,
-    ChartSpec, ChartType, ColDimension, ColStyleEntry, DataTableOoxmlFlags, DataTableRegion,
-    DocumentFormat, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ObjectSize,
-    ParseOutput, RowDimension, SheetData, SheetDimensions,
+    ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment, CommentType, DataTableOoxmlFlags,
+    DataTableRegion, DocumentFormat, FillFormat, FontFormat, FrozenPane, Hyperlink, MergeRegion,
+    NamedRange, ObjectSize, ParseOutput, RowDimension, SheetData, SheetDimensions, TableColumnSpec,
+    TableSpec,
 };
 use formula_types::CellRef;
 use std::sync::Arc;
@@ -26,7 +27,7 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
 }
 
 #[test]
-fn workbook_with_preserved_sheet_drawing_relationship_must_emit_target_part() {
+fn stale_sheet_drawing_relationship_without_modeled_or_opaque_drawing_is_ignored() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         ..Default::default()
@@ -47,23 +48,48 @@ fn workbook_with_preserved_sheet_drawing_relationship_must_emit_target_part() {
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let rels_xml = String::from_utf8(
-        archive
-            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
-            .unwrap(),
-    )
-    .unwrap();
-    assert!(
-        rels_xml.contains("Target=\"../drawings/drawing1.xml\""),
-        "test precondition: writer should preserve the original sheet drawing relationship"
-    );
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/drawings/drawing1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
 
-    let drawing_path =
-        crate::infra::opc::opc_target_to_zip_path("../drawings/drawing1.xml", "xl/worksheets");
-    assert!(
-        archive.contains(&drawing_path),
-        "worksheet drawing relationship points at missing ZIP part {drawing_path}; sheet rels:\n{rels_xml}"
-    );
+#[test]
+fn external_link_workbook_relationship_uses_graph_resolved_id() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        external_links: vec![domain_types::domain::external_link::ExternalLink {
+            id: "1".to_string(),
+            imported_identity: Some(
+                domain_types::domain::external_link::ImportedExternalLinkIdentity {
+                    excel_ordinal: 1,
+                    workbook_rel_id: "rId20".to_string(),
+                    part_name: "externalLinks/externalLink9.xml".to_string(),
+                    external_book_rid: None,
+                    target: Some("externalLinks/externalLink9.xml".to_string()),
+                    target_mode: None,
+                },
+            ),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<externalReference r:id="rId20"/>"#));
+    assert!(workbook_rels.contains(r#"Id="rId20""#));
+    assert!(workbook_rels.contains(r#"Target="externalLinks/externalLink9.xml""#));
+    assert!(content_types.contains(r#"PartName="/xl/externalLinks/externalLink9.xml""#));
+    assert!(archive.contains("xl/externalLinks/externalLink9.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -798,6 +824,62 @@ fn unmanaged_original_drawing_relationship_is_not_replayed() {
 }
 
 #[test]
+fn generated_drawing_relationship_uses_graph_registered_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![make_chart(ChartType::Column, "Data!A1:B2")],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId9".to_string(),
+                rel_type: REL_DRAWING.to_string(),
+                target: "../drawings/drawing9.xml".to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/drawings/drawing9.xml".to_string(),
+            crate::write::CT_DRAWING.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let sheet_rels = String::from_utf8(sheet_rels_bytes.clone()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let drawing_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_DRAWING && rel.target == "../drawings/drawing1.xml")
+        .expect("generated drawing relationship should target the graph-registered part");
+
+    assert!(archive.contains("xl/drawings/drawing1.xml"));
+    assert!(!archive.contains("xl/drawings/drawing9.xml"));
+    assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
+    assert!(!sheet_rels.contains("drawing9.xml"));
+    assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
+    assert!(content_types.contains("PartName=\"/xl/drawings/drawing1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/drawings/drawing9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_referenced() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -824,6 +906,453 @@ fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_refer
     assert!(!archive.contains("xl/tables/table9.xml"));
     assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
     assert!(!sheet_xml.contains("r:id=\"rId4\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        tables: vec![TableSpec {
+            id: 1,
+            name: "Table1".to_string(),
+            display_name: "Table1".to_string(),
+            range_ref: "A1:B2".to_string(),
+            has_headers: true,
+            auto_filter_ref: Some("A1:B2".to_string()),
+            columns: vec![
+                TableColumnSpec {
+                    name: "A".to_string(),
+                    ..Default::default()
+                },
+                TableColumnSpec {
+                    name: "B".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId4".to_string(),
+                    rel_type: crate::write::REL_TABLE.to_string(),
+                    target: "../tables/table1.xml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId9".to_string(),
+                    rel_type: crate::write::REL_TABLE.to_string(),
+                    target: "../tables/table9.xml".to_string(),
+                    target_mode: None,
+                },
+            ],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/tables/table9.xml".to_string(),
+            crate::write::CT_TABLE.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(archive.contains("xl/tables/table1.xml"));
+    assert!(!archive.contains("xl/tables/table9.xml"));
+    assert!(sheet_xml.contains("<tablePart r:id=\"rId4\"/>"));
+    assert!(sheet_rels.contains("Id=\"rId4\""));
+    assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
+    assert!(!sheet_rels.contains("table9.xml"));
+    assert!(content_types.contains("PartName=\"/xl/tables/table1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/tables/table9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        comments: vec![Comment {
+            cell_ref: "A1".to_string(),
+            author: "Tester".to_string(),
+            content: Some("Header comment".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId7".to_string(),
+                    rel_type: REL_COMMENTS.to_string(),
+                    target: "../comments1.xml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId8".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing1.vml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId9".to_string(),
+                    rel_type: REL_COMMENTS.to_string(),
+                    target: "../comments9.xml".to_string(),
+                    target_mode: None,
+                },
+            ],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/comments9.xml".to_string(),
+            crate::write::CT_COMMENTS.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(!archive.contains("xl/comments9.xml"));
+    assert!(sheet_rels.contains("Id=\"rId7\""));
+    assert!(sheet_rels.contains("Target=\"../comments1.xml\""));
+    assert!(sheet_rels.contains("Id=\"rId8\""));
+    assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
+    assert!(!sheet_rels.contains("comments9.xml"));
+    assert!(sheet_xml.contains("<legacyDrawing r:id=\"rId8\"/>"));
+    assert!(content_types.contains("PartName=\"/xl/comments1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/comments9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_hyperlink_relationship_uses_graph_resolved_id() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![
+            Hyperlink {
+                cell_ref: "A1".to_string(),
+                target: Some("https://example.com".to_string()),
+                display: Some("Example".to_string()),
+                ..Default::default()
+            },
+            Hyperlink {
+                cell_ref: "A2".to_string(),
+                target: Some("https://example.org".to_string()),
+                display: Some("Example Org".to_string()),
+                ..Default::default()
+            },
+        ],
+        comments: vec![Comment {
+            cell_ref: "B1".to_string(),
+            author: "Tester".to_string(),
+            content: Some("Header comment".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId5".to_string(),
+                    rel_type: REL_HYPERLINK.to_string(),
+                    target: "https://example.com".to_string(),
+                    target_mode: Some("External".to_string()),
+                },
+                domain_types::OpcRelationship {
+                    id: "rId1".to_string(),
+                    rel_type: REL_HYPERLINK.to_string(),
+                    target: "https://stale.example".to_string(),
+                    target_mode: Some("External".to_string()),
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_rels.contains("Id=\"rId5\""));
+    assert!(sheet_rels.contains("Target=\"https://example.com\""));
+    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId5\""));
+    assert!(sheet_rels.contains("Target=\"https://example.org\""));
+    assert!(!sheet_rels.contains("stale.example"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_control_property_relationship_uses_graph_registered_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![domain_types::domain::floating_object::FloatingObject {
+            common: domain_types::domain::floating_object::FloatingObjectCommon {
+                name: "Check Box 1".to_string(),
+                anchor: domain_types::domain::floating_object::FloatingObjectAnchor {
+                    anchor_row: 0,
+                    anchor_col: 0,
+                    end_row: Some(2),
+                    end_col: Some(2),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            data: domain_types::domain::floating_object::FloatingObjectData::FormControl(
+                domain_types::domain::floating_object::FormControlData {
+                    control_type: "CheckBox".to_string(),
+                    cell_link: Some("$A$1".to_string()),
+                    input_range: None,
+                    ooxml: Some(
+                        domain_types::domain::floating_object::FormControlOoxmlProps {
+                            shape_id: 1025,
+                            checked: Some("Checked".to_string()),
+                            anchor_source: "Modern".to_string(),
+                            ..Default::default()
+                        },
+                    ),
+                },
+            ),
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId9".to_string(),
+                    rel_type: REL_CTRL_PROP.to_string(),
+                    target: "../ctrlProps/ctrlProp9.xml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId10".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing9.vml".to_string(),
+                    target_mode: None,
+                },
+            ],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/ctrlProps/ctrlProp9.xml".to_string(),
+            "application/vnd.ms-excel.controlproperties+xml".to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let sheet_rels = String::from_utf8(sheet_rels_bytes.clone()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let ctrl_prop_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_CTRL_PROP && rel.target == "../ctrlProps/ctrlProp1.xml")
+        .expect("generated ctrlProp relationship should target the graph-registered part");
+    let vml_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_VML_DRAWING && rel.target == "../drawings/vmlDrawing1.vml")
+        .expect("generated form-control VML relationship should target the graph-registered part");
+
+    assert!(archive.contains("xl/ctrlProps/ctrlProp1.xml"));
+    assert!(!archive.contains("xl/ctrlProps/ctrlProp9.xml"));
+    assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(sheet_rels.contains("Target=\"../ctrlProps/ctrlProp1.xml\""));
+    assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
+    assert!(!sheet_rels.contains("ctrlProp9.xml"));
+    assert!(!sheet_rels.contains("vmlDrawing9.vml"));
+    assert!(sheet_xml.contains(&format!(r#"r:id="{}""#, ctrl_prop_rel.id)));
+    assert!(sheet_xml.contains(&format!(r#"<legacyDrawing r:id="{}"/>"#, vml_rel.id)));
+    assert!(content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn header_footer_vml_relationship_uses_graph_registered_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let hf_image = crate::domain::print::hf_images::HeaderFooterImage {
+        position: crate::domain::print::hf_images::HfImagePosition::LeftHeader,
+        image_rel_id: "rId1".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let hf_vml = crate::domain::print::hf_images::write_hf_images_vml(&[hf_image], "1", 13313);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId7".to_string(),
+                rel_type: REL_VML_DRAWING.to_string(),
+                target: "../drawings/vmlDrawing8.vml".to_string(),
+                target_mode: None,
+            }],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing9.vml".to_string(),
+                data: hf_vml,
+                rels: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let sheet_rels = String::from_utf8(sheet_rels_bytes.clone()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let hf_vml_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_VML_DRAWING && rel.target == "../drawings/vmlDrawing9.vml")
+        .expect("header/footer VML relationship should target the emitted VML part");
+
+    assert!(archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing8.vml"));
+    assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing9.vml\""));
+    assert!(!sheet_rels.contains("vmlDrawing8.vml"));
+    assert!(sheet_xml.contains(&format!(r#"<legacyDrawingHF r:id="{}"/>"#, hf_vml_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn printer_settings_relationship_requires_graph_registered_binary_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        print_settings: Some(domain_types::PrintSettings {
+            r_id: Some("rId7".to_string()),
+            has_page_setup: true,
+            paper_size: Some(9),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }]);
+    let clean_printer_settings = domain_types::BlobPart {
+        path: "xl/printerSettings/printerSettings1.bin".to_string(),
+        data: b"clean printer settings".to_vec(),
+    };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId7".to_string(),
+                    rel_type: REL_PRINTER_SETTINGS.to_string(),
+                    target: "../printerSettings/printerSettings1.bin".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId9".to_string(),
+                    rel_type: REL_PRINTER_SETTINGS.to_string(),
+                    target: "../printerSettings/printerSettings9.bin".to_string(),
+                    target_mode: None,
+                },
+            ],
+            ..Default::default()
+        }],
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/printerSettings/printerSettings9.bin".to_string(),
+            data: b"stale printer settings".to_vec(),
+        }],
+        opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
+            owner: domain_types::OpaquePackageOwner::Part {
+                path: clean_printer_settings.path.clone(),
+            },
+            owner_relationship: domain_types::OpaquePackageRelationship {
+                owner: domain_types::OpaquePackageOwner::Part {
+                    path: clean_printer_settings.path.clone(),
+                },
+                relationship_type: String::new(),
+                target: domain_types::OpaqueRelationshipTarget::InternalPath {
+                    target: String::new(),
+                },
+                relationship_id_hint: None,
+            },
+            parts: vec![domain_types::OpaquePackagePart {
+                part: clean_printer_settings,
+                content_type: None,
+                default_extension: Some((
+                    "bin".to_string(),
+                    "application/octet-stream".to_string(),
+                )),
+                ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+            }],
+            relationships: Vec::new(),
+            ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/printerSettings/printerSettings1.bin"));
+    assert!(!archive.contains("xl/printerSettings/printerSettings9.bin"));
+    assert!(sheet_xml.contains("<pageSetup"));
+    assert!(sheet_xml.contains("r:id=\"rId7\""));
+    assert!(sheet_rels.contains("Id=\"rId7\""));
+    assert!(sheet_rels.contains("Target=\"../printerSettings/printerSettings1.bin\""));
+    assert!(!sheet_rels.contains("printerSettings9.bin"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1404,7 +1933,7 @@ fn generated_pivot_preserves_clean_imported_pivot_package_contract() {
 }
 
 #[test]
-fn skipped_generated_pivot_preserves_original_pivot_package_passthrough() {
+fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",
         "PivotTable1",
@@ -1480,23 +2009,17 @@ fn skipped_generated_pivot_preserves_original_pivot_package_passthrough() {
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
-    let sheet_rels = String::from_utf8(
-        archive
-            .read_file("xl/worksheets/_rels/sheet2.xml.rels")
-            .unwrap(),
-    )
-    .unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert!(workbook_rels.contains("pivotCache/pivotCacheDefinition7.xml"));
-    assert!(sheet_rels.contains("../pivotTables/pivotTable7.xml"));
-    assert!(content_types.contains("PartName=\"/xl/pivotTables/pivotTable7.xml\""));
-    assert!(content_types.contains("PartName=\"/xl/pivotCache/pivotCacheDefinition7.xml\""));
-    assert!(content_types.contains("PartName=\"/xl/pivotCache/pivotCacheRecords7.xml\""));
-    assert!(archive.contains("xl/pivotTables/pivotTable7.xml"));
-    assert!(archive.contains("xl/pivotCache/pivotCacheDefinition7.xml"));
-    assert!(archive.contains("xl/pivotCache/pivotCacheRecords7.xml"));
+    assert!(!workbook_rels.contains("pivotCache/pivotCacheDefinition7.xml"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet2.xml.rels"));
+    assert!(!content_types.contains("PartName=\"/xl/pivotTables/pivotTable7.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/pivotCache/pivotCacheDefinition7.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/pivotCache/pivotCacheRecords7.xml\""));
+    assert!(!archive.contains("xl/pivotTables/pivotTable7.xml"));
+    assert!(!archive.contains("xl/pivotCache/pivotCacheDefinition7.xml"));
+    assert!(!archive.contains("xl/pivotCache/pivotCacheRecords7.xml"));
     assert!(!archive.contains("xl/pivotTables/pivotTable1.xml"));
     assert!(!archive.contains("xl/pivotCache/pivotCacheDefinition1.xml"));
     assert!(!archive.contains("xl/pivotCache/pivotCacheRecords1.xml"));

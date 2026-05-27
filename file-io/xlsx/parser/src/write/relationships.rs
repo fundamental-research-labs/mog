@@ -279,6 +279,28 @@ impl RelationshipManager {
             .map(|r| r.id.clone())
     }
 
+    /// Replace any relationship for the same type+target with the provided ID,
+    /// or add it if it does not already exist.
+    pub fn set_with_id(&mut self, id: &str, rel_type: &str, target: &str) {
+        if let Some(num_str) = id.strip_prefix("rId") {
+            if let Ok(num) = num_str.parse::<u32>() {
+                if num >= self.next_id {
+                    self.next_id = num + 1;
+                }
+            }
+        }
+        if let Some(existing) = self
+            .relationships
+            .iter_mut()
+            .find(|r| r.rel_type == rel_type && r.target == target)
+        {
+            existing.id = id.to_string();
+            existing.target_mode = None;
+            return;
+        }
+        self.add_with_id(id, rel_type, target);
+    }
+
     /// Add an external relationship (e.g., for hyperlinks)
     ///
     /// # Arguments
@@ -295,6 +317,19 @@ impl RelationshipManager {
             .push(Relationship::external(id.clone(), rel_type, target));
 
         id
+    }
+
+    /// Add an external relationship with a specific ID.
+    pub fn add_external_with_id(&mut self, id: &str, rel_type: &str, target: &str) {
+        if let Some(num_str) = id.strip_prefix("rId") {
+            if let Ok(num) = num_str.parse::<u32>() {
+                if num >= self.next_id {
+                    self.next_id = num + 1;
+                }
+            }
+        }
+        self.relationships
+            .push(Relationship::external(id.to_string(), rel_type, target));
     }
 
     /// Get all relationships

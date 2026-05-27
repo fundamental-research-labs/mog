@@ -33,9 +33,9 @@ use crate::domain::drawings::write::{
 use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
-    CONTENT_TYPE_CTRL_PROP, ControlsWriter, DefinedNameDef, REL_CHART, REL_CHART_EX, REL_COMMENTS,
-    REL_CTRL_PROP, REL_DRAWING, REL_HYPERLINK, REL_PERSON, REL_PIVOT_CACHE, REL_PRINTER_SETTINGS,
-    REL_TABLE, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    ControlsWriter, DefinedNameDef, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP,
+    REL_DRAWING, REL_HYPERLINK, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE,
+    REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 /// Per-sheet extra data needed for ZIP assembly (comments, tables, rels).
@@ -96,6 +96,65 @@ struct ChartExEntry {
     xml: Vec<u8>,
 }
 
+struct WorksheetCommentsGraphEntry {
+    sheet_idx: usize,
+    comments_path: String,
+    comments_target: String,
+    comments_relationship_id_hint: Option<String>,
+    vml_path: String,
+    vml_target: String,
+    vml_relationship_id_hint: Option<String>,
+}
+
+struct WorksheetHyperlinkGraphEntry {
+    sheet_idx: usize,
+    hyperlink_idx: usize,
+    target: String,
+    relationship_id_hint: String,
+}
+
+struct WorksheetControlPropertyGraphEntry {
+    sheet_idx: usize,
+    global_idx: usize,
+    target: String,
+    relationship_id_hint: String,
+}
+
+struct WorksheetHeaderFooterVmlGraphEntry {
+    sheet_idx: usize,
+    path: String,
+    target: String,
+    relationship_id_hint: Option<String>,
+}
+
+struct WorksheetFormControlVmlGraphEntry {
+    sheet_idx: usize,
+    path: String,
+    target: String,
+    relationship_id_hint: Option<String>,
+}
+
+struct WorksheetDrawingGraphEntry {
+    sheet_idx: usize,
+    path: String,
+    target: String,
+    relationship_id_hint: Option<String>,
+}
+
+struct WorksheetPrinterSettingsGraphEntry {
+    sheet_idx: usize,
+    path: String,
+    target: String,
+    relationship_id_hint: String,
+}
+
+struct WorksheetThreadedCommentsGraphEntry {
+    sheet_idx: usize,
+    path: String,
+    target: String,
+    relationship_id_hint: Option<String>,
+}
+
 fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
     if chart_spec.preserved_chart_xml.is_some() {
         return false;
@@ -118,6 +177,23 @@ fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool 
         || chart_spec.legend.is_some()
         || chart_spec.data_labels.is_some()
         || chart_spec.data_table.is_some()
+}
+
+fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {
+    let Some(ctx) = round_trip_ctx else {
+        return false;
+    };
+    let normalized = path.trim_start_matches('/');
+    ctx.opaque_package_subgraphs.iter().any(|subgraph| {
+        subgraph.parts.iter().any(|part| {
+            part.part.path.trim_start_matches('/') == normalized
+                && matches!(
+                    part.ownership,
+                    domain_types::OpaquePackageOwnership::CleanImported
+                        | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
+                )
+        })
+    })
 }
 
 /// Write an XLSX file from a `ParseOutput`.
@@ -387,7 +463,9 @@ pub fn write_xlsx_from_parse_output(
 
         // ── Print Settings ──────────────────────────────────────────────
         if let Some(ref ps) = sheet_data.print_settings {
-            let pw = crate::domain::print::write::print_writer_from_domain(ps);
+            let mut ps = ps.clone();
+            ps.r_id = None;
+            let pw = crate::domain::print::write::print_writer_from_domain(&ps);
             sheet_writer.set_print_writer(pw);
         }
 
@@ -661,8 +739,6 @@ pub fn write_xlsx_from_parse_output(
             round_trip_ctx
                 .and_then(|ctx| ctx.sheets.get(sheet_idx))
                 .map(|sheet_rt| {
-                    let mut cp: Option<String> = None;
-                    let mut dp: Option<String> = None;
                     // Identify the comment VML path by matching legacyDrawing r:id
                     let comment_vml_path: Option<String> =
                         sheet_rt.legacy_drawing_r_id.as_ref().and_then(|rid| {
@@ -672,13 +748,6 @@ pub fn write_xlsx_from_parse_output(
                                 .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
                                 .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
                         });
-                    for rel in &sheet_rt.sheet_opc_rels {
-                        if rel.rel_type.ends_with("/comments") {
-                            cp = Some(opc_target_to_zip_path(&rel.target, "xl/worksheets"));
-                        } else if rel.rel_type.ends_with("/drawing") {
-                            dp = Some(opc_target_to_zip_path(&rel.target, "xl/worksheets"));
-                        }
-                    }
                     // Parse extra VML drawings (header/footer images) into domain types
                     let mut hf_vml_parsed: Option<crate::domain::print::hf_images::ParsedHfVml> =
                         None;
@@ -699,10 +768,10 @@ pub fn write_xlsx_from_parse_output(
                         }
                     }
                     (
-                        cp,
+                        None,
                         comment_vml_path,
                         hf_vml_parsed,
-                        sheet_rt.original_drawing_path.clone().or(dp),
+                        sheet_rt.original_drawing_path.clone(),
                     )
                 })
                 .unwrap_or((None, None, None, None));
@@ -747,30 +816,30 @@ pub fn write_xlsx_from_parse_output(
         });
     }
 
-    // Now set tableParts XML on sheet writers for sheets that have tables.
-    for (idx, extras) in sheet_extras.iter().enumerate() {
-        if !extras.tables.is_empty() {
-            let mut table_parts_xml = String::new();
-            let table_count = extras.tables.len();
-            table_parts_xml.push_str(&format!("<tableParts count=\"{}\">", table_count));
-            // The r:ids for tables in sheet rels will be assigned below.
-            // For now, use placeholders that match what we'll generate.
-            // Table r:ids come after hyperlink and comment r:ids.
-            for i in 0..table_count {
-                // Placeholder r:id — will be set correctly during rels generation.
-                table_parts_xml.push_str(&format!("<tablePart r:id=\"rIdTable{}\"/>", i + 1));
-            }
-            table_parts_xml.push_str("</tableParts>");
-            sheet_writers[idx].set_table_parts_xml(table_parts_xml);
-        }
-    }
-
     // ── Build pivot table and cache data ──────────────────────────────
     let pivot_data = pivot_writer::build_pivot_data(output, round_trip_ctx);
 
     // ── Build sheet rels and assign r:ids ────────────────────────────────
     // We need to build rels for each sheet and update hyperlink/table r:ids.
-    let mut sheet_rels_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
+    let mut sheet_rels_data: Vec<Option<RelationshipManager>> =
+        Vec::with_capacity(output.sheets.len());
+    let mut sheet_hyperlink_outputs: Vec<Option<Vec<crate::output::results::HyperlinkOutput>>> =
+        vec![None; output.sheets.len()];
+    let mut worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry> = Vec::new();
+    let mut worksheet_control_property_relationships: Vec<WorksheetControlPropertyGraphEntry> =
+        Vec::new();
+    let mut worksheet_header_footer_vml_relationships: Vec<WorksheetHeaderFooterVmlGraphEntry> =
+        Vec::new();
+    let mut worksheet_form_control_vml_relationships: Vec<WorksheetFormControlVmlGraphEntry> =
+        Vec::new();
+    let mut worksheet_drawing_relationships: Vec<WorksheetDrawingGraphEntry> = Vec::new();
+    let mut worksheet_printer_settings_relationships: Vec<WorksheetPrinterSettingsGraphEntry> =
+        Vec::new();
+    let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
+    let mut worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry> =
+        Vec::new();
+    let mut worksheet_table_relationships: Vec<(usize, usize, String)> = Vec::new();
+    let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
 
     // Per-sheet drawing rels XML (for drawing→chart references).
     let mut drawing_rels_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
@@ -816,19 +885,8 @@ pub fn write_xlsx_from_parse_output(
             .and_then(|ctx| ctx.sheets.get(sheet_idx))
             .map(|srt| !srt.drawing_anchor_passthroughs.is_empty())
             .unwrap_or(false);
-        let has_preserved_drawing_relationship = round_trip_ctx
-            .and_then(|ctx| ctx.sheets.get(sheet_idx))
-            .map(|srt| {
-                srt.sheet_opc_rels
-                    .iter()
-                    .any(|r| r.rel_type.ends_with("/drawing"))
-            })
-            .unwrap_or(false);
-        let needs_drawing = has_charts
-            || has_chart_ex
-            || has_floating_objects
-            || has_drawing_passthroughs
-            || has_preserved_drawing_relationship;
+        let needs_drawing =
+            has_charts || has_chart_ex || has_floating_objects || has_drawing_passthroughs;
         let has_modeled_drawing_content =
             has_charts || has_chart_ex || has_floating_objects || has_drawing_passthroughs;
 
@@ -843,11 +901,6 @@ pub fn write_xlsx_from_parse_output(
                 .preserved_pivot_table_entries
                 .iter()
                 .any(|e| e.sheet_idx == sheet_idx);
-        let has_original_sheet_rels = round_trip_ctx
-            .and_then(|ctx| ctx.sheets.get(sheet_idx))
-            .map(|srt| !srt.sheet_opc_rels.is_empty())
-            .unwrap_or(false);
-
         let has_any_hyperlinks = has_hyperlinks || !sheet_data.hyperlinks.is_empty();
         if !has_comments
             && !has_tables
@@ -858,7 +911,6 @@ pub fn write_xlsx_from_parse_output(
             && !has_hf_vml
             && !has_form_controls
             && !has_pivot_tables
-            && !has_original_sheet_rels
         {
             sheet_rels_data.push(None);
             drawing_rels_data.push(None);
@@ -867,40 +919,12 @@ pub fn write_xlsx_from_parse_output(
         }
 
         let sheet_num = sheet_idx + 1;
-
-        // When round-trip context provides original sheet relationships,
-        // replay them to preserve relationship IDs and ordering.
-        let has_original_rels = round_trip_ctx
+        let original_sheet_rels = round_trip_ctx
             .and_then(|ctx| ctx.sheets.get(sheet_idx))
-            .map(|srt| !srt.sheet_opc_rels.is_empty())
-            .unwrap_or(false);
+            .map(|srt| srt.sheet_opc_rels.as_slice())
+            .unwrap_or(&[]);
 
-        let mut rels = if has_original_rels {
-            let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-            // Convert domain_types::OpcRelationship → ooxml_types::shared::OpcRelationship
-            let ooxml_rels: Vec<ooxml_types::shared::OpcRelationship> = srt
-                .sheet_opc_rels
-                .iter()
-                .filter(|r| {
-                    pivot_package::keep_sheet_relationship(&pivot_data, r)
-                        && package_authority::keep_original_sheet_relationship(
-                            &pivot_data,
-                            sheet_idx,
-                            extras,
-                            r,
-                        )
-                })
-                .map(|r| ooxml_types::shared::OpcRelationship {
-                    id: r.id.clone(),
-                    rel_type: r.rel_type.clone(),
-                    target: r.target.clone(),
-                    target_mode: r.target_mode.clone(),
-                })
-                .collect();
-            RelationshipManager::from_original(&ooxml_rels)
-        } else {
-            create_sheet_rels()
-        };
+        let mut rels = create_sheet_rels();
 
         // Classify whether a hyperlink target needs a relationship (r:id) or can be
         // written as a plain `location` attribute. External URLs, `#`-prefixed internal
@@ -913,68 +937,12 @@ pub fn write_xlsx_from_parse_output(
                 || target.starts_with("file:")
         }
 
-        // Hyperlink rels (external URLs and internal links stored as rels)
-        if !has_original_rels {
-            let mut hyperlink_r_ids: Vec<(Option<String>, bool)> = Vec::new();
-            for hl in &sheet_data.hyperlinks {
-                if let Some(ref target) = hl.target {
-                    if target_needs_rel(target) {
-                        let r_id = rels.add_external(REL_HYPERLINK, target);
-                        let is_internal_rel = target.starts_with('#');
-                        hyperlink_r_ids.push((Some(r_id), is_internal_rel));
-                    } else {
-                        // Internal location-based link — no relationship needed.
-                        hyperlink_r_ids.push((None, false));
-                    }
-                } else if let Some(ref location) = hl.location {
-                    // Has location but no target — write as location attribute directly.
-                    hyperlink_r_ids.push((None, false));
-                    let _ = location; // suppress unused warning
-                } else {
-                    hyperlink_r_ids.push((None, false));
-                }
-            }
-
-            // Update hyperlink r:ids on the sheet writer.
-            if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
-                let mut hyperlink_outputs = Vec::with_capacity(sheet_data.hyperlinks.len());
-                for (i, hl) in sheet_data.hyperlinks.iter().enumerate() {
-                    let (r_id, is_internal_rel) =
-                        hyperlink_r_ids.get(i).cloned().unwrap_or((None, false));
-                    // When an internal link has an r:id, the location is encoded in the
-                    // rel target — don't also write it as a `location` attribute.
-                    let location = if is_internal_rel {
-                        String::new()
-                    } else if r_id.is_none() {
-                        // No relationship — use location or target as the location attribute.
-                        hl.location
-                            .clone()
-                            .or_else(|| hl.target.clone())
-                            .unwrap_or_default()
-                    } else {
-                        hl.location.clone().unwrap_or_default()
-                    };
-                    hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
-                        cell_ref: hl.cell_ref.clone(),
-                        location,
-                        display: hl.display.clone().unwrap_or_default(),
-                        tooltip: hl.tooltip.clone().unwrap_or_default(),
-                        r_id,
-                        uid: hl.uid.clone(),
-                    });
-                }
-                sheet_writers[sheet_idx].set_hyperlinks(hyperlink_outputs);
-            }
-        } else if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
-            // With original rels, extract hyperlink r:ids from existing relationships
-            let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-            let mut hl_rels: Vec<&domain_types::OpcRelationship> = srt
-                .sheet_opc_rels
+        // Hyperlink rels (external URLs and internal links stored as rels).
+        if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
+            let mut hl_rels: Vec<&domain_types::OpcRelationship> = original_sheet_rels
                 .iter()
-                .filter(|r| r.rel_type.ends_with("/hyperlink"))
+                .filter(|r| r.rel_type == REL_HYPERLINK)
                 .collect();
-            // Sort by rId numeric suffix to match the order hyperlinks appear.
-            // Lexicographic sort puts "rId10" before "rId2"; extract the number.
             hl_rels.sort_by(|a, b| {
                 let num = |s: &str| {
                     s.strip_prefix("rId")
@@ -999,245 +967,268 @@ pub fn write_xlsx_from_parse_output(
 
             let mut hyperlink_outputs = Vec::with_capacity(sheet_data.hyperlinks.len());
             for hl in &sheet_data.hyperlinks {
-                // Match this hyperlink to an original rel by target.
-                // Check external target first, then internal location (#location format).
-                let matched_rel = hl
-                    .target
-                    .as_ref()
-                    .and_then(|t| {
-                        let ids = rel_target_to_ids.get_mut(t)?;
-                        if ids.is_empty() {
-                            return None;
-                        }
-                        let id = ids.remove(0);
-                        Some((id, t.starts_with('#')))
-                    })
-                    .or_else(|| {
-                        // For internal links, Yrs export strips "#" from target and puts
-                        // it in location. Check if "#" + location matches a rel target.
-                        hl.location.as_ref().and_then(|loc| {
-                            let prefixed = format!("#{}", loc);
-                            let ids = rel_target_to_ids.get_mut(&prefixed)?;
-                            if ids.is_empty() {
-                                return None;
-                            }
-                            let id = ids.remove(0);
-                            Some((id, true))
-                        })
+                let Some(target) = hl.target.clone() else {
+                    hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
+                        cell_ref: hl.cell_ref.clone(),
+                        location: hl.location.clone().unwrap_or_default(),
+                        display: hl.display.clone().unwrap_or_default(),
+                        tooltip: hl.tooltip.clone().unwrap_or_default(),
+                        r_id: None,
+                        uid: hl.uid.clone(),
                     });
+                    continue;
+                };
+                if !target_needs_rel(&target) {
+                    hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
+                        cell_ref: hl.cell_ref.clone(),
+                        location: hl.location.clone().unwrap_or(target),
+                        display: hl.display.clone().unwrap_or_default(),
+                        tooltip: hl.tooltip.clone().unwrap_or_default(),
+                        r_id: None,
+                        uid: hl.uid.clone(),
+                    });
+                    continue;
+                }
 
-                let (r_id, location) = if let Some((rel_id, is_internal_rel)) = matched_rel {
-                    let loc = if is_internal_rel {
-                        // Location is in the rel target — don't duplicate it.
-                        String::new()
+                let hinted_id = rel_target_to_ids.get_mut(&target).and_then(|ids| {
+                    if ids.is_empty() {
+                        None
                     } else {
-                        hl.location.clone().unwrap_or_default()
-                    };
-                    (Some(rel_id), loc)
+                        Some(ids.remove(0))
+                    }
+                });
+                let r_id = if let Some(ref hinted_id) = hinted_id {
+                    rels.add_external_with_id(hinted_id, REL_HYPERLINK, &target);
+                    hinted_id.clone()
                 } else {
-                    // No matching rel — write as location attribute.
-                    let loc = hl
-                        .location
-                        .clone()
-                        .or_else(|| hl.target.clone())
-                        .unwrap_or_default();
-                    (None, loc)
+                    rels.add_external(REL_HYPERLINK, &target)
+                };
+                let hyperlink_idx = hyperlink_outputs.len();
+                let is_internal_rel = target.starts_with('#');
+                let location = if is_internal_rel {
+                    String::new()
+                } else {
+                    hl.location.clone().unwrap_or_default()
                 };
                 hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
                     cell_ref: hl.cell_ref.clone(),
                     location,
                     display: hl.display.clone().unwrap_or_default(),
                     tooltip: hl.tooltip.clone().unwrap_or_default(),
-                    r_id,
+                    r_id: Some(r_id),
                     uid: hl.uid.clone(),
                 });
+                worksheet_hyperlink_relationships.push(WorksheetHyperlinkGraphEntry {
+                    sheet_idx,
+                    hyperlink_idx,
+                    target,
+                    relationship_id_hint: hyperlink_outputs[hyperlink_idx]
+                        .r_id
+                        .clone()
+                        .unwrap_or_default(),
+                });
             }
-            sheet_writers[sheet_idx].set_hyperlinks(hyperlink_outputs);
+            sheet_hyperlink_outputs[sheet_idx] = Some(hyperlink_outputs);
         }
 
         // Comment rels
         if has_comments {
-            if !has_original_rels {
-                global_vml_idx += 1;
-                global_comment_idx += 1;
-                let _comments_r_id = rels.add(
+            global_vml_idx += 1;
+            global_comment_idx += 1;
+            let comments_path = sheet_extras[sheet_idx]
+                .original_comment_path
+                .clone()
+                .unwrap_or_else(|| format!("xl/comments{}.xml", global_comment_idx));
+            let comments_target = worksheet_relative_target(&comments_path);
+            let comments_relationship_id_hint = if let Some(r_id) =
+                package_authority::relationship_id_hint(
+                    original_sheet_rels,
                     REL_COMMENTS,
-                    &format!("../comments{}.xml", global_comment_idx),
-                );
-                let vml_r_id = rels.add(
-                    REL_VML_DRAWING,
-                    &format!("../drawings/vmlDrawing{}.vml", global_vml_idx),
-                );
-                sheet_writers[sheet_idx].set_legacy_drawing_r_id(vml_r_id);
+                    &comments_target,
+                    None,
+                )
+                .filter(|r_id| rels.get_by_id(r_id).is_none())
+            {
+                rels.add_with_id(&r_id, REL_COMMENTS, &comments_target);
+                Some(r_id)
             } else {
-                // Extract VML r:id from original rels
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                if let Some(vml_rel) = srt
-                    .sheet_opc_rels
-                    .iter()
-                    .find(|r| r.rel_type.ends_with("/vmlDrawing"))
-                {
-                    sheet_writers[sheet_idx].set_legacy_drawing_r_id(vml_rel.id.clone());
-                }
-                // Still bump counters to stay in sync for sheets without original rels
-                global_vml_idx += 1;
-                global_comment_idx += 1;
-            }
+                Some(rels.add(REL_COMMENTS, &comments_target))
+            };
+            let vml_path = sheet_extras[sheet_idx]
+                .original_vml_path
+                .clone()
+                .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
+            let vml_target = worksheet_relative_target(&vml_path);
+            let vml_relationship_id_hint = if let Some(r_id) =
+                package_authority::relationship_id_hint(
+                    original_sheet_rels,
+                    REL_VML_DRAWING,
+                    &vml_target,
+                    None,
+                )
+                .filter(|r_id| rels.get_by_id(r_id).is_none())
+            {
+                rels.add_with_id(&r_id, REL_VML_DRAWING, &vml_target);
+                Some(r_id)
+            } else {
+                Some(rels.add(REL_VML_DRAWING, &vml_target))
+            };
+            worksheet_comments_relationships.push(WorksheetCommentsGraphEntry {
+                sheet_idx,
+                comments_path,
+                comments_target,
+                comments_relationship_id_hint,
+                vml_path,
+                vml_target,
+                vml_relationship_id_hint,
+            });
         }
 
         // Header/footer VML rels (legacyDrawingHF)
         if sheet_extras[sheet_idx].hf_vml.is_some() {
-            if has_original_rels {
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                if let Some(hf_r_id) = &srt.legacy_drawing_hf_r_id {
-                    sheet_writers[sheet_idx].set_legacy_drawing_hf_r_id(hf_r_id.clone());
-                }
-            } else {
-                // Generate new relationship for HF VML
-                global_vml_idx += 1;
-                let hf_vml_r_id = rels.add(
-                    REL_VML_DRAWING,
-                    &format!("../drawings/vmlDrawing{}.vml", global_vml_idx),
-                );
-                sheet_writers[sheet_idx].set_legacy_drawing_hf_r_id(hf_vml_r_id);
+            let hf = sheet_extras[sheet_idx].hf_vml.as_ref().unwrap();
+            if let Some(n) = extract_vml_drawing_number(&hf.vml_path) {
+                global_vml_idx = global_vml_idx.max(n);
             }
+            let hf_target = worksheet_relative_target(&hf.vml_path);
+            let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
+                original_sheet_rels,
+                REL_VML_DRAWING,
+                &hf_target,
+                None,
+            )
+            .filter(|r_id| rels.get_by_id(r_id).is_none())
+            {
+                rels.add_with_id(&r_id, REL_VML_DRAWING, &hf_target);
+                Some(r_id)
+            } else {
+                Some(rels.add(REL_VML_DRAWING, &hf_target))
+            };
+            worksheet_header_footer_vml_relationships.push(WorksheetHeaderFooterVmlGraphEntry {
+                sheet_idx,
+                path: hf.vml_path.clone(),
+                target: hf_target,
+                relationship_id_hint,
+            });
         }
 
         // Form controls rels (ctrlProp, VML, worksheet controls XML)
         if has_form_controls {
             let controls = &sheet_extras[sheet_idx].form_controls;
-            let controls_writer = ControlsWriter::new(controls.clone());
-            let base_shape_id: u32 = 1025;
 
-            if has_original_rels {
-                // Extract ctrlProp r:ids from original rels
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                let mut ctrl_prop_r_ids: Vec<String> = srt
-                    .sheet_opc_rels
-                    .iter()
-                    .filter(|r| r.rel_type.ends_with("/ctrlProp"))
-                    .map(|r| r.id.clone())
-                    .collect();
-                // Sort by rId numeric suffix
-                ctrl_prop_r_ids.sort_by(|a, b| {
-                    let num = |s: &str| {
-                        s.strip_prefix("rId")
-                            .and_then(|n| n.parse::<u32>().ok())
-                            .unwrap_or(0)
-                    };
-                    num(a).cmp(&num(b))
-                });
-
-                // Set VML legacyDrawing for form controls if not already set by comments
-                if !has_comments {
-                    if let Some(vml_rel) = srt
-                        .sheet_opc_rels
-                        .iter()
-                        .find(|r| r.rel_type.ends_with("/vmlDrawing"))
-                    {
-                        sheet_writers[sheet_idx].set_legacy_drawing_r_id(vml_rel.id.clone());
-                    }
-                    global_vml_idx += 1;
-                }
-
-                // Prefer the original worksheet controls XML for imported files.
-                // This preserves mc:Fallback presence/absence and namespace placement.
-                if let Some(raw_controls_xml) = &srt.worksheet_controls_xml {
-                    sheet_writers[sheet_idx].set_controls_xml(raw_controls_xml.clone());
+            let mut ctrl_prop_r_ids: Vec<String> = Vec::with_capacity(controls.len());
+            for _ in 0..controls.len() {
+                global_ctrl_prop_idx += 1;
+                let target = format!("../ctrlProps/ctrlProp{}.xml", global_ctrl_prop_idx);
+                let r_id = if let Some(r_id) = package_authority::relationship_id_hint(
+                    original_sheet_rels,
+                    REL_CTRL_PROP,
+                    &target,
+                    None,
+                ) {
+                    rels.add_with_id(&r_id, REL_CTRL_PROP, &target);
+                    r_id
                 } else {
-                    let ctrl_xml =
-                        controls_writer.write_worksheet_controls(base_shape_id, &ctrl_prop_r_ids);
-                    sheet_writers[sheet_idx]
-                        .set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
-                }
+                    rels.add(REL_CTRL_PROP, &target)
+                };
+                ctrl_prop_r_ids.push(r_id);
+                worksheet_control_property_relationships.push(WorksheetControlPropertyGraphEntry {
+                    sheet_idx,
+                    global_idx: global_ctrl_prop_idx,
+                    target,
+                    relationship_id_hint: ctrl_prop_r_ids.last().cloned().unwrap_or_default(),
+                });
+            }
 
-                // Bump global counter to stay in sync
-                global_ctrl_prop_idx += controls.len();
-            } else {
-                // Add ctrlProp relationships
-                let mut ctrl_prop_r_ids: Vec<String> = Vec::with_capacity(controls.len());
-                for _ in 0..controls.len() {
-                    global_ctrl_prop_idx += 1;
-                    let r_id = rels.add(
-                        REL_CTRL_PROP,
-                        &format!("../ctrlProps/ctrlProp{}.xml", global_ctrl_prop_idx),
-                    );
-                    ctrl_prop_r_ids.push(r_id);
+            // Add VML drawing relationship for form controls (separate from comment VML)
+            if !has_comments {
+                global_vml_idx += 1;
+                let path = sheet_extras[sheet_idx]
+                    .original_vml_path
+                    .clone()
+                    .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
+                if let Some(n) = extract_vml_drawing_number(&path) {
+                    global_vml_idx = global_vml_idx.max(n);
                 }
-
-                // Add VML drawing relationship for form controls (separate from comment VML)
-                if !has_comments {
-                    global_vml_idx += 1;
-                    let vml_r_id = rels.add(
+                let target = worksheet_relative_target(&path);
+                let relationship_id_hint = if let Some(r_id) =
+                    package_authority::relationship_id_hint(
+                        original_sheet_rels,
                         REL_VML_DRAWING,
-                        &format!("../drawings/vmlDrawing{}.vml", global_vml_idx),
-                    );
-                    sheet_writers[sheet_idx].set_legacy_drawing_r_id(vml_r_id);
-                }
+                        &target,
+                        None,
+                    )
+                    .filter(|r_id| rels.get_by_id(r_id).is_none())
+                {
+                    rels.add_with_id(&r_id, REL_VML_DRAWING, &target);
+                    Some(r_id)
+                } else {
+                    Some(rels.add(REL_VML_DRAWING, &target))
+                };
+                worksheet_form_control_vml_relationships.push(WorksheetFormControlVmlGraphEntry {
+                    sheet_idx,
+                    path,
+                    target,
+                    relationship_id_hint,
+                });
+            }
 
-                // Generate worksheet controls XML
-                let ctrl_xml =
-                    controls_writer.write_worksheet_controls(base_shape_id, &ctrl_prop_r_ids);
-                sheet_writers[sheet_idx]
-                    .set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
+            if let Some(raw_controls_xml) = round_trip_ctx
+                .and_then(|ctx| ctx.sheets.get(sheet_idx))
+                .and_then(|srt| srt.worksheet_controls_xml.as_ref())
+            {
+                sheet_writers[sheet_idx].set_controls_xml(raw_controls_xml.clone());
             }
         }
 
         // Threaded comment rels (must come after legacy comment rels)
         if has_threaded_comments {
             global_tc_idx += 1;
-            if !has_original_rels {
-                rels.add(
-                    REL_THREADED_COMMENT,
-                    &format!("../threadedComments/threadedComment{}.xml", global_tc_idx),
-                );
-            }
+            let path = format!("xl/threadedComments/threadedComment{}.xml", global_tc_idx);
+            let target = worksheet_relative_target(&path);
+            let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
+                original_sheet_rels,
+                REL_THREADED_COMMENT,
+                &target,
+                None,
+            )
+            .filter(|r_id| rels.get_by_id(r_id).is_none())
+            {
+                rels.add_with_id(&r_id, REL_THREADED_COMMENT, &target);
+                Some(r_id)
+            } else {
+                Some(rels.add(REL_THREADED_COMMENT, &target))
+            };
+            worksheet_threaded_comments_relationships.push(WorksheetThreadedCommentsGraphEntry {
+                sheet_idx,
+                path,
+                target,
+                relationship_id_hint,
+            });
         }
 
         // Table rels
         if has_tables {
-            if has_original_rels {
-                // Extract table r:ids from original rels
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                let mut table_r_ids: Vec<String> = srt
-                    .sheet_opc_rels
-                    .iter()
-                    .filter(|r| r.rel_type.ends_with("/table"))
-                    .map(|r| r.id.clone())
-                    .collect();
-                table_r_ids.sort();
+            let tables_before: usize = sheet_extras[..sheet_idx]
+                .iter()
+                .map(|e| e.tables.len())
+                .sum();
 
-                let mut table_parts_xml = String::new();
-                table_parts_xml
-                    .push_str(&format!("<tableParts count=\"{}\">", extras.tables.len()));
-                for (i, _) in extras.tables.iter().enumerate() {
-                    let r_id = table_r_ids
-                        .get(i)
-                        .cloned()
-                        .unwrap_or_else(|| format!("rId{}", i + 1));
-                    table_parts_xml.push_str(&format!("<tablePart r:id=\"{}\"/>", r_id));
-                }
-                table_parts_xml.push_str("</tableParts>");
-                sheet_writers[sheet_idx].set_table_parts_xml(table_parts_xml);
-            } else {
-                // Compute the global table index offset for this sheet's tables.
-                let tables_before: usize = sheet_extras[..sheet_idx]
-                    .iter()
-                    .map(|e| e.tables.len())
-                    .sum();
-
-                // Build tableParts XML with correct r:ids.
-                let mut table_parts_xml = String::new();
-                table_parts_xml
-                    .push_str(&format!("<tableParts count=\"{}\">", extras.tables.len()));
-                for i in 0..extras.tables.len() {
-                    let global_idx = tables_before + i + 1;
-                    let table_r_id =
-                        rels.add(REL_TABLE, &format!("../tables/table{}.xml", global_idx));
-                    table_parts_xml.push_str(&format!("<tablePart r:id=\"{}\"/>", table_r_id));
-                }
-                table_parts_xml.push_str("</tableParts>");
-                sheet_writers[sheet_idx].set_table_parts_xml(table_parts_xml);
+            for i in 0..extras.tables.len() {
+                let global_idx = tables_before + i + 1;
+                let target = format!("../tables/table{}.xml", global_idx);
+                let table_r_id = if let Some(r_id) = package_authority::relationship_id_hint(
+                    original_sheet_rels,
+                    REL_TABLE,
+                    &target,
+                    None,
+                ) {
+                    rels.add_with_id(&r_id, REL_TABLE, &target);
+                    r_id
+                } else {
+                    rels.add(REL_TABLE, &target)
+                };
+                worksheet_table_relationships.push((sheet_idx, global_idx, table_r_id));
             }
         }
 
@@ -1247,15 +1238,17 @@ pub fn write_xlsx_from_parse_output(
         // `<pivotTableDefinition r:id="..."/>` children in the worksheet XML.
         // The relationship file supplies the target part; both must be kept in
         // lockstep with the generated authoritative pivot paths.
-        let preserved_pivot_table_r_ids =
-            pivot_package::preserved_sheet_relationship_ids(&pivot_data, sheet_idx);
-        if !preserved_pivot_table_r_ids.is_empty() {
-            sheet_writers[sheet_idx].set_preserved_pivot_table_r_ids(preserved_pivot_table_r_ids);
-        }
         let pivot_table_r_ids =
             pivot_package::add_sheet_relationships(&mut rels, &pivot_data, sheet_idx);
         if !pivot_table_r_ids.is_empty() {
-            sheet_writers[sheet_idx].set_pivot_table_r_ids(pivot_table_r_ids);
+            for (entry, r_id) in pivot_data
+                .pivot_table_entries
+                .iter()
+                .filter(|entry| entry.sheet_idx == sheet_idx)
+                .zip(pivot_table_r_ids)
+            {
+                worksheet_pivot_table_relationships.push((sheet_idx, entry.global_idx, r_id));
+            }
         }
 
         // Chart / Drawing / Floating Object rels
@@ -1263,49 +1256,34 @@ pub fn write_xlsx_from_parse_output(
             global_drawing_idx += 1;
             let _chart_entries = &all_chart_entries[sheet_idx];
 
-            if has_original_rels {
-                // Extract drawing r:id from original rels
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                if let Some(dr) = srt
-                    .sheet_opc_rels
-                    .iter()
-                    .find(|r| r.rel_type.ends_with("/drawing"))
-                {
-                    sheet_writers[sheet_idx].set_drawing_r_id(dr.id.clone());
-                }
-            } else {
-                // Add sheet→drawing relationship.
-                let drawing_r_id = rels.add(
+            let drawing_path = sheet_extras[sheet_idx]
+                .original_drawing_path
+                .clone()
+                .unwrap_or_else(|| format!("xl/drawings/drawing{}.xml", global_drawing_idx));
+            let drawing_target = worksheet_relative_target(&drawing_path);
+            let drawing_relationship_id_hint = if let Some(r_id) =
+                package_authority::relationship_id_hint(
+                    original_sheet_rels,
                     REL_DRAWING,
-                    &format!("../drawings/drawing{}.xml", global_drawing_idx),
-                );
-                sheet_writers[sheet_idx].set_drawing_r_id(drawing_r_id);
-            }
+                    &drawing_target,
+                    None,
+                )
+                .filter(|r_id| rels.get_by_id(r_id).is_none())
+            {
+                rels.add_with_id(&r_id, REL_DRAWING, &drawing_target);
+                Some(r_id)
+            } else {
+                Some(rels.add(REL_DRAWING, &drawing_target))
+            };
+            worksheet_drawing_relationships.push(WorksheetDrawingGraphEntry {
+                sheet_idx,
+                path: drawing_path,
+                target: drawing_target,
+                relationship_id_hint: drawing_relationship_id_hint,
+            });
 
             // Build drawing .rels (drawing→chart references, image refs).
-            // When original drawing OPC rels are available, initialize from them to
-            // preserve the original relationship order and IDs.
-            let has_drawing_opc_rels = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .map(|srt| !srt.drawing_opc_rels.is_empty())
-                .unwrap_or(false);
-            let mut drawing_rels = if has_drawing_opc_rels {
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-                let ooxml_rels: Vec<ooxml_types::shared::OpcRelationship> = srt
-                    .drawing_opc_rels
-                    .iter()
-                    .filter(|r| package_authority::keep_original_drawing_relationship(extras, r))
-                    .map(|r| ooxml_types::shared::OpcRelationship {
-                        id: r.id.clone(),
-                        rel_type: r.rel_type.clone(),
-                        target: r.target.clone(),
-                        target_mode: r.target_mode.clone(),
-                    })
-                    .collect();
-                RelationshipManager::from_original(&ooxml_rels)
-            } else {
-                RelationshipManager::new()
-            };
+            let mut drawing_rels = RelationshipManager::new();
 
             let imported_drawing = round_trip_ctx
                 .and_then(|ctx| ctx.sheets.get(sheet_idx))
@@ -1773,18 +1751,35 @@ pub fn write_xlsx_from_parse_output(
         }
 
         // Printer settings relationship.
-        // When original rels exist, the printer settings rel was already replayed above.
-        // When they don't, generate it from the domain model's r:id.
-        if has_printer_settings && !has_original_rels {
+        if has_printer_settings {
             if let Some(ref ps) = sheet_data.print_settings {
-                if let Some(ref r_id) = ps.r_id {
-                    // Use the r:id from the domain model as the relationship ID.
-                    // The target path follows the standard convention.
-                    // The actual binary is written by binary blob passthrough.
-                    rels.add_with_id(
-                        r_id,
-                        REL_PRINTER_SETTINGS,
-                        &format!("../printerSettings/printerSettings{}.bin", sheet_num),
+                let path = format!("xl/printerSettings/printerSettings{}.bin", sheet_num);
+                let target = format!("../printerSettings/printerSettings{}.bin", sheet_num);
+                if has_clean_opaque_part(round_trip_ctx, &path) {
+                    let r_id = ps
+                        .r_id
+                        .clone()
+                        .filter(|r_id| rels.get_by_id(r_id).is_none())
+                        .or_else(|| {
+                            package_authority::relationship_id_hint(
+                                original_sheet_rels,
+                                REL_PRINTER_SETTINGS,
+                                &target,
+                                None,
+                            )
+                            .filter(|r_id| rels.get_by_id(r_id).is_none())
+                        })
+                        .unwrap_or_else(|| rels.add(REL_PRINTER_SETTINGS, &target));
+                    if rels.find_by_target(&target).is_none() {
+                        rels.add_with_id(&r_id, REL_PRINTER_SETTINGS, &target);
+                    }
+                    worksheet_printer_settings_relationships.push(
+                        WorksheetPrinterSettingsGraphEntry {
+                            sheet_idx,
+                            path,
+                            target,
+                            relationship_id_hint: r_id,
+                        },
                     );
                 }
             }
@@ -1793,7 +1788,7 @@ pub fn write_xlsx_from_parse_output(
         if rels.is_empty() {
             sheet_rels_data.push(None);
         } else {
-            sheet_rels_data.push(Some(rels.to_xml()));
+            sheet_rels_data.push(Some(rels));
         }
     }
 
@@ -1831,6 +1826,15 @@ pub fn write_xlsx_from_parse_output(
     } else {
         round_trip_ctx.and_then(|ctx| ctx.raw_persons_xml.clone())
     };
+    let external_link_exports: Vec<(domain_types::domain::external_link::ExternalLink, String)> =
+        round_trip_ctx
+            .map(|ctx| {
+                ctx.external_links
+                    .iter()
+                    .map(|link| (link.clone(), external_link_part_name(link)))
+                    .collect()
+            })
+            .unwrap_or_default();
     let mut package_graph_builder =
         crate::write::package_graph::build_modeled_workbook_graph_builder(
             crate::write::package_graph::ModeledWorkbookGraphOptions {
@@ -1845,12 +1849,406 @@ pub fn write_xlsx_from_parse_output(
             },
             round_trip_ctx,
         )?;
+    for (link, part_name) in &external_link_exports {
+        crate::write::package_graph::register_workbook_external_link(
+            &mut package_graph_builder,
+            part_name,
+            external_link_relationship_id_hint(link, part_name),
+        )?;
+    }
+    for entry in &pivot_data.preserved_workbook_cache_entries {
+        crate::write::package_graph::register_preserved_workbook_pivot_cache(
+            &mut package_graph_builder,
+            &entry.relationship_target,
+            &entry.relationship_id,
+        );
+    }
+    for entry in &pivot_data.pivot_cache_entries {
+        crate::write::package_graph::register_generated_pivot_cache(
+            &mut package_graph_builder,
+            entry.global_idx,
+        )?;
+    }
+    for entry in &worksheet_hyperlink_relationships {
+        crate::write::package_graph::register_worksheet_hyperlink(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.target,
+            &entry.relationship_id_hint,
+        );
+    }
+    for entry in &worksheet_control_property_relationships {
+        crate::write::package_graph::register_worksheet_control_property(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            entry.global_idx,
+            &entry.relationship_id_hint,
+        )?;
+    }
+    for entry in &worksheet_header_footer_vml_relationships {
+        crate::write::package_graph::register_worksheet_vml_drawing(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
+        )?;
+    }
+    for entry in &worksheet_form_control_vml_relationships {
+        crate::write::package_graph::register_worksheet_vml_drawing(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
+        )?;
+    }
+    for entry in &worksheet_drawing_relationships {
+        crate::write::package_graph::register_worksheet_drawing(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
+        )?;
+    }
+    for entry in &worksheet_printer_settings_relationships {
+        crate::write::package_graph::register_worksheet_printer_settings(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            &entry.relationship_id_hint,
+        );
+    }
+    for entry in &worksheet_comments_relationships {
+        crate::write::package_graph::register_worksheet_comments(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.comments_path,
+            entry.comments_relationship_id_hint.as_deref(),
+            &entry.vml_path,
+            entry.vml_relationship_id_hint.as_deref(),
+        )?;
+    }
+    for entry in &worksheet_threaded_comments_relationships {
+        crate::write::package_graph::register_worksheet_threaded_comments(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
+        )?;
+    }
+    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_table_relationships {
+        crate::write::package_graph::register_worksheet_table(
+            &mut package_graph_builder,
+            *sheet_idx,
+            *global_idx,
+            Some(relationship_id_hint),
+        )?;
+    }
+    for entry in &pivot_data.preserved_pivot_table_entries {
+        crate::write::package_graph::register_preserved_worksheet_pivot_table(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.relationship_target,
+            &entry.relationship_id,
+        )?;
+    }
+    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_pivot_table_relationships {
+        crate::write::package_graph::register_generated_worksheet_pivot_table(
+            &mut package_graph_builder,
+            *sheet_idx,
+            *global_idx,
+            Some(relationship_id_hint),
+        )?;
+    }
     crate::write::opaque_subgraph::register_round_trip_opaque_subgraphs(
         &mut package_graph_builder,
         round_trip_ctx,
         &pivot_data,
     )?;
     let package_graph = package_graph_builder.resolve()?;
+
+    for entry in &worksheet_hyperlink_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_HYPERLINK, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet hyperlink relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        if let Some(hyperlinks) = sheet_hyperlink_outputs[entry.sheet_idx].as_mut()
+            && let Some(hyperlink) = hyperlinks.get_mut(entry.hyperlink_idx)
+        {
+            hyperlink.r_id = Some(r_id);
+        }
+    }
+    for (sheet_idx, hyperlinks) in sheet_hyperlink_outputs.into_iter().enumerate() {
+        if let Some(hyperlinks) = hyperlinks {
+            sheet_writers[sheet_idx].set_hyperlinks(hyperlinks);
+        }
+    }
+
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        if extras.form_controls.is_empty() {
+            continue;
+        }
+        if round_trip_ctx
+            .and_then(|ctx| ctx.sheets.get(sheet_idx))
+            .and_then(|srt| srt.worksheet_controls_xml.as_ref())
+            .is_some()
+        {
+            continue;
+        }
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let mut ctrl_prop_r_ids = Vec::with_capacity(extras.form_controls.len());
+        for entry in worksheet_control_property_relationships
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+        {
+            let r_id = package_graph
+                .relationship_id(&owner, REL_CTRL_PROP, &entry.target)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing worksheet control property relationship for sheet {} target {}",
+                        sheet_idx + 1,
+                        entry.target
+                    ))
+                })?
+                .to_string();
+            ctrl_prop_r_ids.push(r_id);
+        }
+        let controls_writer = ControlsWriter::new(extras.form_controls.clone());
+        let ctrl_xml = controls_writer.write_worksheet_controls(1025, &ctrl_prop_r_ids);
+        sheet_writers[sheet_idx].set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
+    }
+
+    for entry in &worksheet_printer_settings_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_PRINTER_SETTINGS, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet printer settings relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        sheet_writers[entry.sheet_idx]
+            .ensure_print_writer()
+            .set_printer_settings_r_id(Some(r_id));
+    }
+
+    for entry in &worksheet_header_footer_vml_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_VML_DRAWING, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet header/footer VML relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        if rels.find_by_target(&entry.target).is_none() {
+            rels.add_with_id(&r_id, REL_VML_DRAWING, &entry.target);
+        }
+        sheet_writers[entry.sheet_idx].set_legacy_drawing_hf_r_id(r_id);
+    }
+
+    for entry in &worksheet_form_control_vml_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_VML_DRAWING, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet form-control VML relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        rels.set_with_id(&r_id, REL_VML_DRAWING, &entry.target);
+        sheet_writers[entry.sheet_idx].set_legacy_drawing_r_id(r_id);
+    }
+
+    for entry in &worksheet_drawing_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_DRAWING, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet drawing relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        rels.set_with_id(&r_id, REL_DRAWING, &entry.target);
+        sheet_writers[entry.sheet_idx].set_drawing_r_id(r_id);
+    }
+
+    for entry in &worksheet_comments_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let comments_r_id = package_graph
+            .relationship_id(&owner, REL_COMMENTS, &entry.comments_target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet comments relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.comments_target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        if rels.find_by_target(&entry.comments_target).is_none() {
+            rels.add_with_id(&comments_r_id, REL_COMMENTS, &entry.comments_target);
+        }
+
+        let vml_r_id = package_graph
+            .relationship_id(&owner, REL_VML_DRAWING, &entry.vml_target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet VML drawing relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.vml_target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        if rels.find_by_target(&entry.vml_target).is_none() {
+            rels.add_with_id(&vml_r_id, REL_VML_DRAWING, &entry.vml_target);
+        }
+        sheet_writers[entry.sheet_idx].set_legacy_drawing_r_id(vml_r_id);
+    }
+
+    for entry in &worksheet_threaded_comments_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_THREADED_COMMENT, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet threaded comments relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        if rels.find_by_target(&entry.target).is_none() {
+            rels.add_with_id(&r_id, REL_THREADED_COMMENT, &entry.target);
+        }
+    }
+
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        if extras.tables.is_empty() {
+            continue;
+        }
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let tables_before: usize = sheet_extras[..sheet_idx]
+            .iter()
+            .map(|e| e.tables.len())
+            .sum();
+        let mut table_parts_xml = String::new();
+        table_parts_xml.push_str(&format!("<tableParts count=\"{}\">", extras.tables.len()));
+        for i in 0..extras.tables.len() {
+            let global_idx = tables_before + i + 1;
+            let target = format!("../tables/table{}.xml", global_idx);
+            let table_r_id = package_graph
+                .relationship_id(&owner, REL_TABLE, &target)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing worksheet table relationship for sheet {} table {}",
+                        sheet_idx + 1,
+                        global_idx
+                    ))
+                })?;
+            table_parts_xml.push_str(&format!("<tablePart r:id=\"{}\"/>", table_r_id));
+        }
+        table_parts_xml.push_str("</tableParts>");
+        sheet_writers[sheet_idx].set_table_parts_xml(table_parts_xml);
+    }
+    for sheet_idx in 0..output.sheets.len() {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let preserved_pivot_table_r_ids: Vec<String> = pivot_data
+            .preserved_pivot_table_entries
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+            .map(|entry| {
+                package_graph
+                    .relationship_id(&owner, REL_PIVOT_TABLE, &entry.relationship_target)
+                    .ok_or_else(|| {
+                        WriteError::PackageIntegrity(format!(
+                            "missing preserved worksheet pivot relationship for sheet {} target {}",
+                            sheet_idx + 1,
+                            entry.relationship_target
+                        ))
+                    })
+                    .map(str::to_string)
+            })
+            .collect::<Result<_, _>>()?;
+        if !preserved_pivot_table_r_ids.is_empty() {
+            sheet_writers[sheet_idx].set_preserved_pivot_table_r_ids(preserved_pivot_table_r_ids);
+        }
+
+        let pivot_table_r_ids: Vec<String> = pivot_data
+            .pivot_table_entries
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+            .map(|entry| {
+                let target = format!("../pivotTables/pivotTable{}.xml", entry.global_idx);
+                package_graph
+                    .relationship_id(&owner, REL_PIVOT_TABLE, &target)
+                    .ok_or_else(|| {
+                        WriteError::PackageIntegrity(format!(
+                            "missing generated worksheet pivot relationship for sheet {} target {}",
+                            sheet_idx + 1,
+                            target
+                        ))
+                    })
+                    .map(str::to_string)
+            })
+            .collect::<Result<_, _>>()?;
+        if !pivot_table_r_ids.is_empty() {
+            sheet_writers[sheet_idx].set_pivot_table_r_ids(pivot_table_r_ids);
+        }
+    }
 
     // ── 4. Build workbook.xml ───────────────────────────────────────────
     let mut workbook_writer = WorkbookWriter::new();
@@ -1943,16 +2341,6 @@ pub fn write_xlsx_from_parse_output(
         workbook_writer.set_calc_settings(calc);
     }
 
-    let external_link_exports: Vec<(domain_types::domain::external_link::ExternalLink, String)> =
-        round_trip_ctx
-            .map(|ctx| {
-                ctx.external_links
-                    .iter()
-                    .map(|link| (link.clone(), external_link_part_name(link)))
-                    .collect()
-            })
-            .unwrap_or_default();
-
     // ── 6. Generate XML parts ───────────────────────────────────────────
     let styles_xml = styles_writer.to_xml();
     // SST entries are emitted in insertion order; the index returned by
@@ -1970,31 +2358,11 @@ pub fn write_xlsx_from_parse_output(
         "application/vnd.openxmlformats-package.relationships+xml",
     );
     content_types.add_default("xml", "application/xml");
-    if let Some(ctx) = round_trip_ctx {
-        for (ext, ct) in &ctx.content_type_defaults {
-            if package_authority::round_trip_default_extension_is_emitted(ctx, &pivot_data, ext) {
-                content_types.add_default(ext, ct);
-            }
-        }
-    }
     if has_any_comments {
         content_types.add_default(
             "vml",
             "application/vnd.openxmlformats-officedocument.vmlDrawing",
         );
-    }
-    // Replay original Override entries from RoundTripContext for order fidelity,
-    // then fill in any overrides for parts that weren't in the original.
-    if let Some(ctx) = round_trip_ctx {
-        for (part_name, ct) in &ctx.content_type_overrides {
-            if !pivot_package::keep_content_type_override(&pivot_data, part_name, ct)
-                || part_name == "/xl/calcChain.xml"
-                || !package_authority::round_trip_content_type_part_is_emitted(ctx, part_name)
-            {
-                continue;
-            }
-            content_types.add_override(part_name, ct);
-        }
     }
     package_graph.add_content_types_to(&mut content_types);
     if round_trip_ctx.map_or(false, |ctx| ctx.doc_metadata_label_info.is_some())
@@ -2002,93 +2370,14 @@ pub fn write_xlsx_from_parse_output(
     {
         content_types.add_doc_metadata_label_info();
     }
-    {
-        let mut ct_comment_idx = 0usize;
-        let mut ct_tc_idx = 0usize;
-        for extras in &sheet_extras {
-            if extras.comments.is_some() {
-                ct_comment_idx += 1;
-                if let Some(ref path) = extras.original_comment_path {
-                    let normalized = if path.starts_with('/') {
-                        path.clone()
-                    } else {
-                        format!("/{}", path)
-                    };
-                    if !content_types.has_override(&normalized) {
-                        content_types.add_comments_path(path);
-                    }
-                } else {
-                    let path = format!("/xl/comments{}.xml", ct_comment_idx);
-                    if !content_types.has_override(&path) {
-                        content_types.add_comments(ct_comment_idx);
-                    }
-                }
-            }
-            if extras.threaded_comments.is_some() {
-                ct_tc_idx += 1;
-                let path = format!("/xl/threadedComments/threadedComment{}.xml", ct_tc_idx);
-                if !content_types.has_override(&path) {
-                    content_types
-                        .add_override(&path, "application/vnd.ms-excel.threadedcomments+xml");
-                }
-            }
-        }
-    }
+    // Comments, VML comment drawings, and threaded comments are registered
+    // through the package graph when emitted.
     // persons.xml is registered through the package graph when emitted.
-    {
-        let mut table_global = 0usize;
-        for extras in &sheet_extras {
-            for _ in &extras.tables {
-                table_global += 1;
-                let path = format!("/xl/tables/table{}.xml", table_global);
-                if !content_types.has_override(&path) {
-                    content_types.add_table(table_global);
-                }
-            }
-        }
-    }
-    // Pivot table and cache content types.
-    pivot_package::add_pivot_content_types(&mut content_types, &pivot_data);
-    // Form control (ctrlProp) content types.
-    {
-        let mut ct_ctrl_idx: usize = 0;
-        for extras in &sheet_extras {
-            for _ in &extras.form_controls {
-                ct_ctrl_idx += 1;
-                let path = format!("/xl/ctrlProps/ctrlProp{}.xml", ct_ctrl_idx);
-                if !content_types.has_override(&path) {
-                    content_types.add_override(&path, CONTENT_TYPE_CTRL_PROP);
-                }
-            }
-        }
-    }
-    // Chart and drawing content types.
-    // Use original drawing paths from round-trip context when available,
-    // otherwise use sequential global drawing index.
-    {
-        let mut ct_drawing_idx: usize = 0;
-        for (idx, _) in output.sheets.iter().enumerate() {
-            if drawing_xml_data[idx].is_none() {
-                continue;
-            }
-            ct_drawing_idx += 1;
-            if let Some(ref orig_path) = sheet_extras[idx].original_drawing_path {
-                let ct_path = if orig_path.starts_with('/') {
-                    orig_path.clone()
-                } else {
-                    format!("/{}", orig_path)
-                };
-                if !content_types.has_override(&ct_path) {
-                    content_types.add_override(
-                        &ct_path,
-                        "application/vnd.openxmlformats-officedocument.drawing+xml",
-                    );
-                }
-            } else {
-                content_types.add_drawing(ct_drawing_idx);
-            }
-        }
-    }
+    // Table content types are registered through the package graph when emitted.
+    // Pivot table and cache content types are registered through the package graph.
+    // Form control (ctrlProp) content types are registered through the package graph.
+    // Drawing content types are registered through the package graph when emitted.
+    // Chart content types.
     for chart_entries in &all_chart_entries {
         for entry in chart_entries {
             let path = format!("/xl/charts/chart{}.xml", entry.global_idx);
@@ -2179,86 +2468,49 @@ pub fn write_xlsx_from_parse_output(
             }
         }
     }
-    // External link content types.
     let has_external_links = !external_link_exports.is_empty();
-    if has_external_links {
-        for (_, part_name) in &external_link_exports {
-            let path = format!("/{}", external_link_zip_path(part_name));
-            if !content_types.has_override(&path) {
-                content_types.add_override(&path, crate::domain::external::write::CT_EXTERNAL_LINK);
-            }
-        }
-    }
     let content_types_xml = content_types.to_xml();
 
     let root_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Root);
     let root_rels_xml = root_rels.to_xml();
 
-    // Build workbook relationships from the resolved package graph, then append
-    // feature paths that have not migrated to the graph facade yet.
-    let mut workbook_rels = package_graph
+    let workbook_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
-    if has_external_links {
-        for (link_def, part_name) in &external_link_exports {
-            if let Some(imported) = &link_def.imported_identity {
-                if workbook_rels.get_by_id(&imported.workbook_rel_id).is_none() {
-                    workbook_rels.add_with_id(
-                        &imported.workbook_rel_id,
-                        super::REL_EXTERNAL_LINK,
-                        part_name,
-                    );
-                }
-            } else if workbook_rels.find_by_target(part_name).is_none() {
-                workbook_rels.add(super::REL_EXTERNAL_LINK, part_name);
-            }
-        }
-    }
-    if let Some(ctx) = round_trip_ctx {
-        for orig_rel in &ctx.workbook_relationships {
-            if orig_rel.rel_type == super::REL_PIVOT_CACHE
-                && pivot_package::keep_workbook_relationship(&pivot_data, orig_rel)
-                && workbook_rels.get_by_id(&orig_rel.id).is_none()
-            {
-                workbook_rels.add_with_id(&orig_rel.id, &orig_rel.rel_type, &orig_rel.target);
-            }
-        }
-    }
-
-    if persons_xml.is_some() && !workbook_rels.has_rel_type(REL_PERSON) {
-        workbook_rels.add(REL_PERSON, "persons/person.xml");
-    }
-
     // Pivot cache workbook rels + pivotCaches XML for workbook.xml.
     // Clean imported cache entries come from the typed package sidecar and keep
     // their original relationship IDs/targets; generated entries are appended.
     let mut pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
     for entry in &pivot_data.preserved_workbook_cache_entries {
-        if workbook_rels.get_by_id(&entry.relationship_id).is_none() {
-            if let Some(existing) = workbook_rels.find_by_target(&entry.relationship_target) {
-                pivot_cache_xml_entries.push((entry.cache_id, existing));
-                continue;
-            }
-            workbook_rels.add_with_id(
-                &entry.relationship_id,
+        let r_id = package_graph
+            .relationship_id(
+                &crate::write::package_graph::PackageOwner::Workbook,
                 REL_PIVOT_CACHE,
                 &entry.relationship_target,
-            );
-        }
-        pivot_cache_xml_entries.push((entry.cache_id, entry.relationship_id.clone()));
+            )
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing workbook relationship for preserved pivot cache {}",
+                    entry.relationship_target
+                ))
+            })?
+            .to_string();
+        pivot_cache_xml_entries.push((entry.cache_id, r_id));
     }
     for entry in &pivot_data.pivot_cache_entries {
         let target = format!("pivotCache/pivotCacheDefinition{}.xml", entry.global_idx);
-        // When using RT rels, the pivot cache rel may already be present — find its rId.
-        let r_id = if let Some(existing) = workbook_rels
-            .relationships()
-            .iter()
-            .find(|r| r.target == target)
-        {
-            existing.id.clone()
-        } else {
-            workbook_rels.add(REL_PIVOT_CACHE, &target)
-        };
+        let r_id = package_graph
+            .relationship_id(
+                &crate::write::package_graph::PackageOwner::Workbook,
+                REL_PIVOT_CACHE,
+                &target,
+            )
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing workbook relationship for generated pivot cache {target}"
+                ))
+            })?
+            .to_string();
         pivot_cache_xml_entries.push((entry.cache_id, r_id));
     }
     if !pivot_cache_xml_entries.is_empty() {
@@ -2269,19 +2521,14 @@ pub fn write_xlsx_from_parse_output(
     if has_external_links {
         let external_reference_r_ids: Vec<String> = external_link_exports
             .iter()
-            .filter_map(|(link, part_name)| {
-                link.imported_identity
-                    .as_ref()
-                    .map(|identity| identity.workbook_rel_id.clone())
-                    .or_else(|| {
-                        workbook_rels
-                            .relationships()
-                            .iter()
-                            .find(|rel| {
-                                rel.rel_type == super::REL_EXTERNAL_LINK && rel.target == *part_name
-                            })
-                            .map(|rel| rel.id.clone())
-                    })
+            .filter_map(|(_, part_name)| {
+                package_graph
+                    .relationship_id(
+                        &crate::write::package_graph::PackageOwner::Workbook,
+                        super::REL_EXTERNAL_LINK,
+                        &external_link_workbook_target(part_name),
+                    )
+                    .map(str::to_string)
             })
             .collect();
         workbook_writer.set_external_reference_r_ids(external_reference_r_ids);
@@ -2379,10 +2626,10 @@ pub fn write_xlsx_from_parse_output(
         zip.add_file(&format!("xl/worksheets/sheet{}.xml", sheet_num), sheet_xml);
 
         // Sheet rels
-        if let Some(ref rels_xml) = sheet_rels_data[idx] {
+        if let Some(ref rels) = sheet_rels_data[idx] {
             zip.add_file(
                 &format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num),
-                rels_xml.clone(),
+                rels.to_xml(),
             );
         }
 
@@ -2462,13 +2709,21 @@ pub fn write_xlsx_from_parse_output(
 
             // Write VML drawing for form controls (separate from comment VML)
             if sheet_extras[idx].comments.is_none() {
+                let vml_entry = worksheet_form_control_vml_relationships
+                    .iter()
+                    .find(|entry| entry.sheet_idx == idx)
+                    .ok_or_else(|| {
+                        WriteError::PackageIntegrity(format!(
+                            "missing graph-registered form-control VML part for sheet {}",
+                            idx + 1
+                        ))
+                    })?;
                 if let Some(ctx) = round_trip_ctx
                     && let Some(sheet_rt) = ctx.sheets.get(idx)
-                    && let Some(original_vml_path) = &sheet_extras[idx].original_vml_path
                     && let Some(vml_part) = sheet_rt
                         .raw_vml_drawings
                         .iter()
-                        .find(|part| &part.path == original_vml_path)
+                        .find(|part| part.path == vml_entry.path)
                 {
                     if let Some(n) = extract_vml_drawing_number(&vml_part.path) {
                         zip_vml_idx = zip_vml_idx.max(n);
@@ -2478,14 +2733,9 @@ pub fn write_xlsx_from_parse_output(
                         zip.add_file(&rels.path, rels.data.clone());
                     }
                 } else {
-                    zip_vml_idx += 1;
-
                     let vml_xml = controls_writer.write_vml_form_controls(base_shape_id);
 
-                    zip.add_file(
-                        &format!("xl/drawings/vmlDrawing{}.vml", zip_vml_idx),
-                        vml_xml,
-                    );
+                    zip.add_file(&vml_entry.path, vml_xml);
                 }
             }
         }
@@ -2557,10 +2807,11 @@ pub fn write_xlsx_from_parse_output(
             entry.records_xml.clone(),
         );
         // Pivot cache definition rels (definition → records relationship).
-        let cache_rels_xml = pivot_writer::build_pivot_cache_rels_xml(&format!(
-            "pivotCacheRecords{}.xml",
-            entry.global_idx
-        ));
+        let cache_rels_xml = package_graph
+            .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Part {
+                path: format!("xl/pivotCache/pivotCacheDefinition{}.xml", entry.global_idx),
+            })
+            .to_xml();
         zip.add_file(
             &format!(
                 "xl/pivotCache/_rels/pivotCacheDefinition{}.xml.rels",
@@ -2636,24 +2887,27 @@ pub fn write_xlsx_from_parse_output(
 
     // Drawing XML files and their .rels
     {
-        let mut zip_drawing_idx: usize = 0;
         for (idx, _) in output.sheets.iter().enumerate() {
             if drawing_xml_data[idx].is_none() {
                 continue;
             }
-            zip_drawing_idx += 1;
 
-            // Use original path from round-trip context when available
-            let drawing_path = sheet_extras[idx]
-                .original_drawing_path
-                .clone()
-                .unwrap_or_else(|| format!("xl/drawings/drawing{}.xml", zip_drawing_idx));
+            let drawing_path = worksheet_drawing_relationships
+                .iter()
+                .find(|entry| entry.sheet_idx == idx)
+                .map(|entry| entry.path.as_str())
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing graph-registered drawing part for sheet {}",
+                        idx + 1
+                    ))
+                })?;
             // Derive the .rels path from the drawing path
             let drawing_filename = drawing_path.rsplit('/').next().unwrap_or("drawing.xml");
             let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
 
             if let Some(ref drawing_xml) = drawing_xml_data[idx] {
-                zip.add_file(&drawing_path, drawing_xml.clone());
+                zip.add_file(drawing_path, drawing_xml.clone());
             }
 
             if let Some(ref drawing_rels_xml) = drawing_rels_data[idx] {
@@ -2692,6 +2946,13 @@ fn extract_table_number_from_rels_path(path: &str) -> Option<u32> {
 }
 
 use crate::infra::opc::opc_target_to_zip_path;
+
+fn worksheet_relative_target(zip_path: &str) -> String {
+    let path = zip_path.trim_start_matches('/');
+    path.strip_prefix("xl/")
+        .map(|rest| format!("../{rest}"))
+        .unwrap_or_else(|| path.to_string())
+}
 
 fn extract_vml_drawing_number(path: &str) -> Option<usize> {
     let file = path.rsplit('/').next()?;
@@ -2841,6 +3102,33 @@ fn external_link_zip_path(part_name: &str) -> String {
     } else {
         format!("xl/{}", trimmed)
     }
+}
+
+fn external_link_workbook_target(part_name: &str) -> String {
+    part_name
+        .trim_start_matches('/')
+        .strip_prefix("xl/")
+        .unwrap_or_else(|| part_name.trim_start_matches('/'))
+        .to_string()
+}
+
+fn external_link_relationship_id_hint<'a>(
+    link: &'a domain_types::domain::external_link::ExternalLink,
+    part_name: &str,
+) -> Option<&'a str> {
+    let identity = link.imported_identity.as_ref()?;
+    if identity.target_mode.is_some() {
+        return None;
+    }
+    let expected_target = external_link_workbook_target(part_name);
+    if identity
+        .target
+        .as_deref()
+        .is_some_and(|target| target != expected_target)
+    {
+        return None;
+    }
+    Some(identity.workbook_rel_id.as_str())
 }
 
 fn external_link_rels_path(zip_path: &str) -> String {

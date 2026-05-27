@@ -9,10 +9,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::relationships::{Relationship, RelationshipManager};
 use super::write_error::WriteError;
 use super::{
-    CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_EXTENDED_PROPERTIES, CT_METADATA,
-    CT_SHARED_STRINGS, CT_STYLES, CT_THEME, CT_WORKBOOK, CT_WORKSHEET, REL_CORE_PROPERTIES,
-    REL_CUSTOM_PROPERTIES, REL_EXTENDED_PROPERTIES, REL_METADATA, REL_OFFICE_DOCUMENT,
-    REL_SHARED_STRINGS, REL_STYLES, REL_THEME, REL_WORKSHEET,
+    CONTENT_TYPE_CTRL_PROP, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
+    CT_EXTENDED_PROPERTIES, CT_METADATA, CT_PIVOT_CACHE, CT_PIVOT_TABLE, CT_SHARED_STRINGS,
+    CT_STYLES, CT_TABLE, CT_THEME, CT_WORKBOOK, CT_WORKSHEET, REL_COMMENTS, REL_CORE_PROPERTIES,
+    REL_CTRL_PROP, REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK,
+    REL_HYPERLINK, REL_METADATA, REL_OFFICE_DOCUMENT, REL_PIVOT_CACHE, REL_PIVOT_TABLE,
+    REL_PRINTER_SETTINGS, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME,
+    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
 };
 use crate::domain::content_types::write::ContentTypesManager;
 use domain_types::{
@@ -22,6 +25,13 @@ use domain_types::{
 
 pub type PackagePartPath = String;
 pub type RelationshipOwnerPath = String;
+
+const CT_PIVOT_CACHE_RECORDS: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
+const REL_PIVOT_CACHE_RECORDS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
+const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
+const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -544,6 +554,305 @@ pub fn modeled_part(path: &str, content_type: &str) -> PackagePart {
         default_extension: None,
         kind: PackagePartKind::Modeled,
         bytes: None,
+    }
+}
+
+pub fn register_workbook_external_link(
+    graph: &mut PackageGraphBuilder,
+    part_name: &str,
+    identity_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = normalize_external_link_part_path(part_name);
+    graph.register_part(modeled_part(
+        &path,
+        crate::domain::external::write::CT_EXTERNAL_LINK,
+    ))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_EXTERNAL_LINK.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: identity_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_generated_pivot_cache(
+    graph: &mut PackageGraphBuilder,
+    global_idx: usize,
+) -> Result<(), WriteError> {
+    let definition_path = format!("xl/pivotCache/pivotCacheDefinition{global_idx}.xml");
+    let records_path = format!("xl/pivotCache/pivotCacheRecords{global_idx}.xml");
+    graph.register_part(modeled_part(&definition_path, CT_PIVOT_CACHE))?;
+    graph.register_part(modeled_part(&records_path, CT_PIVOT_CACHE_RECORDS))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_PIVOT_CACHE.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: definition_path.clone(),
+        },
+        identity_hint: None,
+    });
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: definition_path,
+        },
+        relationship_type: REL_PIVOT_CACHE_RECORDS.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path: records_path },
+        identity_hint: None,
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_table(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/tables/table{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_TABLE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        },
+        relationship_type: REL_TABLE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_drawing(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    drawing_path: &str,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(drawing_path, CT_DRAWING))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_DRAWING.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: drawing_path.to_string(),
+        },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_hyperlink(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    target: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_HYPERLINK.to_string(),
+        target: PackageRelationshipTarget::External {
+            target: target.to_string(),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
+pub fn register_worksheet_control_property(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    let path = format!("xl/ctrlProps/ctrlProp{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CONTENT_TYPE_CTRL_PROP))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_CTRL_PROP.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_printer_settings(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    path: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_PRINTER_SETTINGS.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: path.to_string(),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
+pub fn register_worksheet_comments(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    comments_path: &str,
+    comments_relationship_id_hint: Option<&str>,
+    vml_path: &str,
+    vml_relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(comments_path, CT_COMMENTS))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_COMMENTS.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: comments_path.to_string(),
+        },
+        identity_hint: comments_relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+
+    graph.register_part(PackagePart {
+        path: normalize_part_path(vml_path),
+        content_type: None,
+        default_extension: Some(("vml".to_string(), CT_VML_DRAWING.to_string())),
+        kind: PackagePartKind::Modeled,
+        bytes: None,
+    })?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_VML_DRAWING.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: vml_path.to_string(),
+        },
+        identity_hint: vml_relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_vml_drawing(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    vml_path: &str,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(PackagePart {
+        path: normalize_part_path(vml_path),
+        content_type: None,
+        default_extension: Some(("vml".to_string(), CT_VML_DRAWING.to_string())),
+        kind: PackagePartKind::Modeled,
+        bytes: None,
+    })?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_VML_DRAWING.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: vml_path.to_string(),
+        },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_threaded_comments(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    threaded_comments_path: &str,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(threaded_comments_path, CT_THREADED_COMMENTS))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_THREADED_COMMENT.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: threaded_comments_path.to_string(),
+        },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_generated_worksheet_pivot_table(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/pivotTables/pivotTable{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_PIVOT_TABLE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_PIVOT_TABLE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_preserved_worksheet_pivot_table(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    relationship_target: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_PIVOT_TABLE.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_worksheet_child_target(sheet_idx, relationship_target)?,
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+    Ok(())
+}
+
+pub fn register_preserved_workbook_pivot_cache(
+    graph: &mut PackageGraphBuilder,
+    relationship_target: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_PIVOT_CACHE.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_workbook_child_target(relationship_target),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
+fn worksheet_owner(sheet_idx: usize) -> PackageOwner {
+    PackageOwner::Worksheet {
+        index: sheet_idx,
+        path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+    }
+}
+
+fn normalize_external_link_part_path(part_name: &str) -> String {
+    let trimmed = normalize_part_path(part_name);
+    if trimmed.starts_with("xl/") {
+        trimmed
+    } else {
+        format!("xl/{trimmed}")
+    }
+}
+
+fn normalize_worksheet_child_target(sheet_idx: usize, target: &str) -> Result<String, WriteError> {
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    crate::infra::opc::resolve_relationship_target(Some(&owner_path), target)
+        .map(|path| normalize_part_path(&path))
+        .map_err(|err| {
+            WriteError::PackageIntegrity(format!(
+                "invalid worksheet relationship target for sheet {}: {} ({:?})",
+                sheet_idx + 1,
+                target,
+                err
+            ))
+        })
+}
+
+fn normalize_workbook_child_target(target: &str) -> String {
+    let trimmed = normalize_part_path(target);
+    if trimmed.starts_with("xl/") {
+        trimmed
+    } else {
+        format!("xl/{trimmed}")
     }
 }
 

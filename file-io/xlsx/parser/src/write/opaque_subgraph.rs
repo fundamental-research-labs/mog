@@ -18,9 +18,9 @@ const CT_PIVOT_CACHE_RECORDS: &str =
 pub fn register_round_trip_opaque_subgraphs(
     graph: &mut PackageGraphBuilder,
     round_trip_ctx: Option<&RoundTripContext>,
-    pivot_data: &crate::write::pivot_writer::PivotWriteData,
+    _pivot_data: &crate::write::pivot_writer::PivotWriteData,
 ) -> Result<(), WriteError> {
-    for subgraph in opaque_subgraphs(round_trip_ctx, pivot_data) {
+    for subgraph in opaque_subgraphs(round_trip_ctx) {
         graph.register_opaque_subgraph(&subgraph)?;
     }
     Ok(())
@@ -35,10 +35,7 @@ pub fn write_opaque_parts(zip: &mut ZipWriter, graph: &ResolvedPackageGraph) {
     }
 }
 
-fn opaque_subgraphs(
-    round_trip_ctx: Option<&RoundTripContext>,
-    pivot_data: &crate::write::pivot_writer::PivotWriteData,
-) -> Vec<OpaquePackageSubgraph> {
+fn opaque_subgraphs(round_trip_ctx: Option<&RoundTripContext>) -> Vec<OpaquePackageSubgraph> {
     let Some(ctx) = round_trip_ctx else {
         return Vec::new();
     };
@@ -54,7 +51,6 @@ fn opaque_subgraphs(
         );
     }
     subgraphs.extend(lower_pivot_package(ctx));
-    subgraphs.extend(lower_legacy_pivot_package(ctx, pivot_data));
     subgraphs
 }
 
@@ -294,67 +290,6 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
     }]
 }
 
-fn lower_legacy_pivot_package(
-    ctx: &RoundTripContext,
-    pivot_data: &crate::write::pivot_writer::PivotWriteData,
-) -> Vec<OpaquePackageSubgraph> {
-    if !ctx.pivot_package.is_empty()
-        || !pivot_data.pivot_table_entries.is_empty()
-        || !pivot_data.pivot_cache_entries.is_empty()
-    {
-        return Vec::new();
-    }
-
-    let content_types: HashMap<String, String> = ctx
-        .content_type_overrides
-        .iter()
-        .filter(|(part_name, _)| is_pivot_package_path(part_name))
-        .map(|(part_name, content_type)| {
-            (
-                normalize_content_type_part_name(part_name),
-                content_type.clone(),
-            )
-        })
-        .collect();
-    let parts: Vec<_> = ctx
-        .binary_blobs
-        .iter()
-        .filter(|part| is_pivot_package_path(&part.path))
-        .map(|part| {
-            opaque_pivot_part(
-                &part.path,
-                part.data.clone(),
-                content_types
-                    .get(&normalize_content_type_part_name(&part.path))
-                    .cloned(),
-            )
-        })
-        .collect();
-
-    if parts.is_empty() {
-        return Vec::new();
-    }
-
-    vec![OpaquePackageSubgraph {
-        owner: OpaquePackageOwner::Part {
-            path: "xl/workbook.xml".to_string(),
-        },
-        owner_relationship: OpaquePackageRelationship {
-            owner: OpaquePackageOwner::Part {
-                path: "xl/workbook.xml".to_string(),
-            },
-            relationship_type: String::new(),
-            target: OpaqueRelationshipTarget::InternalPath {
-                target: String::new(),
-            },
-            relationship_id_hint: None,
-        },
-        parts,
-        relationships: Vec::new(),
-        ownership: OpaquePackageOwnership::OrphanCleanPackageData,
-    }]
-}
-
 fn custom_xml_part_belongs_to_item(item_path: &str, candidate_path: &str) -> bool {
     let item_path = normalize_path(item_path);
     let candidate_path = normalize_path(candidate_path);
@@ -529,9 +464,4 @@ fn normalize_path(path: &str) -> String {
 
 fn normalize_content_type_part_name(path: &str) -> String {
     format!("/{}", normalize_path(path))
-}
-
-fn is_pivot_package_path(path: &str) -> bool {
-    let path = normalize_path(path);
-    path.starts_with("xl/pivotTables/") || path.starts_with("xl/pivotCache/")
 }

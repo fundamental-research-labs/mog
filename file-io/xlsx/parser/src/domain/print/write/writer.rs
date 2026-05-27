@@ -170,6 +170,12 @@ impl PrintWriter {
         self
     }
 
+    /// Set or clear the printer settings relationship ID on `<pageSetup>`.
+    pub fn set_printer_settings_r_id(&mut self, r_id: Option<String>) -> &mut Self {
+        self.ensure_page_setup().r_id = r_id;
+        self
+    }
+
     // -------------------------------------------------------------------------
     // Margins Methods
     // -------------------------------------------------------------------------

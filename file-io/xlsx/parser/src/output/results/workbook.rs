@@ -542,7 +542,7 @@ pub struct FullParseResult {
     /// Full parsed OOXML stylesheet for lossless style round-tripping.
     /// Preserves theme/indexed color references, cellStyleXfs, dxfs, etc.
     #[serde(skip)]
-    pub parsed_stylesheet: Option<ooxml_types::styles::Stylesheet>,
+    pub parsed_stylesheet: Option<crate::domain::styles::types::Stylesheet>,
     /// Core document properties (docProps/core.xml)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc_props_core: Option<DocPropsCore>,

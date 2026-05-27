@@ -784,7 +784,7 @@ fn convert_sheet(
     shared_strings: &[String],
     shared_strings_rich_runs: &[Option<Vec<domain_types::RichTextRun>>],
     shared_strings_phonetic_xml: &[Option<Vec<u8>>],
-    dxfs: &[ooxml_types::styles::DxfDef],
+    dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
     media_data_urls: &HashMap<String, String>,
 ) -> (SheetData, SheetRoundTripContext) {

@@ -123,10 +123,13 @@ pub(super) fn empty_ext_lst_for_export(
 }
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
-    if raw_xml_contains_element(xml, "sheetPr")
-        && (sheet_data.outline_properties.is_some() || raw_xml_contains_element(xml, "outlinePr"))
-    {
-        return false;
+    if raw_xml_contains_element(xml, "sheetPr") {
+        if sheet_data.outline_properties.is_some() || raw_xml_contains_element(xml, "outlinePr") {
+            return false;
+        }
+        if sheet_data.print_settings.is_some() && raw_xml_contains_element(xml, "pageSetUpPr") {
+            return false;
+        }
     }
     if raw_worksheet_element_contains_modeled_child(xml) {
         return false;
@@ -167,7 +170,9 @@ fn raw_worksheet_element_contains_modeled_child(xml: &str) -> bool {
 }
 
 fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
-    if raw_xml_contains_r_id_attr(xml) && !raw_xml_contains_element(xml, "pivotTableDefinition") {
+    if raw_xml_contains_relationship_id_attr(xml)
+        && !raw_xml_contains_element(xml, "pivotTableDefinition")
+    {
         return true;
     }
 
@@ -188,6 +193,10 @@ fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
     raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
 }
 
+fn raw_xml_contains_relationship_id_attr(raw_xml: &str) -> bool {
+    raw_xml_contains_r_id_attr(raw_xml) || raw_xml_contains_prefixed_relationship_id_attr(raw_xml)
+}
+
 fn raw_xml_contains_r_id_attr(raw_xml: &str) -> bool {
     let bytes = raw_xml.as_bytes();
     let mut pos = 0;
@@ -204,6 +213,54 @@ fn raw_xml_contains_r_id_attr(raw_xml: &str) -> bool {
             return true;
         }
     }
+    false
+}
+
+fn raw_xml_contains_prefixed_relationship_id_attr(raw_xml: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = find_subslice(&bytes[pos..], b":id") {
+        let colon = pos + offset;
+        let attr_end = colon + b":id".len();
+        let mut cursor = attr_end;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if bytes.get(cursor) != Some(&b'=') {
+            pos = attr_end;
+            continue;
+        }
+        cursor += 1;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+
+        let Some(&quote) = bytes.get(cursor) else {
+            pos = attr_end;
+            continue;
+        };
+        if quote != b'"' && quote != b'\'' {
+            pos = attr_end;
+            continue;
+        }
+        cursor += 1;
+        if bytes
+            .get(cursor..cursor + b"rId".len())
+            .is_some_and(|value| value == b"rId")
+        {
+            return true;
+        }
+
+        pos = attr_end;
+    }
+
     false
 }
 
@@ -389,12 +446,47 @@ mod tests {
     }
 
     #[test]
+    fn drops_sheet_pr_page_setup_pr_when_print_settings_are_modeled() {
+        let sheet_data = SheetData {
+            print_settings: Some(domain_types::PrintSettings {
+                has_page_setup: true,
+                scale: Some(75),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0first\0\0sheetPr".to_string(),
+                r#"<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
     fn drops_unknown_preserved_elements_with_raw_relationship_id_attributes() {
         let sheet_data = SheetData::default();
         let sheet_rt = SheetRoundTripContext {
             sheet_preserved_elements: vec![(
                 "worksheet\0after\0sheetData".to_string(),
                 r#"<vendor:state r:id = "rIdStale"/>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn drops_unknown_preserved_elements_with_prefixed_relationship_id_attributes() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData".to_string(),
+                r#"<vendor:state rel:id = "rIdStale"/>"#.to_string(),
             )],
             ..Default::default()
         };

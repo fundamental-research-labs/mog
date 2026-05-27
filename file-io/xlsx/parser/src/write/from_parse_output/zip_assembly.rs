@@ -20,7 +20,7 @@ pub(super) fn write_zip_package(
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     sheet_writers: Vec<SheetWriter>,
-    sheet_rels_data: Vec<Option<RelationshipManager>>,
+    _sheet_rels_data: Vec<Option<RelationshipManager>>,
     sheet_extras: &[SheetExtras],
     external_link_exports: &[(domain_types::domain::external_link::ExternalLink, String)],
     workbook_xml: Vec<u8>,
@@ -179,7 +179,12 @@ pub(super) fn write_zip_package(
         )?;
 
         // Sheet rels
-        if let Some(ref rels) = sheet_rels_data[idx] {
+        let sheet_owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        };
+        let rels = package_graph.relationship_manager_for_owner(&sheet_owner);
+        if !rels.is_empty() {
             zip.add_file(
                 &format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num),
                 rels.to_xml(),

@@ -185,6 +185,64 @@ fn clean_typed_opaque_subgraph_with_missing_owner_target_is_not_exported() {
 }
 
 #[test]
+fn worksheet_owned_clean_opaque_subgraph_writes_sheet_owner_relationship() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext::default()],
+        opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
+            owner: domain_types::OpaquePackageOwner::Worksheet {
+                index: 0,
+                path: "xl/worksheets/sheet1.xml".to_string(),
+            },
+            owner_relationship: domain_types::OpaquePackageRelationship {
+                owner: domain_types::OpaquePackageOwner::Worksheet {
+                    index: 0,
+                    path: "xl/worksheets/sheet1.xml".to_string(),
+                },
+                relationship_type: "http://schemas.microsoft.com/office/2007/relationships/slicer"
+                    .to_string(),
+                target: domain_types::OpaqueRelationshipTarget::InternalPart {
+                    path: "xl/slicers/slicer1.xml".to_string(),
+                },
+                relationship_id_hint: Some("rIdSlicer".to_string()),
+            },
+            parts: vec![domain_types::OpaquePackagePart {
+                part: domain_types::BlobPart {
+                    path: "xl/slicers/slicer1.xml".to_string(),
+                    data: b"<slicer/>".to_vec(),
+                },
+                content_type: Some("application/vnd.ms-excel.slicer+xml".to_string()),
+                default_extension: Some(("xml".to_string(), "application/xml".to_string())),
+                ownership: domain_types::OpaquePackageOwnership::CleanImported,
+            }],
+            relationships: Vec::new(),
+            ownership: domain_types::OpaquePackageOwnership::CleanImported,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        archive.read_file("xl/slicers/slicer1.xml").unwrap(),
+        b"<slicer/>".to_vec()
+    );
+    assert!(sheet_rels.contains(r#"Id="rIdSlicer""#));
+    assert!(sheet_rels.contains(r#"Target="../slicers/slicer1.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn legacy_custom_xml_with_dangling_sidecar_relationship_is_not_exported() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

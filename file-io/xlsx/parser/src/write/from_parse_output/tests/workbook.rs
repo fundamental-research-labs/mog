@@ -595,6 +595,29 @@ fn unknown_preserved_workbook_xml_with_raw_relationship_id_is_not_replayed() {
 }
 
 #[test]
+fn unknown_preserved_workbook_xml_with_prefixed_relationship_id_is_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        workbook_preserved_elements: vec![(
+            "workbook\0after\0workbookPr\0vendorState".to_string(),
+            r#"<vendor:state rel:id = "rIdStale"/>"#.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(!workbook_xml.contains("vendor:state"));
+    assert!(!workbook_xml.contains("rIdStale"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn external_link_imported_identity_cannot_move_part_outside_external_links_cluster() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

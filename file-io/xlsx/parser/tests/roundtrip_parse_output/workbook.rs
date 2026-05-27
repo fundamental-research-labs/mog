@@ -91,9 +91,18 @@ fn roundtrip_named_ranges() {
             name: "SheetScoped".to_string(),
             refers_to: "Sheet1!$A$1:$B$2".to_string(),
             local_sheet_id: Some(0),
-            hidden: false,
-            comment: None,
-            ..Default::default()
+            hidden: true,
+            comment: Some("sheet-local comment".to_string()),
+            custom_menu: Some("sheet-local menu".to_string()),
+            description: Some("sheet-local description".to_string()),
+            help: Some("sheet-local help".to_string()),
+            status_bar: Some("sheet-local status".to_string()),
+            xlm: true,
+            function: true,
+            vb_procedure: true,
+            publish_to_server: true,
+            workbook_parameter: true,
+            xml_space_preserve: true,
         },
     ];
 
@@ -113,6 +122,35 @@ fn roundtrip_named_ranges() {
         .find(|n| n.name == "MyRange")
         .expect("MyRange should exist");
     assert_eq!(my_range.refers_to, "Sheet1!$A$1");
+
+    let sheet_scoped = rt
+        .named_ranges
+        .iter()
+        .find(|n| n.name == "SheetScoped")
+        .expect("SheetScoped should exist");
+    assert_eq!(sheet_scoped.refers_to, "Sheet1!$A$1:$B$2");
+    assert_eq!(sheet_scoped.local_sheet_id, Some(0));
+    assert!(sheet_scoped.hidden);
+    assert_eq!(sheet_scoped.comment.as_deref(), Some("sheet-local comment"));
+    assert_eq!(
+        sheet_scoped.custom_menu.as_deref(),
+        Some("sheet-local menu")
+    );
+    assert_eq!(
+        sheet_scoped.description.as_deref(),
+        Some("sheet-local description")
+    );
+    assert_eq!(sheet_scoped.help.as_deref(), Some("sheet-local help"));
+    assert_eq!(
+        sheet_scoped.status_bar.as_deref(),
+        Some("sheet-local status")
+    );
+    assert!(sheet_scoped.xlm);
+    assert!(sheet_scoped.function);
+    assert!(sheet_scoped.vb_procedure);
+    assert!(sheet_scoped.publish_to_server);
+    assert!(sheet_scoped.workbook_parameter);
+    assert!(sheet_scoped.xml_space_preserve);
 }
 
 // =============================================================================

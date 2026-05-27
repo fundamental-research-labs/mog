@@ -2657,6 +2657,72 @@ fn printer_settings_relationship_requires_graph_registered_binary_part() {
 }
 
 #[test]
+fn printer_settings_without_imported_identity_does_not_wire_clean_orphan_binary() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        print_settings: Some(domain_types::PrintSettings {
+            r_id: Some("rIdStalePrinter".to_string()),
+            has_page_setup: true,
+            paper_size: Some(9),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rIdStalePrinter".to_string(),
+                rel_type: REL_PRINTER_SETTINGS.to_string(),
+                target: "../printerSettings/printerSettings1.bin".to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        }],
+        opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
+            owner: domain_types::OpaquePackageOwner::Part {
+                path: "xl/printerSettings/printerSettings1.bin".to_string(),
+            },
+            owner_relationship: domain_types::OpaquePackageRelationship {
+                owner: domain_types::OpaquePackageOwner::Part {
+                    path: "xl/printerSettings/printerSettings1.bin".to_string(),
+                },
+                relationship_type: String::new(),
+                target: domain_types::OpaqueRelationshipTarget::InternalPath {
+                    target: String::new(),
+                },
+                relationship_id_hint: None,
+            },
+            parts: vec![domain_types::OpaquePackagePart {
+                part: domain_types::BlobPart {
+                    path: "xl/printerSettings/printerSettings1.bin".to_string(),
+                    data: b"orphan printer settings".to_vec(),
+                },
+                content_type: None,
+                default_extension: Some((
+                    "bin".to_string(),
+                    crate::write::CT_PRINTER_SETTINGS.to_string(),
+                )),
+                ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+            }],
+            relationships: Vec::new(),
+            ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/printerSettings/printerSettings1.bin"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(sheet_xml.contains("<pageSetup"));
+    assert!(!sheet_xml.contains("r:id="));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn mutated_printer_settings_do_not_reuse_imported_binary_identity() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

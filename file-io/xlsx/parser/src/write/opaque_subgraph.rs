@@ -63,7 +63,7 @@ fn normalize_explicit_opaque_subgraph(
         .parts
         .retain(|part| !is_relationship_part(&part.part.path));
     normalized.relationships.extend(sidecar_relationships);
-    Some(normalized)
+    closed_opaque_subgraph(&normalized).then_some(normalized)
 }
 
 fn lower_legacy_web_extensions(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {

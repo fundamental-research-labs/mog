@@ -37,6 +37,7 @@ mod pivot_package;
 mod shared_strings;
 mod smoke_and_formulas;
 mod styles;
+mod theme;
 mod workbook;
 mod worksheet_relationships;
 

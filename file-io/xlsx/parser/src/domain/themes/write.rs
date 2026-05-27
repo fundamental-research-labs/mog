@@ -1480,8 +1480,11 @@ pub fn theme_writer_from_domain(
         tw.set_format_scheme((*format_scheme).clone());
     }
 
-    // Pass through raw XML blobs for objectDefaults, extraClrSchemeLst, and extLst
-    if let Some(ctx) = round_trip_ctx {
+    // Preserve raw sibling sidecars only while the modeled theme projection still
+    // matches the imported theme identity.
+    if let Some(ctx) = round_trip_ctx
+        && theme_data_matches_round_trip_context(theme, ctx)
+    {
         if let Some(ref obj_xml) = ctx.theme_object_defaults_xml {
             tw.set_object_defaults_xml(obj_xml.clone());
         }
@@ -1546,4 +1549,81 @@ pub fn theme_writer_from_domain(
     }
 
     tw.to_xml()
+}
+
+fn theme_data_matches_round_trip_context(
+    theme: &domain_types::ThemeData,
+    ctx: &domain_types::RoundTripContext,
+) -> bool {
+    theme.name == ctx.theme_name
+        && theme.major_font == imported_major_font(ctx)
+        && theme.minor_font == imported_minor_font(ctx)
+        && theme.colors == imported_theme_colors(ctx)
+}
+
+fn imported_major_font(ctx: &domain_types::RoundTripContext) -> Option<String> {
+    ctx.theme_font_scheme
+        .as_ref()
+        .map(|fs| fs.major_font.latin.typeface.clone())
+}
+
+fn imported_minor_font(ctx: &domain_types::RoundTripContext) -> Option<String> {
+    ctx.theme_font_scheme
+        .as_ref()
+        .map(|fs| fs.minor_font.latin.typeface.clone())
+}
+
+fn imported_theme_colors(ctx: &domain_types::RoundTripContext) -> Vec<domain_types::ThemeColor> {
+    const COLOR_SLOT_NAMES: &[(u8, &str)] = &[
+        (0, "dk1"),
+        (1, "lt1"),
+        (2, "dk2"),
+        (3, "lt2"),
+        (4, "accent1"),
+        (5, "accent2"),
+        (6, "accent3"),
+        (7, "accent4"),
+        (8, "accent5"),
+        (9, "accent6"),
+        (10, "hlink"),
+        (11, "folHlink"),
+    ];
+
+    let Some(color_scheme) = ctx.theme_color_scheme.as_ref() else {
+        return Vec::new();
+    };
+
+    COLOR_SLOT_NAMES
+        .iter()
+        .filter_map(|&(idx, name)| {
+            let hex = color_scheme.resolve_hex(idx)?;
+            let source = color_scheme
+                .get_by_index(idx)
+                .and_then(|color| match color {
+                    DrawingColor::SysClr { val, last_clr, .. } => {
+                        Some(domain_types::ThemeColorSource::SysClr {
+                            val: val.to_ooxml().to_string(),
+                            last_clr: last_clr.clone().unwrap_or_default(),
+                        })
+                    }
+                    _ => None,
+                });
+            Some(domain_types::ThemeColor {
+                name: name.to_string(),
+                color: normalize_imported_rgb_color(&hex),
+                source,
+            })
+        })
+        .collect()
+}
+
+fn normalize_imported_rgb_color(value: &str) -> String {
+    if value.starts_with('#') {
+        value.to_string()
+    } else if value.len() == 8 {
+        let rgb = value.get(2..).unwrap_or(value);
+        format!("#{rgb}")
+    } else {
+        format!("#{value}")
+    }
 }

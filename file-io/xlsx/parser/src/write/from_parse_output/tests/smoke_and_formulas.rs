@@ -350,6 +350,33 @@ fn test_frozen_pane() {
 }
 
 #[test]
+fn stale_pane_qualified_selection_is_dropped_without_current_pane() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        view: domain_types::SheetView {
+            selections: vec![ooxml_types::worksheet::Selection {
+                pane: Some(ooxml_types::worksheet::Pane::BottomRight),
+                active_cell: Some("C3".to_string()),
+                active_cell_id: None,
+                sqref: Some("C3".to_string()),
+            }],
+            active_cell: Some("A1".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains(r#"pane="bottomRight""#));
+    assert!(sheet_xml.contains(r#"<selection activeCell="A1" sqref="A1"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn test_multiple_sheets() {
     let output = make_parse_output(vec![
         SheetData {

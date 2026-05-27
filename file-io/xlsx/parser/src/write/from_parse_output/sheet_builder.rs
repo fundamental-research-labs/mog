@@ -11,6 +11,7 @@ use domain_types::{DataTableRegion, OutlineGroup};
 use super::super::{SharedStringsWriter, to_a1};
 use crate::write::sheet::{CellData, CellValue, ColWidth, SheetFormatPr, SheetPane, SheetWriter};
 use crate::write::{Selection, SheetView};
+use ooxml_types::worksheet::Pane;
 use value_types::CellError;
 
 /// Build a `SheetWriter` from a `SheetData`.
@@ -546,8 +547,10 @@ pub(super) fn build_sheet(
                 // Only reconstruct a default selection when the view explicitly
                 // specifies an active cell — if neither selections nor active_cell
                 // are present, the original had no <selection> element.
-                if !view.selections.is_empty() {
-                    sheet_view.selections = view.selections.clone();
+                let preserved_selections =
+                    compatible_selections_for_pane(&view.selections, sheet_view.pane.as_ref());
+                if !preserved_selections.is_empty() {
+                    sheet_view.selections = preserved_selections;
                 } else if view.active_cell.is_some() || view.sqref.is_some() {
                     let active_pane = sheet_view.pane.as_ref().unwrap().effective_active_pane();
                     let sel_active = view
@@ -565,7 +568,18 @@ pub(super) fn build_sheet(
             }
         } else if !view.selections.is_empty() {
             // Non-frozen sheet with preserved selections
-            sheet_view.selections = view.selections.clone();
+            let preserved_selections = compatible_selections_for_pane(&view.selections, None);
+            if !preserved_selections.is_empty() {
+                sheet_view.selections = preserved_selections;
+            } else if let Some(ref ac) = view.active_cell {
+                let sqref = view.sqref.as_deref().unwrap_or(ac.as_str());
+                sheet_view.selections = vec![Selection {
+                    pane: None,
+                    active_cell: Some(ac.clone()),
+                    active_cell_id: None,
+                    sqref: Some(sqref.to_string()),
+                }];
+            }
         } else if let Some(ref ac) = view.active_cell {
             // Non-frozen sheet with a preserved active cell selection
             let sqref = view.sqref.as_deref().unwrap_or(ac.as_str());
@@ -588,6 +602,35 @@ pub(super) fn build_sheet(
     }
 
     writer
+}
+
+fn compatible_selections_for_pane(
+    selections: &[Selection],
+    pane: Option<&SheetPane>,
+) -> Vec<Selection> {
+    selections
+        .iter()
+        .filter(|selection| selection_pane_is_compatible(selection.pane, pane))
+        .cloned()
+        .collect()
+}
+
+fn selection_pane_is_compatible(selection_pane: Option<Pane>, pane: Option<&SheetPane>) -> bool {
+    let Some(selection_pane) = selection_pane else {
+        return true;
+    };
+    let Some(pane) = pane else {
+        return false;
+    };
+
+    let has_rows = pane.y_split != 0.0;
+    let has_cols = pane.x_split != 0.0;
+    match (has_rows, has_cols) {
+        (true, true) => true,
+        (true, false) => matches!(selection_pane, Pane::TopLeft | Pane::BottomLeft),
+        (false, true) => matches!(selection_pane, Pane::TopLeft | Pane::TopRight),
+        (false, false) => matches!(selection_pane, Pane::TopLeft),
+    }
 }
 
 fn data_table_master_formula_map(

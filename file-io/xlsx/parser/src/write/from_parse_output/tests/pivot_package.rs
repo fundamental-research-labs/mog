@@ -1,4 +1,5 @@
 use super::*;
+use crate::write::REL_PIVOT_CACHE;
 
 #[test]
 fn pivot_package_generation_filters_stale_original_parts_and_rels() {

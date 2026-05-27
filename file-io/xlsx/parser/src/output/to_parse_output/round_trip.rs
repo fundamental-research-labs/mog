@@ -12,6 +12,7 @@ use domain_types::{
 use std::collections::{HashMap, HashSet};
 
 use crate::output::results::FullParseResult;
+use crate::infra::opc::{resolve_relationship_target, OoxmlRelationshipType, REL_VML_DRAWING};
 
 use super::normalize_rgb_color;
 
@@ -211,36 +212,14 @@ fn pivot_table_rels_path(table_path: &str) -> String {
     format!("{}/_rels/{}.rels", table_dir, table_filename)
 }
 
-fn resolve_workbook_rel_path(rel_path: &str) -> String {
-    if rel_path.starts_with('/') {
-        rel_path.trim_start_matches('/').to_string()
-    } else {
-        format!("xl/{}", rel_path)
-    }
+fn relationship_type_is(rel_type: &str, expected: OoxmlRelationshipType) -> bool {
+    OoxmlRelationshipType::from_uri(rel_type) == expected
 }
 
-fn resolve_cache_rel_path(cache_definition_path: &str, rel_path: &str) -> String {
-    if rel_path.starts_with('/') {
-        rel_path.trim_start_matches('/').to_string()
-    } else if rel_path.starts_with("xl/") {
-        rel_path.to_string()
-    } else {
-        let cache_dir = cache_definition_path
-            .rsplit_once('/')
-            .map(|(dir, _)| dir)
-            .unwrap_or("xl/pivotCache");
-        format!("{}/{}", cache_dir, rel_path)
-    }
-}
-
-fn resolve_sheet_rel_path(rel_path: &str) -> String {
-    if rel_path.starts_with('/') {
-        rel_path.trim_start_matches('/').to_string()
-    } else if let Some(stripped) = rel_path.strip_prefix("../") {
-        format!("xl/{}", stripped)
-    } else {
-        format!("xl/worksheets/{}", rel_path)
-    }
+fn resolve_internal_rel(owner_part: Option<&str>, target: &str) -> Option<String> {
+    resolve_relationship_target(owner_part, target)
+        .ok()
+        .map(|path| normalize_part_path(&path))
 }
 
 fn to_dt_rels(rels_xml: &[u8]) -> Vec<DtOpcRelationship> {
@@ -283,7 +262,7 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
         && result
             .workbook_relationships
             .iter()
-            .all(|rel| !rel.rel_type.ends_with("/pivotCacheDefinition"))
+            .all(|rel| !relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition))
     {
         return PivotPackageRoundTrip::default();
     }
@@ -297,8 +276,9 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
     {
         let definition_path = normalize_part_path(definition_path);
         let workbook_rel = result.workbook_relationships.iter().find(|rel| {
-            rel.rel_type.ends_with("/pivotCacheDefinition")
-                && resolve_workbook_rel_path(&rel.target) == definition_path
+            relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition)
+                && resolve_internal_rel(Some("xl/workbook.xml"), &rel.target).as_deref()
+                    == Some(definition_path.as_str())
         });
 
         if let Some(rel) = workbook_rel {
@@ -323,7 +303,7 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
             .unwrap_or_default();
 
         let records_relationship = raw_relationships.iter().find(|rel| {
-            rel.rel_type.ends_with("/pivotCacheRecords") || rel.target.contains("pivotCacheRecords")
+            relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheRecords)
         });
         let records_relationship_id = records_relationship.map(|rel| rel.id.clone());
         let records_relationship_target = records_relationship.map(|rel| rel.target.clone());
@@ -331,8 +311,9 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
             .as_ref()
             .map(|path| normalize_part_path(path))
             .or_else(|| {
-                records_relationship
-                    .map(|rel| resolve_cache_rel_path(&definition_path, &rel.target))
+                records_relationship.and_then(|rel| {
+                    resolve_internal_rel(Some(&definition_path), &rel.target)
+                })
             });
         if let Some(path) = &records_path {
             claimed_paths.insert(path.clone());
@@ -376,9 +357,12 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
         for rel in sheet
             .sheet_opc_rels
             .iter()
-            .filter(|rel| rel.rel_type.ends_with("/pivotTable"))
+            .filter(|rel| relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotTable))
         {
-            let table_path = resolve_sheet_rel_path(&rel.target);
+            let owner_part = format!("xl/worksheets/sheet{}.xml", sheet_index + 1);
+            let Some(table_path) = resolve_internal_rel(Some(&owner_part), &rel.target) else {
+                continue;
+            };
             let Some(raw_table_xml) = pivot_blob(&pivot_blobs, &table_path).cloned() else {
                 continue;
             };
@@ -607,7 +591,7 @@ fn comment_vml_path(sheet_idx: usize, sheet_rt: &SheetRoundTripContext) -> Optio
         .iter()
         .find(|rel| {
             &rel.id == legacy_drawing_r_id
-                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.rel_type == REL_VML_DRAWING
                 && rel.target_mode.as_deref() != Some("External")
         })
         .and_then(|rel| {

@@ -25,7 +25,7 @@ mod metadata;
 pub(crate) mod pivot_convert;
 mod round_trip;
 mod styles;
-use crate::infra::opc::opc_target_to_zip_path;
+use crate::infra::opc::{resolve_relationship_target, REL_DRAWING};
 use cells::*;
 use features::*;
 use round_trip::*;
@@ -1465,11 +1465,12 @@ fn convert_sheet(
             })
             .unwrap_or_default(),
         imported_drawing: sheet.parsed_drawing.as_ref().and_then(|d| {
+            let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
             let path = sheet
                 .sheet_opc_rels
                 .iter()
-                .find(|r| r.rel_type.ends_with("/drawing"))
-                .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))?;
+                .find(|r| r.rel_type == REL_DRAWING)
+                .and_then(|r| resolve_relationship_target(Some(&owner_path), &r.target).ok())?;
             let data = d.raw_drawing_xml.clone()?;
             let rels = d.raw_drawing_rels_xml.clone().map(|data| {
                 let filename = path.rsplit('/').next().unwrap_or("drawing.xml");
@@ -1488,8 +1489,11 @@ fn convert_sheet(
         original_drawing_path: sheet
             .sheet_opc_rels
             .iter()
-            .find(|r| r.rel_type.ends_with("/drawing"))
-            .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets")),
+            .find(|r| r.rel_type == REL_DRAWING)
+            .and_then(|r| {
+                let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
+                resolve_relationship_target(Some(&owner_path), &r.target).ok()
+            }),
         // Preserve drawing OPC rels for relationship ID fidelity.
         drawing_opc_rels: sheet
             .parsed_drawing
@@ -1573,7 +1577,8 @@ fn merge_threaded_comments(result: &FullParseResult, sheets: &mut [SheetData]) -
         // Find the threaded comment target from this sheet's OPC rels
         let tc_path = parsed_sheet.sheet_opc_rels.iter().find_map(|rel| {
             if rel.rel_type == REL_TYPE_THREADED_COMMENT {
-                Some(opc_target_to_zip_path(&rel.target, "xl/worksheets"))
+                let owner_path = format!("xl/worksheets/sheet{}.xml", parsed_sheet.index + 1);
+                resolve_relationship_target(Some(&owner_path), &rel.target).ok()
             } else {
                 None
             }

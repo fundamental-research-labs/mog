@@ -1871,7 +1871,6 @@ pub fn write_xlsx_from_parse_output(
         &package_graph,
         &pivot_data,
         &external_link_exports,
-        &mut sheet_rels_data,
     )?;
 
     // ── 6. Generate XML parts ───────────────────────────────────────────
@@ -1888,7 +1887,6 @@ pub fn write_xlsx_from_parse_output(
         &package_graph,
         &pivot_data,
         sheet_writers,
-        sheet_rels_data,
         &sheet_extras,
         &external_link_exports,
         workbook_xml,

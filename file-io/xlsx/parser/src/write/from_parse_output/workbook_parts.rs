@@ -5,7 +5,6 @@ use super::external_links;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer;
 use crate::write::pivot_writer::PivotWriteData;
-use crate::write::relationships::RelationshipManager;
 use crate::write::{
     DefinedNameDef, REL_EXTERNAL_LINK, REL_PIVOT_CACHE, REL_WORKSHEET, SheetDef, WorkbookWriter,
 };
@@ -21,7 +20,6 @@ pub(super) fn build_workbook_xml(
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     external_link_exports: &[(domain_types::domain::external_link::ExternalLink, String)],
-    sheet_rels_data: &mut [Option<RelationshipManager>],
 ) -> Result<WorkbookXmlParts, WriteError> {
     // ── 4. Build workbook.xml ───────────────────────────────────────────
     let mut workbook_writer = WorkbookWriter::new();
@@ -186,15 +184,6 @@ pub(super) fn build_workbook_xml(
             })
             .collect();
         workbook_writer.set_external_reference_r_ids(external_reference_r_ids);
-    }
-
-    for sheet_idx in 0..output.sheets.len() {
-        let owner = crate::write::package_graph::PackageOwner::Worksheet {
-            index: sheet_idx,
-            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
-        };
-        let rels = package_graph.relationship_manager_for_owner(&owner);
-        sheet_rels_data[sheet_idx] = (!rels.is_empty()).then_some(rels);
     }
 
     let workbook_rels_xml = workbook_rels.to_xml();

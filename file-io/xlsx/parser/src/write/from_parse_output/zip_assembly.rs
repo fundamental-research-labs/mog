@@ -10,7 +10,6 @@ use super::{
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer::PivotWriteData;
-use crate::write::relationships::RelationshipManager;
 use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
 
 #[allow(clippy::too_many_arguments)]
@@ -20,7 +19,6 @@ pub(super) fn write_zip_package(
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     sheet_writers: Vec<SheetWriter>,
-    _sheet_rels_data: Vec<Option<RelationshipManager>>,
     sheet_extras: &[SheetExtras],
     external_link_exports: &[(domain_types::domain::external_link::ExternalLink, String)],
     workbook_xml: Vec<u8>,

@@ -123,6 +123,9 @@ pub(super) fn empty_ext_lst_for_export(
 }
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
+    if raw_worksheet_element_contains_modeled_child(xml) {
+        return false;
+    }
     if xml.contains("<tableParts") {
         return false;
     }
@@ -131,6 +134,31 @@ fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> boo
     }
 
     !xml.contains("<extLst") || raw_worksheet_ext_lst_is_compatible(sheet_data, xml)
+}
+
+fn raw_worksheet_element_contains_modeled_child(xml: &str) -> bool {
+    [
+        "dimension",
+        "sheetViews",
+        "sheetFormatPr",
+        "cols",
+        "sheetData",
+        "mergeCells",
+        "conditionalFormatting",
+        "dataValidations",
+        "hyperlinks",
+        "autoFilter",
+        "sortState",
+        "sheetProtection",
+        "printOptions",
+        "pageMargins",
+        "pageSetup",
+        "headerFooter",
+        "rowBreaks",
+        "colBreaks",
+    ]
+    .iter()
+    .any(|name| raw_xml_contains_element(xml, name))
 }
 
 fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
@@ -145,6 +173,10 @@ fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
     ]
     .iter()
     .any(|marker| xml.contains(marker))
+}
+
+fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
+    raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
 }
 
 fn raw_worksheet_ext_lst_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {

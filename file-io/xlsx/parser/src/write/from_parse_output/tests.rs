@@ -577,6 +577,45 @@ fn stale_raw_worksheet_ext_lst_modeled_extensions_are_dropped() {
 }
 
 #[test]
+fn stale_sheet_preserved_known_children_are_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_preserved_elements: vec![
+                (
+                    "worksheet\0after\0sheetData\0sheetProtection".to_string(),
+                    r#"<sheetProtection sheet="1" password="STALE"/>"#.to_string(),
+                ),
+                (
+                    "worksheet\0after\0sheetData\0autoFilter".to_string(),
+                    r#"<autoFilter ref="A1:Z99"/>"#.to_string(),
+                ),
+                (
+                    "worksheet\0after\0mergeCells\0dataValidations".to_string(),
+                    r#"<dataValidations count="1"><dataValidation sqref="A1"/></dataValidations>"#
+                        .to_string(),
+                ),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<sheetProtection"));
+    assert!(!sheet_xml.contains("<autoFilter"));
+    assert!(!sheet_xml.contains("<dataValidations"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn unknown_raw_worksheet_ext_lst_is_preserved_without_modeled_owner() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

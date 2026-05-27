@@ -861,6 +861,14 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
                 target: "../drawings/drawing9.xml".to_string(),
                 target_mode: None,
             }],
+            imported_drawing: Some(domain_types::ImportedDrawingPart {
+                path: "xl/drawings/drawing9.xml".to_string(),
+                data: br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><rawSentinel/></xdr:wsDr>"#.to_vec(),
+                rels: Some(domain_types::BlobPart {
+                    path: "xl/drawings/_rels/drawing9.xml.rels".to_string(),
+                    data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId99" Type="http://example.invalid/privateDrawingFeature" Target="https://example.invalid/private" TargetMode="External"/></Relationships>"#.to_vec(),
+                }),
+            }),
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -888,9 +896,20 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
 
     assert!(archive.contains("xl/drawings/drawing1.xml"));
     assert!(!archive.contains("xl/drawings/drawing9.xml"));
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    let drawing_rels = String::from_utf8(
+        archive
+            .read_file("xl/drawings/_rels/drawing1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
     assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
     assert!(!sheet_rels.contains("drawing9.xml"));
     assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
+    assert!(!drawing_xml.contains("rawSentinel"));
+    assert!(!drawing_rels.contains("privateDrawingFeature"));
+    assert!(!drawing_rels.contains("rId99"));
     assert!(content_types.contains("PartName=\"/xl/drawings/drawing1.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/drawings/drawing9.xml\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

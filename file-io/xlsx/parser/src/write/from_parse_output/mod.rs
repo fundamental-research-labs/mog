@@ -872,7 +872,6 @@ pub fn write_xlsx_from_parse_output(
         let has_chart_ex = extras.has_chart_ex;
         let has_floating_objects = extras.has_floating_objects;
         let needs_drawing = has_charts || has_chart_ex || has_floating_objects;
-        let has_modeled_drawing_content = has_charts || has_chart_ex || has_floating_objects;
 
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
@@ -1262,10 +1261,6 @@ pub fn write_xlsx_from_parse_output(
             // Build drawing .rels (drawing→chart references, image refs).
             let mut drawing_rels = RelationshipManager::new();
 
-            let imported_drawing = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .and_then(|srt| srt.imported_drawing.clone());
-
             // Build DrawingWriter with all anchors (charts + floating objects).
             let mut drawing_writer = DrawingWriter::new();
             if let Some(attrs) = round_trip_ctx
@@ -1618,28 +1613,15 @@ pub fn write_xlsx_from_parse_output(
                 }
             }
 
-            if has_modeled_drawing_content {
-                drawing_xml_data.push(None);
-                drawing_writer_data.push(Some(drawing_writer));
-            } else if let Some(ref imported) = imported_drawing {
-                drawing_xml_data.push(Some(imported.data.clone()));
-                drawing_writer_data.push(None);
-            } else {
-                drawing_xml_data.push(None);
-                drawing_writer_data.push(Some(DrawingWriter::new()));
-            }
+            drawing_xml_data.push(None);
+            drawing_writer_data.push(Some(drawing_writer));
             // Emit drawing .rels when there are actual relationships OR when the
             // original archive had a .rels file (even if empty) for round-trip fidelity.
             let had_original_rels_file = round_trip_ctx
                 .and_then(|ctx| ctx.sheets.get(sheet_idx))
                 .map(|srt| srt.has_drawing_rels_file)
                 .unwrap_or(false);
-            if let Some(imported) = imported_drawing
-                && let Some(rels) = imported.rels
-            {
-                drawing_rels_data.push(Some(rels.data));
-                drawing_rels_should_emit.push(true);
-            } else if !drawing_rels.is_empty() || had_original_rels_file {
+            if !drawing_rels.is_empty() || had_original_rels_file {
                 for rel in drawing_rels.relationships() {
                     let target_path = crate::infra::opc::resolve_relationship_target(
                         Some(&drawing_path),

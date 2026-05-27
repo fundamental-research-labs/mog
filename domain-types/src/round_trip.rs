@@ -3,8 +3,21 @@ use ooxml_types::themes::{ColorScheme, FontScheme, FormatScheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Raw XML preservation for lossless XLSX round-tripping.
-/// Tier 4 in Yrs — stored as opaque JSON blob, never collaboratively edited.
+/// Opaque XLSX preservation data for import/export round-tripping.
+///
+/// Hard invariant: this context is only for OOXML/package data that the Mog
+/// engine cannot interpret or mutate. If Mog has a domain type for a concept,
+/// import must lower it into that domain type and export must regenerate the
+/// OOXML/package graph from domain state.
+///
+/// This context must never be the source of truth for engine-mutated workbook
+/// semantics, modeled XML parts, content types, or relationships. Preserved
+/// blobs are valid only for opaque subgraphs whose owner parts are also outside
+/// Mog's mutation surface.
+///
+/// Relationship IDs, part names, and ordering from imported XLSX files may be
+/// kept as non-authoritative hints only. They must not decide whether modeled
+/// parts exist in the exported package.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoundTripContext {
@@ -31,7 +44,13 @@ pub struct RoundTripContext {
     #[serde(default)]
     pub styles_namespace_attrs: Vec<(String, String)>,
 
-    // OPC packaging
+    // OPC packaging.
+    //
+    // AUDIT WARNING: package-level rels/content-types are currently broad
+    // preservation hooks. Under the RoundTripContext invariant above they may
+    // only describe opaque, unmodeled subgraphs. They must not be treated as
+    // authoritative for workbook, worksheet, styles, sharedStrings, theme,
+    // metadata, comments, tables, drawings, pivots, or any other modeled part.
     #[serde(default)]
     pub content_type_defaults: Vec<(String, String)>,
     #[serde(default)]
@@ -42,23 +61,25 @@ pub struct RoundTripContext {
     pub workbook_relationships: Vec<OpcRelationship>,
 
     /// Original relationship IDs per sheet from workbook.xml, in document order.
-    /// Used to preserve rId assignments in workbook.xml.rels during round-trip
-    /// writing instead of generating sequential rId1, rId2, etc.
+    ///
+    /// Non-authoritative hint only. Sheet relationships for modeled worksheets
+    /// must be generated from the exported workbook graph.
     #[serde(default)]
     pub sheet_workbook_r_ids: Vec<String>,
 
     // Workbook-level preserved blobs
     /// Original `count` attribute from the `<sst>` element in the parsed XLSX.
-    /// Preserved for round-trip fidelity — the computed total_count() from
-    /// the SharedStringsWriter may differ when formula string results change
-    /// between inline (t="str") and SST reference (t="s") during hydration.
+    ///
+    /// AUDIT WARNING: shared strings are part of the modeled cell graph. This
+    /// may not override the count implied by generated sharedStrings.xml.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_sst_count: Option<usize>,
 
     /// Parsed shared strings list (index-aligned with the raw SST XML).
-    /// Used to seed the SharedStringsWriter so that cell `<v>` indices
-    /// match the original SST ordering when raw_shared_strings_xml is
-    /// used for verbatim passthrough.
+    ///
+    /// AUDIT WARNING: shared strings are cell data, so this may only be used as
+    /// an index hint for cells that still prove they reference the same text.
+    /// It must not make the imported SST authoritative.
     #[serde(default)]
     pub shared_strings_list: Vec<String>,
 
@@ -74,6 +95,8 @@ pub struct RoundTripContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_strings_phonetic_xml: Vec<Option<Vec<u8>>>,
 
+    /// AUDIT WARNING: sharedStrings.xml is generated from modeled cells and
+    /// must not be replayed verbatim once cells can change.
     #[serde(default, with = "option_bytes")]
     pub raw_shared_strings_xml: Option<Vec<u8>>,
     #[serde(default, with = "option_bytes")]
@@ -181,6 +204,9 @@ pub struct RoundTripContext {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetRoundTripContext {
+    /// AUDIT WARNING: sheet relationships may only preserve opaque sheet-owned
+    /// subgraphs. Relationships for modeled sheet features must be generated
+    /// from domain state.
     #[serde(default)]
     pub sheet_opc_rels: Vec<OpcRelationship>,
     #[serde(default)]

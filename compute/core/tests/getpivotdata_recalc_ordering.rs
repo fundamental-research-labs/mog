@@ -1,117 +1,171 @@
-//! Regression tests for GETPIVOTDATA / pivot-materialization ordering.
+//! Behavioral regression tests for GETPIVOTDATA / pivot-materialization ordering.
 //!
-//! # The bug
-//!
-//! `YrsComputeEngine::recalculate()` currently runs `full_recalc()` BEFORE
-//! `materialize_all_pivots()`. GETPIVOTDATA formulas inside the user's
-//! workbook read the pivot region via the cell mirror, so during
-//! `full_recalc` they see the stale / cleared pivot region and coerce Null
-//! to 0. The numerator therefore returns 0 (e.g. Fund 2!Y25 = 0), and when
-//! both numerator and denominator are Null the ratio collapses to
-//! `#DIV/0!` (Fund 1!Y23).
-//!
-//! Root cause: `compute/core/src/storage/engine/mod.rs:1531-1536` (and the
-//! mirror counterpart in `recalculate_with_options` at 1539-1550).
-//!
-//! # The fix
-//!
-//! `materialize_all_pivots()` must run BEFORE `full_recalc()` so that every
-//! GETPIVOTDATA call sees a freshly materialized pivot region. (Option (b)
-//! in the plan — running `materialize_all_pivots` twice, once before recalc
-//! and once after — is another acceptable resolution; either way, a
-//! materialize call must precede the recalc.)
-//!
-//! These tests are documentation-style source-inspection tests. They assert
-//! the ordering contract by reading `storage/engine/mod.rs` and checking
-//! the call order inside `recalculate()` and `recalculate_with_options()`.
-//! They FAIL today and PASS once the ordering bug is fixed.
-//!
-//! A full end-to-end test (build doc + pivot + GETPIVOTDATA formula, call
-//! `recalculate()`, assert the numeric ratio) is the right test shape but
-//! requires wiring a non-trivial `PivotTableConfig` through the JSON-validated
-//! `pivot_create` API. Tracked separately; this narrower contract test
-//! guarantees the ordering invariant that the E2E test would verify.
+//! `YrsComputeEngine::recalculate*()` must materialize stored pivot output before
+//! full formula recalculation. GETPIVOTDATA reads the rendered pivot region
+//! through the cell mirror, so stale or absent pivot output would make the
+//! formula evaluate to the wrong value.
 
-/// Find the body of a function starting at a prefix like
-/// `"pub fn recalculate("`. Returns the substring between the opening `{`
-/// that follows the signature and the matching closing `}`.
-fn slice_fn_body<'a>(source: &'a str, signature_prefix: &str) -> Option<&'a str> {
-    let start = source.find(signature_prefix)?;
-    let rest = &source[start..];
-    let open_rel = rest.find('{')?;
-    let bytes = rest.as_bytes();
-    let mut depth: i32 = 0;
-    let mut i = open_rel;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&rest[open_rel + 1..i]);
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
+use cell_types::{SheetId, SheetPos};
+use compute_core::storage::engine::YrsComputeEngine;
+use serde_json::json;
+use snapshot_types::{CellData, RecalcOptions, SheetSnapshot, WorkbookSnapshot};
+use value_types::{CellValue, FiniteF64};
+
+const DATA_SHEET_ID: &str = "550e8400-e29b-41d4-a716-446655440000";
+const PIVOT_SHEET_ID: &str = "550e8400-e29b-41d4-a716-446655440100";
+
+fn cell_uuid(sheet_digit: u8, row: u32, col: u32) -> String {
+    format!("c0000000{sheet_digit:04x}{row:04x}{col:04x}000000000000")
 }
 
-fn engine_mod_source() -> String {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/storage/engine/mod.rs",);
-    std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("engine mod.rs should be readable at {}: {}", path, e))
+fn text_cell(sheet_digit: u8, row: u32, col: u32, text: &str) -> CellData {
+    CellData {
+        cell_id: cell_uuid(sheet_digit, row, col),
+        row,
+        col,
+        value: CellValue::Text(text.into()),
+        formula: None,
+        identity_formula: None,
+        array_ref: None,
+    }
+}
+
+fn number_cell(sheet_digit: u8, row: u32, col: u32, value: f64) -> CellData {
+    CellData {
+        cell_id: cell_uuid(sheet_digit, row, col),
+        row,
+        col,
+        value: CellValue::Number(FiniteF64::must(value)),
+        formula: None,
+        identity_formula: None,
+        array_ref: None,
+    }
+}
+
+fn formula_cell(sheet_digit: u8, row: u32, col: u32, formula: &str) -> CellData {
+    CellData {
+        cell_id: cell_uuid(sheet_digit, row, col),
+        row,
+        col,
+        value: CellValue::Null,
+        formula: Some(formula.to_string()),
+        identity_formula: None,
+        array_ref: None,
+    }
+}
+
+fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
+    WorkbookSnapshot {
+        sheets: vec![
+            SheetSnapshot {
+                id: DATA_SHEET_ID.to_string(),
+                name: "Data".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![
+                    text_cell(0, 0, 0, "Category"),
+                    text_cell(0, 0, 1, "Amount"),
+                    text_cell(0, 1, 0, "A"),
+                    number_cell(0, 1, 1, 10.0),
+                    text_cell(0, 2, 0, "A"),
+                    number_cell(0, 2, 1, 20.0),
+                    text_cell(0, 3, 0, "B"),
+                    number_cell(0, 3, 1, 7.0),
+                ],
+                ranges: vec![],
+            },
+            SheetSnapshot {
+                id: PIVOT_SHEET_ID.to_string(),
+                name: "Pivot".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![formula_cell(
+                    1,
+                    0,
+                    6,
+                    r#"=GETPIVOTDATA("Sum of Amount",$A$1,"Category","A")"#,
+                )],
+                ranges: vec![],
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn create_pivot(engine: &mut YrsComputeEngine) {
+    let config = json!({
+        "id": "pivot-getpivotdata-ordering",
+        "name": "PivotForGetPivotData",
+        "sourceSheetId": DATA_SHEET_ID,
+        "sourceSheetName": "Data",
+        "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 3, "endCol": 1 },
+        "outputSheetName": "Pivot",
+        "outputLocation": { "row": 0, "col": 0 },
+        "fields": [
+            { "id": "Category", "name": "Category", "sourceColumn": 0, "dataType": "string" },
+            { "id": "Amount", "name": "Amount", "sourceColumn": 1, "dataType": "number" }
+        ],
+        "placements": [
+            { "fieldId": "Category", "area": "row", "position": 0 },
+            { "fieldId": "Amount", "area": "value", "position": 0, "aggregateFunction": "sum" }
+        ],
+        "filters": []
+    });
+
+    engine.pivot_create(config).expect("pivot_create");
+}
+
+fn pivot_sheet_id() -> SheetId {
+    SheetId::from_uuid_str(PIVOT_SHEET_ID).unwrap()
+}
+
+fn getpivotdata_value(engine: &YrsComputeEngine) -> f64 {
+    match engine
+        .mirror()
+        .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6))
+    {
+        Some(CellValue::Number(n)) => n.get(),
+        other => {
+            let pivot_cells: Vec<_> = (0..6)
+                .map(|row| {
+                    (0..3)
+                        .map(|col| {
+                            engine
+                                .mirror()
+                                .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(row, col))
+                                .cloned()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            panic!(
+                "expected GETPIVOTDATA formula to evaluate to 30, got {other:?}; pivot cells: {pivot_cells:?}; pivot defs: {:?}",
+                engine.mirror().all_pivot_tables()
+            );
+        }
+    }
 }
 
 #[test]
 fn recalculate_materializes_pivots_before_full_recalc() {
-    let source = engine_mod_source();
-    let recalc_body = slice_fn_body(&source, "pub fn recalculate(")
-        .expect("recalculate() should exist in storage/engine/mod.rs");
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+    create_pivot(&mut engine);
 
-    let full_recalc_pos = recalc_body
-        .find("full_recalc(")
-        .expect("recalculate() should call full_recalc(...)");
-    let materialize_pos = recalc_body
-        .find("materialize_all_pivots(")
-        .expect("recalculate() should call materialize_all_pivots(...)");
+    engine.recalculate().expect("recalculate");
 
-    assert!(
-        materialize_pos < full_recalc_pos,
-        "GETPIVOTDATA ordering bug (issue 07): materialize_all_pivots() must \
-         be called BEFORE full_recalc() inside recalculate(). Current (buggy) \
-         order: full_recalc at byte offset {}, materialize_all_pivots at {}. \
-         GETPIVOTDATA formulas read the pivot region through the cell \
-         mirror during full_recalc, so the pivot must already be \
-         materialized when that recalc runs.",
-        full_recalc_pos,
-        materialize_pos,
-    );
+    assert_eq!(getpivotdata_value(&engine), 30.0);
 }
 
 #[test]
 fn recalculate_with_options_materializes_pivots_before_full_recalc() {
-    let source = engine_mod_source();
-    let body = slice_fn_body(&source, "pub fn recalculate_with_options(")
-        .expect("recalculate_with_options() should exist in storage/engine/mod.rs");
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+    create_pivot(&mut engine);
 
-    let full_recalc_pos = body
-        .find("full_recalc_with_options(")
-        .expect("recalculate_with_options() should call full_recalc_with_options(...)");
-    let materialize_pos = body
-        .find("materialize_all_pivots(")
-        .expect("recalculate_with_options() should call materialize_all_pivots(...)");
+    engine
+        .recalculate_with_options(&RecalcOptions::default())
+        .expect("recalculate_with_options");
 
-    assert!(
-        materialize_pos < full_recalc_pos,
-        "GETPIVOTDATA ordering bug (issue 07): materialize_all_pivots() must \
-         be called BEFORE full_recalc_with_options() inside \
-         recalculate_with_options(). Current (buggy) order: full_recalc at \
-         byte offset {}, materialize_all_pivots at {}. If only recalculate() \
-         is fixed but this variant is left buggy, iterative-calc paths will \
-         still see stale pivots.",
-        full_recalc_pos,
-        materialize_pos,
-    );
+    assert_eq!(getpivotdata_value(&engine), 30.0);
 }

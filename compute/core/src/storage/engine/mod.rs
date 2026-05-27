@@ -4,6 +4,10 @@
 //! tracking, undo/redo, and the `ComputeCore` recalculation scheduler.
 //! All user edits flow through the yrs Doc, are detected by the
 //! `StorageObserver`, and delegated to `ComputeCore` for recalculation.
+//!
+//! Root module policy: keep type ownership and module wiring here. Put bridge
+//! domain APIs in sibling modules and shared behavior in services or focused
+//! private modules.
 
 pub mod construction;
 mod mutation_coordinator;
@@ -24,13 +28,16 @@ mod data_table_formula;
 mod delegations;
 mod export;
 mod features;
+mod format_inference;
 mod formatting;
+mod grid_indexing;
 mod layout;
 mod merge_index;
 pub(crate) mod mutation;
 mod objects;
 mod queries;
 mod query_serialization;
+mod recalc_postprocess;
 mod screenshot;
 pub mod search;
 mod security;
@@ -69,8 +76,6 @@ use crate::snapshot::{
 };
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_layout_index::LayoutIndex;
-use domain_types::CellFormat;
-use formula_types::IdentityFormulaRef;
 use value_types::{CellValue, ComputeError};
 
 use super::YrsStorage;
@@ -82,171 +87,14 @@ use mutation::{EngineMutation, MutationOutput};
 
 use crate::snapshot::{ChangeKind, SortingChange};
 
+use format_inference::is_formula_parse_input;
+use grid_indexing::apply_grid_index_changes;
+pub(in crate::storage::engine) use grid_indexing::build_grid_from_yrs_for_sheet;
 use mutation_coordinator::{MutationCoordinator, SheetLifecycleHistoryHint};
 use settings::EngineSettings;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
 use viewport::service::ViewportService;
-
-/// Apply observed `gridIndex/posToId` entry changes to the in-memory
-/// `GridIndex` for each affected sheet.
-///
-/// Each entry carries a `CellId` and the `rowHex`/`colHex` identity pair;
-/// resolve those to the current `(row, col)` by consulting the sheet's
-/// `rowOrder`/`colOrder` YArrays (the same source-of-truth hydration uses).
-/// Entries whose row/col hex no longer resolves — e.g. a row was deleted
-/// between the write and the observation — are silently skipped.
-///
-/// Runs on both the writer (idempotent: register_cell is a no-op) and on
-/// every peer that applies a remote update containing a `posToId` insert,
-/// so a metadata-only write (comment, hyperlink, format on a previously
-/// empty cell) propagates the cell's position into the peer's in-memory
-/// `GridIndex` without waiting for a sheet-lifecycle rebuild.
-fn apply_grid_index_changes(
-    stores: &mut EngineStores,
-    changes: &[compute_document::observe::GridIndexCellChange],
-) {
-    use crate::storage::infra::grid_helpers;
-    use compute_document::observe::CellChangeKind;
-    use yrs::{Array, Map, Out, Transact};
-
-    if changes.is_empty() {
-        return;
-    }
-
-    let txn = stores.storage.doc().transact();
-    for change in changes {
-        let sheet_hex = id_to_hex(change.sheet_id.as_u128());
-        let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-            continue;
-        };
-        let Some(row_arr) = grid_helpers::get_row_order_array(&sheet_map, &txn) else {
-            continue;
-        };
-        let Some(col_arr) = grid_helpers::get_col_order_array(&sheet_map, &txn) else {
-            continue;
-        };
-        let row = (0..row_arr.len(&txn)).find(|&i| {
-            matches!(
-                row_arr.get(&txn, i),
-                Some(Out::Any(yrs::Any::String(s))) if s.as_ref() == change.row_hex
-            )
-        });
-        let col = (0..col_arr.len(&txn)).find(|&i| {
-            matches!(
-                col_arr.get(&txn, i),
-                Some(Out::Any(yrs::Any::String(s))) if s.as_ref() == change.col_hex
-            )
-        });
-        let (Some(row), Some(col)) = (row, col) else {
-            continue;
-        };
-
-        match change.kind {
-            CellChangeKind::Modified => {
-                if let Some(grid) = stores.grid_indexes.get_mut(&change.sheet_id) {
-                    grid.register_cell(change.cell_id, row, col);
-                }
-            }
-            CellChangeKind::Removed => {
-                if let Some(grid) = stores.grid_indexes.get_mut(&change.sheet_id) {
-                    // Guard: only remove if the cell is still at the vacated position.
-                    // A preceding Modified event in the same observer batch may have
-                    // already moved the cell to its new position — blindly removing
-                    // would evict it from the new slot instead of the old one.
-                    if grid.cell_position(&change.cell_id) == Some((row, col)) {
-                        grid.remove_cell(&change.cell_id);
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Build a GridIndex for a single sheet by reading rowOrder/colOrder from Yrs.
-pub(super) fn build_grid_from_yrs_for_sheet(
-    storage: &YrsStorage,
-    sheet_id: SheetId,
-    sheet_snap: &crate::snapshot::SheetSnapshot,
-    id_alloc: std::sync::Arc<cell_types::IdAllocator>,
-) -> GridIndex {
-    use crate::storage::infra::grid_helpers;
-    use yrs::{Map, Out, Transact};
-
-    let sheet_hex = compute_document::hex::id_to_hex(sheet_id.as_u128());
-    let (row_hexes, col_hexes, pos_to_id_entries) = {
-        let txn = storage.doc().transact();
-        let sm = storage
-            .sheets()
-            .get(&txn, &sheet_hex)
-            .and_then(|v| match v {
-                Out::YMap(m) => Some(m),
-                _ => None,
-            });
-        if let Some(sm) = sm {
-            let rh = grid_helpers::get_row_order_array(&sm, &txn)
-                .map(|a| grid_helpers::read_row_order(&a, &txn))
-                .unwrap_or_default();
-            let ch = grid_helpers::get_col_order_array(&sm, &txn)
-                .map(|a| grid_helpers::read_col_order(&a, &txn))
-                .unwrap_or_default();
-            let pos_to_id_entries = sm
-                .get(&txn, compute_document::schema::KEY_GRID_INDEX)
-                .and_then(|out| match out {
-                    Out::YMap(grid_index_map) => {
-                        grid_index_map.get(&txn, compute_document::schema::KEY_GRID_POS_TO_ID)
-                    }
-                    _ => None,
-                })
-                .and_then(|out| match out {
-                    Out::YMap(pos_to_id) => Some(
-                        pos_to_id
-                            .iter(&txn)
-                            .filter_map(|(pos_key, value)| match value {
-                                yrs::Out::Any(yrs::Any::String(cell_hex)) => {
-                                    Some((pos_key.to_string(), cell_hex.to_string()))
-                                }
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            (rh, ch, pos_to_id_entries)
-        } else {
-            (vec![], vec![], vec![])
-        }
-    };
-
-    let mut grid = if !row_hexes.is_empty() || !col_hexes.is_empty() {
-        GridIndex::from_yrs_arrays(sheet_id, &row_hexes, &col_hexes, id_alloc)
-    } else {
-        GridIndex::new(sheet_id, sheet_snap.rows, sheet_snap.cols, id_alloc)
-    };
-
-    for (pos_key, cell_hex) in pos_to_id_entries {
-        let Some((row_hex, col_hex)) = pos_key.split_once(':') else {
-            continue;
-        };
-        let (Some(row), Some(col)) = (
-            grid.row_index_from_hex(row_hex),
-            grid.col_index_from_hex(col_hex),
-        ) else {
-            continue;
-        };
-        if let Some(cell_raw) = compute_document::hex::hex_to_id(&cell_hex) {
-            grid.register_cell(CellId::from_raw(cell_raw), row, col);
-        }
-    }
-
-    for cell_data in &sheet_snap.cells {
-        if let Ok(cell_id) = CellId::from_uuid_str(&cell_data.cell_id) {
-            grid.register_cell(cell_id, cell_data.row, cell_data.col);
-        }
-    }
-    grid
-}
 
 /// Yrs-backed compute engine: CRDT storage + identity tracking + compute scheduler.
 pub struct YrsComputeEngine {
@@ -2175,135 +2023,6 @@ impl YrsComputeEngine {
 }
 
 impl YrsComputeEngine {
-    /// Post-process recalc (CF refresh + display text + schema validation) and stash for flush.
-    ///
-    /// This is the central funnel for every mutation path that produces a
-    /// `RecalcResult` — cell edits (`set_cell*`, `import_values`, `apply_changes`),
-    /// structural changes, and every branch of `apply_mutation`. We mark the
-    /// compute store dirty here so that a subsequent `recalculate_with_options`
-    /// call cannot short-circuit past a mutation that actually changed state.
-    fn prepare_recalc_for_flush(&mut self, recalc: &mut RecalcResult) {
-        // A mutation reached this funnel: a subsequent full recalc must run.
-        // This covers every Engine-level mutation entry point in one place:
-        //   set_cell / set_cell_binary / set_cell_value_parsed /
-        //   set_cell_value_as_text / set_cell_values_parsed / import_values /
-        //   apply_changes / structure_change / apply_mutation's SetCells,
-        //   ClearCells, SetCellsByPosition, ClearRangeByPosition, SortRange,
-        //   RemoveDuplicates, ClearRange, ClearRangeAndReturnIds, DeleteSheet,
-        //   CreateSubtotals, AutoFill, FlashFill, RelocateCells, CopyRange, …
-        self.stores.compute.mark_dirty();
-
-        self.refresh_cf_caches_after_recalc(recalc);
-        self.enrich_display_text(recalc);
-
-        // Run schema validation on all changed cells.
-        if let Some(ref schemas) = self.stores.compute.schema_map {
-            let dirty: Vec<CellId> = recalc
-                .changed_cells
-                .iter()
-                .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
-                .collect();
-            recalc.validation_annotations =
-                self.stores
-                    .compute
-                    .validate_dirty_cells(&self.mirror, &dirty, schemas);
-        }
-
-        // Run data-validation rules (the `dataValidations` Y.Array) on every
-        // changed cell. This is independent of column schemas — a cell can
-        // carry a data-validation rule (Excel-style "Data > Data Validation")
-        // without being part of a typed column. We emit pass/fail annotations
-        // for every covered cell so the TS bridge fires `validation:passed`
-        // when an invalid cell becomes valid (clearing its validation circle)
-        // and `validation:failed` when a valid cell becomes invalid.
-        self.append_data_validation_annotations(recalc);
-
-        self.mutation.pending_recalc = Some(recalc.clone());
-    }
-
-    /// Post-process an import-open recalc for the direct hydration return path.
-    ///
-    /// This needs the same observable enrichment as mutation flushes, but it
-    /// must not leave compute dirty or seed a pending viewport recalc because
-    /// the enriched payload is returned by `complete_deferred_hydration`
-    /// itself.
-    fn postprocess_import_open_recalc(&mut self, recalc: &mut RecalcResult) {
-        self.prepare_recalc_for_flush(recalc);
-        self.enrich_metadata_flags(recalc);
-        self.stores.compute.clear_dirty();
-        self.mutation.pending_recalc = None;
-    }
-
-    /// Append `RecalcValidationAnnotation` entries for every changed cell
-    /// covered by a data-validation rule. Uses an `errors`-empty annotation
-    /// for passes; the TS bridge interprets that as a `validation:passed`
-    /// transition.
-    fn append_data_validation_annotations(&self, recalc: &mut RecalcResult) {
-        use crate::snapshot::{RecalcValidationAnnotation, RecalcValidationError};
-        use crate::storage::sheet::schemas::DataValidationOutcome;
-        use domain_types::domain::validation::{
-            SchemaType, ValidationErrorCode, ValidationSeverity,
-        };
-
-        for change in &recalc.changed_cells {
-            let Some(ref pos) = change.position else {
-                continue;
-            };
-            let Ok(sheet_id) = SheetId::from_uuid_str(&change.sheet_id) else {
-                continue;
-            };
-            let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id) else {
-                continue;
-            };
-            let row = pos.row;
-            let col = pos.col;
-
-            let outcome = services::formatting::validate_cell_against_data_validations(
-                &self.stores,
-                &self.mirror,
-                &sheet_id,
-                row,
-                col,
-                &change.value,
-            );
-
-            let errors = match outcome {
-                DataValidationOutcome::NoRule => continue,
-                DataValidationOutcome::Pass => Vec::new(),
-                DataValidationOutcome::Fail { message } => vec![RecalcValidationError {
-                    code: ValidationErrorCode::TypeMismatch,
-                    message,
-                    severity: ValidationSeverity::Error,
-                }],
-            };
-
-            // Skip if a column-schema annotation already exists for this cell.
-            // Column schemas take priority — re-emitting would either
-            // overwrite metadata or duplicate events.
-            let already_annotated = recalc
-                .validation_annotations
-                .iter()
-                .any(|a| a.cell_id == change.cell_id);
-            if already_annotated {
-                continue;
-            }
-
-            recalc
-                .validation_annotations
-                .push(RecalcValidationAnnotation {
-                    cell_id: cell_id.to_uuid_string(),
-                    sheet_id: sheet_id.to_uuid_string(),
-                    row,
-                    column: col,
-                    errors,
-                    expected_type: SchemaType::Any,
-                    actual_type: SchemaType::Any,
-                });
-        }
-    }
-}
-
-impl YrsComputeEngine {
     fn attach_sheet_lifecycle_runtime_hint(
         result: &mut MutationResult,
         hint: SheetLifecycleRuntimeHint,
@@ -3095,22 +2814,6 @@ impl YrsComputeEngine {
         Ok(output)
     }
 
-    /// Populate `display_text` on each `CellChange` using the canonical format pipeline.
-    fn enrich_display_text(&self, result: &mut RecalcResult) {
-        services::mutation_handlers::enrich_display_text(
-            &self.stores,
-            &self.mirror,
-            &self.settings,
-            result,
-            &|value, sheet_id, row, col| self.format_value_at_cell(value, sheet_id, row, col),
-        );
-    }
-
-    /// Populate `extra_flags` on each `CellChange` with metadata flags.
-    fn enrich_metadata_flags(&self, recalc: &mut RecalcResult) {
-        services::mutation_handlers::enrich_metadata_flags(&self.stores, &self.mirror, recalc);
-    }
-
     /// Create a new sheet (used by objects.rs for pivot table creation).
     fn mutation_create_sheet(
         &mut self,
@@ -3592,291 +3295,6 @@ impl YrsComputeEngine {
         self.stores.compute.clear_dirty();
         Ok(recalc)
     }
-
-    /// For each user-typed string that landed as a Number value, run
-    /// locale-aware date detection. If the input parses as a date AND the
-    /// cell does not already have a date format applied, write the
-    /// suggested format code (e.g. `"M/d/yyyy"`, `"yyyy-mm-dd"`) into the
-    /// per-cell number_format. This is the Rust-side replacement for the
-    /// previous `cell-operations.ts` post-set `parseDateInput` shim — the
-    /// kernel just calls `setCellsByPosition` and Rust handles the
-    /// value/format pairing atomically.
-    ///
-    /// Skips entries where:
-    /// - the parse did not produce a numeric value (e.g. plain text, formula);
-    /// - the resulting value is not a date (parse_date_input returns None);
-    /// - the cell already has any explicit non-General format from any layer
-    ///   of the cascade (column/row/table/cell) — Excel parity: an
-    ///   explicitly-formatted cell never silently changes format on input.
-    ///   Only General cells are eligible for auto date-inference.
-    fn apply_inferred_date_formats(
-        &mut self,
-        candidates: &[(SheetId, u32, u32, String)],
-    ) -> Result<(), ComputeError> {
-        use compute_document::hex::id_to_hex;
-        use domain_types::CellFormat;
-
-        let locale = self.settings.locale.clone();
-        let mut to_apply: Vec<(SheetId, u32, u32, String)> = Vec::new();
-
-        for (sheet_id, row, col, text) in candidates {
-            // 1. Skip formulas and apostrophe-prefixed literal text — those
-            //    never round-trip through date detection.
-            let trimmed = text.trim();
-            if trimmed.is_empty() || trimmed.starts_with('=') || trimmed.starts_with('\'') {
-                continue;
-            }
-
-            // 2. Cell must exist and currently hold a numeric value (the
-            //    parse landed as a date serial). If the parser fell through
-            //    to text or boolean, skip.
-            let cell_value = self
-                .mirror
-                .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col));
-            if !matches!(cell_value, Some(value_types::CellValue::Number(_))) {
-                continue;
-            }
-
-            // 3. Locale-aware date detection. Rust's internal parse_input_value
-            //    is stricter than parse_date_input (no D/M/Y, no month-name
-            //    fallbacks), so only act when *both* parsers agree — this
-            //    avoids "looks like a date in the locale" applying to plain
-            //    numbers that happen to be the same magnitude as a serial.
-            let parsed = match compute_formats::parse_date_input(trimmed, &locale) {
-                Some(p) => p,
-                None => continue,
-            };
-
-            // 4. Skip if the cell already has a date format applied.
-            let cell_id =
-                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
-                    Some(id) => id,
-                    None => continue,
-                };
-            let cell_hex = id_to_hex(cell_id.as_u128());
-            let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
-                &self.stores.storage,
-                sheet_id,
-                &cell_hex,
-                *row,
-                *col,
-                table_fmt.as_ref(),
-                self.stores.grid_indexes.get(sheet_id),
-                self.mirror.get_sheet(sheet_id),
-            );
-            // Auto date-inference only fires on cells whose effective format is
-            // General. Any explicit format the user set — Number, Currency,
-            // Date, Fraction, Percentage, Scientific, Custom, Text, Special,
-            // Time, Accounting — is sticky and beats inference. (Excel
-            // parity: an explicitly-formatted cell never silently changes
-            // format on input.) Use `detect_format_type` for canonical
-            // classification, matching the route taken in
-            // `services::cell_editing::write_cell_value` when computing the
-            // parser hint.
-            let has_explicit_format = effective
-                .number_format
-                .as_deref()
-                .map(compute_formats::detect_format_type)
-                .is_some_and(|ft| ft != compute_formats::FormatType::General);
-            if has_explicit_format {
-                continue;
-            }
-
-            to_apply.push((*sheet_id, *row, *col, parsed.suggested_format));
-        }
-
-        if to_apply.is_empty() {
-            return Ok(());
-        }
-
-        // Suppress observer rebroadcast for the format writes — these are
-        // structural follow-ups to the value mutation that already fired its
-        // own observer notification.
-        let _guard = self.mutation.suppress_guard();
-        for (sheet_id, row, col, fmt) in to_apply {
-            let format = CellFormat {
-                number_format: Some(fmt),
-                ..Default::default()
-            };
-            services::formatting::set_format_for_ranges(
-                &mut self.stores,
-                &self.mirror,
-                &sheet_id,
-                &[(row, col, row, col)],
-                &format,
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Excel applies formula-reference number format inheritance at edit time:
-    /// the formula cell receives its own copied number_format, and later display
-    /// reads use that stored format without walking references.
-    fn apply_formula_inherited_number_formats(
-        &mut self,
-        candidates: &[(SheetId, u32, u32)],
-    ) -> Result<MutationResult, ComputeError> {
-        if candidates.is_empty() {
-            return Ok(MutationResult::empty());
-        }
-
-        let mut to_apply: Vec<(SheetId, u32, u32, String)> = Vec::new();
-
-        for (sheet_id, row, col) in candidates {
-            let Some(cell_id) = self
-                .mirror
-                .resolve_cell_id(sheet_id, SheetPos::new(*row, *col))
-            else {
-                continue;
-            };
-
-            if self.formula_cell_has_non_general_number_format(&cell_id, sheet_id, *row, *col) {
-                continue;
-            }
-
-            let mut visited = HashSet::new();
-            visited.insert(cell_id);
-            let Some(number_format) =
-                self.inherited_formula_number_format(&cell_id, &mut visited, 8)
-            else {
-                continue;
-            };
-
-            to_apply.push((*sheet_id, *row, *col, number_format));
-        }
-
-        if to_apply.is_empty() {
-            return Ok(MutationResult::empty());
-        }
-
-        let _guard = self.mutation.suppress_guard();
-        let mut result = MutationResult::empty();
-        for (sheet_id, row, col, number_format) in to_apply {
-            let format = CellFormat {
-                number_format: Some(number_format),
-                ..Default::default()
-            };
-            let (_affected, format_result) = services::formatting::set_format_for_ranges(
-                &mut self.stores,
-                &self.mirror,
-                &sheet_id,
-                &[(row, col, row, col)],
-                &format,
-            )?;
-            result
-                .property_changes
-                .extend(format_result.property_changes);
-        }
-
-        Ok(result)
-    }
-
-    fn formula_cell_has_non_general_number_format(
-        &self,
-        cell_id: &CellId,
-        sheet_id: &SheetId,
-        row: u32,
-        col: u32,
-    ) -> bool {
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        let table_fmt =
-            services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, row, col);
-        let effective = crate::storage::properties::get_effective_format(
-            &self.stores.storage,
-            sheet_id,
-            &cell_hex,
-            row,
-            col,
-            table_fmt.as_ref(),
-            self.stores.grid_indexes.get(sheet_id),
-            self.mirror.get_sheet(sheet_id),
-        );
-
-        effective
-            .number_format
-            .as_deref()
-            .is_some_and(is_non_general_number_format)
-    }
-
-    fn effective_number_format_for_cell(&self, cell_id: &CellId) -> Option<String> {
-        let sheet_id = self.mirror.sheet_for_cell(cell_id)?;
-        let pos = self.mirror.resolve_position(cell_id)?;
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        let table_fmt = services::tables::resolve_table_format_at_cell(
-            &self.mirror,
-            &sheet_id,
-            pos.row(),
-            pos.col(),
-        );
-        let effective = crate::storage::properties::get_effective_format(
-            &self.stores.storage,
-            &sheet_id,
-            &cell_hex,
-            pos.row(),
-            pos.col(),
-            table_fmt.as_ref(),
-            self.stores.grid_indexes.get(&sheet_id),
-            self.mirror.get_sheet(&sheet_id),
-        );
-
-        effective
-            .number_format
-            .filter(|fmt| is_non_general_number_format(fmt))
-    }
-
-    fn inherited_formula_number_format(
-        &self,
-        formula_cell_id: &CellId,
-        visited: &mut HashSet<CellId>,
-        depth: u8,
-    ) -> Option<String> {
-        if depth == 0 {
-            return None;
-        }
-
-        let formula = self.mirror.get_formula(formula_cell_id)?;
-        let mut inherited: Option<String> = None;
-
-        for reference in &formula.refs {
-            let IdentityFormulaRef::Cell(cell_ref) = reference else {
-                continue;
-            };
-
-            let source_format = if let Some(format) =
-                self.effective_number_format_for_cell(&cell_ref.id)
-            {
-                Some(format)
-            } else if visited.insert(cell_ref.id) {
-                let nested = self.inherited_formula_number_format(&cell_ref.id, visited, depth - 1);
-                visited.remove(&cell_ref.id);
-                nested
-            } else {
-                None
-            };
-
-            let Some(source_format) = source_format else {
-                continue;
-            };
-
-            match &inherited {
-                Some(existing) if existing != &source_format => return None,
-                Some(_) => {}
-                None => inherited = Some(source_format),
-            }
-        }
-
-        inherited
-    }
-}
-
-fn is_non_general_number_format(format: &str) -> bool {
-    compute_formats::detect_format_type(format) != compute_formats::FormatType::General
-}
-
-fn is_formula_parse_input(input: &mutation::CellInput) -> bool {
-    matches!(input, mutation::CellInput::Parse { text } if text.trim().starts_with('='))
 }
 
 impl std::fmt::Debug for YrsComputeEngine {

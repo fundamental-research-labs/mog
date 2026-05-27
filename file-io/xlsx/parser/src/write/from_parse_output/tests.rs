@@ -2980,6 +2980,14 @@ fn pivot_package_preserves_orphan_workbook_cache_relationships_for_clean_parts()
         ],
         sheet_workbook_r_ids: vec!["rId1".to_string()],
         pivot_package: domain_types::PivotPackageRoundTrip {
+            workbook_cache_entries: vec![domain_types::PivotWorkbookCacheEntry {
+                cache_id: 999,
+                relationship_id: "rId40".to_string(),
+                relationship_target: "pivotCache/pivotCacheDefinition5.xml".to_string(),
+                definition_path: "xl/pivotCache/pivotCacheDefinition5.xml".to_string(),
+                order: 0,
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
             cache_definitions: vec![domain_types::PivotCacheDefinitionPackage {
                 cache_id: 999,
                 definition_path: "xl/pivotCache/pivotCacheDefinition5.xml".to_string(),
@@ -3014,6 +3022,60 @@ fn pivot_package_preserves_orphan_workbook_cache_relationships_for_clean_parts()
 
     assert!(workbook_rels.contains("Id=\"rId40\""));
     assert!(workbook_rels.contains("pivotCache/pivotCacheDefinition5.xml"));
+    assert!(archive.contains("xl/pivotCache/pivotCacheDefinition5.xml"));
+}
+
+#[test]
+fn pivot_cache_relationship_requires_typed_pivot_package_entry() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext::default()],
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId40".to_string(),
+            rel_type: REL_PIVOT_CACHE.to_string(),
+            target: "pivotCache/pivotCacheDefinition5.xml".to_string(),
+            target_mode: None,
+        }],
+        pivot_package: domain_types::PivotPackageRoundTrip {
+            cache_definitions: vec![domain_types::PivotCacheDefinitionPackage {
+                cache_id: 999,
+                definition_path: "xl/pivotCache/pivotCacheDefinition5.xml".to_string(),
+                definition_rels_path: None,
+                source_kind: domain_types::PivotCacheSourceKind::Worksheet,
+                raw_definition_xml: br#"<pivotCacheDefinition cacheId="999"/>"#.to_vec(),
+                raw_relationships: Vec::new(),
+                records_relationship_id: None,
+                records_relationship_target: None,
+                records_path: None,
+                raw_records_xml: None,
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            content_type_overrides: vec![domain_types::PivotPackageContentType {
+                part_name: "/xl/pivotCache/pivotCacheDefinition5.xml".to_string(),
+                content_type: CT_PIVOT_CACHE.to_string(),
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            ..Default::default()
+        },
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/pivotCache/pivotCacheDefinition5.xml".to_string(),
+            data: br#"<pivotCacheDefinition cacheId="999"/>"#.to_vec(),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+
+    assert!(!workbook_xml.contains("<pivotCaches"));
+    assert!(!workbook_rels.contains("Id=\"rId40\""));
+    assert!(!workbook_rels.contains("pivotCache/pivotCacheDefinition5.xml"));
     assert!(archive.contains("xl/pivotCache/pivotCacheDefinition5.xml"));
 }
 

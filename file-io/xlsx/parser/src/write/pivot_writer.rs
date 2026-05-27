@@ -112,7 +112,7 @@ pub fn build_pivot_data(
                 .collect()
         })
         .unwrap_or_default();
-    let mut preserved_workbook_cache_entries: Vec<PreservedWorkbookCacheEntry> = package
+    let preserved_workbook_cache_entries: Vec<PreservedWorkbookCacheEntry> = package
         .map(|package| {
             package
                 .workbook_cache_entries
@@ -128,31 +128,6 @@ pub fn build_pivot_data(
                 .collect()
         })
         .unwrap_or_default();
-    if let (Some(package), Some(ctx)) = (package, round_trip_ctx) {
-        for cache in &package.cache_definitions {
-            if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {
-                continue;
-            }
-            if preserved_workbook_cache_entries
-                .iter()
-                .any(|entry| entry.cache_id == cache.cache_id)
-            {
-                continue;
-            }
-            let relationship_target = workbook_relationship_target(&cache.definition_path);
-            if let Some(rel) = ctx.workbook_relationships.iter().find(|rel| {
-                rel.rel_type == crate::write::REL_PIVOT_CACHE
-                    && rel.target == relationship_target
-                    && rel.target_mode.is_none()
-            }) {
-                preserved_workbook_cache_entries.push(PreservedWorkbookCacheEntry {
-                    cache_id: cache.cache_id,
-                    relationship_id: rel.id.clone(),
-                    relationship_target,
-                });
-            }
-        }
-    }
     let preserved_part_paths = preserved_pivot_part_paths(round_trip_ctx);
     let preserved_content_type_part_names = package
         .map(|package| {
@@ -385,13 +360,6 @@ fn normalize_part_path(path: &str) -> String {
 
 fn normalize_content_type_part_name(path: &str) -> String {
     format!("/{}", normalize_part_path(path))
-}
-
-fn workbook_relationship_target(path: &str) -> String {
-    normalize_part_path(path)
-        .strip_prefix("xl/")
-        .map(str::to_string)
-        .unwrap_or_else(|| normalize_part_path(path))
 }
 
 fn preserved_pivot_part_paths(round_trip_ctx: Option<&RoundTripContext>) -> HashSet<String> {

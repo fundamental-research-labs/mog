@@ -9,10 +9,10 @@ use domain_types::{
     AlignmentFormat, AnchorPosition, AuthoredStyleRun, BorderFormat,
     BorderSide as DomainBorderSide, CFCellRange, CFRule, CFStyle, CellData as DomainCellData,
     CellValue as DomainValue, ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment,
-    CommentType, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentFormat,
-    DocumentProperties, FillFormat, FontFormat, FrozenPane, Hyperlink, MergeRegion, NamedRange,
-    ObjectSize, ParseOutput, PersonInfo, RowDimension, SheetData, SheetDimensions, TableColumnSpec,
-    TableSpec, WorkbookView,
+    CommentType, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentCustomProperty,
+    DocumentCustomPropertyValue, DocumentFormat, DocumentProperties, FillFormat, FontFormat,
+    FrozenPane, Hyperlink, MergeRegion, NamedRange, ObjectSize, ParseOutput, PersonInfo,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec, WorkbookView,
 };
 use formula_types::CellRef;
 use ooxml_types::cond_format::CfOperator;

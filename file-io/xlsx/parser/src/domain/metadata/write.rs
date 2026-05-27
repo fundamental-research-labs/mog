@@ -111,19 +111,68 @@ pub fn write_custom_props_xml(props: &domain_types::DocumentProperties) -> Vec<u
         )
         .end_attrs();
 
-    for (idx, (name, value)) in props.custom.iter().enumerate() {
+    let typed_properties: Vec<_> = if props.typed_custom.is_empty() {
+        props
+            .custom
+            .iter()
+            .map(|(name, value)| domain_types::DocumentCustomProperty {
+                name: name.clone(),
+                value: domain_types::DocumentCustomPropertyValue::Lpwstr(value.clone()),
+            })
+            .collect()
+    } else {
+        props.typed_custom.clone()
+    };
+
+    for (idx, prop) in typed_properties.iter().enumerate() {
         w.start_element("property")
             .attr("fmtid", "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}")
             .attr_num("pid", idx + 2)
-            .attr("name", name)
+            .attr("name", &prop.name)
             .end_attrs();
-        w.start_element("vt:lpwstr")
-            .end_attrs()
-            .text(value)
-            .end_element("vt:lpwstr");
+        write_custom_property_value(&mut w, &prop.value);
         w.end_element("property");
     }
 
     w.end_element("Properties");
     w.finish()
+}
+
+fn write_custom_property_value(
+    w: &mut XmlWriter,
+    value: &domain_types::DocumentCustomPropertyValue,
+) {
+    match value {
+        domain_types::DocumentCustomPropertyValue::Lpwstr(value) => {
+            write_custom_property_text(w, "vt:lpwstr", value);
+        }
+        domain_types::DocumentCustomPropertyValue::I4(value) => {
+            w.start_element("vt:i4")
+                .end_attrs()
+                .text(&value.to_string())
+                .end_element("vt:i4");
+        }
+        domain_types::DocumentCustomPropertyValue::R8(value) => {
+            w.start_element("vt:r8")
+                .end_attrs()
+                .text(&value.to_string())
+                .end_element("vt:r8");
+        }
+        domain_types::DocumentCustomPropertyValue::Bool(value) => {
+            w.start_element("vt:bool")
+                .end_attrs()
+                .text(if *value { "true" } else { "false" })
+                .end_element("vt:bool");
+        }
+        domain_types::DocumentCustomPropertyValue::Filetime(value) => {
+            write_custom_property_text(w, "vt:filetime", value);
+        }
+    }
+}
+
+fn write_custom_property_text(w: &mut XmlWriter, element: &str, value: &str) {
+    w.start_element(element)
+        .end_attrs()
+        .text(value)
+        .end_element(element);
 }

@@ -18,6 +18,7 @@ pub const KEY_LAST_MODIFIED_BY: &str = "lastModifiedBy";
 pub const KEY_CATEGORY: &str = "category";
 pub const KEY_KEYWORDS: &str = "keywords";
 pub const KEY_CUSTOM: &str = "custom";
+pub const KEY_TYPED_CUSTOM: &str = "typedCustom";
 
 // ─── to_yrs_prelim ─────────────────────────────────────────────────────────
 
@@ -37,6 +38,9 @@ pub fn to_yrs_prelim(props: &DocumentProperties) -> Vec<(&str, Any)> {
     if !props.custom.is_empty() {
         entries.push((KEY_CUSTOM, json_any(&props.custom)));
     }
+    if !props.typed_custom.is_empty() {
+        entries.push((KEY_TYPED_CUSTOM, json_any(&props.typed_custom)));
+    }
     entries
 }
 
@@ -54,6 +58,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> DocumentProperties {
         last_modified_by: read_string(map, txn, KEY_LAST_MODIFIED_BY),
         category: read_string(map, txn, KEY_CATEGORY),
         keywords: read_string(map, txn, KEY_KEYWORDS),
+        typed_custom: read_json(map, txn, KEY_TYPED_CUSTOM).unwrap_or_default(),
         custom: read_json(map, txn, KEY_CUSTOM).unwrap_or_default(),
     }
 }

@@ -81,12 +81,19 @@ fn env_flag_default_true(name: &str) -> bool {
         .unwrap_or(true)
 }
 
-fn custom_property_value_to_string(value: &CustomPropertyValue) -> String {
+fn custom_property_value_to_domain(
+    value: &CustomPropertyValue,
+) -> domain_types::DocumentCustomPropertyValue {
     match value {
-        CustomPropertyValue::Lpwstr(value) | CustomPropertyValue::Filetime(value) => value.clone(),
-        CustomPropertyValue::I4(value) => value.to_string(),
-        CustomPropertyValue::R8(value) => value.to_string(),
-        CustomPropertyValue::Bool(value) => value.to_string(),
+        CustomPropertyValue::Lpwstr(value) => {
+            domain_types::DocumentCustomPropertyValue::Lpwstr(value.clone())
+        }
+        CustomPropertyValue::I4(value) => domain_types::DocumentCustomPropertyValue::I4(*value),
+        CustomPropertyValue::R8(value) => domain_types::DocumentCustomPropertyValue::R8(*value),
+        CustomPropertyValue::Bool(value) => domain_types::DocumentCustomPropertyValue::Bool(*value),
+        CustomPropertyValue::Filetime(value) => {
+            domain_types::DocumentCustomPropertyValue::Filetime(value.clone())
+        }
     }
 }
 
@@ -170,6 +177,20 @@ pub(crate) fn full_parse_result_to_parse_output(
     let properties =
         (result.doc_props_core.is_some() || result.doc_props_custom.is_some()).then(|| {
             let core = result.doc_props_core.as_ref();
+            let typed_custom: Vec<_> = result
+                .doc_props_custom
+                .as_ref()
+                .map(|custom| {
+                    custom
+                        .properties
+                        .iter()
+                        .map(|prop| domain_types::DocumentCustomProperty {
+                            name: prop.name.clone(),
+                            value: custom_property_value_to_domain(&prop.value),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             domain_types::DocumentProperties {
                 title: core.and_then(|core| core.title.clone()),
                 creator: core.and_then(|core| core.creator.clone()),
@@ -180,22 +201,11 @@ pub(crate) fn full_parse_result_to_parse_output(
                 last_modified_by: core.and_then(|core| core.last_modified_by.clone()),
                 category: core.and_then(|core| core.category.clone()),
                 keywords: core.and_then(|core| core.keywords.clone()),
-                custom: result
-                    .doc_props_custom
-                    .as_ref()
-                    .map(|custom| {
-                        custom
-                            .properties
-                            .iter()
-                            .map(|prop| {
-                                (
-                                    prop.name.clone(),
-                                    custom_property_value_to_string(&prop.value),
-                                )
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                custom: typed_custom
+                    .iter()
+                    .map(|prop| (prop.name.clone(), prop.value.as_legacy_string()))
+                    .collect(),
+                typed_custom,
             }
         });
 

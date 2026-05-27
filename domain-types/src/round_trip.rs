@@ -126,7 +126,8 @@ pub struct RoundTripContext {
     #[serde(default, with = "option_bytes")]
     pub raw_doc_props_app_xml: Option<Vec<u8>>,
     /// Compatibility input only. Modeled custom properties live on
-    /// `DocumentProperties.custom`.
+    /// `DocumentProperties.typed_custom` with `DocumentProperties.custom` kept
+    /// as a legacy string projection.
     #[serde(default, with = "option_bytes")]
     pub raw_doc_props_custom_xml: Option<Vec<u8>>,
     /// Compatibility input only. Raw `xl/metadata.xml` may seed export only

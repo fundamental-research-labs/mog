@@ -45,6 +45,56 @@ fn raw_doc_props_do_not_override_modeled_document_properties() {
 }
 
 #[test]
+fn typed_custom_doc_props_export_from_modeled_state_not_raw_strings() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.properties = Some(DocumentProperties {
+        typed_custom: vec![
+            DocumentCustomProperty {
+                name: "Approved".to_string(),
+                value: DocumentCustomPropertyValue::Bool(true),
+            },
+            DocumentCustomProperty {
+                name: "Revision".to_string(),
+                value: DocumentCustomPropertyValue::I4(7),
+            },
+            DocumentCustomProperty {
+                name: "Confidence".to_string(),
+                value: DocumentCustomPropertyValue::R8(0.875),
+            },
+            DocumentCustomProperty {
+                name: "ReviewedAt".to_string(),
+                value: DocumentCustomPropertyValue::Filetime("2026-05-27T10:00:00Z".to_string()),
+            },
+        ],
+        ..Default::default()
+    });
+    let ctx = domain_types::RoundTripContext {
+        raw_doc_props_custom_xml: Some(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="Approved"><vt:lpwstr>stale</vt:lpwstr></property></Properties>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let custom_xml = String::from_utf8(archive.read_file("docProps/custom.xml").unwrap()).unwrap();
+
+    assert!(custom_xml.contains(r#"name="Approved"><vt:bool>true</vt:bool>"#));
+    assert!(custom_xml.contains(r#"name="Revision"><vt:i4>7</vt:i4>"#));
+    assert!(custom_xml.contains(r#"name="Confidence"><vt:r8>0.875</vt:r8>"#));
+    assert!(
+        custom_xml.contains(r#"name="ReviewedAt"><vt:filetime>2026-05-27T10:00:00Z</vt:filetime>"#)
+    );
+    assert!(!custom_xml.contains("<vt:lpwstr>true</vt:lpwstr>"));
+    assert!(!custom_xml.contains(">stale<"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn raw_doc_props_are_dropped_when_document_properties_are_unmodeled() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

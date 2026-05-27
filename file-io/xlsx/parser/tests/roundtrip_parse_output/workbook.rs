@@ -8,10 +8,10 @@ use super::helpers::{
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CalcMode,
     CalculationProperties, CellData, ColDimension, Comment, CommentType, ConditionalFormat,
-    DocumentFormat, DocumentProperties, ErrorStyle, FillFormat, FontFormat, FrozenPane,
-    MergeRegion, NamedRange, ParseOutput, RefMode, RoundTripContext, RowDimension, SheetData,
-    SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule,
-    ValidationSpec,
+    DocumentCustomProperty, DocumentCustomPropertyValue, DocumentFormat, DocumentProperties,
+    ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput, RefMode,
+    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
@@ -39,6 +39,52 @@ fn document_properties_roundtrip_from_modeled_state() {
     assert_eq!(
         properties.custom,
         vec![("ReviewStatus".to_string(), "Approved".to_string())]
+    );
+}
+
+#[test]
+fn typed_custom_document_properties_roundtrip_from_modeled_state() {
+    let mut output = make_single_sheet("Sheet1", Vec::new());
+    output.properties = Some(DocumentProperties {
+        typed_custom: vec![
+            DocumentCustomProperty {
+                name: "Approved".to_string(),
+                value: DocumentCustomPropertyValue::Bool(true),
+            },
+            DocumentCustomProperty {
+                name: "Revision".to_string(),
+                value: DocumentCustomPropertyValue::I4(7),
+            },
+            DocumentCustomProperty {
+                name: "Confidence".to_string(),
+                value: DocumentCustomPropertyValue::R8(0.875),
+            },
+            DocumentCustomProperty {
+                name: "ReviewedAt".to_string(),
+                value: DocumentCustomPropertyValue::Filetime("2026-05-27T10:00:00Z".to_string()),
+            },
+        ],
+        ..Default::default()
+    });
+
+    let round_tripped = roundtrip(&output);
+    let properties = round_tripped
+        .properties
+        .as_ref()
+        .expect("document properties should round-trip");
+
+    assert_eq!(
+        properties.typed_custom,
+        output.properties.as_ref().unwrap().typed_custom
+    );
+    assert_eq!(
+        properties.custom,
+        vec![
+            ("Approved".to_string(), "true".to_string()),
+            ("Revision".to_string(), "7".to_string()),
+            ("Confidence".to_string(), "0.875".to_string()),
+            ("ReviewedAt".to_string(), "2026-05-27T10:00:00Z".to_string()),
+        ]
     );
 }
 

@@ -49,9 +49,10 @@ pub use crate::domain::content_types::write::{
     CT_CALC_CHAIN, CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DIAGRAM_COLORS, CT_DIAGRAM_DATA, CT_DIAGRAM_DRAWING, CT_DIAGRAM_LAYOUT, CT_DIAGRAM_STYLE,
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
-    CT_PIVOT_TABLE, CT_PNG, CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_SLICER, CT_SLICER_CACHE,
-    CT_STYLES, CT_TABLE, CT_THEME, CT_VBA, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, CT_XML,
-    ContentTypeDefault, ContentTypeOverride, ContentTypesManager, create_xlsx_content_types,
+    CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS, CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_SLICER,
+    CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_THEME, CT_VBA, CT_WMF, CT_WORKBOOK, CT_WORKSHEET,
+    CT_XML, ContentTypeDefault, ContentTypeOverride, ContentTypesManager,
+    create_xlsx_content_types,
 };
 pub use crate::domain::controls::write::{
     CONTENT_TYPE_CTRL_PROP, ControlsWriter, REL_CTRL_PROP, ctrl_prop_relationship_target,

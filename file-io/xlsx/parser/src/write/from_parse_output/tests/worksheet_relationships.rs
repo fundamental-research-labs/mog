@@ -1744,7 +1744,7 @@ fn printer_settings_relationship_requires_graph_registered_binary_part() {
         ..Default::default()
     }]);
     let clean_printer_settings = domain_types::BlobPart {
-        path: "xl/printerSettings/printerSettings1.bin".to_string(),
+        path: "xl/printerSettings/printerSettings9.bin".to_string(),
         data: b"clean printer settings".to_vec(),
     };
     let ctx = domain_types::RoundTripContext {
@@ -1753,20 +1753,20 @@ fn printer_settings_relationship_requires_graph_registered_binary_part() {
                 domain_types::OpcRelationship {
                     id: "rId7".to_string(),
                     rel_type: REL_PRINTER_SETTINGS.to_string(),
-                    target: "../printerSettings/printerSettings1.bin".to_string(),
+                    target: "../printerSettings/printerSettings9.bin".to_string(),
                     target_mode: None,
                 },
                 domain_types::OpcRelationship {
                     id: "rId9".to_string(),
                     rel_type: REL_PRINTER_SETTINGS.to_string(),
-                    target: "../printerSettings/printerSettings9.bin".to_string(),
+                    target: "../printerSettings/printerSettings1.bin".to_string(),
                     target_mode: None,
                 },
             ],
             ..Default::default()
         }],
         binary_blobs: vec![domain_types::BlobPart {
-            path: "xl/printerSettings/printerSettings9.bin".to_string(),
+            path: "xl/printerSettings/printerSettings1.bin".to_string(),
             data: b"stale printer settings".to_vec(),
         }],
         opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
@@ -1788,7 +1788,7 @@ fn printer_settings_relationship_requires_graph_registered_binary_part() {
                 content_type: None,
                 default_extension: Some((
                     "bin".to_string(),
-                    "application/octet-stream".to_string(),
+                    crate::write::CT_PRINTER_SETTINGS.to_string(),
                 )),
                 ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
             }],
@@ -1808,14 +1808,18 @@ fn printer_settings_relationship_requires_graph_registered_binary_part() {
             .unwrap(),
     )
     .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert!(archive.contains("xl/printerSettings/printerSettings1.bin"));
-    assert!(!archive.contains("xl/printerSettings/printerSettings9.bin"));
+    assert!(archive.contains("xl/printerSettings/printerSettings9.bin"));
+    assert!(!archive.contains("xl/printerSettings/printerSettings1.bin"));
     assert!(sheet_xml.contains("<pageSetup"));
     assert!(sheet_xml.contains("r:id=\"rId7\""));
     assert!(sheet_rels.contains("Id=\"rId7\""));
-    assert!(sheet_rels.contains("Target=\"../printerSettings/printerSettings1.bin\""));
-    assert!(!sheet_rels.contains("printerSettings9.bin"));
+    assert!(sheet_rels.contains("Target=\"../printerSettings/printerSettings9.bin\""));
+    assert!(!sheet_rels.contains("printerSettings1.bin"));
+    assert!(content_types.contains(r#"Extension="bin""#));
+    assert!(content_types.contains(crate::write::CT_PRINTER_SETTINGS));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

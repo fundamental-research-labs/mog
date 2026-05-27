@@ -80,6 +80,10 @@ pub const CT_PIVOT_TABLE: &str =
 pub const CT_PIVOT_CACHE: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml";
 
+/// Content type for printer settings binaries
+pub const CT_PRINTER_SETTINGS: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings";
+
 /// Content type for VBA projects
 pub const CT_VBA: &str = "application/vnd.ms-office.vbaProject";
 

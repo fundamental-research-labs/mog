@@ -19,6 +19,7 @@ mod metadata;
 mod opaque_worksheet_drawing;
 mod package_authority;
 mod pivot_package;
+mod printer_settings;
 mod sheet_builder;
 mod sheet_parts;
 mod sheet_preservation;
@@ -1099,36 +1100,17 @@ pub fn write_xlsx_from_parse_output(
 
         // Printer settings relationship.
         if has_printer_settings {
-            if let Some(ref ps) = sheet_data.print_settings {
-                let path = format!("xl/printerSettings/printerSettings{}.bin", sheet_num);
-                let target = format!("../printerSettings/printerSettings{}.bin", sheet_num);
-                if has_clean_opaque_part(round_trip_ctx, &path) {
-                    let r_id = ps
-                        .r_id
-                        .clone()
-                        .filter(|r_id| rels.get_by_id(r_id).is_none())
-                        .or_else(|| {
-                            package_authority::relationship_id_hint(
-                                original_sheet_rels,
-                                REL_PRINTER_SETTINGS,
-                                &target,
-                                None,
-                            )
-                            .filter(|r_id| rels.get_by_id(r_id).is_none())
-                        })
-                        .unwrap_or_else(|| rels.add(REL_PRINTER_SETTINGS, &target));
-                    if rels.find_by_target(&target).is_none() {
-                        rels.add_with_id(&r_id, REL_PRINTER_SETTINGS, &target);
-                    }
-                    worksheet_printer_settings_relationships.push(
-                        WorksheetPrinterSettingsGraphEntry {
-                            sheet_idx,
-                            path,
-                            target,
-                            relationship_id_hint: r_id,
-                        },
-                    );
-                }
+            if let Some(entry) = sheet_data.print_settings.as_ref().and_then(|ps| {
+                printer_settings::add_relationship_for_export(
+                    sheet_idx,
+                    sheet_num,
+                    ps,
+                    original_sheet_rels,
+                    round_trip_ctx,
+                    &mut rels,
+                )
+            }) {
+                worksheet_printer_settings_relationships.push(entry);
             }
         }
 

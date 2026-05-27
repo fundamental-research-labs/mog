@@ -5,7 +5,9 @@
 
 use super::super::helpers::{parse_edit_as, parse_i64};
 use super::super::reader::attrs::{attr_value, bool_attr_or};
-use super::super::reader::elements::{direct_child_slice, direct_child_text, document_element_slice};
+use super::super::reader::elements::{
+    direct_child_slice, direct_child_text, document_element_slice,
+};
 use super::super::types::{
     AbsoluteAnchor, CellAnchor, ClientData, Extent, OneCellAnchor, Position, TwoCellAnchor,
 };

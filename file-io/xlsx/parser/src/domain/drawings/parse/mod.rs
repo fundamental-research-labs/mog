@@ -9,4 +9,6 @@ pub(crate) mod groups;
 pub(crate) mod non_visual;
 pub(crate) mod pictures;
 pub(crate) mod shapes;
+pub(crate) mod styling;
 pub(crate) mod text;
+pub(crate) mod three_d;

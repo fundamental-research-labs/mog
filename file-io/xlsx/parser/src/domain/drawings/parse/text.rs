@@ -9,7 +9,6 @@ use super::super::helpers::{
 use super::super::reader::elements::{
     direct_child_elements, direct_child_slice, direct_child_text, document_element_slice,
 };
-use super::super::transforms::{parse_color, parse_effect_list, parse_fill, parse_outline};
 use super::super::types::{
     BulletColor, BulletProperties, BulletSize, BulletType, DrawingColor, ExtensionList, Fill,
     Hyperlink, Paragraph, ParagraphProperties, RunProperties, SolidFill, TextAlign, TextAnchor,
@@ -18,6 +17,7 @@ use super::super::types::{
     TextTabAlignType, TextTabStop, TextUnderlineType, TextVertOverflow, TextVerticalType, TextWrap,
     UnderlineFill, UnderlineLine,
 };
+use super::styling::{parse_color, parse_effect_list, parse_fill, parse_outline};
 use ooxml_types::drawings::{
     StAngle, StPercentage, StPitchFamily, StTextFontSize, StTextIndentLevelType,
     StTextNonNegativePoint, StTextPoint, TextAutonumberType,
@@ -408,8 +408,8 @@ fn parse_run_props(xml: &[u8]) -> RunProperties {
     props.sym = parse_text_font(xml, b"sym");
 
     if let Some(effect_lst) = direct_child_slice(xml, b"effectLst") {
-        props.effects = parse_effect_list(effect_lst)
-            .map(ooxml_types::drawings::EffectProperties::EffectList);
+        props.effects =
+            parse_effect_list(effect_lst).map(ooxml_types::drawings::EffectProperties::EffectList);
     }
 
     if let Some(highlight) = direct_child_slice(xml, b"highlight") {

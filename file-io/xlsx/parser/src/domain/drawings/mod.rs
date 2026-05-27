@@ -27,8 +27,6 @@ mod parse;
 mod reader;
 mod shapes;
 mod text;
-pub(crate) mod three_d;
-mod transforms;
 pub(crate) mod types;
 pub mod write;
 
@@ -44,8 +42,8 @@ pub use parse::drawing::parse_drawing;
 pub use parse::non_visual::parse_nv_props;
 pub use parse::pictures::parse_blip_fill;
 pub use parse::shapes::{parse_shape, parse_shape_preset};
-pub use text::parse_text_body;
-pub use transforms::{
+pub use parse::styling::{
     parse_color, parse_dash_style, parse_effect_list, parse_fill, parse_outline,
     parse_shape_properties, parse_shape_style, parse_transform_2d, scheme_name_to_index,
 };
+pub use text::parse_text_body;

@@ -9,12 +9,12 @@ use super::super::reader::elements::{
     direct_child_elements, direct_child_slice, document_element, document_element_slice,
 };
 use super::super::reader::raw::extract_ext_lst_raw;
-use super::super::transforms::{parse_shape_properties, parse_shape_style};
 use super::super::types::{
     BlipEffect, BlipFill, CompressionState, DrawingLocking, FillMode, RectAlignment, SourceRect,
     SpreadsheetPicture, TileFill, TileFlipMode,
 };
 use super::non_visual::parse_nv_props;
+use super::styling::{parse_shape_properties, parse_shape_style};
 use ooxml_types::drawings::{
     BlurEffect, FillOverlayEffect, StCoordinate, StPercentage, StPositiveCoordinate,
     StPositiveFixedPercentageDecimal,

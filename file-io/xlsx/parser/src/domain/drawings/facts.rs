@@ -18,8 +18,8 @@ pub use xlsx_test_contracts::{
     AnchorFact, AnchorGeometryFact, AnchorKindFact, CellAnchorFact, ClientDataFact, ConnectionFact,
     ConnectorFact, DrawingFacts, ExtentFact, GraphicFrameFact, GraphicFrameKindFact, GroupFact,
     GroupTransformFact, ObjectFact, ParagraphFact, PictureFact, PositionFact, ShapeFact,
-    ShapePropertiesFact, SmartArtFact, SourceRectFact, TextBodyFact, TextBreakFact,
-    TextFieldFact, TextFact, TextRunFact, TextRunPropertiesFact, TextTabFact, TransformFact,
+    ShapePropertiesFact, SmartArtFact, SourceRectFact, TextBodyFact, TextBreakFact, TextFact,
+    TextFieldFact, TextRunFact, TextRunPropertiesFact, TextTabFact, TransformFact,
 };
 
 /// Extract stable facts from a parsed drawing.
@@ -209,10 +209,24 @@ fn shape_properties_fact(properties: &ShapeProperties) -> ShapePropertiesFact {
         }),
         preset: preset_fact(properties),
         fill: properties.fill.as_ref().map(fill_name),
+        fill_detail: properties.fill.as_ref().map(|fill| format!("{fill:?}")),
         outline: properties.ln.is_some(),
+        outline_detail: properties.ln.as_ref().map(|outline| format!("{outline:?}")),
         effects: properties.effects.is_some(),
+        effect_detail: properties
+            .effects
+            .as_ref()
+            .map(|effects| format!("{effects:?}")),
         scene3d: properties.scene3d.is_some(),
+        scene3d_detail: properties
+            .scene3d
+            .as_ref()
+            .map(|scene3d| format!("{scene3d:?}")),
         shape3d: properties.sp3d.is_some(),
+        shape3d_detail: properties
+            .sp3d
+            .as_ref()
+            .map(|shape3d| format!("{shape3d:?}")),
     }
 }
 
@@ -223,8 +237,11 @@ fn text_fact(text_body: &super::types::TextBody, rel_targets: &HashMap<&str, &st
         ..TextFact::default()
     };
     for (paragraph_index, paragraph) in text_body.paragraphs.iter().enumerate() {
-        fact.paragraphs
-            .push(paragraph_fact(paragraph_index, &paragraph.props, rel_targets));
+        fact.paragraphs.push(paragraph_fact(
+            paragraph_index,
+            &paragraph.props,
+            rel_targets,
+        ));
         if let Some(end_para_rpr) = paragraph.end_para_rpr.as_ref() {
             fact.end_paragraph_runs
                 .push(run_properties_fact(end_para_rpr, rel_targets));
@@ -833,8 +850,7 @@ mod tests {
             <xdr:clientData/>
         </xdr:twoCellAnchor>"#;
 
-        let ObjectFact::Shape(shape) = &drawing_facts(&parse_drawing(xml)).anchors[0].object
-        else {
+        let ObjectFact::Shape(shape) = &drawing_facts(&parse_drawing(xml)).anchors[0].object else {
             panic!("expected shape fact");
         };
 
@@ -877,6 +893,79 @@ mod tests {
         );
         assert_eq!(run.properties.latin_font.as_deref(), Some("Arial"));
         assert_eq!(run.properties.language.as_deref(), Some("en-US"));
+    }
+
+    #[test]
+    fn shape_property_facts_include_styling_value_details() {
+        let xml = br#"<xdr:twoCellAnchor>
+            <xdr:from><xdr:col>1</xdr:col><xdr:row>2</xdr:row></xdr:from>
+            <xdr:to><xdr:col>3</xdr:col><xdr:row>4</xdr:row></xdr:to>
+            <xdr:sp>
+                <xdr:nvSpPr><xdr:cNvPr id="2" name="Styled Shape"/></xdr:nvSpPr>
+                <xdr:spPr>
+                    <a:prstGeom prst="rect"/>
+                    <a:solidFill><a:srgbClr val="123456"/></a:solidFill>
+                    <a:ln w="12700" cap="rnd">
+                        <a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill>
+                        <a:prstDash val="dash"/>
+                    </a:ln>
+                    <a:effectLst>
+                        <a:glow rad="63500"><a:srgbClr val="00FF00"/></a:glow>
+                    </a:effectLst>
+                    <a:scene3d>
+                        <a:camera prst="orthographicFront"/>
+                        <a:lightRig rig="threePt" dir="t"/>
+                    </a:scene3d>
+                    <a:sp3d prstMaterial="plastic" z="4000"/>
+                </xdr:spPr>
+            </xdr:sp>
+            <xdr:clientData/>
+        </xdr:twoCellAnchor>"#;
+
+        let ObjectFact::Shape(shape) = &drawing_facts(&parse_drawing(xml)).anchors[0].object else {
+            panic!("expected shape fact");
+        };
+
+        assert_eq!(shape.properties.fill.as_deref(), Some("solid"));
+        assert!(
+            shape
+                .properties
+                .fill_detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("123456"))
+        );
+        assert!(shape.properties.outline);
+        assert!(
+            shape
+                .properties
+                .outline_detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("12700") && detail.contains("ABCDEF"))
+        );
+        assert!(shape.properties.effects);
+        assert!(
+            shape
+                .properties
+                .effect_detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("Glow") && detail.contains("00FF00"))
+        );
+        assert!(shape.properties.scene3d);
+        assert!(
+            shape
+                .properties
+                .scene3d_detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("OrthographicFront"))
+        );
+        assert!(shape.properties.shape3d);
+        assert!(
+            shape
+                .properties
+                .shape3d_detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("Plastic") && detail.contains("4000"))
+        );
     }
 
     fn image_rel(id: &str) -> OpcRelationship {

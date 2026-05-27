@@ -2,10 +2,10 @@
 //!
 //! Parses `<a:scene3d>` and `<a:sp3d>` elements into typed structs from `ooxml_types`.
 
-use super::helpers::{extract_attr_value_in_element, parse_i64};
-use super::reader::elements::{direct_child_elements, direct_child_slice, document_element};
-use super::reader::raw::extract_ext_lst_raw;
-use super::transforms::parse_color;
+use super::super::helpers::{extract_attr_value_in_element, parse_i64};
+use super::super::reader::elements::{direct_child_elements, direct_child_slice, document_element};
+use super::super::reader::raw::extract_ext_lst_raw;
+use super::styling::parse_color;
 use ooxml_types::drawings::{
     Backdrop, Bevel, BevelPresetType, Camera, DrawingColor, LightRig, LightRigDirection,
     LightRigType, Point3D, PresetCameraType, PresetMaterialType, Rotation3D, Scene3D, Shape3D,

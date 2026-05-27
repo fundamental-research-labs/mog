@@ -4,9 +4,9 @@ use super::super::helpers::parse_u32;
 use super::super::reader::attrs::{attr_value, parse_bool};
 use super::super::reader::elements::{direct_child_slice, document_element_slice};
 use super::super::reader::raw::extract_ext_lst_raw;
-use super::super::transforms::{parse_shape_properties, parse_shape_style};
 use super::super::types::{Connection, DrawingLocking, SpreadsheetConnector};
 use super::non_visual::parse_nv_props;
+use super::styling::{parse_shape_properties, parse_shape_style};
 
 /// Parse a connector element.
 pub fn parse_connector(xml: &[u8], start: usize) -> Option<SpreadsheetConnector> {

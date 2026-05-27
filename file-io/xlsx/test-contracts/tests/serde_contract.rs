@@ -1,11 +1,11 @@
 use xlsx_test_contracts::{
     AnchorFact, AnchorGeometryFact, AnchorKindFact, CellAnchorFact, ClientDataFact, DrawingFacts,
     FailureFingerprint, FingerprintCategory, FingerprintOwner, FingerprintSeverity, GateName,
-    GateReport, GateScenario, GateStatus, GateSuiteName, ObjectFact, REPORT_SCHEMA_VERSION,
-    ParagraphFact, SheetDrawingFacts, TextFact, TextRunFact, TextRunPropertiesFact,
-    WORKBOOK_FACTS_SCHEMA_VERSION, WorkbookFacts,
-    autonomous_full_run_schedule, enforce_rollout_report_policy, gate_command_contracts,
-    gate_suite_contract, gate_suite_readiness,
+    GateReport, GateScenario, GateStatus, GateSuiteName, ObjectFact, ParagraphFact,
+    REPORT_SCHEMA_VERSION, SheetDrawingFacts, TextFact, TextRunFact, TextRunPropertiesFact,
+    WORKBOOK_FACTS_SCHEMA_VERSION, WorkbookFacts, autonomous_full_run_schedule,
+    enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
+    gate_suite_readiness,
 };
 
 #[test]
@@ -20,7 +20,7 @@ fn report_envelope_uses_stable_schema_and_snake_case() {
 }
 
 #[test]
-fn workbook_facts_publish_drawing_facts_as_snake_case_schema_v3() {
+fn workbook_facts_publish_drawing_facts_as_snake_case_schema_v4() {
     let mut facts = WorkbookFacts::new();
     facts.drawings.push(SheetDrawingFacts {
         sheet_index: 2,
@@ -57,7 +57,7 @@ fn workbook_facts_publish_drawing_facts_as_snake_case_schema_v3() {
     let json = serde_json::to_string(&facts).expect("workbook facts serialize");
 
     assert_eq!(facts.schema_version, WORKBOOK_FACTS_SCHEMA_VERSION);
-    assert_eq!(WORKBOOK_FACTS_SCHEMA_VERSION, 3);
+    assert_eq!(WORKBOOK_FACTS_SCHEMA_VERSION, 4);
     assert_eq!(facts.drawings[0].sheet_name, "Sheet 2");
     assert!(json.contains("\"drawings\""));
     assert!(json.contains("\"sheet_index\""));
@@ -120,7 +120,13 @@ fn drawing_text_facts_publish_rich_text_shape_details() {
                         }],
                         ..TextFact::default()
                     },
-                    properties: xlsx_test_contracts::ShapePropertiesFact::default(),
+                    properties: xlsx_test_contracts::ShapePropertiesFact {
+                        fill: Some("solid".to_string()),
+                        fill_detail: Some("Solid".to_string()),
+                        outline: true,
+                        outline_detail: Some("Outline".to_string()),
+                        ..xlsx_test_contracts::ShapePropertiesFact::default()
+                    },
                 }),
                 client_data: ClientDataFact {
                     locks_with_sheet: false,
@@ -137,6 +143,8 @@ fn drawing_text_facts_publish_rich_text_shape_details() {
     assert!(json.contains("\"default_run\""));
     assert!(json.contains("\"runs\""));
     assert!(json.contains("\"latin_font\""));
+    assert!(json.contains("\"fill_detail\""));
+    assert!(json.contains("\"outline_detail\""));
     assert!(json.contains("\"srgb:FF0000:transforms=0\""));
     assert!(!json.contains("defaultRun"));
 }
@@ -164,18 +172,26 @@ fn command_contracts_publish_every_phase_zero_gate_name() {
     let contracts = gate_command_contracts();
 
     assert_eq!(contracts.len(), GateName::ALL.len());
-    assert!(contracts
-        .iter()
-        .any(|contract| contract.gate == GateName::PackageGraph && contract.implemented));
-    assert!(contracts
-        .iter()
-        .any(|contract| contract.gate == GateName::PerfFull && contract.implemented));
-    assert!(contracts
-        .iter()
-        .any(|contract| contract.gate == GateName::CorpusFull && contract.heavy));
-    assert!(contracts
-        .iter()
-        .all(|contract| !contract.command.is_empty()));
+    assert!(
+        contracts
+            .iter()
+            .any(|contract| contract.gate == GateName::PackageGraph && contract.implemented)
+    );
+    assert!(
+        contracts
+            .iter()
+            .any(|contract| contract.gate == GateName::PerfFull && contract.implemented)
+    );
+    assert!(
+        contracts
+            .iter()
+            .any(|contract| contract.gate == GateName::CorpusFull && contract.heavy)
+    );
+    assert!(
+        contracts
+            .iter()
+            .all(|contract| !contract.command.is_empty())
+    );
 }
 
 #[test]
@@ -185,32 +201,39 @@ fn rollout_suites_publish_local_ci_and_autonomous_gate_sets() {
     let full = gate_suite_contract(GateSuiteName::AutonomousFull);
 
     assert_eq!(local.name, "local-smoke");
-    assert!(local
-        .gates
-        .iter()
-        .any(|gate| gate.gate == GateName::PerfSmoke));
+    assert!(
+        local
+            .gates
+            .iter()
+            .any(|gate| gate.gate == GateName::PerfSmoke)
+    );
     assert!(golden.gates.len() > local.gates.len());
     assert_eq!(full.gates.len(), GateName::ALL.len());
-    assert!(full
-        .gates
-        .iter()
-        .any(|gate| gate.gate == GateName::PerfFull));
+    assert!(
+        full.gates
+            .iter()
+            .any(|gate| gate.gate == GateName::PerfFull)
+    );
 }
 
 #[test]
 fn rollout_readiness_blocks_unimplemented_and_unapproved_heavy_gates() {
     let smoke = gate_suite_readiness(GateSuiteName::LocalSmoke, false);
     assert!(!smoke.runnable);
-    assert!(smoke
-        .blockers
-        .iter()
-        .any(|blocker| blocker.code == "gate-not-implemented"));
+    assert!(
+        smoke
+            .blockers
+            .iter()
+            .any(|blocker| blocker.code == "gate-not-implemented")
+    );
 
     let full_without_heavy = gate_suite_readiness(GateSuiteName::AutonomousFull, false);
-    assert!(full_without_heavy
-        .blockers
-        .iter()
-        .any(|blocker| blocker.code == "heavy-gate-requires-explicit-opt-in"));
+    assert!(
+        full_without_heavy
+            .blockers
+            .iter()
+            .any(|blocker| blocker.code == "heavy-gate-requires-explicit-opt-in")
+    );
 }
 
 #[test]
@@ -235,9 +258,11 @@ fn rollout_policy_rejects_failed_reports_without_actionable_fingerprints() {
 
     let violations = enforce_rollout_report_policy(&report);
 
-    assert!(violations
-        .iter()
-        .any(|v| v.code == "failed-scenario-without-fingerprint"));
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.code == "failed-scenario-without-fingerprint")
+    );
 }
 
 #[test]
@@ -256,7 +281,9 @@ fn rollout_policy_rejects_broad_fingerprint_buckets() {
 
     let violations = enforce_rollout_report_policy(&report);
 
-    assert!(violations
-        .iter()
-        .any(|v| v.code == "non-actionable-fingerprint"));
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.code == "non-actionable-fingerprint")
+    );
 }

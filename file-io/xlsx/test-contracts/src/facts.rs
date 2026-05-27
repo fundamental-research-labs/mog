@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const WORKBOOK_FACTS_SCHEMA_VERSION: u32 = 3;
+pub const WORKBOOK_FACTS_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -294,10 +294,15 @@ pub struct ShapePropertiesFact {
     pub transform: Option<TransformFact>,
     pub preset: Option<String>,
     pub fill: Option<String>,
+    pub fill_detail: Option<String>,
     pub outline: bool,
+    pub outline_detail: Option<String>,
     pub effects: bool,
+    pub effect_detail: Option<String>,
     pub scene3d: bool,
+    pub scene3d_detail: Option<String>,
     pub shape3d: bool,
+    pub shape3d_detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

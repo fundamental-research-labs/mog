@@ -3,18 +3,18 @@
 //! This module handles parsing of 2D transforms, fill styles (solid, gradient,
 //! pattern), and outline/line properties from drawing XML.
 
-use super::helpers::{extract_attr_value_in_element, parse_i32, parse_i64, parse_u32};
-use super::reader::elements::{
+use super::super::helpers::{extract_attr_value_in_element, parse_i32, parse_i64, parse_u32};
+use super::super::reader::elements::{
     direct_child_elements, direct_child_slice, document_element, document_element_slice,
 };
-use super::reader::raw::extract_ext_lst_raw;
-use super::shapes::parse_shape_preset;
-use super::types::{
+use super::super::reader::raw::extract_ext_lst_raw;
+use super::super::types::{
     BlackWhiteMode, CompoundLine, DashStyle, DrawingColor, EffectList, Fill, GradientFill,
     GradientStop, LineCap, LineEndProperties, LineEndSize, LineEndType, LineJoin, Outline,
     PatternFill, PenAlignment, PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle,
     SolidFill, StyleRef, Transform2D,
 };
+use super::shapes::parse_shape_preset;
 use ooxml_types::drawings::{
     BlurEffect, FillOverlayEffect, Glow, InnerShadow, OuterShadow, PresetShadow, RectAlignment,
     Reflection, SoftEdge,
@@ -100,7 +100,7 @@ pub fn parse_transform_2d(xml: &[u8]) -> Option<Transform2D> {
 
     // Parse rotation
     transform.rotation = extract_attr_value_in_element(xml, b"rot=\"")
-        .and_then(|v| super::helpers::parse_i32(v))
+        .and_then(|v| parse_i32(v))
         .map(StAngle::new);
 
     // Parse flips

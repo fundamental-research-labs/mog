@@ -4,7 +4,6 @@ use super::super::helpers::extract_attr_value_in_element;
 use super::super::reader::elements::{
     direct_child_elements, direct_child_slice, document_element_slice,
 };
-use super::super::transforms::{parse_effect_list, parse_fill};
 use super::super::types::{
     BlackWhiteMode, DrawingContent, GroupLocking, GroupShape, GroupTransform2D,
     SpreadsheetGraphicFrame,
@@ -14,6 +13,7 @@ use super::graphic_frames::{parse_graphic_frame_nv, parse_graphic_frame_xfrm};
 use super::non_visual::parse_nv_props;
 use super::pictures::parse_picture;
 use super::shapes::parse_shape;
+use super::styling::{parse_effect_list, parse_fill};
 
 /// Parse a group shape element (CT_GroupShape).
 pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
@@ -48,7 +48,7 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
         }
 
         if let Some(scene3d) = direct_child_slice(grp_element, b"scene3d") {
-            group.grp_sp_pr.scene3d = super::super::three_d::parse_scene3d(scene3d);
+            group.grp_sp_pr.scene3d = super::three_d::parse_scene3d(scene3d);
         }
 
         if let Some(ext_lst) = direct_child_slice(grp_element, b"extLst") {

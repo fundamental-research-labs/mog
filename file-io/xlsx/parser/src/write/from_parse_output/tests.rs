@@ -313,6 +313,56 @@ fn external_link_workbook_relationship_uses_graph_resolved_id() {
 }
 
 #[test]
+fn external_link_owned_relationships_use_graph_resolved_ids() {
+    let modeled_link = domain_types::domain::external_link::ExternalLink {
+        id: "1".to_string(),
+        file_path: Some("file:///workbook.xlsx".to_string()),
+        file_path_rid: Some("rId1".to_string()),
+        alternate_url: Some("https://example.com/workbook.xlsx".to_string()),
+        alternate_url_rid: Some("rId1".to_string()),
+        imported_identity: Some(
+            domain_types::domain::external_link::ImportedExternalLinkIdentity {
+                excel_ordinal: 1,
+                workbook_rel_id: "rId20".to_string(),
+                part_name: "externalLinks/externalLink9.xml".to_string(),
+                external_book_rid: Some("rId1".to_string()),
+                target: Some("externalLinks/externalLink9.xml".to_string()),
+                target_mode: None,
+            },
+        ),
+        ..Default::default()
+    };
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.external_links = vec![modeled_link];
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let link_xml = String::from_utf8(
+        archive
+            .read_file("xl/externalLinks/externalLink9.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let link_rels = String::from_utf8(
+        archive
+            .read_file("xl/externalLinks/_rels/externalLink9.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(link_xml.contains(r#"<externalBook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1">"#));
+    assert!(link_xml.contains(r#"<xxl21:absoluteUrl r:id="rId2"/>"#));
+    assert!(link_rels.contains(r#"Id="rId1""#));
+    assert!(link_rels.contains(r#"Target="file:///workbook.xlsx""#));
+    assert!(link_rels.contains(r#"Id="rId2""#));
+    assert!(link_rels.contains(r#"Target="https://example.com/workbook.xlsx""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_roundtrip_external_links_do_not_export_without_modeled_links() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

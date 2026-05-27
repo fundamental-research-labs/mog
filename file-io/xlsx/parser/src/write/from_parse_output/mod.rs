@@ -11,6 +11,7 @@
 #![allow(clippy::string_slice)]
 
 mod doc_props;
+mod external_links;
 mod metadata;
 mod package_authority;
 mod pivot_package;
@@ -1721,7 +1722,7 @@ pub fn write_xlsx_from_parse_output(
         output
             .external_links
             .iter()
-            .map(|link| (link.clone(), external_link_part_name(link)))
+            .map(|link| (link.clone(), external_links::part_name(link)))
             .collect();
     let mut package_graph_builder =
         crate::write::package_graph::build_modeled_workbook_graph_builder(
@@ -1742,8 +1743,9 @@ pub fn write_xlsx_from_parse_output(
         crate::write::package_graph::register_workbook_external_link(
             &mut package_graph_builder,
             part_name,
-            external_link_relationship_id_hint(link, part_name),
+            external_links::workbook_relationship_id_hint(link, part_name),
         )?;
+        external_links::register_owned_relationships(&mut package_graph_builder, part_name, link);
     }
     for entry in &pivot_data.preserved_workbook_cache_entries {
         crate::write::package_graph::register_preserved_workbook_pivot_cache(
@@ -2546,7 +2548,7 @@ pub fn write_xlsx_from_parse_output(
                     .relationship_id(
                         &crate::write::package_graph::PackageOwner::Workbook,
                         super::REL_EXTERNAL_LINK,
-                        &external_link_workbook_target(part_name),
+                        &external_links::workbook_target(part_name),
                     )
                     .map(str::to_string)
             })
@@ -2606,12 +2608,17 @@ pub fn write_xlsx_from_parse_output(
 
     // External links — serialize from domain types
     for (link, part_name) in &external_link_exports {
-        let xml = crate::domain::external::write::write_external_link_xml(link);
-        let zip_path = external_link_zip_path(part_name);
+        let zip_path = external_links::zip_path(part_name);
+        let owner = crate::write::package_graph::PackageOwner::Part {
+            path: zip_path.clone(),
+        };
+        let link_for_xml =
+            external_links::with_resolved_relationship_ids(&package_graph, link, &owner);
+        let xml = crate::domain::external::write::write_external_link_xml(&link_for_xml);
         zip.add_file(&zip_path, xml);
-        // Write rels if the link has file paths
-        if let Some(rels) = crate::domain::external::write::write_external_link_rels(link) {
-            zip.add_file(&external_link_rels_path(&zip_path), rels);
+        let rels = package_graph.relationship_manager_for_owner(&owner);
+        if !rels.is_empty() {
+            zip.add_file(&external_links::rels_path(&zip_path), rels.to_xml());
         }
     }
 
@@ -3074,54 +3081,6 @@ fn convert_unified_form_controls(
             })
         })
         .collect()
-}
-
-fn external_link_part_name(link: &domain_types::domain::external_link::ExternalLink) -> String {
-    link.imported_identity
-        .as_ref()
-        .map(|identity| identity.part_name.clone())
-        .unwrap_or_else(|| format!("externalLinks/externalLink{}.xml", link.id))
-}
-
-fn external_link_zip_path(part_name: &str) -> String {
-    let trimmed = part_name.trim_start_matches('/');
-    if trimmed.starts_with("xl/") {
-        trimmed.to_string()
-    } else {
-        format!("xl/{}", trimmed)
-    }
-}
-
-fn external_link_workbook_target(part_name: &str) -> String {
-    part_name
-        .trim_start_matches('/')
-        .strip_prefix("xl/")
-        .unwrap_or_else(|| part_name.trim_start_matches('/'))
-        .to_string()
-}
-
-fn external_link_relationship_id_hint<'a>(
-    link: &'a domain_types::domain::external_link::ExternalLink,
-    part_name: &str,
-) -> Option<&'a str> {
-    let identity = link.imported_identity.as_ref()?;
-    if identity.target_mode.is_some() {
-        return None;
-    }
-    let expected_target = external_link_workbook_target(part_name);
-    if identity
-        .target
-        .as_deref()
-        .is_some_and(|target| target != expected_target)
-    {
-        return None;
-    }
-    Some(identity.workbook_rel_id.as_str())
-}
-
-fn external_link_rels_path(zip_path: &str) -> String {
-    let file_name = zip_path.rsplit('/').next().unwrap_or(zip_path);
-    format!("xl/externalLinks/_rels/{}.rels", file_name)
 }
 
 #[cfg(test)]

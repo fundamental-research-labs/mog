@@ -668,6 +668,25 @@ pub fn register_workbook_external_link(
     Ok(())
 }
 
+pub fn register_external_link_relationship(
+    graph: &mut PackageGraphBuilder,
+    part_name: &str,
+    relationship_type: &str,
+    target: &str,
+    identity_hint: Option<&str>,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_external_link_part_path(part_name),
+        },
+        relationship_type: relationship_type.to_string(),
+        target: PackageRelationshipTarget::External {
+            target: target.to_string(),
+        },
+        identity_hint: identity_hint.map(RelationshipIdentityHint::new),
+    });
+}
+
 pub fn register_generated_pivot_cache(
     graph: &mut PackageGraphBuilder,
     global_idx: usize,

@@ -13,7 +13,7 @@ pub const CT_EXTERNAL_LINK: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml";
 
 /// Relationship type for external link paths (used inside the external link's own .rels file).
-const REL_EXTERNAL_LINK_PATH: &str =
+pub const REL_EXTERNAL_LINK_PATH: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath";
 
 // Namespace URIs

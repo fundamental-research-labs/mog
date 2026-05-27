@@ -3802,6 +3802,40 @@ fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
 }
 
 #[test]
+fn imported_chart_with_modeled_chart_property_does_not_replay_stale_raw_chart_xml() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    imported_chart.gap_width = Some(75);
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace::default(),
+    ));
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:gapWidth val="222"/></c:barChart></c:plotArea></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(chart_xml.contains(r#"<c:gapWidth val="75"/>"#));
+    assert!(!chart_xml.contains(r#"<c:gapWidth val="222"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;

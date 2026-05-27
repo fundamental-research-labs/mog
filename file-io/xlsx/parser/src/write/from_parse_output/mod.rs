@@ -209,6 +209,18 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.title_formula.is_some()
         || chart_spec.display_blanks_as.is_some()
         || chart_spec.plot_visible_only.is_some()
+        || chart_spec.sub_type.is_some()
+        || chart_spec.gap_width.is_some()
+        || chart_spec.overlap.is_some()
+        || chart_spec.doughnut_hole_size.is_some()
+        || chart_spec.first_slice_angle.is_some()
+        || chart_spec.bubble_scale.is_some()
+        || chart_spec.split_type.is_some()
+        || chart_spec.split_value.is_some()
+        || chart_spec.view_3d.is_some()
+        || chart_spec.floor_format.is_some()
+        || chart_spec.side_wall_format.is_some()
+        || chart_spec.back_wall_format.is_some()
 }
 
 fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {

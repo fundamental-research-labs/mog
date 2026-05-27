@@ -44,6 +44,10 @@ fn standard_excel_content_type_defaults_are_exported() {
     assert!(content_types.contains(r#"Extension="jpeg" ContentType="image/jpeg""#));
     assert!(content_types.contains(r#"Extension="png" ContentType="image/png""#));
     assert!(content_types.contains(r#"Extension="svg" ContentType="image/svg+xml""#));
+    assert!(
+        content_types.find(r#"PartName="/xl/workbook.xml""#)
+            < content_types.find(r#"PartName="/xl/styles.xml""#)
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

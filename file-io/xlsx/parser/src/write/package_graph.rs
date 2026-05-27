@@ -229,7 +229,14 @@ impl ResolvedPackageGraph {
     }
 
     pub fn add_content_types_to(&self, content_types: &mut ContentTypesManager) {
-        for part in self.parts.values() {
+        let mut parts: Vec<_> = self.parts.values().collect();
+        parts.sort_by(|a, b| {
+            content_type_part_order(&a.path)
+                .cmp(&content_type_part_order(&b.path))
+                .then_with(|| a.path.cmp(&b.path))
+        });
+
+        for part in parts {
             if let Some((extension, content_type)) = &part.default_extension {
                 content_types.add_default(extension, content_type);
             }
@@ -295,6 +302,32 @@ impl ResolvedPackageGraph {
                 )
             })
             .collect()
+    }
+}
+
+fn content_type_part_order(path: &str) -> u8 {
+    if path == "xl/workbook.xml" {
+        0
+    } else if path.starts_with("xl/theme/") {
+        10
+    } else if path == "xl/styles.xml" {
+        20
+    } else if path == "xl/sharedStrings.xml" {
+        30
+    } else if path.starts_with("xl/worksheets/") {
+        40
+    } else if path == "xl/metadata.xml" {
+        50
+    } else if path.starts_with("xl/") {
+        60
+    } else if path == "docProps/core.xml" {
+        90
+    } else if path == "docProps/app.xml" {
+        91
+    } else if path == "docProps/custom.xml" {
+        92
+    } else {
+        80
     }
 }
 

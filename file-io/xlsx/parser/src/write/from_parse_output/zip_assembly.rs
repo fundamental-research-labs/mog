@@ -51,6 +51,7 @@ pub(super) fn write_zip_package(
         "application/vnd.openxmlformats-package.relationships+xml",
     );
     content_types.add_default("xml", "application/xml");
+    add_standard_excel_default_content_types(&mut content_types);
     if has_any_comments {
         content_types.add_default(
             "vml",
@@ -538,4 +539,24 @@ fn add_registered_part(
     }
     zip.add_file(path, data);
     Ok(())
+}
+
+fn add_standard_excel_default_content_types(content_types: &mut ContentTypesManager) {
+    for (extension, content_type) in [
+        (
+            "bin",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings",
+        ),
+        ("jpg", "image/jpg"),
+        ("tiff", "image/tiff"),
+        ("jpeg", "image/jpeg"),
+        ("png", "image/png"),
+        ("bmp", "image/bmp"),
+        ("gif", "image/gif"),
+        ("svg", "image/svg+xml"),
+        ("emf", "image/x-emf"),
+        ("wmf", "image/x-wmf"),
+    ] {
+        content_types.add_default(extension, content_type);
+    }
 }

@@ -27,6 +27,27 @@ fn stale_content_type_override_for_missing_part_is_not_exported() {
 }
 
 #[test]
+fn standard_excel_content_type_defaults_are_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(content_types.contains(r#"Extension="bin""#));
+    assert!(content_types.contains(r#"ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings""#));
+    assert!(content_types.contains(r#"Extension="jpg" ContentType="image/jpg""#));
+    assert!(content_types.contains(r#"Extension="jpeg" ContentType="image/jpeg""#));
+    assert!(content_types.contains(r#"Extension="png" ContentType="image/png""#));
+    assert!(content_types.contains(r#"Extension="svg" ContentType="image/svg+xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_root_relationship_to_missing_part_is_not_exported_or_reserved() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

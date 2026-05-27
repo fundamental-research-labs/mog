@@ -11,11 +11,11 @@ use crate::infra::scanner::{
 };
 use crate::pipeline::fast_parse;
 
-const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 3] = ["id", "embed", "link"];
+const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 4] = ["id", "embed", "link", "relid"];
 
 /// Returns true when raw XML contains a namespaced relationship-bearing
-/// attribute such as `r:id`, `r:embed`, `r:link`, or an equivalent prefixed
-/// `*:id`/`*:embed`/`*:link` attribute.
+/// attribute such as `r:id`, `r:embed`, `r:link`, `o:relid`, or an equivalent
+/// prefixed attribute.
 pub fn raw_xml_contains_relationship_attr(raw_xml: &str) -> bool {
     RELATIONSHIP_ATTR_LOCAL_NAMES
         .iter()
@@ -1234,7 +1234,7 @@ mod tests {
     }
 
     #[test]
-    fn relationship_attr_detector_covers_id_embed_and_link() {
+    fn relationship_attr_detector_covers_id_embed_link_and_relid() {
         assert!(raw_xml_contains_relationship_attr(
             r#"<x:state r:id = "rId1"/>"#
         ));
@@ -1243,6 +1243,9 @@ mod tests {
         ));
         assert!(raw_xml_contains_relationship_attr(
             r#"<a:blip other:link = "rId3"/>"#
+        ));
+        assert!(raw_xml_contains_relationship_attr(
+            r#"<v:imagedata o:relid="rId4"/>"#
         ));
         assert!(!raw_xml_contains_relationship_attr(
             r#"<x:state id="local" embed="literal" link="literal"/>"#

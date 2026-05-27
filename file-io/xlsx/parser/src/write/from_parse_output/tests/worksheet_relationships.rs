@@ -1867,6 +1867,7 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
     assert!(!sheet_rels.contains("ctrlProp9.xml"));
     assert!(!sheet_rels.contains("vmlDrawing9.vml"));
+    assert_ne!(ctrl_prop_rel.id, "rId9");
     assert!(sheet_xml.contains(&format!(r#"r:id="{}""#, ctrl_prop_rel.id)));
     assert!(!sheet_xml.contains("rawControlsSentinel"));
     assert!(!sheet_xml.contains("r:id=\"rId99\""));

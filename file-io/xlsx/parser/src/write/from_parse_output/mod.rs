@@ -493,17 +493,7 @@ pub fn write_xlsx_from_parse_output(
             for _ in 0..controls.len() {
                 global_ctrl_prop_idx += 1;
                 let target = format!("../ctrlProps/ctrlProp{}.xml", global_ctrl_prop_idx);
-                let r_id = if let Some(r_id) = package_authority::relationship_id_hint(
-                    original_sheet_rels,
-                    REL_CTRL_PROP,
-                    &target,
-                    None,
-                ) {
-                    rels.add_with_id(&r_id, REL_CTRL_PROP, &target);
-                    r_id
-                } else {
-                    rels.add(REL_CTRL_PROP, &target)
-                };
+                let r_id = rels.add(REL_CTRL_PROP, &target);
                 ctrl_prop_r_ids.push(r_id);
                 worksheet_control_property_relationships.push(WorksheetControlPropertyGraphEntry {
                     sheet_idx,

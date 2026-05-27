@@ -134,6 +134,10 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
         uri: "{stale-plot-area}".to_string(),
         xml: r#"<stalePlotAreaExtension xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:link="rIdStaleLink"/>"#.to_string(),
     };
+    let stale_relid_plot_area_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{stale-relid-plot-area}".to_string(),
+        xml: r#"<staleRelIdPlotAreaExtension xmlns:o="urn:schemas-microsoft-com:office:office" o:relid="rIdStaleRelId"/>"#.to_string(),
+    };
 
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.rt = Some(domain_types::chart::ChartRoundTripData {
@@ -150,7 +154,7 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
         lang: None,
         chart_space_extensions: vec![clean_chart_space_extension, stale_chart_space_extension],
         chart_extensions: vec![clean_chart_extension, stale_chart_extension],
-        plot_area_extensions: vec![stale_plot_area_extension],
+        plot_area_extensions: vec![stale_plot_area_extension, stale_relid_plot_area_extension],
         has_empty_chart_ext_lst: false,
         plot_area_layout: None,
         style_alternate_content: None,
@@ -179,9 +183,11 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
     assert!(!chart_xml.contains("staleChartSpaceExtension"));
     assert!(!chart_xml.contains("staleChartExtension"));
     assert!(!chart_xml.contains("stalePlotAreaExtension"));
+    assert!(!chart_xml.contains("staleRelIdPlotAreaExtension"));
     assert!(!chart_xml.contains("rIdStaleChartSpace"));
     assert!(!chart_xml.contains("rIdStaleEmbed"));
     assert!(!chart_xml.contains("rIdStaleLink"));
+    assert!(!chart_xml.contains("rIdStaleRelId"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -190,7 +196,7 @@ fn chart_ex_print_settings_drop_unresolved_relationship_attrs() {
     let mut chart_ex_space = ooxml_types::chart_ex::ChartExSpace::default();
     chart_ex_space.print_settings = Some(ooxml_types::chart_ex::ChartExPrintSettings {
         raw_xml: Some(
-            r#"<cx:printSettings xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cx:pageSetup r:id="rIdStalePrintSettings"/></cx:printSettings>"#
+            r#"<cx:printSettings xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:o="urn:schemas-microsoft-com:office:office"><cx:pageSetup o:relid="rIdStalePrintSettings"/></cx:printSettings>"#
                 .to_string(),
         ),
     });

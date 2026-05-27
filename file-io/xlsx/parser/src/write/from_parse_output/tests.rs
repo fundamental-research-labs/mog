@@ -2773,9 +2773,39 @@ fn header_footer_vml_relationship_uses_graph_registered_part() {
             raw_vml_drawings: vec![domain_types::VmlDrawingPart {
                 path: "xl/drawings/vmlDrawing9.vml".to_string(),
                 data: hf_vml,
-                rels: None,
+                rels: Some(domain_types::VmlRels {
+                    path: "xl/drawings/_rels/vmlDrawing9.vml.rels".to_string(),
+                    data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#
+                        .to_vec(),
+                }),
             }],
             ..Default::default()
+        }],
+        opaque_package_subgraphs: vec![domain_types::OpaquePackageSubgraph {
+            owner: domain_types::OpaquePackageOwner::Part {
+                path: "xl/media/image1.png".to_string(),
+            },
+            owner_relationship: domain_types::OpaquePackageRelationship {
+                owner: domain_types::OpaquePackageOwner::Part {
+                    path: "xl/media/image1.png".to_string(),
+                },
+                relationship_type: String::new(),
+                target: domain_types::OpaqueRelationshipTarget::InternalPath {
+                    target: String::new(),
+                },
+                relationship_id_hint: None,
+            },
+            parts: vec![domain_types::OpaquePackagePart {
+                part: domain_types::BlobPart {
+                    path: "xl/media/image1.png".to_string(),
+                    data: b"png bytes".to_vec(),
+                },
+                content_type: None,
+                default_extension: Some(("png".to_string(), "image/png".to_string())),
+                ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
+            }],
+            relationships: Vec::new(),
+            ownership: domain_types::OpaquePackageOwnership::OrphanCleanPackageData,
         }],
         ..Default::default()
     };
@@ -2793,11 +2823,20 @@ fn header_footer_vml_relationship_uses_graph_registered_part() {
         .iter()
         .find(|rel| rel.rel_type == REL_VML_DRAWING && rel.target == "../drawings/vmlDrawing9.vml")
         .expect("header/footer VML relationship should target the emitted VML part");
+    let vml_rels = String::from_utf8(
+        archive
+            .read_file("xl/drawings/_rels/vmlDrawing9.vml.rels")
+            .unwrap(),
+    )
+    .unwrap();
 
     assert!(archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(archive.contains("xl/media/image1.png"));
     assert!(!archive.contains("xl/drawings/vmlDrawing8.vml"));
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing9.vml\""));
     assert!(!sheet_rels.contains("vmlDrawing8.vml"));
+    assert!(vml_rels.contains("Id=\"rId1\""));
+    assert!(vml_rels.contains("Target=\"../media/image1.png\""));
     assert!(sheet_xml.contains(&format!(r#"<legacyDrawingHF r:id="{}"/>"#, hf_vml_rel.id)));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

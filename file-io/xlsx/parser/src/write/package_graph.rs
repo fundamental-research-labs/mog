@@ -300,6 +300,12 @@ impl ResolvedPackageGraph {
     }
 }
 
+pub fn part_relationships_path(part_path: &str) -> String {
+    owner_rels_path(&PackageOwner::Part {
+        path: normalize_part_path(part_path),
+    })
+}
+
 #[derive(Debug, Default)]
 pub struct PackageGraphBuilder {
     parts: BTreeMap<String, PackagePart>,
@@ -887,6 +893,24 @@ pub fn register_drawing_image_relationship(
         image_path,
         relationship_id_hint,
     )
+}
+
+pub fn register_part_image_relationship(
+    graph: &mut PackageGraphBuilder,
+    owner_path: &str,
+    image_path: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_part_path(owner_path),
+        },
+        relationship_type: REL_IMAGE.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(image_path),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
 }
 
 fn register_drawing_relationship(

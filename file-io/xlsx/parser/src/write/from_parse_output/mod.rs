@@ -1789,6 +1789,26 @@ pub fn write_xlsx_from_parse_output(
             entry.relationship_id_hint.as_deref(),
         )?;
     }
+    for extras in &sheet_extras {
+        let Some(hf) = &extras.hf_vml else {
+            continue;
+        };
+        for (relationship_id, target) in &hf.image_targets {
+            let Ok(target_path) =
+                crate::infra::opc::resolve_relationship_target(Some(&hf.vml_path), target)
+            else {
+                continue;
+            };
+            if has_clean_opaque_part(round_trip_ctx, &target_path) {
+                crate::write::package_graph::register_part_image_relationship(
+                    &mut package_graph_builder,
+                    &hf.vml_path,
+                    &target_path,
+                    relationship_id,
+                );
+            }
+        }
+    }
     for entry in &worksheet_form_control_vml_relationships {
         crate::write::package_graph::register_worksheet_vml_drawing(
             &mut package_graph_builder,
@@ -2697,19 +2717,16 @@ pub fn write_xlsx_from_parse_output(
             );
             zip.add_file(&hf.vml_path, vml_xml);
 
-            // Generate .rels from parsed image targets
-            if let Some(ref rels_path) = hf.rels_path {
-                if !hf.image_targets.is_empty() {
-                    let targets: Vec<(&str, &str)> = hf
-                        .image_targets
-                        .iter()
-                        .map(|(id, target)| (id.as_str(), target.as_str()))
-                        .collect();
-                    let rels_xml = crate::domain::print::hf_images::write_hf_images_vml_rels(
-                        &hf.images, &targets,
-                    );
-                    zip.add_file(rels_path, rels_xml);
-                }
+            let rels = package_graph.relationship_manager_for_owner(
+                &crate::write::package_graph::PackageOwner::Part {
+                    path: hf.vml_path.clone(),
+                },
+            );
+            if !rels.is_empty() {
+                let rels_path = hf.rels_path.clone().unwrap_or_else(|| {
+                    crate::write::package_graph::part_relationships_path(&hf.vml_path)
+                });
+                zip.add_file(&rels_path, rels.to_xml());
             }
         }
 

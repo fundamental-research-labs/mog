@@ -413,39 +413,13 @@ pub fn write_xlsx_from_parse_output(
                 .clone()
                 .unwrap_or_else(|| format!("xl/comments{}.xml", global_comment_idx));
             let comments_target = worksheet_relative_target(&comments_path);
-            let comments_relationship_id_hint = if let Some(r_id) =
-                package_authority::relationship_id_hint(
-                    original_sheet_rels,
-                    REL_COMMENTS,
-                    &comments_target,
-                    None,
-                )
-                .filter(|r_id| rels.get_by_id(r_id).is_none())
-            {
-                rels.add_with_id(&r_id, REL_COMMENTS, &comments_target);
-                Some(r_id)
-            } else {
-                Some(rels.add(REL_COMMENTS, &comments_target))
-            };
+            let comments_relationship_id_hint = Some(rels.add(REL_COMMENTS, &comments_target));
             let vml_path = sheet_extras[sheet_idx]
                 .original_vml_path
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
             let vml_target = worksheet_relative_target(&vml_path);
-            let vml_relationship_id_hint = if let Some(r_id) =
-                package_authority::relationship_id_hint(
-                    original_sheet_rels,
-                    REL_VML_DRAWING,
-                    &vml_target,
-                    None,
-                )
-                .filter(|r_id| rels.get_by_id(r_id).is_none())
-            {
-                rels.add_with_id(&r_id, REL_VML_DRAWING, &vml_target);
-                Some(r_id)
-            } else {
-                Some(rels.add(REL_VML_DRAWING, &vml_target))
-            };
+            let vml_relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &vml_target));
             worksheet_comments_relationships.push(WorksheetCommentsGraphEntry {
                 sheet_idx,
                 comments_path,

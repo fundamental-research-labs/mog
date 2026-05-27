@@ -1268,7 +1268,7 @@ fn duplicate_original_worksheet_relationship_ids_do_not_leak_to_generated_relati
     let unique_ids: std::collections::BTreeSet<_> = rels.iter().map(|rel| &rel.id).collect();
 
     assert_eq!(unique_ids.len(), rels.len());
-    assert_eq!(comments_rel.id, "rId4");
+    assert_ne!(comments_rel.id, "rId4");
     assert_ne!(table_rel.id, comments_rel.id);
     assert!(sheet_xml.contains(&format!("<legacyDrawing r:id=\"{}\"/>", vml_rel.id)));
     assert!(sheet_xml.contains(&format!("<tablePart r:id=\"{}\"/>", table_rel.id)));
@@ -1512,16 +1512,25 @@ fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids()
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
     let vml_xml =
         String::from_utf8(archive.read_file("xl/drawings/vmlDrawing1.vml").unwrap()).unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes());
+    let comments_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_COMMENTS && rel.target == "../comments1.xml")
+        .expect("comments relationship should be emitted");
+    let vml_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_VML_DRAWING && rel.target == "../drawings/vmlDrawing1.vml")
+        .expect("VML relationship should be emitted");
 
     assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
     assert!(!archive.contains("xl/drawings/_rels/vmlDrawing1.vml.rels"));
     assert!(!archive.contains("xl/comments9.xml"));
-    assert!(sheet_rels.contains("Id=\"rId7\""));
+    assert_ne!(comments_rel.id, "rId7");
     assert!(sheet_rels.contains("Target=\"../comments1.xml\""));
-    assert!(sheet_rels.contains("Id=\"rId8\""));
+    assert_ne!(vml_rel.id, "rId8");
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
     assert!(!sheet_rels.contains("comments9.xml"));
-    assert!(sheet_xml.contains("<legacyDrawing r:id=\"rId8\"/>"));
+    assert!(sheet_xml.contains(&format!("<legacyDrawing r:id=\"{}\"/>", vml_rel.id)));
     assert!(content_types.contains("PartName=\"/xl/comments1.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/comments9.xml\""));
     assert!(vml_xml.contains("ObjectType=\"Note\""));

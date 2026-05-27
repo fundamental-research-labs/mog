@@ -41,6 +41,7 @@ struct PerfFixture {
     id: String,
     source: PerfSource,
     declared_classes: Vec<String>,
+    expected_shape: Option<ExpectedShape>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +58,14 @@ struct GeneratedScaleFixture {
     shared_string_cardinality: u32,
     formula_every: Option<u32>,
     style_count: u32,
+}
+
+#[derive(Debug, Clone)]
+struct ExpectedShape {
+    sheets: u32,
+    rows_per_sheet: u32,
+    cols_per_sheet: u32,
+    total_cells: u64,
 }
 
 #[derive(Debug)]
@@ -265,6 +274,14 @@ fn run_perf_fixture(
         peak_rss_mb,
         &classes,
     );
+    if let Some(expected_shape) = &fixture.expected_shape {
+        record_expected_shape_metrics(&mut metrics, expected_shape);
+        let shape_fingerprints = validate_expected_shape(&fixture.id, expected_shape, &facts);
+        if !shape_fingerprints.is_empty() {
+            status = GateStatus::Failed;
+            fingerprints.extend(shape_fingerprints);
+        }
+    }
 
     let budget_results = evaluate_budgets(&fixture.id, &classes, &metrics, budgets);
     if budget_results
@@ -343,6 +360,7 @@ fn discover_perf_fixtures(
                 .into_iter()
                 .map(|fixture| PerfFixture {
                     id: fixture.id(),
+                    expected_shape: Some(fixture.expected_shape()),
                     source: PerfSource::Generated(fixture),
                     declared_classes: Vec::new(),
                 }),
@@ -362,6 +380,7 @@ fn collect_input_fixtures(path: &Path, fixtures: &mut Vec<PerfFixture>) {
                     .unwrap_or_else(|| path.display().to_string()),
                 source: PerfSource::File(path.to_path_buf()),
                 declared_classes: Vec::new(),
+                expected_shape: None,
             });
         }
         return;
@@ -383,6 +402,7 @@ fn collect_input_fixtures(path: &Path, fixtures: &mut Vec<PerfFixture>) {
                     .to_string(),
                 source: PerfSource::File(child),
                 declared_classes: Vec::new(),
+                expected_shape: None,
             });
         }
     }
@@ -429,6 +449,7 @@ fn collect_manifest_fixtures(
             id,
             source: PerfSource::File(path),
             declared_classes: entry.classes,
+            expected_shape: None,
         });
     }
 }
@@ -491,6 +512,15 @@ impl GeneratedScaleFixture {
             "generated-scale-s{}-r{}-c{}-styles{}-sst{}",
             self.sheets, self.rows, self.cols, self.style_count, self.shared_string_cardinality
         )
+    }
+
+    fn expected_shape(&self) -> ExpectedShape {
+        ExpectedShape {
+            sheets: self.sheets,
+            rows_per_sheet: self.rows,
+            cols_per_sheet: self.cols,
+            total_cells: u64::from(self.sheets) * u64::from(self.rows) * u64::from(self.cols),
+        }
     }
 }
 
@@ -839,6 +869,105 @@ fn merge_classes(detected: Vec<String>, declared: &[String]) -> Vec<String> {
     classes.extend(detected);
     classes.extend(declared.iter().cloned());
     classes.into_iter().collect()
+}
+
+fn record_expected_shape_metrics(
+    metrics: &mut BTreeMap<String, MetricValue>,
+    expected_shape: &ExpectedShape,
+) {
+    metrics.insert(
+        "expected_shape.sheet_count".to_string(),
+        MetricValue::Integer(expected_shape.sheets as i64),
+    );
+    metrics.insert(
+        "expected_shape.rows_per_sheet".to_string(),
+        MetricValue::Integer(expected_shape.rows_per_sheet as i64),
+    );
+    metrics.insert(
+        "expected_shape.cols_per_sheet".to_string(),
+        MetricValue::Integer(expected_shape.cols_per_sheet as i64),
+    );
+    metrics.insert(
+        "expected_shape.total_cells".to_string(),
+        MetricValue::Integer(expected_shape.total_cells as i64),
+    );
+}
+
+fn validate_expected_shape(
+    id: &str,
+    expected_shape: &ExpectedShape,
+    facts: &WorkbookFacts,
+) -> Vec<FailureFingerprint> {
+    let mut fingerprints = Vec::new();
+    if facts.workbook.sheet_count != expected_shape.sheets {
+        fingerprints.push(expected_shape_fingerprint(
+            id,
+            "sheet_count",
+            expected_shape.sheets.to_string(),
+            facts.workbook.sheet_count.to_string(),
+        ));
+    }
+    if facts.workbook.total_cell_count != expected_shape.total_cells {
+        fingerprints.push(expected_shape_fingerprint(
+            id,
+            "total_cells",
+            expected_shape.total_cells.to_string(),
+            facts.workbook.total_cell_count.to_string(),
+        ));
+    }
+    for sheet in &facts.sheets {
+        let Some(range) = sheet.used_range else {
+            fingerprints.push(expected_shape_fingerprint(
+                id,
+                &format!("sheet.{}.used_range", sheet.index),
+                format!(
+                    "{}x{}",
+                    expected_shape.rows_per_sheet, expected_shape.cols_per_sheet
+                ),
+                "none".to_string(),
+            ));
+            continue;
+        };
+        let rows = range.max_row.saturating_sub(range.min_row) + 1;
+        let cols = range.max_col.saturating_sub(range.min_col) + 1;
+        if rows != expected_shape.rows_per_sheet || cols != expected_shape.cols_per_sheet {
+            fingerprints.push(expected_shape_fingerprint(
+                id,
+                &format!("sheet.{}.extent", sheet.index),
+                format!(
+                    "{}x{}",
+                    expected_shape.rows_per_sheet, expected_shape.cols_per_sheet
+                ),
+                format!("{rows}x{cols}"),
+            ));
+        }
+    }
+    fingerprints
+}
+
+fn expected_shape_fingerprint(
+    id: &str,
+    field: &str,
+    expected: String,
+    actual: String,
+) -> FailureFingerprint {
+    FailureFingerprint::new(
+        format!(
+            "perf-generated-shape-{}-{}",
+            sanitize_id(id),
+            sanitize_id(field)
+        ),
+        FingerprintCategory::Performance(PerformanceFingerprintCategory::HarnessMeasurementBug),
+        FingerprintSeverity::Error,
+        FingerprintOwner::Performance,
+        "generated perf fixture shape did not match declaration",
+    )
+    .with_evidence(
+        FingerprintEvidence::message("generated fixture shape mismatch")
+            .at_path(id)
+            .field(field)
+            .expected_actual(expected, actual),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

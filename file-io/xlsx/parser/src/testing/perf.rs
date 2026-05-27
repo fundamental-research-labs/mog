@@ -31,6 +31,7 @@ const OUTPUT_SIZE_RATIO_BUDGET_METRIC: &str = "output_size_ratio";
 pub struct PerfGateOptions {
     pub gate: GateName,
     pub inputs: Vec<PathBuf>,
+    pub manifest_path: Option<PathBuf>,
     pub budget_path: Option<PathBuf>,
     pub baseline_path: Option<PathBuf>,
 }
@@ -39,6 +40,7 @@ pub struct PerfGateOptions {
 struct PerfFixture {
     id: String,
     source: PerfSource,
+    declared_classes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +88,24 @@ struct PerfBudget {
     reason: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct PerfManifestFile {
+    #[serde(default)]
+    fixtures: Vec<PerfManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct PerfManifestEntry {
+    id: Option<String>,
+    path: PathBuf,
+    #[serde(default)]
+    tiers: Vec<String>,
+    #[serde(default)]
+    classes: Vec<String>,
+}
+
 #[derive(Debug)]
 struct BaselineRegression {
     metric: String,
@@ -100,7 +120,14 @@ pub fn run_perf_gate(options: PerfGateOptions) -> (GateReport, i32) {
     let started = Instant::now();
     let budgets = load_budget_file(options.budget_path.as_deref());
     let baseline = load_baseline(options.baseline_path.as_deref());
-    let fixtures = discover_perf_fixtures(options.gate, &options.inputs);
+    let manifest_path = options
+        .manifest_path
+        .or_else(|| std::env::var_os("MOG_XLSX_PERF_MANIFEST").map(PathBuf::from));
+    let mut inputs = options.inputs;
+    if let Some(env_inputs) = std::env::var_os("MOG_XLSX_PERF_INPUTS") {
+        inputs.extend(std::env::split_paths(&env_inputs));
+    }
+    let fixtures = discover_perf_fixtures(options.gate, &inputs, manifest_path.as_deref());
 
     if fixtures.is_empty() {
         let mut scenario = GateScenario::new(options.gate.as_str(), GateStatus::Blocked);
@@ -224,7 +251,7 @@ fn run_perf_fixture(
     let rss_after = current_rss_mb();
     let peak_rss_mb = rss_after.or(rss_before).unwrap_or(0.0);
     let facts = workbook_facts(&output, &parsed, &exported);
-    let classes = classify_workbook(&facts);
+    let classes = merge_classes(classify_workbook(&facts), &fixture.declared_classes);
     let mut metrics = perf_metrics(
         &timings,
         &facts,
@@ -296,8 +323,15 @@ fn run_perf_fixture(
     }
 }
 
-fn discover_perf_fixtures(gate: GateName, inputs: &[PathBuf]) -> Vec<PerfFixture> {
+fn discover_perf_fixtures(
+    gate: GateName,
+    inputs: &[PathBuf],
+    manifest_path: Option<&Path>,
+) -> Vec<PerfFixture> {
     let mut fixtures = Vec::new();
+    if let Some(manifest_path) = manifest_path {
+        collect_manifest_fixtures(gate, manifest_path, &mut fixtures);
+    }
     for input in inputs {
         collect_input_fixtures(input, &mut fixtures);
     }
@@ -308,6 +342,7 @@ fn discover_perf_fixtures(gate: GateName, inputs: &[PathBuf]) -> Vec<PerfFixture
                 .map(|fixture| PerfFixture {
                     id: fixture.id(),
                     source: PerfSource::Generated(fixture),
+                    declared_classes: Vec::new(),
                 }),
         );
     }
@@ -324,6 +359,7 @@ fn collect_input_fixtures(path: &Path, fixtures: &mut Vec<PerfFixture>) {
                     .map(|name| name.to_string_lossy().to_string())
                     .unwrap_or_else(|| path.display().to_string()),
                 source: PerfSource::File(path.to_path_buf()),
+                declared_classes: Vec::new(),
             });
         }
         return;
@@ -344,8 +380,54 @@ fn collect_input_fixtures(path: &Path, fixtures: &mut Vec<PerfFixture>) {
                     .display()
                     .to_string(),
                 source: PerfSource::File(child),
+                declared_classes: Vec::new(),
             });
         }
+    }
+}
+
+fn collect_manifest_fixtures(
+    gate: GateName,
+    manifest_path: &Path,
+    fixtures: &mut Vec<PerfFixture>,
+) {
+    let Ok(bytes) = fs::read(manifest_path) else {
+        return;
+    };
+    let Ok(manifest) = serde_json::from_slice::<PerfManifestFile>(&bytes) else {
+        return;
+    };
+    let base_dir = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+    let gate_name = gate.as_str();
+    let tier_name = gate.tier().as_str();
+    for entry in manifest.fixtures {
+        let tier_matches = entry.tiers.is_empty()
+            || entry
+                .tiers
+                .iter()
+                .any(|tier| tier == gate_name || tier == tier_name);
+        if !tier_matches {
+            continue;
+        }
+        let path = if entry.path.is_absolute() {
+            entry.path
+        } else {
+            base_dir.join(entry.path)
+        };
+        if !is_xlsx_path(&path) {
+            continue;
+        }
+        let id = entry.id.unwrap_or_else(|| {
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        });
+        fixtures.push(PerfFixture {
+            id,
+            source: PerfSource::File(path),
+            declared_classes: entry.classes,
+        });
     }
 }
 
@@ -712,6 +794,13 @@ fn classify_workbook(facts: &WorkbookFacts) -> Vec<String> {
     }
 
     classes.into_iter().map(str::to_string).collect()
+}
+
+fn merge_classes(detected: Vec<String>, declared: &[String]) -> Vec<String> {
+    let mut classes = BTreeSet::new();
+    classes.extend(detected);
+    classes.extend(declared.iter().cloned());
+    classes.into_iter().collect()
 }
 
 #[allow(clippy::too_many_arguments)]

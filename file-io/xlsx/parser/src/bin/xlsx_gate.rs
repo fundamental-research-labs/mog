@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use xlsx_parser::testing::{
-    enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
+    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, GateSuiteName, MetricValue,
+    PerfGateOptions, enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
     gate_suite_contracts, gate_suite_readiness, run_ooxml_contract_gate, run_perf_gate,
-    validate_package_graph_bytes, GateName, GateReport, GateReportDomain, GateScenario, GateStatus,
-    GateSuiteName, MetricValue, PerfGateOptions,
+    validate_package_graph_bytes,
 };
 
 fn main() {
@@ -100,6 +100,7 @@ fn main() {
     let mut output: Option<PathBuf> = None;
     let mut budget_path: Option<PathBuf> = None;
     let mut baseline_path: Option<PathBuf> = None;
+    let mut manifest_path: Option<PathBuf> = None;
     let mut positional = Vec::new();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -124,6 +125,13 @@ fn main() {
                 };
                 baseline_path = Some(PathBuf::from(path));
             }
+            "--manifest" => {
+                let Some(path) = args.next() else {
+                    eprintln!("--manifest requires a path");
+                    std::process::exit(2);
+                };
+                manifest_path = Some(PathBuf::from(path));
+            }
             other => positional.push(other.to_string()),
         }
     }
@@ -144,6 +152,7 @@ fn main() {
             run_perf_gate(PerfGateOptions {
                 gate,
                 inputs,
+                manifest_path,
                 budget_path,
                 baseline_path,
             })
@@ -230,7 +239,7 @@ fn not_implemented_exit(gate: GateName) -> i32 {
 
 fn print_usage() {
     eprintln!(
-        "Usage: xlsx-gate <gate-name> [input.xlsx|corpus-dir ...] [--output report.json] [--budgets budgets.json] [--baseline report.json]"
+        "Usage: xlsx-gate <gate-name> [input.xlsx|corpus-dir ...] [--output report.json] [--manifest manifest.json] [--budgets budgets.json] [--baseline report.json]"
     );
     eprintln!("       xlsx-gate --list");
     eprintln!("       xlsx-gate --suites");

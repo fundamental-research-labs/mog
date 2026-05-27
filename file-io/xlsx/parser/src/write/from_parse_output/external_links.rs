@@ -3,7 +3,7 @@ use domain_types::domain::external_link::ExternalLink;
 pub(super) fn part_name(link: &ExternalLink) -> String {
     link.imported_identity
         .as_ref()
-        .map(|identity| identity.part_name.clone())
+        .and_then(|identity| normalized_external_link_part_name(&identity.part_name))
         .unwrap_or_else(|| format!("externalLinks/externalLink{}.xml", link.id))
 }
 
@@ -131,4 +131,21 @@ pub(super) fn with_resolved_relationship_ids(
 pub(super) fn rels_path(zip_path: &str) -> String {
     let file_name = zip_path.rsplit('/').next().unwrap_or(zip_path);
     format!("xl/externalLinks/_rels/{}.rels", file_name)
+}
+
+fn normalized_external_link_part_name(part_name: &str) -> Option<String> {
+    let trimmed = part_name.trim_start_matches('/');
+    let normalized = trimmed.strip_prefix("xl/").unwrap_or(trimmed);
+    if normalized.contains("/../") || normalized.starts_with("../") {
+        return None;
+    }
+    let file_name = normalized.rsplit('/').next().unwrap_or(normalized);
+    if normalized.starts_with("externalLinks/externalLink")
+        && file_name.starts_with("externalLink")
+        && file_name.ends_with(".xml")
+    {
+        Some(normalized.to_string())
+    } else {
+        None
+    }
 }

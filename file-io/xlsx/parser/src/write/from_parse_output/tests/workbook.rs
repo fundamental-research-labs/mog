@@ -412,6 +412,45 @@ fn raw_workbook_external_references_do_not_override_modeled_external_links() {
 }
 
 #[test]
+fn external_link_imported_identity_cannot_move_part_outside_external_links_cluster() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.external_links = vec![domain_types::domain::external_link::ExternalLink {
+        id: "1".to_string(),
+        imported_identity: Some(
+            domain_types::domain::external_link::ImportedExternalLinkIdentity {
+                excel_ordinal: 1,
+                workbook_rel_id: "rId20".to_string(),
+                part_name: "docProps/custom.xml".to_string(),
+                external_book_rid: None,
+                target: Some("docProps/custom.xml".to_string()),
+                target_mode: None,
+            },
+        ),
+        ..Default::default()
+    }];
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/externalLinks/externalLink1.xml"));
+    assert!(!archive.contains("xl/docProps/custom.xml"));
+    assert!(workbook_xml.contains("<externalReference"));
+    assert!(workbook_rels.contains(r#"Target="externalLinks/externalLink1.xml""#));
+    assert!(!workbook_rels.contains("docProps/custom.xml"));
+    assert!(content_types.contains(r#"PartName="/xl/externalLinks/externalLink1.xml""#));
+    assert!(!content_types.contains(r#"PartName="/xl/docProps/custom.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn persons_are_exported_from_modeled_state_not_raw_person_xml() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -7,9 +7,12 @@ pub(super) fn add_relationship_for_export(
     sheet_idx: usize,
     global_idx: usize,
     original_sheet_rels: &[domain_types::OpcRelationship],
+    comments: &[domain_types::Comment],
     rels: &mut RelationshipManager,
 ) -> WorksheetThreadedCommentsGraphEntry {
-    let path = original_threaded_comments_path(sheet_idx, original_sheet_rels)
+    let path = current_comments_have_imported_threaded_identity(comments)
+        .then(|| original_threaded_comments_path(sheet_idx, original_sheet_rels))
+        .flatten()
         .unwrap_or_else(|| format!("xl/threadedComments/threadedComment{global_idx}.xml"));
     let target = worksheet_relative_target(&path);
     let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
@@ -32,6 +35,17 @@ pub(super) fn add_relationship_for_export(
         target,
         relationship_id_hint,
     }
+}
+
+fn current_comments_have_imported_threaded_identity(comments: &[domain_types::Comment]) -> bool {
+    comments.iter().any(|comment| {
+        comment.comment_type == domain_types::CommentType::ThreadedComment
+            && (comment.thread_id.is_some()
+                || comment.person_id.is_some()
+                || comment.timestamp.is_some()
+                || comment.xr_uid.is_some()
+                || comment.ext_lst_xml.is_some())
+    })
 }
 
 fn original_threaded_comments_path(

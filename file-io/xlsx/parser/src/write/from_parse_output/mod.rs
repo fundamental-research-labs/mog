@@ -581,6 +581,7 @@ pub fn write_xlsx_from_parse_output(
                     sheet_idx,
                     global_tc_idx,
                     original_sheet_rels,
+                    &sheet_data.comments,
                     &mut rels,
                 ),
             );

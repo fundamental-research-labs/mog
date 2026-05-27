@@ -454,7 +454,7 @@ pub(super) fn build_sheet_parts(
                         None,
                         comment_vml_path,
                         hf_vml_parsed,
-                        sheet_rt.original_drawing_path.clone(),
+                        original_drawing_path_for_export(sheet_data, sheet_rt),
                     )
                 })
                 .unwrap_or((None, None, None, None));
@@ -509,6 +509,53 @@ pub(super) fn build_sheet_parts(
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
+    }
+}
+
+fn original_drawing_path_for_export(
+    sheet_data: &domain_types::SheetData,
+    sheet_rt: &domain_types::SheetRoundTripContext,
+) -> Option<String> {
+    let original_path = sheet_rt.original_drawing_path.as_ref()?;
+    let imported_path = sheet_rt
+        .imported_drawing
+        .as_ref()
+        .map(|drawing| drawing.path.trim_start_matches('/').replace('\\', "/"));
+    if imported_path.as_deref() != Some(original_path.trim_start_matches('/')) {
+        return None;
+    }
+    current_sheet_has_imported_drawing_identity(sheet_data).then(|| original_path.clone())
+}
+
+fn current_sheet_has_imported_drawing_identity(sheet_data: &domain_types::SheetData) -> bool {
+    sheet_data
+        .charts
+        .iter()
+        .any(|chart| chart.chart_frame.is_some())
+        || sheet_data
+            .floating_objects
+            .iter()
+            .any(floating_object_has_imported_drawing_identity)
+}
+
+fn floating_object_has_imported_drawing_identity(
+    object: &domain_types::domain::floating_object::FloatingObject,
+) -> bool {
+    use domain_types::domain::floating_object::FloatingObjectData;
+
+    match &object.data {
+        FloatingObjectData::Picture(data) => data.ooxml.is_some(),
+        FloatingObjectData::Shape(data) => data.ooxml.is_some(),
+        FloatingObjectData::Textbox(data) => data.ooxml.is_some(),
+        FloatingObjectData::Connector(data) => data.ooxml.is_some(),
+        FloatingObjectData::Chart(data) => data
+            .ooxml
+            .as_ref()
+            .and_then(|ooxml| ooxml.drawing_frame.as_ref())
+            .is_some(),
+        FloatingObjectData::OleObject(data) => data.ooxml.is_some(),
+        FloatingObjectData::FormControl(data) => data.ooxml.is_some(),
+        _ => false,
     }
 }
 

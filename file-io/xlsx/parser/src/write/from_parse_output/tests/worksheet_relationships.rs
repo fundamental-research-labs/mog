@@ -419,6 +419,59 @@ fn generated_drawing_relationship_uses_graph_registered_part() {
 }
 
 #[test]
+fn generated_drawing_ignores_stale_original_drawing_path_without_imported_identity() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![make_chart(ChartType::Column, "Data!A1:B2")],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId9".to_string(),
+                rel_type: REL_DRAWING.to_string(),
+                target: "../drawings/drawing9.xml".to_string(),
+                target_mode: None,
+            }],
+            original_drawing_path: Some("xl/drawings/drawing9.xml".to_string()),
+            imported_drawing: Some(domain_types::ImportedDrawingPart {
+                path: "xl/drawings/drawing9.xml".to_string(),
+                data: br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><staleDrawing/></xdr:wsDr>"#
+                    .to_vec(),
+                rels: None,
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/drawings/drawing1.xml"));
+    assert!(!archive.contains("xl/drawings/drawing9.xml"));
+    assert!(sheet_rels.contains(r#"Target="../drawings/drawing1.xml""#));
+    assert!(!sheet_rels.contains("drawing9.xml"));
+    assert!(content_types.contains("PartName=\"/xl/drawings/drawing1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/drawings/drawing9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_picture_media_is_emitted_as_modeled_drawing_part() {
     let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
     picture.blip_fill.embed_id = Some("rId5".to_string());
@@ -541,6 +594,53 @@ fn generated_drawing_without_child_relationships_drops_empty_imported_rels_file(
     assert!(!archive.contains("xl/drawings/_rels/drawing1.xml.rels"));
     assert!(sheet_rels.contains("Target=\"../drawings/drawing1.xml\""));
     assert!(sheet_xml.contains(&format!(r#"<drawing r:id="{}"/>"#, drawing_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_threaded_comments_ignore_stale_original_threaded_comments_path() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        comments: vec![Comment {
+            id: "generated-thread".to_string(),
+            cell_ref: "A1".to_string(),
+            author: "Tester".to_string(),
+            content: Some("Generated threaded comment".to_string()),
+            comment_type: CommentType::ThreadedComment,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rIdThreaded".to_string(),
+                rel_type: REL_THREADED_COMMENT.to_string(),
+                target: "../threadedComments/threadedComment9.xml".to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/threadedComments/threadedComment1.xml"));
+    assert!(!archive.contains("xl/threadedComments/threadedComment9.xml"));
+    assert!(sheet_rels.contains(r#"Target="../threadedComments/threadedComment1.xml""#));
+    assert!(!sheet_rels.contains("threadedComment9.xml"));
+    assert!(content_types.contains("PartName=\"/xl/threadedComments/threadedComment1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/threadedComments/threadedComment9.xml\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

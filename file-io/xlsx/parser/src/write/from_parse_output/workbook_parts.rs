@@ -107,11 +107,19 @@ pub(super) fn build_workbook_xml(
             workbook_writer.set_preserved_namespaces(ns_map);
         }
         if !ctx.workbook_preserved_elements.is_empty() {
-            let preserved =
-                crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(
-                    &ctx.workbook_preserved_elements,
-                );
-            workbook_writer.set_preserved_elements(preserved);
+            let preserved_pairs: Vec<_> = ctx
+                .workbook_preserved_elements
+                .iter()
+                .filter(|(_, xml)| !raw_xml_contains_r_id_attr(xml))
+                .cloned()
+                .collect();
+            if !preserved_pairs.is_empty() {
+                let preserved =
+                    crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(
+                        &preserved_pairs,
+                    );
+                workbook_writer.set_preserved_elements(preserved);
+            }
         }
     }
 
@@ -196,4 +204,29 @@ pub(super) fn build_workbook_xml(
         workbook_xml,
         workbook_rels_xml,
     })
+}
+
+fn raw_xml_contains_r_id_attr(raw_xml: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let mut pos = 0;
+    while let Some(offset) = find_subslice(&bytes[pos..], b"r:id") {
+        pos += offset + b"r:id".len();
+        let mut cursor = pos;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if bytes.get(cursor) == Some(&b'=') {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }

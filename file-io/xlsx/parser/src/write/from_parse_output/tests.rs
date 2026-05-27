@@ -4248,6 +4248,86 @@ fn matching_roundtrip_formula_metadata_decorates_current_formula_cell() {
 }
 
 #[test]
+fn imported_shared_formula_range_is_not_replayed_without_modeled_group() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(A2:A10)",
+            DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let imported_formula = ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Shared,
+        si: Some(7),
+        r#ref: Some("A1:A2".to_string()),
+        text: "SUM(A2:A10)".to_string(),
+        ..Default::default()
+    };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            cell_formulas: vec![((0, 0), imported_formula)],
+            xml_space_formula_cells: vec![(0, 0)],
+            force_recalc_cells: vec![(0, 0)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<f>SUM(A2:A10)</f>"));
+    assert!(!sheet_xml.contains(r#"t="shared""#));
+    assert!(!sheet_xml.contains(r#"si="7""#));
+    assert!(!sheet_xml.contains(r#"ca="1""#));
+    assert!(!sheet_xml.contains(r#"xml:space="preserve""#));
+}
+
+#[test]
+fn imported_array_formula_range_is_not_replayed_without_modeled_group() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(A2:A10)",
+            DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let imported_formula = ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Array,
+        r#ref: Some("A1:A2".to_string()),
+        text: "SUM(A2:A10)".to_string(),
+        aca: true,
+        ..Default::default()
+    };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            cell_formulas: vec![((0, 0), imported_formula)],
+            force_recalc_cells: vec![(0, 0)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<f>SUM(A2:A10)</f>"));
+    assert!(!sheet_xml.contains(r#"t="array""#));
+    assert!(!sheet_xml.contains(r#"aca="1""#));
+    assert!(!sheet_xml.contains(r#"ca="1""#));
+}
+
+#[test]
 fn stale_roundtrip_formula_metadata_does_not_decorate_edited_formula_cell() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

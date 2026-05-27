@@ -650,12 +650,15 @@ fn current_formula_metadata<'a>(
     cell: &'a DomainCellData,
     imported_formula: Option<&'a ooxml_types::worksheet::CellFormula>,
 ) -> Option<&'a ooxml_types::worksheet::CellFormula> {
-    cell.cell_formula
+    if let Some(formula) = cell
+        .cell_formula
         .as_ref()
         .filter(|formula| formula_metadata_matches_current_cell(cell, formula))
-        .or_else(|| {
-            imported_formula.filter(|formula| formula_metadata_matches_current_cell(cell, formula))
-        })
+    {
+        return Some(formula);
+    }
+
+    imported_formula.filter(|formula| imported_formula_metadata_matches_current_cell(cell, formula))
 }
 
 fn formula_round_trip_hints_match_current_cell(
@@ -666,9 +669,34 @@ fn formula_round_trip_hints_match_current_cell(
         return false;
     }
 
-    match imported_formula.or(cell.cell_formula.as_ref()) {
-        Some(formula) => formula_metadata_matches_current_cell(cell, formula),
-        None => true,
+    if let Some(formula) = cell.cell_formula.as_ref() {
+        return formula_metadata_matches_current_cell(cell, formula);
+    }
+
+    if let Some(formula) = imported_formula {
+        return imported_formula_metadata_matches_current_cell(cell, formula);
+    }
+
+    true
+}
+
+fn imported_formula_metadata_matches_current_cell(
+    cell: &DomainCellData,
+    formula: &ooxml_types::worksheet::CellFormula,
+) -> bool {
+    use ooxml_types::worksheet::CellFormulaType;
+
+    if !formula_metadata_matches_current_cell(cell, formula) {
+        return false;
+    }
+
+    match formula.t {
+        CellFormulaType::Shared | CellFormulaType::Array => formula
+            .r#ref
+            .as_deref()
+            .is_some_and(|r| single_cell_ref_matches(r, cell.row, cell.col)),
+        CellFormulaType::DataTable => false,
+        _ => true,
     }
 }
 
@@ -705,6 +733,17 @@ fn formulas_match(current: &str, imported: &str) -> bool {
 
 fn formula_identity_text(formula: &str) -> &str {
     formula.strip_prefix('=').unwrap_or(formula)
+}
+
+fn single_cell_ref_matches(ref_text: &str, row: u32, col: u32) -> bool {
+    if let Some((start_row, start_col, end_row, end_col)) =
+        crate::infra::a1::parse_a1_range(ref_text)
+    {
+        start_row == row && end_row == row && start_col == col && end_col == col
+    } else {
+        crate::infra::a1::parse_a1_cell(ref_text)
+            .is_some_and(|(ref_row, ref_col)| ref_row == row && ref_col == col)
+    }
 }
 
 fn is_data_table_body_formula(cell: &DomainCellData, is_data_table_master: bool) -> bool {

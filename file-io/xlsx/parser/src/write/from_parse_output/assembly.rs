@@ -1,0 +1,58 @@
+use super::worksheet_custom_properties;
+
+/// Per-sheet extra data needed for ZIP assembly (comments, tables, rels).
+pub(super) struct SheetExtras {
+    /// (comments_xml, vml_xml) if the sheet has comments.
+    pub(super) comments: Option<(Vec<u8>, Vec<u8>)>,
+    /// Threaded comment XML (xl/threadedComments/threadedComment{N}.xml) if this sheet
+    /// has comments with thread_id set.
+    pub(super) threaded_comments: Option<Vec<u8>>,
+    /// Table XML bytes, one per table. Index is local to this sheet.
+    pub(super) tables: Vec<Vec<u8>>,
+    /// Whether this sheet has external hyperlinks (needs rels).
+    pub(super) has_external_hyperlinks: bool,
+    /// Whether this sheet has standard charts that need drawing.
+    pub(super) has_charts: bool,
+    /// Whether this sheet has ChartEx (modern) charts that need drawing.
+    pub(super) has_chart_ex: bool,
+    /// Whether this sheet has floating objects (images, shapes, etc.) that need drawing.
+    pub(super) has_floating_objects: bool,
+    /// Original comment ZIP path from round-trip context (e.g. "xl/comments6.xml").
+    /// When set, this path is used instead of sequential numbering.
+    pub(super) original_comment_path: Option<String>,
+    /// Original VML drawing ZIP path from round-trip context.
+    pub(super) original_vml_path: Option<String>,
+    /// Original drawing ZIP path from round-trip context (e.g. "xl/drawings/drawing1.xml").
+    /// When set, this path is used instead of sequential numbering.
+    pub(super) original_drawing_path: Option<String>,
+    /// Parsed header/footer image VML data (from legacyDrawingHF).
+    /// Stored as domain types — the writer generates VML XML from these.
+    pub(super) hf_vml: Option<crate::domain::print::hf_images::ParsedHfVml>,
+    /// Whether this sheet references a printer settings binary (pageSetup r:id).
+    pub(super) has_printer_settings: bool,
+    /// Form controls for this sheet (converted from domain types).
+    pub(super) form_controls: Vec<crate::domain::controls::read::FormControl>,
+    /// Clean imported worksheet custom property sidecars.
+    pub(super) custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
+}
+
+/// Per-chart data needed during ZIP assembly. Includes the original ChartSpec
+/// reference index so we can retrieve position/size for drawing anchors.
+pub(super) struct ChartEntry {
+    /// Global 1-based chart index (for xl/charts/chart{N}.xml path).
+    pub(super) global_idx: usize,
+    /// Index into the original `sheet_data.charts` Vec.
+    pub(super) source_idx: usize,
+    /// Serialized chart XML bytes.
+    pub(super) xml: Vec<u8>,
+}
+
+/// Per-ChartEx data needed during ZIP assembly.
+pub(super) struct ChartExEntry {
+    /// Global 1-based chart-ex index (for xl/charts/chartEx{N}.xml path).
+    pub(super) global_idx: usize,
+    /// Index into the original `sheet_data.charts` Vec.
+    pub(super) source_idx: usize,
+    /// Serialized ChartEx XML bytes.
+    pub(super) xml: Vec<u8>,
+}

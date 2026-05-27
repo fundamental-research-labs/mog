@@ -10,28 +10,29 @@
 
 #![allow(clippy::string_slice)]
 
+mod assembly;
 mod chart_auxiliary;
 mod doc_props;
 mod external_links;
+mod form_controls;
 mod metadata;
 mod package_authority;
 mod pivot_package;
 mod sheet_builder;
+mod sheet_parts;
 mod sheet_preservation;
 mod styles;
 mod vml_merge;
+mod workbook_parts;
 mod worksheet_custom_properties;
 
-use domain_types::Hyperlink;
 use domain_types::ParseOutput;
 use domain_types::RoundTripContext;
 // ChartSpec / AnchorPosition are re-exported from domain_types::domain::chart via domain_types::*
 // but we don't need them as standalone imports — they're accessed via sheet_data.charts.
 
 use super::write_error::WriteError;
-use super::{CompressionMethod, SharedStringsWriter, WorkbookWriter, ZipWriter};
-use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
-use crate::domain::charts::write_canonical::serialize_chart_space;
+use super::{CompressionMethod, ZipWriter};
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::domain::drawings::write::{
     CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject, DrawingWriter,
@@ -40,67 +41,12 @@ use crate::domain::drawings::write::{
 use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
-    ControlsWriter, DefinedNameDef, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP,
-    REL_DRAWING, REL_HYPERLINK, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE,
-    REL_THREADED_COMMENT, REL_VML_DRAWING,
+    ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
+    REL_HYPERLINK, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE, REL_THREADED_COMMENT,
+    REL_VML_DRAWING,
 };
 
-/// Per-sheet extra data needed for ZIP assembly (comments, tables, rels).
-struct SheetExtras {
-    /// (comments_xml, vml_xml) if the sheet has comments.
-    comments: Option<(Vec<u8>, Vec<u8>)>,
-    /// Threaded comment XML (xl/threadedComments/threadedComment{N}.xml) if this sheet
-    /// has comments with thread_id set.
-    threaded_comments: Option<Vec<u8>>,
-    /// Table XML bytes, one per table. Index is local to this sheet.
-    tables: Vec<Vec<u8>>,
-    /// Whether this sheet has external hyperlinks (needs rels).
-    has_external_hyperlinks: bool,
-    /// Whether this sheet has standard charts that need drawing.
-    has_charts: bool,
-    /// Whether this sheet has ChartEx (modern) charts that need drawing.
-    has_chart_ex: bool,
-    /// Whether this sheet has floating objects (images, shapes, etc.) that need drawing.
-    has_floating_objects: bool,
-    /// Original comment ZIP path from round-trip context (e.g. "xl/comments6.xml").
-    /// When set, this path is used instead of sequential numbering.
-    original_comment_path: Option<String>,
-    /// Original VML drawing ZIP path from round-trip context.
-    original_vml_path: Option<String>,
-    /// Original drawing ZIP path from round-trip context (e.g. "xl/drawings/drawing1.xml").
-    /// When set, this path is used instead of sequential numbering.
-    original_drawing_path: Option<String>,
-    /// Parsed header/footer image VML data (from legacyDrawingHF).
-    /// Stored as domain types — the writer generates VML XML from these.
-    hf_vml: Option<crate::domain::print::hf_images::ParsedHfVml>,
-    /// Whether this sheet references a printer settings binary (pageSetup r:id).
-    has_printer_settings: bool,
-    /// Form controls for this sheet (converted from domain types).
-    form_controls: Vec<crate::domain::controls::read::FormControl>,
-    /// Clean imported worksheet custom property sidecars.
-    custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
-}
-
-/// Per-chart data needed during ZIP assembly. Includes the original ChartSpec
-/// reference index so we can retrieve position/size for drawing anchors.
-struct ChartEntry {
-    /// Global 1-based chart index (for xl/charts/chart{N}.xml path).
-    global_idx: usize,
-    /// Index into the original `sheet_data.charts` Vec.
-    source_idx: usize,
-    /// Serialized chart XML bytes.
-    xml: Vec<u8>,
-}
-
-/// Per-ChartEx data needed during ZIP assembly.
-struct ChartExEntry {
-    /// Global 1-based chart-ex index (for xl/charts/chartEx{N}.xml path).
-    global_idx: usize,
-    /// Index into the original `sheet_data.charts` Vec.
-    source_idx: usize,
-    /// Serialized ChartEx XML bytes.
-    xml: Vec<u8>,
-}
+use assembly::{ChartEntry, ChartExEntry};
 
 struct WorksheetCommentsGraphEntry {
     sheet_idx: usize,
@@ -314,500 +260,21 @@ pub fn write_xlsx_from_parse_output(
     };
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
-    // Imported shared string entries are non-authoritative per-cell hints. A
-    // hint is emitted only when a current cell still references the same
-    // original SST index and text; stale raw SST XML and count metadata never
-    // override the generated table.
-    let mut shared_strings = if let Some(ctx) = round_trip_ctx {
-        if !ctx.shared_strings_list.is_empty() {
-            let mut sst = SharedStringsWriter::with_capacity(ctx.shared_strings_list.len());
-            for (i, s) in ctx.shared_strings_list.iter().enumerate() {
-                sst.add_imported_hint(
-                    i,
-                    s,
-                    ctx.shared_strings_rich_runs.get(i).cloned().flatten(),
-                    ctx.shared_strings_phonetic_xml.get(i).cloned().flatten(),
-                );
-            }
-            sst
-        } else {
-            SharedStringsWriter::new()
-        }
-    } else {
-        SharedStringsWriter::new()
-    };
-    let mut sheet_writers = Vec::with_capacity(output.sheets.len());
-    let mut sheet_extras = Vec::with_capacity(output.sheets.len());
-
-    // Global table counter for archive paths (xl/tables/table{N}.xml).
-    let mut global_table_idx: u32 = 0;
-
-    // Global chart counter for archive paths (xl/charts/chart{N}.xml).
-    let mut global_chart_idx: usize = 0;
-
-    // Per-sheet chart entries: Vec<Vec<ChartEntry>> (outer = sheet, inner = charts in that sheet).
-    let mut all_chart_entries: Vec<Vec<ChartEntry>> = Vec::with_capacity(output.sheets.len());
-
-    // Global ChartEx counter for archive paths (xl/charts/chartEx{N}.xml).
-    let mut global_chart_ex_idx: usize = 0;
-
-    // Per-sheet ChartEx entries: Vec<Vec<ChartExEntry>>.
-    let mut all_chart_ex_entries: Vec<Vec<ChartExEntry>> = Vec::with_capacity(output.sheets.len());
+    let mut shared_strings = sheet_parts::build_shared_strings(round_trip_ctx);
+    let sheet_parts::BuiltSheetParts {
+        mut sheet_writers,
+        sheet_extras,
+        all_chart_entries,
+        all_chart_ex_entries,
+    } = sheet_parts::build_sheet_parts(
+        output,
+        round_trip_ctx,
+        &mut shared_strings,
+        has_lossless_stylesheet,
+    );
 
     // Collected image blobs from floating objects: (zip_path, bytes).
     let mut all_image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
-
-    // Metadata refs are emitted only with an authoritative metadata part.
-    // Raw `xl/metadata.xml` replay is intentionally disabled until the metadata
-    // domain has a modeled writer.
-    let emit_cell_metadata_refs = false;
-    for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
-        let sheet_num = sheet_idx + 1;
-
-        // Determine how many external hyperlinks this sheet has (need r:id refs).
-        let external_hyperlinks: Vec<&Hyperlink> = sheet_data
-            .hyperlinks
-            .iter()
-            .filter(|h| h.target.is_some())
-            .collect();
-        let has_external_hyperlinks = !external_hyperlinks.is_empty();
-
-        // Collect Data Table body-cell positions for this sheet. Body cells
-        // carry a synthesized formula in the data model but the OOXML writer
-        // must emit `<v>`-only for them (only the master cell carries
-        // `<f t="dataTable">`). See `sheet_builder::build_sheet` for the
-        // sanitization detail.
-        let data_table_body_positions: std::collections::HashSet<(u32, u32)> = output
-            .data_table_regions
-            .iter()
-            .filter(|r| r.sheet_index as usize == sheet_idx)
-            .flat_map(|r| {
-                let (start_row, start_col) = (r.start_row, r.start_col);
-                let (end_row, end_col) = (r.end_row, r.end_col);
-                (start_row..=end_row).flat_map(move |row| {
-                    (start_col..=end_col).filter_map(move |col| {
-                        // Master is (start_row, start_col) — exclude it; only
-                        // body cells need formula suppression.
-                        if row == start_row && col == start_col {
-                            None
-                        } else {
-                            Some((row, col))
-                        }
-                    })
-                })
-            })
-            .collect();
-        let sheet_data_table_regions: Vec<_> = output
-            .data_table_regions
-            .iter()
-            .filter(|r| r.sheet_index as usize == sheet_idx)
-            .cloned()
-            .collect();
-
-        // Build the base SheetWriter (cells, merges, views, etc.)
-        let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-        let mut sheet_writer = build_sheet(
-            sheet_data,
-            &mut shared_strings,
-            has_lossless_stylesheet,
-            sheet_rt,
-            &data_table_body_positions,
-            &sheet_data_table_regions,
-            emit_cell_metadata_refs,
-        );
-
-        // Preserve whether <mergeCells> had a count attribute
-        if let Some(srt) = sheet_rt {
-            sheet_writer.set_merge_cells_emit_count(srt.merge_cells_has_count);
-        }
-
-        // ── Sheet UID (xr:uid on <worksheet> root) ───────────────────
-        if let Some(ref uid) = sheet_data.uid {
-            sheet_writer.set_uid(uid.clone());
-        }
-
-        // ── Preserved Namespaces + Dimension (round-trip) ──────────────
-        if let Some(ctx) = round_trip_ctx {
-            if let Some(sheet_rt) = ctx.sheets.get(sheet_idx) {
-                if !sheet_rt.preserved_namespace_attrs.is_empty() {
-                    let mut ns_map = crate::roundtrip::namespaces::NamespaceMap::new();
-                    for (prefix, uri) in &sheet_rt.preserved_namespace_attrs {
-                        if prefix.is_empty() {
-                            ns_map.set_default(uri.as_str());
-                        } else {
-                            ns_map.add_prefixed(prefix.as_str(), uri.as_str());
-                        }
-                    }
-                    sheet_writer.set_preserved_namespaces(ns_map);
-                }
-                if let Some(dim) =
-                    sheet_preservation::original_dimension_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_dimension_ref(dim.clone());
-                }
-                sheet_preservation::apply_row_hints_for_export(
-                    &mut sheet_writer,
-                    sheet_data,
-                    sheet_rt,
-                );
-                if let Some(preserved) =
-                    sheet_preservation::preserved_elements_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_preserved_elements(preserved);
-                }
-            }
-        }
-
-        // ── Hyperlinks ──────────────────────────────────────────────────
-        // Hyperlink r:ids are assigned during rels generation below.
-        // Both external and internal hyperlinks get relationship entries
-        // (Excel stores internal links as rels with Target="#Sheet!Cell").
-
-        // ── Data Validations ────────────────────────────────────────────
-        // Typed OOXML preservation: worksheet-level data validations now reconstruct
-        // from typed `SheetData.data_validations` + container-attr fields
-        // (`data_validations_declared_count`,
-        // `data_validations_disable_prompts`, `data_validations_x_window`,
-        // `data_validations_y_window`). The former raw-XML sidecar on
-        // `SheetRoundTripContext.data_validations_xml` has been removed.
-        if !sheet_data.data_validations.is_empty() {
-            let xml = crate::domain::validation::write::validations_xml_from_domain_with_opts(
-                &sheet_data.data_validations,
-                sheet_data.data_validations_disable_prompts,
-                sheet_data.data_validations_x_window,
-                sheet_data.data_validations_y_window,
-                sheet_data.data_validations_declared_count,
-            );
-            sheet_writer.set_data_validations_xml(xml);
-        }
-
-        // ── Conditional Formats ─────────────────────────────────────────
-        if !sheet_data.conditional_formats.is_empty() {
-            let xml = crate::domain::cond_format::write::cf_xml_from_domain(
-                &sheet_data.conditional_formats,
-            );
-            sheet_writer.set_conditional_formatting_xml(xml);
-        }
-
-        // ── Print Settings ──────────────────────────────────────────────
-        if let Some(ref ps) = sheet_data.print_settings {
-            let mut ps = ps.clone();
-            ps.r_id = None;
-            let pw = crate::domain::print::write::print_writer_from_domain(&ps);
-            sheet_writer.set_print_writer(pw);
-        }
-
-        // ── Sheet Protection ────────────────────────────────────────────
-        if let Some(ref prot) = sheet_data.protection {
-            if prot.is_protected {
-                let xml = crate::domain::protection::write::sheet_protection_xml_from_domain(prot);
-                sheet_writer.set_sheet_protection_xml(xml);
-            }
-        }
-
-        // ── Page Breaks ──────────────────────────────────────────────────
-        if let Some(ref pb) = sheet_data.page_breaks {
-            if !pb.row_breaks.is_empty() || !pb.col_breaks.is_empty() {
-                // Page breaks are written by PrintWriter as rowBreaks/colBreaks.
-                // Ensure a PrintWriter exists and add breaks to it.
-                let pw = sheet_writer.ensure_print_writer();
-                for brk in &pb.row_breaks {
-                    pw.add_row_break_full(brk.id, brk.min, brk.max, brk.manual, brk.pt);
-                }
-                for brk in &pb.col_breaks {
-                    pw.add_col_break_full(brk.id, brk.min, brk.max, brk.manual, brk.pt);
-                }
-            }
-        }
-
-        // ── Outline Groups (rows only) ─────────────────────────────────
-        // Column outline levels are handled during column coalescing in build_sheet.
-        if !sheet_data.outline_groups.is_empty() {
-            apply_outline_groups_rows_only(&mut sheet_writer, &sheet_data.outline_groups);
-        }
-        // Re-apply explicit hidden="0" AFTER outline groups, because
-        // apply_outline_groups_rows_only may override hidden=true for grouped rows
-        // that were actually visible in the original (e.g., partially expanded groups).
-        if let Some(sheet_rt) = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)) {
-            sheet_preservation::apply_visible_row_hints_for_export(
-                &mut sheet_writer,
-                sheet_data,
-                sheet_rt,
-            );
-        }
-        // ── Auto Filter ─────────────────────────────────────────────────
-        // Typed OOXML preservation: auto filter now reconstructs from the typed
-        // `SheetData.auto_filter` only. The former raw-XML sidecar
-        // fallback on `SheetRoundTripContext.auto_filter_xml` is gone — the
-        // domain type is lossless over CT_AutoFilter.
-        if let Some(ref af) = sheet_data.auto_filter {
-            let xml = crate::domain::auto_filter::write::write_auto_filter_xml(af);
-            sheet_writer.set_auto_filter_xml(xml);
-        }
-
-        // ── Sort State ──────────────────────────────────────────────────
-        // Typed OOXML preservation: worksheet-level sort state now reconstructs from
-        // the typed `SheetData.sort_state`. The former raw-XML sidecar on
-        // `SheetRoundTripContext.sort_state_xml` was silently dropping sort
-        // state on the Yrs-hydration path whenever the blob was absent.
-        if let Some(ref ss) = sheet_data.sort_state {
-            let xml = crate::domain::auto_filter::write::write_sort_state_xml(ss);
-            sheet_writer.set_sort_state_xml(xml);
-        }
-
-        // ── Sparklines / extLst ──────────────────────────────────────────
-        let sheet_rt_for_ext = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-        if !sheet_data.sparklines.is_empty() {
-            let xml = crate::domain::sparklines::write::sparklines_xml_from_domain(
-                &sheet_data.name,
-                &sheet_data.sparklines,
-            );
-            sheet_writer.set_ext_lst_xml(xml);
-        } else {
-            if let Some(sheet_rt) = sheet_rt_for_ext {
-                if let Some(ext_xml) =
-                    sheet_preservation::standalone_ext_lst_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_ext_lst_xml(ext_xml.clone());
-                } else if sheet_preservation::empty_ext_lst_for_export(sheet_data, sheet_rt) {
-                    sheet_writer.set_ext_lst_xml("<extLst/>".to_string());
-                }
-            }
-        }
-
-        // ── Comments ────────────────────────────────────────────────────
-        let comments_data = if !sheet_data.comments.is_empty() {
-            let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-            let imported_comment_identity = comments_have_imported_identity(sheet_data);
-            let original_authors = sheet_rt
-                .map(|rt| rt.comment_authors.as_slice())
-                .filter(|authors| imported_comment_identity && !authors.is_empty());
-            let root_ns_attrs = sheet_rt
-                .map(|rt| rt.comments_root_namespace_attrs.as_slice())
-                .filter(|attrs| imported_comment_identity && !attrs.is_empty());
-            let (comments_xml, generated_vml_xml) =
-                crate::domain::comments::write::comments_from_domain(
-                    sheet_num,
-                    &sheet_data.comments,
-                    original_authors,
-                    root_ns_attrs,
-                );
-            Some((comments_xml, generated_vml_xml))
-        } else {
-            None
-        };
-
-        // ── Threaded Comments ────────────────────────────────────────────
-        let threaded_comments =
-            crate::domain::comments::write::threaded_comments_xml_from_domain(&sheet_data.comments);
-
-        // ── Tables (per-sheet) ───────────────────────────────────────────
-        let mut table_xmls = Vec::new();
-        for table_spec in &sheet_data.tables {
-            global_table_idx += 1;
-            // Prefer the original table ID from the parsed file; fall back to
-            // sequential counter for tables created from scratch.
-            let table_id = if table_spec.id > 0 {
-                table_spec.id
-            } else {
-                global_table_idx
-            };
-            table_xmls.push(
-                crate::domain::tables::write::table_writer_from_domain(table_id, table_spec)
-                    .to_xml(),
-            );
-        }
-
-        // ── Charts (per-sheet) ──────────────────────────────────────────
-        // We zip chart_specs with chart_entries later, so only increment the
-        // global counter AFTER successful deserialization to keep them aligned.
-        let mut chart_entries_for_sheet: Vec<ChartEntry> = Vec::new();
-        let sheet_rt_for_charts = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-        for (source_idx, chart_spec) in sheet_data.charts.iter().enumerate() {
-            if chart_spec.is_chart_ex {
-                continue; // handled by ChartEx pipeline below
-            }
-            // Reconstruct from typed fields when present so modeled chart edits
-            // are not overridden by stale preserved ChartSpace XML.
-            let chart_xml = if should_reconstruct_chart_space(chart_spec) {
-                let chart_space =
-                    crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
-                serialize_chart_space(&chart_space)
-            } else if let Some(raw_xml) = &chart_spec.preserved_chart_xml {
-                raw_xml.as_bytes().to_vec()
-            } else {
-                // Legacy: read from definition blob
-                match &chart_spec.definition {
-                    Some(domain_types::ChartDefinition::Chart(cs)) => serialize_chart_space(cs),
-                    _ => continue, // not a standard chart
-                }
-            };
-            // Preserve original chart number from round-trip context when available.
-            // E.g., if original was "xl/charts/chart2.xml", extract 2 instead of using
-            // the sequential counter (which would produce chart1.xml).
-            let original_idx = chart_allows_auxiliary_replay(chart_spec)
-                .then(|| {
-                    chart_auxiliary::standard_chart_auxiliary_data(sheet_rt_for_charts, chart_spec)
-                        .and_then(chart_auxiliary::standard_chart_number)
-                })
-                .flatten();
-            let idx = if let Some(orig) = original_idx {
-                // Track the highest index we've used so sequential fallback
-                // doesn't collide with preserved original numbers.
-                if orig > global_chart_idx {
-                    global_chart_idx = orig;
-                }
-                orig
-            } else {
-                global_chart_idx += 1;
-                global_chart_idx
-            };
-            chart_entries_for_sheet.push(ChartEntry {
-                global_idx: idx,
-                source_idx,
-                xml: chart_xml,
-            });
-        }
-        let has_charts = !chart_entries_for_sheet.is_empty();
-        all_chart_entries.push(chart_entries_for_sheet);
-
-        // ── ChartEx (per-sheet) ─────────────────────────────────────────
-        let mut chart_ex_entries_for_sheet: Vec<ChartExEntry> = Vec::new();
-        for (source_idx, chart_spec) in sheet_data.charts.iter().enumerate() {
-            if !chart_spec.is_chart_ex {
-                continue;
-            }
-            // ChartDefinition directly wraps ChartExSpace — no deserialization needed.
-            let chart_ex_space: &ooxml_types::chart_ex::ChartExSpace = match &chart_spec.definition
-            {
-                Some(domain_types::ChartDefinition::ChartEx(cs)) => cs,
-                _ => continue, // not a chartEx
-            };
-            // Preserve original chartEx number from round-trip context when available.
-            let original_idx = chart_allows_auxiliary_replay(chart_spec)
-                .then(|| {
-                    chart_auxiliary::chart_ex_auxiliary_data(sheet_rt_for_charts, chart_spec)
-                        .and_then(chart_auxiliary::chart_ex_number)
-                })
-                .flatten();
-            let idx = if let Some(orig) = original_idx {
-                if orig > global_chart_ex_idx {
-                    global_chart_ex_idx = orig;
-                }
-                orig
-            } else {
-                global_chart_ex_idx += 1;
-                global_chart_ex_idx
-            };
-            let chart_ex_xml = serialize_chart_ex_space(chart_ex_space);
-            chart_ex_entries_for_sheet.push(ChartExEntry {
-                global_idx: idx,
-                source_idx,
-                xml: chart_ex_xml,
-            });
-        }
-        let has_chart_ex = !chart_ex_entries_for_sheet.is_empty();
-        all_chart_ex_entries.push(chart_ex_entries_for_sheet);
-
-        // Check for floating objects (images, shapes, etc.)
-        let has_floating_objects = !sheet_data.floating_objects.is_empty();
-
-        // Extract original comment/VML/drawing paths from round-trip context for ZIP assembly
-        let (original_comment_path, original_vml_path, hf_vml, original_drawing_path) =
-            round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .map(|sheet_rt| {
-                    // Identify the comment VML path by matching legacyDrawing r:id
-                    let comment_vml_path: Option<String> =
-                        if comments_have_imported_identity(sheet_data) {
-                            sheet_rt.legacy_drawing_r_id.as_ref().and_then(|rid| {
-                                sheet_rt
-                                    .sheet_opc_rels
-                                    .iter()
-                                    .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
-                                    .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
-                            })
-                        } else {
-                            None
-                        };
-                    // Parse imported header/footer image VML only while the
-                    // current modeled sheet still has header/footer images.
-                    // Otherwise stale raw VML would resurrect deleted images.
-                    let mut hf_vml_parsed: Option<crate::domain::print::hf_images::ParsedHfVml> =
-                        None;
-                    if !sheet_data.hf_images.is_empty() {
-                        for vml_part in &sheet_rt.raw_vml_drawings {
-                            if comment_vml_path.as_ref() == Some(&vml_part.path) {
-                                continue;
-                            }
-                            let rels_path = vml_part.rels.as_ref().map(|r| r.path.as_str());
-                            let rels_data = vml_part.rels.as_ref().map(|r| r.data.as_slice());
-                            if let Some(parsed) =
-                                crate::domain::print::hf_images::parse_hf_vml_context(
-                                    &vml_part.path,
-                                    &vml_part.data,
-                                    rels_path,
-                                    rels_data,
-                                )
-                            {
-                                hf_vml_parsed = Some(parsed);
-                                break; // Only one HF VML per sheet
-                            }
-                        }
-                    }
-                    (
-                        None,
-                        comment_vml_path,
-                        hf_vml_parsed,
-                        sheet_rt.original_drawing_path.clone(),
-                    )
-                })
-                .unwrap_or((None, None, None, None));
-
-        let has_printer_settings = sheet_data
-            .print_settings
-            .as_ref()
-            .and_then(|ps| ps.r_id.as_ref())
-            .is_some();
-
-        // ── Form Controls ──────────────────────────────────────────────
-        // Extract form controls from the unified floating_objects vec
-        let form_control_fobjs: Vec<&domain_types::domain::floating_object::FloatingObject> =
-            sheet_data
-                .floating_objects
-                .iter()
-                .filter(|fo| {
-                    matches!(
-                        &fo.data,
-                        domain_types::domain::floating_object::FloatingObjectData::FormControl(_)
-                    )
-                })
-                .collect();
-        let form_controls = convert_unified_form_controls(&form_control_fobjs);
-        let custom_properties = round_trip_ctx.and_then(|ctx| {
-            ctx.sheets.get(sheet_idx).and_then(|sheet_rt| {
-                worksheet_custom_properties::custom_properties_for_export(ctx, sheet_rt, sheet_idx)
-            })
-        });
-
-        sheet_writers.push(sheet_writer);
-        sheet_extras.push(SheetExtras {
-            comments: comments_data,
-            threaded_comments,
-            tables: table_xmls,
-            has_external_hyperlinks,
-            has_charts,
-            has_chart_ex,
-            has_floating_objects,
-            original_comment_path,
-            original_vml_path,
-            hf_vml,
-            original_drawing_path,
-            has_printer_settings,
-            form_controls,
-            custom_properties,
-        });
-    }
 
     // ── Build pivot table and cache data ──────────────────────────────
     let pivot_data = pivot_writer::build_pivot_data(output, round_trip_ctx);
@@ -2496,102 +1963,17 @@ pub fn write_xlsx_from_parse_output(
     }
 
     // ── 4. Build workbook.xml ───────────────────────────────────────────
-    let mut workbook_writer = WorkbookWriter::new();
-    for (idx, sheet_data) in output.sheets.iter().enumerate() {
-        let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
-        let r_id = package_graph
-            .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                super::REL_WORKSHEET,
-                &sheet_target,
-            )
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing workbook relationship for sheet {}",
-                    idx + 1
-                ))
-            })?
-            .to_string();
-        let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
-        workbook_writer.add_sheet_def(super::SheetDef::with_state(
-            &sheet_data.name,
-            sheet_id,
-            &r_id,
-            sheet_data.visibility,
-        ));
-    }
-
-    if !output.workbook_views.is_empty() {
-        let views: Vec<ooxml_types::workbook::BookView> = output
-            .workbook_views
-            .iter()
-            .cloned()
-            .map(ooxml_types::workbook::BookView::from)
-            .collect();
-        workbook_writer.set_views(views);
-    }
-
-    // Add defined names (named ranges)
-    for named_range in &output.named_ranges {
-        let mut def = DefinedNameDef::new(&named_range.name, &named_range.refers_to);
-        def.local_sheet_id = named_range.local_sheet_id;
-        def.hidden = named_range.hidden;
-        def.comment = named_range.comment.clone();
-        def.custom_menu = named_range.custom_menu.clone();
-        def.description = named_range.description.clone();
-        def.help = named_range.help.clone();
-        def.status_bar = named_range.status_bar.clone();
-        def.xlm = named_range.xlm;
-        def.function = named_range.function;
-        def.vb_procedure = named_range.vb_procedure;
-        def.publish_to_server = named_range.publish_to_server;
-        def.workbook_parameter = named_range.workbook_parameter;
-        def.xml_space_preserve = named_range.xml_space_preserve;
-        workbook_writer.add_defined_name_full(def);
-    }
-
-    // ── Workbook Protection ──────────────────────────────────────────
-    if let Some(ref prot) = output.protection {
-        workbook_writer.set_workbook_protection(prot.clone());
-    }
-
-    if let Some(ref file_version) = output.file_version {
-        workbook_writer.set_file_version(file_version.clone());
-    }
-    if let Some(ref file_sharing) = output.file_sharing {
-        workbook_writer.set_file_sharing(file_sharing.clone());
-    }
-    if let Some(ref workbook_properties) = output.workbook_properties {
-        workbook_writer.set_workbook_properties(workbook_properties.clone());
-    }
-
-    // ── Workbook Preserved Namespaces + Elements (round-trip) ─────
-    if let Some(ctx) = round_trip_ctx {
-        if !ctx.workbook_namespace_attrs.is_empty() {
-            let mut ns_map = crate::roundtrip::namespaces::NamespaceMap::new();
-            for (prefix, uri) in &ctx.workbook_namespace_attrs {
-                if prefix.is_empty() {
-                    ns_map.set_default(uri.as_str());
-                } else {
-                    ns_map.add_prefixed(prefix.as_str(), uri.as_str());
-                }
-            }
-            workbook_writer.set_preserved_namespaces(ns_map);
-        }
-        if !ctx.workbook_preserved_elements.is_empty() {
-            let preserved =
-                crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(
-                    &ctx.workbook_preserved_elements,
-                );
-            workbook_writer.set_preserved_elements(preserved);
-        }
-    }
-
-    // ── Iterative Calc Settings ──────────────────────────────────────
-    {
-        let calc = crate::domain::workbook::write::calc_settings_from_domain(&output.calculation);
-        workbook_writer.set_calc_settings(calc);
-    }
+    let workbook_parts::WorkbookXmlParts {
+        workbook_xml,
+        workbook_rels_xml,
+    } = workbook_parts::build_workbook_xml(
+        output,
+        round_trip_ctx,
+        &package_graph,
+        &pivot_data,
+        &external_link_exports,
+        &mut sheet_rels_data,
+    )?;
 
     // ── 6. Generate XML parts ───────────────────────────────────────────
     let styles_xml = styles_writer.to_xml();
@@ -2628,83 +2010,11 @@ pub fn write_xlsx_from_parse_output(
     // Chart and ChartEx content types are registered through the package graph.
     // Generated media content types are registered through the package graph.
     // Chart auxiliary content types are registered through the package graph.
-    let has_external_links = !external_link_exports.is_empty();
     let content_types_xml = content_types.to_xml();
 
     let root_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Root);
     let root_rels_xml = root_rels.to_xml();
-
-    let workbook_rels = package_graph
-        .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
-    // Pivot cache workbook rels + pivotCaches XML for workbook.xml.
-    // Clean imported cache entries come from the typed package sidecar and keep
-    // their original relationship IDs/targets; generated entries are appended.
-    let mut pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
-    for entry in &pivot_data.preserved_workbook_cache_entries {
-        let r_id = package_graph
-            .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                REL_PIVOT_CACHE,
-                &entry.relationship_target,
-            )
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing workbook relationship for preserved pivot cache {}",
-                    entry.relationship_target
-                ))
-            })?
-            .to_string();
-        pivot_cache_xml_entries.push((entry.cache_id, r_id));
-    }
-    for entry in &pivot_data.pivot_cache_entries {
-        let target = format!("pivotCache/pivotCacheDefinition{}.xml", entry.global_idx);
-        let r_id = package_graph
-            .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                REL_PIVOT_CACHE,
-                &target,
-            )
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing workbook relationship for generated pivot cache {target}"
-                ))
-            })?
-            .to_string();
-        pivot_cache_xml_entries.push((entry.cache_id, r_id));
-    }
-    if !pivot_cache_xml_entries.is_empty() {
-        let pivot_caches_xml = pivot_writer::build_pivot_caches_xml(&pivot_cache_xml_entries);
-        workbook_writer.set_pivot_caches_xml(pivot_caches_xml);
-    }
-
-    if has_external_links {
-        let external_reference_r_ids: Vec<String> = external_link_exports
-            .iter()
-            .filter_map(|(_, part_name)| {
-                package_graph
-                    .relationship_id(
-                        &crate::write::package_graph::PackageOwner::Workbook,
-                        super::REL_EXTERNAL_LINK,
-                        &external_links::workbook_target(part_name),
-                    )
-                    .map(str::to_string)
-            })
-            .collect();
-        workbook_writer.set_external_reference_r_ids(external_reference_r_ids);
-    }
-
-    for sheet_idx in 0..output.sheets.len() {
-        let owner = crate::write::package_graph::PackageOwner::Worksheet {
-            index: sheet_idx,
-            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
-        };
-        let rels = package_graph.relationship_manager_for_owner(&owner);
-        sheet_rels_data[sheet_idx] = (!rels.is_empty()).then_some(rels);
-    }
-
-    let workbook_rels_xml = workbook_rels.to_xml();
-    let workbook_xml = workbook_writer.to_xml();
 
     // ── 7. Assemble ZIP ─────────────────────────────────────────────────
     let mut zip = ZipWriter::with_compression(CompressionMethod::Deflate(1));
@@ -3095,13 +2405,10 @@ pub fn write_xlsx_from_parse_output(
     Ok(xlsx_bytes)
 }
 
-use sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use styles::{
     append_palette_to_lossless_styles, build_styles, build_styles_from_stylesheet,
     output_references_style_ids,
 };
-
-use crate::infra::opc::opc_target_to_zip_path;
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');
@@ -3116,132 +2423,6 @@ fn extract_vml_drawing_number(path: &str) -> Option<usize> {
         .strip_suffix(".vml")?
         .parse()
         .ok()
-}
-
-/// Convert domain-types `FormControl` items into parser-internal `FormControl`
-/// items for the controls writer.
-///
-/// The domain FormControl stores control type, anchor, and a JSON properties blob.
-/// This reverses the conversion done in `to_parse_output::features::convert_form_controls`.
-/// Convert unified `FloatingObject` items with `FormControl` data into writer `FormControl`.
-fn convert_unified_form_controls(
-    controls: &[&domain_types::domain::floating_object::FloatingObject],
-) -> Vec<crate::domain::controls::read::FormControl> {
-    use crate::domain::controls::read::{
-        AnchorSource, CheckState, ControlAnchor, FormControl, FormControlProperties,
-        FormControlType, VmlShapeProps,
-    };
-    use std::collections::HashMap;
-
-    controls
-        .iter()
-        .filter_map(|fo| {
-            let fc_data = match &fo.data {
-                domain_types::domain::floating_object::FloatingObjectData::FormControl(d) => d,
-                _ => return None,
-            };
-            // Filter out "Note" controls
-            if fc_data.control_type == "Note" {
-                return None;
-            }
-
-            let object_type = FormControlType::from_str(&fc_data.control_type);
-            let props = fc_data.ooxml.as_ref();
-            let default_props =
-                domain_types::domain::floating_object::FormControlOoxmlProps::default();
-            let p = props.unwrap_or(&default_props);
-            let anchor_ref = &fo.common.anchor;
-
-            let anchor_source = match p.anchor_source.as_str() {
-                "Modern" => AnchorSource::Modern,
-                _ => AnchorSource::Vml,
-            };
-
-            let anchor = ControlAnchor {
-                from_col: anchor_ref.anchor_col,
-                from_col_offset: anchor_ref.anchor_col_offset,
-                from_row: anchor_ref.anchor_row,
-                from_row_offset: anchor_ref.anchor_row_offset,
-                to_col: anchor_ref.end_col.unwrap_or(anchor_ref.anchor_col + 2),
-                to_col_offset: anchor_ref.end_col_offset.unwrap_or(0),
-                to_row: anchor_ref.end_row.unwrap_or(anchor_ref.anchor_row + 2),
-                to_row_offset: anchor_ref.end_row_offset.unwrap_or(0),
-                anchor_source,
-            };
-
-            let checked = p.checked.as_deref().map(CheckState::from_str);
-
-            let vml_extras: HashMap<String, String> = p.vml_extras.clone();
-
-            let items: Vec<String> = p.items.clone();
-
-            let name_opt = if fo.common.name.is_empty() {
-                None
-            } else {
-                Some(fo.common.name.clone())
-            };
-
-            let properties = FormControlProperties {
-                name: name_opt,
-                alt_text: p.alt_text.clone(),
-                linked_cell: fc_data.cell_link.clone(),
-                input_range: fc_data.input_range.clone(),
-                fmla_group: p.fmla_group.clone(),
-                fmla_txbx: p.fmla_txbx.clone(),
-                checked,
-                val: p.val,
-                sel: p.sel,
-                min_value: p.min,
-                max_value: p.max,
-                increment: p.inc,
-                page_increment: p.page,
-                drop_lines: p.drop_lines,
-                sel_type: p.sel_type.clone(),
-                drop_style: p.drop_style.clone(),
-                macro_name: p.macro_name.clone(),
-                colored: p.colored,
-                dx: p.dx,
-                horiz: p.horiz,
-                first_button: p.first_button,
-                no_three_d: p.no_three_d,
-                no_three_d2: p.no_three_d2,
-                lock_text: p.lock_text,
-                multi_sel: p.multi_sel.clone(),
-                text_h_align: p.text_h_align.clone(),
-                text_v_align: p.text_v_align.clone(),
-                edit_val: p.edit_val.clone(),
-                multi_line: p.multi_line,
-                vertical_bar: p.vertical_bar,
-                password_edit: p.password_edit,
-                just_last_x: p.just_last_x,
-                width_min: p.width_min,
-                items,
-                vml_extras,
-            };
-
-            let shape_id = if p.shape_id != 0 {
-                Some(p.shape_id)
-            } else {
-                None
-            };
-
-            let control_pr_attrs: HashMap<String, String> = p.control_pr_attrs.clone();
-
-            // Read the typed VmlShapeProps directly (typed OOXML preservation).
-            let vml_shape: VmlShapeProps = p.vml_shape.clone().unwrap_or_default();
-
-            Some(FormControl {
-                object_type,
-                anchor,
-                properties,
-                shape_id,
-                control_pr_attrs,
-                move_with_cells: p.move_with_cells,
-                size_with_cells: p.size_with_cells,
-                vml_shape,
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]

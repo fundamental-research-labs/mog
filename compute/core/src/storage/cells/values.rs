@@ -30,7 +30,7 @@
 use std::sync::Arc;
 
 use compute_document::undo::ORIGIN_USER_EDIT;
-use yrs::{Any, Array, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
+use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 use crate::mirror::{CellMirror, SheetMirror};
 use crate::scheduler::input::CellWrite;
@@ -125,11 +125,10 @@ pub(crate) fn remove_cell_position_from_yrs(
 mod parsing;
 
 pub(crate) use parsing::{
-    InputParseContext, ParsedInputValue, ParsedValue, parse_input_value,
-    parse_input_value_with_context,
+    InputParseContext, ParsedValue, parse_input_value, parse_input_value_with_context,
 };
 #[cfg(test)]
-pub(super) use parsing::{parse_date_string, parse_formatted_number};
+use parsing::{is_plain_number, parse_date_string, parse_formatted_number};
 
 // ---------------------------------------------------------------------------
 // CellData struct

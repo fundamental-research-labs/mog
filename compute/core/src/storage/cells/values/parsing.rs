@@ -254,7 +254,7 @@ fn parse_simple_fraction(s: &str) -> Option<f64> {
 }
 
 /// Check if a string matches the plain number pattern: /^-?\d*\.?\d+$/
-fn is_plain_number(s: &str) -> bool {
+pub(super) fn is_plain_number(s: &str) -> bool {
     let bytes = s.as_bytes();
     if bytes.is_empty() {
         return false;

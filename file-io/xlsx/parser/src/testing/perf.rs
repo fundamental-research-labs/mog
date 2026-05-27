@@ -250,11 +250,13 @@ fn run_perf_fixture(
 
     let rss_after = current_rss_mb();
     let peak_rss_mb = rss_after.or(rss_before).unwrap_or(0.0);
+    let relationship_count = package_relationship_count(&exported);
     let facts = workbook_facts(&output, &parsed, &exported);
     let classes = merge_classes(classify_workbook(&facts), &fixture.declared_classes);
     let mut metrics = perf_metrics(
         &timings,
         &facts,
+        relationship_count,
         input_size_bytes,
         exported.len(),
         import_ms,
@@ -715,6 +717,42 @@ fn package_facts(exported: &[u8], has_calc_pr: bool) -> PackageFacts {
     }
 }
 
+fn package_relationship_count(exported: &[u8]) -> u32 {
+    let Ok(archive) = XlsxArchive::new(exported) else {
+        return 0;
+    };
+    archive
+        .entries()
+        .iter()
+        .filter(|entry| entry.name.ends_with(".rels"))
+        .filter_map(|entry| archive.read_file(&entry.name).ok())
+        .map(|rels_xml| count_xml_start_tags(&rels_xml, b"Relationship"))
+        .sum()
+}
+
+fn count_xml_start_tags(xml: &[u8], local_name: &[u8]) -> u32 {
+    let mut count = 0;
+    let mut offset = 0;
+    while let Some(pos) = xml[offset..].iter().position(|byte| *byte == b'<') {
+        let start = offset + pos + 1;
+        if start < xml.len()
+            && xml[start] != b'/'
+            && xml[start] != b'?'
+            && xml[start] != b'!'
+            && xml[start..].starts_with(local_name)
+        {
+            let after_name = start + local_name.len();
+            if after_name >= xml.len()
+                || matches!(xml[after_name], b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>')
+            {
+                count += 1;
+            }
+        }
+        offset = start;
+    }
+    count
+}
+
 fn classify_workbook(facts: &WorkbookFacts) -> Vec<String> {
     let mut classes = BTreeSet::new();
     let sheet_count = facts.workbook.sheet_count;
@@ -807,6 +845,7 @@ fn merge_classes(detected: Vec<String>, declared: &[String]) -> Vec<String> {
 fn perf_metrics(
     timings: &ParseTimings,
     facts: &WorkbookFacts,
+    relationship_count: u32,
     input_size_bytes: usize,
     output_size_bytes: usize,
     import_ms: f64,
@@ -875,8 +914,12 @@ fn perf_metrics(
         MetricValue::Integer(facts.package.part_count.unwrap_or(0) as i64),
     );
     metrics.insert(
-        "relationship_count".to_string(),
+        "relationship_part_count".to_string(),
         MetricValue::Integer(facts.package.relationship_part_count.unwrap_or(0) as i64),
+    );
+    metrics.insert(
+        "relationship_count".to_string(),
+        MetricValue::Integer(relationship_count as i64),
     );
     metrics.insert(
         "sheet_count".to_string(),

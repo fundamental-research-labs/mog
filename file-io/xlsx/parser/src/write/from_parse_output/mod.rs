@@ -1162,13 +1162,6 @@ pub fn write_xlsx_from_parse_output(
                     relationship_id_hint,
                 });
             }
-
-            if let Some(raw_controls_xml) = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .and_then(|srt| srt.worksheet_controls_xml.as_ref())
-            {
-                sheet_writers[sheet_idx].set_controls_xml(raw_controls_xml.clone());
-            }
         }
 
         // Threaded comment rels (must come after legacy comment rels)
@@ -2211,13 +2204,6 @@ pub fn write_xlsx_from_parse_output(
 
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
         if extras.form_controls.is_empty() {
-            continue;
-        }
-        if round_trip_ctx
-            .and_then(|ctx| ctx.sheets.get(sheet_idx))
-            .and_then(|srt| srt.worksheet_controls_xml.as_ref())
-            .is_some()
-        {
             continue;
         }
         let owner = crate::write::package_graph::PackageOwner::Worksheet {

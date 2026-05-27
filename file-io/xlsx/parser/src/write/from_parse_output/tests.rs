@@ -1282,6 +1282,10 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
                         .to_vec(),
                 }),
             }],
+            worksheet_controls_xml: Some(
+                r#"<mc:AlternateContent><controls><control shapeId="1025" r:id="rId99" name="Raw Control"/></controls><rawControlsSentinel/></mc:AlternateContent>"#
+                    .to_string(),
+            ),
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -1323,6 +1327,8 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     assert!(!sheet_rels.contains("ctrlProp9.xml"));
     assert!(!sheet_rels.contains("vmlDrawing9.vml"));
     assert!(sheet_xml.contains(&format!(r#"r:id="{}""#, ctrl_prop_rel.id)));
+    assert!(!sheet_xml.contains("rawControlsSentinel"));
+    assert!(!sheet_xml.contains("r:id=\"rId99\""));
     assert!(sheet_xml.contains(&format!(r#"<legacyDrawing r:id="{}"/>"#, vml_rel.id)));
     assert!(content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp1.xml\""));
     assert!(!content_types.contains("PartName=\"/xl/ctrlProps/ctrlProp9.xml\""));

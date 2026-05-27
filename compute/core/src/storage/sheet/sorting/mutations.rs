@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId};
 use compute_document::identity::GridIndex;
-use domain_types::domain::filter::SortOrder;
 use domain_types::CellFormat;
+use domain_types::domain::filter::SortOrder;
 use yrs::{Doc, MapRef};
 
 use super::planner::compute_sorted_row_order;

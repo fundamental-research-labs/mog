@@ -1,5 +1,5 @@
-use domain_types::domain::filter::SortOrder;
 use domain_types::CellFormat;
+use domain_types::domain::filter::SortOrder;
 use value_types::{CellValue, FiniteF64};
 
 use super::mutations::{sort_by_column, sort_range};

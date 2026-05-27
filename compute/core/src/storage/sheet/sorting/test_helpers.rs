@@ -8,7 +8,7 @@ use value_types::CellValue;
 use yrs::{Any, Map, MapPrelim, Origin, Transact};
 
 use crate::storage::infra::grid_helpers::get_cells_map;
-use crate::storage::{YrsStorage, KEY_VALUE};
+use crate::storage::{KEY_VALUE, YrsStorage};
 
 // -------------------------------------------------------------------
 // Helpers

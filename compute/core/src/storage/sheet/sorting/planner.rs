@@ -5,8 +5,8 @@ use cell_types::{CellId, SheetId};
 use compute_document::cell_serde::yrs_any_to_cell_value;
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use domain_types::domain::filter::SortOrder;
 use domain_types::CellFormat;
+use domain_types::domain::filter::SortOrder;
 use value_types::CellValue;
 use yrs::{Doc, Map, MapRef, Out, Transact};
 

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
-use domain_types::domain::filter::{ColorPosition, SortOrder};
 use domain_types::CellFormat;
+use domain_types::domain::filter::{ColorPosition, SortOrder};
 use value_types::CellValue;
 
 use super::types::SortConfig;

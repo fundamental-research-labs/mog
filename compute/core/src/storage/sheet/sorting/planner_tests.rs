@@ -1,5 +1,5 @@
-use domain_types::domain::filter::{ColorPosition, SortOrder};
 use domain_types::CellFormat;
+use domain_types::domain::filter::{ColorPosition, SortOrder};
 use value_types::{CellValue, FiniteF64};
 
 use super::planner::compute_sorted_row_order;

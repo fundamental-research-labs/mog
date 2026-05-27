@@ -199,6 +199,8 @@ js-sys = "0.3"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+syn = { version = "2", features = ["full"] }
 
 [[bench]]
 name = "parser_bench"

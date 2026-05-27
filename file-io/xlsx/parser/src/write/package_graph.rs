@@ -1620,6 +1620,8 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
         Some(CT_THREADED_COMMENTS)
+    } else if path.starts_with("xl/customProperty/") && path.ends_with(".xml") {
+        Some(CT_WORKSHEET_CUSTOM_PROPERTY)
     } else if path.starts_with("xl/drawings/drawing") && path.ends_with(".xml") {
         Some(CT_DRAWING)
     } else if path.starts_with("xl/charts/chartEx") && path.ends_with(".xml") {
@@ -1652,6 +1654,8 @@ fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
         Some(REL_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
         Some(REL_THREADED_COMMENT)
+    } else if path.starts_with("xl/customProperty/") && path.ends_with(".xml") {
+        Some(REL_WORKSHEET_CUSTOM_PROPERTY)
     } else if path.starts_with("xl/drawings/drawing") && path.ends_with(".xml") {
         Some(REL_DRAWING)
     } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {

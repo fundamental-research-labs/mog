@@ -348,11 +348,11 @@ pub(super) fn write_zip_package(
                     && let Some(aux) =
                         chart_auxiliary::standard_chart_auxiliary_data(sheet_rt, chart_spec)
                 {
+                    let auxiliary_paths =
+                        chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
                     // Write auxiliary files (style, colors XML) preserving their original paths.
                     for aux_file in &aux.auxiliary_files {
-                        if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                            &aux_file.path,
-                        ) {
+                        if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                             continue;
                         }
                         zip.add_file(&aux_file.path, aux_file.data.clone());
@@ -385,10 +385,10 @@ pub(super) fn write_zip_package(
                     && let Some(aux) =
                         chart_auxiliary::chart_ex_auxiliary_data(sheet_rt, chart_spec)
                 {
+                    let auxiliary_paths =
+                        chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
                     for aux_file in &aux.auxiliary_files {
-                        if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                            &aux_file.path,
-                        ) {
+                        if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                             continue;
                         }
                         zip.add_file(&aux_file.path, aux_file.data.clone());

@@ -182,6 +182,46 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
 }
 
 #[test]
+fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+    let mut ctx = chart_auxiliary_roundtrip_context();
+    ctx.sheets[0].chart_auxiliary_data[0].chart_rels = Some(
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://example.com/notChartStyle" Target="style9.xml"/></Relationships>"#
+            .as_bytes()
+            .to_vec(),
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/charts/chart9.xml"));
+    assert!(!archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
+    assert!(!content_types.contains("/xl/charts/style9.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_prior_chart() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;

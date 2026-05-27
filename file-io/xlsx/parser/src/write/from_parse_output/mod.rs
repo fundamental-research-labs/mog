@@ -1281,20 +1281,10 @@ pub fn write_xlsx_from_parse_output(
                     chart_spec,
                 )
             {
-                let auxiliary_paths: std::collections::BTreeSet<_> = aux
-                    .auxiliary_files
-                    .iter()
-                    .filter(|aux_file| {
-                        crate::write::package_graph::is_supported_chart_auxiliary_part(
-                            &aux_file.path,
-                        )
-                    })
-                    .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
-                    .collect();
+                let auxiliary_paths =
+                    chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
                 for aux_file in &aux.auxiliary_files {
-                    if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                        &aux_file.path,
-                    ) {
+                    if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                         continue;
                     }
                     if registered_chart_auxiliary_parts
@@ -1308,17 +1298,19 @@ pub fn write_xlsx_from_parse_output(
                 }
                 if let Some(rels_data) = &aux.chart_rels {
                     for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
-                        if rel.target_mode.as_deref() == Some("External") {
-                            continue;
-                        }
-                        let Ok(target_path) = crate::infra::opc::resolve_relationship_target(
+                        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
                             Some(&chart_path),
                             &rel.target,
-                        ) else {
+                        )
+                        .ok()
+                        .map(|target| target.trim_start_matches('/').to_string()) else {
                             continue;
                         };
-                        let target_path = target_path.trim_start_matches('/').to_string();
-                        if auxiliary_paths.contains(&target_path) {
+                        if chart_auxiliary::is_supported_auxiliary_relationship(
+                            &rel.rel_type,
+                            &target_path,
+                        ) && auxiliary_paths.contains(&target_path)
+                        {
                             chart_auxiliary_relationships.push(
                                 ChartAuxiliaryRelationshipGraphEntry {
                                     chart_path: chart_path.clone(),
@@ -1347,20 +1339,10 @@ pub fn write_xlsx_from_parse_output(
                     chart_spec,
                 )
             {
-                let auxiliary_paths: std::collections::BTreeSet<_> = aux
-                    .auxiliary_files
-                    .iter()
-                    .filter(|aux_file| {
-                        crate::write::package_graph::is_supported_chart_auxiliary_part(
-                            &aux_file.path,
-                        )
-                    })
-                    .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
-                    .collect();
+                let auxiliary_paths =
+                    chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
                 for aux_file in &aux.auxiliary_files {
-                    if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                        &aux_file.path,
-                    ) {
+                    if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                         continue;
                     }
                     if registered_chart_auxiliary_parts
@@ -1374,17 +1356,19 @@ pub fn write_xlsx_from_parse_output(
                 }
                 if let Some(rels_data) = &aux.chart_rels {
                     for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
-                        if rel.target_mode.as_deref() == Some("External") {
-                            continue;
-                        }
-                        let Ok(target_path) = crate::infra::opc::resolve_relationship_target(
+                        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
                             Some(&chart_path),
                             &rel.target,
-                        ) else {
+                        )
+                        .ok()
+                        .map(|target| target.trim_start_matches('/').to_string()) else {
                             continue;
                         };
-                        let target_path = target_path.trim_start_matches('/').to_string();
-                        if auxiliary_paths.contains(&target_path) {
+                        if chart_auxiliary::is_supported_auxiliary_relationship(
+                            &rel.rel_type,
+                            &target_path,
+                        ) && auxiliary_paths.contains(&target_path)
+                        {
                             chart_auxiliary_relationships.push(
                                 ChartAuxiliaryRelationshipGraphEntry {
                                     chart_path: chart_path.clone(),

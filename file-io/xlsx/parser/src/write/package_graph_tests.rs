@@ -283,6 +283,35 @@ fn registers_media_default_content_types_when_emitted() {
 }
 
 #[test]
+fn worksheet_custom_property_parts_require_worksheet_relationship() {
+    let mut graph = PackageGraphBuilder::new();
+    graph
+        .register_part(modeled_part(
+            "xl/customProperty/item1.xml",
+            CT_WORKSHEET_CUSTOM_PROPERTY,
+        ))
+        .unwrap();
+
+    let resolved = graph.resolve().unwrap();
+    let err = resolved.validate_for_export().unwrap_err();
+
+    match err {
+        WriteError::PackageIntegrityIssues(issues) => {
+            assert!(issues.iter().any(|issue| matches!(
+                issue,
+                PackageIntegrityIssue::MissingRequiredRelationship {
+                    relationship_type,
+                    target_path,
+                    ..
+                } if relationship_type == REL_WORKSHEET_CUSTOM_PROPERTY
+                    && target_path == "xl/customProperty/item1.xml"
+            )));
+        }
+        other => panic!("expected package integrity issues, got {other:?}"),
+    }
+}
+
+#[test]
 fn rejects_dangling_internal_relationship_targets() {
     let mut graph = PackageGraphBuilder::new();
     graph.add_relationship(PackageRelationship {

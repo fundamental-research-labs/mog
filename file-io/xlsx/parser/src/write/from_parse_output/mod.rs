@@ -199,8 +199,6 @@ pub fn write_xlsx_from_parse_output(
 
     // ── Build sheet rels and assign r:ids ────────────────────────────────
     // We need to build rels for each sheet and update hyperlink/table r:ids.
-    let mut sheet_rels_data: Vec<Option<RelationshipManager>> =
-        Vec::with_capacity(output.sheets.len());
     let mut sheet_hyperlink_outputs: Vec<Option<Vec<crate::output::results::HyperlinkOutput>>> =
         vec![None; output.sheets.len()];
     let mut worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry> = Vec::new();
@@ -294,7 +292,6 @@ pub fn write_xlsx_from_parse_output(
             && !has_custom_properties
             && !has_pivot_tables
         {
-            sheet_rels_data.push(None);
             drawing_rels_data.push(None);
             drawing_xml_data.push(None);
             continue;
@@ -1088,12 +1085,6 @@ pub fn write_xlsx_from_parse_output(
             }) {
                 worksheet_printer_settings_relationships.push(entry);
             }
-        }
-
-        if rels.is_empty() {
-            sheet_rels_data.push(None);
-        } else {
-            sheet_rels_data.push(Some(rels));
         }
     }
 

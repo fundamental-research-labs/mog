@@ -1117,6 +1117,36 @@ fn legacy_untyped_binary_blob_is_not_emitted_by_blanket_passthrough() {
 }
 
 #[test]
+fn raw_metadata_xml_is_dropped_when_current_value_metadata_refs_are_unsupported() {
+    let mut metadata_cell = make_cell(0, 0, DomainValue::Text(Arc::from("rich value")));
+    metadata_cell.vm = Some(1);
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![metadata_cell],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        raw_metadata_xml: Some(
+            br#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes><cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/metadata.xml"));
+    assert!(!workbook_rels.contains(crate::write::relationships::REL_METADATA));
+    assert!(!content_types.contains("/xl/metadata.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn test_api_created_data_range_chart_exports_valid_chart_xml() {
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),

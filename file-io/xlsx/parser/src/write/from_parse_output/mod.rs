@@ -11,6 +11,7 @@
 #![allow(clippy::string_slice)]
 
 mod doc_props;
+mod metadata;
 mod package_authority;
 mod pivot_package;
 mod sheet_builder;
@@ -240,14 +241,6 @@ fn comments_have_imported_identity(sheet_data: &domain_types::SheetData) -> bool
     sheet_data.comments.iter().any(|comment| {
         comment.shape_id.is_some() || comment.xr_uid.as_deref().is_some_and(|uid| !uid.is_empty())
     })
-}
-
-fn output_references_metadata(output: &ParseOutput) -> bool {
-    output
-        .sheets
-        .iter()
-        .flat_map(|sheet| sheet.cells.iter())
-        .any(|cell| cell.cm || cell.vm.is_some())
 }
 
 /// Write an XLSX file from a `ParseOutput`.
@@ -1704,11 +1697,7 @@ pub fn write_xlsx_from_parse_output(
     let core_props_xml = doc_props_xml.core;
     let app_props_xml = doc_props_xml.app;
     let custom_props_xml = doc_props_xml.custom;
-    let metadata_xml: Option<Vec<u8>> = if output_references_metadata(output) {
-        round_trip_ctx.and_then(|ctx| ctx.raw_metadata_xml.clone())
-    } else {
-        None
-    };
+    let metadata_xml = metadata::metadata_xml_for_export(output, round_trip_ctx);
     let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
         Some(crate::domain::comments::write::persons_xml_from_domain(
             &output.persons,

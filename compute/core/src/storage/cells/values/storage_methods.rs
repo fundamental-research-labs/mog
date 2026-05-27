@@ -5,7 +5,9 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::cell_serde::{
     build_cell_prelim, read_identity_formula_from_yrs, write_identity_formula_to_yrs,
+    yrs_any_to_cell_value,
 };
+use compute_document::undo::ORIGIN_USER_EDIT;
 use formula_types::IdentityFormula;
 
 use crate::mirror::CellMirror;

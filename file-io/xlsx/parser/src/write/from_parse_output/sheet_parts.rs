@@ -5,8 +5,8 @@ use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::{
-    chart_allows_auxiliary_replay, comments_have_imported_identity, sheet_preservation,
-    should_reconstruct_chart_space, worksheet_custom_properties,
+    chart_allows_auxiliary_replay, comments_have_imported_identity, has_clean_opaque_part,
+    sheet_preservation, should_reconstruct_chart_space, worksheet_custom_properties,
 };
 use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
@@ -460,7 +460,8 @@ pub(super) fn build_sheet_parts(
                                     rels_data,
                                 )
                             {
-                                hf_vml_parsed = Some(parsed);
+                                hf_vml_parsed =
+                                    filter_hf_vml_to_clean_image_parts(parsed, round_trip_ctx);
                                 break; // Only one HF VML per sheet
                             }
                         }
@@ -525,4 +526,32 @@ pub(super) fn build_sheet_parts(
         all_chart_entries,
         all_chart_ex_entries,
     }
+}
+
+fn filter_hf_vml_to_clean_image_parts(
+    mut hf_vml: crate::domain::print::hf_images::ParsedHfVml,
+    round_trip_ctx: Option<&RoundTripContext>,
+) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
+    let allowed_rel_ids: std::collections::HashSet<String> = hf_vml
+        .image_targets
+        .iter()
+        .filter_map(|(rel_id, target)| {
+            let target_path =
+                crate::infra::opc::resolve_relationship_target(Some(&hf_vml.vml_path), target)
+                    .ok()?;
+            has_clean_opaque_part(round_trip_ctx, &target_path).then(|| rel_id.clone())
+        })
+        .collect();
+
+    hf_vml
+        .images
+        .retain(|image| allowed_rel_ids.contains(&image.image_rel_id));
+    if hf_vml.images.is_empty() {
+        return None;
+    }
+
+    hf_vml
+        .image_targets
+        .retain(|(rel_id, _)| allowed_rel_ids.contains(rel_id));
+    Some(hf_vml)
 }

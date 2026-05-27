@@ -117,7 +117,7 @@ fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
                 .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some()))
 }
 
-fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {
+pub(super) fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {
     let Some(ctx) = round_trip_ctx else {
         return false;
     };

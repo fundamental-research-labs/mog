@@ -1099,13 +1099,11 @@ pub fn write_xlsx_from_parse_output(
         // Printer settings relationship.
         if has_printer_settings {
             if let Some(entry) = sheet_data.print_settings.as_ref().and_then(|ps| {
-                printer_settings::add_relationship_for_export(
+                printer_settings::relationship_for_export(
                     sheet_idx,
                     sheet_num,
                     ps,
                     original_sheet_rels,
-                    round_trip_ctx,
-                    &mut rels,
                 )
             }) {
                 worksheet_printer_settings_relationships.push(entry);
@@ -1414,12 +1412,14 @@ pub fn write_xlsx_from_parse_output(
         }
     }
     for entry in &worksheet_printer_settings_relationships {
-        crate::write::package_graph::register_worksheet_printer_settings(
-            &mut package_graph_builder,
-            entry.sheet_idx,
-            &entry.path,
-            &entry.relationship_id_hint,
-        );
+        if package_graph_builder.contains_part(&entry.path) {
+            crate::write::package_graph::register_worksheet_printer_settings(
+                &mut package_graph_builder,
+                entry.sheet_idx,
+                &entry.path,
+                &entry.relationship_id_hint,
+            );
+        }
     }
     for entry in &worksheet_comments_relationships {
         crate::write::package_graph::register_worksheet_comments(
@@ -1648,14 +1648,14 @@ pub fn write_xlsx_from_parse_output(
         };
         let r_id = package_graph
             .relationship_id(&owner, REL_PRINTER_SETTINGS, &entry.target)
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing worksheet printer settings relationship for sheet {} target {}",
-                    entry.sheet_idx + 1,
-                    entry.target
-                ))
-            })?
-            .to_string();
+            .map(str::to_string);
+        let Some(r_id) = r_id else {
+            continue;
+        };
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        if rels.find_by_target(&entry.target).is_none() {
+            rels.add_with_id(&r_id, REL_PRINTER_SETTINGS, &entry.target);
+        }
         sheet_writers[entry.sheet_idx]
             .ensure_print_writer()
             .set_printer_settings_r_id(Some(r_id));

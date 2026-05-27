@@ -208,17 +208,7 @@ impl ResolvedPackageGraph {
                 target_mode: rel.target_mode.clone(),
             })
             .collect();
-        RelationshipManager::from_original(
-            &relationships
-                .iter()
-                .map(|rel| ooxml_types::shared::OpcRelationship {
-                    id: rel.id.clone(),
-                    rel_type: rel.rel_type.clone(),
-                    target: rel.target.clone(),
-                    target_mode: rel.target_mode.clone(),
-                })
-                .collect::<Vec<_>>(),
-        )
+        RelationshipManager::from_relationships(relationships)
     }
 
     pub fn relationship_id(
@@ -292,7 +282,7 @@ impl ResolvedPackageGraph {
                     .relationships
                     .iter()
                     .filter(|rel| rel.owner_rels_path == rels_path)
-                    .map(|rel| ooxml_types::shared::OpcRelationship {
+                    .map(|rel| Relationship {
                         id: rel.id.clone(),
                         rel_type: rel.relationship_type.clone(),
                         target: rel.target.clone(),
@@ -301,7 +291,7 @@ impl ResolvedPackageGraph {
                     .collect();
                 (
                     rels_path,
-                    RelationshipManager::from_original(&relationships).to_xml(),
+                    RelationshipManager::from_relationships(relationships).to_xml(),
                 )
             })
             .collect()

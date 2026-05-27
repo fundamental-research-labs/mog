@@ -366,36 +366,36 @@ impl RelationshipManager {
         self.add(rel_type, target)
     }
 
+    /// Create a RelationshipManager from resolved relationship records.
+    pub fn from_relationships(relationships: Vec<Relationship>) -> Self {
+        let next_id = relationships
+            .iter()
+            .filter_map(|r| r.id.strip_prefix("rId")?.parse::<u32>().ok())
+            .max()
+            .map_or(1, |max_id| max_id + 1);
+
+        Self {
+            relationships,
+            next_id,
+        }
+    }
+
     /// Create a RelationshipManager from original OPC relationships.
     ///
     /// This replays stored relationships with their original IDs, types, targets,
     /// and order — used during round-trip writing to preserve fidelity.
     pub fn from_original(rels: &[ooxml_types::shared::OpcRelationship]) -> Self {
-        let mut max_id: u32 = 0;
         let relationships: Vec<Relationship> = rels
             .iter()
-            .map(|r| {
-                // Track highest numeric ID for next_id
-                if let Some(num_str) = r.id.strip_prefix("rId") {
-                    if let Ok(n) = num_str.parse::<u32>() {
-                        if n > max_id {
-                            max_id = n;
-                        }
-                    }
-                }
-                Relationship {
-                    id: r.id.clone(),
-                    rel_type: r.rel_type.clone(),
-                    target: r.target.clone(),
-                    target_mode: r.target_mode.clone(),
-                }
+            .map(|r| Relationship {
+                id: r.id.clone(),
+                rel_type: r.rel_type.clone(),
+                target: r.target.clone(),
+                target_mode: r.target_mode.clone(),
             })
             .collect();
 
-        Self {
-            relationships,
-            next_id: max_id + 1,
-        }
+        Self::from_relationships(relationships)
     }
 
     /// Generate the .rels XML content

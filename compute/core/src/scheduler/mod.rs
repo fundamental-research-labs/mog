@@ -90,7 +90,7 @@ mod value_utils;
 mod test_helpers;
 
 #[cfg(test)]
-#[path = "scheduler_tests.rs"]
+#[path = "scheduler_tests/mod.rs"]
 mod tests;
 
 #[cfg(test)]

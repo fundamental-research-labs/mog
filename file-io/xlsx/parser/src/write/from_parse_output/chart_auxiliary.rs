@@ -125,6 +125,9 @@ enum AuxiliaryKind {
 }
 
 fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
+    if !path.starts_with("xl/charts/") {
+        return None;
+    }
     let file_name = path.rsplit('/').next().unwrap_or(path);
     if file_name.starts_with("style") && file_name.ends_with(".xml") {
         Some(AuxiliaryKind::Style)

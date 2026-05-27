@@ -9,9 +9,9 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
-    PageMargins, ParseOutput, PrintSettings, RoundTripContext, RowDimension, SheetData,
-    SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule,
-    ValidationSpec,
+    PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings, RoundTripContext,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator,
+    ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 
@@ -289,6 +289,56 @@ fn roundtrip_print_settings_from_modeled_state() {
         .expect("print settings should round-trip");
 
     assert_eq!(rt_print, output.sheets[0].print_settings.as_ref().unwrap());
+}
+
+#[test]
+fn roundtrip_page_breaks_from_modeled_state() {
+    let mut output = make_single_sheet(
+        "Breaks",
+        vec![cell(0, 0, CellValue::Text(Arc::from("breaks")))],
+    );
+    output.sheets[0].page_breaks = Some(PageBreaks {
+        row_breaks: vec![
+            PageBreakEntry {
+                id: 10,
+                min: 0,
+                max: 16383,
+                manual: true,
+                pt: false,
+            },
+            PageBreakEntry {
+                id: 20,
+                min: 2,
+                max: 7,
+                manual: false,
+                pt: true,
+            },
+        ],
+        col_breaks: vec![
+            PageBreakEntry {
+                id: 3,
+                min: 0,
+                max: 1048575,
+                manual: true,
+                pt: false,
+            },
+            PageBreakEntry {
+                id: 6,
+                min: 4,
+                max: 12,
+                manual: false,
+                pt: true,
+            },
+        ],
+    });
+
+    let rt = roundtrip(&output);
+    let rt_breaks = rt.sheets[0]
+        .page_breaks
+        .as_ref()
+        .expect("page breaks should round-trip");
+
+    assert_eq!(rt_breaks, output.sheets[0].page_breaks.as_ref().unwrap());
 }
 
 #[test]

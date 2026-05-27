@@ -17,6 +17,9 @@ coverage/
 *.gen.ts
 *.gen.js
 runtime/sdk/src/generated/
+compute/wasm/npm/compute_core_wasm.js
+compute/wasm/npm/compute_core_wasm.d.ts
+compute/wasm/npm/compute_core_wasm_bg.wasm.d.ts
 
 # Markdown
 *.md

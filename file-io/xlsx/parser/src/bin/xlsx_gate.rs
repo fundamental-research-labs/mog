@@ -5,9 +5,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use xlsx_parser::testing::{
-    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, GateSuiteName, MetricValue,
-    PerfGateOptions, enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
-    gate_suite_contracts, run_ooxml_contract_gate, run_perf_gate, validate_package_graph_bytes,
+    enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
+    gate_suite_contracts, gate_suite_readiness, run_ooxml_contract_gate, run_perf_gate,
+    validate_package_graph_bytes, GateName, GateReport, GateReportDomain, GateScenario, GateStatus,
+    GateSuiteName, MetricValue, PerfGateOptions,
 };
 
 fn main() {
@@ -42,6 +43,26 @@ fn main() {
         };
         print_json(&gate_suite_contract(suite));
         return;
+    }
+    if gate_name == "--check-suite" {
+        let Some(suite_name) = args.next() else {
+            eprintln!(
+                "--check-suite requires a suite name: local-smoke, ci-golden, or autonomous-full"
+            );
+            std::process::exit(2);
+        };
+        let allow_heavy = args.any(|arg| arg == "--allow-heavy");
+        let suite = match GateSuiteName::from_str(&suite_name) {
+            Ok(suite) => suite,
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(2);
+            }
+        };
+        let readiness = gate_suite_readiness(suite, allow_heavy);
+        let runnable = readiness.runnable;
+        print_json(&readiness);
+        std::process::exit(if runnable { 0 } else { 2 });
     }
     if gate_name == "--enforce-policy" {
         let Some(path) = args.next() else {
@@ -214,6 +235,9 @@ fn print_usage() {
     eprintln!("       xlsx-gate --list");
     eprintln!("       xlsx-gate --suites");
     eprintln!("       xlsx-gate --plan <local-smoke|ci-golden|autonomous-full>");
+    eprintln!(
+        "       xlsx-gate --check-suite <local-smoke|ci-golden|autonomous-full> [--allow-heavy]"
+    );
     eprintln!("       xlsx-gate --enforce-policy <report.json>");
     eprintln!("Gate names:");
     for gate in GateName::ALL {

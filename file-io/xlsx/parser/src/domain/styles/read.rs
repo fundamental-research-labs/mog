@@ -10,13 +10,8 @@ use crate::infra::xml::{
     parse_string_attr, parse_string_attr_single_quote, parse_u32_attr,
 };
 
-// Re-export canonical types from ooxml-types for use by read-side consumers.
-pub use ooxml_types::styles::{
-    AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellStyleDef, CellXfDef, ColorDef,
-    ColorsDef, DxfDef, FillDef, FontDef, FontScheme, GradientStop, GradientType, HorizontalAlign,
-    NumberFormatDef, PatternType, ProtectionDef, Stylesheet, TableStyleDef, TableStyleElementDef,
-    TableStyleType, UnderlineStyle, VerticalAlign, VerticalAlignRun,
-};
+// Re-export shared style types for compatibility with existing read-side consumers.
+pub use super::types::*;
 
 // =============================================================================
 // Derive-based parse structs (local proxies for mechanical XML attribute extraction)

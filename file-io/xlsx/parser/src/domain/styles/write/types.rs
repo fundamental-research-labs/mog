@@ -1,11 +1,6 @@
-//! Style types — re-exported from `ooxml_types::styles` (canonical OOXML vocabulary).
+//! Compatibility re-export for write-side style types.
 //!
-//! All struct and enum types are defined in `ooxml-types`. This module
-//! re-exports them so that write-side code has a single import path.
+//! New domain code should import from `crate::domain::styles::types`; this
+//! module remains so existing public `write::styles::*` paths keep working.
 
-pub use ooxml_types::styles::{
-    AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellStyleDef, CellXfDef, ColorDef,
-    ColorsDef, DxfDef, FillDef, FontDef, FontScheme, GradientStop, GradientType, HorizontalAlign,
-    NumberFormatDef, PatternType, ProtectionDef, TableStyleDef, TableStyleElementDef,
-    TableStyleType, UnderlineStyle, VerticalAlign, VerticalAlignRun,
-};
+pub use crate::domain::styles::types::*;

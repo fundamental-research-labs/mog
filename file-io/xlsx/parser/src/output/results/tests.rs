@@ -1,6 +1,6 @@
 use super::*;
+use crate::domain::styles::types::CellXfDef;
 use crate::infra::error::{ErrorCode, ParseErrorDetail};
-use ooxml_types::styles::CellXfDef;
 
 #[test]
 fn test_parse_result_success() {

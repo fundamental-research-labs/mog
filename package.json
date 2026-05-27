@@ -48,7 +48,10 @@
     "gate:xlsx:list": "pnpm --filter @mog/xlsx-parser-wasm run gate:list",
     "gate:xlsx:plan:smoke": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:smoke",
     "gate:xlsx:plan:golden": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:golden",
-    "gate:xlsx:plan:full": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:full"
+    "gate:xlsx:plan:full": "pnpm --filter @mog/xlsx-parser-wasm run gate:plan:full",
+    "gate:xlsx:check:smoke": "pnpm --filter @mog/xlsx-parser-wasm run gate:check:smoke",
+    "gate:xlsx:check:golden": "pnpm --filter @mog/xlsx-parser-wasm run gate:check:golden",
+    "gate:xlsx:check:full": "pnpm --filter @mog/xlsx-parser-wasm run gate:check:full"
   },
   "dependencies": {
     "@mog-sdk/node": "workspace:*",

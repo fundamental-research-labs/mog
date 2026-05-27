@@ -65,7 +65,6 @@ use domain_types::{
     TrailingColRange,
     VmlDrawingPart,
     VmlRels,
-    domain::workbook::CalcMode,
 };
 use formula_types::{CellRef, RangeType};
 use ooxml_types::doc_props::CustomPropertyValue;
@@ -211,33 +210,19 @@ pub(crate) fn full_parse_result_to_parse_output(
         });
 
     // 7. Calculation properties
-    let mut calculation = CalculationProperties {
-        iterate: result.iterative_calc,
-        iterate_count: result.max_iterations.unwrap_or(100),
-        iterate_delta: result.max_change.unwrap_or(0.001),
-        calc_id: result.calc_id,
-        has_explicit_iterate_count: result.max_iterations.is_some(),
-        has_explicit_iterate_delta: result.max_change.is_some(),
-        ..Default::default()
-    };
-    if let Some(ref cps) = result.calc_pr_settings {
-        calculation.full_precision = cps.full_precision.unwrap_or(true);
-        calculation.calc_completed = cps.calc_completed.unwrap_or(true);
-        calculation.calc_on_save = cps.calc_on_save.unwrap_or(true);
-        calculation.concurrent_calc = cps.concurrent_calc.unwrap_or(true);
-        calculation.concurrent_manual_count = cps.concurrent_manual_count;
-        calculation.force_full_calc = cps.force_full_calc.unwrap_or(false);
-        calculation.calc_mode = match cps.calc_mode.as_deref() {
-            Some("manual") => CalcMode::Manual,
-            Some("autoNoTable") => CalcMode::AutoNoTable,
-            _ => CalcMode::Auto,
-        };
-        calculation.full_calc_on_load = cps.full_calc_on_load;
-        calculation.ref_mode = match cps.ref_mode.as_deref() {
-            Some("R1C1") => domain_types::domain::workbook::RefMode::R1C1,
-            _ => domain_types::domain::workbook::RefMode::A1,
-        };
-    }
+    let calculation = result
+        .calc_pr_settings
+        .clone()
+        .map(CalculationProperties::from)
+        .unwrap_or_else(|| CalculationProperties {
+            iterate: result.iterative_calc,
+            iterate_count: result.max_iterations.unwrap_or(100),
+            iterate_delta: result.max_change.unwrap_or(0.001),
+            calc_id: result.calc_id,
+            has_explicit_iterate_count: result.max_iterations.is_some(),
+            has_explicit_iterate_delta: result.max_change.is_some(),
+            ..Default::default()
+        });
 
     let metadata = result
         .metadata

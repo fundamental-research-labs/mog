@@ -838,7 +838,7 @@ fn threading_result(
         shared_strings: Vec::new(),
         shared_strings_rich_runs: Vec::new(),
         shared_strings_phonetic_xml: Vec::new(),
-        styles: StylesOutput::from(&crate::domain::styles::read::Stylesheet::default()),
+        styles: StylesOutput::from(&crate::domain::styles::types::Stylesheet::default()),
         theme: None,
         defined_names: Vec::new(),
         workbook_protection: None,

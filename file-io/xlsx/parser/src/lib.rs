@@ -192,10 +192,8 @@ pub use domain::sparklines::read::{
     SparklineGroups, SparklineType, parse_sparklines,
 };
 pub use domain::strings::read::SharedStrings;
-pub use domain::styles::read::{
-    CellXfDef, NumberFormatDef, Stylesheet, builtin_format, get_number_format, is_date_format,
-    parse_styles,
-};
+pub use domain::styles::read::{builtin_format, get_number_format, is_date_format, parse_styles};
+pub use domain::styles::types::{CellXfDef, NumberFormatDef, Stylesheet};
 pub use domain::tables::{
     AutoFilter, FilterColumn, Table, TableColumn, TableStyleInfo, TableType, TotalsRowFunction,
 };

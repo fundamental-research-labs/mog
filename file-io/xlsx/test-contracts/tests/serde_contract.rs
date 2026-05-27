@@ -1,7 +1,8 @@
 use xlsx_test_contracts::{
-    FailureFingerprint, FingerprintCategory, FingerprintOwner, FingerprintSeverity, GateName,
-    GateReport, GateScenario, GateStatus, GateSuiteName, REPORT_SCHEMA_VERSION,
     enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
+    gate_suite_readiness, FailureFingerprint, FingerprintCategory, FingerprintOwner,
+    FingerprintSeverity, GateName, GateReport, GateScenario, GateStatus, GateSuiteName,
+    REPORT_SCHEMA_VERSION,
 };
 
 #[test]
@@ -38,26 +39,18 @@ fn command_contracts_publish_every_phase_zero_gate_name() {
     let contracts = gate_command_contracts();
 
     assert_eq!(contracts.len(), GateName::ALL.len());
-    assert!(
-        contracts
-            .iter()
-            .any(|contract| contract.gate == GateName::PackageGraph && contract.implemented)
-    );
-    assert!(
-        contracts
-            .iter()
-            .any(|contract| contract.gate == GateName::PerfFull && contract.implemented)
-    );
-    assert!(
-        contracts
-            .iter()
-            .any(|contract| contract.gate == GateName::CorpusFull && contract.heavy)
-    );
-    assert!(
-        contracts
-            .iter()
-            .all(|contract| !contract.command.is_empty())
-    );
+    assert!(contracts
+        .iter()
+        .any(|contract| contract.gate == GateName::PackageGraph && contract.implemented));
+    assert!(contracts
+        .iter()
+        .any(|contract| contract.gate == GateName::PerfFull && contract.implemented));
+    assert!(contracts
+        .iter()
+        .any(|contract| contract.gate == GateName::CorpusFull && contract.heavy));
+    assert!(contracts
+        .iter()
+        .all(|contract| !contract.command.is_empty()));
 }
 
 #[test]
@@ -67,19 +60,32 @@ fn rollout_suites_publish_local_ci_and_autonomous_gate_sets() {
     let full = gate_suite_contract(GateSuiteName::AutonomousFull);
 
     assert_eq!(local.name, "local-smoke");
-    assert!(
-        local
-            .gates
-            .iter()
-            .any(|gate| gate.gate == GateName::PerfSmoke)
-    );
+    assert!(local
+        .gates
+        .iter()
+        .any(|gate| gate.gate == GateName::PerfSmoke));
     assert!(golden.gates.len() > local.gates.len());
     assert_eq!(full.gates.len(), GateName::ALL.len());
-    assert!(
-        full.gates
-            .iter()
-            .any(|gate| gate.gate == GateName::PerfFull)
-    );
+    assert!(full
+        .gates
+        .iter()
+        .any(|gate| gate.gate == GateName::PerfFull));
+}
+
+#[test]
+fn rollout_readiness_blocks_unimplemented_and_unapproved_heavy_gates() {
+    let smoke = gate_suite_readiness(GateSuiteName::LocalSmoke, false);
+    assert!(!smoke.runnable);
+    assert!(smoke
+        .blockers
+        .iter()
+        .any(|blocker| blocker.code == "gate-not-implemented"));
+
+    let full_without_heavy = gate_suite_readiness(GateSuiteName::AutonomousFull, false);
+    assert!(full_without_heavy
+        .blockers
+        .iter()
+        .any(|blocker| blocker.code == "heavy-gate-requires-explicit-opt-in"));
 }
 
 #[test]
@@ -89,11 +95,9 @@ fn rollout_policy_rejects_failed_reports_without_actionable_fingerprints() {
 
     let violations = enforce_rollout_report_policy(&report);
 
-    assert!(
-        violations
-            .iter()
-            .any(|v| v.code == "failed-scenario-without-fingerprint")
-    );
+    assert!(violations
+        .iter()
+        .any(|v| v.code == "failed-scenario-without-fingerprint"));
 }
 
 #[test]
@@ -112,9 +116,7 @@ fn rollout_policy_rejects_broad_fingerprint_buckets() {
 
     let violations = enforce_rollout_report_policy(&report);
 
-    assert!(
-        violations
-            .iter()
-            .any(|v| v.code == "non-actionable-fingerprint")
-    );
+    assert!(violations
+        .iter()
+        .any(|v| v.code == "non-actionable-fingerprint"));
 }

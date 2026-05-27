@@ -44,6 +44,9 @@
     "gate:plan:smoke": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --plan local-smoke",
     "gate:plan:golden": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --plan ci-golden",
     "gate:plan:full": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --plan autonomous-full",
+    "gate:check:smoke": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --check-suite local-smoke",
+    "gate:check:golden": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --check-suite ci-golden --allow-heavy",
+    "gate:check:full": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --check-suite autonomous-full --allow-heavy",
     "gate:enforce-policy": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- --enforce-policy",
     "corpus:crashtest": "sh -c 'test -n \"$MOG_XLSX_CORPUS_DIR\" || { echo \"Set MOG_XLSX_CORPUS_DIR to the XLSX corpus directory\" >&2; exit 1; }; cargo run --profile crashtest --bin xlsx-crashtest --features cli -- \"$MOG_XLSX_CORPUS_DIR\"'"
   },

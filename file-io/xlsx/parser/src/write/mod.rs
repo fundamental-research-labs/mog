@@ -81,9 +81,10 @@ pub use crate::domain::sparklines::write::{
 };
 pub use crate::domain::strings::write::{RichTextRun, SharedStringValue, SharedStringsWriter};
 pub use crate::domain::styles::write::{
-    AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellXfDef, ColorDef, FillDef, FontDef,
-    FontScheme, GradientStop, GradientType, HorizontalAlign, NumberFormatDef, PatternType,
-    ProtectionDef, StylesWriter, UnderlineStyle, VerticalAlign, VerticalAlignRun,
+    AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellStyleDef, CellXfDef, ColorDef,
+    ColorsDef, DxfDef, FillDef, FontDef, FontScheme, GradientStop, GradientType, HorizontalAlign,
+    NumberFormatDef, PatternType, ProtectionDef, StylesWriter, Stylesheet, TableStyleDef,
+    TableStyleElementDef, TableStyleType, UnderlineStyle, VerticalAlign, VerticalAlignRun,
 };
 pub use crate::domain::tables::write::{
     AutoFilterDef, CustomFilter, DynamicFilterType, FilterColumn, FilterOperator, FilterType,

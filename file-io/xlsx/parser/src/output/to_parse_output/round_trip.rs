@@ -1318,31 +1318,21 @@ pub(super) fn build_round_trip_context(
         calc_id: result.calc_id,
         skipped_named_ranges: vec![],
         original_named_ranges_order: vec![],
-        iterative_calc_settings: Some({
-            let mut cp = domain_types::domain::workbook::CalculationProperties {
-                iterate: result.iterative_calc,
-                iterate_count: result.max_iterations.unwrap_or(100),
-                iterate_delta: result.max_change.unwrap_or(0.001),
-                calc_id: result.calc_id,
-                has_explicit_iterate_count: result.max_iterations.is_some(),
-                has_explicit_iterate_delta: result.max_change.is_some(),
-                ..Default::default()
-            };
-            if let Some(ref cps) = result.calc_pr_settings {
-                cp.full_precision = cps.full_precision.unwrap_or(true);
-                cp.calc_completed = cps.calc_completed.unwrap_or(true);
-                cp.calc_on_save = cps.calc_on_save.unwrap_or(true);
-                cp.concurrent_calc = cps.concurrent_calc.unwrap_or(true);
-                cp.concurrent_manual_count = cps.concurrent_manual_count;
-                cp.force_full_calc = cps.force_full_calc.unwrap_or(false);
-                cp.calc_mode = match cps.calc_mode.as_deref() {
-                    Some("manual") => domain_types::domain::workbook::CalcMode::Manual,
-                    Some("autoNoTable") => domain_types::domain::workbook::CalcMode::AutoNoTable,
-                    _ => domain_types::domain::workbook::CalcMode::Auto,
-                };
-            }
-            cp
-        }),
+        iterative_calc_settings: Some(
+            result
+                .calc_pr_settings
+                .clone()
+                .map(domain_types::domain::workbook::CalculationProperties::from)
+                .unwrap_or_else(|| domain_types::domain::workbook::CalculationProperties {
+                    iterate: result.iterative_calc,
+                    iterate_count: result.max_iterations.unwrap_or(100),
+                    iterate_delta: result.max_change.unwrap_or(0.001),
+                    calc_id: result.calc_id,
+                    has_explicit_iterate_count: result.max_iterations.is_some(),
+                    has_explicit_iterate_delta: result.max_change.is_some(),
+                    ..Default::default()
+                }),
+        ),
     }
 }
 

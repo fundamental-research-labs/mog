@@ -7,11 +7,11 @@ use domain_types::{
     ProtectionFormat,
 };
 
-use crate::domain::styles::write::{
+use crate::domain::styles::types::{
     AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellXfDef, ColorDef, FillDef, FontDef,
-    FontScheme, HorizontalAlign, PatternType, ProtectionDef, StylesWriter, UnderlineStyle,
-    VerticalAlign,
+    FontScheme, HorizontalAlign, PatternType, ProtectionDef, UnderlineStyle, VerticalAlign,
 };
+use crate::domain::styles::write::StylesWriter;
 
 /// Build a `StylesWriter` from a palette of `DocumentFormat` entries.
 ///
@@ -25,7 +25,7 @@ use crate::domain::styles::write::{
 /// Used when `RoundTripContext.parsed_stylesheet` is available (i.e., the file
 /// was parsed from an XLSX and we have the original style hierarchy).
 pub(super) fn build_styles_from_stylesheet(
-    stylesheet: &ooxml_types::styles::Stylesheet,
+    stylesheet: &crate::domain::styles::types::Stylesheet,
     ext_lst_raw: Option<&[u8]>,
     namespace_attrs: &[(String, String)],
     output: &ParseOutput,
@@ -177,7 +177,7 @@ fn sanitize_unreferenced_differential_styles(
         return pruned;
     }
 
-    let default_dxf = ooxml_types::styles::DxfDef::default();
+    let default_dxf = crate::domain::styles::types::DxfDef::default();
     for (idx, dxf) in writer.dxfs.iter_mut().enumerate() {
         if !referenced_dxfs.contains(&(idx as u32)) && *dxf != default_dxf {
             *dxf = default_dxf.clone();

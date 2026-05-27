@@ -47,7 +47,7 @@ pub use crate::common::range::{ColWidth, MergeRange, Pane, PaneState, RowHeight,
 // BorderSideOutput, AlignmentOutput. This lets downstream consumers (e.g.,
 // compute-core) name these types without adding ooxml-types as a direct
 // dependency.
-pub use ooxml_types::styles::{
+pub use crate::domain::styles::types::{
     BorderStyle, HorizontalAlign, PatternType, UnderlineStyle, VerticalAlign,
 };
 

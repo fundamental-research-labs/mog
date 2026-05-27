@@ -135,7 +135,7 @@ pub struct FullParsedSheet {
     pub sheet_id: Option<u32>,
     /// Sheet visibility state from workbook.xml (preserved for round-trip fidelity).
     #[serde(skip)]
-    pub state: crate::domain::workbook::write::SheetState,
+    pub state: crate::domain::workbook::types::SheetState,
     /// All cells in the sheet
     pub cells: Vec<FullCellData>,
     /// Compact authored blank cells with explicit `s` attributes.
@@ -502,7 +502,7 @@ pub struct FullParseResult {
     /// Full calculation settings from `<calcPr>` for round-trip fidelity.
     /// Contains all CT_CalcPr attributes (calcOnSave, concurrentCalc, etc.).
     #[serde(skip)]
-    pub calc_pr_settings: Option<crate::domain::workbook::read::CalcPrSettings>,
+    pub calc_pr_settings: Option<crate::domain::workbook::types::CalcSettings>,
     /// Full pivot cache definitions for structured round-trip writing.
     /// Keyed by cache_id. Contains source, fields, shared items — everything
     /// needed to reconstruct pivotCacheDefinition XML.

@@ -444,10 +444,8 @@ impl From<ooxml_types::workbook::CalcPr> for CalculationProperties {
             concurrent_manual_count: v.concurrent_manual_count,
             calc_id: v.calc_id,
             force_full_calc: v.force_full_calc,
-            // Fidelity flags default to false — caller sets them when the parser
-            // detected explicit XML attributes.
-            has_explicit_iterate_count: false,
-            has_explicit_iterate_delta: false,
+            has_explicit_iterate_count: v.has_explicit_iterate_count,
+            has_explicit_iterate_delta: v.has_explicit_iterate_delta,
         }
     }
 }
@@ -749,8 +747,8 @@ mod tests {
             concurrent_calc: false,
             concurrent_manual_count: Some(4),
             force_full_calc: true,
-            has_explicit_iterate_count: false,
-            has_explicit_iterate_delta: false,
+            has_explicit_iterate_count: true,
+            has_explicit_iterate_delta: true,
         };
         let domain: CalculationProperties = ooxml.clone().into();
         assert_eq!(domain.iterate, true);
@@ -761,11 +759,15 @@ mod tests {
         assert_eq!(domain.full_precision, false);
         assert_eq!(domain.concurrent_manual_count, Some(4));
         assert_eq!(domain.force_full_calc, true);
+        assert_eq!(domain.has_explicit_iterate_count, true);
+        assert_eq!(domain.has_explicit_iterate_delta, true);
 
         let back: ooxml_types::workbook::CalcPr = domain.into();
         assert_eq!(back.calc_id, Some(191029));
         assert_eq!(back.calc_mode, ooxml_types::workbook::CalcMode::Manual);
         assert_eq!(back.iterate_count, 200);
+        assert_eq!(back.has_explicit_iterate_count, true);
+        assert_eq!(back.has_explicit_iterate_delta, true);
     }
 
     #[test]

@@ -23,6 +23,8 @@
 //! </Relationships>
 //! ```
 
+pub use super::types::{CalcPrSettings, SheetInfo};
+use super::types::{CalcSettings, SheetState, WorkbookView};
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::zip::constants::MAX_RELATIONSHIPS_PER_PART;
 
@@ -31,31 +33,6 @@ fn checked_xml_text(bytes: &[u8]) -> String {
     std::str::from_utf8(bytes)
         .expect("relationship/workbook XML was validated as UTF-8 at the archive boundary")
         .to_owned()
-}
-
-/// Sheet metadata from workbook.xml
-#[derive(Debug, Clone)]
-pub struct SheetInfo {
-    /// Display name of the sheet (e.g., "Sheet1", "Sales Data")
-    pub name: String,
-    /// Unique sheet ID within the workbook
-    pub sheet_id: u32,
-    /// Relationship ID linking to workbook.xml.rels (e.g., "rId1")
-    pub r_id: String,
-    /// Sheet visibility state (visible, hidden, or veryHidden)
-    pub state: crate::domain::workbook::write::SheetState,
-}
-
-impl SheetInfo {
-    /// Create a new SheetInfo instance
-    pub fn new(name: String, sheet_id: u32, r_id: String) -> Self {
-        Self {
-            name,
-            sheet_id,
-            r_id,
-            state: crate::domain::workbook::write::SheetState::Visible,
-        }
-    }
 }
 
 /// Parse workbook.xml to extract sheet information
@@ -139,12 +116,8 @@ pub fn parse_workbook(xml: &[u8]) -> Vec<SheetInfo> {
 
         // Extract state attribute (visible is default when absent)
         let state = extract_attr_value_in_range(element, b"state=\"")
-            .map(|v| match v {
-                b"hidden" => crate::domain::workbook::write::SheetState::Hidden,
-                b"veryHidden" => crate::domain::workbook::write::SheetState::VeryHidden,
-                _ => crate::domain::workbook::write::SheetState::Visible,
-            })
-            .unwrap_or(crate::domain::workbook::write::SheetState::Visible);
+            .map(SheetState::from_bytes)
+            .unwrap_or(SheetState::Visible);
 
         if !name.is_empty() {
             sheets.push(SheetInfo {
@@ -378,63 +351,6 @@ fn find_element_end_simple(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-/// Parsed calculation settings from `<calcPr>` element in workbook.xml.
-///
-/// Covers all OOXML CT_CalcPr attributes for full round-trip fidelity:
-/// calcId, calcMode, fullCalcOnLoad, refMode, iterate, iterateCount,
-/// iterateDelta, fullPrecision, calcCompleted, calcOnSave, concurrentCalc,
-/// concurrentManualCount, forceFullCalc.
-#[derive(Debug, Clone)]
-pub struct CalcPrSettings {
-    /// The calcId attribute value (identifies the engine version; Excel uses this
-    /// to decide whether to recalculate). Preserved for round-trip fidelity.
-    pub calc_id: Option<u32>,
-    /// Calculation mode: "auto" (default), "manual", or "autoNoTable"
-    pub calc_mode: Option<String>,
-    /// Whether to perform a full recalculation on load (fullCalcOnLoad="1")
-    pub full_calc_on_load: bool,
-    /// Reference mode: "A1" (default) or "R1C1"
-    pub ref_mode: Option<String>,
-    /// Whether iterative calculation is enabled (iterate="1")
-    pub iterate: bool,
-    /// Maximum number of iterations (iterateCount attribute, default 100)
-    pub iterate_count: Option<u32>,
-    /// Maximum change between iterations (iterateDelta attribute, default 0.001)
-    pub iterate_delta: Option<f64>,
-    /// Whether to use full precision for calculations (fullPrecision attribute, default true)
-    pub full_precision: Option<bool>,
-    /// Whether calculation was completed before save (calcCompleted attribute)
-    pub calc_completed: Option<bool>,
-    /// Whether to save calculation results on save (calcOnSave attribute, default true)
-    pub calc_on_save: Option<bool>,
-    /// Whether concurrent calculation is enabled (concurrentCalc attribute, default true)
-    pub concurrent_calc: Option<bool>,
-    /// Maximum concurrent threads for manual calc (concurrentManualCount attribute)
-    pub concurrent_manual_count: Option<u32>,
-    /// Whether to force a full calculation (forceFullCalc attribute)
-    pub force_full_calc: Option<bool>,
-}
-
-impl Default for CalcPrSettings {
-    fn default() -> Self {
-        Self {
-            calc_id: None,
-            calc_mode: None,
-            full_calc_on_load: false,
-            ref_mode: None,
-            iterate: false,
-            iterate_count: None,
-            iterate_delta: None,
-            full_precision: None,
-            calc_completed: None,
-            calc_on_save: None,
-            concurrent_calc: None,
-            concurrent_manual_count: None,
-            force_full_calc: None,
-        }
-    }
-}
-
 /// Parse the `<calcPr>` element from workbook.xml to extract calculation settings.
 ///
 /// Returns the iterative calculation settings. If no `<calcPr>` element is found,
@@ -444,12 +360,12 @@ impl Default for CalcPrSettings {
 /// * `xml` - Raw bytes of the workbook.xml file
 ///
 /// # Returns
-/// Parsed CalcPrSettings
+/// Parsed calculation settings.
 pub fn parse_calc_settings(xml: &[u8]) -> CalcPrSettings {
     // Find <calcPr element
     let calc_start = match find_tag_simd(xml, b"calcPr", 0) {
         Some(pos) => pos,
-        None => return CalcPrSettings::default(),
+        None => return CalcSettings::default(),
     };
 
     // Find end of the element
@@ -472,17 +388,15 @@ pub fn parse_calc_settings(xml: &[u8]) -> CalcPrSettings {
         extract_attr_value_in_range(element, attr)
             .map(|v| !v.is_empty() && (v[0] == b'1' || v[0] == b't' || v[0] == b'T'))
     };
-    let parse_str_attr = |attr: &[u8]| -> Option<String> {
-        extract_attr_value_in_range(element, attr)
-            .and_then(|v| std::str::from_utf8(v).ok())
-            .map(|s| s.to_string())
-    };
-
     // Parse all CT_CalcPr attributes
     let calc_id = parse_u32_attr(b"calcId=\"");
-    let calc_mode = parse_str_attr(b"calcMode=\"");
+    let calc_mode = extract_attr_value_in_range(element, b"calcMode=\"")
+        .map(ooxml_types::workbook::CalcMode::from_bytes)
+        .unwrap_or_default();
     let full_calc_on_load = parse_bool_attr(b"fullCalcOnLoad=\"").unwrap_or(false);
-    let ref_mode = parse_str_attr(b"refMode=\"");
+    let ref_mode = extract_attr_value_in_range(element, b"refMode=\"")
+        .map(ooxml_types::workbook::RefMode::from_bytes)
+        .unwrap_or_default();
     let iterate = parse_bool_attr(b"iterate=\"").unwrap_or(false);
     let iterate_count = parse_u32_attr(b"iterateCount=\"");
     let iterate_delta = parse_f64_attr(b"iterateDelta=\"");
@@ -493,20 +407,22 @@ pub fn parse_calc_settings(xml: &[u8]) -> CalcPrSettings {
     let concurrent_manual_count = parse_u32_attr(b"concurrentManualCount=\"");
     let force_full_calc = parse_bool_attr(b"forceFullCalc=\"");
 
-    CalcPrSettings {
+    CalcSettings {
         calc_id,
         calc_mode,
         full_calc_on_load,
         ref_mode,
         iterate,
-        iterate_count,
-        iterate_delta,
-        full_precision,
-        calc_completed,
-        calc_on_save,
-        concurrent_calc,
+        iterate_count: iterate_count.unwrap_or(100),
+        iterate_delta: iterate_delta.unwrap_or(0.001),
+        full_precision: full_precision.unwrap_or(true),
+        calc_completed: calc_completed.unwrap_or(true),
+        calc_on_save: calc_on_save.unwrap_or(true),
+        concurrent_calc: concurrent_calc.unwrap_or(true),
         concurrent_manual_count,
-        force_full_calc,
+        force_full_calc: force_full_calc.unwrap_or(false),
+        has_explicit_iterate_count: iterate_count.is_some(),
+        has_explicit_iterate_delta: iterate_delta.is_some(),
     }
 }
 
@@ -514,7 +430,7 @@ pub fn parse_calc_settings(xml: &[u8]) -> CalcPrSettings {
 ///
 /// Loops over every `<workbookView>` tag, advancing past each one so that
 /// multiple views survive round-trip.
-pub fn parse_workbook_views(xml: &[u8]) -> Vec<crate::domain::workbook::write::WorkbookView> {
+pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
     let mut views = Vec::new();
     let mut offset = 0;
 
@@ -548,7 +464,7 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<crate::domain::workbook::write::W
                 .unwrap_or(default)
         };
 
-        let mut view = crate::domain::workbook::write::WorkbookView::default();
+        let mut view = WorkbookView::default();
         view.x_window = parse_i32(b"xWindow=\"");
         view.y_window = parse_i32(b"yWindow=\"");
         view.window_width = parse_u32(b"windowWidth=\"");
@@ -795,7 +711,7 @@ mod tests {
 
     #[test]
     fn test_parse_workbook_with_state_attributes() {
-        use crate::domain::workbook::write::SheetState;
+        use crate::domain::workbook::types::SheetState;
 
         let xml = br#"<workbook>
   <sheets>
@@ -1061,8 +977,10 @@ mod tests {
         let xml = br#"<workbook><calcPr calcId="191029"/></workbook>"#;
         let settings = parse_calc_settings(xml);
         assert!(!settings.iterate);
-        assert!(settings.iterate_count.is_none());
-        assert!(settings.iterate_delta.is_none());
+        assert_eq!(settings.iterate_count, 100);
+        assert_eq!(settings.iterate_delta, 0.001);
+        assert!(!settings.has_explicit_iterate_count);
+        assert!(!settings.has_explicit_iterate_delta);
     }
 
     #[test]
@@ -1077,8 +995,10 @@ mod tests {
         let xml = br#"<workbook><calcPr calcId="191029" iterate="1" iterateCount="100" iterateDelta="0.001"/></workbook>"#;
         let settings = parse_calc_settings(xml);
         assert!(settings.iterate);
-        assert_eq!(settings.iterate_count, Some(100));
-        assert!((settings.iterate_delta.unwrap() - 0.001).abs() < 1e-10);
+        assert_eq!(settings.iterate_count, 100);
+        assert!((settings.iterate_delta - 0.001).abs() < 1e-10);
+        assert!(settings.has_explicit_iterate_count);
+        assert!(settings.has_explicit_iterate_delta);
     }
 
     #[test]
@@ -1086,8 +1006,8 @@ mod tests {
         let xml = br#"<workbook><calcPr calcId="191029" iterate="1" iterateCount="200" iterateDelta="0.01"/></workbook>"#;
         let settings = parse_calc_settings(xml);
         assert!(settings.iterate);
-        assert_eq!(settings.iterate_count, Some(200));
-        assert!((settings.iterate_delta.unwrap() - 0.01).abs() < 1e-10);
+        assert_eq!(settings.iterate_count, 200);
+        assert!((settings.iterate_delta - 0.01).abs() < 1e-10);
     }
 
     #[test]

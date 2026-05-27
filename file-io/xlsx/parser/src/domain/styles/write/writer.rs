@@ -35,7 +35,7 @@
 //! let xml = writer.to_xml();
 //! ```
 
-use super::types::*;
+use crate::domain::styles::types::*;
 use crate::write::xml_writer::XmlWriter;
 
 /// Spreadsheet ML namespace

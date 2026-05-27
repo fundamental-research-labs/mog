@@ -18,7 +18,7 @@ use super::*;
 /// empty-on-error contract.
 pub(crate) fn convert_conditional_formats(
     cfs: &[ooxml_types::cond_format::ConditionalFormatting],
-    dxfs: &[ooxml_types::styles::DxfDef],
+    dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
 ) -> Vec<ConditionalFormat> {
     cfs.iter()
@@ -87,15 +87,15 @@ fn range_ref_to_cf_range(r: &compute_parser::RangeRef) -> Option<CFCellRange> {
     Some(CFCellRange::new(start_row, start_col, end_row, end_col))
 }
 
-/// Resolve an `ooxml_types::styles::ColorDef` to a `#RRGGBB` hex string.
+/// Resolve a style `ColorDef` to a `#RRGGBB` hex string.
 ///
 /// `theme_colors` is a 12-element palette of resolved hex strings
 /// (dk1, lt1, dk2, lt2, accent1..6, hlink, fol_hlink) extracted from the theme.
 fn resolve_color_def_to_hex(
-    color: &ooxml_types::styles::ColorDef,
+    color: &crate::domain::styles::types::ColorDef,
     theme_colors: &[String],
 ) -> Option<String> {
-    use ooxml_types::styles::ColorDef;
+    use crate::domain::styles::types::ColorDef;
 
     /// Parse an AARRGGBB or RRGGBB hex string to (r, g, b).
     fn parse_hex_rgb(s: &str) -> Option<(u8, u8, u8)> {
@@ -196,7 +196,7 @@ fn resolve_color_def_to_hex(
 /// Extracts font color, background color, bold, italic, strikethrough, underline,
 /// and number format from the DXF, resolving theme/indexed colors to hex.
 fn resolve_dxf_to_cf_style(
-    dxf: &ooxml_types::styles::DxfDef,
+    dxf: &crate::domain::styles::types::DxfDef,
     theme_colors: &[String],
     dxf_id: Option<u32>,
 ) -> CFStyle {
@@ -207,7 +207,7 @@ fn resolve_dxf_to_cf_style(
         .and_then(|c| resolve_color_def_to_hex(c, theme_colors));
 
     let background_color = dxf.fill.as_ref().and_then(|fill| {
-        use ooxml_types::styles::FillDef;
+        use crate::domain::styles::types::FillDef;
         match fill {
             FillDef::Solid { fg_color } => resolve_color_def_to_hex(fg_color, theme_colors),
             FillDef::Pattern {
@@ -280,7 +280,7 @@ fn resolve_dxf_to_cf_style(
 /// for round-trip fidelity.
 pub(crate) fn convert_cf_rule(
     rule: &ooxml_types::cond_format::CfRule,
-    dxfs: &[ooxml_types::styles::DxfDef],
+    dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
 ) -> CFRule {
     use ooxml_types::cond_format::CfRuleType;

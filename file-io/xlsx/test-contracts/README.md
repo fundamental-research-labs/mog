@@ -42,6 +42,7 @@ pnpm gate:xlsx:list
 pnpm gate:xlsx:plan:smoke
 pnpm gate:xlsx:plan:golden
 pnpm gate:xlsx:plan:full
+pnpm gate:xlsx:check:smoke
 ```
 
 Report policy enforcement is also contract-backed:

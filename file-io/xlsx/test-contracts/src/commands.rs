@@ -243,6 +243,61 @@ impl GateSuiteContract {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GateSuiteReadiness {
+    pub suite: String,
+    pub runnable: bool,
+    pub allow_heavy: bool,
+    pub blockers: Vec<GateSuiteReadinessBlocker>,
+    pub commands: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GateSuiteReadinessBlocker {
+    pub gate: GateName,
+    pub code: String,
+    pub message: String,
+}
+
+pub fn gate_suite_readiness(suite: GateSuiteName, allow_heavy: bool) -> GateSuiteReadiness {
+    let contract = gate_suite_contract(suite);
+    let mut blockers = Vec::new();
+
+    for gate in &contract.gates {
+        if !gate.implemented {
+            blockers.push(GateSuiteReadinessBlocker {
+                gate: gate.gate,
+                code: "gate-not-implemented".to_string(),
+                message: format!(
+                    "{} is owned by {:?} and has not published a runnable gate yet",
+                    gate.gate, gate.producer
+                ),
+            });
+        }
+        if gate.heavy && !allow_heavy {
+            blockers.push(GateSuiteReadinessBlocker {
+                gate: gate.gate,
+                code: "heavy-gate-requires-explicit-opt-in".to_string(),
+                message: format!("{} is a heavy gate and requires --allow-heavy", gate.gate),
+            });
+        }
+    }
+
+    GateSuiteReadiness {
+        suite: contract.name,
+        runnable: blockers.is_empty(),
+        allow_heavy,
+        blockers,
+        commands: contract
+            .gates
+            .into_iter()
+            .map(|gate| gate.command)
+            .collect(),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GateSuiteName {

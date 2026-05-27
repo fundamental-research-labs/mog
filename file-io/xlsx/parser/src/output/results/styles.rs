@@ -40,7 +40,7 @@ pub struct CellProtectionOutput {
     pub hidden: bool,
 }
 
-use crate::domain::styles::read::{
+use crate::domain::styles::types::{
     BorderDef, BorderSideDef, CellStyleDef, CellXfDef, ColorDef, FillDef, FontDef, Stylesheet,
 };
 
@@ -64,15 +64,15 @@ pub struct StylesOutput {
     /// Raw FontDef data for round-trip fidelity (preserves Option<bool> for bold/italic).
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_fonts: Vec<ooxml_types::styles::FontDef>,
+    pub raw_fonts: Vec<FontDef>,
     /// Raw CellXfDef data for round-trip fidelity (preserves Option<bool> for apply* flags).
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_cell_xfs: Vec<ooxml_types::styles::CellXfDef>,
+    pub raw_cell_xfs: Vec<CellXfDef>,
     /// Raw CellXfDef data for round-trip fidelity (preserves Option<bool> for apply* flags).
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_cell_style_xfs: Vec<ooxml_types::styles::CellXfDef>,
+    pub raw_cell_style_xfs: Vec<CellXfDef>,
     /// Default table style name for round-trip fidelity.
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
@@ -84,15 +84,15 @@ pub struct StylesOutput {
     /// Raw DxfDef data for round-trip fidelity (differential formatting records).
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_dxfs: Vec<ooxml_types::styles::DxfDef>,
+    pub raw_dxfs: Vec<crate::domain::styles::types::DxfDef>,
     /// Raw ColorsDef for round-trip fidelity (custom color palette).
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_colors: Option<ooxml_types::styles::ColorsDef>,
+    pub raw_colors: Option<crate::domain::styles::types::ColorsDef>,
     /// Raw TableStyleDef data for round-trip fidelity.
     /// Not serialized to TypeScript — used only by the write path.
     #[serde(skip)]
-    pub raw_table_styles: Vec<ooxml_types::styles::TableStyleDef>,
+    pub raw_table_styles: Vec<crate::domain::styles::types::TableStyleDef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,7 +169,7 @@ mod serde_ooxml_output {
 
     pub mod opt_underline_style {
         use super::*;
-        use crate::domain::styles::read::UnderlineStyle;
+        use crate::domain::styles::types::UnderlineStyle;
 
         pub fn serialize<S: Serializer>(
             val: &Option<UnderlineStyle>,
@@ -184,7 +184,7 @@ mod serde_ooxml_output {
 
     pub mod pattern_type {
         use super::*;
-        use crate::domain::styles::read::PatternType;
+        use crate::domain::styles::types::PatternType;
 
         pub fn serialize<S: Serializer>(val: &PatternType, ser: S) -> Result<S::Ok, S::Error> {
             ser.serialize_str(val.to_ooxml())
@@ -193,7 +193,7 @@ mod serde_ooxml_output {
 
     pub mod border_style {
         use super::*;
-        use crate::domain::styles::read::BorderStyle;
+        use crate::domain::styles::types::BorderStyle;
 
         pub fn serialize<S: Serializer>(val: &BorderStyle, ser: S) -> Result<S::Ok, S::Error> {
             ser.serialize_str(val.to_ooxml())
@@ -330,8 +330,8 @@ impl From<&FillDef> for FillOutput {
                 bg_color: None,
                 gradient: Some(GradientFillOutput {
                     gradient_type: match gradient_type {
-                        ooxml_types::styles::GradientType::Linear => "linear".to_string(),
-                        ooxml_types::styles::GradientType::Path => "path".to_string(),
+                        crate::domain::styles::types::GradientType::Linear => "linear".to_string(),
+                        crate::domain::styles::types::GradientType::Path => "path".to_string(),
                     },
                     degree: *degree,
                     stops: stops
@@ -355,7 +355,7 @@ impl From<&FillDef> for FillOutput {
 #[serde(rename_all = "camelCase")]
 pub struct BorderSideOutput {
     #[serde(serialize_with = "serde_ooxml_output::border_style::serialize")]
-    pub style: crate::domain::styles::read::BorderStyle,
+    pub style: crate::domain::styles::types::BorderStyle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<ColorOutput>,
 }

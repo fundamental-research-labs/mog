@@ -681,7 +681,7 @@ fn parse_xlsx_full_native_impl(
             empty_sheet.sheet_id = sheet_info.map(|si| si.sheet_id);
             empty_sheet.state = sheet_info
                 .map(|si| si.state)
-                .unwrap_or(crate::domain::workbook::write::SheetState::Visible);
+                .unwrap_or(crate::domain::workbook::types::SheetState::Visible);
 
             // Extract view settings from the worksheet XML header (before <sheetData>).
             // This gives us gridlines, frozen panes, zoom, RTL, etc. without cell parsing.
@@ -897,8 +897,12 @@ fn parse_xlsx_full_native_impl(
         },
         calc_id: calc_settings.calc_id,
         iterative_calc: calc_settings.iterate,
-        max_iterations: calc_settings.iterate_count,
-        max_change: calc_settings.iterate_delta,
+        max_iterations: calc_settings
+            .has_explicit_iterate_count
+            .then_some(calc_settings.iterate_count),
+        max_change: calc_settings
+            .has_explicit_iterate_delta
+            .then_some(calc_settings.iterate_delta),
         calc_pr_settings: Some(calc_settings),
         pivot_caches,
         pivot_cache_paths,

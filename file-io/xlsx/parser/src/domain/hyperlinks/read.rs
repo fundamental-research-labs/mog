@@ -44,7 +44,10 @@
 
 #![allow(clippy::string_slice)]
 
-use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::opc::{
+    parse_owned_relationships, PackageOwner, RelationshipTargetMode, WorksheetRelationships,
+};
+use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;
 
 // ============================================================================
@@ -171,52 +174,25 @@ impl HyperlinkRelationship {
     /// # Returns
     /// Vector of hyperlink relationships
     pub fn parse_all(xml: &[u8]) -> Vec<Self> {
-        let mut relationships = Vec::new();
-        let mut pos = 0;
-
-        while pos < xml.len() {
-            // Find next <Relationship element
-            let rel_pos = match find_tag_simd(xml, b"Relationship", pos) {
-                Some(p) => p,
-                None => break,
-            };
-
-            // Find the end of this element
-            let element_end = find_element_end_simple(xml, rel_pos).unwrap_or(xml.len());
-
-            let element = &xml[rel_pos..element_end.min(xml.len())];
-
-            // Check if this is a hyperlink relationship
-            let type_value = parse_bytes_attr(element, b"Type=\"");
-            let is_hyperlink = type_value
-                .map(|t| memchr::memmem::find(t, b"hyperlink").is_some())
-                .unwrap_or(false);
-
-            if is_hyperlink {
-                // Extract Id attribute
-                let id = parse_string_attr(element, b"Id=\"").unwrap_or_default();
-
-                // Extract Target attribute
-                let target = parse_string_attr(element, b"Target=\"").unwrap_or_default();
-
-                // Extract TargetMode attribute
-                let target_mode = parse_bytes_attr(element, b"TargetMode=\"")
-                    .map(TargetMode::from_bytes)
-                    .unwrap_or_default();
-
-                if !id.is_empty() {
-                    relationships.push(HyperlinkRelationship {
-                        id,
-                        target,
-                        target_mode,
-                    });
-                }
-            }
-
-            pos = element_end + 1;
-        }
-
-        relationships
+        let relationships = parse_owned_relationships(
+            PackageOwner::Worksheet {
+                sheet_index: 0,
+                path: "xl/worksheets/sheet1.xml".to_string(),
+            },
+            xml,
+        );
+        WorksheetRelationships::new(&relationships)
+            .hyperlinks()
+            .into_iter()
+            .map(|rel| HyperlinkRelationship {
+                id: rel.id.clone(),
+                target: rel.target.raw().to_string(),
+                target_mode: match rel.target_mode {
+                    RelationshipTargetMode::External => TargetMode::External,
+                    RelationshipTargetMode::Internal => TargetMode::Internal,
+                },
+            })
+            .collect()
     }
 }
 
@@ -531,24 +507,6 @@ impl Hyperlinks {
 // Helper Functions
 // ============================================================================
 
-/// Parse raw bytes from an attribute (no decoding)
-fn parse_bytes_attr<'a>(xml: &'a [u8], attr: &[u8]) -> Option<&'a [u8]> {
-    let attr_pos = find_attr_simd(xml, attr, 0)?;
-    let value_start = attr_pos + attr.len();
-
-    if value_start >= xml.len() {
-        return None;
-    }
-
-    // Find closing quote
-    let mut pos = value_start;
-    while pos < xml.len() && xml[pos] != b'"' {
-        pos += 1;
-    }
-
-    Some(&xml[value_start..pos])
-}
-
 /// Find the end of an XML element (the closing > character)
 /// Handles quoted attribute values
 fn find_element_end_simple(bytes: &[u8], start: usize) -> Option<usize> {
@@ -848,6 +806,16 @@ mod tests {
         let xml = br#"<Relationships></Relationships>"#;
         let rels = HyperlinkRelationship::parse_all(xml);
         assert_eq!(rels.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_hyperlink_relationships_rejects_near_miss_type() {
+        let xml = br#"<Relationships>
+  <Relationship Id="rId1" Type="http://example.invalid/relationships/not-a-hyperlink" Target="https://example.com" TargetMode="External"/>
+</Relationships>"#;
+
+        let rels = HyperlinkRelationship::parse_all(xml);
+        assert!(rels.is_empty());
     }
 
     #[test]

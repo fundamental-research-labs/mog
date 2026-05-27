@@ -32,9 +32,7 @@
 
 #![allow(clippy::string_slice)]
 
-use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
-};
+use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
     decode_xml_entities, parse_bool_attr, parse_f64_attr, parse_string_attr,
     parse_string_attr_verbatim, parse_u32_attr,
@@ -868,57 +866,19 @@ fn parse_u32_content(xml: &[u8]) -> Option<u32> {
 // Domain Coordinator
 // ============================================================================
 
-/// Extract the comments file target from a sheet rels XML.
-///
-/// Looks for a `<Relationship>` whose `Type` ends with `/comments` and
-/// returns its `Target` value (e.g. `"../comments1.xml"`), or `None` if
-/// no comments relationship is found.
-fn extract_comments_target(rels_xml: &[u8]) -> Option<String> {
-    let mut pos = 0;
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        // Check if Type contains "/comments"
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            let value_start = type_pos + 6;
-            if let Some((start, end)) = extract_quoted_value(rel_elem, value_start) {
-                let type_str = &rel_elem[start..end];
-                if type_str.ends_with(b"/comments") {
-                    // Extract Target attribute
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        let tgt_start = target_pos + 8;
-                        if let Some((ts, te)) = extract_quoted_value(rel_elem, tgt_start) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[ts..te]) {
-                                return Some(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        pos = rel_end;
-    }
-    None
-}
-
-/// Resolve a relative rels target like `"../comments1.xml"` to an archive
-/// path like `"xl/comments1.xml"`.
-fn resolve_comments_path(target: &str) -> String {
-    // Targets are relative to xl/worksheets/, so "../X" -> "xl/X"
-    if let Some(rest) = target.strip_prefix("../") {
-        format!("xl/{}", rest)
-    } else if let Some(rest) = target.strip_prefix('/') {
-        // Absolute pack URI (e.g. "/xl/comments/comment1.xml") — strip the
-        // leading slash so the path matches the ZIP archive entry name.
-        rest.to_string()
-    } else {
-        // Already a relative path from the archive root.
-        target.to_string()
-    }
+fn extract_comments_path_for_sheet(sheet_num: usize, rels_xml: &[u8]) -> Option<String> {
+    let relationships = crate::infra::opc::parse_owned_relationships(
+        crate::infra::opc::PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
+        rels_xml,
+    );
+    crate::infra::opc::WorksheetRelationships::new(&relationships)
+        .comments()
+        .into_iter()
+        .next()
+        .and_then(|rel| rel.target.path().map(ToOwned::to_owned))
 }
 
 /// Parse comments for a specific sheet.
@@ -961,15 +921,13 @@ pub fn parse_comments_for_sheet(
     let comments_path = {
         let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
         match archive.read_file(&rels_path) {
-            Ok(rels_xml) => {
-                match extract_comments_target(&rels_xml) {
-                    Some(target) => resolve_comments_path(&target),
-                    None => {
-                        // Sheet rels exist but contain no comments relationship.
-                        return (Vec::new(), Vec::new(), Vec::new());
-                    }
+            Ok(rels_xml) => match extract_comments_path_for_sheet(sheet_num, &rels_xml) {
+                Some(path) => path,
+                None => {
+                    // Sheet rels exist but contain no comments relationship.
+                    return (Vec::new(), Vec::new(), Vec::new());
                 }
-            }
+            },
             Err(_) => {
                 // No rels file for this sheet — no comments.
                 return (Vec::new(), Vec::new(), Vec::new());

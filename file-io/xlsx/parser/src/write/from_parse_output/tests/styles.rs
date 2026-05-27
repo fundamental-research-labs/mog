@@ -114,6 +114,78 @@ fn conditional_format_dxf_reference_keeps_imported_stylesheet() {
 }
 
 #[test]
+fn builtin_table_style_does_not_replay_unreferenced_custom_table_styles_or_dxfs() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![
+                make_cell(0, 0, DomainValue::Text(Arc::from("A"))),
+                make_cell(0, 1, DomainValue::Text(Arc::from("B"))),
+                make_cell(1, 0, DomainValue::Number(FiniteF64::new(1.0).unwrap())),
+                make_cell(1, 1, DomainValue::Number(FiniteF64::new(2.0).unwrap())),
+            ],
+            tables: vec![TableSpec {
+                id: 1,
+                name: "Table1".to_string(),
+                display_name: "Table1".to_string(),
+                range_ref: "A1:B2".to_string(),
+                has_headers: true,
+                style_name: Some("TableStyleMedium2".to_string()),
+                auto_filter_ref: Some("A1:B2".to_string()),
+                columns: vec![
+                    TableColumnSpec {
+                        name: "A".to_string(),
+                        ..Default::default()
+                    },
+                    TableColumnSpec {
+                        name: "B".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        style_palette: Vec::new(),
+        ..Default::default()
+    };
+    let imported_styles = br#"
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+          <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+          <borders count="1"><border/></borders>
+          <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+          <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+          <dxfs count="2">
+            <dxf><font><color rgb="FFFF0000"/></font></dxf>
+            <dxf><fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill></dxf>
+          </dxfs>
+          <tableStyles count="1" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16">
+            <tableStyle name="StaleCustom" pivot="0" table="1" count="1">
+              <tableStyleElement type="wholeTable" dxfId="1"/>
+            </tableStyle>
+          </tableStyles>
+        </styleSheet>
+    "#;
+    let ctx = domain_types::RoundTripContext {
+        parsed_stylesheet: Some(crate::domain::styles::read::parse_styles(imported_styles)),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let table_xml = String::from_utf8(archive.read_file("xl/tables/table1.xml").unwrap()).unwrap();
+
+    assert!(table_xml.contains(r#"name="TableStyleMedium2""#));
+    assert!(!styles_xml.contains("StaleCustom"));
+    assert!(!styles_xml.contains("FFFF0000"));
+    assert!(!styles_xml.contains("FF00FF00"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn lossless_imported_stylesheet_prunes_unreferenced_cell_xf_components() {
     let output = ParseOutput {
         sheets: vec![SheetData {

@@ -49,7 +49,9 @@ pub(super) fn build_styles_from_stylesheet(
     writer.known_fonts = stylesheet.known_fonts;
     writer.ext_lst_raw = ext_lst_raw.map(|b| b.to_vec());
 
-    sanitize_unreferenced_lossless_styles(&mut writer, &referenced_cell_xfs);
+    if sanitize_unreferenced_lossless_styles(&mut writer, &referenced_cell_xfs, output) {
+        writer.ext_lst_raw = None;
+    }
 
     // Reconstruct namespace map from preserved (prefix, uri) pairs.
     if !namespace_attrs.is_empty() {
@@ -71,15 +73,22 @@ pub(super) fn build_styles_from_stylesheet(
 fn sanitize_unreferenced_lossless_styles(
     writer: &mut StylesWriter,
     referenced_cell_xfs: &BTreeSet<u32>,
-) {
+    output: &ParseOutput,
+) -> bool {
+    let mut pruned = sanitize_unreferenced_differential_styles(writer, output);
+
     if writer.cell_xfs.is_empty() {
-        return;
+        return pruned;
     }
 
     let mut kept_cell_xfs = writer.cell_xfs.clone();
     for (idx, xf) in kept_cell_xfs.iter_mut().enumerate() {
         if idx != 0 && !referenced_cell_xfs.contains(&(idx as u32)) {
-            *xf = default_cell_xf();
+            let default = default_cell_xf();
+            if *xf != default {
+                *xf = default;
+                pruned = true;
+            }
         }
     }
 
@@ -93,7 +102,11 @@ fn sanitize_unreferenced_lossless_styles(
     let mut kept_cell_style_xfs = writer.cell_style_xfs.clone();
     for (idx, xf) in kept_cell_style_xfs.iter_mut().enumerate() {
         if !referenced_cell_style_xfs.contains(&(idx as u32)) {
-            *xf = default_cell_style_xf();
+            let default = default_cell_style_xf();
+            if *xf != default {
+                *xf = default;
+                pruned = true;
+            }
         }
     }
 
@@ -123,9 +136,53 @@ fn sanitize_unreferenced_lossless_styles(
         &border_remap,
     );
 
+    let original_num_fmts_len = writer.num_fmts.len();
     writer.num_fmts.retain(|fmt| num_fmt_ids.contains(&fmt.id));
+    if writer.num_fmts.len() != original_num_fmts_len {
+        pruned = true;
+    }
     writer.cell_xfs = kept_cell_xfs;
     writer.cell_style_xfs = kept_cell_style_xfs;
+    pruned
+}
+
+fn sanitize_unreferenced_differential_styles(
+    writer: &mut StylesWriter,
+    output: &ParseOutput,
+) -> bool {
+    let referenced_table_styles = referenced_table_style_names(output);
+    let original_table_style_count = writer.table_styles.len();
+    writer
+        .table_styles
+        .retain(|style| referenced_table_styles.contains(&style.name));
+    let mut pruned = writer.table_styles.len() != original_table_style_count;
+
+    let mut referenced_dxfs = referenced_dxf_ids(output);
+    for table_style in &writer.table_styles {
+        for element in &table_style.elements {
+            if let Some(dxf_id) = element.dxf_id {
+                referenced_dxfs.insert(dxf_id);
+            }
+        }
+    }
+
+    if referenced_dxfs.is_empty() {
+        if !writer.dxfs.is_empty() {
+            writer.dxfs.clear();
+            pruned = true;
+        }
+        return pruned;
+    }
+
+    let default_dxf = ooxml_types::styles::DxfDef::default();
+    for (idx, dxf) in writer.dxfs.iter_mut().enumerate() {
+        if !referenced_dxfs.contains(&(idx as u32)) && *dxf != default_dxf {
+            *dxf = default_dxf.clone();
+            pruned = true;
+        }
+    }
+
+    pruned
 }
 
 fn referenced_cell_xf_ids(output: &ParseOutput) -> BTreeSet<u32> {
@@ -144,6 +201,99 @@ fn referenced_cell_xf_ids(output: &ParseOutput) -> BTreeSet<u32> {
         );
     }
     ids
+}
+
+fn referenced_table_style_names(output: &ParseOutput) -> BTreeSet<String> {
+    output
+        .sheets
+        .iter()
+        .flat_map(|sheet| sheet.tables.iter())
+        .filter_map(|table| table.style_name.clone())
+        .collect()
+}
+
+fn referenced_dxf_ids(output: &ParseOutput) -> BTreeSet<u32> {
+    let mut ids = BTreeSet::new();
+    for sheet in &output.sheets {
+        for cf in &sheet.conditional_formats {
+            for rule in &cf.rules {
+                if let Some(style) = conditional_format_rule_style(rule)
+                    && let Some(dxf_id) = style.dxf_id
+                {
+                    ids.insert(dxf_id);
+                }
+            }
+        }
+        if let Some(auto_filter) = &sheet.auto_filter {
+            collect_auto_filter_dxf_ids(auto_filter, &mut ids);
+        }
+        if let Some(sort_state) = &sheet.sort_state {
+            collect_sort_state_dxf_ids(sort_state, &mut ids);
+        }
+        for table in &sheet.tables {
+            collect_table_dxf_ids(table, &mut ids);
+        }
+    }
+    ids
+}
+
+fn collect_auto_filter_dxf_ids(auto_filter: &domain_types::AutoFilter, ids: &mut BTreeSet<u32>) {
+    for column in &auto_filter.columns {
+        if let Some(domain_types::OoxmlFilterType::Color {
+            dxf_id: Some(dxf_id),
+            ..
+        }) = &column.filter_type
+        {
+            ids.insert(*dxf_id);
+        }
+    }
+    if let Some(sort_state) = &auto_filter.sort {
+        collect_sort_state_dxf_ids(sort_state, ids);
+    }
+}
+
+fn collect_sort_state_dxf_ids(sort_state: &domain_types::SortState, ids: &mut BTreeSet<u32>) {
+    ids.extend(
+        sort_state
+            .conditions
+            .iter()
+            .filter_map(|condition| condition.dxf_id),
+    );
+}
+
+fn collect_table_dxf_ids(table: &domain_types::TableSpec, ids: &mut BTreeSet<u32>) {
+    ids.extend(
+        [
+            table.header_row_dxf_id,
+            table.data_dxf_id,
+            table.totals_row_dxf_id,
+            table.header_row_border_dxf_id,
+            table.table_border_dxf_id,
+            table.totals_row_border_dxf_id,
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    for column in &table.columns {
+        ids.extend(
+            [
+                column.header_row_dxf_id,
+                column.data_dxf_id,
+                column.totals_row_dxf_id,
+            ]
+            .into_iter()
+            .flatten(),
+        );
+    }
+    for column in &table.filter_columns {
+        if let domain_types::FilterSpec::Color {
+            dxf_id: Some(dxf_id),
+            ..
+        } = &column.filter
+        {
+            ids.insert(*dxf_id);
+        }
+    }
 }
 
 fn collect_xf_component_ids(

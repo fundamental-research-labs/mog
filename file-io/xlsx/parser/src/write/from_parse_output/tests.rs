@@ -3740,6 +3740,35 @@ fn generated_chart_does_not_inherit_stale_auxiliary_parts_by_local_index() {
 }
 
 #[test]
+fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = Some("Modeled Revenue".to_string());
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(chart_xml.contains("Modeled Revenue"));
+    assert!(!chart_xml.contains("Stale Revenue"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.preserved_chart_xml = Some(

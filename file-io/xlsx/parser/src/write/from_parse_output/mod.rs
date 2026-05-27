@@ -169,10 +169,6 @@ struct WorksheetThreadedCommentsGraphEntry {
 }
 
 fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
-    if chart_spec.preserved_chart_xml.is_some() {
-        return false;
-    }
-
     if matches!(
         chart_spec.definition,
         Some(domain_types::ChartDefinition::Chart(_))
@@ -586,15 +582,14 @@ pub fn write_xlsx_from_parse_output(
             if chart_spec.is_chart_ex {
                 continue; // handled by ChartEx pipeline below
             }
-            // Reconstruct API-created charts from typed fields. Imported charts can
-            // use their preserved XML directly to avoid deep ChartSpace JSON
-            // rehydration during L2 export.
-            let chart_xml = if let Some(raw_xml) = &chart_spec.preserved_chart_xml {
-                raw_xml.as_bytes().to_vec()
-            } else if should_reconstruct_chart_space(chart_spec) {
+            // Reconstruct from typed fields when present so modeled chart edits
+            // are not overridden by stale preserved ChartSpace XML.
+            let chart_xml = if should_reconstruct_chart_space(chart_spec) {
                 let chart_space =
                     crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
                 serialize_chart_space(&chart_space)
+            } else if let Some(raw_xml) = &chart_spec.preserved_chart_xml {
+                raw_xml.as_bytes().to_vec()
             } else {
                 // Legacy: read from definition blob
                 match &chart_spec.definition {

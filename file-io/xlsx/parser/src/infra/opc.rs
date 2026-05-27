@@ -475,6 +475,20 @@ impl<'a> WorkbookRelationships<'a> {
             .filter(|rel| rel.rel_type == OoxmlRelationshipType::Worksheet)
             .collect()
     }
+
+    pub fn pivot_cache_definitions(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::PivotCacheDefinition)
+            .collect()
+    }
+
+    pub fn slicer_caches(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::SlicerCache)
+            .collect()
+    }
 }
 
 impl<'a> WorksheetRelationships<'a> {
@@ -516,6 +530,20 @@ impl<'a> WorksheetRelationships<'a> {
         self.relationships
             .iter()
             .filter(|rel| rel.rel_type == OoxmlRelationshipType::PrinterSettings)
+            .collect()
+    }
+
+    pub fn pivot_tables(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::PivotTable)
+            .collect()
+    }
+
+    pub fn slicers(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Slicer)
             .collect()
     }
 }

@@ -30,6 +30,10 @@
 
 #![allow(clippy::string_slice)]
 
+use crate::infra::opc::{
+    OoxmlRelationshipType, PackageOwner, WorkbookRelationships, WorksheetRelationships,
+    parse_owned_relationships,
+};
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
     parse_bool_attr, parse_bool_attr_with_default, parse_f64_attr, parse_i32_attr,
@@ -1399,16 +1403,25 @@ pub fn parse_all_pivot_caches(archive: &crate::zip::XlsxArchive) -> ParsedPivotC
         Err(_) => return (caches, cache_paths),
     };
 
-    // Build r:id -> target path map from workbook rels
-    let rels_map = extract_rel_id_target_map(&wb_rels_xml);
+    // Build r:id -> typed pivot cache definition path map from workbook rels.
+    let workbook_relationships = parse_owned_relationships(PackageOwner::Workbook, &wb_rels_xml);
+    let workbook_relationships = WorkbookRelationships::new(&workbook_relationships);
+    let rels_map: std::collections::HashMap<String, String> = workbook_relationships
+        .pivot_cache_definitions()
+        .into_iter()
+        .filter_map(|rel| {
+            rel.target
+                .path()
+                .map(|path| (rel.id.clone(), path.to_string()))
+        })
+        .collect();
 
     // Parse <pivotCaches><pivotCache cacheId="X" r:id="rIdY"/></pivotCaches>
     let pivot_caches_entries = extract_pivot_cache_entries(&workbook_xml);
 
     for (cache_id, r_id) in pivot_caches_entries {
         if let Some(target) = rels_map.get(&r_id) {
-            // Resolve relative path (targets are relative to xl/ directory)
-            let def_path = resolve_workbook_rel_path(target);
+            let def_path = target.clone();
             if let Ok(cache_xml) = archive.read_file(&def_path) {
                 let definition = pivot_cache_to_ooxml(&cache_xml);
                 let raw_definition_xml = Some(cache_xml);
@@ -1421,21 +1434,16 @@ pub fn parse_all_pivot_caches(archive: &crate::zip::XlsxArchive) -> ParsedPivotC
                 let cache_filename = def_path.rsplit('/').next().unwrap_or("");
                 let cache_rels_path = format!("{}/_rels/{}.rels", cache_dir, cache_filename);
                 let records_path = if let Ok(cache_rels_xml) = archive.read_file(&cache_rels_path) {
-                    let cache_rels = extract_rel_id_target_map(&cache_rels_xml);
-                    // Find the relationship pointing to a pivotCacheRecords file.
-                    // The .rels may contain multiple relationships (records + extensions),
-                    // so we must filter by target name, not take .values().next().
-                    cache_rels
-                        .values()
-                        .find(|target| target.contains("pivotCacheRecords"))
-                        .or_else(|| cache_rels.values().next())
-                        .map(|target| {
-                            if target.starts_with('/') || target.starts_with("xl/") {
-                                target.clone()
-                            } else {
-                                format!("{}/{}", cache_dir, target)
-                            }
-                        })
+                    let cache_relationships = parse_owned_relationships(
+                        PackageOwner::PivotCache {
+                            path: def_path.clone(),
+                        },
+                        &cache_rels_xml,
+                    );
+                    cache_relationships
+                        .iter()
+                        .find(|rel| rel.rel_type == OoxmlRelationshipType::PivotCacheRecords)
+                        .and_then(|rel| rel.target.path().map(ToOwned::to_owned))
                 } else {
                     let records_guess =
                         def_path.replace("pivotCacheDefinition", "pivotCacheRecords");
@@ -1486,14 +1494,13 @@ pub fn parse_pivot_tables_for_sheet_v2(
 
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
     let pivot_paths = if let Ok(rels_xml) = archive.read_file(&rels_path) {
-        extract_pivot_table_targets(&rels_xml)
+        extract_pivot_table_paths_for_sheet(sheet_num, &rels_xml)
     } else {
         Vec::new()
     };
 
-    for rel_path in &pivot_paths {
-        let full_path = resolve_sheet_rel_path(rel_path);
-        if let Ok(pivot_xml) = archive.read_file(&full_path) {
+    for full_path in &pivot_paths {
+        if let Ok(pivot_xml) = archive.read_file(full_path) {
             let pt = parse_pivot_table(&pivot_xml);
             let cache = pivot_caches
                 .get(&pt.cache_id)
@@ -1628,50 +1635,6 @@ fn build_full_pivot_cache_for_converter(
     }
 }
 
-/// Extract Relationship entries from a .rels XML file into an Id -> Target map.
-fn extract_rel_id_target_map(rels_xml: &[u8]) -> std::collections::HashMap<String, String> {
-    use crate::infra::scanner::{
-        extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd,
-    };
-    let mut map = std::collections::HashMap::new();
-    let mut pos = 0;
-
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        // Extract Id attribute
-        let id = find_attr_simd(rel_elem, b"Id=\"", 0).and_then(|p| {
-            let vs = p + 4; // len of 'Id="'
-            extract_quoted_value(rel_elem, vs).and_then(|(s, e)| {
-                std::str::from_utf8(&rel_elem[s..e])
-                    .ok()
-                    .map(|v| v.to_string())
-            })
-        });
-
-        // Extract Target attribute
-        let target = find_attr_simd(rel_elem, b"Target=\"", 0).and_then(|p| {
-            let vs = p + 8; // len of 'Target="'
-            extract_quoted_value(rel_elem, vs).and_then(|(s, e)| {
-                std::str::from_utf8(&rel_elem[s..e])
-                    .ok()
-                    .map(|v| v.to_string())
-            })
-        });
-
-        if let (Some(id_val), Some(target_val)) = (id, target) {
-            map.insert(id_val, target_val);
-        }
-
-        pos = rel_end;
-    }
-
-    map
-}
-
 /// Extract pivot cache entries from workbook.xml.
 ///
 /// Parses `<pivotCaches><pivotCache cacheId="X" r:id="rIdY"/></pivotCaches>`
@@ -1727,75 +1690,19 @@ fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, String)> {
     entries
 }
 
-/// Resolve a relative path from workbook.xml.rels to an absolute archive path.
-///
-/// Handles paths like:
-/// - `pivotCache/pivotCacheDefinition1.xml` -> `xl/pivotCache/pivotCacheDefinition1.xml`
-/// - `/xl/pivotCache/pivotCacheDefinition1.xml` -> `xl/pivotCache/pivotCacheDefinition1.xml`
-fn resolve_workbook_rel_path(rel_path: &str) -> String {
-    if rel_path.starts_with('/') {
-        rel_path.trim_start_matches('/').to_string()
-    } else {
-        format!("xl/{}", rel_path)
-    }
-}
-
-/// Resolve a relative path from a sheet .rels file to an absolute archive path.
-///
-/// Handles paths like:
-/// - `../pivotTables/pivotTable1.xml` -> `xl/pivotTables/pivotTable1.xml`
-/// - `/xl/pivotTables/pivotTable1.xml` -> `xl/pivotTables/pivotTable1.xml`
-/// - `pivotTables/pivotTable1.xml` -> `xl/worksheets/pivotTables/pivotTable1.xml`
-fn resolve_sheet_rel_path(rel_path: &str) -> String {
-    if rel_path.starts_with('/') {
-        rel_path.trim_start_matches('/').to_string()
-    } else if let Some(stripped) = rel_path.strip_prefix("../") {
-        format!("xl/{}", stripped)
-    } else {
-        format!("xl/worksheets/{}", rel_path)
-    }
-}
-
-/// Extract pivot table relationship targets from a sheet .rels XML file.
-///
-/// Looks for `<Relationship>` elements whose `Type` attribute ends with
-/// `/pivotTable` and returns their `Target` attribute values.
-fn extract_pivot_table_targets(rels_xml: &[u8]) -> Vec<String> {
-    use crate::infra::scanner::{
-        extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd,
-    };
-    let mut targets = Vec::new();
-    let mut pos = 0;
-
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        // Check if Type contains "/pivotTable"
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            let value_start = type_pos + 6; // len of 'Type="'
-            if let Some((start, end)) = extract_quoted_value(rel_elem, value_start) {
-                let type_str = &rel_elem[start..end];
-                if type_str.ends_with(b"/pivotTable") {
-                    // Extract Target attribute
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        let tgt_start = target_pos + 8; // len of 'Target="'
-                        if let Some((ts, te)) = extract_quoted_value(rel_elem, tgt_start) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[ts..te]) {
-                                targets.push(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        pos = rel_end;
-    }
-
-    targets
+fn extract_pivot_table_paths_for_sheet(sheet_num: usize, rels_xml: &[u8]) -> Vec<String> {
+    let relationships = parse_owned_relationships(
+        PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
+        rels_xml,
+    );
+    WorksheetRelationships::new(&relationships)
+        .pivot_tables()
+        .into_iter()
+        .filter_map(|rel| rel.target.path().map(ToOwned::to_owned))
+        .collect()
 }
 
 // ============================================================================

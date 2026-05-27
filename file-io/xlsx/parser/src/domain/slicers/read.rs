@@ -16,6 +16,9 @@
 
 #![allow(clippy::string_slice)]
 
+use crate::infra::opc::{
+    PackageOwner, WorkbookRelationships, WorksheetRelationships, parse_owned_relationships,
+};
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_with_default, parse_string_attr, parse_u32_attr};
 
@@ -690,24 +693,33 @@ pub fn parse_slicers_for_sheet(
         Err(_) => return (all_slicers, all_anchors),
     };
 
-    let slicer_targets = ph_extract_rel_targets_by_type(&rels_xml, REL_SLICER);
+    let sheet_relationships = parse_owned_relationships(
+        PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
+        &rels_xml,
+    );
+    let worksheet_relationships = WorksheetRelationships::new(&sheet_relationships);
 
     // Step 2: Parse each slicer part
-    for target in &slicer_targets {
-        let full_path = ph_resolve_relative_path("xl/worksheets", target);
-        if let Ok(slicer_xml) = archive.read_file(&full_path) {
+    for rel in worksheet_relationships.slicers() {
+        let Some(full_path) = rel.target.path() else {
+            continue;
+        };
+        if let Ok(slicer_xml) = archive.read_file(full_path) {
             let mut parsed = parse_slicer_part(&slicer_xml);
             all_slicers.append(&mut parsed);
         }
     }
 
     // Step 3: Extract slicer anchors from drawing XML
-    let drawing_target = ph_extract_drawing_target(&rels_xml);
-    if let Some(drawing_target) = drawing_target {
-        let drawing_path = ph_resolve_relative_path("xl/worksheets", &drawing_target);
-        if let Ok(drawing_xml) = archive.read_file(&drawing_path) {
-            let mut anchors = parse_slicer_anchors_from_drawing(&drawing_xml);
-            all_anchors.append(&mut anchors);
+    if let Some(drawing_rel) = worksheet_relationships.drawing() {
+        if let Some(drawing_path) = drawing_rel.target.path() {
+            if let Ok(drawing_xml) = archive.read_file(drawing_path) {
+                let mut anchors = parse_slicer_anchors_from_drawing(&drawing_xml);
+                all_anchors.append(&mut anchors);
+            }
         }
     }
 
@@ -728,11 +740,14 @@ pub fn parse_all_slicer_caches(archive: &crate::zip::XlsxArchive) -> Vec<SlicerC
         Err(_) => return caches,
     };
 
-    let cache_targets = ph_extract_rel_targets_by_type(&rels_xml, REL_SLICER_CACHE);
+    let workbook_relationships = parse_owned_relationships(PackageOwner::Workbook, &rels_xml);
+    let workbook_relationships = WorkbookRelationships::new(&workbook_relationships);
 
-    for target in &cache_targets {
-        let full_path = ph_resolve_relative_path("xl", target);
-        if let Ok(cache_xml) = archive.read_file(&full_path) {
+    for rel in workbook_relationships.slicer_caches() {
+        let Some(full_path) = rel.target.path() else {
+            continue;
+        };
+        if let Ok(cache_xml) = archive.read_file(full_path) {
             if let Some(cache) = parse_slicer_cache(&cache_xml) {
                 caches.push(cache);
             }
@@ -778,6 +793,7 @@ pub fn build_rel_id_map(rels_xml: &[u8]) -> std::collections::HashMap<String, St
 
 // Private helpers (mirrors of parse_helpers.rs private fns, prefixed to avoid conflicts)
 
+#[cfg(test)]
 fn ph_extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
     use crate::infra::scanner::extract_quoted_value;
 
@@ -807,57 +823,6 @@ fn ph_extract_drawing_target(rels_xml: &[u8]) -> Option<String> {
         pos = rel_end;
     }
     None
-}
-
-fn ph_extract_rel_targets_by_type(rels_xml: &[u8], rel_type: &str) -> Vec<String> {
-    use crate::infra::scanner::extract_quoted_value;
-    let mut targets = Vec::new();
-    let rel_type_bytes = rel_type.as_bytes();
-    let mut pos = 0;
-
-    while let Some(rel_start) = find_tag_simd(rels_xml, b"Relationship", pos) {
-        let rel_end = find_gt_simd(rels_xml, rel_start)
-            .map(|p| p + 1)
-            .unwrap_or(rels_xml.len());
-        let rel_elem = &rels_xml[rel_start..rel_end];
-
-        if let Some(type_pos) = find_attr_simd(rel_elem, b"Type=\"", 0) {
-            if let Some((ts, te)) = extract_quoted_value(rel_elem, type_pos + 6) {
-                if &rel_elem[ts..te] == rel_type_bytes {
-                    if let Some(target_pos) = find_attr_simd(rel_elem, b"Target=\"", 0) {
-                        if let Some((tgs, tge)) = extract_quoted_value(rel_elem, target_pos + 8) {
-                            if let Ok(target) = std::str::from_utf8(&rel_elem[tgs..tge]) {
-                                targets.push(target.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        pos = rel_end;
-    }
-
-    targets
-}
-
-fn ph_resolve_relative_path(base_dir: &str, relative: &str) -> String {
-    if !relative.starts_with("..") {
-        if let Some(stripped) = relative.strip_prefix('/') {
-            return stripped.to_string();
-        }
-        return format!("{}/{}", base_dir, relative);
-    }
-
-    let mut parts: Vec<&str> = base_dir.split('/').collect();
-    for segment in relative.split('/') {
-        if segment == ".." {
-            parts.pop();
-        } else {
-            parts.push(segment);
-        }
-    }
-    parts.join("/")
 }
 
 // ============================================================================

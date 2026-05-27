@@ -158,7 +158,7 @@ pub(crate) fn convert_hf_images(
         sheet
             .sheet_opc_rels
             .iter()
-            .find(|r| r.id == *rid && r.rel_type.ends_with("/vmlDrawing"))
+            .find(|r| r.id == *rid && r.rel_type == crate::infra::opc::REL_VML_DRAWING)
             .map(|r| opc_target_to_zip_path(&r.target, "xl"))
     });
 

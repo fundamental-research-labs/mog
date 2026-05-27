@@ -6,4 +6,5 @@ mod hierarchy;
 mod multi_value;
 mod non_numeric;
 mod regression;
+mod subtotals;
 mod three_level;

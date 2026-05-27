@@ -657,8 +657,4 @@ fn set_all_values_to_null(rows: &mut [PivotRow], value_index: usize, ctx: &ShowV
 // ============================================================================
 
 #[cfg(test)]
-#[path = "../show_values_as_tests.rs"]
-mod show_values_as_tests;
-
-#[cfg(test)]
 mod tests;

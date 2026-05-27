@@ -151,7 +151,7 @@ fn builtin_table_style_does_not_replay_unreferenced_custom_table_styles_or_dxfs(
     };
     let imported_styles = br#"
         <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-          <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+          <fonts count="1"><font><i/><sz val="11"/><name val="StaleImported"/></font></fonts>
           <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
           <borders count="1"><border/></borders>
           <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
@@ -330,10 +330,16 @@ fn mutated_imported_stylesheet_drops_raw_ext_lst() {
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(!styles_xml.contains("stale-style-extension"));
     assert!(!styles_xml.contains("staleStyleNode"));
+    assert!(!styles_xml.contains("StaleImported"));
+    assert!(!styles_xml.contains("<i/>"));
     assert!(styles_xml.contains("<b/>"));
+    assert!(sheet_xml.contains(r#" s="1""#));
+    assert!(!sheet_xml.contains(r#" s="0""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

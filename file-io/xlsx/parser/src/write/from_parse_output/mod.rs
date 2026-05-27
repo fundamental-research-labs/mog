@@ -136,15 +136,16 @@ pub fn write_xlsx_from_parse_output(
 ) -> Result<Vec<u8>, WriteError> {
     // ── 1. Build styles ─────────────────────────────────────────────────
     // Use the imported stylesheet only while current modeled objects still
-    // reference its raw cellXfs indices. If styles are no longer referenced,
-    // regenerate from modeled style state so stale imported style facts do not
-    // survive deletion.
+    // reference its raw cellXfs indices. A non-empty style palette is modeled
+    // export state, so cell style_id values are palette indices and must not be
+    // interpreted as raw imported cellXfs.
     // Track whether we use the lossless stylesheet path. When true, cellXfs
     // are passed through directly and cell style_id values should NOT be offset
     // by +1. When false (lossy palette path), a default is inserted at cellXfs[0]
     // so cell style_id values must be offset by +1.
     let has_style_references = output_references_style_ids(output);
     let has_lossless_stylesheet = has_style_references
+        && output.style_palette.is_empty()
         && round_trip_ctx
             .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
             .is_some();
@@ -156,20 +157,12 @@ pub fn write_xlsx_from_parse_output(
 
     let styles_writer = if let Some(ctx) = round_trip_ctx {
         if has_lossless_stylesheet && let Some(ref stylesheet) = ctx.parsed_stylesheet {
-            let mut writer = build_styles_from_stylesheet(
+            build_styles_from_stylesheet(
                 stylesheet,
                 ctx.styles_ext_lst_xml.as_deref(),
                 &ctx.styles_namespace_attrs,
                 output,
-            );
-            // When formats are mutated via the API on XLSX-imported cells,
-            // their xlsxStyleId is cleared and the export adds new entries
-            // to style_palette. Append these as new cellXfs entries after
-            // the original stylesheet entries.
-            if !style_palette_for_export.is_empty() {
-                append_palette_to_lossless_styles(&mut writer, style_palette_for_export);
-            }
-            writer
+            )
         } else {
             build_styles(style_palette_for_export)
         }
@@ -1862,10 +1855,7 @@ pub fn write_xlsx_from_parse_output(
     )
 }
 
-use styles::{
-    append_palette_to_lossless_styles, build_styles, build_styles_from_stylesheet,
-    output_references_style_ids,
-};
+use styles::{build_styles, build_styles_from_stylesheet, output_references_style_ids};
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');

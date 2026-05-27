@@ -757,12 +757,24 @@ pub fn register_chart_auxiliary_part(
     graph: &mut PackageGraphBuilder,
     path: &str,
 ) -> Result<(), WriteError> {
+    let Some(content_type) = chart_auxiliary_content_type(path) else {
+        return Ok(());
+    };
+    graph.register_part(modeled_part(path, content_type))
+}
+
+pub fn is_supported_chart_auxiliary_part(path: &str) -> bool {
+    chart_auxiliary_content_type(path).is_some()
+}
+
+fn chart_auxiliary_content_type(path: &str) -> Option<&'static str> {
     if path.contains("style") {
-        graph.register_part(modeled_part(path, CT_CHART_STYLE))?;
+        Some(CT_CHART_STYLE)
     } else if path.contains("colors") || path.contains("color") {
-        graph.register_part(modeled_part(path, CT_CHART_COLOR_STYLE))?;
+        Some(CT_CHART_COLOR_STYLE)
+    } else {
+        None
     }
-    Ok(())
 }
 
 pub fn register_chart_auxiliary_relationship(

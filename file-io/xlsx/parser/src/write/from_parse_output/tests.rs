@@ -3807,13 +3807,19 @@ fn chart_auxiliary_roundtrip_context() -> domain_types::RoundTripContext {
     domain_types::RoundTripContext {
         sheets: vec![domain_types::SheetRoundTripContext {
             chart_auxiliary_data: vec![domain_types::ChartAuxiliaryData {
-                auxiliary_files: vec![domain_types::BlobPart {
-                    path: "xl/charts/style9.xml".to_string(),
-                    data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
-                        .to_vec(),
-                }],
+                auxiliary_files: vec![
+                    domain_types::BlobPart {
+                        path: "xl/charts/style9.xml".to_string(),
+                        data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
+                            .to_vec(),
+                    },
+                    domain_types::BlobPart {
+                        path: "xl/charts/vendor9.xml".to_string(),
+                        data: b"<vendor:chartSidecar/>".to_vec(),
+                    },
+                ],
                 chart_rels: Some(
-                    br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style9.xml"/></Relationships>"#
+                    br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style9.xml"/><Relationship Id="rId10" Type="http://example.com/vendorChartSidecar" Target="vendor9.xml"/></Relationships>"#
                         .to_vec(),
                 ),
                 original_path: Some("xl/charts/chart9.xml".to_string()),
@@ -3953,9 +3959,12 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
 
     assert!(archive.contains("xl/charts/chart9.xml"));
     assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/vendor9.xml"));
     assert!(content_types.contains("/xl/charts/style9.xml"));
+    assert!(!content_types.contains("/xl/charts/vendor9.xml"));
     assert!(chart_rels.contains(r#"Id="rId9""#));
     assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    assert!(!chart_rels.contains("vendor9.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

@@ -1815,9 +1815,19 @@ pub fn write_xlsx_from_parse_output(
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
                     .iter()
+                    .filter(|aux_file| {
+                        crate::write::package_graph::is_supported_chart_auxiliary_part(
+                            &aux_file.path,
+                        )
+                    })
                     .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
                     .collect();
                 for aux_file in &aux.auxiliary_files {
+                    if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                        &aux_file.path,
+                    ) {
+                        continue;
+                    }
                     if registered_chart_auxiliary_parts
                         .insert(aux_file.path.trim_start_matches('/').to_string())
                     {
@@ -1870,9 +1880,19 @@ pub fn write_xlsx_from_parse_output(
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
                     .iter()
+                    .filter(|aux_file| {
+                        crate::write::package_graph::is_supported_chart_auxiliary_part(
+                            &aux_file.path,
+                        )
+                    })
                     .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
                     .collect();
                 for aux_file in &aux.auxiliary_files {
+                    if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                        &aux_file.path,
+                    ) {
+                        continue;
+                    }
                     if registered_chart_auxiliary_parts
                         .insert(aux_file.path.trim_start_matches('/').to_string())
                     {
@@ -2789,6 +2809,11 @@ pub fn write_xlsx_from_parse_output(
                     if let Some(aux) = srt.chart_auxiliary_data.get(local_idx) {
                         // Write auxiliary files (style, colors XML) preserving their original paths.
                         for aux_file in &aux.auxiliary_files {
+                            if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                                &aux_file.path,
+                            ) {
+                                continue;
+                            }
                             zip.add_file(&aux_file.path, aux_file.data.clone());
                         }
                     }
@@ -2821,6 +2846,11 @@ pub fn write_xlsx_from_parse_output(
                 {
                     if let Some(aux) = srt.chart_ex_auxiliary_data.get(local_idx) {
                         for aux_file in &aux.auxiliary_files {
+                            if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                                &aux_file.path,
+                            ) {
+                                continue;
+                            }
                             zip.add_file(&aux_file.path, aux_file.data.clone());
                         }
                     }

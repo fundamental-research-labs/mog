@@ -271,7 +271,6 @@ fn assemble_engine_inner(
 
 /// Sync per-sheet `enable_calculation` flags from the Yrs document into the
 /// `CellMirror`'s `SheetMirror` structs. This ensures the scheduler respects
-
 pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     engine: &mut YrsComputeEngine,
     new_storage: YrsStorage,

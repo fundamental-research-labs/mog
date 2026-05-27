@@ -74,7 +74,6 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
 /// This is ~2x faster than `import_from_xlsx_bytes` because it skips the
 /// 2-second Yrs hydration step. The engine can display viewport data
 /// immediately. Call `complete_deferred_hydration()` after first paint
-
 pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
 ) -> Result<XlsxHydrateResult, ComputeError> {

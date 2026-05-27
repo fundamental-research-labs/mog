@@ -930,6 +930,49 @@ fn generated_hyperlink_relationship_uses_graph_resolved_id() {
 }
 
 #[test]
+fn fragment_hyperlink_relationship_is_not_marked_external() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![Hyperlink {
+            cell_ref: "A1".to_string(),
+            target: Some("#Sheet2!A1".to_string()),
+            display: Some("Jump".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId3".to_string(),
+                rel_type: REL_HYPERLINK.to_string(),
+                target: "#Sheet2!A1".to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId3\""));
+    assert!(sheet_rels.contains("Id=\"rId3\""));
+    assert!(sheet_rels.contains("Target=\"#Sheet2!A1\""));
+    assert!(!sheet_rels.contains("TargetMode=\"External\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_control_property_relationship_uses_graph_registered_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

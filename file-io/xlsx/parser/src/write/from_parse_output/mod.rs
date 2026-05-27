@@ -386,8 +386,14 @@ pub fn write_xlsx_from_parse_output(
                     }
                 });
                 let r_id = if let Some(ref hinted_id) = hinted_id {
-                    rels.add_external_with_id(hinted_id, REL_HYPERLINK, &target);
+                    if target.starts_with('#') {
+                        rels.add_with_id(hinted_id, REL_HYPERLINK, &target);
+                    } else {
+                        rels.add_external_with_id(hinted_id, REL_HYPERLINK, &target);
+                    }
                     hinted_id.clone()
+                } else if target.starts_with('#') {
+                    rels.add(REL_HYPERLINK, &target)
                 } else {
                     rels.add_external(REL_HYPERLINK, &target)
                 };

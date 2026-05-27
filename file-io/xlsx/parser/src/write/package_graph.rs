@@ -943,12 +943,19 @@ pub fn register_worksheet_hyperlink(
     target: &str,
     relationship_id_hint: &str,
 ) {
+    let target = if target.starts_with('#') {
+        PackageRelationshipTarget::InternalPath {
+            target: target.to_string(),
+        }
+    } else {
+        PackageRelationshipTarget::External {
+            target: target.to_string(),
+        }
+    };
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_HYPERLINK.to_string(),
-        target: PackageRelationshipTarget::External {
-            target: target.to_string(),
-        },
+        target,
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
 }

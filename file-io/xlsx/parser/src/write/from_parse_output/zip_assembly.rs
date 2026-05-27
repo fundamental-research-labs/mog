@@ -174,7 +174,7 @@ pub(super) fn write_zip_package(
                 .original_vml_path
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", zip_vml_idx));
-            zip.add_file(&comment_path, comments_xml.clone());
+            add_registered_part(package_graph, &mut zip, &comment_path, comments_xml.clone())?;
             let merged_vml = if !sheet_extras[idx].form_controls.is_empty() {
                 let base_shape_id =
                     vml_merge::form_control_base_shape_id(&output.sheets[idx].comments);
@@ -194,7 +194,7 @@ pub(super) fn write_zip_package(
             } else {
                 vml_xml.clone()
             };
-            zip.add_file(&vml_path, merged_vml);
+            add_registered_part(package_graph, &mut zip, &vml_path, merged_vml)?;
         }
 
         // Header/footer image VML — generated from domain types
@@ -204,7 +204,7 @@ pub(super) fn write_zip_package(
                 &hf.idmap_data,
                 hf.spid_base,
             );
-            zip.add_file(&hf.vml_path, vml_xml);
+            add_registered_part(package_graph, &mut zip, &hf.vml_path, vml_xml)?;
 
             let rels = package_graph.relationship_manager_for_owner(
                 &crate::write::package_graph::PackageOwner::Part {
@@ -237,10 +237,12 @@ pub(super) fn write_zip_package(
             for i in 0..controls.len() {
                 zip_ctrl_prop_idx += 1;
                 let ctrl_prop_xml = controls_writer.write_ctrl_prop(i);
-                zip.add_file(
+                add_registered_part(
+                    package_graph,
+                    &mut zip,
                     &format!("xl/ctrlProps/ctrlProp{}.xml", zip_ctrl_prop_idx),
                     ctrl_prop_xml,
-                );
+                )?;
             }
 
             // Write VML drawing for form controls (separate from comment VML)
@@ -255,22 +257,24 @@ pub(super) fn write_zip_package(
                         ))
                     })?;
                 let vml_xml = controls_writer.write_vml_form_controls(base_shape_id);
-                zip.add_file(&vml_entry.path, vml_xml);
+                add_registered_part(package_graph, &mut zip, &vml_entry.path, vml_xml)?;
             }
         }
 
         // Threaded comment XML
         if let Some(ref tc_xml) = sheet_extras[idx].threaded_comments {
             zip_tc_idx += 1;
-            zip.add_file(
+            add_registered_part(
+                package_graph,
+                &mut zip,
                 &format!("xl/threadedComments/threadedComment{}.xml", zip_tc_idx),
                 tc_xml.clone(),
-            );
+            )?;
         }
 
         if let Some(custom_properties) = &sheet_extras[idx].custom_properties {
             for part in &custom_properties.parts {
-                zip.add_file(&part.path, part.data.clone());
+                add_registered_part(package_graph, &mut zip, &part.path, part.data.clone())?;
             }
         }
     }
@@ -281,10 +285,12 @@ pub(super) fn write_zip_package(
         for extras in sheet_extras {
             for table_xml in &extras.tables {
                 table_global += 1;
-                zip.add_file(
+                add_registered_part(
+                    package_graph,
+                    &mut zip,
                     &format!("xl/tables/table{}.xml", table_global),
                     table_xml.clone(),
-                );
+                )?;
             }
         }
     }
@@ -355,7 +361,12 @@ pub(super) fn write_zip_package(
                         if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                             continue;
                         }
-                        zip.add_file(&aux_file.path, aux_file.data.clone());
+                        add_registered_part(
+                            package_graph,
+                            &mut zip,
+                            &aux_file.path,
+                            aux_file.data.clone(),
+                        )?;
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
@@ -391,7 +402,12 @@ pub(super) fn write_zip_package(
                         if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
                             continue;
                         }
-                        zip.add_file(&aux_file.path, aux_file.data.clone());
+                        add_registered_part(
+                            package_graph,
+                            &mut zip,
+                            &aux_file.path,
+                            aux_file.data.clone(),
+                        )?;
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
@@ -407,7 +423,7 @@ pub(super) fn write_zip_package(
 
     // Image blobs (from floating objects) — content types already registered above.
     for (zip_path, image_bytes) in all_image_blobs {
-        zip.add_file(&zip_path, image_bytes);
+        add_registered_part(package_graph, &mut zip, &zip_path, image_bytes)?;
     }
 
     // Drawing XML files and their .rels
@@ -432,7 +448,7 @@ pub(super) fn write_zip_package(
             let drawing_rels_path = format!("xl/drawings/_rels/{}.rels", drawing_filename);
 
             if let Some(ref drawing_xml) = drawing_xml_data[idx] {
-                zip.add_file(drawing_path, drawing_xml.clone());
+                add_registered_part(package_graph, &mut zip, drawing_path, drawing_xml.clone())?;
             }
 
             if drawing_rels_should_emit[idx] {
@@ -464,4 +480,20 @@ pub(super) fn write_zip_package(
         return Err(WriteError::PackageIntegrity(message));
     }
     Ok(xlsx_bytes)
+}
+
+fn add_registered_part(
+    package_graph: &ResolvedPackageGraph,
+    zip: &mut ZipWriter,
+    path: &str,
+    data: Vec<u8>,
+) -> Result<(), WriteError> {
+    if !package_graph.contains_part(path) {
+        return Err(WriteError::PackageIntegrity(format!(
+            "attempted to write unregistered package part: {}",
+            path.trim_start_matches('/')
+        )));
+    }
+    zip.add_file(path, data);
+    Ok(())
 }

@@ -249,6 +249,10 @@ impl ResolvedPackageGraph {
         }
     }
 
+    pub fn contains_part(&self, path: &str) -> bool {
+        self.parts.contains_key(&normalize_part_path(path))
+    }
+
     pub fn raw_opaque_parts(&self) -> impl Iterator<Item = (&str, &[u8])> {
         self.parts.values().filter_map(|part| {
             if matches!(part.kind, PackagePartKind::OpaqueClean) {

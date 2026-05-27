@@ -65,6 +65,20 @@ fn accepts_duplicate_part_paths_only_when_bytes_match() {
 }
 
 #[test]
+fn resolved_graph_part_membership_normalizes_paths() {
+    let mut graph = PackageGraphBuilder::new();
+    graph
+        .register_part(modeled_part("xl/drawings/drawing1.xml", CT_DRAWING))
+        .unwrap();
+
+    let resolved = graph.resolve().unwrap();
+
+    assert!(resolved.contains_part("xl/drawings/drawing1.xml"));
+    assert!(resolved.contains_part("/xl/drawings/drawing1.xml"));
+    assert!(!resolved.contains_part("xl/drawings/drawing2.xml"));
+}
+
+#[test]
 fn rejects_modeled_opaque_path_conflicts_even_when_bytes_match() {
     let mut graph = PackageGraphBuilder::new();
     let mut modeled = modeled_part("xl/workbook.xml", "application/xml");

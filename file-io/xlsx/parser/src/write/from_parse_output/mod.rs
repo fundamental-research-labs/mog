@@ -217,6 +217,12 @@ fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) 
     })
 }
 
+fn comments_have_imported_identity(sheet_data: &domain_types::SheetData) -> bool {
+    sheet_data.comments.iter().any(|comment| {
+        comment.shape_id.is_some() || comment.xr_uid.as_deref().is_some_and(|uid| !uid.is_empty())
+    })
+}
+
 fn output_references_metadata(output: &ParseOutput) -> bool {
     output
         .sheets
@@ -530,12 +536,13 @@ pub fn write_xlsx_from_parse_output(
         // ── Comments ────────────────────────────────────────────────────
         let comments_data = if !sheet_data.comments.is_empty() {
             let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
+            let imported_comment_identity = comments_have_imported_identity(sheet_data);
             let original_authors = sheet_rt
                 .map(|rt| rt.comment_authors.as_slice())
-                .filter(|a| !a.is_empty());
+                .filter(|authors| imported_comment_identity && !authors.is_empty());
             let root_ns_attrs = sheet_rt
                 .map(|rt| rt.comments_root_namespace_attrs.as_slice())
-                .filter(|a| !a.is_empty());
+                .filter(|attrs| imported_comment_identity && !attrs.is_empty());
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(
                     sheet_num,
@@ -688,13 +695,17 @@ pub fn write_xlsx_from_parse_output(
                 .map(|sheet_rt| {
                     // Identify the comment VML path by matching legacyDrawing r:id
                     let comment_vml_path: Option<String> =
-                        sheet_rt.legacy_drawing_r_id.as_ref().and_then(|rid| {
-                            sheet_rt
-                                .sheet_opc_rels
-                                .iter()
-                                .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
-                                .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
-                        });
+                        if comments_have_imported_identity(sheet_data) {
+                            sheet_rt.legacy_drawing_r_id.as_ref().and_then(|rid| {
+                                sheet_rt
+                                    .sheet_opc_rels
+                                    .iter()
+                                    .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
+                                    .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
+                            })
+                        } else {
+                            None
+                        };
                     // Parse imported header/footer image VML only while the
                     // current modeled sheet still has header/footer images.
                     // Otherwise stale raw VML would resurrect deleted images.

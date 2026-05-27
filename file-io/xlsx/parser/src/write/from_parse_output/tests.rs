@@ -308,6 +308,45 @@ fn stale_roundtrip_external_links_do_not_export_without_modeled_links() {
 }
 
 #[test]
+fn raw_workbook_external_references_do_not_override_modeled_external_links() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.external_links = vec![domain_types::domain::external_link::ExternalLink {
+        id: "1".to_string(),
+        imported_identity: Some(
+            domain_types::domain::external_link::ImportedExternalLinkIdentity {
+                excel_ordinal: 1,
+                workbook_rel_id: "rId20".to_string(),
+                part_name: "externalLinks/externalLink9.xml".to_string(),
+                external_book_rid: None,
+                target: Some("externalLinks/externalLink9.xml".to_string()),
+                target_mode: None,
+            },
+        ),
+        ..Default::default()
+    }];
+    let ctx = domain_types::RoundTripContext {
+        workbook_preserved_elements: vec![(
+            "workbook\0after\0workbookProtection\0externalReferences".to_string(),
+            r#"<externalReferences><externalReference r:id="rIdStale"/></externalReferences>"#
+                .to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert_eq!(workbook_xml.matches("<externalReferences>").count(), 1);
+    assert!(workbook_xml.contains(r#"<externalReference r:id="rId20"/>"#));
+    assert!(!workbook_xml.contains("rIdStale"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn persons_are_exported_from_modeled_state_not_raw_person_xml() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -1657,6 +1696,48 @@ fn stale_worksheet_relationship_to_missing_modeled_part_is_not_exported_or_refer
 }
 
 #[test]
+fn stale_preserved_table_parts_are_not_replayed_when_modeled_tables_are_deleted() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId4".to_string(),
+                rel_type: crate::write::REL_TABLE.to_string(),
+                target: "../tables/table9.xml".to_string(),
+                target_mode: None,
+            }],
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0legacyDrawing\0tableParts".to_string(),
+                r#"<tableParts count="1"><tablePart r:id="rId4"/></tableParts>"#.to_string(),
+            )],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/tables/table9.xml".to_string(),
+            crate::write::CT_TABLE.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(!sheet_xml.contains("<tableParts"));
+    assert!(!sheet_xml.contains("rId4"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/tables/table9.xml"));
+    assert!(!content_types.contains("PartName=\"/xl/tables/table9.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -1977,6 +2058,81 @@ fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids()
     assert!(!content_types.contains("PartName=\"/xl/comments9.xml\""));
     assert!(vml_xml.contains("ObjectType=\"Note\""));
     assert!(!vml_xml.contains("rawVmlSentinel"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn generated_comment_does_not_reuse_stale_comment_sidecar_identity_by_sheet_index() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        comments: vec![Comment {
+            cell_ref: "A1".to_string(),
+            author: "Fresh Author".to_string(),
+            content: Some("Fresh note".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId7".to_string(),
+                    rel_type: REL_COMMENTS.to_string(),
+                    target: "../comments7.xml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId8".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing9.vml".to_string(),
+                    target_mode: None,
+                },
+            ],
+            legacy_drawing_r_id: Some("rId8".to_string()),
+            comments_root_namespace_attrs: vec![
+                (
+                    "xmlns".to_string(),
+                    "http://schemas.openxmlformats.org/spreadsheetml/2006/main".to_string(),
+                ),
+                (
+                    "xmlns:stale".to_string(),
+                    "http://example.invalid/stale-comments".to_string(),
+                ),
+                ("mc:Ignorable".to_string(), "stale".to_string()),
+            ],
+            comment_authors: vec!["Stale Author".to_string()],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing9.vml".to_string(),
+                data: b"<xml><staleCommentVml/></xml>".to_vec(),
+                rels: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let comments_xml = String::from_utf8(archive.read_file("xl/comments1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(comments_xml.contains("<author>Fresh Author</author>"));
+    assert!(!comments_xml.contains("Stale Author"));
+    assert!(!comments_xml.contains("stale-comments"));
+    assert!(!comments_xml.contains("mc:Ignorable=\"stale\""));
+    assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(sheet_rels.contains("Target=\"../comments1.xml\""));
+    assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
+    assert!(!sheet_rels.contains("comments7.xml"));
+    assert!(!sheet_rels.contains("vmlDrawing9.vml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -3447,6 +3603,147 @@ fn test_formula_cells() {
     }]);
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
+}
+
+#[test]
+fn matching_roundtrip_formula_metadata_decorates_current_formula_cell() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(A2:A10)",
+            DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let imported_formula = ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Shared,
+        si: Some(7),
+        r#ref: Some("A1:A1".to_string()),
+        text: "SUM(A2:A10)".to_string(),
+        ..Default::default()
+    };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            cell_formulas: vec![((0, 0), imported_formula)],
+            xml_space_formula_cells: vec![(0, 0)],
+            force_recalc_cells: vec![(0, 0)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<f t="shared" si="7" ref="A1:A1""#));
+    assert!(sheet_xml.contains(r#"ca="1""#));
+    assert!(sheet_xml.contains(r#"xml:space="preserve""#));
+}
+
+#[test]
+fn stale_roundtrip_formula_metadata_does_not_decorate_edited_formula_cell() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(B2:B10)",
+            DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let imported_formula = ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Shared,
+        si: Some(7),
+        r#ref: Some("A1:A1".to_string()),
+        text: "SUM(A2:A10)".to_string(),
+        ..Default::default()
+    };
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            cell_formulas: vec![((0, 0), imported_formula)],
+            xml_space_formula_cells: vec![(0, 0)],
+            force_recalc_cells: vec![(0, 0)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<f>SUM(B2:B10)</f>"));
+    assert!(!sheet_xml.contains(r#"t="shared""#));
+    assert!(!sheet_xml.contains(r#"ca="1""#));
+    assert!(!sheet_xml.contains(r#"xml:space="preserve""#));
+}
+
+#[test]
+fn stale_formula_hints_do_not_decorate_replaced_value_cell() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(42.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            xml_space_formula_cells: vec![(0, 0)],
+            force_recalc_cells: vec![(0, 0)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<f"));
+    assert!(!sheet_xml.contains(r#"ca="1""#));
+    assert!(!sheet_xml.contains(r#"xml:space="preserve""#));
+}
+
+#[test]
+fn stale_data_table_formula_metadata_does_not_decorate_edited_formula_cell() {
+    let mut edited_formula_cell = make_formula_cell(
+        0,
+        0,
+        "SUM(B2:B10)",
+        DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+    );
+    edited_formula_cell.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::DataTable,
+        r#ref: Some("A1:B2".to_string()),
+        r1: Some("$A$1".to_string()),
+        r2: Some("$B$1".to_string()),
+        dt2d: true,
+        ..Default::default()
+    });
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![edited_formula_cell],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<f>SUM(B2:B10)</f>"));
+    assert!(!sheet_xml.contains(r#"t="dataTable""#));
+    assert!(!sheet_xml.contains(r#"dt2D="1""#));
 }
 
 #[test]

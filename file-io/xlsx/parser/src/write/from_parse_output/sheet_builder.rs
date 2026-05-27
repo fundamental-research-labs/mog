@@ -1,6 +1,6 @@
 //! Sheet building: SheetData → SheetWriter.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use domain_types::{
     AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue, SheetData,
@@ -313,6 +313,9 @@ pub(super) fn build_sheet(
     let force_recalc_set: HashSet<(u32, u32)> = sheet_rt
         .map(|rt| rt.force_recalc_cells.iter().copied().collect())
         .unwrap_or_default();
+    let imported_cell_formulas: HashMap<(u32, u32), ooxml_types::worksheet::CellFormula> = sheet_rt
+        .map(|rt| rt.cell_formulas.iter().cloned().collect())
+        .unwrap_or_default();
     let data_table_master_formulas = data_table_master_formula_map(data_table_regions);
     let authored_style_at = |row: u32, col: u32| -> Option<u32> {
         sheet_data
@@ -354,6 +357,9 @@ pub(super) fn build_sheet(
             if canonical.style_id.is_none() {
                 canonical.style_id = authored_style_at(canonical.row, canonical.col);
             }
+            let imported_formula = imported_cell_formulas.get(&key);
+            canonical.cell_formula =
+                current_formula_metadata(&canonical, imported_formula).cloned();
             if let Some(cell_formula) = data_table_master_formulas.get(&key) {
                 canonical.cell_formula = Some(cell_formula.clone());
                 if canonical.formula.is_none() {
@@ -366,10 +372,12 @@ pub(super) fn build_sheet(
         if xml_space_value_set.contains(&key) {
             writer_cell.preserve_space_value = true;
         }
-        if xml_space_formula_set.contains(&key) {
+        let formula_hints_match =
+            formula_round_trip_hints_match_current_cell(cell, imported_cell_formulas.get(&key));
+        if formula_hints_match && xml_space_formula_set.contains(&key) {
             writer_cell.preserve_space_formula = true;
         }
-        if force_recalc_set.contains(&key) {
+        if formula_hints_match && force_recalc_set.contains(&key) {
             writer_cell.force_recalc = true;
         }
         writer.add_cell(writer_cell);
@@ -625,6 +633,67 @@ fn data_table_formula_text(cell_formula: &ooxml_types::worksheet::CellFormula) -
         .clone()
         .unwrap_or_else(|| "\"\"".to_string());
     format!("TABLE({row_arg},{col_arg})")
+}
+
+fn current_formula_metadata<'a>(
+    cell: &'a DomainCellData,
+    imported_formula: Option<&'a ooxml_types::worksheet::CellFormula>,
+) -> Option<&'a ooxml_types::worksheet::CellFormula> {
+    cell.cell_formula
+        .as_ref()
+        .filter(|formula| formula_metadata_matches_current_cell(cell, formula))
+        .or_else(|| {
+            imported_formula.filter(|formula| formula_metadata_matches_current_cell(cell, formula))
+        })
+}
+
+fn formula_round_trip_hints_match_current_cell(
+    cell: &DomainCellData,
+    imported_formula: Option<&ooxml_types::worksheet::CellFormula>,
+) -> bool {
+    if cell.formula.is_none() {
+        return false;
+    }
+
+    match imported_formula.or(cell.cell_formula.as_ref()) {
+        Some(formula) => formula_metadata_matches_current_cell(cell, formula),
+        None => true,
+    }
+}
+
+fn formula_metadata_matches_current_cell(
+    cell: &DomainCellData,
+    formula: &ooxml_types::worksheet::CellFormula,
+) -> bool {
+    let Some(current_formula) = cell.formula.as_deref() else {
+        return false;
+    };
+
+    use ooxml_types::worksheet::CellFormulaType;
+    match formula.t {
+        CellFormulaType::DataTable => formulas_match(
+            current_formula,
+            formula
+                .text
+                .is_empty()
+                .then(|| data_table_formula_text(formula))
+                .as_deref()
+                .unwrap_or(&formula.text),
+        ),
+        CellFormulaType::Shared | CellFormulaType::Array if !formula.text.is_empty() => {
+            formulas_match(current_formula, &formula.text)
+        }
+        CellFormulaType::Shared | CellFormulaType::Array => false,
+        _ => true,
+    }
+}
+
+fn formulas_match(current: &str, imported: &str) -> bool {
+    formula_identity_text(current) == formula_identity_text(imported)
+}
+
+fn formula_identity_text(formula: &str) -> &str {
+    formula.strip_prefix('=').unwrap_or(formula)
 }
 
 fn is_data_table_body_formula(cell: &DomainCellData, is_data_table_master: bool) -> bool {

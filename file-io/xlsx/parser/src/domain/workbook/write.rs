@@ -425,6 +425,7 @@ impl WorkbookWriter {
             || raw_xml.contains("<fileVersion")
             || raw_xml.contains("<fileSharing")
             || raw_xml.contains("<workbookPr")
+            || raw_xml.contains("<externalReferences")
     }
 
     /// Generate workbook.xml content

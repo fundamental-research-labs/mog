@@ -123,6 +123,10 @@ pub(super) fn empty_ext_lst_for_export(
 }
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
+    if xml.contains("<tableParts") {
+        return false;
+    }
+
     !xml.contains("<extLst") || raw_worksheet_ext_lst_is_compatible(sheet_data, xml)
 }
 

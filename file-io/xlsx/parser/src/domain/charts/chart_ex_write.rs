@@ -67,13 +67,51 @@ pub fn serialize_chart_ex_space(cs: &ChartExSpace) -> Vec<u8> {
 
     // printSettings
     if let Some(ref ps) = cs.print_settings {
-        if let Some(ref raw) = ps.raw_xml {
+        if let Some(ref raw) = ps.raw_xml
+            && !raw_xml_contains_relationship_attr(raw)
+        {
             w.raw(raw.as_bytes());
         }
     }
 
     w.end_element("cx:chartSpace");
     w.finish()
+}
+
+fn raw_xml_contains_relationship_attr(xml: &str) -> bool {
+    ["id", "embed", "link"]
+        .iter()
+        .any(|local_name| raw_xml_contains_prefixed_attr(xml, local_name))
+}
+
+fn raw_xml_contains_prefixed_attr(raw_xml: &str, local_name: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let pattern = format!(":{local_name}");
+    let pattern = pattern.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = find_subslice(&bytes[pos..], pattern) {
+        let attr_end = pos + offset + pattern.len();
+        let mut cursor = attr_end;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if bytes.get(cursor) == Some(&b'=') {
+            return true;
+        }
+        pos = attr_end;
+    }
+
+    false
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 // =============================================================================

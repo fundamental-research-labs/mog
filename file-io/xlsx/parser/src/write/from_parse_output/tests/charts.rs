@@ -186,6 +186,76 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
 }
 
 #[test]
+fn chart_ex_print_settings_drop_unresolved_relationship_attrs() {
+    let mut chart_ex_space = ooxml_types::chart_ex::ChartExSpace::default();
+    chart_ex_space.print_settings = Some(ooxml_types::chart_ex::ChartExPrintSettings {
+        raw_xml: Some(
+            r#"<cx:printSettings xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cx:pageSetup r:id="rIdStalePrintSettings"/></cx:printSettings>"#
+                .to_string(),
+        ),
+    });
+    let mut chart_ex = make_chart(ChartType::Waterfall, "Data!A1:B2");
+    chart_ex.is_chart_ex = true;
+    chart_ex.definition = Some(domain_types::ChartDefinition::ChartEx(chart_ex_space));
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_ex_xml =
+        String::from_utf8(archive.read_file("xl/charts/chartEx1.xml").unwrap()).unwrap();
+
+    assert!(!chart_ex_xml.contains("rIdStalePrintSettings"));
+    assert!(!chart_ex_xml.contains("<cx:printSettings"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn chart_ex_print_settings_preserve_clean_raw_xml() {
+    let mut chart_ex_space = ooxml_types::chart_ex::ChartExSpace::default();
+    chart_ex_space.print_settings = Some(ooxml_types::chart_ex::ChartExPrintSettings {
+        raw_xml: Some(
+            r#"<cx:printSettings xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:pageMargins l="0.7" r="0.7"/></cx:printSettings>"#
+                .to_string(),
+        ),
+    });
+    let mut chart_ex = make_chart(ChartType::Waterfall, "Data!A1:B2");
+    chart_ex.is_chart_ex = true;
+    chart_ex.definition = Some(domain_types::ChartDefinition::ChartEx(chart_ex_space));
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_ex_xml =
+        String::from_utf8(archive.read_file("xl/charts/chartEx1.xml").unwrap()).unwrap();
+
+    assert!(chart_ex_xml.contains("<cx:printSettings"));
+    assert!(chart_ex_xml.contains("<cx:pageMargins"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn modeled_chart_ignores_stale_chart_frame_relationship_target() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());

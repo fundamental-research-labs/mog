@@ -47,9 +47,6 @@ struct SheetExtras {
     threaded_comments: Option<Vec<u8>>,
     /// Table XML bytes, one per table. Index is local to this sheet.
     tables: Vec<Vec<u8>>,
-    /// Table relationship XML bytes for tables that have them (e.g., query tables).
-    /// Each entry is `(table_local_index, rels_xml_bytes)`.
-    table_rels: Vec<(usize, Vec<u8>)>,
     /// Whether this sheet has external hyperlinks (needs rels).
     has_external_hyperlinks: bool,
     /// Whether this sheet has standard charts that need drawing.
@@ -611,7 +608,6 @@ pub fn write_xlsx_from_parse_output(
 
         // ── Tables (per-sheet) ───────────────────────────────────────────
         let mut table_xmls = Vec::new();
-        let tables_before_this_sheet = global_table_idx;
         for table_spec in &sheet_data.tables {
             global_table_idx += 1;
             // Prefer the original table ID from the parsed file; fall back to
@@ -625,23 +621,6 @@ pub fn write_xlsx_from_parse_output(
                 crate::domain::tables::write::table_writer_from_domain(table_id, table_spec)
                     .to_xml(),
             );
-        }
-
-        // ── Table Rels (from round-trip context) ─────────────────────────
-        // Table _rels files (e.g., xl/tables/_rels/table1.xml.rels) link tables
-        // to external data sources like query tables. Preserved verbatim.
-        let mut table_rels_data: Vec<(usize, Vec<u8>)> = Vec::new();
-        if let Some(sheet_rt) = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)) {
-            for blob in &sheet_rt.table_xml_passthroughs {
-                if blob.path.contains("/_rels/") && blob.path.ends_with(".rels") {
-                    if let Some(table_num) = extract_table_number_from_rels_path(&blob.path) {
-                        if table_num > tables_before_this_sheet && table_num <= global_table_idx {
-                            let local_idx = (table_num - tables_before_this_sheet - 1) as usize;
-                            table_rels_data.push((local_idx, blob.data.clone()));
-                        }
-                    }
-                }
-            }
         }
 
         // ── Charts (per-sheet) ──────────────────────────────────────────
@@ -816,7 +795,6 @@ pub fn write_xlsx_from_parse_output(
             comments: comments_data,
             threaded_comments,
             tables: table_xmls,
-            table_rels: table_rels_data,
             has_external_hyperlinks,
             has_charts,
             has_chart_ex,
@@ -2903,24 +2881,15 @@ pub fn write_xlsx_from_parse_output(
         }
     }
 
-    // Table XML files and their relationship files
+    // Table XML files
     {
         let mut table_global = 0usize;
         for extras in &sheet_extras {
-            let base_global = table_global;
             for table_xml in &extras.tables {
                 table_global += 1;
                 zip.add_file(
                     &format!("xl/tables/table{}.xml", table_global),
                     table_xml.clone(),
-                );
-            }
-            // Write table _rels files (e.g., xl/tables/_rels/table1.xml.rels)
-            for (local_idx, rels_data) in &extras.table_rels {
-                let global_idx = base_global + local_idx + 1;
-                zip.add_file(
-                    &format!("xl/tables/_rels/table{}.xml.rels", global_idx),
-                    rels_data.clone(),
                 );
             }
         }
@@ -3094,16 +3063,6 @@ pub fn write_xlsx_from_parse_output(
 
 use sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use styles::{append_palette_to_lossless_styles, build_styles, build_styles_from_stylesheet};
-
-/// Extract the table number from a table rels path.
-/// e.g., "xl/tables/_rels/table1.xml.rels" → Some(1)
-fn extract_table_number_from_rels_path(path: &str) -> Option<u32> {
-    let filename = path.rsplit('/').next()?;
-    // filename is like "table1.xml.rels"
-    let stripped = filename.strip_prefix("table")?;
-    let dot_pos = stripped.find('.')?;
-    stripped[..dot_pos].parse().ok()
-}
 
 use crate::infra::opc::opc_target_to_zip_path;
 

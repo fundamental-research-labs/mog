@@ -996,6 +996,83 @@ fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
 }
 
 #[test]
+fn stale_table_sidecar_relationships_are_not_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        tables: vec![TableSpec {
+            id: 1,
+            name: "Table1".to_string(),
+            display_name: "Table1".to_string(),
+            range_ref: "A1:B2".to_string(),
+            has_headers: true,
+            auto_filter_ref: Some("A1:B2".to_string()),
+            columns: vec![
+                TableColumnSpec {
+                    name: "A".to_string(),
+                    ..Default::default()
+                },
+                TableColumnSpec {
+                    name: "B".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId4".to_string(),
+                rel_type: crate::write::REL_TABLE.to_string(),
+                target: "../tables/table1.xml".to_string(),
+                target_mode: None,
+            }],
+            table_xml_passthroughs: vec![domain_types::BlobPart {
+                path: "xl/tables/_rels/table1.xml.rels".to_string(),
+                data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable" Target="../queryTables/queryTable1.xml"/>
+</Relationships>"#
+                    .to_vec(),
+            }],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/queryTables/queryTable1.xml".to_string(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml"
+                .to_string(),
+        )],
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/queryTables/queryTable1.xml".to_string(),
+            data: b"stale query table".to_vec(),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(archive.contains("xl/tables/table1.xml"));
+    assert!(!archive.contains("xl/tables/_rels/table1.xml.rels"));
+    assert!(!archive.contains("xl/queryTables/queryTable1.xml"));
+    assert!(sheet_xml.contains("<tablePart r:id=\"rId4\"/>"));
+    assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
+    assert!(!content_types.contains("queryTable+xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_comment_relationships_use_graph_registered_parts_and_resolved_ids() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

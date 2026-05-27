@@ -1810,7 +1810,7 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
                 domain_types::OpcRelationship {
                     id: "rId10".to_string(),
                     rel_type: REL_VML_DRAWING.to_string(),
-                    target: "../drawings/vmlDrawing9.vml".to_string(),
+                    target: "../drawings/vmlDrawing1.vml".to_string(),
                     target_mode: None,
                 },
             ],
@@ -1868,6 +1868,7 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
     assert!(!sheet_rels.contains("ctrlProp9.xml"));
     assert!(!sheet_rels.contains("vmlDrawing9.vml"));
     assert_ne!(ctrl_prop_rel.id, "rId9");
+    assert_ne!(vml_rel.id, "rId10");
     assert!(sheet_xml.contains(&format!(r#"r:id="{}""#, ctrl_prop_rel.id)));
     assert!(!sheet_xml.contains("rawControlsSentinel"));
     assert!(!sheet_xml.contains("r:id=\"rId99\""));
@@ -2001,7 +2002,7 @@ fn header_footer_vml_relationship_uses_graph_registered_part() {
             sheet_opc_rels: vec![domain_types::OpcRelationship {
                 id: "rId7".to_string(),
                 rel_type: REL_VML_DRAWING.to_string(),
-                target: "../drawings/vmlDrawing8.vml".to_string(),
+                target: "../drawings/vmlDrawing9.vml".to_string(),
                 target_mode: None,
             }],
             raw_vml_drawings: vec![domain_types::VmlDrawingPart {
@@ -2045,9 +2046,8 @@ fn header_footer_vml_relationship_uses_graph_registered_part() {
 
     assert!(archive.contains("xl/drawings/vmlDrawing9.vml"));
     assert!(archive.contains("xl/media/image1.png"));
-    assert!(!archive.contains("xl/drawings/vmlDrawing8.vml"));
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing9.vml\""));
-    assert!(!sheet_rels.contains("vmlDrawing8.vml"));
+    assert_ne!(hf_vml_rel.id, "rId7");
     assert!(vml_rels.contains("Id=\"rId1\""));
     assert!(vml_rels.contains("Target=\"../media/image1.png\""));
     assert!(sheet_xml.contains(&format!(r#"<legacyDrawingHF r:id="{}"/>"#, hf_vml_rel.id)));

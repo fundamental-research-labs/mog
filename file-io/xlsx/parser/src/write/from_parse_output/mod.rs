@@ -464,19 +464,7 @@ pub fn write_xlsx_from_parse_output(
                 global_vml_idx = global_vml_idx.max(n);
             }
             let hf_target = worksheet_relative_target(&hf.vml_path);
-            let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
-                original_sheet_rels,
-                REL_VML_DRAWING,
-                &hf_target,
-                None,
-            )
-            .filter(|r_id| rels.get_by_id(r_id).is_none())
-            {
-                rels.add_with_id(&r_id, REL_VML_DRAWING, &hf_target);
-                Some(r_id)
-            } else {
-                Some(rels.add(REL_VML_DRAWING, &hf_target))
-            };
+            let relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &hf_target));
             worksheet_header_footer_vml_relationships.push(WorksheetHeaderFooterVmlGraphEntry {
                 sheet_idx,
                 path: hf.vml_path.clone(),
@@ -514,20 +502,7 @@ pub fn write_xlsx_from_parse_output(
                     global_vml_idx = global_vml_idx.max(n);
                 }
                 let target = worksheet_relative_target(&path);
-                let relationship_id_hint = if let Some(r_id) =
-                    package_authority::relationship_id_hint(
-                        original_sheet_rels,
-                        REL_VML_DRAWING,
-                        &target,
-                        None,
-                    )
-                    .filter(|r_id| rels.get_by_id(r_id).is_none())
-                {
-                    rels.add_with_id(&r_id, REL_VML_DRAWING, &target);
-                    Some(r_id)
-                } else {
-                    Some(rels.add(REL_VML_DRAWING, &target))
-                };
+                let relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &target));
                 worksheet_form_control_vml_relationships.push(WorksheetFormControlVmlGraphEntry {
                     sheet_idx,
                     path,

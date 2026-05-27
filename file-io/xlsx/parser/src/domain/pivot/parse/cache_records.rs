@@ -1,0 +1,109 @@
+//! `pivotCacheRecords` parsing.
+
+use crate::domain::pivot::model::{CacheRecord, CacheRecordValue};
+use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::xml::{parse_bool_attr, parse_f64_attr, parse_string_attr, parse_u32_attr};
+
+/// Parse pivot cache records from pivotCacheRecords*.xml.
+pub fn parse_pivot_cache_records(xml: &[u8]) -> Vec<CacheRecord> {
+    let mut records = Vec::new();
+    let records_start = match find_tag_simd(xml, b"pivotCacheRecords", 0) {
+        Some(pos) => pos,
+        None => return records,
+    };
+    let records_end =
+        find_closing_tag(xml, b"pivotCacheRecords", records_start).unwrap_or(xml.len());
+
+    let mut pos = records_start;
+    while pos < records_end {
+        let r_start = match find_tag_simd(&xml[..records_end], b"r", pos) {
+            Some(p) if p < records_end => p,
+            _ => break,
+        };
+
+        if r_start + 2 < xml.len() {
+            let after = xml.get(r_start + 2);
+            if after == Some(&b' ') || after == Some(&b'>') || after == Some(&b'/') {
+                let r_end = find_closing_tag(xml, b"r", r_start).unwrap_or(records_end);
+                let tag_end = find_gt_simd(xml, r_start).unwrap_or(r_end);
+                let is_self_closing = tag_end > 0 && xml.get(tag_end - 1) == Some(&b'/');
+
+                if !is_self_closing && r_end > r_start {
+                    records.push(parse_cache_record(&xml[r_start..r_end]));
+                }
+
+                pos = if is_self_closing {
+                    tag_end + 1
+                } else {
+                    r_end + 1
+                };
+                continue;
+            }
+        }
+
+        pos = r_start + 1;
+    }
+
+    records
+}
+
+pub(crate) fn parse_cache_record(xml: &[u8]) -> CacheRecord {
+    let mut record = CacheRecord::default();
+    let mut pos = 0;
+
+    while pos < xml.len() {
+        let lt_pos = match memchr::memchr(b'<', &xml[pos..]) {
+            Some(p) => pos + p,
+            None => break,
+        };
+
+        if lt_pos + 1 < xml.len() && xml[lt_pos + 1] == b'/' {
+            pos = lt_pos + 1;
+            continue;
+        }
+
+        if lt_pos + 2 >= xml.len() {
+            break;
+        }
+
+        let tag_end = find_gt_simd(xml, lt_pos).unwrap_or(xml.len());
+        let element = &xml[lt_pos..tag_end + 1];
+
+        match xml[lt_pos + 1] {
+            b'x' => {
+                if let Some(v) = parse_u32_attr(element, b"v=\"") {
+                    record.values.push(CacheRecordValue::Index(v));
+                }
+            }
+            b's' => {
+                if let Some(v) = parse_string_attr(element, b"v=\"") {
+                    record.values.push(CacheRecordValue::String(v));
+                }
+            }
+            b'n' => {
+                if let Some(v) = parse_f64_attr(element, b"v=\"") {
+                    record.values.push(CacheRecordValue::Number(v));
+                }
+            }
+            b'b' => record
+                .values
+                .push(CacheRecordValue::Boolean(parse_bool_attr(element, b"v=\""))),
+            b'e' => {
+                if let Some(v) = parse_string_attr(element, b"v=\"") {
+                    record.values.push(CacheRecordValue::Error(v));
+                }
+            }
+            b'd' => {
+                if let Some(v) = parse_string_attr(element, b"v=\"") {
+                    record.values.push(CacheRecordValue::DateTime(v));
+                }
+            }
+            b'm' => record.values.push(CacheRecordValue::Missing),
+            _ => {}
+        }
+
+        pos = tag_end + 1;
+    }
+
+    record
+}

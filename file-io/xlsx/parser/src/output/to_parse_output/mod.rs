@@ -25,7 +25,7 @@ mod metadata;
 pub(crate) mod pivot_convert;
 mod round_trip;
 mod styles;
-use crate::infra::opc::{resolve_relationship_target, REL_DRAWING};
+use crate::infra::opc::{REL_DRAWING, resolve_relationship_target};
 use cells::*;
 use features::*;
 use round_trip::*;
@@ -238,80 +238,14 @@ pub fn full_parse_result_to_parse_output(
         extend_sheet_data_extent(sheet);
     }
 
-    // 8c. Extract pivot cache records for eval-only use.
-    // Resolves PivotRecordValue::Index via shared_items to produce flat Vec<Vec<CellValue>>.
+    // 8c. Extract pivot cache records for eval-only use through the pivot conversion contract.
     let pivot_cache_records: std::collections::HashMap<u32, Vec<Vec<value_types::CellValue>>> =
         result
             .pivot_caches
             .iter()
             .filter_map(|(cache_id, parsed_cache)| {
-                let fields = &parsed_cache.definition.cache_fields.items;
-                let records = &parsed_cache.records.records;
-                if records.is_empty() {
-                    return None;
-                }
-
-                /// Convert a SharedItem to CellValue.
-                fn shared_item_to_cell_value(
-                    item: &ooxml_types::pivot::SharedItem,
-                ) -> value_types::CellValue {
-                    use ooxml_types::pivot::SharedItem;
-                    match item {
-                        SharedItem::Number(n) => value_types::CellValue::number(*n),
-                        SharedItem::String(s) => value_types::CellValue::Text(s.as_str().into()),
-                        SharedItem::Boolean(b) => value_types::CellValue::Boolean(*b),
-                        SharedItem::Error(e) => e
-                            .parse::<value_types::CellError>()
-                            .map(|e| value_types::CellValue::Error(e, None))
-                            .unwrap_or(value_types::CellValue::Null),
-                        SharedItem::DateTime(s) => value_types::CellValue::Text(s.as_str().into()),
-                        SharedItem::Missing => value_types::CellValue::Null,
-                    }
-                }
-
-                let rows: Vec<Vec<value_types::CellValue>> = records
-                    .iter()
-                    .map(|record| {
-                        record
-                            .values
-                            .iter()
-                            .enumerate()
-                            .map(|(field_idx, val)| {
-                                use ooxml_types::pivot::cache::PivotRecordValue;
-                                match val {
-                                    PivotRecordValue::Number(n) => {
-                                        value_types::CellValue::number(*n)
-                                    }
-                                    PivotRecordValue::String(s) => {
-                                        value_types::CellValue::Text(s.as_str().into())
-                                    }
-                                    PivotRecordValue::Boolean(b) => {
-                                        value_types::CellValue::Boolean(*b)
-                                    }
-                                    PivotRecordValue::Error(e) => e
-                                        .parse::<value_types::CellError>()
-                                        .map(|e| value_types::CellValue::Error(e, None))
-                                        .unwrap_or(value_types::CellValue::Null),
-                                    PivotRecordValue::DateTime(s) => {
-                                        value_types::CellValue::Text(s.as_str().into())
-                                    }
-                                    PivotRecordValue::Missing => value_types::CellValue::Null,
-                                    PivotRecordValue::Index(idx) => {
-                                        // Resolve index via the corresponding cache field's
-                                        // shared items list.
-                                        fields
-                                            .get(field_idx)
-                                            .and_then(|f| f.shared_items.as_ref())
-                                            .and_then(|shared| shared.items.get(*idx as usize))
-                                            .map(shared_item_to_cell_value)
-                                            .unwrap_or(value_types::CellValue::Null)
-                                    }
-                                }
-                            })
-                            .collect()
-                    })
-                    .collect();
-                Some((*cache_id, rows))
+                let rows = crate::domain::pivot::convert::resolve_cache_records(Some(parsed_cache));
+                (!rows.is_empty()).then_some((*cache_id, rows))
             })
             .collect();
 

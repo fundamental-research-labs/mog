@@ -1,0 +1,482 @@
+//! Package-level pivot relationship discovery.
+
+use crate::domain::pivot::convert::{
+    build_full_pivot_cache_for_converter, parsed_pivot_to_config, resolve_cache_records,
+};
+use crate::domain::pivot::parse::parse_pivot_table;
+use crate::domain::pivot::spec::{pivot_cache_records_to_ooxml, pivot_cache_to_ooxml};
+use crate::infra::opc::{
+    OoxmlRelationshipType, PackageOwner, WorkbookRelationships, WorksheetRelationships,
+    parse_owned_relationships,
+};
+
+pub type PivotCacheMap =
+    std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>;
+pub type PivotCachePathList = Vec<(u32, String, Option<String>)>;
+pub type ParsedPivotCaches = (PivotCacheMap, PivotCachePathList);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PivotCacheRecordsPathSource {
+    Relationship,
+    Fallback,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PivotCacheRecordsLink {
+    pub rels_path: Option<String>,
+    pub relationship_id: Option<String>,
+    pub relationship_target: Option<String>,
+    pub records_path: Option<String>,
+    pub source: PivotCacheRecordsPathSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PivotCachePackageLink {
+    pub cache_id: u32,
+    pub workbook_relationship_id: String,
+    pub workbook_relationship_target: String,
+    pub definition_path: String,
+    pub records: PivotCacheRecordsLink,
+}
+
+impl PivotCachePackageLink {
+    pub fn records_path(&self) -> Option<String> {
+        self.records.records_path.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PivotCachePackage {
+    pub link: PivotCachePackageLink,
+    pub parsed_cache: crate::domain::pivot::types::ParsedPivotCache,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PivotPackageDiscovery {
+    pub caches: PivotCacheMap,
+    pub packages: Vec<PivotCachePackage>,
+    pub links: Vec<PivotCachePackageLink>,
+}
+
+impl PivotPackageDiscovery {
+    pub fn cache_paths(&self) -> PivotCachePathList {
+        self.links
+            .iter()
+            .map(|link| {
+                (
+                    link.cache_id,
+                    link.definition_path.clone(),
+                    link.records_path(),
+                )
+            })
+            .collect()
+    }
+}
+
+/// Parse all pivot cache package parts and their OPC relationship metadata.
+pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPackageDiscovery {
+    let mut discovery = PivotPackageDiscovery::default();
+
+    let workbook_xml = match archive.read_file("xl/workbook.xml") {
+        Ok(xml) => xml,
+        Err(_) => return discovery,
+    };
+    let wb_rels_xml = match archive.read_file("xl/_rels/workbook.xml.rels") {
+        Ok(xml) => xml,
+        Err(_) => return discovery,
+    };
+
+    let workbook_relationships = parse_owned_relationships(PackageOwner::Workbook, &wb_rels_xml);
+    let workbook_relationships = WorkbookRelationships::new(&workbook_relationships);
+    let rels_map: std::collections::HashMap<String, (String, String)> = workbook_relationships
+        .pivot_cache_definitions()
+        .into_iter()
+        .filter_map(|rel| {
+            rel.target.path().map(|path| {
+                (
+                    rel.id.clone(),
+                    (rel.target.raw().to_string(), path.to_string()),
+                )
+            })
+        })
+        .collect();
+
+    for (cache_id, r_id) in extract_pivot_cache_entries(&workbook_xml) {
+        let Some((workbook_relationship_target, def_path)) = rels_map.get(&r_id).cloned() else {
+            continue;
+        };
+        let Ok(cache_xml) = archive.read_file(&def_path) else {
+            continue;
+        };
+
+        let definition = pivot_cache_to_ooxml(&cache_xml);
+        let raw_definition_xml = Some(cache_xml);
+        let records = resolve_cache_records_link(archive, &def_path);
+
+        let mut cache_records = ooxml_types::pivot::PivotCacheRecords::default();
+        let mut raw_records_xml = None;
+        if let Some(ref rp) = records.records_path {
+            if let Ok(records_xml) = archive.read_file(rp) {
+                cache_records = pivot_cache_records_to_ooxml(&records_xml);
+                raw_records_xml = Some(records_xml);
+            }
+        }
+
+        let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
+            definition,
+            records: cache_records,
+            raw_definition_xml,
+            raw_records_xml,
+        };
+        let link = PivotCachePackageLink {
+            cache_id,
+            workbook_relationship_id: r_id,
+            workbook_relationship_target,
+            definition_path: def_path,
+            records,
+        };
+
+        discovery.caches.insert(cache_id, parsed_cache.clone());
+        discovery.links.push(link.clone());
+        discovery
+            .packages
+            .push(PivotCachePackage { link, parsed_cache });
+    }
+
+    discovery
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PivotCachePathEntry {
+    pub cache_id: u32,
+    pub definition_path: String,
+    pub records_path: Option<String>,
+}
+
+/// Parse all pivot caches from the workbook package.
+pub fn parse_all_pivot_caches(archive: &crate::zip::XlsxArchive) -> ParsedPivotCaches {
+    let discovery = parse_pivot_cache_packages(archive);
+    let cache_paths = discovery.cache_paths();
+    (discovery.caches, cache_paths)
+}
+
+pub fn parse_pivot_tables_for_sheet_v2(
+    archive: &crate::zip::XlsxArchive,
+    sheet_num: usize,
+    sheet_name: &str,
+    pivot_caches: &std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
+) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
+    let mut results = Vec::new();
+
+    let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
+    let pivot_paths = if let Ok(rels_xml) = archive.read_file(&rels_path) {
+        extract_pivot_table_paths_for_sheet(sheet_num, &rels_xml)
+    } else {
+        Vec::new()
+    };
+
+    for full_path in &pivot_paths {
+        if let Ok(pivot_xml) = archive.read_file(full_path) {
+            let pt = parse_pivot_table(&pivot_xml);
+            let cache = pivot_caches
+                .get(&pt.cache_id)
+                .map(|pc| build_full_pivot_cache_for_converter(pc, pt.cache_id));
+            if let Some(ref cache) = cache {
+                let cache_records = resolve_cache_records(pivot_caches.get(&pt.cache_id));
+                if let Some(parsed) = parsed_pivot_to_config(&pt, cache, sheet_name, &cache_records)
+                {
+                    results.push(parsed);
+                }
+            }
+        }
+    }
+
+    results
+}
+
+fn resolve_cache_records_link(
+    archive: &crate::zip::XlsxArchive,
+    def_path: &str,
+) -> PivotCacheRecordsLink {
+    let cache_dir = def_path
+        .rsplit_once('/')
+        .map(|(d, _)| d)
+        .unwrap_or("xl/pivotCache");
+    let cache_filename = def_path.rsplit('/').next().unwrap_or("");
+    let cache_rels_path = format!("{}/_rels/{}.rels", cache_dir, cache_filename);
+    if let Ok(cache_rels_xml) = archive.read_file(&cache_rels_path) {
+        let cache_relationships = parse_owned_relationships(
+            PackageOwner::PivotCache {
+                path: def_path.to_string(),
+            },
+            &cache_rels_xml,
+        );
+        let record_rel = cache_relationships
+            .iter()
+            .find(|rel| rel.rel_type == OoxmlRelationshipType::PivotCacheRecords);
+        if let Some(rel) = record_rel {
+            PivotCacheRecordsLink {
+                rels_path: Some(cache_rels_path),
+                relationship_id: Some(rel.id.clone()),
+                relationship_target: Some(rel.target.raw().to_string()),
+                records_path: rel.target.path().map(ToOwned::to_owned),
+                source: PivotCacheRecordsPathSource::Relationship,
+            }
+        } else {
+            PivotCacheRecordsLink {
+                rels_path: Some(cache_rels_path),
+                relationship_id: None,
+                relationship_target: None,
+                records_path: None,
+                source: PivotCacheRecordsPathSource::Missing,
+            }
+        }
+    } else {
+        let records_guess = def_path.replace("pivotCacheDefinition", "pivotCacheRecords");
+        if archive.read_file(&records_guess).is_ok() {
+            PivotCacheRecordsLink {
+                rels_path: None,
+                relationship_id: None,
+                relationship_target: None,
+                records_path: Some(records_guess),
+                source: PivotCacheRecordsPathSource::Fallback,
+            }
+        } else {
+            PivotCacheRecordsLink {
+                rels_path: None,
+                relationship_id: None,
+                relationship_target: None,
+                records_path: None,
+                source: PivotCacheRecordsPathSource::Missing,
+            }
+        }
+    }
+}
+
+pub(crate) fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, String)> {
+    use crate::infra::scanner::{
+        extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+    };
+    let mut entries = Vec::new();
+
+    let section_start = match find_tag_simd(workbook_xml, b"pivotCaches", 0) {
+        Some(pos) => pos,
+        None => return entries,
+    };
+    let section_end =
+        find_closing_tag(workbook_xml, b"pivotCaches", section_start).unwrap_or(workbook_xml.len());
+    let section = &workbook_xml[section_start..section_end];
+
+    let mut pos = 0;
+    while let Some(pc_start) = find_tag_simd(section, b"pivotCache", pos) {
+        let pc_end = find_gt_simd(section, pc_start)
+            .map(|p| p + 1)
+            .unwrap_or(section.len());
+        let pc_elem = &section[pc_start..pc_end];
+
+        let cache_id = find_attr_simd(pc_elem, b"cacheId=\"", 0).and_then(|p| {
+            let vs = p + 9;
+            extract_quoted_value(pc_elem, vs).and_then(|(s, e)| {
+                std::str::from_utf8(&pc_elem[s..e])
+                    .ok()?
+                    .parse::<u32>()
+                    .ok()
+            })
+        });
+
+        let r_id = find_attr_simd(pc_elem, b"r:id=\"", 0).and_then(|p| {
+            let vs = p + 6;
+            extract_quoted_value(pc_elem, vs)
+                .and_then(|(s, e)| std::str::from_utf8(&pc_elem[s..e]).ok().map(str::to_string))
+        });
+
+        if let (Some(cid), Some(rid)) = (cache_id, r_id) {
+            entries.push((cid, rid));
+        }
+
+        pos = pc_start + 1;
+    }
+
+    entries
+}
+
+pub(crate) fn extract_pivot_table_paths_for_sheet(
+    sheet_num: usize,
+    rels_xml: &[u8],
+) -> Vec<String> {
+    let relationships = parse_owned_relationships(
+        PackageOwner::Worksheet {
+            sheet_index: sheet_num,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_num),
+        },
+        rels_xml,
+    );
+    WorksheetRelationships::new(&relationships)
+        .pivot_tables()
+        .into_iter()
+        .filter_map(|rel| rel.target.path().map(ToOwned::to_owned))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pivot_cache_definition_xml(sheet: &str) -> Vec<u8> {
+        format!(
+            r#"<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" recordCount="1">
+                <cacheSource type="worksheet"><worksheetSource ref="A1:B2" sheet="{sheet}"/></cacheSource>
+                <cacheFields count="1">
+                    <cacheField name="Region"><sharedItems count="1"><s v="West"/></sharedItems></cacheField>
+                </cacheFields>
+            </pivotCacheDefinition>"#
+        )
+        .into_bytes()
+    }
+
+    fn pivot_cache_records_xml(value: &str) -> Vec<u8> {
+        format!(
+            r#"<pivotCacheRecords xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1">
+                <r><s v="{value}"/></r>
+            </pivotCacheRecords>"#
+        )
+        .into_bytes()
+    }
+
+    fn archive_with(files: &[(&str, Vec<u8>)]) -> Vec<u8> {
+        let mut writer = crate::write::ZipWriter::new();
+        for (path, bytes) in files {
+            writer.add_file(path, bytes.clone());
+        }
+        writer.finish().expect("fixture archive should write")
+    }
+
+    #[test]
+    fn workbook_pivot_cache_entries_extract_cache_id_and_relationship() {
+        let xml = br#"<workbook><pivotCaches>
+            <pivotCache cacheId="4" r:id="rId7"/>
+            <pivotCache cacheId="9" r:id="rId8"/>
+        </pivotCaches></workbook>"#;
+        assert_eq!(
+            extract_pivot_cache_entries(xml),
+            vec![(4, "rId7".to_string()), (9, "rId8".to_string())]
+        );
+    }
+
+    #[test]
+    fn worksheet_relationships_extract_pivot_table_paths() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/>
+        </Relationships>"#;
+        assert_eq!(
+            extract_pivot_table_paths_for_sheet(1, rels),
+            vec!["xl/pivotTables/pivotTable1.xml".to_string()]
+        );
+    }
+
+    #[test]
+    fn package_discovery_tracks_workbook_and_cache_record_relationships() {
+        let bytes = archive_with(&[
+            (
+                "xl/workbook.xml",
+                br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pivotCaches><pivotCache cacheId="4" r:id="rId7"/></pivotCaches></workbook>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition4.xml"/></Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+                pivot_cache_definition_xml("Data"),
+            ),
+            (
+                "xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords4.xml"/></Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheRecords4.xml",
+                pivot_cache_records_xml("0"),
+            ),
+        ]);
+        let archive = crate::zip::XlsxArchive::new(&bytes).expect("fixture archive should open");
+
+        let discovery = parse_pivot_cache_packages(&archive);
+
+        assert_eq!(discovery.caches.len(), 1);
+        assert_eq!(discovery.links.len(), 1);
+        let link = &discovery.links[0];
+        assert_eq!(link.cache_id, 4);
+        assert_eq!(link.workbook_relationship_id, "rId7");
+        assert_eq!(
+            link.workbook_relationship_target,
+            "pivotCache/pivotCacheDefinition4.xml"
+        );
+        assert_eq!(
+            link.definition_path,
+            "xl/pivotCache/pivotCacheDefinition4.xml"
+        );
+        assert_eq!(
+            link.records,
+            PivotCacheRecordsLink {
+                rels_path: Some("xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels".to_string()),
+                relationship_id: Some("rId1".to_string()),
+                relationship_target: Some("pivotCacheRecords4.xml".to_string()),
+                records_path: Some("xl/pivotCache/pivotCacheRecords4.xml".to_string()),
+                source: PivotCacheRecordsPathSource::Relationship,
+            }
+        );
+        assert!(discovery.caches[&4].raw_definition_xml.is_some());
+        assert!(discovery.caches[&4].raw_records_xml.is_some());
+        assert_eq!(
+            discovery.cache_paths(),
+            vec![(
+                4,
+                "xl/pivotCache/pivotCacheDefinition4.xml".to_string(),
+                Some("xl/pivotCache/pivotCacheRecords4.xml".to_string())
+            )]
+        );
+    }
+
+    #[test]
+    fn package_discovery_falls_back_to_matching_cache_records_path() {
+        let bytes = archive_with(&[
+            (
+                "xl/workbook.xml",
+                br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pivotCaches><pivotCache cacheId="9" r:id="rId9"/></pivotCaches></workbook>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition9.xml"/></Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheDefinition9.xml",
+                pivot_cache_definition_xml("Data"),
+            ),
+            (
+                "xl/pivotCache/pivotCacheRecords9.xml",
+                pivot_cache_records_xml("0"),
+            ),
+        ]);
+        let archive = crate::zip::XlsxArchive::new(&bytes).expect("fixture archive should open");
+
+        let discovery = parse_pivot_cache_packages(&archive);
+
+        assert_eq!(discovery.links.len(), 1);
+        assert_eq!(
+            discovery.links[0].records,
+            PivotCacheRecordsLink {
+                rels_path: None,
+                relationship_id: None,
+                relationship_target: None,
+                records_path: Some("xl/pivotCache/pivotCacheRecords9.xml".to_string()),
+                source: PivotCacheRecordsPathSource::Fallback,
+            }
+        );
+    }
+}

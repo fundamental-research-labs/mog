@@ -107,7 +107,7 @@ fn custom_property_value_to_domain(
 /// - `ParseOutput`: Semantic data (cells, merges, styles, named ranges, etc.)
 /// - `RoundTripContext`: Raw XML/OPC preservation blobs for lossless re-export
 /// - `ParseDiagnostics`: Errors, statistics, and recalc hints
-pub(crate) fn full_parse_result_to_parse_output(
+pub fn full_parse_result_to_parse_output(
     result: &FullParseResult,
 ) -> (ParseOutput, RoundTripContext, ParseDiagnostics) {
     // 1. Resolve styles into a flat DocumentFormat palette

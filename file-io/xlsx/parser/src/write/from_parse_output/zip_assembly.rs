@@ -124,7 +124,7 @@ pub(super) fn write_zip_package(
         let link_for_xml =
             external_links::with_resolved_relationship_ids(package_graph, link, &owner);
         let xml = crate::domain::external::write::write_external_link_xml(&link_for_xml);
-        zip.add_file(&zip_path, xml);
+        add_registered_part(package_graph, &mut zip, &zip_path, xml)?;
         let rels = package_graph.relationship_manager_for_owner(&owner);
         if !rels.is_empty() {
             zip.add_file(&external_links::rels_path(&zip_path), rels.to_xml());
@@ -298,7 +298,12 @@ pub(super) fn write_zip_package(
     // Pivot table and cache XML files
     for entry in &pivot_data.pivot_table_entries {
         let pivot_table_path = format!("xl/pivotTables/pivotTable{}.xml", entry.global_idx);
-        zip.add_file(&pivot_table_path, entry.xml.clone());
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            &pivot_table_path,
+            entry.xml.clone(),
+        )?;
         let pt_rels = package_graph.relationship_manager_for_owner(
             &crate::write::package_graph::PackageOwner::Part {
                 path: pivot_table_path,
@@ -315,14 +320,18 @@ pub(super) fn write_zip_package(
         }
     }
     for entry in &pivot_data.pivot_cache_entries {
-        zip.add_file(
+        add_registered_part(
+            package_graph,
+            &mut zip,
             &format!("xl/pivotCache/pivotCacheDefinition{}.xml", entry.global_idx),
             entry.definition_xml.clone(),
-        );
-        zip.add_file(
+        )?;
+        add_registered_part(
+            package_graph,
+            &mut zip,
             &format!("xl/pivotCache/pivotCacheRecords{}.xml", entry.global_idx),
             entry.records_xml.clone(),
-        );
+        )?;
         // Pivot cache definition rels (definition → records relationship).
         let cache_rels_xml = package_graph
             .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Part {
@@ -345,7 +354,7 @@ pub(super) fn write_zip_package(
 
             for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
-                zip.add_file(&chart_path, entry.xml.clone());
+                add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
 
                 // Write chart auxiliary files (style XML, colors XML) only
                 // when the current chart still carries imported chart identity.
@@ -387,7 +396,7 @@ pub(super) fn write_zip_package(
 
             for entry in chart_ex_entries {
                 let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
-                zip.add_file(&chart_path, entry.xml.clone());
+                add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
 
                 // Write ChartEx auxiliary files only when the current chart
                 // still carries imported chart identity.

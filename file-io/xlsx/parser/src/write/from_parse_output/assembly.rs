@@ -56,3 +56,82 @@ pub(super) struct ChartExEntry {
     /// Serialized ChartEx XML bytes.
     pub(super) xml: Vec<u8>,
 }
+pub(super) struct WorksheetCommentsGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) comments_path: String,
+    pub(super) comments_target: String,
+    pub(super) comments_relationship_id_hint: Option<String>,
+    pub(super) vml_path: String,
+    pub(super) vml_target: String,
+    pub(super) vml_relationship_id_hint: Option<String>,
+}
+
+pub(super) struct WorksheetHyperlinkGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) hyperlink_idx: usize,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetControlPropertyGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) global_idx: usize,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetCustomPropertyGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetHeaderFooterVmlGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
+pub(super) struct WorksheetFormControlVmlGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
+pub(super) struct WorksheetDrawingGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
+pub(super) struct DrawingRelationshipGraphEntry {
+    pub(super) drawing_path: String,
+    pub(super) rel_type: String,
+    pub(super) target_path: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct ChartAuxiliaryRelationshipGraphEntry {
+    pub(super) chart_path: String,
+    pub(super) rel_type: String,
+    pub(super) target_path: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetPrinterSettingsGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetThreadedCommentsGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}

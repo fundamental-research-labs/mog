@@ -1,0 +1,12 @@
+{
+  "budgets": [
+    {
+      "budgets": {
+        "import_ms_p95": 120000,
+        "export_ms_p95": 120000,
+        "output_size_ratio_max": 5
+      },
+      "reason": "initial Lane D full-tier discovery budget"
+    }
+  ]
+}

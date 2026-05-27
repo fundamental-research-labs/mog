@@ -187,6 +187,90 @@ pub struct ReportArtifact {
     pub path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ReportPolicyViolation {
+    pub code: String,
+    pub path: String,
+    pub message: String,
+}
+
+impl ReportPolicyViolation {
+    fn new(code: impl Into<String>, path: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            path: path.into(),
+            message: message.into(),
+        }
+    }
+}
+
+pub fn enforce_rollout_report_policy(report: &GateReport) -> Vec<ReportPolicyViolation> {
+    let mut violations = Vec::new();
+
+    if report.schema != REPORT_SCHEMA_VERSION {
+        violations.push(ReportPolicyViolation::new(
+            "report-schema-version",
+            "$schema",
+            format!("expected {REPORT_SCHEMA_VERSION}, got {}", report.schema),
+        ));
+    }
+
+    for scenario in &report.scenarios {
+        let path = format!("scenarios.{}", scenario.id);
+        if scenario.status == GateStatus::Failed && scenario.fingerprints.is_empty() {
+            violations.push(ReportPolicyViolation::new(
+                "failed-scenario-without-fingerprint",
+                &path,
+                "failed scenarios must carry at least one stable fingerprint",
+            ));
+        }
+        for fingerprint in &scenario.fingerprints {
+            enforce_fingerprint_policy(fingerprint, &path, &mut violations);
+        }
+    }
+
+    if let Some(domain) = &report.domain {
+        for fingerprint in &domain.fingerprints {
+            enforce_fingerprint_policy(fingerprint, "domain.fingerprints", &mut violations);
+        }
+        if matches!(report.gate, GateName::PerfGolden | GateName::PerfFull) {
+            for budget in &domain.budgets {
+                if budget.status == GateStatus::Failed && budget.reason.is_none() {
+                    violations.push(ReportPolicyViolation::new(
+                        "failed-performance-budget-without-reason",
+                        format!("domain.budgets.{}", budget.name),
+                        "failed performance budget updates require a named reason",
+                    ));
+                }
+            }
+        }
+    }
+
+    violations
+}
+
+fn enforce_fingerprint_policy(
+    fingerprint: &FailureFingerprint,
+    path: &str,
+    violations: &mut Vec<ReportPolicyViolation>,
+) {
+    let normalized = fingerprint.id.0.to_ascii_lowercase();
+    if normalized.contains("unknown")
+        || normalized.contains("misc")
+        || normalized.contains("raw-xml-diff")
+    {
+        violations.push(ReportPolicyViolation::new(
+            "non-actionable-fingerprint",
+            path,
+            format!(
+                "fingerprint '{}' uses a forbidden broad failure bucket",
+                fingerprint.id.0
+            ),
+        ));
+    }
+}
+
 fn unix_ms() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

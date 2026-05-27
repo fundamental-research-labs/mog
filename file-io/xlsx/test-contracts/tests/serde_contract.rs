@@ -1,6 +1,7 @@
 use xlsx_test_contracts::{
     FailureFingerprint, FingerprintCategory, FingerprintOwner, FingerprintSeverity, GateName,
-    GateReport, GateStatus, REPORT_SCHEMA_VERSION, gate_command_contracts,
+    GateReport, GateScenario, GateStatus, GateSuiteName, REPORT_SCHEMA_VERSION,
+    enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
 };
 
 #[test]
@@ -45,6 +46,75 @@ fn command_contracts_publish_every_phase_zero_gate_name() {
     assert!(
         contracts
             .iter()
-            .any(|contract| contract.gate == GateName::PerfFull && !contract.implemented)
+            .any(|contract| contract.gate == GateName::PerfFull && contract.implemented)
+    );
+    assert!(
+        contracts
+            .iter()
+            .any(|contract| contract.gate == GateName::CorpusFull && contract.heavy)
+    );
+    assert!(
+        contracts
+            .iter()
+            .all(|contract| !contract.command.is_empty())
+    );
+}
+
+#[test]
+fn rollout_suites_publish_local_ci_and_autonomous_gate_sets() {
+    let local = gate_suite_contract(GateSuiteName::LocalSmoke);
+    let golden = gate_suite_contract(GateSuiteName::CiGolden);
+    let full = gate_suite_contract(GateSuiteName::AutonomousFull);
+
+    assert_eq!(local.name, "local-smoke");
+    assert!(
+        local
+            .gates
+            .iter()
+            .any(|gate| gate.gate == GateName::PerfSmoke)
+    );
+    assert!(golden.gates.len() > local.gates.len());
+    assert_eq!(full.gates.len(), GateName::ALL.len());
+    assert!(
+        full.gates
+            .iter()
+            .any(|gate| gate.gate == GateName::PerfFull)
+    );
+}
+
+#[test]
+fn rollout_policy_rejects_failed_reports_without_actionable_fingerprints() {
+    let scenario = GateScenario::new("fixture-with-loss", GateStatus::Failed);
+    let report = GateReport::from_scenarios(GateName::OoxmlContract, vec![scenario], 0);
+
+    let violations = enforce_rollout_report_policy(&report);
+
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.code == "failed-scenario-without-fingerprint")
+    );
+}
+
+#[test]
+fn rollout_policy_rejects_broad_fingerprint_buckets() {
+    let mut scenario = GateScenario::new("fixture-with-loss", GateStatus::Failed);
+    scenario.fingerprints.push(FailureFingerprint::new(
+        "misc-raw-xml-diff",
+        FingerprintCategory::Correctness(
+            xlsx_test_contracts::CorrectnessFingerprintCategory::HarnessBug,
+        ),
+        FingerprintSeverity::Error,
+        FingerprintOwner::Harness,
+        "broad diff bucket",
+    ));
+    let report = GateReport::from_scenarios(GateName::OoxmlContract, vec![scenario], 0);
+
+    let violations = enforce_rollout_report_policy(&report);
+
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.code == "non-actionable-fingerprint")
     );
 }

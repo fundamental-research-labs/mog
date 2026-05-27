@@ -29,6 +29,7 @@ packages:
   - 'file-io/pdf/layout'
   - 'file-io/print-export'
   - 'file-io/xlsx/bridge'
+  - 'file-io/xlsx/corpus-eval'
   - 'file-io/xlsx/parser'
   - 'file-io/xlsx/tooling'
   - 'infra/culture'

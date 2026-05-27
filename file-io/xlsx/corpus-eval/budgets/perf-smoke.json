@@ -1,0 +1,13 @@
+{
+  "budgets": [
+    {
+      "classes": ["small-normal"],
+      "budgets": {
+        "import_ms_p95": 5000,
+        "export_ms_p95": 5000,
+        "output_size_ratio_max": 5
+      },
+      "reason": "initial Lane D generated smoke sentinel budget"
+    }
+  ]
+}

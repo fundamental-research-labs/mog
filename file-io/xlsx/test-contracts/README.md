@@ -31,3 +31,25 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 
 Phase 0 implements the `package-graph` archive adapter and publishes explicit
 `not implemented` stubs for the lane-owned gates.
+
+## Lane E Rollout Surface
+
+Lane E owns orchestration, not new report schemas. The gate binary exposes the
+shared command metadata and rollout suites from the Rust contracts:
+
+```bash
+pnpm gate:xlsx:list
+pnpm gate:xlsx:plan:smoke
+pnpm gate:xlsx:plan:golden
+pnpm gate:xlsx:plan:full
+```
+
+Report policy enforcement is also contract-backed:
+
+```bash
+pnpm --filter @mog/xlsx-parser-wasm run gate:enforce-policy -- report.json
+```
+
+Golden/full reports must use the shared envelope, carry stable fingerprints for
+failed scenarios, avoid broad `unknown`/`misc`/raw XML diff buckets, and include
+named reasons for failed performance budget updates.

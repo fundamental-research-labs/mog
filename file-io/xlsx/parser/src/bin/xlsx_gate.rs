@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use xlsx_parser::testing::{
-    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, MetricValue,
-    validate_package_graph_bytes,
+    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, GateSuiteName, MetricValue,
+    PerfGateOptions, enforce_rollout_report_policy, gate_command_contracts, gate_suite_contract,
+    gate_suite_contracts, run_ooxml_contract_gate, run_perf_gate, validate_package_graph_bytes,
 };
 
 fn main() {
@@ -19,6 +20,52 @@ fn main() {
         print_usage();
         return;
     }
+    if gate_name == "--list" {
+        print_json(&gate_command_contracts());
+        return;
+    }
+    if gate_name == "--suites" {
+        print_json(&gate_suite_contracts());
+        return;
+    }
+    if gate_name == "--plan" {
+        let Some(suite_name) = args.next() else {
+            eprintln!("--plan requires a suite name: local-smoke, ci-golden, or autonomous-full");
+            std::process::exit(2);
+        };
+        let suite = match GateSuiteName::from_str(&suite_name) {
+            Ok(suite) => suite,
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(2);
+            }
+        };
+        print_json(&gate_suite_contract(suite));
+        return;
+    }
+    if gate_name == "--enforce-policy" {
+        let Some(path) = args.next() else {
+            eprintln!("--enforce-policy requires a report path");
+            std::process::exit(2);
+        };
+        let report_json = match fs::read_to_string(&path) {
+            Ok(json) => json,
+            Err(err) => {
+                eprintln!("failed to read report {path}: {err}");
+                std::process::exit(1);
+            }
+        };
+        let report: GateReport = match serde_json::from_str(&report_json) {
+            Ok(report) => report,
+            Err(err) => {
+                eprintln!("failed to parse report {path}: {err}");
+                std::process::exit(1);
+            }
+        };
+        let violations = enforce_rollout_report_policy(&report);
+        print_json(&violations);
+        std::process::exit(if violations.is_empty() { 0 } else { 1 });
+    }
 
     let gate = match GateName::from_str(&gate_name) {
         Ok(gate) => gate,
@@ -30,6 +77,8 @@ fn main() {
     };
 
     let mut output: Option<PathBuf> = None;
+    let mut budget_path: Option<PathBuf> = None;
+    let mut baseline_path: Option<PathBuf> = None;
     let mut positional = Vec::new();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -40,12 +89,44 @@ fn main() {
                 };
                 output = Some(PathBuf::from(path));
             }
+            "--budgets" => {
+                let Some(path) = args.next() else {
+                    eprintln!("--budgets requires a path");
+                    std::process::exit(2);
+                };
+                budget_path = Some(PathBuf::from(path));
+            }
+            "--baseline" => {
+                let Some(path) = args.next() else {
+                    eprintln!("--baseline requires a path");
+                    std::process::exit(2);
+                };
+                baseline_path = Some(PathBuf::from(path));
+            }
             other => positional.push(other.to_string()),
         }
     }
 
     let (report, exit_code) = match gate {
+        GateName::OoxmlContract => {
+            let report = run_ooxml_contract_gate();
+            let exit_code = if report.totals.failed == 0 && report.totals.blocked == 0 {
+                0
+            } else {
+                1
+            };
+            (report, exit_code)
+        }
         GateName::PackageGraph => run_package_graph_gate(positional),
+        GateName::PerfSmoke | GateName::PerfGolden | GateName::PerfFull => {
+            let inputs = positional.into_iter().map(PathBuf::from).collect();
+            run_perf_gate(PerfGateOptions {
+                gate,
+                inputs,
+                budget_path,
+                baseline_path,
+            })
+        }
         other => (not_implemented_report(other), not_implemented_exit(other)),
     };
 
@@ -127,9 +208,20 @@ fn not_implemented_exit(gate: GateName) -> i32 {
 }
 
 fn print_usage() {
-    eprintln!("Usage: xlsx-gate <gate-name> [input.xlsx] [--output report.json]");
+    eprintln!(
+        "Usage: xlsx-gate <gate-name> [input.xlsx|corpus-dir ...] [--output report.json] [--budgets budgets.json] [--baseline report.json]"
+    );
+    eprintln!("       xlsx-gate --list");
+    eprintln!("       xlsx-gate --suites");
+    eprintln!("       xlsx-gate --plan <local-smoke|ci-golden|autonomous-full>");
+    eprintln!("       xlsx-gate --enforce-policy <report.json>");
     eprintln!("Gate names:");
     for gate in GateName::ALL {
         eprintln!("  {}", gate.as_str());
     }
+}
+
+fn print_json<T: serde::Serialize>(value: &T) {
+    let json = serde_json::to_string_pretty(value).expect("gate metadata should serialize");
+    println!("{json}");
 }

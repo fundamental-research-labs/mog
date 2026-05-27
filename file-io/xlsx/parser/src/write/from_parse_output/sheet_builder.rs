@@ -599,12 +599,27 @@ pub(super) fn build_sheet(
         } else {
             // Combine primary view with extra views for round-trip fidelity.
             let mut all_views = vec![sheet_view];
-            all_views.extend(sheet_data.extra_sheet_views.iter().cloned());
+            let current_pane = all_views[0].pane.clone();
+            all_views.extend(
+                sheet_data
+                    .extra_sheet_views
+                    .iter()
+                    .map(|view| normalize_extra_sheet_view(view, current_pane.as_ref())),
+            );
             writer.set_views(all_views);
         }
     }
 
     writer
+}
+
+fn normalize_extra_sheet_view(view: &SheetView, current_pane: Option<&SheetPane>) -> SheetView {
+    let mut view = view.clone();
+    if !pane_shape_is_compatible(view.pane.as_ref(), current_pane) {
+        view.pane = None;
+    }
+    view.selections = compatible_selections_for_pane(&view.selections, view.pane.as_ref());
+    view
 }
 
 fn compatible_selections_for_pane(
@@ -633,6 +648,17 @@ fn selection_pane_is_compatible(selection_pane: Option<Pane>, pane: Option<&Shee
         (true, false) => matches!(selection_pane, Pane::TopLeft | Pane::BottomLeft),
         (false, true) => matches!(selection_pane, Pane::TopLeft | Pane::TopRight),
         (false, false) => matches!(selection_pane, Pane::TopLeft),
+    }
+}
+
+fn pane_shape_is_compatible(pane: Option<&SheetPane>, current_pane: Option<&SheetPane>) -> bool {
+    match (pane, current_pane) {
+        (None, _) => true,
+        (Some(_), None) => false,
+        (Some(pane), Some(current_pane)) => {
+            (pane.x_split != 0.0) == (current_pane.x_split != 0.0)
+                && (pane.y_split != 0.0) == (current_pane.y_split != 0.0)
+        }
     }
 }
 

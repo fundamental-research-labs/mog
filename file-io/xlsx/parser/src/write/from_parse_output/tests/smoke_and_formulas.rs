@@ -413,6 +413,42 @@ fn stale_roundtrip_view_selection_does_not_override_current_sheet_view() {
 }
 
 #[test]
+fn stale_extra_sheet_view_pane_selection_is_dropped_without_current_pane() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        view: domain_types::SheetView {
+            active_cell: Some("A1".to_string()),
+            sqref: Some("A1".to_string()),
+            ..Default::default()
+        },
+        extra_sheet_views: vec![ooxml_types::worksheet::SheetView {
+            pane: Some(ooxml_types::worksheet::SheetPane::frozen(1, 1)),
+            selections: vec![ooxml_types::worksheet::Selection {
+                pane: Some(ooxml_types::worksheet::Pane::BottomRight),
+                active_cell: Some("C3".to_string()),
+                active_cell_id: None,
+                sqref: Some("C3".to_string()),
+            }],
+            workbook_view_id: 1,
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("<pane"));
+    assert!(!sheet_xml.contains(r#"pane="bottomRight""#));
+    assert!(!sheet_xml.contains(r#"activeCell="C3""#));
+    assert!(!sheet_xml.contains(r#"sqref="C3""#));
+    assert!(sheet_xml.contains(r#"<selection activeCell="A1" sqref="A1"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn test_multiple_sheets() {
     let output = make_parse_output(vec![
         SheetData {

@@ -33,7 +33,7 @@ impl Parse for GenerateClassInput {
 
 /// Generate a `#[pyclass]` struct definition and dispatch descriptor macros
 /// through `__expand_class`.
-pub(super) fn generate_class_impl(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
+pub(crate) fn generate_class_impl(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
     let parsed: GenerateClassInput = syn::parse2(input)?;
 
     let class_ident = &parsed.class_name;

@@ -21,7 +21,7 @@ pub(crate) use methods::emit_pure_method;
 pub(crate) use params::build_params_and_conversions;
 pub(crate) use returns::build_return_handling;
 
-use methods::{emit_async_service_method, emit_service_method};
+use methods::emit_service_method;
 use service::{emit_destroy, emit_helpers, emit_lifecycle_create, emit_registry};
 
 use crate::classify::{is_direct_return, to_snake_case};

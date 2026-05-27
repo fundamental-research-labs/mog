@@ -213,6 +213,7 @@ pub(super) fn emit_service_method(
 /// Async service methods clone the service instance out of the registry so that
 /// the DashMap guard is not held across an `.await` point. The cloned instance
 /// is then used to call the async method.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_async_service_method(
     desc: &NapiDescriptor,
     method: &NapiMethod,

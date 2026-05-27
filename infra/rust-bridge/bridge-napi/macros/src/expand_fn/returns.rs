@@ -7,11 +7,8 @@ pub(crate) fn build_return_handling(
     match return_type {
         None => {
             // No return value (unit)
-            if always_result {
-                (quote! { napi::Result<()> }, quote! { Ok(()) })
-            } else {
-                (quote! { napi::Result<()> }, quote! { Ok(()) })
-            }
+            let _ = always_result;
+            (quote! { napi::Result<()> }, quote! { Ok(()) })
         }
         Some(ret) => {
             if ret.is_string {

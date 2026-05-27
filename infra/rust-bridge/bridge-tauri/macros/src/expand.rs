@@ -16,12 +16,12 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub(super) use body::*;
-pub(super) use generate::expand_descriptor;
-pub(super) use ir::*;
-pub(super) use method::expand_method;
-pub(super) use names::to_snake_case;
-pub(super) use types::*;
+use body::*;
+use generate::expand_descriptor;
+use ir::*;
+use method::expand_method;
+use names::to_snake_case;
+use types::*;
 
 pub(crate) fn parse_and_expand(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
     let desc: TauriDescriptor = syn::parse2(input)?;

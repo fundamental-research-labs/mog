@@ -61,15 +61,3 @@ pub(super) fn emit_pure_function(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// `generate_class!` parsing and code generation
-// ---------------------------------------------------------------------------
-
-/// Input for `__generate_class`:
-/// `struct ClassName(path::to::InnerType); desc1, desc2, ...`
-pub(crate) struct GenerateClassInput {
-    pub class_name: Ident,
-    pub inner_type: syn::Path,
-    pub descriptors: Vec<syn::Path>,
-}

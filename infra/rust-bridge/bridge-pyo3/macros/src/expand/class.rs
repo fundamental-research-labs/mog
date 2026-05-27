@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn parse_and_expand_class(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
+pub(crate) fn parse_and_expand_class(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
     let parsed: ClassExpandInput = syn::parse2(input)?;
     let desc: PyO3Descriptor = syn::parse2(parsed.descriptor_tokens)?;
     Ok(expand_class(&parsed.class_name, &desc))

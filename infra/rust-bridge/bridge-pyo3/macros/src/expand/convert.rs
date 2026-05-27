@@ -156,7 +156,6 @@ pub(super) fn build_params_and_conversions(
 /// Option B (pydantic-style sibling dataclasses with a `Union` discriminator)
 /// is left as a future enhancement that can sit on top of this same FFI
 /// contract without codegen changes.
-
 pub(super) fn build_pyo3_return_type(ret: &ReturnInfo) -> TokenStream {
     if ret.is_string {
         quote! { String }

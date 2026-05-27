@@ -30,15 +30,15 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub(super) use class::{expand_class, parse_and_expand_class};
-pub(super) use convert::{
-    build_params_and_conversions, build_pyo3_return_type, build_return_handling,
-};
-pub(super) use free::{emit_pure_function, expand};
-pub(super) use generate_class::generate_class_impl;
-pub(super) use ir::*;
-pub(super) use tagged_enum::*;
-pub(super) use types::{classify_return, is_direct_return, to_snake_case};
+#[cfg(test)]
+use class::expand_class;
+pub(crate) use class::parse_and_expand_class;
+use convert::{build_params_and_conversions, build_pyo3_return_type, build_return_handling};
+use free::{emit_pure_function, expand};
+pub(crate) use generate_class::generate_class_impl;
+use ir::*;
+use tagged_enum::*;
+use types::{classify_return, is_direct_return, to_snake_case};
 
 pub(crate) fn parse_and_expand(input: proc_macro2::TokenStream) -> syn::Result<TokenStream> {
     let desc: PyO3Descriptor = syn::parse2(input)?;

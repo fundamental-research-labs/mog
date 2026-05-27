@@ -342,8 +342,8 @@ fn validate_modeled_part_invariants(
 
     for entry in archive.entries() {
         let path = entry.name.as_str();
-        if is_xml_part(path) && !is_worksheet_part(path) {
-            validate_xml_relationship_references(archive, path, relationships_by_part, errors);
+        if is_relationship_reference_part(path) && !is_worksheet_part(path) {
+            validate_part_relationship_references(archive, path, relationships_by_part, errors);
         }
         if is_worksheet_part(path) {
             require_relationship(
@@ -487,7 +487,7 @@ fn validate_worksheet_r_ids(
     }
 }
 
-fn validate_xml_relationship_references(
+fn validate_part_relationship_references(
     archive: &XlsxArchive<'_>,
     part_path: &str,
     relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
@@ -541,7 +541,7 @@ struct RelationshipAttr {
 }
 
 fn extract_relationship_attrs(xml: &[u8]) -> Vec<RelationshipAttr> {
-    ["id", "embed", "link"]
+    ["id", "embed", "link", "relid"]
         .into_iter()
         .flat_map(|local_name| extract_prefixed_attr_values(xml, local_name))
         .collect()
@@ -617,6 +617,10 @@ fn part_rels_path(part_path: &str) -> String {
 
 fn is_xml_part(path: &str) -> bool {
     path.ends_with(".xml") && path != "[Content_Types].xml" && !is_relationship_part(path)
+}
+
+fn is_relationship_reference_part(path: &str) -> bool {
+    is_xml_part(path) || path.ends_with(".vml")
 }
 
 fn worksheet_rels_path(worksheet_path: &str) -> String {
@@ -972,6 +976,72 @@ mod tests {
                 && id == "rIdExternalData"
                 && attr_name == "r:id"
         )));
+    }
+
+    #[test]
+    fn vml_image_relid_without_matching_vml_relationship_fails() {
+        let content_types = valid_content_types("");
+        let workbook_rels = workbook_rels("");
+        let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><legacyDrawing r:id="rIdVml"/></worksheet>"#,
+            ),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels),
+            (
+                "xl/drawings/vmlDrawing1.vml",
+                br#"<xml><v:shape><v:imagedata o:relid="rIdImage"/></v:shape></xml>"#,
+            ),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("VML image rel is dangling");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingPartRelationshipReference {
+                part_path,
+                id,
+                attr_name,
+                ..
+            } if part_path == "xl/drawings/vmlDrawing1.vml"
+                && id == "rIdImage"
+                && attr_name == "o:relid"
+        )));
+    }
+
+    #[test]
+    fn vml_image_relid_with_matching_vml_relationship_passes() {
+        let content_types = valid_content_types("");
+        let workbook_rels = workbook_rels("");
+        let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdVml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
+        let vml_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#;
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><legacyDrawing r:id="rIdVml"/></worksheet>"#,
+            ),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels),
+            (
+                "xl/drawings/vmlDrawing1.vml",
+                br#"<xml><v:shape><v:imagedata o:relid="rIdImage"/></v:shape></xml>"#,
+            ),
+            ("xl/drawings/_rels/vmlDrawing1.vml.rels", vml_rels),
+            ("xl/media/image1.png", b"png"),
+        ]);
+
+        validate_archive_package_integrity(&archive)
+            .expect("matching VML image relationship should be valid");
     }
 
     #[test]

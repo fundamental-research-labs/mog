@@ -28,7 +28,7 @@ use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::domain::drawings::write::{
     CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject, DrawingWriter,
-    Extent, OneCellAnchor, OpaqueGraphicFrame, TwoCellAnchor,
+    Extent, OneCellAnchor, TwoCellAnchor,
 };
 use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
@@ -871,14 +871,8 @@ pub fn write_xlsx_from_parse_output(
         let has_charts = extras.has_charts;
         let has_chart_ex = extras.has_chart_ex;
         let has_floating_objects = extras.has_floating_objects;
-        let has_drawing_passthroughs = round_trip_ctx
-            .and_then(|ctx| ctx.sheets.get(sheet_idx))
-            .map(|srt| !srt.drawing_anchor_passthroughs.is_empty())
-            .unwrap_or(false);
-        let needs_drawing =
-            has_charts || has_chart_ex || has_floating_objects || has_drawing_passthroughs;
-        let has_modeled_drawing_content =
-            has_charts || has_chart_ex || has_floating_objects || has_drawing_passthroughs;
+        let needs_drawing = has_charts || has_chart_ex || has_floating_objects;
+        let has_modeled_drawing_content = has_charts || has_chart_ex || has_floating_objects;
 
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
@@ -1282,72 +1276,6 @@ pub fn write_xlsx_from_parse_output(
                 drawing_writer.set_root_namespace_attrs(attrs);
             }
 
-            // ── Collect drawing anchor passthroughs (mc:AlternateContent, e.g., ChartEx) ──
-            // These carry their own relationship IDs (embedded in the raw XML).
-            // Stored with their original anchor index so we can insert them at the
-            // correct position after all other anchors are added, preserving order.
-            let has_passthroughs = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .map(|srt| !srt.drawing_anchor_passthroughs.is_empty())
-                .unwrap_or(false);
-            let mut passthrough_chart_ex_count = 0usize;
-            let mut deferred_passthroughs: Vec<(usize, DrawingAnchor)> = Vec::new();
-            if has_passthroughs {
-                let srt = &round_trip_ctx.unwrap().sheets[sheet_idx];
-
-                for (orig_idx, raw_xml) in &srt.drawing_anchor_passthroughs {
-                    use crate::domain::drawings::McAlternateContent;
-                    if raw_xml.contains("2014/chartex") || raw_xml.contains("chartEx") {
-                        passthrough_chart_ex_count += 1;
-                    }
-                    let mc = McAlternateContent {
-                        raw_xml: raw_xml.clone(),
-                    };
-                    let anchor = if raw_xml.starts_with("<xdr:oneCellAnchor") {
-                        DrawingAnchor::OneCell(
-                            OneCellAnchor {
-                                from: CellAnchor {
-                                    col: 0,
-                                    row: 0,
-                                    col_off: 0,
-                                    row_off: 0,
-                                },
-                                extent: Extent { cx: 0, cy: 0 },
-                                client_data: ClientData::default(),
-                                mc_alternate_content: Some(mc),
-                            },
-                            DrawingObject::GraphicFrame(OpaqueGraphicFrame {
-                                raw_xml: String::new(),
-                            }),
-                        )
-                    } else {
-                        DrawingAnchor::TwoCell(
-                            TwoCellAnchor {
-                                from: CellAnchor {
-                                    col: 0,
-                                    row: 0,
-                                    col_off: 0,
-                                    row_off: 0,
-                                },
-                                to: CellAnchor {
-                                    col: 0,
-                                    row: 0,
-                                    col_off: 0,
-                                    row_off: 0,
-                                },
-                                edit_as: None,
-                                client_data: ClientData::default(),
-                                mc_alternate_content: Some(mc),
-                            },
-                            DrawingObject::GraphicFrame(OpaqueGraphicFrame {
-                                raw_xml: String::new(),
-                            }),
-                        )
-                    };
-                    deferred_passthroughs.push((*orig_idx, anchor));
-                }
-            }
-
             // ── Floating objects (images, shapes, text boxes, groups, connectors, SmartArt) ──
             // IMPORTANT: Image rels must be registered BEFORE chart rels so that
             // `add_with_id` bumps `next_id` past the original rIds. Otherwise
@@ -1445,11 +1373,6 @@ pub fn write_xlsx_from_parse_output(
                 };
 
                 if chart_spec.is_chart_ex {
-                    // Skip if this chartEx was already handled by a drawing anchor passthrough.
-                    if passthrough_chart_ex_count > 0 && cx_local_idx < passthrough_chart_ex_count {
-                        cx_local_idx += 1;
-                        continue;
-                    }
                     let Some(cx_entry) = chart_ex_entry_map.get(&source_idx) else {
                         continue;
                     };
@@ -1643,20 +1566,16 @@ pub fn write_xlsx_from_parse_output(
 
             // ── Interleave all deferred anchors in original drawing order ──
             // Floating objects have explicit anchor indices from ooxml props.
-            // Passthroughs have explicit anchor indices from the parser.
             // Charts now also carry explicit anchor indices from ChartSpec.anchor_index.
             // Any anchors without explicit indices fill the remaining slots in order.
             {
-                // Collect all known (occupied) anchor indices from fobj, charts, and passthroughs.
+                // Collect all known (occupied) anchor indices from fobj and charts.
                 let mut occupied: std::collections::BTreeSet<usize> =
                     std::collections::BTreeSet::new();
                 for (idx, _) in &deferred_fobj_anchors {
                     if let Some(i) = idx {
                         occupied.insert(*i);
                     }
-                }
-                for (idx, _) in &deferred_passthroughs {
-                    occupied.insert(*idx);
                 }
                 // Charts with explicit anchor_index from ChartSpec
                 for (idx, _) in &deferred_chart_anchors {
@@ -1666,9 +1585,7 @@ pub fn write_xlsx_from_parse_output(
                 }
 
                 // Assign unindexed chart anchors to the remaining (free) indices.
-                let total = deferred_fobj_anchors.len()
-                    + deferred_chart_anchors.len()
-                    + deferred_passthroughs.len();
+                let total = deferred_fobj_anchors.len() + deferred_chart_anchors.len();
                 let mut free_indices: Vec<usize> =
                     (0..total).filter(|i| !occupied.contains(i)).collect();
                 let unindexed_chart_count = deferred_chart_anchors
@@ -1691,9 +1608,6 @@ pub fn write_xlsx_from_parse_output(
                 for (idx, anchor) in deferred_chart_anchors {
                     let i = idx.unwrap_or_else(|| free_idx_iter.next().unwrap_or(usize::MAX));
                     all_anchors.push((i, anchor));
-                }
-                for (idx, anchor) in deferred_passthroughs {
-                    all_anchors.push((idx, anchor));
                 }
 
                 // Sort by anchor index to restore original order.

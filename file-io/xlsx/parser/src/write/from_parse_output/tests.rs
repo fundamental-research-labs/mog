@@ -41,6 +41,11 @@ fn stale_sheet_drawing_relationship_without_modeled_or_opaque_drawing_is_ignored
                 target_mode: None,
             }],
             original_drawing_path: Some("xl/drawings/drawing1.xml".to_string()),
+            drawing_anchor_passthroughs: vec![(
+                0,
+                r#"<xdr:twoCellAnchor><xdr:graphicFrame><a:graphic><a:graphicData><cx:chart r:id="rId99"/></a:graphicData></a:graphic></xdr:graphicFrame></xdr:twoCellAnchor>"#
+                    .to_string(),
+            )],
             ..Default::default()
         }],
         ..Default::default()

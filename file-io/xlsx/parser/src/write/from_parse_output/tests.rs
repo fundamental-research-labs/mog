@@ -7,13 +7,15 @@ use crate::write::REL_PIVOT_TABLE;
 use domain_types::domain::workbook::{FileSharing, FileVersion, WorkbookProperties};
 use domain_types::{
     AlignmentFormat, AnchorPosition, AuthoredStyleRun, BorderFormat,
-    BorderSide as DomainBorderSide, CellData as DomainCellData, CellValue as DomainValue,
-    ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment, CommentType, DataTableOoxmlFlags,
-    DataTableRegion, DocumentFormat, DocumentProperties, FillFormat, FontFormat, FrozenPane,
-    Hyperlink, MergeRegion, NamedRange, ObjectSize, ParseOutput, PersonInfo, RowDimension,
-    SheetData, SheetDimensions, TableColumnSpec, TableSpec, WorkbookView,
+    BorderSide as DomainBorderSide, CFCellRange, CFRule, CFStyle, CellData as DomainCellData,
+    CellValue as DomainValue, ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment,
+    CommentType, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentFormat,
+    DocumentProperties, FillFormat, FontFormat, FrozenPane, Hyperlink, MergeRegion, NamedRange,
+    ObjectSize, ParseOutput, PersonInfo, RowDimension, SheetData, SheetDimensions, TableColumnSpec,
+    TableSpec, WorkbookView,
 };
 use formula_types::CellRef;
+use ooxml_types::cond_format::CfOperator;
 use std::sync::Arc;
 use value_types::{CellError, FiniteF64};
 
@@ -4436,6 +4438,70 @@ fn unused_imported_stylesheet_is_not_replayed_without_modeled_style_references()
     assert!(!styles_xml.contains("StaleFont"));
     assert!(!styles_xml.contains("STALE"));
     assert!(styles_xml.contains("<cellXfs count=\"1\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn conditional_format_dxf_reference_keeps_imported_stylesheet() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![make_cell(
+                0,
+                0,
+                DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+            )],
+            conditional_formats: vec![ConditionalFormat {
+                id: "cf1".to_string(),
+                sheet_id: "sheet1".to_string(),
+                pivot: None,
+                ranges: vec![CFCellRange::new(0, 0, 9, 0)],
+                range_identities: None,
+                rules: vec![CFRule::CellValue {
+                    id: "rule1".to_string(),
+                    priority: 1,
+                    stop_if_true: None,
+                    operator: CfOperator::GreaterThan,
+                    value1: serde_json::json!(5),
+                    value2: None,
+                    style: CFStyle {
+                        dxf_id: Some(0),
+                        ..Default::default()
+                    },
+                    text: None,
+                }],
+            }],
+            ..Default::default()
+        }],
+        style_palette: Vec::new(),
+        ..Default::default()
+    };
+    let imported_styles = br#"
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+          <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+          <borders count="1"><border/></borders>
+          <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+          <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+          <dxfs count="1"><dxf><font><color rgb="FFFF0000"/></font></dxf></dxfs>
+          <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
+        </styleSheet>
+    "#;
+    let ctx = domain_types::RoundTripContext {
+        parsed_stylesheet: Some(crate::domain::styles::read::parse_styles(imported_styles)),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"<dxfs count="1">"#));
+    assert!(styles_xml.contains(r#"rgb="FFFF0000""#));
+    assert!(sheet_xml.contains(r#"dxfId="0""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

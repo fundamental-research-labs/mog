@@ -1,0 +1,296 @@
+use super::*;
+
+// =============================================================================
+// Domain conversions: Form controls
+// =============================================================================
+
+/// Convert parser `FormControlOutput` items into unified `FloatingObject` items.
+pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<FloatingObject> {
+    controls
+        .iter()
+        .enumerate()
+        .map(|(idx, fc)| {
+            let anchor = FloatingObjectAnchor {
+                anchor_row: fc.from_row,
+                anchor_col: fc.from_col,
+                anchor_row_offset: fc.from_row_offset,
+                anchor_col_offset: fc.from_col_offset,
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(fc.to_row),
+                end_col: Some(fc.to_col),
+                end_row_offset: Some(fc.to_row_offset),
+                end_col_offset: Some(fc.to_col_offset),
+                extent_cx: None,
+                extent_cy: None,
+            };
+            // Build typed ooxml props for round-trip
+            let ooxml = FormControlOoxmlProps {
+                shape_id: fc.shape_id,
+                alt_text: fc.alt_text.clone(),
+                fmla_group: fc.fmla_group.clone(),
+                fmla_txbx: fc.fmla_txbx.clone(),
+                checked: fc.checked.clone(),
+                val: fc.val,
+                sel: fc.sel,
+                min: fc.min,
+                max: fc.max,
+                inc: fc.inc,
+                page: fc.page,
+                drop_lines: fc.drop_lines,
+                drop_style: fc.drop_style.clone(),
+                dx: fc.dx,
+                horiz: fc.horiz,
+                colored: fc.colored,
+                no_three_d: fc.no_three_d,
+                no_three_d2: fc.no_three_d2,
+                first_button: fc.first_button,
+                lock_text: fc.lock_text,
+                sel_type: fc.sel_type.clone(),
+                multi_sel: fc.multi_sel.clone(),
+                text_h_align: fc.text_h_align.clone(),
+                text_v_align: fc.text_v_align.clone(),
+                edit_val: fc.edit_val.clone(),
+                multi_line: fc.multi_line,
+                vertical_bar: fc.vertical_bar,
+                password_edit: fc.password_edit,
+                just_last_x: fc.just_last_x,
+                width_min: fc.width_min,
+                items: fc.items.clone(),
+                macro_name: fc.macro_name.clone(),
+                anchor_source: fc.anchor_source.clone(),
+                move_with_cells: fc.move_with_cells,
+                size_with_cells: fc.size_with_cells,
+                vml_extras: fc.vml_extras.clone(),
+                control_pr_attrs: fc.control_pr_attrs.clone(),
+                vml_shape: Some(fc.vml_shape.clone()),
+            };
+            FloatingObject {
+                common: FloatingObjectCommon {
+                    id: format!("fobj-fc-{}", idx),
+                    sheet_id: String::new(),
+                    anchor,
+                    width: 0.0,
+                    height: 0.0,
+                    z_index: idx as i32,
+                    rotation: 0.0,
+                    flip_h: false,
+                    flip_v: false,
+                    locked: false,
+                    visible: true,
+                    printable: true,
+                    opacity: 1.0,
+                    name: fc.name.clone().unwrap_or_default(),
+                    created_at: 0,
+                    updated_at: 0,
+                    group_id: None,
+                    anchor_cell_id: None,
+                    to_anchor_cell_id: None,
+                    lock_aspect_ratio: None,
+                    alt_text_title: None,
+                    display_name: None,
+                    import_status: None,
+                },
+                data: FloatingObjectData::FormControl(FormControlData {
+                    control_type: fc.object_type.clone(),
+                    cell_link: fc.fmla_link.clone(),
+                    input_range: fc.fmla_range.clone(),
+                    ooxml: Some(ooxml),
+                }),
+            }
+        })
+        .collect()
+}
+
+// =============================================================================
+// Domain conversions: OLE objects
+// =============================================================================
+
+/// Convert parser `OleObjectOutput` items into unified `FloatingObject` items.
+pub(crate) fn convert_ole_objects(objects: &[OleObjectOutput]) -> Vec<FloatingObject> {
+    objects
+        .iter()
+        .enumerate()
+        .map(|(idx, o)| {
+            // Build anchor from objectPr anchor if available
+            let anchor = o
+                .object_pr
+                .as_ref()
+                .and_then(|pr| pr.anchor.as_ref())
+                .map(|a| FloatingObjectAnchor {
+                    anchor_row: a.from.row,
+                    anchor_col: a.from.col,
+                    anchor_row_offset: a.from.row_off,
+                    anchor_col_offset: a.from.col_off,
+                    anchor_mode: AnchorMode::TwoCell,
+                    end_row: Some(a.to.row),
+                    end_col: Some(a.to.col),
+                    end_row_offset: Some(a.to.row_off),
+                    end_col_offset: Some(a.to.col_off),
+                    extent_cx: None,
+                    extent_cy: None,
+                })
+                .unwrap_or(FloatingObjectAnchor {
+                    anchor_row: 0,
+                    anchor_col: 0,
+                    anchor_row_offset: 0,
+                    anchor_col_offset: 0,
+                    anchor_mode: AnchorMode::TwoCell,
+                    end_row: None,
+                    end_col: None,
+                    end_row_offset: None,
+                    end_col_offset: None,
+                    extent_cx: None,
+                    extent_cy: None,
+                });
+            // Build typed ooxml props for round-trip
+            let ooxml = OleObjectOoxmlProps {
+                shape_id: o.shape_id,
+                r_id: o.r_id.clone(),
+                data_path: o.data_path.clone(),
+                name: o.name.clone(),
+                link: o.link.clone(),
+                dv_aspect: o.dv_aspect.clone(),
+                prog_id: o.prog_id.clone(),
+                ole_update: o.ole_update.clone(),
+                auto_load: o.auto_load,
+                preview_image_rel_id: o.preview_image_rel_id.clone(),
+                preview_image_path: o.preview_image_path.clone(),
+                object_pr: o.object_pr.clone(),
+            };
+            FloatingObject {
+                common: FloatingObjectCommon {
+                    id: format!("fobj-ole-{}", idx),
+                    sheet_id: String::new(),
+                    anchor,
+                    width: 0.0,
+                    height: 0.0,
+                    z_index: idx as i32,
+                    rotation: 0.0,
+                    flip_h: false,
+                    flip_v: false,
+                    locked: false,
+                    visible: true,
+                    printable: true,
+                    opacity: 1.0,
+                    name: o.name.clone().unwrap_or_default(),
+                    created_at: 0,
+                    updated_at: 0,
+                    group_id: None,
+                    anchor_cell_id: None,
+                    to_anchor_cell_id: None,
+                    lock_aspect_ratio: None,
+                    alt_text_title: None,
+                    display_name: None,
+                    import_status: None,
+                },
+                data: FloatingObjectData::OleObject(OleObjectData {
+                    prog_id: o.prog_id.clone(),
+                    dv_aspect: "DVASPECT_CONTENT".to_string(),
+                    is_linked: false,
+                    is_embedded: true,
+                    preview_image_src: None,
+                    alt_text: None,
+                    ooxml: Some(ooxml),
+                }),
+            }
+        })
+        .collect()
+}
+
+// =============================================================================
+// Domain conversions: Connectors
+// =============================================================================
+
+/// Convert parser `ConnectorOutput` items into unified `FloatingObject` items.
+pub(crate) fn convert_connectors(connectors: &[ConnectorOutput]) -> Vec<FloatingObject> {
+    connectors
+        .iter()
+        .enumerate()
+        .map(|(idx, c)| {
+            let has_end = c.end_row.is_some() && c.end_col.is_some();
+            let anchor = FloatingObjectAnchor {
+                anchor_row: c.anchor_row.unwrap_or(0),
+                anchor_col: c.anchor_col.unwrap_or(0),
+                anchor_row_offset: c.anchor_row_offset,
+                anchor_col_offset: c.anchor_col_offset,
+                anchor_mode: if has_end {
+                    AnchorMode::TwoCell
+                } else {
+                    AnchorMode::OneCell
+                },
+                end_row: c.end_row,
+                end_col: c.end_col,
+                end_row_offset: c.end_row_offset,
+                end_col_offset: c.end_col_offset,
+                extent_cx: None,
+                extent_cy: None,
+            };
+            // Convert EMU to pixels (÷9525) for width/height
+            let width = c.width.map(|w| (w / 9525) as f64).unwrap_or(0.0);
+            let height = c.height.map(|h| (h / 9525) as f64).unwrap_or(0.0);
+            let start_connection = c.start_connection.as_ref().map(|e| ConnectorBinding {
+                shape_id: e.shape_id.to_string(),
+                site_index: e.idx as i32,
+            });
+            let end_connection = c.end_connection.as_ref().map(|e| ConnectorBinding {
+                shape_id: e.shape_id.to_string(),
+                site_index: e.idx as i32,
+            });
+            let ooxml: Option<ConnectorOoxmlProps> = c
+                .raw_json
+                .as_ref()
+                .and_then(|j| {
+                    serde_json::from_str::<ooxml_types::drawings::SpreadsheetConnector>(j).ok()
+                })
+                .map(|connector| ConnectorOoxmlProps {
+                    connector,
+                    anchor_index: None,
+                    extent_emu_cx: c.width,
+                    extent_emu_cy: c.height,
+                    edit_as: None,
+                    client_data_locks_with_sheet: None,
+                    client_data_prints_with_sheet: None,
+                    mc_alternate_content_raw_xml: None,
+                });
+            FloatingObject {
+                common: FloatingObjectCommon {
+                    id: format!("fobj-conn-{}", idx),
+                    sheet_id: String::new(),
+                    anchor,
+                    width,
+                    height,
+                    z_index: idx as i32,
+                    rotation: 0.0,
+                    flip_h: false,
+                    flip_v: false,
+                    locked: false,
+                    visible: true,
+                    printable: true,
+                    opacity: 1.0,
+                    name: c.name.clone().unwrap_or_default(),
+                    created_at: 0,
+                    updated_at: 0,
+                    group_id: None,
+                    anchor_cell_id: None,
+                    to_anchor_cell_id: None,
+                    lock_aspect_ratio: None,
+                    alt_text_title: None,
+                    display_name: None,
+                    import_status: None,
+                },
+                data: FloatingObjectData::Connector(ConnectorData {
+                    shape_type: c
+                        .preset_geometry
+                        .clone()
+                        .unwrap_or_else(|| "line".to_string()),
+                    fill: None,
+                    outline: None,
+                    start_connection,
+                    end_connection,
+                    adjustments: None,
+                    ooxml,
+                }),
+            }
+        })
+        .collect()
+}

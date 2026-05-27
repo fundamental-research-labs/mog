@@ -282,6 +282,48 @@ fn legacy_custom_xml_with_dangling_sidecar_relationship_is_not_exported() {
 }
 
 #[test]
+fn legacy_custom_xml_with_unreachable_item_props_is_not_exported() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        custom_xml_parts: vec![
+            domain_types::BlobPart {
+                path: "customXml/item1.xml".to_string(),
+                data: b"<item/>".to_vec(),
+            },
+            domain_types::BlobPart {
+                path: "customXml/itemProps1.xml".to_string(),
+                data: b"<props/>".to_vec(),
+            },
+        ],
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId9".to_string(),
+            rel_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
+                    .to_string(),
+            target: "../customXml/item1.xml".to_string(),
+            target_mode: None,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("customXml/item1.xml"));
+    assert!(!archive.contains("customXml/itemProps1.xml"));
+    assert!(!workbook_rels.contains("customXml"));
+    assert!(!content_types.contains("/customXml/item"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn legacy_custom_xml_without_workbook_owner_relationship_is_not_exported() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -1365,8 +1365,8 @@ pub fn write_xlsx_from_parse_output(
 
                 deferred_fobj_anchors = drawing_data.anchors;
 
-                // Add image relationships for images whose bytes are already
-                // handled by binary_blobs passthrough (no need to re-emit bytes).
+                // Add image relationships for images whose bytes are emitted
+                // from modeled floating-object image blobs below.
                 // Uses add_with_id to preserve original relationship IDs for round-trip fidelity.
                 // Must be registered before chart rels to reserve original rIds.
                 // Skip if already present (from from_original).
@@ -2704,16 +2704,6 @@ pub fn write_xlsx_from_parse_output(
     }
 
     crate::write::opaque_subgraph::write_opaque_parts(&mut zip, &package_graph);
-
-    // Binary blob passthrough (printerSettings, vbaProject, richData, media, etc.)
-    if let Some(ctx) = round_trip_ctx {
-        for part in &ctx.binary_blobs {
-            if !package_authority::keep_round_trip_binary_blob(ctx, &pivot_data, &part.path) {
-                continue;
-            }
-            zip.add_file(&part.path, part.data.clone());
-        }
-    }
 
     // Pre-generate all sheet XMLs (parallel when the "parallel" feature is enabled).
     #[cfg(feature = "parallel")]

@@ -10,18 +10,6 @@ use crate::write::relationships::RelationshipManager;
 // clean imported and orphan parts are replayed, generated/dirty/deleted parts
 // replace only their proven paths, and API-created pivots remain generated.
 
-pub(super) fn keep_binary_blob(pivot_data: &PivotWriteData, path: &str) -> bool {
-    if !is_managed_pivot_part_path(path) {
-        return true;
-    }
-    if pivot_data.has_typed_package_contract {
-        let path = normalize_part_path(path);
-        return pivot_data.preserved_part_paths.contains(&path)
-            && !pivot_data.generated_part_paths.contains(&path);
-    }
-    false
-}
-
 pub(super) fn add_sheet_relationships(
     rels: &mut RelationshipManager,
     pivot_data: &PivotWriteData,
@@ -54,13 +42,4 @@ pub(super) fn add_sheet_relationships(
         r_ids.push(r_id);
     }
     r_ids
-}
-
-fn is_managed_pivot_part_path(path: &str) -> bool {
-    let path = path.trim_start_matches('/');
-    path.starts_with("xl/pivotTables/") || path.starts_with("xl/pivotCache/")
-}
-
-fn normalize_part_path(path: &str) -> String {
-    path.trim_start_matches('/').to_string()
 }

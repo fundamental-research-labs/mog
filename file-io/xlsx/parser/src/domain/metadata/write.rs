@@ -95,3 +95,35 @@ pub fn write_app_props_xml() -> Vec<u8> {
     w.end_element("Properties");
     w.finish()
 }
+
+/// Build `docProps/custom.xml` from modeled custom document properties.
+pub fn write_custom_props_xml(props: &domain_types::DocumentProperties) -> Vec<u8> {
+    let mut w = XmlWriter::new();
+    w.write_declaration();
+    w.start_element("Properties")
+        .attr(
+            "xmlns",
+            "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+        )
+        .attr(
+            "xmlns:vt",
+            "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+        )
+        .end_attrs();
+
+    for (idx, (name, value)) in props.custom.iter().enumerate() {
+        w.start_element("property")
+            .attr("fmtid", "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}")
+            .attr_num("pid", idx + 2)
+            .attr("name", name)
+            .end_attrs();
+        w.start_element("vt:lpwstr")
+            .end_attrs()
+            .text(value)
+            .end_element("vt:lpwstr");
+        w.end_element("property");
+    }
+
+    w.end_element("Properties");
+    w.finish()
+}

@@ -28,7 +28,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         parsed
     };
     let parse_output = parsed.output;
-    let mut round_trip_ctx = parsed.round_trip_ctx;
+    let round_trip_ctx = parsed.round_trip_ctx;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -36,21 +36,6 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             "XLSX import produced parse errors"
         );
     }
-
-    round_trip_ctx.original_named_ranges_order = parse_output.named_ranges.clone();
-    round_trip_ctx.skipped_named_ranges = parse_output
-        .named_ranges
-        .iter()
-        .filter(|nr| {
-            nr.hidden
-                || matches!(
-                    compute_parser::ParsedExpr::classify(&nr.refers_to),
-                    compute_parser::ParsedExpr::BrokenRef { .. }
-                        | compute_parser::ParsedExpr::Empty
-                )
-        })
-        .cloned()
-        .collect();
 
     // Import replaces the current document contents. The non-deferred path
     // rebuilds a fresh storage instance; the deferred path must do the same
@@ -392,7 +377,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let (full_parse_output, mut full_round_trip_ctx) = {
+        let (full_parse_output, full_round_trip_ctx) = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
             let parsed = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
@@ -415,21 +400,6 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             );
             parsed
         };
-        full_round_trip_ctx.original_named_ranges_order = full_parse_output.named_ranges.clone();
-        full_round_trip_ctx.skipped_named_ranges = full_parse_output
-            .named_ranges
-            .iter()
-            .filter(|nr| {
-                nr.hidden
-                    || matches!(
-                        compute_parser::ParsedExpr::classify(&nr.refers_to),
-                        compute_parser::ParsedExpr::BrokenRef { .. }
-                            | compute_parser::ParsedExpr::Empty
-                    )
-            })
-            .cloned()
-            .collect();
-
         dh_log!("phase 0 done");
 
         // Pass 1: Re-allocate IDs for ALL sheets with FIXED SheetIds.

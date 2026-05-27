@@ -98,7 +98,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         parsed
     };
     let parse_output = parsed.output;
-    let mut round_trip_ctx = parsed.round_trip_ctx;
+    let round_trip_ctx = parsed.round_trip_ctx;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -112,21 +112,6 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             "XLSX import: cells requiring forced recalc"
         );
     }
-
-    round_trip_ctx.original_named_ranges_order = parse_output.named_ranges.clone();
-    round_trip_ctx.skipped_named_ranges = parse_output
-        .named_ranges
-        .iter()
-        .filter(|nr| {
-            nr.hidden
-                || matches!(
-                    compute_parser::ParsedExpr::classify(&nr.refers_to),
-                    compute_parser::ParsedExpr::BrokenRef { .. }
-                        | compute_parser::ParsedExpr::Empty
-                )
-        })
-        .cloned()
-        .collect();
 
     // ── Pass 1: Allocate IDs (no Yrs writes) ──────────────────────────
     let mut allocator = DefaultIdAllocator::new();

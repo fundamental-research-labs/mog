@@ -12,10 +12,10 @@ use std::sync::Arc;
 
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
-    ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, ErrorStyle, FillFormat,
-    FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput, RoundTripContext, RowDimension,
-    SheetData, SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule,
-    ValidationSpec,
+    ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
+    ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
+    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::parse_xlsx_to_output;
@@ -62,6 +62,30 @@ fn make_single_sheet(name: &str, cells: Vec<CellData>) -> ParseOutput {
         }],
         ..Default::default()
     }
+}
+
+#[test]
+fn document_properties_roundtrip_from_modeled_state() {
+    let mut output = make_single_sheet("Sheet1", Vec::new());
+    output.properties = Some(DocumentProperties {
+        title: Some("Modeled Workbook".to_string()),
+        creator: Some("Mog".to_string()),
+        custom: vec![("ReviewStatus".to_string(), "Approved".to_string())],
+        ..Default::default()
+    });
+
+    let round_tripped = roundtrip(&output);
+    let properties = round_tripped
+        .properties
+        .as_ref()
+        .expect("document properties should round-trip");
+
+    assert_eq!(properties.title.as_deref(), Some("Modeled Workbook"));
+    assert_eq!(properties.creator.as_deref(), Some("Mog"));
+    assert_eq!(
+        properties.custom,
+        vec![("ReviewStatus".to_string(), "Approved".to_string())]
+    );
 }
 
 /// Helper: create a CellData with just a value at (row, col).

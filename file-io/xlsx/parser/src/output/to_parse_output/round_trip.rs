@@ -844,8 +844,8 @@ pub(super) fn build_round_trip_context(
         theme_ext_lst_xml: result.theme_ext_lst_xml.clone(),
         doc_metadata_label_info: result.raw_doc_metadata_label_info.clone(),
         calc_id: result.calc_id,
-        skipped_named_ranges: vec![], // populated later by compute-core during import
-        original_named_ranges_order: vec![], // populated later by compute-core during import
+        skipped_named_ranges: vec![],
+        original_named_ranges_order: vec![],
         iterative_calc_settings: Some({
             let mut cp = domain_types::domain::workbook::CalculationProperties {
                 iterate: result.iterative_calc,

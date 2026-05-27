@@ -1,7 +1,7 @@
 //! Unified XLSX writer that consumes `ParseOutput` from domain-types.
 //!
-//! When `round_trip_ctx` is `Some`, raw XML blobs are used for round-trip fidelity.
-//! When `None`, clean OOXML is generated from the domain types alone.
+//! Round-trip context supplies identity hints and clean opaque package data.
+//! Modeled workbook state is generated from domain types.
 //!
 //! UTF-8 boundary guard: the two `&s[..n]` slices in this file truncate
 //! ASCII-only identifier strings (relationship IDs, hyperlink target
@@ -10,6 +10,7 @@
 
 #![allow(clippy::string_slice)]
 
+mod doc_props;
 mod package_authority;
 mod pivot_package;
 mod sheet_builder;
@@ -190,6 +191,14 @@ fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool 
         || chart_spec.data_table.is_some()
 }
 
+fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
+    chart_spec.preserved_chart_xml.is_some()
+        || chart_spec
+            .rt
+            .as_ref()
+            .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some())
+}
+
 fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) -> bool {
     let Some(ctx) = round_trip_ctx else {
         return false;
@@ -207,29 +216,39 @@ fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, path: &str) 
     })
 }
 
+fn output_references_metadata(output: &ParseOutput) -> bool {
+    output
+        .sheets
+        .iter()
+        .flat_map(|sheet| sheet.cells.iter())
+        .any(|cell| cell.cm || cell.vm.is_some())
+}
+
 /// Write an XLSX file from a `ParseOutput`.
 ///
-/// When `round_trip_ctx` is `Some`, raw XML blobs are used for round-trip fidelity.
-/// When `None`, clean OOXML is generated from the domain types alone.
+/// Round-trip context supplies identity hints and clean opaque package data;
+/// modeled workbook state is generated from domain types.
 pub fn write_xlsx_from_parse_output(
     output: &ParseOutput,
     round_trip_ctx: Option<&RoundTripContext>,
 ) -> Result<Vec<u8>, WriteError> {
     // ── 1. Build styles ─────────────────────────────────────────────────
-    // Prefer the full parsed Stylesheet from RoundTripContext (lossless: preserves
-    // theme/indexed colors, cellStyleXfs, dxfs, table styles, named styles, etc.).
-    // Fall back to the lossy DocumentFormat reconstruction when no stylesheet is available
-    // (e.g., new files created from scratch or after Yrs round-trip without stylesheet storage).
+    // Use the imported stylesheet only while current modeled objects still
+    // reference its raw cellXfs indices. If styles are no longer referenced,
+    // regenerate from modeled style state so stale imported style facts do not
+    // survive deletion.
     // Track whether we use the lossless stylesheet path. When true, cellXfs
     // are passed through directly and cell style_id values should NOT be offset
     // by +1. When false (lossy palette path), a default is inserted at cellXfs[0]
     // so cell style_id values must be offset by +1.
-    let has_lossless_stylesheet = round_trip_ctx
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .is_some();
+    let has_style_references = output_references_style_ids(output);
+    let has_lossless_stylesheet = has_style_references
+        && round_trip_ctx
+            .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
+            .is_some();
 
     let styles_writer = if let Some(ctx) = round_trip_ctx {
-        if let Some(ref stylesheet) = ctx.parsed_stylesheet {
+        if has_style_references && let Some(ref stylesheet) = ctx.parsed_stylesheet {
             let mut writer = build_styles_from_stylesheet(
                 stylesheet,
                 ctx.styles_ext_lst_xml.as_deref(),
@@ -251,35 +270,20 @@ pub fn write_xlsx_from_parse_output(
     };
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
-    // When round-tripping with a raw SST passthrough, seed the SharedStringsWriter
-    // with the original string→index mapping so that cell <v> indices match the
-    // preserved SST XML ordering.
+    // Imported shared string entries are non-authoritative per-cell hints. A
+    // hint is emitted only when a current cell still references the same
+    // original SST index and text; stale raw SST XML and count metadata never
+    // override the generated table.
     let mut shared_strings = if let Some(ctx) = round_trip_ctx {
-        if ctx.raw_shared_strings_xml.is_some() && !ctx.shared_strings_list.is_empty() {
+        if !ctx.shared_strings_list.is_empty() {
             let mut sst = SharedStringsWriter::with_capacity(ctx.shared_strings_list.len());
-            let has_rich = !ctx.shared_strings_rich_runs.is_empty();
-            let has_phonetic = !ctx.shared_strings_phonetic_xml.is_empty();
             for (i, s) in ctx.shared_strings_list.iter().enumerate() {
-                // Use rich text runs when available for this entry
-                let idx = if has_rich {
-                    if let Some(Some(runs)) = ctx.shared_strings_rich_runs.get(i) {
-                        sst.seed_rich(runs.clone())
-                    } else {
-                        sst.seed(s)
-                    }
-                } else {
-                    sst.seed(s)
-                };
-                // Attach phonetic XML if present for this entry
-                if has_phonetic {
-                    if let Some(Some(phonetic)) = ctx.shared_strings_phonetic_xml.get(i) {
-                        sst.set_phonetic_xml(idx, phonetic.clone());
-                    }
-                }
-            }
-            // Preserve the original SST count attribute for round-trip fidelity
-            if let Some(count) = ctx.original_sst_count {
-                sst.set_original_sst_count(count);
+                sst.add_imported_hint(
+                    i,
+                    s,
+                    ctx.shared_strings_rich_runs.get(i).cloned().flatten(),
+                    ctx.shared_strings_phonetic_xml.get(i).cloned().flatten(),
+                );
             }
             sst
         } else {
@@ -645,15 +649,19 @@ pub fn write_xlsx_from_parse_output(
             // Preserve original chart number from round-trip context when available.
             // E.g., if original was "xl/charts/chart2.xml", extract 2 instead of using
             // the sequential counter (which would produce chart1.xml).
-            let original_idx = sheet_rt_for_charts
-                .and_then(|srt| srt.chart_auxiliary_data.get(chart_local_idx))
-                .and_then(|aux| aux.original_path.as_ref())
-                .and_then(|path| {
-                    // Extract number from "xl/charts/chart{N}.xml"
-                    let fname = path.rsplit('/').next()?;
-                    let num_str = fname.strip_prefix("chart")?.strip_suffix(".xml")?;
-                    num_str.parse::<usize>().ok()
-                });
+            let original_idx = chart_allows_auxiliary_replay(chart_spec)
+                .then(|| {
+                    sheet_rt_for_charts
+                        .and_then(|srt| srt.chart_auxiliary_data.get(chart_local_idx))
+                        .and_then(|aux| aux.original_path.as_ref())
+                        .and_then(|path| {
+                            // Extract number from "xl/charts/chart{N}.xml"
+                            let fname = path.rsplit('/').next()?;
+                            let num_str = fname.strip_prefix("chart")?.strip_suffix(".xml")?;
+                            num_str.parse::<usize>().ok()
+                        })
+                })
+                .flatten();
             let idx = if let Some(orig) = original_idx {
                 // Track the highest index we've used so sequential fallback
                 // doesn't collide with preserved original numbers.
@@ -689,14 +697,18 @@ pub fn write_xlsx_from_parse_output(
                 _ => continue, // not a chartEx
             };
             // Preserve original chartEx number from round-trip context when available.
-            let original_idx = sheet_rt_for_charts
-                .and_then(|srt| srt.chart_ex_auxiliary_data.get(chart_ex_local_idx))
-                .and_then(|aux| aux.original_path.as_ref())
-                .and_then(|path| {
-                    let fname = path.rsplit('/').next()?;
-                    let num_str = fname.strip_prefix("chartEx")?.strip_suffix(".xml")?;
-                    num_str.parse::<usize>().ok()
-                });
+            let original_idx = chart_allows_auxiliary_replay(chart_spec)
+                .then(|| {
+                    sheet_rt_for_charts
+                        .and_then(|srt| srt.chart_ex_auxiliary_data.get(chart_ex_local_idx))
+                        .and_then(|aux| aux.original_path.as_ref())
+                        .and_then(|path| {
+                            let fname = path.rsplit('/').next()?;
+                            let num_str = fname.strip_prefix("chartEx")?.strip_suffix(".xml")?;
+                            num_str.parse::<usize>().ok()
+                        })
+                })
+                .flatten();
             let idx = if let Some(orig) = original_idx {
                 if orig > global_chart_ex_idx {
                     global_chart_ex_idx = orig;
@@ -734,23 +746,29 @@ pub fn write_xlsx_from_parse_output(
                                 .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
                                 .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
                         });
-                    // Parse extra VML drawings (header/footer images) into domain types
+                    // Parse imported header/footer image VML only while the
+                    // current modeled sheet still has header/footer images.
+                    // Otherwise stale raw VML would resurrect deleted images.
                     let mut hf_vml_parsed: Option<crate::domain::print::hf_images::ParsedHfVml> =
                         None;
-                    for vml_part in &sheet_rt.raw_vml_drawings {
-                        if comment_vml_path.as_ref() == Some(&vml_part.path) {
-                            continue;
-                        }
-                        let rels_path = vml_part.rels.as_ref().map(|r| r.path.as_str());
-                        let rels_data = vml_part.rels.as_ref().map(|r| r.data.as_slice());
-                        if let Some(parsed) = crate::domain::print::hf_images::parse_hf_vml_context(
-                            &vml_part.path,
-                            &vml_part.data,
-                            rels_path,
-                            rels_data,
-                        ) {
-                            hf_vml_parsed = Some(parsed);
-                            break; // Only one HF VML per sheet
+                    if !sheet_data.hf_images.is_empty() {
+                        for vml_part in &sheet_rt.raw_vml_drawings {
+                            if comment_vml_path.as_ref() == Some(&vml_part.path) {
+                                continue;
+                            }
+                            let rels_path = vml_part.rels.as_ref().map(|r| r.path.as_str());
+                            let rels_data = vml_part.rels.as_ref().map(|r| r.data.as_slice());
+                            if let Some(parsed) =
+                                crate::domain::print::hf_images::parse_hf_vml_context(
+                                    &vml_part.path,
+                                    &vml_part.data,
+                                    rels_path,
+                                    rels_data,
+                                )
+                            {
+                                hf_vml_parsed = Some(parsed);
+                                break; // Only one HF VML per sheet
+                            }
                         }
                     }
                     (
@@ -1704,55 +1722,40 @@ pub fn write_xlsx_from_parse_output(
         .as_ref()
         .map(|t| crate::domain::themes::write::theme_writer_from_domain(t, round_trip_ctx));
     let has_theme = theme_xml.is_some();
-    let core_props_xml: Option<Vec<u8>> = round_trip_ctx
-        .and_then(|ctx| ctx.raw_doc_props_core_xml.clone())
-        .or_else(|| {
-            output
-                .properties
-                .as_ref()
-                .map(crate::domain::metadata::write::write_core_props_xml)
-        });
-    let app_props_xml: Option<Vec<u8>> = round_trip_ctx
-        .and_then(|ctx| ctx.raw_doc_props_app_xml.clone())
-        .or_else(|| {
-            output
-                .properties
-                .as_ref()
-                .map(|_| crate::domain::metadata::write::write_app_props_xml())
-        });
-    let custom_props_xml: Option<Vec<u8>> =
-        round_trip_ctx.and_then(|ctx| ctx.raw_doc_props_custom_xml.clone());
-    let metadata_xml: Option<Vec<u8>> = round_trip_ctx.and_then(|ctx| ctx.raw_metadata_xml.clone());
+    let doc_props_xml = doc_props::build_doc_props_xml(output);
+    let core_props_xml = doc_props_xml.core;
+    let app_props_xml = doc_props_xml.app;
+    let custom_props_xml = doc_props_xml.custom;
+    let metadata_xml: Option<Vec<u8>> = if output_references_metadata(output) {
+        round_trip_ctx.and_then(|ctx| ctx.raw_metadata_xml.clone())
+    } else {
+        None
+    };
     let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
         Some(crate::domain::comments::write::persons_xml_from_domain(
             &output.persons,
         ))
     } else {
-        round_trip_ctx.and_then(|ctx| ctx.raw_persons_xml.clone())
+        None
     };
     let external_link_exports: Vec<(domain_types::domain::external_link::ExternalLink, String)> =
-        round_trip_ctx
-            .map(|ctx| {
-                ctx.external_links
-                    .iter()
-                    .map(|link| (link.clone(), external_link_part_name(link)))
-                    .collect()
-            })
-            .unwrap_or_default();
+        output
+            .external_links
+            .iter()
+            .map(|link| (link.clone(), external_link_part_name(link)))
+            .collect();
     let mut package_graph_builder =
         crate::write::package_graph::build_modeled_workbook_graph_builder(
             crate::write::package_graph::ModeledWorkbookGraphOptions {
                 sheet_count: output.sheets.len(),
                 has_theme,
-                has_shared_strings: !shared_strings.is_empty(),
+                has_shared_strings: shared_strings.has_referenced_entries(),
                 has_core_props: core_props_xml.is_some(),
                 has_app_props: app_props_xml.is_some(),
                 has_custom_props: custom_props_xml.is_some(),
                 has_metadata: metadata_xml.is_some(),
                 has_persons: persons_xml.is_some(),
-                has_doc_metadata_label_info: round_trip_ctx
-                    .and_then(|ctx| ctx.doc_metadata_label_info.as_ref())
-                    .is_some(),
+                has_doc_metadata_label_info: false,
             },
             round_trip_ctx,
         )?;
@@ -1824,9 +1827,11 @@ pub fn write_xlsx_from_parse_output(
                 &mut package_graph_builder,
                 entry.global_idx,
             )?;
-            if let Some(aux) = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .and_then(|srt| srt.chart_auxiliary_data.get(local_idx))
+            let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+            if chart_allows_auxiliary_replay(chart_spec)
+                && let Some(aux) = round_trip_ctx
+                    .and_then(|ctx| ctx.sheets.get(sheet_idx))
+                    .and_then(|srt| srt.chart_auxiliary_data.get(local_idx))
             {
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
@@ -1877,9 +1882,11 @@ pub fn write_xlsx_from_parse_output(
                 &mut package_graph_builder,
                 entry.global_idx,
             )?;
-            if let Some(aux) = round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .and_then(|srt| srt.chart_ex_auxiliary_data.get(local_idx))
+            let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+            if chart_allows_auxiliary_replay(chart_spec)
+                && let Some(aux) = round_trip_ctx
+                    .and_then(|ctx| ctx.sheets.get(sheet_idx))
+                    .and_then(|srt| srt.chart_ex_auxiliary_data.get(local_idx))
             {
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
@@ -2374,17 +2381,14 @@ pub fn write_xlsx_from_parse_output(
         ));
     }
 
-    // Set workbook views from RoundTripContext (preserves tabRatio, window position, etc.)
-    if let Some(ctx) = round_trip_ctx {
-        if !ctx.workbook_views.is_empty() {
-            let views: Vec<ooxml_types::workbook::BookView> = ctx
-                .workbook_views
-                .iter()
-                .cloned()
-                .map(ooxml_types::workbook::BookView::from)
-                .collect();
-            workbook_writer.set_views(views);
-        }
+    if !output.workbook_views.is_empty() {
+        let views: Vec<ooxml_types::workbook::BookView> = output
+            .workbook_views
+            .iter()
+            .cloned()
+            .map(ooxml_types::workbook::BookView::from)
+            .collect();
+        workbook_writer.set_views(views);
     }
 
     // Add defined names (named ranges)
@@ -2409,6 +2413,16 @@ pub fn write_xlsx_from_parse_output(
     // ── Workbook Protection ──────────────────────────────────────────
     if let Some(ref prot) = output.protection {
         workbook_writer.set_workbook_protection(prot.clone());
+    }
+
+    if let Some(ref file_version) = output.file_version {
+        workbook_writer.set_file_version(file_version.clone());
+    }
+    if let Some(ref file_sharing) = output.file_sharing {
+        workbook_writer.set_file_sharing(file_sharing.clone());
+    }
+    if let Some(ref workbook_properties) = output.workbook_properties {
+        workbook_writer.set_workbook_properties(workbook_properties.clone());
     }
 
     // ── Workbook Preserved Namespaces + Elements (round-trip) ─────
@@ -2561,7 +2575,7 @@ pub fn write_xlsx_from_parse_output(
     zip.add_file("xl/_rels/workbook.xml.rels", workbook_rels_xml);
     zip.add_file("xl/styles.xml", styles_xml);
 
-    if !shared_strings.is_empty() {
+    if shared_strings.has_referenced_entries() {
         zip.add_file("xl/sharedStrings.xml", shared_strings_xml);
     }
 
@@ -2585,13 +2599,6 @@ pub fn write_xlsx_from_parse_output(
     if let Some(ref meta) = metadata_xml {
         zip.add_file("xl/metadata.xml", meta.clone());
     }
-    // docMetadata/LabelInfo.xml passthrough
-    if let Some(ctx) = round_trip_ctx {
-        if let Some(ref label_info) = ctx.doc_metadata_label_info {
-            zip.add_file("docMetadata/LabelInfo.xml", label_info.clone());
-        }
-    }
-
     // Persons (threaded comments author list)
     if let Some(ref persons) = persons_xml {
         zip.add_file("xl/persons/person.xml", persons.clone());
@@ -2793,8 +2800,12 @@ pub fn write_xlsx_from_parse_output(
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
                 zip.add_file(&chart_path, entry.xml.clone());
 
-                // Write chart auxiliary files (style XML, colors XML) from round-trip context.
-                if let Some(srt) = sheet_rt {
+                // Write chart auxiliary files (style XML, colors XML) only
+                // when the current chart still carries imported chart identity.
+                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                if chart_allows_auxiliary_replay(chart_spec)
+                    && let Some(srt) = sheet_rt
+                {
                     if let Some(aux) = srt.chart_auxiliary_data.get(local_idx) {
                         // Write auxiliary files (style, colors XML) preserving their original paths.
                         for aux_file in &aux.auxiliary_files {
@@ -2822,8 +2833,12 @@ pub fn write_xlsx_from_parse_output(
                 let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
                 zip.add_file(&chart_path, entry.xml.clone());
 
-                // Write ChartEx auxiliary files from round-trip context.
-                if let Some(srt) = sheet_rt {
+                // Write ChartEx auxiliary files only when the current chart
+                // still carries imported chart identity.
+                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                if chart_allows_auxiliary_replay(chart_spec)
+                    && let Some(srt) = sheet_rt
+                {
                     if let Some(aux) = srt.chart_ex_auxiliary_data.get(local_idx) {
                         for aux_file in &aux.auxiliary_files {
                             zip.add_file(&aux_file.path, aux_file.data.clone());
@@ -2903,7 +2918,10 @@ pub fn write_xlsx_from_parse_output(
 }
 
 use sheet_builder::{apply_outline_groups_rows_only, build_sheet};
-use styles::{append_palette_to_lossless_styles, build_styles, build_styles_from_stylesheet};
+use styles::{
+    append_palette_to_lossless_styles, build_styles, build_styles_from_stylesheet,
+    output_references_style_ids,
+};
 
 use crate::infra::opc::opc_target_to_zip_path;
 

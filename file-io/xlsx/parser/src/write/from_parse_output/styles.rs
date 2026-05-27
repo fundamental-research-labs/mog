@@ -1,7 +1,7 @@
 //! Style conversion: DocumentFormat / Stylesheet → StylesWriter.
 
 use domain_types::{
-    AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat,
+    AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat, ParseOutput,
     ProtectionFormat,
 };
 
@@ -203,6 +203,26 @@ pub(super) fn append_palette_to_lossless_styles(
 
         writer.add_cell_xf(xf);
     }
+}
+
+/// Whether the current modeled workbook references any style IDs.
+///
+/// Imported stylesheets are useful identity/style hints only while some current
+/// workbook object still points at their raw cellXfs indices. If all style
+/// references disappeared, replaying the imported stylesheet keeps stale style
+/// facts alive after deletion.
+pub(super) fn output_references_style_ids(output: &ParseOutput) -> bool {
+    output.sheets.iter().any(|sheet| {
+        sheet.cells.iter().any(|cell| cell.style_id.is_some())
+            || !sheet.authored_style_runs.is_empty()
+            || !sheet.row_styles.is_empty()
+            || !sheet.col_styles.is_empty()
+            || sheet
+                .dimensions
+                .trailing_col_ranges
+                .iter()
+                .any(|range| range.style_id.is_some())
+    })
 }
 
 /// Convert a `FontFormat` to a `FontDef`.

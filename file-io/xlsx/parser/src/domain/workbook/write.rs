@@ -19,6 +19,9 @@
 //! ```
 
 use crate::write::xml_writer::XmlWriter;
+use domain_types::domain::workbook::{
+    FileSharing, FileVersion, ObjectDisplayMode, UpdateLinks, WorkbookProperties,
+};
 
 /// Spreadsheet ML namespace
 const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -186,6 +189,22 @@ pub fn calc_settings_from_domain(calc_props: &domain_types::CalculationPropertie
     }
 }
 
+fn object_display_mode_to_xml(mode: ObjectDisplayMode) -> &'static str {
+    match mode {
+        ObjectDisplayMode::All => "all",
+        ObjectDisplayMode::Placeholders => "placeholders",
+        ObjectDisplayMode::None => "none",
+    }
+}
+
+fn update_links_to_xml(update_links: UpdateLinks) -> &'static str {
+    match update_links {
+        UpdateLinks::UserSet => "userSet",
+        UpdateLinks::Never => "never",
+        UpdateLinks::Always => "always",
+    }
+}
+
 // ============================================================================
 // WorkbookWriter
 // ============================================================================
@@ -195,6 +214,12 @@ pub fn calc_settings_from_domain(calc_props: &domain_types::CalculationPropertie
 /// Generates `xl/workbook.xml` content for XLSX files.
 #[derive(Debug, Clone, Default)]
 pub struct WorkbookWriter {
+    /// File version metadata.
+    file_version: Option<FileVersion>,
+    /// File sharing metadata.
+    file_sharing: Option<FileSharing>,
+    /// Workbook properties.
+    workbook_properties: Option<WorkbookProperties>,
     /// Sheet definitions
     sheets: Vec<SheetDef>,
     /// Defined names
@@ -330,6 +355,27 @@ impl WorkbookWriter {
         self
     }
 
+    /// Set file version metadata.
+    pub fn set_file_version(&mut self, file_version: FileVersion) -> &mut Self {
+        self.file_version = Some(file_version);
+        self
+    }
+
+    /// Set file sharing metadata.
+    pub fn set_file_sharing(&mut self, file_sharing: FileSharing) -> &mut Self {
+        self.file_sharing = Some(file_sharing);
+        self
+    }
+
+    /// Set workbook properties.
+    pub fn set_workbook_properties(
+        &mut self,
+        workbook_properties: WorkbookProperties,
+    ) -> &mut Self {
+        self.workbook_properties = Some(workbook_properties);
+        self
+    }
+
     /// Set the raw `<pivotCaches>` XML element for workbook.xml.
     pub fn set_pivot_caches_xml(&mut self, xml: String) -> &mut Self {
         self.pivot_caches_xml = Some(xml);
@@ -374,8 +420,11 @@ impl WorkbookWriter {
         self
     }
 
-    fn should_skip_preserved_pivot_caches(&self, raw_xml: &str) -> bool {
-        self.pivot_caches_xml.is_some() && raw_xml.contains("<pivotCaches")
+    fn should_skip_preserved_element(&self, raw_xml: &str) -> bool {
+        (self.pivot_caches_xml.is_some() && raw_xml.contains("<pivotCaches"))
+            || raw_xml.contains("<fileVersion")
+            || raw_xml.contains("<fileSharing")
+            || raw_xml.contains("<workbookPr")
     }
 
     /// Generate workbook.xml content
@@ -425,29 +474,34 @@ impl WorkbookWriter {
         // Tier 2: Emit preserved elements with position First
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_first("workbook") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
             }
         }
+
+        self.write_file_version(&mut w);
 
         // Emit preserved elements after fileVersion (e.g., workbookPr if preserved)
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "fileVersion") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
             }
         }
 
+        self.write_file_sharing(&mut w);
+        self.write_workbook_properties(&mut w);
+
         // Emit preserved elements after workbookPr (e.g., mc:AlternateContent, xr:revisionPtr)
         // These appear before <bookViews> in Excel's canonical order:
-        // fileVersion → workbookPr → alternateContent → bookViews → sheets → …
+        // fileVersion → fileSharing → workbookPr → alternateContent → bookViews → sheets → …
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "workbookPr") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -457,7 +511,7 @@ impl WorkbookWriter {
         // Emit any explicitly BeforeElement("bookViews") elements
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_before("workbook", "bookViews") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -470,7 +524,7 @@ impl WorkbookWriter {
         // Emit preserved elements after bookViews
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "bookViews") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -483,7 +537,7 @@ impl WorkbookWriter {
         // Emit preserved elements after sheets
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "sheets") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -506,7 +560,7 @@ impl WorkbookWriter {
         // Emit preserved elements after definedNames
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "definedNames") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -519,7 +573,7 @@ impl WorkbookWriter {
         // Emit preserved elements after calcPr
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "calcPr") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -534,7 +588,7 @@ impl WorkbookWriter {
         // Emit preserved elements after pivotCaches
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "pivotCaches") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -544,7 +598,7 @@ impl WorkbookWriter {
         // Tier 2: Emit preserved elements with position Last
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_last("workbook") {
-                if self.should_skip_preserved_pivot_caches(&elem.raw_xml) {
+                if self.should_skip_preserved_element(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -555,6 +609,110 @@ impl WorkbookWriter {
         w.end_element("workbook");
 
         w.finish()
+    }
+
+    fn write_file_version(&self, w: &mut XmlWriter) {
+        let Some(file_version) = &self.file_version else {
+            return;
+        };
+
+        w.start_element("fileVersion")
+            .attr_if("appName", file_version.app_name.as_deref())
+            .attr_if("lastEdited", file_version.last_edited.as_deref())
+            .attr_if("lowestEdited", file_version.lowest_edited.as_deref())
+            .attr_if("rupBuild", file_version.rup_build.as_deref())
+            .attr_if("codeName", file_version.code_name.as_deref())
+            .self_close();
+    }
+
+    fn write_file_sharing(&self, w: &mut XmlWriter) {
+        let Some(file_sharing) = &self.file_sharing else {
+            return;
+        };
+
+        let mut elem = w.start_element("fileSharing");
+        if file_sharing.read_only_recommended {
+            elem = elem.attr_bool("readOnlyRecommended", true);
+        }
+        elem.attr_if("userName", file_sharing.user_name.as_deref())
+            .attr_if(
+                "reservationPassword",
+                file_sharing.reservation_password.as_deref(),
+            )
+            .attr_if("algorithmName", file_sharing.algorithm_name.as_deref())
+            .attr_if("hashValue", file_sharing.hash_value.as_deref())
+            .attr_if("saltValue", file_sharing.salt_value.as_deref())
+            .attr_num_if("spinCount", file_sharing.spin_count)
+            .self_close();
+    }
+
+    fn write_workbook_properties(&self, w: &mut XmlWriter) {
+        let Some(properties) = &self.workbook_properties else {
+            return;
+        };
+        let defaults = WorkbookProperties::default();
+
+        let mut elem = w.start_element("workbookPr");
+        if properties.date1904 != defaults.date1904 {
+            elem = elem.attr_bool("date1904", properties.date1904);
+        }
+        if properties.show_objects != defaults.show_objects {
+            elem = elem.attr(
+                "showObjects",
+                object_display_mode_to_xml(properties.show_objects),
+            );
+        }
+        if properties.show_border_unselected_tables != defaults.show_border_unselected_tables {
+            elem = elem.attr_bool(
+                "showBorderUnselectedTables",
+                properties.show_border_unselected_tables,
+            );
+        }
+        if properties.filter_privacy != defaults.filter_privacy {
+            elem = elem.attr_bool("filterPrivacy", properties.filter_privacy);
+        }
+        if properties.prompted_solutions != defaults.prompted_solutions {
+            elem = elem.attr_bool("promptedSolutions", properties.prompted_solutions);
+        }
+        if properties.show_ink_annotation != defaults.show_ink_annotation {
+            elem = elem.attr_bool("showInkAnnotation", properties.show_ink_annotation);
+        }
+        if properties.backup_file != defaults.backup_file {
+            elem = elem.attr_bool("backupFile", properties.backup_file);
+        }
+        if properties.save_external_link_values != defaults.save_external_link_values {
+            elem = elem.attr_bool(
+                "saveExternalLinkValues",
+                properties.save_external_link_values,
+            );
+        }
+        if properties.update_links != defaults.update_links {
+            elem = elem.attr("updateLinks", update_links_to_xml(properties.update_links));
+        }
+        elem = elem.attr_if("codeName", properties.code_name.as_deref());
+        if properties.hide_pivot_field_list != defaults.hide_pivot_field_list {
+            elem = elem.attr_bool("hidePivotFieldList", properties.hide_pivot_field_list);
+        }
+        if properties.show_pivot_chart_filter != defaults.show_pivot_chart_filter {
+            elem = elem.attr_bool("showPivotChartFilter", properties.show_pivot_chart_filter);
+        }
+        if properties.allow_refresh_query != defaults.allow_refresh_query {
+            elem = elem.attr_bool("allowRefreshQuery", properties.allow_refresh_query);
+        }
+        if properties.publish_items != defaults.publish_items {
+            elem = elem.attr_bool("publishItems", properties.publish_items);
+        }
+        if properties.check_compatibility != defaults.check_compatibility {
+            elem = elem.attr_bool("checkCompatibility", properties.check_compatibility);
+        }
+        if properties.auto_compress_pictures != defaults.auto_compress_pictures {
+            elem = elem.attr_bool("autoCompressPictures", properties.auto_compress_pictures);
+        }
+        if properties.refresh_all_connections != defaults.refresh_all_connections {
+            elem = elem.attr_bool("refreshAllConnections", properties.refresh_all_connections);
+        }
+        elem.attr_num_if("defaultThemeVersion", properties.default_theme_version)
+            .self_close();
     }
 
     fn write_external_references(&self, w: &mut XmlWriter) {

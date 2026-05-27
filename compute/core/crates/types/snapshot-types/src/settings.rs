@@ -65,6 +65,10 @@ pub struct CalculationSettings {
     /// Whether to perform a full calculation when the file is opened.
     #[serde(default)]
     pub full_calc_on_load: bool,
+
+    /// Whether Excel should force a full recalculation even in manual mode.
+    #[serde(default)]
+    pub force_full_calc: bool,
 }
 
 impl Default for CalculationSettings {
@@ -77,6 +81,7 @@ impl Default for CalculationSettings {
             full_precision: true,
             r1c1_mode: false,
             full_calc_on_load: false,
+            force_full_calc: false,
         }
     }
 }
@@ -653,6 +658,7 @@ impl From<domain_types::domain::workbook::CalculationProperties> for Calculation
             full_precision: v.full_precision,
             r1c1_mode: v.ref_mode == domain_types::domain::workbook::RefMode::R1C1,
             full_calc_on_load: v.full_calc_on_load,
+            force_full_calc: v.force_full_calc,
         }
     }
 }
@@ -696,6 +702,7 @@ mod tests {
         assert_eq!(settings.full_precision, false);
         assert_eq!(settings.r1c1_mode, true);
         assert_eq!(settings.full_calc_on_load, true);
+        assert_eq!(settings.force_full_calc, true);
     }
 
     #[test]
@@ -709,6 +716,7 @@ mod tests {
         assert_eq!(settings.full_precision, true);
         assert_eq!(settings.r1c1_mode, false);
         assert_eq!(settings.full_calc_on_load, false);
+        assert_eq!(settings.force_full_calc, false);
     }
 
     // ----------------------------------------------------------------
@@ -817,6 +825,7 @@ mod tests {
             full_precision: false,
             r1c1_mode: true,
             full_calc_on_load: true,
+            force_full_calc: true,
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: CalculationSettings = serde_json::from_str(&json).unwrap();
@@ -833,6 +842,10 @@ mod tests {
         assert!(
             v.get("fullCalcOnLoad").is_some(),
             "expected camelCase fullCalcOnLoad"
+        );
+        assert!(
+            v.get("forceFullCalc").is_some(),
+            "expected camelCase forceFullCalc"
         );
     }
 
@@ -858,6 +871,7 @@ mod tests {
         assert_eq!(settings.full_precision, true);
         assert_eq!(settings.r1c1_mode, false);
         assert_eq!(settings.full_calc_on_load, false);
+        assert_eq!(settings.force_full_calc, false);
     }
 
     #[test]

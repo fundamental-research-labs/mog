@@ -2241,6 +2241,9 @@ fn find_matching_alternate_content_end(xml: &[u8], start: usize) -> Option<usize
 /// Known child element tags for workbook.xml that we already parse.
 /// Elements NOT in this list will be captured as preserved XML.
 const WORKBOOK_KNOWN_CHILDREN: &[&[u8]] = &[
+    b"fileVersion",
+    b"fileSharing",
+    b"workbookPr",
     b"bookViews",
     b"sheets",
     b"definedNames",

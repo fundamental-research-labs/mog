@@ -4,13 +4,14 @@ use crate::domain::content_types::write::{CT_PIVOT_CACHE, CT_PIVOT_TABLE};
 use crate::domain::styles::write::ColorDef;
 use crate::infra::package_integrity::validate_archive_package_integrity;
 use crate::write::REL_PIVOT_TABLE;
+use domain_types::domain::workbook::{FileSharing, FileVersion, WorkbookProperties};
 use domain_types::{
     AlignmentFormat, AnchorPosition, AuthoredStyleRun, BorderFormat,
     BorderSide as DomainBorderSide, CellData as DomainCellData, CellValue as DomainValue,
     ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment, CommentType, DataTableOoxmlFlags,
-    DataTableRegion, DocumentFormat, FillFormat, FontFormat, FrozenPane, Hyperlink, MergeRegion,
-    NamedRange, ObjectSize, ParseOutput, RowDimension, SheetData, SheetDimensions, TableColumnSpec,
-    TableSpec,
+    DataTableRegion, DocumentFormat, DocumentProperties, FillFormat, FontFormat, FrozenPane,
+    Hyperlink, MergeRegion, NamedRange, ObjectSize, ParseOutput, PersonInfo, RowDimension,
+    SheetData, SheetDimensions, TableColumnSpec, TableSpec, WorkbookView,
 };
 use formula_types::CellRef;
 use std::sync::Arc;
@@ -24,6 +25,173 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
         sheets,
         ..Default::default()
     }
+}
+
+#[test]
+fn raw_doc_props_do_not_override_modeled_document_properties() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.properties = Some(DocumentProperties {
+        title: Some("Modeled Title".to_string()),
+        creator: Some("Modeled Creator".to_string()),
+        custom: vec![("ReviewStatus".to_string(), "Modeled".to_string())],
+        ..Default::default()
+    });
+    let ctx = domain_types::RoundTripContext {
+        raw_doc_props_core_xml: Some(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Stale Title</dc:title><dc:creator>Stale Creator</dc:creator></cp:coreProperties>"#
+                .to_vec(),
+        ),
+        raw_doc_props_app_xml: Some(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Excel</Application><Company>Stale Company</Company></Properties>"#
+                .to_vec(),
+        ),
+        raw_doc_props_custom_xml: Some(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="ReviewStatus"><vt:lpwstr>Stale</vt:lpwstr></property></Properties>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let core_xml = String::from_utf8(archive.read_file("docProps/core.xml").unwrap()).unwrap();
+    let app_xml = String::from_utf8(archive.read_file("docProps/app.xml").unwrap()).unwrap();
+    let custom_xml = String::from_utf8(archive.read_file("docProps/custom.xml").unwrap()).unwrap();
+
+    assert!(core_xml.contains("Modeled Title"));
+    assert!(core_xml.contains("Modeled Creator"));
+    assert!(!core_xml.contains("Stale Title"));
+    assert!(!app_xml.contains("Stale Company"));
+    assert!(custom_xml.contains(r#"name="ReviewStatus""#));
+    assert!(custom_xml.contains(">Modeled<"));
+    assert!(!custom_xml.contains(">Stale<"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn raw_doc_props_are_dropped_when_document_properties_are_unmodeled() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        raw_doc_props_core_xml: Some(b"<cp:coreProperties/>".to_vec()),
+        raw_doc_props_app_xml: Some(b"<Properties/>".to_vec()),
+        raw_doc_props_custom_xml: Some(b"<Properties/>".to_vec()),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let root_rels = String::from_utf8(archive.read_file("_rels/.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("docProps/core.xml"));
+    assert!(!archive.contains("docProps/app.xml"));
+    assert!(!archive.contains("docProps/custom.xml"));
+    assert!(!root_rels.contains("docProps/"));
+    assert!(!content_types.contains("docProps/"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn workbook_views_are_exported_from_modeled_state_not_roundtrip_context() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.workbook_views = vec![WorkbookView {
+        active_tab: 0,
+        first_sheet: 0,
+        tab_ratio: Some(700.0),
+        window_width: Some(12345),
+        ..Default::default()
+    }];
+    let ctx = domain_types::RoundTripContext {
+        workbook_views: vec![WorkbookView {
+            active_tab: 0,
+            first_sheet: 0,
+            tab_ratio: Some(300.0),
+            window_width: Some(999),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"tabRatio="700""#));
+    assert!(workbook_xml.contains(r#"windowWidth="12345""#));
+    assert!(!workbook_xml.contains(r#"tabRatio="300""#));
+    assert!(!workbook_xml.contains(r#"windowWidth="999""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn workbook_metadata_is_exported_from_modeled_state_not_preserved_xml() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.file_version = Some(FileVersion {
+        app_name: Some("xl".to_string()),
+        last_edited: Some("7".to_string()),
+        lowest_edited: Some("7".to_string()),
+        rup_build: Some("28130".to_string()),
+        code_name: Some("ModeledVersion".to_string()),
+    });
+    output.file_sharing = Some(FileSharing {
+        read_only_recommended: true,
+        user_name: Some("Modeled User".to_string()),
+        reservation_password: Some("ABCD".to_string()),
+        ..Default::default()
+    });
+    output.workbook_properties = Some(WorkbookProperties {
+        date1904: true,
+        code_name: Some("ModeledCode".to_string()),
+        default_theme_version: Some(166925),
+        ..Default::default()
+    });
+    let ctx = domain_types::RoundTripContext {
+        workbook_preserved_elements: vec![
+            (
+                "workbook\0first\0\0fileVersion".to_string(),
+                r#"<fileVersion appName="StaleApp" codeName="StaleVersion"/>"#.to_string(),
+            ),
+            (
+                "workbook\0after\0fileVersion\0fileSharing".to_string(),
+                r#"<fileSharing readOnlyRecommended="0" userName="Stale User"/>"#.to_string(),
+            ),
+            (
+                "workbook\0after\0fileVersion\0workbookPr".to_string(),
+                r#"<workbookPr codeName="StaleCode" defaultThemeVersion="1"/>"#.to_string(),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<fileVersion appName="xl" lastEdited="7""#));
+    assert!(workbook_xml.contains(r#"codeName="ModeledVersion""#));
+    assert!(workbook_xml.contains(r#"<fileSharing readOnlyRecommended="1""#));
+    assert!(workbook_xml.contains(r#"userName="Modeled User""#));
+    assert!(workbook_xml.contains(r#"<workbookPr date1904="1""#));
+    assert!(workbook_xml.contains(r#"codeName="ModeledCode""#));
+    assert!(workbook_xml.contains(r#"defaultThemeVersion="166925""#));
+    assert!(!workbook_xml.contains("StaleApp"));
+    assert!(!workbook_xml.contains("StaleVersion"));
+    assert!(!workbook_xml.contains("Stale User"));
+    assert!(!workbook_xml.contains("StaleCode"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
@@ -60,6 +228,48 @@ fn stale_sheet_drawing_relationship_without_modeled_or_opaque_drawing_is_ignored
 
 #[test]
 fn external_link_workbook_relationship_uses_graph_resolved_id() {
+    let modeled_link = domain_types::domain::external_link::ExternalLink {
+        id: "1".to_string(),
+        imported_identity: Some(
+            domain_types::domain::external_link::ImportedExternalLinkIdentity {
+                excel_ordinal: 1,
+                workbook_rel_id: "rId20".to_string(),
+                part_name: "externalLinks/externalLink9.xml".to_string(),
+                external_book_rid: None,
+                target: Some("externalLinks/externalLink9.xml".to_string()),
+                target_mode: None,
+            },
+        ),
+        ..Default::default()
+    };
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.external_links = vec![modeled_link.clone()];
+    let ctx = domain_types::RoundTripContext {
+        external_links: vec![modeled_link],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<externalReference r:id="rId20"/>"#));
+    assert!(workbook_rels.contains(r#"Id="rId20""#));
+    assert!(workbook_rels.contains(r#"Target="externalLinks/externalLink9.xml""#));
+    assert!(content_types.contains(r#"PartName="/xl/externalLinks/externalLink9.xml""#));
+    assert!(archive.contains("xl/externalLinks/externalLink9.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_roundtrip_external_links_do_not_export_without_modeled_links() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         ..Default::default()
@@ -90,11 +300,164 @@ fn external_link_workbook_relationship_uses_graph_resolved_id() {
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert!(workbook_xml.contains(r#"<externalReference r:id="rId20"/>"#));
-    assert!(workbook_rels.contains(r#"Id="rId20""#));
-    assert!(workbook_rels.contains(r#"Target="externalLinks/externalLink9.xml""#));
-    assert!(content_types.contains(r#"PartName="/xl/externalLinks/externalLink9.xml""#));
-    assert!(archive.contains("xl/externalLinks/externalLink9.xml"));
+    assert!(!workbook_xml.contains("<externalReferences"));
+    assert!(!workbook_rels.contains(crate::write::relationships::REL_EXTERNAL_LINK));
+    assert!(!content_types.contains("/xl/externalLinks/"));
+    assert!(!archive.contains("xl/externalLinks/externalLink9.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn persons_are_exported_from_modeled_state_not_raw_person_xml() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.persons = vec![PersonInfo {
+        id: "{MODELED-PERSON}".to_string(),
+        display_name: "Modeled Person".to_string(),
+        user_id: Some("S::modeled@example.com::1".to_string()),
+        provider_id: Some("AD".to_string()),
+    }];
+    let ctx = domain_types::RoundTripContext {
+        raw_persons_xml: Some(
+            br#"<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"><person displayName="Stale Person" id="{STALE-PERSON}" userId="stale"/></personList>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let persons_xml =
+        String::from_utf8(archive.read_file("xl/persons/person.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(persons_xml.contains("Modeled Person"));
+    assert!(persons_xml.contains("{MODELED-PERSON}"));
+    assert!(!persons_xml.contains("Stale Person"));
+    assert!(!persons_xml.contains("{STALE-PERSON}"));
+    assert!(workbook_rels.contains("persons/person.xml"));
+    assert!(content_types.contains(r#"PartName="/xl/persons/person.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_raw_person_xml_is_dropped_without_modeled_persons() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        raw_persons_xml: Some(
+            br#"<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"><person displayName="Stale Person" id="{STALE-PERSON}"/></personList>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/persons/person.xml"));
+    assert!(!workbook_rels.contains("persons/person.xml"));
+    assert!(!content_types.contains("/xl/persons/person.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_doc_metadata_label_info_is_not_emitted_as_raw_sidecar() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        doc_metadata_label_info: Some(
+            br#"<clbl:labelList xmlns:clbl="http://schemas.microsoft.com/office/2020/mipLabelMetadata"><clbl:label id="stale"/></clbl:labelList>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("docMetadata/LabelInfo.xml"));
+    assert!(!content_types.contains("/docMetadata/LabelInfo.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_raw_metadata_xml_is_dropped_without_current_cell_metadata_references() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Text(Arc::from("ordinary cell")),
+        )],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        raw_metadata_xml: Some(
+            br#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes><cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/metadata.xml"));
+    assert!(!workbook_rels.contains(crate::write::relationships::REL_METADATA));
+    assert!(!content_types.contains("/xl/metadata.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn raw_metadata_xml_exports_only_when_current_cells_reference_metadata() {
+    let mut metadata_cell = make_cell(0, 0, DomainValue::Text(Arc::from("dynamic")));
+    metadata_cell.cm = true;
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![metadata_cell],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        raw_metadata_xml: Some(
+            br#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes><cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/metadata.xml"));
+    assert!(workbook_rels.contains(crate::write::relationships::REL_METADATA));
+    assert!(content_types.contains("/xl/metadata.xml"));
+    assert!(sheet_xml.contains(r#" cm="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -470,6 +833,38 @@ fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     }
 }
 
+fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32) -> DomainCellData {
+    DomainCellData {
+        row,
+        col,
+        value: DomainValue::Text(Arc::from(value)),
+        original_sst_index: Some(index),
+        original_value: Some(index.to_string()),
+        ..Default::default()
+    }
+}
+
+fn rich_text_run(text: &str) -> domain_types::RichTextRun {
+    domain_types::RichTextRun {
+        text: text.to_string(),
+        font_name: Some("Calibri".to_string()),
+        font_size: Some(11.0),
+        bold: true,
+        italic: false,
+        underline: false,
+        strikethrough: false,
+        color: Some("FFFF0000".to_string()),
+        color_indexed: None,
+        color_theme: None,
+        color_tint: None,
+        charset: None,
+        family: None,
+        scheme: None,
+        vert_align: None,
+        preserve_space: false,
+    }
+}
+
 #[test]
 fn authored_non_finite_numeric_lexeme_roundtrips_through_domain_cell_metadata() {
     let output = make_parse_output(vec![SheetData {
@@ -675,6 +1070,132 @@ fn stale_workbook_rels_without_shared_strings_are_repaired_when_text_cells_emit_
 }
 
 #[test]
+fn imported_original_sst_count_does_not_override_generated_counts() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![
+            make_text_cell_with_original_sst(0, 0, "old", 0),
+            make_cell(1, 0, DomainValue::Text(Arc::from("new"))),
+        ],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        original_sst_count: Some(99),
+        shared_strings_list: vec!["old".to_string()],
+        raw_shared_strings_xml: Some(
+            br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="99" uniqueCount="1"><si><t>old</t></si></sst>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+
+    assert!(shared_strings.contains("count=\"2\""));
+    assert!(shared_strings.contains("uniqueCount=\"2\""));
+    assert!(!shared_strings.contains("count=\"99\""));
+    assert!(shared_strings.contains("<t>old</t>"));
+    assert!(shared_strings.contains("<t>new</t>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_unused_shared_strings_do_not_force_sst_part_rel_or_content_type() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        original_sst_count: Some(3),
+        shared_strings_list: vec!["stale".to_string()],
+        raw_shared_strings_xml: Some(
+            br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="1"><si><t>stale</t></si></sst>"#
+                .to_vec(),
+        ),
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rId9".to_string(),
+            rel_type: crate::write::REL_SHARED_STRINGS.to_string(),
+            target: "sharedStrings.xml".to_string(),
+            target_mode: None,
+        }],
+        content_type_overrides: vec![(
+            "/xl/sharedStrings.xml".to_string(),
+            crate::write::CT_SHARED_STRINGS.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/sharedStrings.xml"));
+    assert!(!workbook_rels.contains(crate::write::REL_SHARED_STRINGS));
+    assert!(!content_types.contains("PartName=\"/xl/sharedStrings.xml\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn unchanged_imported_rich_text_hint_is_preserved_per_cell() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_text_cell_with_original_sst(0, 0, "Rich", 0)],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        shared_strings_list: vec!["Rich".to_string()],
+        shared_strings_rich_runs: vec![Some(vec![rich_text_run("Rich")])],
+        shared_strings_phonetic_xml: vec![Some(
+            b"<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>".to_vec(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+
+    assert!(shared_strings.contains("<rPr><b/>"));
+    assert!(shared_strings.contains("<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn edited_imported_rich_text_cell_drops_stale_hint() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_text_cell_with_original_sst(0, 0, "Edited", 0)],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        shared_strings_list: vec!["Rich".to_string()],
+        shared_strings_rich_runs: vec![Some(vec![rich_text_run("Rich")])],
+        shared_strings_phonetic_xml: vec![Some(
+            b"<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>".to_vec(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+
+    assert!(shared_strings.contains("<t>Edited</t>"));
+    assert!(!shared_strings.contains("<rPr><b/>"));
+    assert!(!shared_strings.contains("<rPh"));
+    assert!(!shared_strings.contains("phonetic"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_content_type_override_for_missing_part_is_not_exported() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -729,10 +1250,13 @@ fn stale_workbook_relationship_to_missing_modeled_part_is_not_exported() {
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
     assert!(!archive.contains("xl/sharedStrings.xml"));
     assert!(!workbook_rels.contains(crate::write::REL_SHARED_STRINGS));
     assert!(!workbook_rels.contains("Target=\"sharedStrings.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/sharedStrings.xml\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1453,6 +1977,13 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
 fn header_footer_vml_relationship_uses_graph_registered_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
+        hf_images: vec![domain_types::domain::print::HeaderFooterImageInfo {
+            position: domain_types::domain::print::HfImagePosition::LeftHeader,
+            src: "../media/image1.png".to_string(),
+            title: "LH".to_string(),
+            width_pt: 46.0,
+            height_pt: 46.0,
+        }],
         ..Default::default()
     }]);
     let hf_image = crate::domain::print::hf_images::HeaderFooterImage {
@@ -1500,6 +2031,49 @@ fn header_footer_vml_relationship_uses_graph_registered_part() {
     assert!(sheet_rels.contains("Target=\"../drawings/vmlDrawing9.vml\""));
     assert!(!sheet_rels.contains("vmlDrawing8.vml"));
     assert!(sheet_xml.contains(&format!(r#"<legacyDrawingHF r:id="{}"/>"#, hf_vml_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_header_footer_vml_is_dropped_without_modeled_hf_images() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let hf_image = crate::domain::print::hf_images::HeaderFooterImage {
+        position: crate::domain::print::hf_images::HfImagePosition::LeftHeader,
+        image_rel_id: "rId1".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let hf_vml = crate::domain::print::hf_images::write_hf_images_vml(&[hf_image], "1", 13313);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId7".to_string(),
+                rel_type: REL_VML_DRAWING.to_string(),
+                target: "../drawings/vmlDrawing9.vml".to_string(),
+                target_mode: None,
+            }],
+            raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                path: "xl/drawings/vmlDrawing9.vml".to_string(),
+                data: hf_vml,
+                rels: None,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!sheet_xml.contains("legacyDrawingHF"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -2455,6 +3029,94 @@ fn table_formula_body_cells_export_as_cached_values_only() {
     assert!(!sheet_xml.contains("<f>TABLE("));
 }
 
+fn chart_auxiliary_roundtrip_context() -> domain_types::RoundTripContext {
+    domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            chart_auxiliary_data: vec![domain_types::ChartAuxiliaryData {
+                auxiliary_files: vec![domain_types::BlobPart {
+                    path: "xl/charts/style9.xml".to_string(),
+                    data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
+                        .to_vec(),
+                }],
+                chart_rels: Some(
+                    br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style9.xml"/></Relationships>"#
+                        .to_vec(),
+                ),
+                original_path: Some("xl/charts/chart9.xml".to_string()),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn generated_chart_does_not_inherit_stale_auxiliary_parts_by_local_index() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![make_chart(ChartType::Column, "Data!A1:B2")],
+        ..Default::default()
+    }]);
+    let ctx = chart_auxiliary_roundtrip_context();
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/charts/chart1.xml"));
+    assert!(!archive.contains("xl/charts/chart9.xml"));
+    assert!(!archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/_rels/chart1.xml.rels"));
+    assert!(!content_types.contains("/xl/charts/style9.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+    let ctx = chart_auxiliary_roundtrip_context();
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart9.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/charts/chart9.xml"));
+    assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(content_types.contains("/xl/charts/style9.xml"));
+    assert!(chart_rels.contains(r#"Id="rId9""#));
+    assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
     ChartSpec {
         chart_type,
@@ -2745,6 +3407,55 @@ fn test_styled_cells() {
     };
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
+}
+
+#[test]
+fn unused_imported_stylesheet_is_not_replayed_without_modeled_style_references() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![make_cell(
+                0,
+                0,
+                DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+            )],
+            ..Default::default()
+        }],
+        style_palette: Vec::new(),
+        ..Default::default()
+    };
+    let imported_styles = br#"
+        <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;STALE&quot;0"/></numFmts>
+          <fonts count="2">
+            <font><sz val="11"/><name val="Calibri"/></font>
+            <font><sz val="12"/><name val="StaleFont"/></font>
+          </fonts>
+          <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+          <borders count="1"><border/></borders>
+          <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+          <cellXfs count="2">
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+            <xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+          </cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+          <dxfs count="0"/>
+          <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
+        </styleSheet>
+    "#;
+    let ctx = domain_types::RoundTripContext {
+        parsed_stylesheet: Some(crate::domain::styles::read::parse_styles(imported_styles)),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(!styles_xml.contains("StaleFont"));
+    assert!(!styles_xml.contains("STALE"));
+    assert!(styles_xml.contains("<cellXfs count=\"1\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]

@@ -721,16 +721,9 @@ pub(super) fn convert_cell(
                 // in the seeded SST. If the cell was edited after import, the
                 // stale index must not override the current resolved value.
                 let sst_idx = if let Some(orig_idx) = cell.original_sst_index {
-                    let idx = orig_idx as usize;
-                    if shared_strings.has_entry(idx)
-                        && shared_strings.entry_text_matches(idx, s.as_ref())
-                    {
-                        // Ensure the entry is counted as referenced
-                        shared_strings.mark_used(idx);
-                        idx
-                    } else {
-                        shared_strings.add(s.as_ref())
-                    }
+                    shared_strings
+                        .add_imported_hint_if_text_matches(orig_idx as usize, s.as_ref())
+                        .unwrap_or_else(|| shared_strings.add(s.as_ref()))
                 } else {
                     shared_strings.add(s.as_ref())
                 };
@@ -884,7 +877,7 @@ mod tests {
     #[test]
     fn original_sst_index_preserves_empty_shared_string_cell() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.seed("");
+        shared_strings.add_imported_hint(0, "", None, None);
         let converted = convert_cell(&text_cell("", Some(0)), &mut shared_strings, true);
 
         assert!(matches!(&converted.value, CellValue::String(0)));
@@ -895,20 +888,20 @@ mod tests {
     #[test]
     fn original_sst_index_out_of_range_falls_back() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.seed("old");
+        shared_strings.add_imported_hint(0, "old", None, None);
         let converted = convert_cell(&text_cell("current", Some(99)), &mut shared_strings, true);
 
-        assert!(matches!(&converted.value, CellValue::String(1)));
+        assert!(matches!(&converted.value, CellValue::String(0)));
         assert!(!matches!(&converted.value, CellValue::String(99)));
     }
 
     #[test]
     fn original_sst_index_text_mismatch_falls_back() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.seed("old");
+        shared_strings.add_imported_hint(0, "old", None, None);
         let converted = convert_cell(&text_cell("new", Some(0)), &mut shared_strings, true);
 
-        assert!(matches!(&converted.value, CellValue::String(1)));
+        assert!(matches!(&converted.value, CellValue::String(0)));
     }
 }
 

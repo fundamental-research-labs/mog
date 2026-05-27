@@ -4,12 +4,28 @@
 //! workbook properties, file version, file sharing, slicer caches, and
 //! parsed pivot tables.
 
+use cell_types::SheetId;
+use compute_document::hex::hex_to_id;
 use compute_document::schema::*;
-use domain_types::{domain::theme::ThemeData, domain::workbook::WorkbookProtection, yrs_schema};
+use compute_document::workbook_metadata::{
+    read_imported_external_cache_records, read_workbook_link_records,
+};
+use domain_types::{
+    NamedRange,
+    domain::external_link::ExternalLink,
+    domain::theme::ThemeData,
+    domain::workbook::{CalculationProperties, RefMode, WorkbookProtection},
+    yrs_schema,
+};
 use yrs::{Any, Map, Out, Transact};
 
+use crate::mirror::CellMirror;
+use crate::snapshot::{CalcMode, CalculationSettings};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
+use crate::storage::workbook::{
+    named_ranges as workbook_named_ranges, settings as workbook_settings,
+};
 
 // -------------------------------------------------------------------
 // Workbook-level exports
@@ -107,6 +123,129 @@ pub(super) fn export_document_properties(
     }
 }
 
+/// Export calculation settings from modeled workbook storage.
+///
+/// `calcId` is not modeled by the app runtime, so an imported value may be
+/// carried forward as a non-authoritative identity hint. Behavioral settings
+/// must come from the workbook settings map.
+pub(super) fn export_calculation_properties(
+    stores: &EngineStores,
+    calc_id_hint: Option<u32>,
+) -> CalculationProperties {
+    let settings = workbook_settings::get_calculation_settings(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+    );
+    calculation_properties_from_settings(&settings, calc_id_hint)
+}
+
+fn calculation_properties_from_settings(
+    settings: &CalculationSettings,
+    calc_id_hint: Option<u32>,
+) -> CalculationProperties {
+    CalculationProperties {
+        iterate: settings.enable_iterative_calculation,
+        iterate_count: settings.max_iterations,
+        iterate_delta: settings.max_change.get(),
+        calc_mode: match settings.calc_mode {
+            CalcMode::Auto => domain_types::domain::workbook::CalcMode::Auto,
+            CalcMode::AutoNoTable => domain_types::domain::workbook::CalcMode::AutoNoTable,
+            CalcMode::Manual => domain_types::domain::workbook::CalcMode::Manual,
+        },
+        full_calc_on_load: settings.full_calc_on_load,
+        ref_mode: if settings.r1c1_mode {
+            RefMode::R1C1
+        } else {
+            RefMode::A1
+        },
+        full_precision: settings.full_precision,
+        force_full_calc: settings.force_full_calc,
+        calc_id: calc_id_hint,
+        ..CalculationProperties::default()
+    }
+}
+
+/// Export all modeled defined names from Yrs storage.
+///
+/// Hidden names are included here because they are workbook state, not UI query
+/// output. Unsupported or opaque references must be present in
+/// `DefinedName.raw_refers_to`; stale `RoundTripContext` skipped-name lists are
+/// intentionally not consulted.
+pub(super) fn export_workbook_named_ranges(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_ids: &[SheetId],
+) -> Vec<NamedRange> {
+    workbook_named_ranges::get_all_named_ranges(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+    )
+    .into_iter()
+    .filter_map(|dn| {
+        let local_sheet_id = dn.scope.as_ref().and_then(|scope_hex| {
+            let raw = hex_to_id(scope_hex)?;
+            let scope_sid = SheetId::from_raw(raw);
+            sheet_ids
+                .iter()
+                .position(|sid| *sid == scope_sid)
+                .map(|i| i as u32)
+        });
+
+        let refers_to = if let Some(raw_refers_to) = dn.raw_refers_to.clone() {
+            raw_refers_to
+        } else {
+            let identity = match serde_json::from_str::<formula_types::IdentityFormula>(&dn.refers_to) {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::warn!(
+                        name = %dn.name,
+                        error = %e,
+                        "Yrs DefinedName.refers_to is not a valid IdentityFormula JSON and has no raw_refers_to; \
+                         omitting from XLSX export. Typed formula boundary: made IdentityFormula JSON \
+                         the single canonical on-disk format."
+                    );
+                    return None;
+                }
+            };
+
+            if identity.refs.is_empty() {
+                identity.template
+            } else {
+                let a1 = stores.compute.to_a1_display_qualified(
+                    mirror,
+                    &SheetId::from_raw(0),
+                    &identity,
+                );
+                let a1 = a1.strip_prefix('=').unwrap_or(&a1);
+                if a1.is_empty() {
+                    dn.refers_to.clone()
+                } else {
+                    a1.to_string()
+                }
+            }
+        };
+
+        Some(NamedRange {
+            name: dn.name,
+            refers_to,
+            local_sheet_id,
+            hidden: !dn.visible,
+            comment: dn.comment,
+            custom_menu: dn.custom_menu,
+            description: dn.description,
+            help: dn.help,
+            status_bar: dn.status_bar,
+            xlm: dn.xlm,
+            function: dn.function,
+            vb_procedure: dn.vb_procedure,
+            publish_to_server: dn.publish_to_server,
+            workbook_parameter: dn.workbook_parameter,
+            xml_space_preserve: dn.xml_space_preserve,
+        })
+    })
+    .collect()
+}
+
 /// Export workbook properties from the `workbookSettings` Y.Map.
 pub(super) fn export_workbook_properties(
     stores: &EngineStores,
@@ -170,6 +309,41 @@ pub(super) fn export_file_sharing(
     } else {
         Some(fs)
     }
+}
+
+/// Export workbook external links from workbook-owned imported-cache records.
+///
+/// The original parser `RoundTripContext.external_links` is import input only.
+/// Once hydrated, the workbook link registry and imported cache map own the
+/// current external-link export set.
+pub(super) fn export_external_links(stores: &EngineStores) -> Vec<ExternalLink> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let live_link_ids: rustc_hash::FxHashSet<_> = read_workbook_link_records(&txn, workbook)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|record| record.link_id)
+        .collect();
+
+    let mut links: Vec<ExternalLink> = read_imported_external_cache_records(&txn, workbook)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|record| live_link_ids.contains(&record.link_id))
+        .filter(|record| {
+            record.payload_kind == "domain-types.external-link" && record.payload_version == 1
+        })
+        .filter_map(|record| serde_json::from_str::<ExternalLink>(&record.payload_json).ok())
+        .collect();
+
+    links.sort_by_key(|link| {
+        link.imported_identity
+            .as_ref()
+            .map(|identity| identity.excel_ordinal)
+            .unwrap_or(u32::MAX)
+    });
+    links
 }
 
 /// Export slicer caches from the workbook-level slicers map.

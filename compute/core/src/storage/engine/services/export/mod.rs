@@ -36,11 +36,10 @@ pub(in crate::storage::engine) use workbook::{
 };
 
 use cell_types::SheetId;
-use compute_document::hex::hex_to_id;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
-    DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, SheetData, SheetView,
+    DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, ParseOutput, RoundTripContext,
+    SheetData, SheetView,
     domain::chart::ChartSpec,
     domain::comment::{Comment, CommentType},
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
@@ -48,7 +47,6 @@ use domain_types::{
     domain::print::PrintSettings,
     domain::table::TableSpec,
 };
-use formula_types;
 use yrs::{Any, Map, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -63,7 +61,8 @@ use crate::storage::engine::stores::EngineStores;
 // Private imports for submodule functions used in export_single_sheet
 use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
-    export_document_properties, export_file_sharing, export_file_version,
+    export_calculation_properties, export_document_properties, export_external_links,
+    export_file_sharing, export_file_version, export_workbook_named_ranges,
     export_workbook_properties,
 };
 
@@ -834,132 +833,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     };
 
     // --- Named ranges ---
-    //
-    // Normal Yrs `DefinedName.refers_to` entries are JSON-serialized
-    // `IdentityFormula`s. Entries with `raw_refers_to` are the explicit opaque
-    // preservation path for references the compute engine cannot model
-    // structurally, so export that original OOXML text verbatim.
-    let defined_names = queries::get_all_named_ranges_wire(stores);
-    let named_ranges: Vec<NamedRange> = defined_names
-        .into_iter()
-        .filter_map(|dn| {
-            if let Some(raw_refers_to) = dn.raw_refers_to.clone() {
-                let local_sheet_id = dn.scope.as_ref().and_then(|scope_hex| {
-                    let raw = hex_to_id(scope_hex)?;
-                    let scope_sid = SheetId::from_raw(raw);
-                    sheet_ids
-                        .iter()
-                        .position(|sid| *sid == scope_sid)
-                        .map(|i| i as u32)
-                });
-                return Some(NamedRange {
-                    name: dn.name,
-                    refers_to: raw_refers_to,
-                    local_sheet_id,
-                    hidden: !dn.visible,
-                    comment: dn.comment,
-                    custom_menu: dn.custom_menu,
-                    description: dn.description,
-                    help: dn.help,
-                    status_bar: dn.status_bar,
-                    xlm: dn.xlm,
-                    function: dn.function,
-                    vb_procedure: dn.vb_procedure,
-                    publish_to_server: dn.publish_to_server,
-                    workbook_parameter: dn.workbook_parameter,
-                    xml_space_preserve: dn.xml_space_preserve,
-                });
-            }
-
-            let identity =
-                match serde_json::from_str::<formula_types::IdentityFormula>(&dn.refers_to) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        tracing::warn!(
-                            name = %dn.name,
-                            error = %e,
-                            "Yrs DefinedName.refers_to is not a valid IdentityFormula JSON; \
-                             omitting from XLSX export. Typed formula boundary: made IdentityFormula JSON \
-                             the single canonical on-disk format."
-                        );
-                        return None;
-                    }
-                };
-
-            let refers_to = if identity.refs.is_empty() {
-                identity.template
-            } else {
-                let a1 = stores.compute.to_a1_display_qualified(
-                    mirror,
-                    &SheetId::from_raw(0),
-                    &identity,
-                );
-                let a1 = a1.strip_prefix('=').unwrap_or(&a1);
-                if a1.is_empty() {
-                    dn.refers_to.clone()
-                } else {
-                    a1.to_string()
-                }
-            };
-
-            let local_sheet_id = dn.scope.as_ref().and_then(|scope_hex| {
-                let raw = hex_to_id(scope_hex)?;
-                let scope_sid = SheetId::from_raw(raw);
-                sheet_ids
-                    .iter()
-                    .position(|sid| *sid == scope_sid)
-                    .map(|i| i as u32)
-            });
-            Some(NamedRange {
-                name: dn.name,
-                refers_to,
-                local_sheet_id,
-                hidden: !dn.visible,
-                comment: dn.comment,
-                custom_menu: dn.custom_menu,
-                description: dn.description,
-                help: dn.help,
-                status_bar: dn.status_bar,
-                xlm: dn.xlm,
-                function: dn.function,
-                vb_procedure: dn.vb_procedure,
-                publish_to_server: dn.publish_to_server,
-                workbook_parameter: dn.workbook_parameter,
-                xml_space_preserve: dn.xml_space_preserve,
-            })
-        })
-        .collect();
-
-    // Merge back named ranges that were skipped during import (hidden names,
-    // orphaned #REF! entries) and reconstruct the original document order.
-    let named_ranges = if let Some(ctx) = round_trip_context {
-        if !ctx.original_named_ranges_order.is_empty() {
-            // Rebuild in original order: for each original entry, use the engine's
-            // updated version if it went through the engine, or the preserved
-            // original if it was skipped.
-            let mut engine_names: std::collections::HashMap<(String, Option<u32>), NamedRange> =
-                named_ranges
-                    .into_iter()
-                    .map(|nr| ((nr.name.clone(), nr.local_sheet_id), nr))
-                    .collect();
-
-            ctx.original_named_ranges_order
-                .iter()
-                .map(|orig| {
-                    let key = (orig.name.clone(), orig.local_sheet_id);
-                    // If the engine has an updated version, use it; otherwise use original
-                    engine_names.remove(&key).unwrap_or_else(|| orig.clone())
-                })
-                .collect()
-        } else {
-            // No original order available — append skipped names at the end
-            let mut result = named_ranges;
-            result.extend(ctx.skipped_named_ranges.iter().cloned());
-            result
-        }
-    } else {
-        named_ranges
-    };
+    let named_ranges = export_workbook_named_ranges(stores, mirror, &sheet_ids);
 
     // --- Workbook-level ---
     let theme = export_workbook_theme(stores);
@@ -978,19 +852,15 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         theme,
         properties: export_document_properties(stores),
         protection: wb_protection,
-        calculation: round_trip_context
-            .and_then(|ctx| ctx.iterative_calc_settings.clone())
-            .unwrap_or_else(|| {
-                let mut ic = domain_types::domain::workbook::CalculationProperties::default();
-                if let Some(ctx) = round_trip_context {
-                    ic.calc_id = ctx.calc_id;
-                }
-                ic
-            }),
+        calculation: export_calculation_properties(
+            stores,
+            round_trip_context.and_then(|ctx| ctx.calc_id),
+        ),
         workbook_views: vec![],
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),
         file_sharing: export_file_sharing(stores),
+        external_links: export_external_links(stores),
         persons: vec![],
     }
 }

@@ -99,18 +99,31 @@ pub struct RoundTripContext {
     /// must not be replayed verbatim once cells can change.
     #[serde(default, with = "option_bytes")]
     pub raw_shared_strings_xml: Option<Vec<u8>>,
+    /// Compatibility input only. Document properties are modeled through
+    /// `ParseOutput.properties` and must be regenerated from that state.
     #[serde(default, with = "option_bytes")]
     pub raw_doc_props_core_xml: Option<Vec<u8>>,
+    /// Compatibility input only. Unsupported extended properties are dropped
+    /// unless they are promoted to modeled document property state.
     #[serde(default, with = "option_bytes")]
     pub raw_doc_props_app_xml: Option<Vec<u8>>,
+    /// Compatibility input only. Modeled custom properties live on
+    /// `DocumentProperties.custom`.
     #[serde(default, with = "option_bytes")]
     pub raw_doc_props_custom_xml: Option<Vec<u8>>,
+    /// Compatibility input only. Raw `xl/metadata.xml` may seed export only
+    /// while current modeled cells still reference cell/value metadata (`cm`
+    /// or `vm`); stale metadata must not force package parts by itself.
     #[serde(default, with = "option_bytes")]
     pub raw_metadata_xml: Option<Vec<u8>>,
+    /// Compatibility input only. Person identity export is modeled through
+    /// `ParseOutput.persons`; stale raw person.xml must not be replayed when
+    /// modeled persons are absent.
     #[serde(default, with = "option_bytes")]
     pub raw_persons_xml: Option<Vec<u8>>,
-    /// Parsed external link definitions for proper domain-based round-tripping.
-    /// Each entry represents one externalLinkN.xml file with its resolved relationships.
+    /// Compatibility input only. External links are modeled through
+    /// `ParseOutput.external_links` and imported workbook storage; exporters
+    /// must not merge this list back into workbook relationships or parts.
     #[serde(default)]
     pub external_links: Vec<crate::domain::external_link::ExternalLink>,
     #[serde(default)]
@@ -141,6 +154,8 @@ pub struct RoundTripContext {
     /// packages only for API-created or explicitly dirty pivots.
     #[serde(default, skip_serializing_if = "PivotPackageRoundTrip::is_empty")]
     pub pivot_package: PivotPackageRoundTrip,
+    /// Compatibility input only. Workbook views are modeled through
+    /// `ParseOutput.workbook_views` and must be regenerated from that state.
     #[serde(default)]
     pub workbook_views: Vec<crate::domain::workbook::WorkbookView>,
     /// Original `calcId` from `<calcPr>`. Preserved for round-trip fidelity
@@ -167,16 +182,15 @@ pub struct RoundTripContext {
     #[serde(default)]
     pub workbook_preserved_elements: Vec<(String, String)>,
 
-    /// Named ranges from the original XLSX that were not imported into the
-    /// compute engine (hidden names like `_xlnm._FilterDatabase`, orphaned
-    /// `#REF!` entries, etc.). Preserved here for round-trip fidelity and
-    /// merged back during export to maintain the original defined name list.
+    /// Compatibility input only. Hidden and opaque defined names are modeled in
+    /// workbook named-range storage with `raw_refers_to` when needed; exporters
+    /// must not merge this list back into workbook XML.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped_named_ranges: Vec<crate::parse_output::NamedRange>,
 
-    /// Complete original named ranges list in document order. Used during
-    /// export to reconstruct the correct ordering when merging engine-updated
-    /// names with preserved skipped names.
+    /// Compatibility input only. Modeled named ranges carry their own order in
+    /// workbook named-range storage; exporters must not use this list as an
+    /// authority to resurrect deleted or unsupported names.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub original_named_ranges_order: Vec<crate::parse_output::NamedRange>,
 
@@ -204,7 +218,9 @@ pub struct RoundTripContext {
     /// Raw XML of `<a:extLst>` (full element including tags).
     #[serde(default, with = "option_bytes")]
     pub theme_ext_lst_xml: Option<Vec<u8>>,
-    /// Raw bytes of `docMetadata/LabelInfo.xml` for verbatim round-trip passthrough.
+    /// Compatibility input only. `docMetadata/LabelInfo.xml` is unsupported
+    /// classification-label package data and must not be replayed as a raw
+    /// standalone sidecar outside an explicit clean opaque subgraph.
     #[serde(default, with = "option_bytes")]
     pub doc_metadata_label_info: Option<Vec<u8>>,
 }
@@ -217,6 +233,8 @@ pub struct SheetRoundTripContext {
     /// from domain state.
     #[serde(default)]
     pub sheet_opc_rels: Vec<OpcRelationship>,
+    /// Compatibility input only. Comment VML and header/footer image VML may
+    /// seed modeled/owned outputs, but stale raw VML must not emit by itself.
     #[serde(default)]
     pub raw_vml_drawings: Vec<VmlDrawingPart>,
     pub legacy_drawing_r_id: Option<String>,
@@ -271,10 +289,14 @@ pub struct SheetRoundTripContext {
     /// other non-standard namespace attrs for round-trip fidelity.
     #[serde(default)]
     pub preserved_namespace_attrs: Vec<(String, String)>,
-    /// Per-chart auxiliary data for round-trip fidelity (style XML, colors XML, .rels).
+    /// Compatibility input only. Per-chart auxiliary data (style XML, colors
+    /// XML, .rels) may seed export only when the current chart object still
+    /// carries imported chart identity; local index alone must not replay stale
+    /// aux subgraphs after chart replacement.
     #[serde(default)]
     pub chart_auxiliary_data: Vec<ChartAuxiliaryData>,
-    /// Per-ChartEx auxiliary data (style XML, colors XML, .rels) — separate from standard charts.
+    /// Compatibility input only. Same contract as `chart_auxiliary_data`, for
+    /// modern ChartEx parts.
     #[serde(default)]
     pub chart_ex_auxiliary_data: Vec<ChartAuxiliaryData>,
     /// Preserved OOXML cell formula metadata (shared, array, dataTable) for round-trip.

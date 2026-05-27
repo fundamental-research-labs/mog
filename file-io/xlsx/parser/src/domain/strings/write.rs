@@ -131,6 +131,12 @@ struct StringEntry {
     phonetic_xml: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Clone)]
+struct ImportedStringHint {
+    value: SharedStringValue,
+    phonetic_xml: Option<Vec<u8>>,
+}
+
 // ============================================================================
 // SharedStringsWriter
 // ============================================================================
@@ -164,10 +170,10 @@ pub struct SharedStringsWriter {
     /// For seeded SSTs with duplicate strings: maps string → list of all SST indices.
     /// Used in round-trip mode to cycle through duplicate indices in order.
     dup_indices: HashMap<String, Vec<usize>>,
-    /// Original `count` attribute from the parsed SST XML, preserved for round-trip fidelity.
-    /// When set, `to_xml()` emits this as the `<sst count="…">` attribute
-    /// instead of the computed `total_count()`.
-    original_sst_count: Option<usize>,
+    /// Imported per-entry hints keyed by original SST index. Hints are not emitted
+    /// until a current cell proves it still references the same text.
+    imported_hints: HashMap<usize, ImportedStringHint>,
+    imported_hint_indices: HashMap<usize, usize>,
 }
 
 impl SharedStringsWriter {
@@ -178,7 +184,8 @@ impl SharedStringsWriter {
             index_map: HashMap::new(),
             next_index: 0,
             dup_indices: HashMap::new(),
-            original_sst_count: None,
+            imported_hints: HashMap::new(),
+            imported_hint_indices: HashMap::new(),
         }
     }
 
@@ -189,17 +196,65 @@ impl SharedStringsWriter {
             index_map: HashMap::with_capacity(capacity),
             next_index: 0,
             dup_indices: HashMap::new(),
-            original_sst_count: None,
+            imported_hints: HashMap::new(),
+            imported_hint_indices: HashMap::new(),
         }
     }
 
-    /// Set the original `count` attribute value from the parsed SST XML.
-    /// When set, `to_xml()` emits this value in the `<sst count="…">`
-    /// attribute instead of the computed total reference count, so that
-    /// round-tripped files preserve the original count byte-for-byte even
-    /// if our cell-reference counting differs in edge cases.
-    pub fn set_original_sst_count(&mut self, count: usize) {
-        self.original_sst_count = Some(count);
+    /// Register an imported SST entry as a non-authoritative hint.
+    ///
+    /// The hint is emitted only via `add_imported_hint_if_text_matches`, after a
+    /// current cell proves that its original SST index still resolves to the
+    /// current text. This lets unchanged rich text and phonetic metadata survive
+    /// without replaying raw sharedStrings.xml or stale unused entries.
+    pub fn add_imported_hint(
+        &mut self,
+        original_index: usize,
+        text: &str,
+        rich_runs: Option<Vec<DtRichTextRun>>,
+        phonetic_xml: Option<Vec<u8>>,
+    ) {
+        let value = rich_runs.map_or_else(
+            || SharedStringValue::Plain(text.to_string()),
+            SharedStringValue::DomainRichText,
+        );
+        self.imported_hints.insert(
+            original_index,
+            ImportedStringHint {
+                value,
+                phonetic_xml,
+            },
+        );
+    }
+
+    /// Emit and reference an imported hint if its plain text still matches the cell.
+    pub fn add_imported_hint_if_text_matches(
+        &mut self,
+        original_index: usize,
+        text: &str,
+    ) -> Option<usize> {
+        let hint = self.imported_hints.get(&original_index)?;
+        if hint.value.to_plain_text() != text {
+            return None;
+        }
+
+        if let Some(&idx) = self.imported_hint_indices.get(&original_index) {
+            self.entries[idx].count += 1;
+            return Some(idx);
+        }
+
+        let idx = self.next_index;
+        self.entries.push(StringEntry {
+            value: hint.value.clone(),
+            count: 1,
+            phonetic_xml: hint.phonetic_xml.clone(),
+        });
+        if matches!(hint.value, SharedStringValue::Plain(_)) {
+            self.index_map.entry(text.to_string()).or_insert(idx);
+        }
+        self.imported_hint_indices.insert(original_index, idx);
+        self.next_index += 1;
+        Some(idx)
     }
 
     /// Seed a plain string with count=0 and return its index.
@@ -354,6 +409,11 @@ impl SharedStringsWriter {
         self.entries.is_empty()
     }
 
+    /// Check whether any entry is actually referenced by cells.
+    pub fn has_referenced_entries(&self) -> bool {
+        self.total_count() > 0
+    }
+
     /// Get the total reference count (sum of all string usage counts).
     ///
     /// This is used for the `count` attribute in the `<sst>` element.
@@ -375,9 +435,7 @@ impl SharedStringsWriter {
             return self.write_empty_xml();
         }
 
-        let total_count = self
-            .original_sst_count
-            .unwrap_or_else(|| self.total_count());
+        let total_count = self.total_count();
         let unique_count = self.len();
 
         let mut xml = Vec::with_capacity(64 + unique_count * 64);

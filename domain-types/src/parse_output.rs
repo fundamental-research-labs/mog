@@ -43,6 +43,9 @@ pub struct ParseOutput {
     pub file_version: Option<FileVersion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_sharing: Option<FileSharing>,
+    /// Workbook external-link definitions that should be emitted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_links: Vec<ExternalLink>,
     /// Person identity list for threaded comments.
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

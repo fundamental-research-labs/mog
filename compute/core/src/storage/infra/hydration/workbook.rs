@@ -60,11 +60,12 @@ pub(super) fn hydrate_workbook_named_ranges(
         // monotonic uniqueness — the ID just needs to be a unique hex string)
         let id = id_to_hex(allocator.alloc_cell_id().as_u128()).to_string();
 
-        let raw_refers_to = if should_preserve_defined_name_ref_opaque(&nr.name, &nr.refers_to) {
-            Some(nr.refers_to.clone())
-        } else {
-            None
-        };
+        let raw_refers_to =
+            if nr.hidden || should_preserve_defined_name_ref_opaque(&nr.name, &nr.refers_to) {
+                Some(nr.refers_to.clone())
+            } else {
+                None
+            };
 
         let defined_name = domain_types::DefinedName {
             id,

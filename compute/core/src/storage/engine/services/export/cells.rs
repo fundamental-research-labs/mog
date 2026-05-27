@@ -203,7 +203,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     let has_lossless_stylesheet = round_trip_context
         .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
         .is_some();
-
     // Original cellXfs count — new palette entries are appended after these,
     // so mutated cells get style_id = original_count + palette_idx.
     let original_cellxfs_count = round_trip_context
@@ -690,6 +689,10 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     let has_lossless_stylesheet = round_trip_context
         .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
         .is_some();
+    let original_cellxfs_count = round_trip_context
+        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
+        .map(|ss| ss.cell_xfs.len() as u32)
+        .unwrap_or(0);
 
     let grid_index = stores.grid_indexes.get(sheet_id);
 
@@ -707,15 +710,17 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
             }
             continue;
         }
-        if let Some(fmt) = entry.format {
-            let doc_fmt = cell_format_to_document_format(&fmt);
-            if doc_fmt == DocumentFormat::default() {
-                continue;
-            }
-            let idx = palette.get_or_insert(doc_fmt);
+        if let Some(fmt) = entry.format
+            && let Some(style_id) = style_id_for_cell_format(
+                &fmt,
+                has_lossless_stylesheet,
+                original_cellxfs_count,
+                palette,
+            )
+        {
             row_styles.push(RowStyleEntry {
                 row: entry.row,
-                style_id: idx,
+                style_id,
             });
         }
     }
@@ -733,15 +738,17 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
             }
             continue;
         }
-        if let Some(fmt) = entry.format {
-            let doc_fmt = cell_format_to_document_format(&fmt);
-            if doc_fmt == DocumentFormat::default() {
-                continue;
-            }
-            let idx = palette.get_or_insert(doc_fmt);
+        if let Some(fmt) = entry.format
+            && let Some(style_id) = style_id_for_cell_format(
+                &fmt,
+                has_lossless_stylesheet,
+                original_cellxfs_count,
+                palette,
+            )
+        {
             col_styles.push(ColStyleEntry {
                 col: entry.col,
-                style_id: idx,
+                style_id,
             });
         }
     }
@@ -899,6 +906,39 @@ mod tests {
         }
     }
 
+    fn parsed_stylesheet_with_cell_xfs(count: usize) -> ooxml_types::styles::Stylesheet {
+        let cell_xfs = (0..count)
+            .map(|idx| {
+                if idx == 0 {
+                    r#"<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>"#
+                        .to_string()
+                } else {
+                    format!(
+                        r#"<xf numFmtId="0" fontId="{idx}" fillId="0" borderId="0" xfId="0" applyFont="1"/>"#
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        let fonts = (0..count)
+            .map(|idx| format!(r#"<font><sz val="11"/><name val="Font{idx}"/></font>"#))
+            .collect::<Vec<_>>()
+            .join("");
+        let xml = format!(
+            r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                <fonts count="{count}">{fonts}</fonts>
+                <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+                <borders count="1"><border/></borders>
+                <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+                <cellXfs count="{count}">{cell_xfs}</cellXfs>
+                <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+                <dxfs count="0"/>
+                <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
+            </styleSheet>"#
+        );
+        xlsx_parser::domain::styles::read::parse_styles(xml.as_bytes())
+    }
+
     #[test]
     fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
         let output = authored_style_run_output();
@@ -950,6 +990,58 @@ mod tests {
             &palette,
         );
         assert_eq!(exported_runs, output.sheets[0].authored_style_runs);
+    }
+
+    #[test]
+    fn mutated_row_and_col_formats_rebase_after_imported_cellxfs() {
+        let output = domain_types::ParseOutput {
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                rows: 4,
+                cols: 4,
+                cells: vec![domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: number(1.0),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let round_trip_context = domain_types::RoundTripContext {
+            parsed_stylesheet: Some(parsed_stylesheet_with_cell_xfs(3)),
+            ..Default::default()
+        };
+        let (mut engine, sheet_id) =
+            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+
+        engine
+            .set_row_format(
+                &sheet_id,
+                2,
+                CellFormat {
+                    bold: Some(true),
+                    ..Default::default()
+                },
+            )
+            .expect("set row format");
+        engine
+            .set_col_format(
+                &sheet_id,
+                1,
+                CellFormat {
+                    background_color: Some("#FFEE00".to_string()),
+                    pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+                    ..Default::default()
+                },
+            )
+            .expect("set col format");
+
+        let exported = engine.build_parse_output_from_yrs();
+        assert_eq!(exported.style_palette.len(), 2);
+        assert_eq!(exported.sheets[0].row_styles[0].style_id, 3);
+        assert_eq!(exported.sheets[0].col_styles[0].style_id, 4);
     }
 
     #[test]

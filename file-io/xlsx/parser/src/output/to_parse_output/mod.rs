@@ -67,6 +67,7 @@ use domain_types::{
     domain::workbook::CalcMode,
 };
 use formula_types::{CellRef, RangeType};
+use ooxml_types::doc_props::CustomPropertyValue;
 
 // Parser-internal imports (no re-export indirection)
 use crate::output::results::{FullParseResult, FullParsedSheet};
@@ -78,6 +79,15 @@ fn env_flag_default_true(name: &str) -> bool {
             !matches!(normalized.as_str(), "0" | "false" | "no" | "off")
         })
         .unwrap_or(true)
+}
+
+fn custom_property_value_to_string(value: &CustomPropertyValue) -> String {
+    match value {
+        CustomPropertyValue::Lpwstr(value) | CustomPropertyValue::Filetime(value) => value.clone(),
+        CustomPropertyValue::I4(value) => value.to_string(),
+        CustomPropertyValue::R8(value) => value.to_string(),
+        CustomPropertyValue::Bool(value) => value.to_string(),
+    }
 }
 
 // =============================================================================
@@ -157,20 +167,37 @@ pub(crate) fn full_parse_result_to_parse_output(
     let protection = result.workbook_protection.clone();
 
     // 6. Convert document properties
-    let properties = result.doc_props_core.as_ref().map(|core| {
-        domain_types::DocumentProperties {
-            title: core.title.clone(),
-            creator: core.creator.clone(),
-            description: core.description.clone(),
-            subject: core.subject.clone(),
-            created: core.created.clone(),
-            modified: core.modified.clone(),
-            last_modified_by: core.last_modified_by.clone(),
-            category: core.category.clone(),
-            keywords: core.keywords.clone(),
-            custom: Vec::new(), // TODO: wire from doc_props_custom
-        }
-    });
+    let properties =
+        (result.doc_props_core.is_some() || result.doc_props_custom.is_some()).then(|| {
+            let core = result.doc_props_core.as_ref();
+            domain_types::DocumentProperties {
+                title: core.and_then(|core| core.title.clone()),
+                creator: core.and_then(|core| core.creator.clone()),
+                description: core.and_then(|core| core.description.clone()),
+                subject: core.and_then(|core| core.subject.clone()),
+                created: core.and_then(|core| core.created.clone()),
+                modified: core.and_then(|core| core.modified.clone()),
+                last_modified_by: core.and_then(|core| core.last_modified_by.clone()),
+                category: core.and_then(|core| core.category.clone()),
+                keywords: core.and_then(|core| core.keywords.clone()),
+                custom: result
+                    .doc_props_custom
+                    .as_ref()
+                    .map(|custom| {
+                        custom
+                            .properties
+                            .iter()
+                            .map(|prop| {
+                                (
+                                    prop.name.clone(),
+                                    custom_property_value_to_string(&prop.value),
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            }
+        });
 
     // 7. Calculation properties
     let mut calculation = CalculationProperties {
@@ -309,6 +336,7 @@ pub(crate) fn full_parse_result_to_parse_output(
         workbook_properties: result.workbook_properties.clone(),
         file_version: result.file_version.clone(),
         file_sharing: result.file_sharing.clone(),
+        external_links: result.external_links.clone(),
         persons,
     };
 

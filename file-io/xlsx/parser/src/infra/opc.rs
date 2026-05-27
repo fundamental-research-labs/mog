@@ -85,6 +85,46 @@ pub const REL_PRINTER_SETTINGS: &str =
 pub const REL_EXTERNAL_LINK: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink";
 
+/// Relationship type for an external workbook path stored in an external link part.
+pub const REL_EXTERNAL_LINK_PATH: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath";
+
+/// Relationship type for an external workbook path longer than Excel's legacy path limit.
+pub const REL_EXTERNAL_LINK_LONG_PATH: &str =
+    "http://schemas.microsoft.com/office/2019/04/relationships/externalLinkLongPath";
+
+/// Relationship type for a missing external workbook path.
+pub const REL_XL_PATH_MISSING: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlPathMissing";
+
+/// Relationship type for a missing long external workbook path.
+pub const REL_XL_LONG_PATH_MISSING: &str =
+    "http://schemas.microsoft.com/office/2009/04/relationships/xlExternalLinkLongPath/xlPathMissing";
+
+/// Relationship type for an external workbook path rooted at Excel's startup directory.
+pub const REL_XL_STARTUP: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlStartup";
+
+/// Relationship type for an external workbook path rooted at Excel's alternate startup directory.
+pub const REL_XL_ALTERNATE_STARTUP: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlAlternateStartup";
+
+/// Relationship type for an external workbook path rooted at Excel's library directory.
+pub const REL_XL_LIBRARY: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlLibrary";
+
+/// Relationship type for a long external workbook path rooted at Excel's startup directory.
+pub const REL_XL_LONG_STARTUP: &str =
+    "http://schemas.microsoft.com/office/2019/04/relationships/xlExternalLinkLongPath/xlStartup";
+
+/// Relationship type for a long external workbook path rooted at Excel's alternate startup directory.
+pub const REL_XL_LONG_ALTERNATE_STARTUP: &str =
+    "http://schemas.microsoft.com/office/2019/04/relationships/xlExternalLinkLongPath/xlAlternateStartup";
+
+/// Relationship type for a long external workbook path rooted at Excel's library directory.
+pub const REL_XL_LONG_LIBRARY: &str =
+    "http://schemas.microsoft.com/office/2009/04/relationships/xlExternalLinkLongPath/xlLibrary";
+
 /// Relationship type for SmartArt diagram data.
 pub const REL_DIAGRAM_DATA: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData";
@@ -126,6 +166,10 @@ pub const REL_THREADED_COMMENT: &str =
 
 /// Relationship type for the person list (xl/persons/person.xml).
 pub const REL_PERSON: &str = "http://schemas.microsoft.com/office/2017/10/relationships/person";
+
+/// Relationship type for VBA projects.
+pub const REL_VBA_PROJECT: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/vbaProject";
 
 /// Relationship type for chart style sidecar parts.
 pub const REL_CHART_STYLE: &str =
@@ -211,6 +255,16 @@ pub enum OoxmlRelationshipType {
     CtrlProp,
     CustomProperty,
     ExternalLink,
+    ExternalLinkPath,
+    ExternalLinkLongPath,
+    XlPathMissing,
+    XlLongPathMissing,
+    XlStartup,
+    XlAlternateStartup,
+    XlLibrary,
+    XlLongStartup,
+    XlLongAlternateStartup,
+    XlLongLibrary,
     DiagramData,
     DiagramLayout,
     DiagramColors,
@@ -221,6 +275,7 @@ pub enum OoxmlRelationshipType {
     Metadata,
     OleObject,
     Person,
+    VbaProject,
     Unknown(String),
 }
 
@@ -251,6 +306,16 @@ impl OoxmlRelationshipType {
             REL_CTRL_PROP => Self::CtrlProp,
             REL_CUSTOM_PROPERTY => Self::CustomProperty,
             REL_EXTERNAL_LINK => Self::ExternalLink,
+            REL_EXTERNAL_LINK_PATH => Self::ExternalLinkPath,
+            REL_EXTERNAL_LINK_LONG_PATH => Self::ExternalLinkLongPath,
+            REL_XL_PATH_MISSING => Self::XlPathMissing,
+            REL_XL_LONG_PATH_MISSING => Self::XlLongPathMissing,
+            REL_XL_STARTUP => Self::XlStartup,
+            REL_XL_ALTERNATE_STARTUP => Self::XlAlternateStartup,
+            REL_XL_LIBRARY => Self::XlLibrary,
+            REL_XL_LONG_STARTUP => Self::XlLongStartup,
+            REL_XL_LONG_ALTERNATE_STARTUP => Self::XlLongAlternateStartup,
+            REL_XL_LONG_LIBRARY => Self::XlLongLibrary,
             REL_DIAGRAM_DATA => Self::DiagramData,
             REL_DIAGRAM_LAYOUT => Self::DiagramLayout,
             REL_DIAGRAM_COLORS => Self::DiagramColors,
@@ -261,6 +326,7 @@ impl OoxmlRelationshipType {
             REL_METADATA => Self::Metadata,
             REL_OLE_OBJECT => Self::OleObject,
             REL_PERSON => Self::Person,
+            REL_VBA_PROJECT => Self::VbaProject,
             other => Self::Unknown(other.to_string()),
         }
     }
@@ -291,6 +357,16 @@ impl OoxmlRelationshipType {
             Self::CtrlProp => REL_CTRL_PROP,
             Self::CustomProperty => REL_CUSTOM_PROPERTY,
             Self::ExternalLink => REL_EXTERNAL_LINK,
+            Self::ExternalLinkPath => REL_EXTERNAL_LINK_PATH,
+            Self::ExternalLinkLongPath => REL_EXTERNAL_LINK_LONG_PATH,
+            Self::XlPathMissing => REL_XL_PATH_MISSING,
+            Self::XlLongPathMissing => REL_XL_LONG_PATH_MISSING,
+            Self::XlStartup => REL_XL_STARTUP,
+            Self::XlAlternateStartup => REL_XL_ALTERNATE_STARTUP,
+            Self::XlLibrary => REL_XL_LIBRARY,
+            Self::XlLongStartup => REL_XL_LONG_STARTUP,
+            Self::XlLongAlternateStartup => REL_XL_LONG_ALTERNATE_STARTUP,
+            Self::XlLongLibrary => REL_XL_LONG_LIBRARY,
             Self::DiagramData => REL_DIAGRAM_DATA,
             Self::DiagramLayout => REL_DIAGRAM_LAYOUT,
             Self::DiagramColors => REL_DIAGRAM_COLORS,
@@ -301,9 +377,30 @@ impl OoxmlRelationshipType {
             Self::Metadata => REL_METADATA,
             Self::OleObject => REL_OLE_OBJECT,
             Self::Person => REL_PERSON,
+            Self::VbaProject => REL_VBA_PROJECT,
             Self::Unknown(uri) => uri,
         }
     }
+}
+
+pub fn is_external_workbook_base_path_relationship_type(rel_type: &str) -> bool {
+    matches!(
+        rel_type,
+        REL_EXTERNAL_LINK_PATH
+            | REL_EXTERNAL_LINK_LONG_PATH
+            | REL_XL_PATH_MISSING
+            | REL_XL_LONG_PATH_MISSING
+            | REL_XL_STARTUP
+            | REL_XL_ALTERNATE_STARTUP
+            | REL_XL_LIBRARY
+            | REL_XL_LONG_STARTUP
+            | REL_XL_LONG_ALTERNATE_STARTUP
+            | REL_XL_LONG_LIBRARY
+    )
+}
+
+pub fn is_missing_external_workbook_path_relationship_type(rel_type: &str) -> bool {
+    matches!(rel_type, REL_XL_PATH_MISSING | REL_XL_LONG_PATH_MISSING)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -873,5 +970,27 @@ mod tests {
             drawing.by_id("rId2").map(|rel| rel.target.raw()),
             Some("https://example.com")
         );
+    }
+
+    #[test]
+    fn external_workbook_base_path_relationships_are_exact() {
+        assert!(is_external_workbook_base_path_relationship_type(
+            REL_EXTERNAL_LINK_PATH
+        ));
+        assert!(is_external_workbook_base_path_relationship_type(
+            REL_EXTERNAL_LINK_LONG_PATH
+        ));
+        assert!(is_external_workbook_base_path_relationship_type(
+            REL_XL_PATH_MISSING
+        ));
+        assert!(is_external_workbook_base_path_relationship_type(
+            REL_XL_LONG_PATH_MISSING
+        ));
+        assert!(!is_external_workbook_base_path_relationship_type(
+            "http://example.invalid/relationships/externalLinkPath"
+        ));
+        assert!(!is_missing_external_workbook_path_relationship_type(
+            "http://example.invalid/relationships/xlPathMissing"
+        ));
     }
 }

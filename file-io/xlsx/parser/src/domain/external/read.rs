@@ -45,7 +45,7 @@
 //! ```
 
 use crate::infra::scanner::{
-    StartTagEnd, find_closing_tag, find_gt_simd, find_start_tag_end_quoted, find_tag_simd,
+    find_closing_tag, find_gt_simd, find_start_tag_end_quoted, find_tag_simd, StartTagEnd,
 };
 use crate::infra::xml::{parse_string_attr_quoted, parse_u32_attr};
 
@@ -181,7 +181,7 @@ impl ExternalLinks {
                     link.file_path_rid = Some(id.clone());
                     // Preserve non-default relationship types (e.g., xlPathMissing)
                     if let Some(ref rt) = rel_type {
-                        if !rt.ends_with("/externalLinkPath") {
+                        if rt != crate::infra::opc::REL_EXTERNAL_LINK_PATH {
                             link.file_path_rel_type = Some(rt.clone());
                         }
                     }

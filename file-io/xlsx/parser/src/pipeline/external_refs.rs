@@ -49,10 +49,9 @@ pub(crate) fn rewrite_all_external_refs(
     let ext_link_map: HashMap<&str, ExtLinkInfo<'_>> = external_links
         .iter()
         .map(|link| {
-            let is_path_missing = link
-                .file_path_rel_type
-                .as_deref()
-                .map_or(false, |rt| rt.contains("xlPathMissing"));
+            let is_path_missing = link.file_path_rel_type.as_deref().is_some_and(
+                crate::infra::opc::is_missing_external_workbook_path_relationship_type,
+            );
             let has_external_path = link.file_path.as_ref().map_or(false, |p| !p.is_empty());
             (
                 link.id.as_str(),

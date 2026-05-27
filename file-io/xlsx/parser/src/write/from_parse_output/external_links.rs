@@ -157,9 +157,7 @@ fn supported_external_link_relationship_type<'a>(
 }
 
 fn is_supported_external_link_relationship_type(rel_type: &str) -> bool {
-    rel_type.ends_with("/externalLinkPath")
-        || rel_type.ends_with("/externalLinkLongPath")
-        || rel_type.ends_with("/xlPathMissing")
+    crate::infra::opc::is_external_workbook_base_path_relationship_type(rel_type)
 }
 
 pub(super) fn rels_path(zip_path: &str) -> String {

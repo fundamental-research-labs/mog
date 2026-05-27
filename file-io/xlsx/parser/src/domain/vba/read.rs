@@ -263,8 +263,7 @@ mod dir_record {
 }
 
 /// Relationship type for VBA projects.
-pub const VBA_RELATIONSHIP_TYPE: &str =
-    "http://schemas.microsoft.com/office/2006/relationships/vbaProject";
+pub use crate::infra::opc::REL_VBA_PROJECT as VBA_RELATIONSHIP_TYPE;
 
 /// Content type for macro-enabled workbooks.
 pub const XLSM_CONTENT_TYPE: &str = "application/vnd.ms-excel.sheet.macroEnabled.main+xml";
@@ -348,7 +347,7 @@ fn parse_vba_relationship(xml: &[u8]) -> Option<VbaRelationship> {
             if let Some((start, end)) = extract_quoted_value(xml, type_start) {
                 let rel_type = String::from_utf8_lossy(&xml[start..end]);
 
-                if rel_type.contains("vbaProject") {
+                if rel_type == VBA_RELATIONSHIP_TYPE {
                     // Extract Id and Target
                     let mut relationship = VbaRelationship {
                         rel_type: rel_type.into_owned(),
@@ -1028,7 +1027,17 @@ mod tests {
         let rel = rel.unwrap();
         assert_eq!(rel.id, "rId2");
         assert_eq!(rel.target, "vbaProject.bin");
-        assert!(rel.rel_type.contains("vbaProject"));
+        assert_eq!(rel.rel_type, VBA_RELATIONSHIP_TYPE);
+    }
+
+    #[test]
+    fn test_parse_vba_relationship_rejects_type_near_miss() {
+        let xml = br#"<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId2" Type="http://schemas.example.invalid/relationships/vbaProject" Target="vbaProject.bin"/>
+</Relationships>"#;
+
+        assert!(parse_vba_relationship(xml).is_none());
     }
 
     #[test]

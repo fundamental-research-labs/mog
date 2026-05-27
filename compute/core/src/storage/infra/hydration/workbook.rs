@@ -271,6 +271,8 @@ pub(super) fn hydrate_workbook_metadata(
     workbook: &MapRef,
     workbook_properties: &Option<domain_types::domain::workbook::WorkbookProperties>,
     document_properties: &Option<domain_types::DocumentProperties>,
+    extended_properties: &Option<ooxml_types::doc_props::ExtendedProperties>,
+    xlsx_metadata: &Option<domain_types::WorkbookMetadata>,
     file_version: &Option<domain_types::domain::workbook::FileVersion>,
     file_sharing: &Option<domain_types::domain::workbook::FileSharing>,
     txn: &mut yrs::TransactionMut,
@@ -292,6 +294,27 @@ pub(super) fn hydrate_workbook_metadata(
             crate::storage::ensure_workbook_child_map(workbook, txn, KEY_DOCUMENT_PROPERTIES);
         for (key, value) in yrs_schema::doc_properties::to_yrs_prelim(props) {
             doc_props_map.insert(txn, key, value);
+        }
+    }
+
+    if let Some(props) = extended_properties {
+        let extended_props_map = crate::storage::ensure_workbook_child_map(
+            workbook,
+            txn,
+            KEY_EXTENDED_DOCUMENT_PROPERTIES,
+        );
+        if let Ok(json) = serde_json::to_string(props) {
+            extended_props_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
+        }
+    }
+
+    if let Some(metadata) = xlsx_metadata
+        && !metadata.is_empty()
+    {
+        let metadata_map =
+            crate::storage::ensure_workbook_child_map(workbook, txn, KEY_XLSX_METADATA);
+        if let Ok(json) = serde_json::to_string(metadata) {
+            metadata_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
         }
     }
 

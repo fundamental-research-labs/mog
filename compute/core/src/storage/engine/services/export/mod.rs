@@ -851,11 +851,13 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         slicer_caches,
         theme,
         properties: export_document_properties(stores),
+        extended_properties: workbook::export_extended_document_properties(stores),
         protection: wb_protection,
         calculation: export_calculation_properties(
             stores,
             round_trip_context.and_then(|ctx| ctx.calc_id),
         ),
+        metadata: workbook::export_xlsx_metadata(stores),
         workbook_views: vec![],
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),

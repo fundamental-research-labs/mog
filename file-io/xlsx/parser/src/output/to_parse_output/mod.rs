@@ -21,6 +21,7 @@
 
 mod cells;
 mod features;
+mod metadata;
 pub(crate) mod pivot_convert;
 mod round_trip;
 mod styles;
@@ -238,6 +239,11 @@ pub(crate) fn full_parse_result_to_parse_output(
         };
     }
 
+    let metadata = result
+        .metadata
+        .as_ref()
+        .and_then(metadata::metadata_to_domain);
+
     // 8. Slicer caches (workbook-level) — already ooxml-types, pass through directly
     let slicer_caches = result.slicer_caches.clone();
 
@@ -335,8 +341,10 @@ pub(crate) fn full_parse_result_to_parse_output(
         slicer_caches,
         theme,
         properties,
+        extended_properties: result.doc_props_app.clone(),
         protection,
         calculation,
+        metadata,
         workbook_views: result
             .workbook_views
             .iter()

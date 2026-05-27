@@ -15,7 +15,10 @@ pub(super) fn preserved_elements_for_export(
     let pairs: Vec<_> = sheet_rt
         .sheet_preserved_elements
         .iter()
-        .filter(|(_, xml)| raw_worksheet_element_is_compatible(sheet_data, xml))
+        .filter(|(_, xml)| {
+            !raw_xml_contains_element(xml, "extLst")
+                && raw_worksheet_element_is_compatible(sheet_data, xml)
+        })
         .cloned()
         .collect();
 
@@ -28,9 +31,13 @@ pub(super) fn original_dimension_for_export<'a>(
     sheet_rt: &'a SheetRoundTripContext,
 ) -> Option<&'a String> {
     sheet_rt.original_dimension.as_ref().filter(|dimension| {
-        parse_dimension_ref(dimension)
-            .zip(modeled_dimension(sheet_data))
-            .is_some_and(|(original, modeled)| original == modeled)
+        let Some(original) = parse_dimension_ref(dimension) else {
+            return false;
+        };
+        match modeled_dimension(sheet_data) {
+            Some(modeled) => original == modeled,
+            None => sheet_has_no_modeled_extent(sheet_data),
+        }
     })
 }
 
@@ -240,6 +247,21 @@ fn modeled_dimension(sheet_data: &SheetData) -> Option<(u32, u32, u32, u32)> {
     } else {
         None
     }
+}
+
+fn sheet_has_no_modeled_extent(sheet_data: &SheetData) -> bool {
+    sheet_data.cells.is_empty()
+        && sheet_data.dimensions.row_heights.is_empty()
+        && sheet_data.dimensions.col_widths.is_empty()
+        && sheet_data.row_styles.is_empty()
+        && sheet_data.col_styles.is_empty()
+        && sheet_data.authored_style_runs.is_empty()
+        && sheet_data.merges.is_empty()
+        && sheet_data.tables.is_empty()
+        && sheet_data.conditional_formats.is_empty()
+        && sheet_data.data_validations.is_empty()
+        && sheet_data.hyperlinks.is_empty()
+        && sheet_data.comments.is_empty()
 }
 
 fn modeled_rows(sheet_data: &SheetData) -> HashSet<u32> {

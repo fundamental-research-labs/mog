@@ -67,10 +67,8 @@ pub(super) fn build_sheet_parts(
     // Per-sheet ChartEx entries: Vec<Vec<ChartExEntry>>.
     let mut all_chart_ex_entries: Vec<Vec<ChartExEntry>> = Vec::with_capacity(output.sheets.len());
 
-    // Metadata refs are emitted only with an authoritative metadata part.
-    // Raw `xl/metadata.xml` replay is intentionally disabled until the metadata
-    // domain has a modeled writer.
-    let emit_cell_metadata_refs = false;
+    // Metadata refs are emitted only with an authoritative modeled metadata part.
+    let emit_cell_metadata_refs = output.metadata.as_ref().is_some_and(|m| !m.is_empty());
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_num = sheet_idx + 1;
 

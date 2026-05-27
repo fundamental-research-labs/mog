@@ -134,17 +134,15 @@ pub fn write_xlsx_from_parse_output(
     round_trip_ctx: Option<&RoundTripContext>,
 ) -> Result<Vec<u8>, WriteError> {
     // ── 1. Build styles ─────────────────────────────────────────────────
-    // Use the imported stylesheet only while current modeled objects still
-    // reference its raw cellXfs indices. A non-empty style palette is modeled
-    // export state, so cell style_id values are palette indices and must not be
-    // interpreted as raw imported cellXfs.
+    // Use the imported stylesheet while export state has not replaced it with a
+    // modeled palette. This also preserves workbook default style records on
+    // empty sheets where no cell references a style id.
     // Track whether we use the lossless stylesheet path. When true, cellXfs
     // are passed through directly and cell style_id values should NOT be offset
     // by +1. When false (lossy palette path), a default is inserted at cellXfs[0]
     // so cell style_id values must be offset by +1.
     let has_style_references = output_references_style_ids(output);
-    let has_lossless_stylesheet = has_style_references
-        && output.style_palette.is_empty()
+    let has_lossless_stylesheet = output.style_palette.is_empty()
         && round_trip_ctx
             .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
             .is_some();

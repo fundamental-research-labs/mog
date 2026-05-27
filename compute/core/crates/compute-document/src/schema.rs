@@ -101,6 +101,8 @@ pub const KEY_SCENARIOS: &str = "scenarios";
 pub const KEY_THEME: &str = "theme";
 pub const KEY_CUSTOM_CELL_STYLES: &str = "custom_cell_styles";
 pub const KEY_DOCUMENT_PROPERTIES: &str = "documentProperties";
+pub const KEY_EXTENDED_DOCUMENT_PROPERTIES: &str = "extendedDocumentProperties";
+pub const KEY_XLSX_METADATA: &str = "xlsxMetadata";
 pub const KEY_FILE_VERSION: &str = "fileVersion";
 pub const KEY_FILE_SHARING: &str = "fileSharing";
 
@@ -277,6 +279,8 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_PIVOT_SPECS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_CACHE_SOURCES, empty());
     workbook.insert(&mut txn, KEY_THEME, empty());
+    workbook.insert(&mut txn, KEY_EXTENDED_DOCUMENT_PROPERTIES, empty());
+    workbook.insert(&mut txn, KEY_XLSX_METADATA, empty());
     workbook.insert(&mut txn, KEY_CUSTOM_CELL_STYLES, empty());
     workbook.insert(&mut txn, KEY_RANGE_BINDINGS, empty());
 
@@ -465,6 +469,8 @@ mod tests {
             KEY_IMPORTED_EXTERNAL_CACHE,
             KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE,
             KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS,
+            KEY_EXTENDED_DOCUMENT_PROPERTIES,
+            KEY_XLSX_METADATA,
             KEY_NAMED_RANGES,
             KEY_TABLES,
             KEY_SLICERS,

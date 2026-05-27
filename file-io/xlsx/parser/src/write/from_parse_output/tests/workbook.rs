@@ -977,6 +977,69 @@ fn raw_metadata_xml_is_not_replayed_for_current_cell_metadata_references() {
 }
 
 #[test]
+fn modeled_xlsx_metadata_is_exported_without_raw_metadata_replay() {
+    let mut metadata_cell = make_cell(0, 0, DomainValue::Text(Arc::from("dynamic")));
+    metadata_cell.cm = true;
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![metadata_cell],
+        ..Default::default()
+    }]);
+    output.metadata = Some(domain_types::WorkbookMetadata {
+        metadata_types: vec![domain_types::MetadataType {
+            name: "XLDAPR".to_string(),
+            min_supported_version: 120000,
+            copy: true,
+            paste_all: true,
+            paste_values: true,
+            merge: true,
+            split_first: true,
+            row_col_shift: true,
+            clear_formats: true,
+            clear_comments: true,
+            assign: true,
+            coerce: true,
+            cell_meta: true,
+        }],
+        future_metadata: vec![domain_types::FutureMetadataGroup {
+            name: "XLDAPR".to_string(),
+            blocks: vec![domain_types::FutureMetadataBlock {
+                raw_xml: r#"<xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/>"#.to_string(),
+            }],
+        }],
+        cell_metadata: vec![domain_types::CellMetadataBlock {
+            records: vec![domain_types::CellMetadataRecord { t: 1, v: 0 }],
+        }],
+    });
+    let ctx = domain_types::RoundTripContext {
+        raw_metadata_xml: Some(
+            br#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="1"><metadataType name="STALE" cellMeta="1"/></metadataTypes></metadata>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let metadata_xml = String::from_utf8(archive.read_file("xl/metadata.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(metadata_xml.contains(r#"name="XLDAPR""#));
+    assert!(metadata_xml.contains(r#"<xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/>"#));
+    assert!(metadata_xml.contains(r#"<rc t="1" v="0"/>"#));
+    assert!(!metadata_xml.contains("STALE"));
+    assert!(workbook_rels.contains(crate::write::relationships::REL_METADATA));
+    assert!(content_types.contains("/xl/metadata.xml"));
+    assert!(sheet_xml.contains(r#" cm="1""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_raw_worksheet_ext_lst_modeled_extensions_are_dropped() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

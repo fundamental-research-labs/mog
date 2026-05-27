@@ -122,6 +122,48 @@ fn engine_from_parse_output_normal_with_roundtrip(
     )
 }
 
+#[test]
+fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
+    let mut output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    output.metadata = Some(domain_types::WorkbookMetadata {
+        metadata_types: vec![domain_types::MetadataType {
+            name: "XLDAPR".to_string(),
+            min_supported_version: 120000,
+            copy: true,
+            paste_all: true,
+            paste_values: true,
+            merge: true,
+            split_first: true,
+            row_col_shift: true,
+            clear_formats: true,
+            clear_comments: true,
+            assign: true,
+            coerce: true,
+            cell_meta: true,
+        }],
+        future_metadata: vec![domain_types::FutureMetadataGroup {
+            name: "XLDAPR".to_string(),
+            blocks: vec![domain_types::FutureMetadataBlock {
+                raw_xml: r#"<xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/>"#.to_string(),
+            }],
+        }],
+        cell_metadata: vec![domain_types::CellMetadataBlock {
+            records: vec![domain_types::CellMetadataRecord { t: 1, v: 0 }],
+        }],
+    });
+
+    let engine = engine_from_parse_output_normal(&output);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.metadata, output.metadata);
+}
+
 fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {
     use crate::storage::infra::hydration::{
         DefaultIdAllocator, HydrationIdMap, allocate_sheet_ids,

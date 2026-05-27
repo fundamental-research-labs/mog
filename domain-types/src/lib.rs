@@ -44,6 +44,10 @@ pub use parse_output::*;
 mod properties;
 pub use properties::*;
 
+// Workbook metadata (`xl/metadata.xml`)
+mod metadata;
+pub use metadata::*;
+
 // Round-trip preservation (opaque XML blobs)
 pub mod round_trip;
 pub use round_trip::*;
@@ -69,6 +73,11 @@ pub mod yrs_schema;
 /// Serde helper: returns true if `v` is false (for `skip_serializing_if`).
 pub fn is_false(v: &bool) -> bool {
     !v
+}
+
+/// Serde helper: returns true if `v` is zero.
+pub fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 /// Serde helper: default value of `true` for bool fields.

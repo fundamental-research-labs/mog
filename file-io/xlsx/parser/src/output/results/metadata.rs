@@ -23,7 +23,7 @@ pub type CustomPropertyValue = ooxml_types::doc_props::CustomPropertyValue;
 ///
 /// Defines a metadata type with its name and behavioral flags (copy, paste, merge, etc.).
 /// See ECMA-376 Part 1, Section 18.9.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetadataTypeOutput {
     /// Metadata type name (e.g., "XLDAPR" for dynamic arrays)
@@ -71,7 +71,7 @@ pub struct MetadataTypeOutput {
 /// Since future metadata blocks can contain arbitrary extension XML (e.g., XLDAPR
 /// dynamic array properties), we store the raw inner XML of each `<bk>` element
 /// to ensure faithful round-trip of unknown extensions.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FutureMetadataBlock {
     /// Raw inner XML content of the `<bk>` element (everything between `<bk>` and `</bk>`).
@@ -81,7 +81,7 @@ pub struct FutureMetadataBlock {
 /// A future metadata group from `<futureMetadata>`.
 ///
 /// Each group is associated with a metadata type by name and contains one or more blocks.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FutureMetadataGroup {
     /// Name of the metadata type this group corresponds to (e.g., "XLDAPR")
@@ -91,7 +91,7 @@ pub struct FutureMetadataGroup {
 }
 
 /// A single record (`<rc>`) within a cell metadata block.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CellMetadataRecord {
     /// Type index (`t` attribute) — 1-based index into `metadataTypes`
@@ -101,7 +101,7 @@ pub struct CellMetadataRecord {
 }
 
 /// A single block (`<bk>`) within `<cellMetadata>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CellMetadataBlock {
     /// Records within this block
@@ -113,7 +113,7 @@ pub struct CellMetadataBlock {
 /// This represents the OOXML metadata part (ECMA-376 Part 1, Section 18.9).
 /// It stores metadata types, future metadata extension blocks, and cell metadata
 /// records referenced by cells via the `cm` attribute.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetadataOutput {
     /// Metadata type definitions from `<metadataTypes>`

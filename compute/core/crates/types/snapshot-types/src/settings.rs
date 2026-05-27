@@ -69,6 +69,18 @@ pub struct CalculationSettings {
     /// Whether Excel should force a full recalculation even in manual mode.
     #[serde(default)]
     pub force_full_calc: bool,
+
+    /// Whether `iterateCount` was explicitly present in source OOXML.
+    ///
+    /// Excel often emits explicit default-valued calcPr attributes. The runtime
+    /// calculation behavior is unchanged by this flag, but XLSX export needs it
+    /// to preserve source-level contract fidelity without using raw XML replay.
+    #[serde(default)]
+    pub has_explicit_iterate_count: bool,
+
+    /// Whether `iterateDelta` was explicitly present in source OOXML.
+    #[serde(default)]
+    pub has_explicit_iterate_delta: bool,
 }
 
 impl Default for CalculationSettings {
@@ -82,6 +94,8 @@ impl Default for CalculationSettings {
             r1c1_mode: false,
             full_calc_on_load: false,
             force_full_calc: false,
+            has_explicit_iterate_count: false,
+            has_explicit_iterate_delta: false,
         }
     }
 }
@@ -659,6 +673,8 @@ impl From<domain_types::domain::workbook::CalculationProperties> for Calculation
             r1c1_mode: v.ref_mode == domain_types::domain::workbook::RefMode::R1C1,
             full_calc_on_load: v.full_calc_on_load,
             force_full_calc: v.force_full_calc,
+            has_explicit_iterate_count: v.has_explicit_iterate_count,
+            has_explicit_iterate_delta: v.has_explicit_iterate_delta,
         }
     }
 }

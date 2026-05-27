@@ -123,6 +123,48 @@ pub(super) fn export_document_properties(
     }
 }
 
+pub(super) fn export_xlsx_metadata(
+    stores: &EngineStores,
+) -> Option<domain_types::WorkbookMetadata> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let metadata_map = match workbook.get(&txn, KEY_XLSX_METADATA) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let json_str = match metadata_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return None,
+    };
+
+    serde_json::from_str::<domain_types::WorkbookMetadata>(&json_str)
+        .ok()
+        .filter(|metadata| !metadata.is_empty())
+}
+
+pub(super) fn export_extended_document_properties(
+    stores: &EngineStores,
+) -> Option<ooxml_types::doc_props::ExtendedProperties> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let props_map = match workbook.get(&txn, KEY_EXTENDED_DOCUMENT_PROPERTIES) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let json_str = match props_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return None,
+    };
+
+    serde_json::from_str::<ooxml_types::doc_props::ExtendedProperties>(&json_str).ok()
+}
+
 /// Export calculation settings from modeled workbook storage.
 ///
 /// `calcId` is not modeled by the app runtime, so an imported value may be
@@ -161,6 +203,8 @@ fn calculation_properties_from_settings(
         full_precision: settings.full_precision,
         force_full_calc: settings.force_full_calc,
         calc_id: calc_id_hint,
+        has_explicit_iterate_count: settings.has_explicit_iterate_count,
+        has_explicit_iterate_delta: settings.has_explicit_iterate_delta,
         ..CalculationProperties::default()
     }
 }

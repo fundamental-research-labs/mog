@@ -19,7 +19,9 @@ pub(super) fn build_doc_props_xml(output: &ParseOutput) -> DocPropsXml {
         core: Some(crate::domain::metadata::write::write_core_props_xml(
             properties,
         )),
-        app: Some(crate::domain::metadata::write::write_app_props_xml()),
+        app: Some(crate::domain::metadata::write::write_app_props_xml(
+            output.extended_properties.as_ref(),
+        )),
         custom: (!properties.custom.is_empty() || !properties.typed_custom.is_empty())
             .then(|| crate::domain::metadata::write::write_custom_props_xml(properties)),
     }

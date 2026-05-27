@@ -79,7 +79,11 @@ pub fn write_core_props_xml(props: &domain_types::DocumentProperties) -> Vec<u8>
 }
 
 /// Build `docProps/app.xml` (extended properties).
-pub fn write_app_props_xml() -> Vec<u8> {
+pub fn write_app_props_xml(props: Option<&ooxml_types::doc_props::ExtendedProperties>) -> Vec<u8> {
+    if let Some(props) = props {
+        return write_modeled_app_props_xml(props);
+    }
+
     let mut w = XmlWriter::new();
     w.write_declaration();
     w.start_element("Properties")
@@ -94,6 +98,84 @@ pub fn write_app_props_xml() -> Vec<u8> {
         .end_element("Application");
     w.end_element("Properties");
     w.finish()
+}
+
+fn write_modeled_app_props_xml(props: &ooxml_types::doc_props::ExtendedProperties) -> Vec<u8> {
+    let mut w = XmlWriter::new();
+    w.write_declaration();
+    w.start_element("Properties")
+        .attr(
+            "xmlns",
+            "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+        )
+        .attr(
+            "xmlns:vt",
+            "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+        )
+        .end_attrs();
+
+    text_opt(&mut w, "Application", props.application.as_deref());
+    text_opt(
+        &mut w,
+        "DocSecurity",
+        props.doc_security.map(|v| v.to_string()).as_deref(),
+    );
+    bool_opt(&mut w, "ScaleCrop", props.scale_crop);
+    text_opt(&mut w, "Template", props.template.as_deref());
+    text_opt(&mut w, "Manager", props.manager.as_deref());
+    text_opt(&mut w, "Company", props.company.as_deref());
+    bool_opt(&mut w, "LinksUpToDate", props.links_up_to_date);
+    bool_opt(&mut w, "SharedDoc", props.shared_doc);
+    bool_opt(&mut w, "HyperlinksChanged", props.hyperlinks_changed);
+    text_opt(&mut w, "HyperlinkBase", props.hyperlink_base.as_deref());
+    text_opt(&mut w, "AppVersion", props.app_version.as_deref());
+    text_opt(&mut w, "TotalTime", props.total_time.as_deref());
+
+    if !props.heading_pairs.is_empty() {
+        w.start_element("HeadingPairs").end_attrs();
+        w.start_element("vt:vector")
+            .attr_num("size", props.heading_pairs.len() * 2)
+            .attr("baseType", "variant")
+            .end_attrs();
+        for pair in &props.heading_pairs {
+            w.start_element("vt:variant")
+                .end_attrs()
+                .element_with_text("vt:lpstr", &pair.name)
+                .end_element("vt:variant");
+            w.start_element("vt:variant")
+                .end_attrs()
+                .element_with_text("vt:i4", &pair.count.to_string())
+                .end_element("vt:variant");
+        }
+        w.end_element("vt:vector").end_element("HeadingPairs");
+    }
+
+    if !props.titles_of_parts.is_empty() {
+        w.start_element("TitlesOfParts").end_attrs();
+        w.start_element("vt:vector")
+            .attr_num("size", props.titles_of_parts.len())
+            .attr("baseType", "lpstr")
+            .end_attrs();
+        for title in &props.titles_of_parts {
+            w.element_with_text("vt:lpstr", title);
+        }
+        w.end_element("vt:vector").end_element("TitlesOfParts");
+    }
+
+    w.end_element("Properties");
+    w.finish()
+}
+
+fn text_opt(w: &mut XmlWriter, name: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        w.element_with_text(name, value);
+    }
+}
+
+fn bool_opt(w: &mut XmlWriter, name: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        w.element_with_text(name, if value { "true" } else { "false" });
+    }
 }
 
 /// Build `docProps/custom.xml` from modeled custom document properties.

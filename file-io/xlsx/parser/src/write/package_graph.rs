@@ -40,6 +40,10 @@ const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlD
 const CT_DOC_METADATA_LABEL_INFO: &str = "application/vnd.ms-office.classificationlabels+xml";
 const CT_CHART_EX: &str = "application/vnd.ms-office.chartex+xml";
 const REL_IMAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const CT_WORKSHEET_CUSTOM_PROPERTY: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml";
+const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -961,6 +965,24 @@ pub fn register_worksheet_control_property(
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_CTRL_PROP.to_string(),
         target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_custom_property(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    path: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(path, CT_WORKSHEET_CUSTOM_PROPERTY))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(path),
+        },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
     Ok(())

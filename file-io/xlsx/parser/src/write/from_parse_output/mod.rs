@@ -20,6 +20,7 @@ mod sheet_builder;
 mod sheet_preservation;
 mod styles;
 mod vml_merge;
+mod worksheet_custom_properties;
 
 use domain_types::Hyperlink;
 use domain_types::ParseOutput;
@@ -76,6 +77,8 @@ struct SheetExtras {
     has_printer_settings: bool,
     /// Form controls for this sheet (converted from domain types).
     form_controls: Vec<crate::domain::controls::read::FormControl>,
+    /// Clean imported worksheet custom property sidecars.
+    custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
 }
 
 /// Per-chart data needed during ZIP assembly. Includes the original ChartSpec
@@ -119,6 +122,13 @@ struct WorksheetHyperlinkGraphEntry {
 struct WorksheetControlPropertyGraphEntry {
     sheet_idx: usize,
     global_idx: usize,
+    target: String,
+    relationship_id_hint: String,
+}
+
+struct WorksheetCustomPropertyGraphEntry {
+    sheet_idx: usize,
+    path: String,
     target: String,
     relationship_id_hint: String,
 }
@@ -774,6 +784,11 @@ pub fn write_xlsx_from_parse_output(
                 })
                 .collect();
         let form_controls = convert_unified_form_controls(&form_control_fobjs);
+        let custom_properties = round_trip_ctx.and_then(|ctx| {
+            ctx.sheets.get(sheet_idx).and_then(|sheet_rt| {
+                worksheet_custom_properties::custom_properties_for_export(ctx, sheet_rt, sheet_idx)
+            })
+        });
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {
@@ -790,6 +805,7 @@ pub fn write_xlsx_from_parse_output(
             original_drawing_path,
             has_printer_settings,
             form_controls,
+            custom_properties,
         });
     }
 
@@ -804,6 +820,8 @@ pub fn write_xlsx_from_parse_output(
         vec![None; output.sheets.len()];
     let mut worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry> = Vec::new();
     let mut worksheet_control_property_relationships: Vec<WorksheetControlPropertyGraphEntry> =
+        Vec::new();
+    let mut worksheet_custom_property_relationships: Vec<WorksheetCustomPropertyGraphEntry> =
         Vec::new();
     let mut worksheet_header_footer_vml_relationships: Vec<WorksheetHeaderFooterVmlGraphEntry> =
         Vec::new();
@@ -868,6 +886,7 @@ pub fn write_xlsx_from_parse_output(
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
         let has_form_controls = !extras.form_controls.is_empty();
+        let has_custom_properties = extras.custom_properties.is_some();
         let has_pivot_tables = pivot_data
             .pivot_table_entries
             .iter()
@@ -885,6 +904,7 @@ pub fn write_xlsx_from_parse_output(
             && !has_printer_settings
             && !has_hf_vml
             && !has_form_controls
+            && !has_custom_properties
             && !has_pivot_tables
         {
             sheet_rels_data.push(None);
@@ -1145,6 +1165,17 @@ pub fn write_xlsx_from_parse_output(
                     path,
                     target,
                     relationship_id_hint,
+                });
+            }
+        }
+
+        if let Some(custom_properties) = &extras.custom_properties {
+            for part in &custom_properties.parts {
+                worksheet_custom_property_relationships.push(WorksheetCustomPropertyGraphEntry {
+                    sheet_idx,
+                    path: part.path.clone(),
+                    target: worksheet_relative_target(&part.path),
+                    relationship_id_hint: part.relationship_id_hint.clone(),
                 });
             }
         }
@@ -1790,6 +1821,14 @@ pub fn write_xlsx_from_parse_output(
             &entry.relationship_id_hint,
         )?;
     }
+    for entry in &worksheet_custom_property_relationships {
+        crate::write::package_graph::register_worksheet_custom_property(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            &entry.relationship_id_hint,
+        )?;
+    }
     for entry in &worksheet_header_footer_vml_relationships {
         crate::write::package_graph::register_worksheet_vml_drawing(
             &mut package_graph_builder,
@@ -2197,6 +2236,43 @@ pub fn write_xlsx_from_parse_output(
         };
         let ctrl_xml = controls_writer.write_worksheet_controls(base_shape_id, &ctrl_prop_r_ids);
         sheet_writers[sheet_idx].set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
+    }
+
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        let Some(custom_properties) = &extras.custom_properties else {
+            continue;
+        };
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let mut resolved_ids = std::collections::HashMap::new();
+        for entry in worksheet_custom_property_relationships
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+        {
+            let r_id = package_graph
+                .relationship_id(
+                    &owner,
+                    worksheet_custom_properties::REL_WORKSHEET_CUSTOM_PROPERTY,
+                    &entry.target,
+                )
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing worksheet custom property relationship for sheet {} target {}",
+                        sheet_idx + 1,
+                        entry.target
+                    ))
+                })?
+                .to_string();
+            resolved_ids.insert(entry.relationship_id_hint.clone(), r_id);
+        }
+        sheet_writers[sheet_idx].set_custom_properties_xml(
+            worksheet_custom_properties::with_resolved_relationship_ids(
+                &custom_properties.xml,
+                &resolved_ids,
+            ),
+        );
     }
 
     for entry in &worksheet_printer_settings_relationships {
@@ -2819,6 +2895,12 @@ pub fn write_xlsx_from_parse_output(
                 &format!("xl/threadedComments/threadedComment{}.xml", zip_tc_idx),
                 tc_xml.clone(),
             );
+        }
+
+        if let Some(custom_properties) = &sheet_extras[idx].custom_properties {
+            for part in &custom_properties.parts {
+                zip.add_file(&part.path, part.data.clone());
+            }
         }
     }
 

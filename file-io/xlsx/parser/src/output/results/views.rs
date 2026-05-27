@@ -1,21 +1,5 @@
 use super::*;
 
-fn is_true(v: &bool) -> bool {
-    *v
-}
-
-fn is_zero_u32(v: &u32) -> bool {
-    *v == 0
-}
-
-fn is_default_color_id(v: &u32) -> bool {
-    *v == 64
-}
-
-fn is_default_zoom_scale(v: &u32) -> bool {
-    *v == 100
-}
-
 /// Sheet view output, converted from the canonical `ooxml_types::worksheet::SheetView`.
 ///
 /// Uses camelCase serialization for backward compatibility with TS consumers.
@@ -66,21 +50,6 @@ pub struct SheetViewOutput {
     /// Preserved selection elements for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selections: Vec<ooxml_types::worksheet::Selection>,
-}
-
-/// Helper for skip_serializing_if on bool fields that default to true.
-fn is_true(v: &bool) -> bool {
-    *v
-}
-
-fn is_default_color_id(v: &u32) -> bool {
-    *v == 64
-}
-fn is_default_zoom_scale(v: &u32) -> bool {
-    *v == 100
-}
-fn is_zero_u32(v: &u32) -> bool {
-    *v == 0
 }
 
 impl From<ooxml_types::worksheet::SheetView> for SheetViewOutput {

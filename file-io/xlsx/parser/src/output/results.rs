@@ -60,10 +60,26 @@ pub use crate::infra::error::mode_from_u32;
 // Re-export A1 range parsing utilities from the canonical module.
 pub use crate::infra::a1::{parse_a1_cell, parse_a1_range};
 
-fn is_false(v: &bool) -> bool {
+pub(super) fn is_false(v: &bool) -> bool {
     !*v
 }
 
-fn is_zero(v: &u8) -> bool {
+pub(super) fn is_zero(v: &u8) -> bool {
     *v == 0
+}
+
+pub(super) fn is_true(v: &bool) -> bool {
+    *v
+}
+
+pub(super) fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
+pub(super) fn is_default_color_id(v: &u32) -> bool {
+    *v == 64
+}
+
+pub(super) fn is_default_zoom_scale(v: &u32) -> bool {
+    *v == 100
 }

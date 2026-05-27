@@ -1679,10 +1679,15 @@ fn generated_hyperlink_relationship_uses_graph_resolved_id() {
             .unwrap(),
     )
     .unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes());
+    let first_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_HYPERLINK && rel.target == "https://example.com")
+        .expect("first hyperlink relationship should be emitted");
 
-    assert!(sheet_rels.contains("Id=\"rId5\""));
+    assert_ne!(first_rel.id, "rId5");
     assert!(sheet_rels.contains("Target=\"https://example.com\""));
-    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId5\""));
+    assert!(sheet_xml.contains(&format!("<hyperlink ref=\"A1\" r:id=\"{}\"", first_rel.id)));
     assert!(sheet_rels.contains("Target=\"https://example.org\""));
     assert!(!sheet_rels.contains("stale.example"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
@@ -1739,9 +1744,17 @@ fn duplicate_same_target_hyperlinks_use_distinct_graph_resolved_ids() {
             .unwrap(),
     )
     .unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes());
+    let ids: Vec<String> = rels
+        .iter()
+        .filter(|rel| rel.rel_type == REL_HYPERLINK && rel.target == "https://example.com")
+        .map(|rel| rel.id.clone())
+        .collect();
 
-    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId5\""));
-    assert!(sheet_xml.contains("<hyperlink ref=\"A2\" r:id=\"rId6\""));
+    assert_eq!(ids.len(), 2);
+    assert!(!ids.iter().any(|id| id == "rId5" || id == "rId6"));
+    assert!(sheet_xml.contains(&format!("<hyperlink ref=\"A1\" r:id=\"{}\"", ids[0])));
+    assert!(sheet_xml.contains(&format!("<hyperlink ref=\"A2\" r:id=\"{}\"", ids[1])));
     assert_eq!(
         sheet_rels.matches("Target=\"https://example.com\"").count(),
         2
@@ -1784,9 +1797,17 @@ fn fragment_hyperlink_relationship_is_not_marked_external() {
             .unwrap(),
     )
     .unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes());
+    let hyperlink_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_HYPERLINK && rel.target == "#Sheet2!A1")
+        .expect("fragment hyperlink relationship should be emitted");
 
-    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\"rId3\""));
-    assert!(sheet_rels.contains("Id=\"rId3\""));
+    assert_ne!(hyperlink_rel.id, "rId3");
+    assert!(sheet_xml.contains(&format!(
+        "<hyperlink ref=\"A1\" r:id=\"{}\"",
+        hyperlink_rel.id
+    )));
     assert!(sheet_rels.contains("Target=\"#Sheet2!A1\""));
     assert!(!sheet_rels.contains("TargetMode=\"External\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

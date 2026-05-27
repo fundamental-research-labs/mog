@@ -305,32 +305,6 @@ pub fn write_xlsx_from_parse_output(
 
         // Hyperlink rels (external URLs and internal links stored as rels).
         if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
-            let mut hl_rels: Vec<&domain_types::OpcRelationship> = original_sheet_rels
-                .iter()
-                .filter(|r| r.rel_type == REL_HYPERLINK)
-                .collect();
-            hl_rels.sort_by(|a, b| {
-                let num = |s: &str| {
-                    s.strip_prefix("rId")
-                        .and_then(|n| n.parse::<u32>().ok())
-                        .unwrap_or(0)
-                };
-                num(&a.id).cmp(&num(&b.id))
-            });
-
-            // Build a lookup of rel targets → rel IDs for matching hyperlinks to rels.
-            // Internal rels have targets like "#Sheet!A1", external ones have URLs.
-            // Use Vec<String> per target to handle duplicate targets (multiple hyperlinks
-            // pointing to the same URL each have their own rId in the rels file).
-            let mut rel_target_to_ids: std::collections::HashMap<String, Vec<String>> =
-                std::collections::HashMap::new();
-            for r in &hl_rels {
-                rel_target_to_ids
-                    .entry(r.target.clone())
-                    .or_default()
-                    .push(r.id.clone());
-            }
-
             let mut hyperlink_outputs = Vec::with_capacity(sheet_data.hyperlinks.len());
             for hl in &sheet_data.hyperlinks {
                 let Some(target) = hl.target.clone() else {
@@ -356,21 +330,7 @@ pub fn write_xlsx_from_parse_output(
                     continue;
                 }
 
-                let hinted_id = rel_target_to_ids.get_mut(&target).and_then(|ids| {
-                    if ids.is_empty() {
-                        None
-                    } else {
-                        Some(ids.remove(0))
-                    }
-                });
-                let r_id = if let Some(ref hinted_id) = hinted_id {
-                    if target.starts_with('#') {
-                        rels.add_with_id(hinted_id, REL_HYPERLINK, &target);
-                    } else {
-                        rels.add_external_with_id(hinted_id, REL_HYPERLINK, &target);
-                    }
-                    hinted_id.clone()
-                } else if target.starts_with('#') {
+                let r_id = if target.starts_with('#') {
                     rels.add(REL_HYPERLINK, &target)
                 } else {
                     rels.add_external(REL_HYPERLINK, &target)

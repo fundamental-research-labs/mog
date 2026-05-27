@@ -201,7 +201,9 @@ pub fn write_slicer_cache(cache: &SlicerCacheDef) -> Vec<u8> {
     // (table slicer cache generates its own extLst)
     if cache.table_slicer_cache.is_none() {
         if let Some(ref ext_xml) = cache.ext_lst {
-            w.raw_str(ext_xml);
+            if !crate::infra::xml::raw_xml_contains_relationship_attr(ext_xml) {
+                w.raw_str(ext_xml);
+            }
         }
     }
 

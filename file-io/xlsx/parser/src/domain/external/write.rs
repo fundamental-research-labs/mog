@@ -48,7 +48,7 @@ pub fn write_external_link_xml(link: &ExternalLink) -> Vec<u8> {
 /// Returns the XML bytes for the relationship file, or `None` if no rels are needed.
 pub fn write_external_link_rels(link: &ExternalLink) -> Option<Vec<u8>> {
     // Only workbook links have rels (with file paths)
-    if link.file_path.is_none() && link.alternate_url.is_none() {
+    if link.file_path.is_none() && link.alternate_url.is_none() && link.relative_url.is_none() {
         return None;
     }
 
@@ -156,12 +156,20 @@ fn write_external_book(xml: &mut Vec<u8>, link: &ExternalLink) {
     }
     xml.push(b'>');
 
-    // <externalBook r:id="rId1">
-    xml.extend_from_slice(b"<externalBook xmlns:r=\"");
-    xml.extend_from_slice(NS_R.as_bytes());
-    xml.extend_from_slice(b"\" r:id=\"");
-    xml.extend_from_slice(link.file_path_rid.as_deref().unwrap_or("rId1").as_bytes());
-    xml.extend_from_slice(b"\">");
+    // <externalBook> carries r:id only when a matching externalLinkPath
+    // relationship is emitted for the primary workbook target.
+    xml.extend_from_slice(b"<externalBook");
+    if link.file_path.is_some() || link.alternate_url.is_some() || link.relative_url.is_some() {
+        xml.extend_from_slice(b" xmlns:r=\"");
+        xml.extend_from_slice(NS_R.as_bytes());
+        xml.extend_from_slice(b"\"");
+    }
+    if link.file_path.is_some() {
+        xml.extend_from_slice(b" r:id=\"");
+        xml.extend_from_slice(link.file_path_rid.as_deref().unwrap_or("rId1").as_bytes());
+        xml.extend_from_slice(b"\"");
+    }
+    xml.extend_from_slice(b">");
 
     // Write alternateUrls extension if present
     if has_alternate || link.relative_url.is_some() {

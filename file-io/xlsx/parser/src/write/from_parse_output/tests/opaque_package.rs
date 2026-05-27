@@ -358,7 +358,7 @@ fn legacy_custom_xml_without_workbook_owner_relationship_is_not_exported() {
 }
 
 #[test]
-fn clean_legacy_web_extension_package_is_emitted_as_structured_opaque_subgraph() {
+fn clean_legacy_web_extension_package_is_not_exported_without_typed_opaque_subgraph() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         ..Default::default()
@@ -390,22 +390,15 @@ fn clean_legacy_web_extension_package_is_emitted_as_structured_opaque_subgraph()
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let root_rels = String::from_utf8(archive.read_file("_rels/.rels").unwrap()).unwrap();
-    let taskpanes_rels = String::from_utf8(
-        archive
-            .read_file("xl/webextensions/_rels/taskpanes.xml.rels")
-            .unwrap(),
-    )
-    .unwrap();
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert!(archive.contains("xl/webextensions/taskpanes.xml"));
-    assert!(archive.contains("xl/webextensions/webextension1.xml"));
-    assert!(root_rels.contains("webextensiontaskpanes"));
-    assert!(root_rels.contains("Target=\"/xl/webextensions/taskpanes.xml\""));
-    assert!(taskpanes_rels.contains("webextension1.xml"));
-    assert!(content_types.contains("/xl/webextensions/taskpanes.xml"));
-    assert!(content_types.contains("/xl/webextensions/webextension1.xml"));
+    assert!(!archive.contains("xl/webextensions/taskpanes.xml"));
+    assert!(!archive.contains("xl/webextensions/webextension1.xml"));
+    assert!(!archive.contains("xl/webextensions/_rels/taskpanes.xml.rels"));
+    assert!(!root_rels.contains("webextensiontaskpanes"));
+    assert!(!root_rels.contains("Target=\"/xl/webextensions/taskpanes.xml\""));
+    assert!(!content_types.contains("/xl/webextensions/"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

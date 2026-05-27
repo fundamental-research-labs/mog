@@ -12,8 +12,6 @@ use super::write_error::WriteError;
 use super::zip_writer::ZipWriter;
 use crate::domain::content_types::write::{CT_PIVOT_CACHE, CT_PIVOT_TABLE};
 
-const REL_CUSTOM_XML: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
 const CT_PIVOT_CACHE_RECORDS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
 const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
@@ -113,17 +111,10 @@ pub fn normalized_round_trip_opaque_subgraphs(
 }
 
 fn explicit_or_legacy_opaque_subgraphs(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
-    if ctx.opaque_package_subgraphs.is_empty() {
-        let mut subgraphs = Vec::new();
-        subgraphs.extend(lower_legacy_web_extensions(ctx));
-        subgraphs.extend(lower_legacy_custom_xml(ctx));
-        subgraphs
-    } else {
-        ctx.opaque_package_subgraphs
-            .iter()
-            .filter_map(normalize_explicit_opaque_subgraph)
-            .collect()
-    }
+    ctx.opaque_package_subgraphs
+        .iter()
+        .filter_map(normalize_explicit_opaque_subgraph)
+        .collect()
 }
 
 fn is_shadowed_worksheet_drawing_subgraph(
@@ -275,124 +266,6 @@ fn normalize_explicit_opaque_subgraph(
     closed_opaque_subgraph(&normalized).then_some(normalized)
 }
 
-fn lower_legacy_web_extensions(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
-    let Some(taskpanes) = ctx
-        .web_extension_parts
-        .iter()
-        .find(|part| normalize_path(&part.path) == "xl/webextensions/taskpanes.xml")
-    else {
-        return Vec::new();
-    };
-    let Some(relationships) = relationships_from_legacy_sidecars(&ctx.web_extension_parts) else {
-        return Vec::new();
-    };
-    let Some(owner_relationship_id_hint) = relationship_hint(
-        &ctx.root_relationships,
-        None,
-        crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES,
-        &taskpanes.path,
-    ) else {
-        return Vec::new();
-    };
-
-    vec![OpaquePackageSubgraph {
-        owner: OpaquePackageOwner::Root,
-        owner_relationship: OpaquePackageRelationship {
-            owner: OpaquePackageOwner::Root,
-            relationship_type: crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES
-                .to_string(),
-            target: OpaqueRelationshipTarget::InternalPart {
-                path: taskpanes.path.clone(),
-            },
-            relationship_id_hint: Some(owner_relationship_id_hint),
-        },
-        parts: ctx
-            .web_extension_parts
-            .iter()
-            .filter(|part| !is_relationship_part(&part.path))
-            .map(|part| {
-                let path = normalize_path(&part.path);
-                let content_type = if path.ends_with("taskpanes.xml") {
-                    Some(
-                        crate::domain::web_extensions::read::CT_WEB_EXTENSION_TASKPANES.to_string(),
-                    )
-                } else if path.ends_with(".xml") && !path.contains("/_rels/") {
-                    Some(crate::domain::web_extensions::read::CT_WEB_EXTENSION.to_string())
-                } else {
-                    None
-                };
-                opaque_part(part, content_type)
-            })
-            .collect(),
-        relationships,
-        ownership: OpaquePackageOwnership::CleanImported,
-    }]
-    .into_iter()
-    .filter(closed_opaque_subgraph)
-    .collect()
-}
-
-fn lower_legacy_custom_xml(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
-    ctx.custom_xml_parts
-        .iter()
-        .filter(|part| {
-            let path = normalize_path(&part.path);
-            path.starts_with("customXml/item")
-                && path.ends_with(".xml")
-                && !path.contains("itemProps")
-                && !path.contains("/_rels/")
-        })
-        .filter_map(|item| {
-            let item_parts = ctx
-                .custom_xml_parts
-                .iter()
-                .filter(|part| custom_xml_part_belongs_to_item(&item.path, &part.path))
-                .cloned()
-                .collect::<Vec<_>>();
-            let relationships = relationships_from_legacy_sidecars(&item_parts)?;
-            let owner_relationship_id_hint = relationship_hint(
-                &ctx.workbook_relationships,
-                Some("xl/workbook.xml"),
-                REL_CUSTOM_XML,
-                &item.path,
-            )?;
-            Some(OpaquePackageSubgraph {
-                owner: OpaquePackageOwner::Workbook,
-                owner_relationship: OpaquePackageRelationship {
-                    owner: OpaquePackageOwner::Workbook,
-                    relationship_type: REL_CUSTOM_XML.to_string(),
-                    target: OpaqueRelationshipTarget::InternalPart {
-                        path: item.path.clone(),
-                    },
-                    relationship_id_hint: Some(owner_relationship_id_hint),
-                },
-                parts: item_parts
-                    .iter()
-                    .filter(|part| !is_relationship_part(&part.path))
-                    .map(|part| {
-                        let path = normalize_path(&part.path);
-                        let content_type = if path.contains("itemProps")
-                            && path.ends_with(".xml")
-                            && !path.contains("/_rels/")
-                        {
-                            Some(
-                                "application/vnd.openxmlformats-officedocument.customXmlProperties+xml"
-                                    .to_string(),
-                            )
-                        } else {
-                            None
-                        };
-                        opaque_part(part, content_type)
-                    })
-                    .collect(),
-                relationships,
-                ownership: OpaquePackageOwnership::CleanImported,
-            })
-        })
-        .filter(closed_opaque_subgraph)
-        .collect()
-}
-
 fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
     let package = &ctx.pivot_package;
     if package.is_empty() || !crate::write::pivot_writer::clean_pivot_package_is_closed(package) {
@@ -515,47 +388,6 @@ fn lower_pivot_package(ctx: &RoundTripContext) -> Vec<OpaquePackageSubgraph> {
         relationships,
         ownership: OpaquePackageOwnership::OrphanCleanPackageData,
     }]
-}
-
-fn custom_xml_part_belongs_to_item(item_path: &str, candidate_path: &str) -> bool {
-    let item_path = normalize_path(item_path);
-    let candidate_path = normalize_path(candidate_path);
-    if candidate_path == item_path {
-        return true;
-    }
-    let Some(item_name) = item_path.rsplit('/').next() else {
-        return false;
-    };
-    let Some(item_number) = item_name
-        .strip_prefix("item")
-        .and_then(|name| name.strip_suffix(".xml"))
-    else {
-        return false;
-    };
-    candidate_path == format!("customXml/_rels/{item_name}.rels")
-        || candidate_path == format!("customXml/itemProps{item_number}.xml")
-}
-
-fn opaque_part(part: &BlobPart, content_type: Option<String>) -> OpaquePackagePart {
-    let path = normalize_path(&part.path);
-    OpaquePackagePart {
-        part: BlobPart {
-            path: path.clone(),
-            data: part.data.clone(),
-        },
-        content_type,
-        default_extension: if path.ends_with(".rels") {
-            Some((
-                "rels".to_string(),
-                "application/vnd.openxmlformats-package.relationships+xml".to_string(),
-            ))
-        } else if path.ends_with(".xml") {
-            Some(("xml".to_string(), "application/xml".to_string()))
-        } else {
-            None
-        },
-        ownership: OpaquePackageOwnership::CleanImported,
-    }
 }
 
 fn relationships_from_legacy_sidecars(
@@ -735,25 +567,6 @@ fn default_extension_for_path(path: &str) -> Option<(String, String)> {
     } else {
         None
     }
-}
-
-fn relationship_hint(
-    relationships: &[domain_types::OpcRelationship],
-    owner_path: Option<&str>,
-    relationship_type: &str,
-    target_path: &str,
-) -> Option<String> {
-    let target_path = normalize_path(target_path);
-    relationships
-        .iter()
-        .find(|rel| {
-            rel.rel_type == relationship_type
-                && rel.target_mode.as_deref() != Some("External")
-                && crate::infra::opc::resolve_relationship_target(owner_path, &rel.target)
-                    .map(|resolved| normalize_path(&resolved) == target_path)
-                    .unwrap_or(false)
-        })
-        .map(|rel| rel.id.clone())
 }
 
 fn normalize_path(path: &str) -> String {

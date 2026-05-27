@@ -933,7 +933,9 @@ impl ThreadedCommentsWriter {
 
         // Emit preserved extLst (hyperlink metadata etc.) for round-trip fidelity
         if let Some(ref ext) = comment.ext_lst_xml {
-            w.raw(ext.as_bytes());
+            if !crate::infra::xml::raw_xml_contains_relationship_attr(ext) {
+                w.raw(ext.as_bytes());
+            }
         }
 
         // Emit mentions if present

@@ -65,6 +65,12 @@ pub enum PackageIntegrityError {
         rels_path: String,
         id: String,
     },
+    MissingPartRelationshipReference {
+        part_path: String,
+        rels_path: String,
+        id: String,
+        attr_name: String,
+    },
 }
 
 impl std::fmt::Display for PackageIntegrityError {
@@ -127,6 +133,15 @@ impl std::fmt::Display for PackageIntegrityError {
             } => write!(
                 f,
                 "worksheet {worksheet_path} references relationship {id}, but {rels_path} does not define it"
+            ),
+            Self::MissingPartRelationshipReference {
+                part_path,
+                rels_path,
+                id,
+                attr_name,
+            } => write!(
+                f,
+                "part {part_path} references relationship {id} through {attr_name}, but {rels_path} does not define it"
             ),
         }
     }
@@ -327,6 +342,9 @@ fn validate_modeled_part_invariants(
 
     for entry in archive.entries() {
         let path = entry.name.as_str();
+        if is_xml_part(path) && !is_worksheet_part(path) {
+            validate_xml_relationship_references(archive, path, relationships_by_part, errors);
+        }
         if is_worksheet_part(path) {
             require_relationship(
                 relationships_by_part,
@@ -469,6 +487,34 @@ fn validate_worksheet_r_ids(
     }
 }
 
+fn validate_xml_relationship_references(
+    archive: &XlsxArchive<'_>,
+    part_path: &str,
+    relationships_by_part: &HashMap<String, Vec<ooxml_types::shared::OpcRelationship>>,
+    errors: &mut Vec<PackageIntegrityError>,
+) {
+    let Ok(xml) = archive.read_file(part_path) else {
+        return;
+    };
+    let rels_path = part_rels_path(part_path);
+    let defined_ids: HashSet<&str> = relationships_by_part
+        .get(&rels_path)
+        .into_iter()
+        .flatten()
+        .map(|rel| rel.id.as_str())
+        .collect();
+    for attr in extract_relationship_attrs(&xml) {
+        if !defined_ids.contains(attr.value.as_str()) {
+            errors.push(PackageIntegrityError::MissingPartRelationshipReference {
+                part_path: part_path.to_string(),
+                rels_path: rels_path.clone(),
+                id: attr.value,
+                attr_name: attr.name,
+            });
+        }
+    }
+}
+
 fn extract_r_ids(xml: &[u8]) -> Vec<String> {
     let mut ids = Vec::new();
     let mut rest = xml;
@@ -489,10 +535,88 @@ fn extract_r_ids(xml: &[u8]) -> Vec<String> {
     ids
 }
 
+struct RelationshipAttr {
+    name: String,
+    value: String,
+}
+
+fn extract_relationship_attrs(xml: &[u8]) -> Vec<RelationshipAttr> {
+    ["id", "embed", "link"]
+        .into_iter()
+        .flat_map(|local_name| extract_prefixed_attr_values(xml, local_name))
+        .collect()
+}
+
+fn extract_prefixed_attr_values(xml: &[u8], local_name: &str) -> Vec<RelationshipAttr> {
+    let mut attrs = Vec::new();
+    let pattern = format!(":{local_name}");
+    let pattern = pattern.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = find_subslice(&xml[pos..], pattern) {
+        let attr_start = pos + offset;
+        let name_end = attr_start + pattern.len();
+        let mut cursor = name_end;
+        while xml
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if xml.get(cursor) != Some(&b'=') {
+            pos = name_end;
+            continue;
+        }
+        cursor += 1;
+        while xml
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        let Some(&quote) = xml.get(cursor) else {
+            pos = name_end;
+            continue;
+        };
+        if quote != b'"' && quote != b'\'' {
+            pos = name_end;
+            continue;
+        }
+        let value_start = cursor + 1;
+        let Some(value_len) = xml[value_start..].iter().position(|b| *b == quote) else {
+            break;
+        };
+        let prefix_start = xml[..attr_start]
+            .iter()
+            .rposition(|byte| byte.is_ascii_whitespace() || *byte == b'<' || *byte == b'/')
+            .map_or(0, |idx| idx + 1);
+        attrs.push(RelationshipAttr {
+            name: String::from_utf8_lossy(&xml[prefix_start..name_end]).into_owned(),
+            value: String::from_utf8_lossy(&xml[value_start..value_start + value_len]).into_owned(),
+        });
+        pos = value_start + value_len + 1;
+    }
+
+    attrs
+}
+
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .position(|window| window == needle)
+}
+
+fn part_rels_path(part_path: &str) -> String {
+    let (dir, file) = part_path.rsplit_once('/').unwrap_or(("", part_path));
+    if dir.is_empty() {
+        format!("_rels/{file}.rels")
+    } else {
+        format!("{dir}/_rels/{file}.rels")
+    }
+}
+
+fn is_xml_part(path: &str) -> bool {
+    path.ends_with(".xml") && path != "[Content_Types].xml" && !is_relationship_part(path)
 }
 
 fn worksheet_rels_path(worksheet_path: &str) -> String {
@@ -763,6 +887,90 @@ mod tests {
             error,
             PackageIntegrityError::MissingWorksheetRelationshipReference { id, .. }
                 if id == "rId9"
+        )));
+    }
+
+    #[test]
+    fn drawing_embed_without_matching_drawing_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdDrawing" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#;
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rIdDrawing"/></worksheet>"#,
+            ),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<xdr:wsDr><xdr:pic><a:blip r:embed="rIdImage"/></xdr:pic></xdr:wsDr>"#,
+            ),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("drawing r:embed is dangling");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingPartRelationshipReference {
+                part_path,
+                id,
+                attr_name,
+                ..
+            } if part_path == "xl/drawings/drawing1.xml"
+                && id == "rIdImage"
+                && attr_name == "r:embed"
+        )));
+    }
+
+    #[test]
+    fn chart_id_without_matching_chart_relationship_fails() {
+        let content_types = valid_content_types(
+            r#"<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>"#,
+        );
+        let workbook_rels = workbook_rels("");
+        let sheet_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdDrawing" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#;
+        let drawing_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdChart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#;
+        let archive = archive(&[
+            ("[Content_Types].xml", &content_types),
+            ("_rels/.rels", root_rels()),
+            ("xl/workbook.xml", b"<workbook/>"),
+            ("xl/_rels/workbook.xml.rels", &workbook_rels),
+            ("xl/styles.xml", b"<styleSheet/>"),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rIdDrawing"/></worksheet>"#,
+            ),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<xdr:wsDr><c:chart r:id="rIdChart"/></xdr:wsDr>"#,
+            ),
+            ("xl/drawings/_rels/drawing1.xml.rels", drawing_rels),
+            (
+                "xl/charts/chart1.xml",
+                br#"<c:chartSpace><c:externalData r:id="rIdExternalData"/></c:chartSpace>"#,
+            ),
+        ]);
+
+        let errors =
+            validate_archive_package_integrity(&archive).expect_err("chart r:id is dangling");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            PackageIntegrityError::MissingPartRelationshipReference {
+                part_path,
+                id,
+                attr_name,
+                ..
+            } if part_path == "xl/charts/chart1.xml"
+                && id == "rIdExternalData"
+                && attr_name == "r:id"
         )));
     }
 

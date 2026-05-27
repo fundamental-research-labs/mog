@@ -776,10 +776,14 @@ fn write_vml_shape(w: &mut XmlWriter, control: &FormControl, shape_id: u32) {
 
     // Write preserved VML child elements (v:fill, o:lock)
     if let Some(ref fill) = vml.fill_xml {
-        w.raw_str(fill);
+        if !crate::infra::xml::raw_xml_contains_relationship_attr(fill) {
+            w.raw_str(fill);
+        }
     }
     if let Some(ref lock) = vml.lock_xml {
-        w.raw_str(lock);
+        if !crate::infra::xml::raw_xml_contains_relationship_attr(lock) {
+            w.raw_str(lock);
+        }
     }
 
     // Textbox for controls that display text
@@ -800,7 +804,9 @@ fn write_vml_shape(w: &mut XmlWriter, control: &FormControl, shape_id: u32) {
 
             // Use preserved VML textbox content if available, otherwise fall back to name.
             if let Some(ref content) = vml.textbox_content {
-                w.raw_str(content);
+                if !crate::infra::xml::raw_xml_contains_relationship_attr(content) {
+                    w.raw_str(content);
+                }
             } else {
                 let text = control.properties.name.as_deref().unwrap_or("");
                 if !text.is_empty() {

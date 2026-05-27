@@ -476,7 +476,10 @@ impl StylesWriter {
 
         // <extLst> — opaque passthrough for round-trip fidelity
         if let Some(ref ext_lst) = self.ext_lst_raw {
-            w.raw(ext_lst);
+            let raw = String::from_utf8_lossy(ext_lst);
+            if !crate::infra::xml::raw_xml_contains_relationship_attr(&raw) {
+                w.raw(ext_lst);
+            }
         }
 
         w.end_element("styleSheet");
@@ -1046,7 +1049,9 @@ impl StylesWriter {
             // <extLst> — raw XML passthrough for round-trip fidelity
             if let Some(ref ext_lst) = xf.ext_lst {
                 if let Some(ref raw) = ext_lst.raw_xml {
-                    w.raw(raw.as_bytes());
+                    if !crate::infra::xml::raw_xml_contains_relationship_attr(raw) {
+                        w.raw(raw.as_bytes());
+                    }
                 }
             }
 

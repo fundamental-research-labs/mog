@@ -39,15 +39,37 @@ pub struct DrawingWriter {
     /// Each entry is (attr_name, attr_value), e.g. ("xmlns:xdr", "http://...").
     /// When set, these are emitted instead of the hardcoded defaults.
     root_namespace_attrs: Vec<(String, String)>,
+    suppress_unregistered_relationships: bool,
 }
 
 impl DrawingWriter {
+    pub(super) fn write_raw_xml_if_relationship_safe(w: &mut XmlWriter, raw_xml: &str) -> bool {
+        if crate::infra::xml::raw_xml_contains_relationship_attr(raw_xml) {
+            return false;
+        }
+        w.raw_str(raw_xml);
+        true
+    }
+
+    pub(super) fn write_raw_xml(&self, w: &mut XmlWriter, raw_xml: &str) -> bool {
+        if self.suppress_unregistered_relationships {
+            return Self::write_raw_xml_if_relationship_safe(w, raw_xml);
+        }
+        w.raw_str(raw_xml);
+        true
+    }
+
     /// Create a new drawing writer
     pub fn new() -> Self {
         Self {
             anchors: Vec::new(),
             root_namespace_attrs: Vec::new(),
+            suppress_unregistered_relationships: false,
         }
+    }
+
+    pub fn set_suppress_unregistered_relationships(&mut self, suppress: bool) {
+        self.suppress_unregistered_relationships = suppress;
     }
 
     /// Set the original root element namespace declarations for round-trip fidelity.
@@ -411,8 +433,9 @@ impl DrawingWriter {
             DrawingAnchor::TwoCell(two_cell, object) => {
                 // If the anchor was wrapped in mc:AlternateContent, emit the raw XML
                 // verbatim for perfect round-trip fidelity.
-                if let Some(ref mc) = two_cell.mc_alternate_content {
-                    w.raw_str(&mc.raw_xml);
+                if let Some(ref mc) = two_cell.mc_alternate_content
+                    && self.write_raw_xml(w, &mc.raw_xml)
+                {
                     return;
                 }
 
@@ -433,8 +456,9 @@ impl DrawingWriter {
                 // If the anchor was wrapped in mc:AlternateContent or contains
                 // content-level mc:AlternateContent (slicer/timeslicer), emit raw XML
                 // verbatim for perfect round-trip fidelity.
-                if let Some(ref mc) = one_cell.mc_alternate_content {
-                    w.raw_str(&mc.raw_xml);
+                if let Some(ref mc) = one_cell.mc_alternate_content
+                    && self.write_raw_xml(w, &mc.raw_xml)
+                {
                     return;
                 }
 

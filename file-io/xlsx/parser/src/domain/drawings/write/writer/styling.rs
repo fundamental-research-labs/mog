@@ -66,8 +66,10 @@ impl DrawingWriter {
         hlink: &ooxml_types::drawings::Hyperlink,
     ) {
         w.start_element(tag);
-        if let Some(ref r_id) = hlink.r_id {
-            w.attr("r:id", r_id);
+        if !self.suppress_unregistered_relationships {
+            if let Some(ref r_id) = hlink.r_id {
+                w.attr("r:id", r_id);
+            }
         }
         if let Some(ref action) = hlink.action {
             w.attr("action", action);
@@ -93,7 +95,7 @@ impl DrawingWriter {
         }
         if let Some(ref ext) = hlink.ext_lst {
             w.end_attrs();
-            w.raw_str(ext);
+            self.write_raw_xml(w, ext);
             w.end_element(tag);
         } else {
             w.self_close();
@@ -188,7 +190,7 @@ impl DrawingWriter {
                     }
                     if let Some(xml) = raw_xml {
                         w.end_attrs();
-                        w.raw_str(xml);
+                        self.write_raw_xml(w, xml);
                         w.end_element("a:clrChange");
                     } else {
                         w.self_close();
@@ -474,20 +476,24 @@ impl DrawingWriter {
             }
             DrawingFill::Blip(blip) => {
                 w.start_element("a:blipFill").end_attrs();
+                if !self.suppress_unregistered_relationships
+                    || (blip.embed_id.is_none() && blip.link_id.is_none())
                 {
                     w.start_element("a:blip");
-                    if let Some(ref embed) = blip.embed_id {
-                        w.attr("r:embed", embed);
-                    }
-                    if let Some(ref link) = blip.link_id {
-                        w.attr("r:link", link);
+                    if !self.suppress_unregistered_relationships {
+                        if let Some(ref embed) = blip.embed_id {
+                            w.attr("r:embed", embed);
+                        }
+                        if let Some(ref link) = blip.link_id {
+                            w.attr("r:link", link);
+                        }
                     }
                     if let Some(ref comp) = blip.compression {
                         w.attr("cstate", comp.to_ooxml());
                     }
                     if let Some(ref ext) = blip.ext_lst {
                         w.end_attrs();
-                        w.raw_str(ext);
+                        self.write_raw_xml(w, ext);
                         w.end_element("a:blip");
                     } else {
                         w.self_close();
@@ -658,14 +664,14 @@ pub(crate) fn write_scene3d(w: &mut XmlWriter, scene: &Scene3D) {
                 .attr_num("z", backdrop.up.z)
                 .self_close();
             if let Some(ref ext) = backdrop.ext_lst {
-                w.raw_str(ext);
+                DrawingWriter::write_raw_xml_if_relationship_safe(w, ext);
             }
             w.end_element("a:backdrop");
         }
 
         // Scene3D extLst
         if let Some(ref ext) = scene.ext_lst {
-            w.raw_str(ext);
+            DrawingWriter::write_raw_xml_if_relationship_safe(w, ext);
         }
     }
     w.end_element("a:scene3d");
@@ -711,7 +717,7 @@ pub(crate) fn write_shape3d(w: &mut XmlWriter, sp3d: &Shape3D) {
 
         // Shape3D extLst
         if let Some(ref ext) = sp3d.ext_lst {
-            w.raw_str(ext);
+            DrawingWriter::write_raw_xml_if_relationship_safe(w, ext);
         }
     }
     w.end_element("a:sp3d");

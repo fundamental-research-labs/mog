@@ -344,6 +344,9 @@ pub(super) fn build_sheet_parts(
                     crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
                 serialize_chart_space(&chart_space)
             } else if let Some(raw_xml) = &chart_spec.preserved_chart_xml {
+                if crate::infra::xml::raw_xml_contains_relationship_attr(raw_xml) {
+                    continue;
+                }
                 raw_xml.as_bytes().to_vec()
             } else {
                 // Legacy: read from definition blob

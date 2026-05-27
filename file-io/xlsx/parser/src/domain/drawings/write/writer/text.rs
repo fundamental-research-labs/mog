@@ -232,7 +232,7 @@ impl DrawingWriter {
     pub(super) fn write_ext_lst(&self, w: &mut XmlWriter, ext: &ExtensionList) {
         if let Some(ref raw) = ext.raw_xml {
             w.start_element("a:extLst").end_attrs();
-            w.raw_str(raw);
+            self.write_raw_xml(w, raw);
             w.end_element("a:extLst");
         }
     }
@@ -725,8 +725,10 @@ impl DrawingWriter {
     /// Write a hyperlink info element for text runs (CT_Hyperlink).
     pub(super) fn write_hlink_info(&self, w: &mut XmlWriter, tag: &str, hlink: &Hyperlink) {
         w.start_element(tag);
-        if let Some(ref r_id) = hlink.r_id {
-            w.attr("r:id", r_id);
+        if !self.suppress_unregistered_relationships {
+            if let Some(ref r_id) = hlink.r_id {
+                w.attr("r:id", r_id);
+            }
         }
         if let Some(ref action) = hlink.action {
             w.attr("action", action);
@@ -753,7 +755,7 @@ impl DrawingWriter {
         }
         if let Some(ref ext) = hlink.ext_lst {
             w.end_attrs();
-            w.raw_str(ext);
+            self.write_raw_xml(w, ext);
             w.end_element(tag);
         } else {
             w.self_close();
@@ -843,9 +845,11 @@ impl DrawingWriter {
                     w.self_close();
                 }
                 BulletType::Blip(r_id) => {
-                    w.start_element("a:buBlip").end_attrs();
-                    w.start_element("a:blip").attr("r:embed", r_id).self_close();
-                    w.end_element("a:buBlip");
+                    if !self.suppress_unregistered_relationships {
+                        w.start_element("a:buBlip").end_attrs();
+                        w.start_element("a:blip").attr("r:embed", r_id).self_close();
+                        w.end_element("a:buBlip");
+                    }
                 }
             }
         }

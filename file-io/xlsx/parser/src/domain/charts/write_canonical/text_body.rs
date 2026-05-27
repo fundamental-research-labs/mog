@@ -10,6 +10,7 @@ use super::shape_props::{
     emit_drawing_color, emit_effect_properties, emit_fill, emit_line_dash, emit_line_fill,
     emit_outline,
 };
+use super::util::write_raw_xml_if_relationship_safe;
 
 pub(crate) fn emit_text_body(w: &mut XmlWriter, tb: &TextBody, tag: &str) {
     w.start_element(tag).end_attrs();
@@ -158,7 +159,7 @@ fn emit_autofit(w: &mut XmlWriter, autofit: &ooxml_types::drawings::TextAutofit)
 fn emit_drawing_ext_lst(w: &mut XmlWriter, ext: &ooxml_types::drawings::ExtensionList) {
     if let Some(ref raw) = ext.raw_xml {
         w.start_element("a:extLst").end_attrs();
-        w.raw_str(raw);
+        write_raw_xml_if_relationship_safe(w, raw);
         w.end_element("a:extLst");
     }
 }
@@ -428,10 +429,9 @@ fn emit_bullet_properties(w: &mut XmlWriter, bullet: &ooxml_types::drawings::Bul
                 }
                 w.self_close();
             }
-            BulletType::Blip(r_id) => {
-                w.start_element("a:buBlip").end_attrs();
-                w.start_element("a:blip").attr("r:embed", r_id).self_close();
-                w.end_element("a:buBlip");
+            BulletType::Blip(_) => {
+                // Bullet images require chart-owned relationships; omit until
+                // those relationship IDs are resolved by the package graph.
             }
         }
     }
@@ -658,9 +658,8 @@ fn emit_text_font(w: &mut XmlWriter, tag: &str, font: &ooxml_types::drawings::Te
 
 fn emit_hyperlink(w: &mut XmlWriter, tag: &str, hlink: &ooxml_types::drawings::Hyperlink) {
     w.start_element(tag);
-    if let Some(ref r_id) = hlink.r_id {
-        w.attr("r:id", r_id);
-    }
+    // DrawingML hyperlink r:ids require chart-owned relationships; preserve
+    // non-relationship metadata only until chart rel registration exists.
     if let Some(ref action) = hlink.action {
         w.attr("action", action);
     }
@@ -684,7 +683,7 @@ fn emit_hyperlink(w: &mut XmlWriter, tag: &str, hlink: &ooxml_types::drawings::H
     }
     if let Some(ref ext) = hlink.ext_lst {
         w.end_attrs();
-        w.raw_str(ext);
+        write_raw_xml_if_relationship_safe(w, ext);
         w.end_element(tag);
     } else {
         w.self_close();

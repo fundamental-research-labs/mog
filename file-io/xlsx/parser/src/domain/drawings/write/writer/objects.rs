@@ -15,6 +15,14 @@ use super::styling::{write_scene3d, write_shape3d};
 
 use super::DrawingWriter;
 
+fn write_raw_xml(w: &mut XmlWriter, raw_xml: &str, suppress_unregistered_relationships: bool) {
+    if suppress_unregistered_relationships {
+        DrawingWriter::write_raw_xml_if_relationship_safe(w, raw_xml);
+    } else {
+        w.raw_str(raw_xml);
+    }
+}
+
 impl DrawingWriter {
     /// Write a picture element (`<xdr:pic>`) with full OOXML fidelity
     pub(super) fn write_picture(&self, w: &mut XmlWriter, image: &ImageProps, object_id: &mut u32) {
@@ -57,7 +65,7 @@ impl DrawingWriter {
                     self.write_hyperlink(w, "a:hlinkHover", hlink);
                 }
                 if let Some(ref ext_lst) = image.nv_ext_lst {
-                    w.raw_str(ext_lst);
+                    self.write_raw_xml(w, ext_lst);
                 }
                 w.end_element("xdr:cNvPr");
             } else {
@@ -121,7 +129,7 @@ impl DrawingWriter {
                 }
                 if let Some(ref ext) = locks.ext_lst {
                     w.end_attrs();
-                    w.raw_str(ext);
+                    self.write_raw_xml(w, ext);
                     w.end_element("a:picLocks");
                 } else {
                     w.self_close();
@@ -147,8 +155,10 @@ impl DrawingWriter {
             let has_effects = !image.blip_effects.is_empty();
             let has_blip_ext = image.blip_ext_lst.is_some();
             w.start_element("a:blip").attr("r:embed", &image.r_id);
-            if let Some(ref link_id) = image.link_id {
-                w.attr("r:link", link_id);
+            if !self.suppress_unregistered_relationships {
+                if let Some(ref link_id) = image.link_id {
+                    w.attr("r:link", link_id);
+                }
             }
             if let Some(ref comp) = image.compression {
                 w.attr("cstate", comp.to_ooxml());
@@ -160,7 +170,7 @@ impl DrawingWriter {
                     self.write_blip_effects(w, &image.blip_effects);
                 }
                 if let Some(ref ext) = image.blip_ext_lst {
-                    w.raw_str(ext);
+                    self.write_raw_xml(w, ext);
                 }
                 w.end_element("a:blip");
             } else {
@@ -312,7 +322,7 @@ impl DrawingWriter {
             }
             // Extension list on spPr (opaque passthrough)
             if let Some(ref ext) = image.sp_pr_ext_lst {
-                w.raw_str(ext);
+                self.write_raw_xml(w, ext);
             }
         }
         w.end_element("xdr:spPr");
@@ -348,7 +358,7 @@ impl DrawingWriter {
                 .attr("name", &shape.name);
             if let Some(ref ext) = shape.nv_ext_lst {
                 cnv.end_attrs();
-                w.raw_str(ext);
+                self.write_raw_xml(w, ext);
                 w.end_element("xdr:cNvPr");
             } else {
                 cnv.self_close();
@@ -465,7 +475,7 @@ impl DrawingWriter {
                     self.write_hyperlink(w, "a:hlinkHover", hlink);
                 }
                 if let Some(ref ext_lst) = chart.nv_ext_lst {
-                    w.raw_str(ext_lst);
+                    self.write_raw_xml(w, ext_lst);
                 }
                 w.end_element("xdr:cNvPr");
             } else {
@@ -478,6 +488,7 @@ impl DrawingWriter {
                 chart.no_change_aspect_explicit,
                 chart.no_drilldown,
                 &chart.c_nv_graphic_frame_pr_ext_lst,
+                self.suppress_unregistered_relationships,
             );
         }
         w.end_element("xdr:nvGraphicFramePr");
@@ -527,6 +538,7 @@ impl DrawingWriter {
         no_change_aspect_explicit: Option<bool>,
         no_drilldown: bool,
         ext_lst: &Option<String>,
+        suppress_unregistered_relationships: bool,
     ) {
         let has_lock_attrs = locks.no_grp
             || locks.no_select
@@ -582,7 +594,7 @@ impl DrawingWriter {
             }
             if let Some(ref lock_ext) = locks.ext_lst {
                 w.end_attrs();
-                w.raw_str(lock_ext);
+                write_raw_xml(w, lock_ext, suppress_unregistered_relationships);
                 w.end_element("a:graphicFrameLocks");
             } else {
                 w.self_close();
@@ -590,7 +602,7 @@ impl DrawingWriter {
         }
 
         if let Some(ext) = ext_lst {
-            w.raw_str(ext);
+            write_raw_xml(w, ext, suppress_unregistered_relationships);
         }
 
         w.end_element("xdr:cNvGraphicFramePr");
@@ -652,7 +664,7 @@ impl DrawingWriter {
                     self.write_hyperlink(w, "a:hlinkHover", hlink);
                 }
                 if let Some(ref ext_lst) = text_box.nv_ext_lst {
-                    w.raw_str(ext_lst);
+                    self.write_raw_xml(w, ext_lst);
                 }
                 w.end_element("xdr:cNvPr");
             } else {
@@ -729,14 +741,14 @@ impl DrawingWriter {
                     }
                     if let Some(ref ext) = locks.ext_lst {
                         w.end_attrs();
-                        w.raw_str(ext);
+                        self.write_raw_xml(w, ext);
                         w.end_element("a:spLocks");
                     } else {
                         w.self_close();
                     }
                 }
                 if let Some(ref ext) = text_box.c_nv_sp_pr_ext_lst {
-                    w.raw_str(ext);
+                    self.write_raw_xml(w, ext);
                 }
                 w.end_element("xdr:cNvSpPr");
             } else {
@@ -814,7 +826,7 @@ impl DrawingWriter {
 
             // Extension list on spPr
             if let Some(ref ext) = text_box.sp_pr_ext_lst {
-                w.raw_str(ext);
+                self.write_raw_xml(w, ext);
             }
         }
         w.end_element("xdr:spPr");
@@ -883,7 +895,7 @@ impl DrawingWriter {
                     self.write_hyperlink(w, "a:hlinkHover", hlink);
                 }
                 if let Some(ref ext_lst) = props.nv_ext_lst {
-                    w.raw_str(ext_lst);
+                    self.write_raw_xml(w, ext_lst);
                 }
 
                 w.end_element("xdr:cNvPr");
@@ -944,7 +956,7 @@ impl DrawingWriter {
                     }
                     if let Some(ref ext) = props.locks.ext_lst {
                         w.end_attrs();
-                        w.raw_str(ext);
+                        self.write_raw_xml(w, ext);
                         w.end_element("a:cxnSpLocks");
                     } else {
                         w.self_close();
@@ -1107,7 +1119,7 @@ impl DrawingWriter {
                         }
                         if let Some(ref ext) = locks.ext_lst {
                             w.end_attrs();
-                            w.raw_str(ext);
+                            self.write_raw_xml(w, ext);
                             w.end_element("a:grpSpLocks");
                         } else {
                             w.self_close();
@@ -1117,7 +1129,7 @@ impl DrawingWriter {
 
                 // opaque cNvGrpSpPr extLst
                 if let Some(ref ext) = props.nv_ext_lst {
-                    w.raw_str(ext);
+                    self.write_raw_xml(w, ext);
                 }
 
                 w.end_element("xdr:cNvGrpSpPr");
@@ -1193,7 +1205,7 @@ impl DrawingWriter {
 
             // Opaque extLst
             if let Some(ref ext) = props.ext_lst {
-                w.raw_str(ext);
+                self.write_raw_xml(w, ext);
             }
         }
         w.end_element("xdr:grpSpPr");
@@ -1208,7 +1220,7 @@ impl DrawingWriter {
 
     /// Write an opaque graphic frame verbatim
     pub(super) fn write_graphic_frame(&self, w: &mut XmlWriter, gf: &OpaqueGraphicFrame) {
-        w.raw_str(&gf.raw_xml);
+        self.write_raw_xml(w, &gf.raw_xml);
     }
 
     /// Write a SmartArt graphicFrame element (`<xdr:graphicFrame>`) with `<dgm:relIds>`.
@@ -1254,7 +1266,7 @@ impl DrawingWriter {
             w.start_element("a:graphicData")
                 .attr("uri", DIAGRAM_GRAPHIC_DATA_URI)
                 .end_attrs();
-            {
+            if !self.suppress_unregistered_relationships {
                 w.start_element("dgm:relIds")
                     .attr("xmlns:dgm", NS_DGM)
                     .attr("r:dm", &sa.dm_rel_id)

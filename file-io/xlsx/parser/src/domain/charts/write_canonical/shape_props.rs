@@ -3,6 +3,8 @@ use crate::write::xml_writer::XmlWriter;
 use ooxml_types::charts::ShapeProperties;
 use ooxml_types::drawings::{DrawingColor, DrawingFill, LineDash, LineFill, LineJoin, Outline};
 
+use super::util::write_raw_xml_if_relationship_safe;
+
 pub(crate) fn emit_shape_properties(w: &mut XmlWriter, sp: &ShapeProperties, tag: &str) {
     w.start_element(tag);
     if let Some(ref bw) = sp.bw_mode {
@@ -93,7 +95,7 @@ pub(crate) fn emit_shape_properties(w: &mut XmlWriter, sp: &ShapeProperties, tag
 
     // extLst
     if let Some(ref ext) = sp.ext_lst {
-        w.raw_str(ext);
+        write_raw_xml_if_relationship_safe(w, ext);
     }
 
     w.end_element(tag);
@@ -148,22 +150,18 @@ pub(super) fn emit_fill(w: &mut XmlWriter, fill: &DrawingFill) {
         }
         DrawingFill::Blip(blip) => {
             w.start_element("a:blipFill").end_attrs();
-            w.start_element("a:blip");
-            if let Some(ref embed) = blip.embed_id {
-                w.attr("r:embed", embed);
-            }
-            if let Some(ref link) = blip.link_id {
-                w.attr("r:link", link);
-            }
-            if let Some(ref comp) = blip.compression {
-                w.attr("cstate", comp.to_ooxml());
-            }
-            if let Some(ref ext) = blip.ext_lst {
-                w.end_attrs();
-                w.raw_str(ext);
-                w.end_element("a:blip");
-            } else {
-                w.self_close();
+            if blip.embed_id.is_none() && blip.link_id.is_none() {
+                w.start_element("a:blip");
+                if let Some(ref comp) = blip.compression {
+                    w.attr("cstate", comp.to_ooxml());
+                }
+                if let Some(ref ext) = blip.ext_lst {
+                    w.end_attrs();
+                    write_raw_xml_if_relationship_safe(w, ext);
+                    w.end_element("a:blip");
+                } else {
+                    w.self_close();
+                }
             }
             w.start_element("a:stretch").end_attrs();
             w.start_element("a:fillRect").self_close();
@@ -624,13 +622,13 @@ fn emit_scene3d(w: &mut XmlWriter, scene: &ooxml_types::drawings::Scene3D) {
             .attr_num("z", backdrop.up.z)
             .self_close();
         if let Some(ref ext) = backdrop.ext_lst {
-            w.raw_str(ext);
+            write_raw_xml_if_relationship_safe(w, ext);
         }
         w.end_element("a:backdrop");
     }
 
     if let Some(ref ext) = scene.ext_lst {
-        w.raw_str(ext);
+        write_raw_xml_if_relationship_safe(w, ext);
     }
 
     w.end_element("a:scene3d");
@@ -669,7 +667,7 @@ fn emit_shape3d(w: &mut XmlWriter, sp3d: &ooxml_types::drawings::Shape3D) {
         w.end_element("a:contourClr");
     }
     if let Some(ref ext) = sp3d.ext_lst {
-        w.raw_str(ext);
+        write_raw_xml_if_relationship_safe(w, ext);
     }
 
     w.end_element("a:sp3d");

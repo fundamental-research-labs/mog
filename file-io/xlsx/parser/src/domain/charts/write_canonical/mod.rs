@@ -20,6 +20,8 @@ use crate::write::xml_writer::XmlWriter;
 
 use ooxml_types::charts::{Chart, ChartSpace};
 
+use self::util::write_raw_xml_if_relationship_safe;
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -69,7 +71,7 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
     // `style_after_chart` is true and we defer emission until after `emit_chart`.
     if !cs.style_after_chart {
         if let Some(ref ac_xml) = cs.style_alternate_content {
-            w.raw(ac_xml.as_bytes());
+            write_raw_xml_if_relationship_safe(&mut w, ac_xml);
         } else if let Some(v) = cs.style {
             w.start_element("c:style")
                 .attr("val", &v.to_string())
@@ -98,7 +100,7 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
     // Deferred style emission for files that had mc:AlternateContent after </c:chart>
     if cs.style_after_chart {
         if let Some(ref ac_xml) = cs.style_alternate_content {
-            w.raw(ac_xml.as_bytes());
+            write_raw_xml_if_relationship_safe(&mut w, ac_xml);
         }
     }
 
@@ -113,9 +115,8 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
     }
 
     // externalData
-    if let Some(ref ed) = cs.external_data {
-        structure::emit_external_data(&mut w, ed);
-    }
+    // externalData owns a chart-part relationship; omit until chart rels are
+    // registered and resolved through the package graph.
 
     // printSettings
     if let Some(ref ps) = cs.print_settings {
@@ -123,17 +124,14 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
     }
 
     // userShapes
-    if let Some(ref us) = cs.user_shapes {
-        w.start_element("c:userShapes")
-            .attr("r:id", us)
-            .self_close();
-    }
+    // userShapes also owns a chart-part relationship and is dropped until the
+    // chart relationship graph models it explicitly.
 
     // extLst
     if !cs.extensions.is_empty() {
         w.start_element("c:extLst").end_attrs();
         for ext in &cs.extensions {
-            w.raw_str(&ext.xml);
+            write_raw_xml_if_relationship_safe(&mut w, &ext.xml);
         }
         w.end_element("c:extLst");
     }
@@ -223,7 +221,7 @@ fn emit_chart(w: &mut XmlWriter, chart: &Chart) {
     if !chart.extensions.is_empty() {
         w.start_element("c:extLst").end_attrs();
         for ext in &chart.extensions {
-            w.raw_str(&ext.xml);
+            write_raw_xml_if_relationship_safe(w, &ext.xml);
         }
         w.end_element("c:extLst");
     } else if chart.has_empty_ext_lst {

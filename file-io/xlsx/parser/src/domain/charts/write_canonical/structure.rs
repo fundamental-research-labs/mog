@@ -1,8 +1,8 @@
 use crate::write::xml_writer::XmlWriter;
 
 use ooxml_types::charts::{
-    ChartProtection, ChartSurface, ExternalData, Legend, LegendEntry, PageMargins, PageSetup,
-    PivotFmt, PivotSource, PrintSettings, Title, View3D,
+    ChartProtection, ChartSurface, Legend, LegendEntry, PageMargins, PageSetup, PivotFmt,
+    PivotSource, PrintSettings, Title, View3D,
 };
 
 use super::layout::{emit_chart_text, emit_layout, emit_picture_options};
@@ -206,12 +206,8 @@ pub(super) fn emit_print_settings(w: &mut XmlWriter, ps: &PrintSettings) {
         emit_page_setup(w, psu);
     }
 
-    // legacyDrawingHF
-    if let Some(ref ld) = ps.legacy_drawing_hf {
-        w.start_element("c:legacyDrawingHF")
-            .attr("r:id", ld)
-            .self_close();
-    }
+    // legacyDrawingHF owns a chart-part relationship; omit until chart rels are
+    // registered and resolved through the package graph.
 
     w.end_element("c:printSettings");
 }
@@ -295,20 +291,6 @@ fn emit_page_setup(w: &mut XmlWriter, psu: &PageSetup) {
         w.attr("copies", &v.to_string());
     }
     w.self_close();
-}
-
-pub(super) fn emit_external_data(w: &mut XmlWriter, ed: &ExternalData) {
-    w.start_element("c:externalData")
-        .attr("r:id", &ed.r_id)
-        .end_attrs();
-
-    if let Some(v) = ed.auto_update {
-        w.start_element("c:autoUpdate")
-            .attr("val", if v { "1" } else { "0" })
-            .self_close();
-    }
-
-    w.end_element("c:externalData");
 }
 
 pub(super) fn emit_pivot_source(w: &mut XmlWriter, ps: &PivotSource) {

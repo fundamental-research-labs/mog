@@ -170,7 +170,7 @@ fn raw_worksheet_element_contains_modeled_child(xml: &str) -> bool {
 }
 
 fn raw_worksheet_element_contains_unresolved_relationship(xml: &str) -> bool {
-    if raw_xml_contains_relationship_id_attr(xml)
+    if crate::infra::xml::raw_xml_contains_relationship_attr(xml)
         && !raw_xml_contains_element(xml, "pivotTableDefinition")
     {
         return true;
@@ -193,81 +193,13 @@ fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
     raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
 }
 
-fn raw_xml_contains_relationship_id_attr(raw_xml: &str) -> bool {
-    raw_xml_contains_r_id_attr(raw_xml) || raw_xml_contains_prefixed_relationship_id_attr(raw_xml)
-}
-
-fn raw_xml_contains_r_id_attr(raw_xml: &str) -> bool {
-    let bytes = raw_xml.as_bytes();
-    let mut pos = 0;
-    while let Some(offset) = find_subslice(&bytes[pos..], b"r:id") {
-        pos += offset + b"r:id".len();
-        let mut cursor = pos;
-        while bytes
-            .get(cursor)
-            .is_some_and(|byte| byte.is_ascii_whitespace())
-        {
-            cursor += 1;
-        }
-        if bytes.get(cursor) == Some(&b'=') {
-            return true;
-        }
-    }
-    false
-}
-
-fn raw_xml_contains_prefixed_relationship_id_attr(raw_xml: &str) -> bool {
-    let bytes = raw_xml.as_bytes();
-    let mut pos = 0;
-
-    while let Some(offset) = find_subslice(&bytes[pos..], b":id") {
-        let colon = pos + offset;
-        let attr_end = colon + b":id".len();
-        let mut cursor = attr_end;
-        while bytes
-            .get(cursor)
-            .is_some_and(|byte| byte.is_ascii_whitespace())
-        {
-            cursor += 1;
-        }
-        if bytes.get(cursor) != Some(&b'=') {
-            pos = attr_end;
-            continue;
-        }
-        cursor += 1;
-        while bytes
-            .get(cursor)
-            .is_some_and(|byte| byte.is_ascii_whitespace())
-        {
-            cursor += 1;
-        }
-
-        let Some(&quote) = bytes.get(cursor) else {
-            pos = attr_end;
-            continue;
-        };
-        if quote != b'"' && quote != b'\'' {
-            pos = attr_end;
-            continue;
-        }
-        return true;
-    }
-
-    false
-}
-
-fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
 fn raw_worksheet_ext_lst_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
     if sheet_has_modeled_ext_lst_owner(sheet_data) {
         return false;
     }
 
-    !raw_ext_lst_contains_modeled_owner(xml)
+    !crate::infra::xml::raw_xml_contains_relationship_attr(xml)
+        && !raw_ext_lst_contains_modeled_owner(xml)
 }
 
 fn sheet_has_modeled_ext_lst_owner(sheet_data: &SheetData) -> bool {

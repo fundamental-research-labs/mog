@@ -11,6 +11,42 @@ use crate::infra::scanner::{
 };
 use crate::pipeline::fast_parse;
 
+const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 3] = ["id", "embed", "link"];
+
+/// Returns true when raw XML contains a namespaced relationship-bearing
+/// attribute such as `r:id`, `r:embed`, `r:link`, or an equivalent prefixed
+/// `*:id`/`*:embed`/`*:link` attribute.
+pub fn raw_xml_contains_relationship_attr(raw_xml: &str) -> bool {
+    RELATIONSHIP_ATTR_LOCAL_NAMES
+        .iter()
+        .any(|local_name| raw_xml_contains_prefixed_attr(raw_xml, local_name))
+}
+
+fn raw_xml_contains_prefixed_attr(raw_xml: &str, local_name: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let pattern = format!(":{local_name}");
+    let pattern = pattern.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = bytes[pos..]
+        .windows(pattern.len())
+        .position(|window| window == pattern)
+    {
+        let attr_pos = pos + offset;
+        let after_name = attr_pos + pattern.len();
+        let mut cursor = after_name;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor < bytes.len() && bytes[cursor] == b'=' {
+            return true;
+        }
+        pos = after_name;
+    }
+
+    false
+}
+
 // ============================================================================
 // Boolean Attribute Parsing
 // ============================================================================
@@ -1195,5 +1231,21 @@ mod tests {
             }
             other => panic!("Expected Resolved(choice), got {:?}", other),
         }
+    }
+
+    #[test]
+    fn relationship_attr_detector_covers_id_embed_and_link() {
+        assert!(raw_xml_contains_relationship_attr(
+            r#"<x:state r:id = "rId1"/>"#
+        ));
+        assert!(raw_xml_contains_relationship_attr(
+            r#"<a:blip rel:embed="rId2"/>"#
+        ));
+        assert!(raw_xml_contains_relationship_attr(
+            r#"<a:blip other:link = "rId3"/>"#
+        ));
+        assert!(!raw_xml_contains_relationship_attr(
+            r#"<x:state id="local" embed="literal" link="literal"/>"#
+        ));
     }
 }

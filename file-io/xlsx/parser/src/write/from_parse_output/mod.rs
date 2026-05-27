@@ -652,6 +652,7 @@ pub fn write_xlsx_from_parse_output(
 
             // Build DrawingWriter with all anchors (charts + floating objects).
             let mut drawing_writer = DrawingWriter::new();
+            drawing_writer.set_suppress_unregistered_relationships(true);
             if let Some(attrs) = round_trip_ctx
                 .and_then(|ctx| ctx.sheets.get(sheet_idx))
                 .map(|srt| srt.drawing_root_namespace_attrs.clone())

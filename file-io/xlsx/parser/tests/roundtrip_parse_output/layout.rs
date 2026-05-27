@@ -9,11 +9,15 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
-    PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings, RoundTripContext,
-    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator,
-    ValidationRule, ValidationSpec,
+    OutlineGroup, PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings,
+    RoundTripContext, RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec,
+    TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
+use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
+use xlsx_parser::parse_xlsx_to_output;
+use xlsx_parser::write::write_xlsx_from_parse_output;
+use xlsx_parser::zip::XlsxArchive;
 
 #[test]
 fn roundtrip_merge_regions() {
@@ -229,6 +233,72 @@ fn roundtrip_hidden_rows_and_cols() {
         hidden_col.is_some(),
         "Hidden col 1 dimension entry should survive round-trip"
     );
+}
+
+#[test]
+fn regenerated_row_layout_flags_come_from_modeled_state() {
+    let mut output = make_single_sheet(
+        "Rows",
+        vec![cell(0, 0, CellValue::Text(Arc::from("row layout")))],
+    );
+    output.style_palette = vec![DocumentFormat::default()];
+    output.sheets[0].dimensions = SheetDimensions {
+        row_heights: vec![RowDimension {
+            row: 2,
+            height: 24.0,
+            custom_height: true,
+            hidden: true,
+            custom_format: true,
+            descent: Some(0.25),
+        }],
+        ..Default::default()
+    };
+    output.sheets[0].row_styles = vec![RowStyleEntry {
+        row: 2,
+        style_id: 0,
+    }];
+    output.sheets[0].outline_groups = vec![OutlineGroup {
+        is_row: true,
+        start: 2,
+        end: 3,
+        level: 1,
+        collapsed: true,
+        hidden: true,
+        collapsed_on_member: false,
+    }];
+
+    let bytes = write_xlsx_from_parse_output(&output, None).expect("export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    let styled_hidden_row = sheet_xml
+        .split("<row ")
+        .find(|row| row.contains(r#"r="3""#))
+        .expect("row 3 should be regenerated from modeled row layout state");
+    assert!(styled_hidden_row.contains(r#"s="1""#));
+    assert!(styled_hidden_row.contains(r#"customFormat="1""#));
+    assert!(styled_hidden_row.contains(r#"ht="24""#));
+    assert!(styled_hidden_row.contains(r#"hidden="1""#));
+    assert!(styled_hidden_row.contains(r#"customHeight="1""#));
+    assert!(styled_hidden_row.contains(r#"outlineLevel="1""#));
+    assert!(styled_hidden_row.contains(r#"x14ac:dyDescent="0.25""#));
+
+    let collapsed_sentinel_row = sheet_xml
+        .split("<row ")
+        .find(|row| row.contains(r#"r="5""#))
+        .expect("collapsed outline sentinel row should be regenerated");
+    assert!(collapsed_sentinel_row.contains(r#"collapsed="1""#));
+
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+    let (rt, _ctx, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert!(rt.sheets[0].dimensions.row_heights.iter().any(|row| {
+        row.row == 2 && row.custom_height && row.hidden && row.custom_format
+    }));
+    assert!(rt.sheets[0].outline_groups.iter().any(|group| {
+        group.is_row && group.start == 2 && group.end == 3 && group.level == 1 && group.hidden
+    }));
 }
 
 #[test]

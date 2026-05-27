@@ -10,7 +10,7 @@ use super::{
 };
 use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use crate::infra::opc::opc_target_to_zip_path;
+use crate::infra::opc::resolve_relationship_target;
 use crate::write::{SharedStringsWriter, SheetWriter};
 
 pub(super) struct BuiltSheetParts {
@@ -431,18 +431,8 @@ pub(super) fn build_sheet_parts(
                 .and_then(|ctx| ctx.sheets.get(sheet_idx))
                 .map(|sheet_rt| {
                     // Identify the comment VML path by matching legacyDrawing r:id
-                    let comment_vml_path: Option<String> =
-                        if comments_have_imported_identity(sheet_data) {
-                            sheet_rt.legacy_drawing_r_id.as_ref().and_then(|rid| {
-                                sheet_rt
-                                    .sheet_opc_rels
-                                    .iter()
-                                    .find(|r| &r.id == rid && r.rel_type.ends_with("/vmlDrawing"))
-                                    .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
-                            })
-                        } else {
-                            None
-                        };
+                    let comment_vml_path =
+                        imported_comment_vml_path_for_export(sheet_idx, sheet_data, sheet_rt);
                     let hf_vml_parsed = (!sheet_data.hf_images.is_empty())
                         .then(|| {
                             header_footer_vml_from_opaque_subgraphs(
@@ -539,6 +529,33 @@ fn current_sheet_has_imported_drawing_identity(sheet_data: &domain_types::SheetD
             .floating_objects
             .iter()
             .any(floating_object_has_imported_drawing_identity)
+}
+
+fn imported_comment_vml_path_for_export(
+    sheet_idx: usize,
+    sheet_data: &domain_types::SheetData,
+    sheet_rt: &domain_types::SheetRoundTripContext,
+) -> Option<String> {
+    if !comments_have_imported_identity(sheet_data) {
+        return None;
+    }
+    let legacy_drawing_r_id = sheet_rt.legacy_drawing_r_id.as_ref()?;
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    let path = sheet_rt
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| {
+            &rel.id == legacy_drawing_r_id
+                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.target_mode.as_deref() != Some("External")
+        })
+        .and_then(|rel| resolve_relationship_target(Some(&owner_path), &rel.target).ok())
+        .map(|path| normalize_path(&path))?;
+    sheet_rt
+        .raw_vml_drawings
+        .iter()
+        .any(|vml| normalize_path(&vml.path) == path)
+        .then_some(path)
 }
 
 fn floating_object_has_imported_drawing_identity(

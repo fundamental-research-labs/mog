@@ -1622,6 +1622,92 @@ fn generated_comment_does_not_reuse_stale_comment_sidecar_identity_by_sheet_inde
 }
 
 #[test]
+fn imported_comment_vml_path_requires_internal_imported_vml_part() {
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "MissingRawVml".to_string(),
+            comments: vec![Comment {
+                cell_ref: "A1".to_string(),
+                author: "Tester".to_string(),
+                content: Some("Comment with stale missing VML target".to_string()),
+                comment_type: CommentType::Note,
+                shape_id: Some(1025),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        SheetData {
+            name: "ExternalVml".to_string(),
+            comments: vec![Comment {
+                cell_ref: "A1".to_string(),
+                author: "Tester".to_string(),
+                content: Some("Comment with external stale VML target".to_string()),
+                comment_type: CommentType::Note,
+                shape_id: Some(1026),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    ]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![
+            domain_types::SheetRoundTripContext {
+                sheet_opc_rels: vec![domain_types::OpcRelationship {
+                    id: "rIdStaleVml".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing9.vml".to_string(),
+                    target_mode: None,
+                }],
+                legacy_drawing_r_id: Some("rIdStaleVml".to_string()),
+                ..Default::default()
+            },
+            domain_types::SheetRoundTripContext {
+                sheet_opc_rels: vec![domain_types::OpcRelationship {
+                    id: "rIdExternalVml".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "https://example.invalid/vmlDrawing.vml".to_string(),
+                    target_mode: Some("External".to_string()),
+                }],
+                legacy_drawing_r_id: Some("rIdExternalVml".to_string()),
+                raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                    path: "xl/drawings/vmlDrawing8.vml".to_string(),
+                    data: b"<xml><externalVmlSentinel/></xml>".to_vec(),
+                    rels: None,
+                }],
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet1_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let sheet2_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet2.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/drawings/vmlDrawing1.vml"));
+    assert!(archive.contains("xl/drawings/vmlDrawing2.vml"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing8.vml"));
+    assert!(!archive.contains("xl/drawings/vmlDrawing9.vml"));
+    assert!(sheet1_rels.contains("Target=\"../drawings/vmlDrawing1.vml\""));
+    assert!(sheet2_rels.contains("Target=\"../drawings/vmlDrawing2.vml\""));
+    assert!(!sheet1_rels.contains("vmlDrawing9.vml"));
+    assert!(!sheet2_rels.contains("example.invalid"));
+    assert!(!sheet2_rels.contains("vmlDrawing8.vml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_hyperlink_relationship_uses_graph_resolved_id() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

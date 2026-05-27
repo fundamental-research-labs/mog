@@ -10,6 +10,7 @@
 
 #![allow(clippy::string_slice)]
 
+mod chart_auxiliary;
 mod doc_props;
 mod external_links;
 mod metadata;
@@ -611,7 +612,6 @@ pub fn write_xlsx_from_parse_output(
         // global counter AFTER successful deserialization to keep them aligned.
         let mut chart_entries_for_sheet: Vec<ChartEntry> = Vec::new();
         let sheet_rt_for_charts = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-        let mut chart_local_idx: usize = 0;
         for (source_idx, chart_spec) in sheet_data.charts.iter().enumerate() {
             if chart_spec.is_chart_ex {
                 continue; // handled by ChartEx pipeline below
@@ -636,15 +636,8 @@ pub fn write_xlsx_from_parse_output(
             // the sequential counter (which would produce chart1.xml).
             let original_idx = chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
-                    sheet_rt_for_charts
-                        .and_then(|srt| srt.chart_auxiliary_data.get(chart_local_idx))
-                        .and_then(|aux| aux.original_path.as_ref())
-                        .and_then(|path| {
-                            // Extract number from "xl/charts/chart{N}.xml"
-                            let fname = path.rsplit('/').next()?;
-                            let num_str = fname.strip_prefix("chart")?.strip_suffix(".xml")?;
-                            num_str.parse::<usize>().ok()
-                        })
+                    chart_auxiliary::standard_chart_auxiliary_data(sheet_rt_for_charts, chart_spec)
+                        .and_then(chart_auxiliary::standard_chart_number)
                 })
                 .flatten();
             let idx = if let Some(orig) = original_idx {
@@ -663,14 +656,12 @@ pub fn write_xlsx_from_parse_output(
                 source_idx,
                 xml: chart_xml,
             });
-            chart_local_idx += 1;
         }
         let has_charts = !chart_entries_for_sheet.is_empty();
         all_chart_entries.push(chart_entries_for_sheet);
 
         // ── ChartEx (per-sheet) ─────────────────────────────────────────
         let mut chart_ex_entries_for_sheet: Vec<ChartExEntry> = Vec::new();
-        let mut chart_ex_local_idx: usize = 0;
         for (source_idx, chart_spec) in sheet_data.charts.iter().enumerate() {
             if !chart_spec.is_chart_ex {
                 continue;
@@ -684,14 +675,8 @@ pub fn write_xlsx_from_parse_output(
             // Preserve original chartEx number from round-trip context when available.
             let original_idx = chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
-                    sheet_rt_for_charts
-                        .and_then(|srt| srt.chart_ex_auxiliary_data.get(chart_ex_local_idx))
-                        .and_then(|aux| aux.original_path.as_ref())
-                        .and_then(|path| {
-                            let fname = path.rsplit('/').next()?;
-                            let num_str = fname.strip_prefix("chartEx")?.strip_suffix(".xml")?;
-                            num_str.parse::<usize>().ok()
-                        })
+                    chart_auxiliary::chart_ex_auxiliary_data(sheet_rt_for_charts, chart_spec)
+                        .and_then(chart_auxiliary::chart_ex_number)
                 })
                 .flatten();
             let idx = if let Some(orig) = original_idx {
@@ -709,7 +694,6 @@ pub fn write_xlsx_from_parse_output(
                 source_idx,
                 xml: chart_ex_xml,
             });
-            chart_ex_local_idx += 1;
         }
         let has_chart_ex = !chart_ex_entries_for_sheet.is_empty();
         all_chart_ex_entries.push(chart_ex_entries_for_sheet);
@@ -1827,7 +1811,7 @@ pub fn write_xlsx_from_parse_output(
     }
     let mut registered_chart_auxiliary_parts = std::collections::BTreeSet::new();
     for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
-        for (local_idx, entry) in chart_entries.iter().enumerate() {
+        for entry in chart_entries {
             let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
             crate::write::package_graph::register_chart(
                 &mut package_graph_builder,
@@ -1835,9 +1819,10 @@ pub fn write_xlsx_from_parse_output(
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
             if chart_allows_auxiliary_replay(chart_spec)
-                && let Some(aux) = round_trip_ctx
-                    .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                    .and_then(|srt| srt.chart_auxiliary_data.get(local_idx))
+                && let Some(aux) = chart_auxiliary::standard_chart_auxiliary_data(
+                    round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)),
+                    chart_spec,
+                )
             {
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
@@ -1892,7 +1877,7 @@ pub fn write_xlsx_from_parse_output(
         }
     }
     for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
-        for (local_idx, entry) in chart_ex_entries.iter().enumerate() {
+        for entry in chart_ex_entries {
             let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
             crate::write::package_graph::register_chart_ex(
                 &mut package_graph_builder,
@@ -1900,9 +1885,10 @@ pub fn write_xlsx_from_parse_output(
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
             if chart_allows_auxiliary_replay(chart_spec)
-                && let Some(aux) = round_trip_ctx
-                    .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                    .and_then(|srt| srt.chart_ex_auxiliary_data.get(local_idx))
+                && let Some(aux) = chart_auxiliary::chart_ex_auxiliary_data(
+                    round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)),
+                    chart_spec,
+                )
             {
                 let auxiliary_paths: std::collections::BTreeSet<_> = aux
                     .auxiliary_files
@@ -2834,7 +2820,7 @@ pub fn write_xlsx_from_parse_output(
         for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
             let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
 
-            for (local_idx, entry) in chart_entries.iter().enumerate() {
+            for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
                 zip.add_file(&chart_path, entry.xml.clone());
 
@@ -2842,18 +2828,17 @@ pub fn write_xlsx_from_parse_output(
                 // when the current chart still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
                 if chart_allows_auxiliary_replay(chart_spec)
-                    && let Some(srt) = sheet_rt
+                    && let Some(aux) =
+                        chart_auxiliary::standard_chart_auxiliary_data(sheet_rt, chart_spec)
                 {
-                    if let Some(aux) = srt.chart_auxiliary_data.get(local_idx) {
-                        // Write auxiliary files (style, colors XML) preserving their original paths.
-                        for aux_file in &aux.auxiliary_files {
-                            if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                                &aux_file.path,
-                            ) {
-                                continue;
-                            }
-                            zip.add_file(&aux_file.path, aux_file.data.clone());
+                    // Write auxiliary files (style, colors XML) preserving their original paths.
+                    for aux_file in &aux.auxiliary_files {
+                        if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                            &aux_file.path,
+                        ) {
+                            continue;
                         }
+                        zip.add_file(&aux_file.path, aux_file.data.clone());
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
@@ -2872,7 +2857,7 @@ pub fn write_xlsx_from_parse_output(
         for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
             let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
 
-            for (local_idx, entry) in chart_ex_entries.iter().enumerate() {
+            for entry in chart_ex_entries {
                 let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
                 zip.add_file(&chart_path, entry.xml.clone());
 
@@ -2880,17 +2865,16 @@ pub fn write_xlsx_from_parse_output(
                 // still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
                 if chart_allows_auxiliary_replay(chart_spec)
-                    && let Some(srt) = sheet_rt
+                    && let Some(aux) =
+                        chart_auxiliary::chart_ex_auxiliary_data(sheet_rt, chart_spec)
                 {
-                    if let Some(aux) = srt.chart_ex_auxiliary_data.get(local_idx) {
-                        for aux_file in &aux.auxiliary_files {
-                            if !crate::write::package_graph::is_supported_chart_auxiliary_part(
-                                &aux_file.path,
-                            ) {
-                                continue;
-                            }
-                            zip.add_file(&aux_file.path, aux_file.data.clone());
+                    for aux_file in &aux.auxiliary_files {
+                        if !crate::write::package_graph::is_supported_chart_auxiliary_part(
+                            &aux_file.path,
+                        ) {
+                            continue;
                         }
+                        zip.add_file(&aux_file.path, aux_file.data.clone());
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(

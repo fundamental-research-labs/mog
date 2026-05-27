@@ -3898,31 +3898,64 @@ fn table_formula_body_cells_export_as_cached_values_only() {
     assert!(!sheet_xml.contains("<f>TABLE("));
 }
 
+fn chart_auxiliary_data(chart_num: usize) -> domain_types::ChartAuxiliaryData {
+    domain_types::ChartAuxiliaryData {
+        auxiliary_files: vec![
+            domain_types::BlobPart {
+                path: format!("xl/charts/style{chart_num}.xml"),
+                data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
+                    .to_vec(),
+            },
+            domain_types::BlobPart {
+                path: format!("xl/charts/vendor{chart_num}.xml"),
+                data: b"<vendor:chartSidecar/>".to_vec(),
+            },
+        ],
+        chart_rels: Some(
+            format!(
+                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style{chart_num}.xml"/><Relationship Id="rId10" Type="http://example.com/vendorChartSidecar" Target="vendor{chart_num}.xml"/></Relationships>"#
+            )
+            .into_bytes(),
+        ),
+        original_path: Some(format!("xl/charts/chart{chart_num}.xml")),
+    }
+}
+
 fn chart_auxiliary_roundtrip_context() -> domain_types::RoundTripContext {
     domain_types::RoundTripContext {
         sheets: vec![domain_types::SheetRoundTripContext {
-            chart_auxiliary_data: vec![domain_types::ChartAuxiliaryData {
-                auxiliary_files: vec![
-                    domain_types::BlobPart {
-                        path: "xl/charts/style9.xml".to_string(),
-                        data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
-                            .to_vec(),
-                    },
-                    domain_types::BlobPart {
-                        path: "xl/charts/vendor9.xml".to_string(),
-                        data: b"<vendor:chartSidecar/>".to_vec(),
-                    },
-                ],
-                chart_rels: Some(
-                    br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style9.xml"/><Relationship Id="rId10" Type="http://example.com/vendorChartSidecar" Target="vendor9.xml"/></Relationships>"#
-                        .to_vec(),
-                ),
-                original_path: Some("xl/charts/chart9.xml".to_string()),
-            }],
+            chart_auxiliary_data: vec![chart_auxiliary_data(9)],
             ..Default::default()
         }],
         ..Default::default()
     }
+}
+
+fn chart_auxiliary_roundtrip_context_with_charts(
+    chart_nums: &[usize],
+) -> domain_types::RoundTripContext {
+    domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            chart_auxiliary_data: chart_nums
+                .iter()
+                .copied()
+                .map(chart_auxiliary_data)
+                .collect(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+fn with_chart_identity(mut chart: ChartSpec, target: &str) -> ChartSpec {
+    chart.chart_frame = Some(
+        domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps {
+            relationship_target: Some(target.to_string()),
+            relationship_id: Some("rId9".to_string()),
+            ..Default::default()
+        },
+    );
+    chart
 }
 
 #[test]
@@ -4028,6 +4061,7 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
     );
+    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -4060,6 +4094,51 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     assert!(chart_rels.contains(r#"Id="rId9""#));
     assert!(chart_rels.contains(r#"Target="style9.xml""#));
     assert!(!chart_rels.contains("vendor9.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_prior_chart() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+    let ctx = chart_auxiliary_roundtrip_context_with_charts(&[5, 9]);
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart9.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/charts/chart9.xml"));
+    assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/chart5.xml"));
+    assert!(!archive.contains("xl/charts/style5.xml"));
+    assert!(content_types.contains("/xl/charts/style9.xml"));
+    assert!(!content_types.contains("/xl/charts/style5.xml"));
+    assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    assert!(!chart_rels.contains("style5.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

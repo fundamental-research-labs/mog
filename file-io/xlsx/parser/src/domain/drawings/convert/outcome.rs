@@ -1,6 +1,7 @@
 //! Structured drawing conversion outcomes and relationship dependency discovery.
 
 use super::{read, write};
+use crate::domain::drawings::reader::raw::relationship_ids_in_raw;
 use ooxml_types::drawings as ooxml;
 
 /// Structured result of converting parsed drawing content into writer input.
@@ -95,22 +96,6 @@ pub(crate) fn relationship_ids_for_non_visual(props: &read::NonVisualProps) -> V
             .as_ref()
             .and_then(|hyperlink| hyperlink.r_id.as_deref()),
     );
-    dedupe_relationship_ids(ids)
-}
-
-pub(crate) fn relationship_ids_in_raw(xml: &str) -> Vec<String> {
-    let bytes = xml.as_bytes();
-    let mut ids = Vec::new();
-    let mut pos = 0;
-    while let Some(attr_pos) = memchr::memmem::find(&bytes[pos..], b"r:id=\"") {
-        let value_start = pos + attr_pos + b"r:id=\"".len();
-        if let Some(end) = memchr::memchr(b'"', &bytes[value_start..]) {
-            ids.push(String::from_utf8_lossy(&bytes[value_start..value_start + end]).to_string());
-            pos = value_start + end + 1;
-        } else {
-            break;
-        }
-    }
     dedupe_relationship_ids(ids)
 }
 

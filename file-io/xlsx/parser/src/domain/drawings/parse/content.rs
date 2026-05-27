@@ -8,6 +8,7 @@ use super::super::reader::attrs::attr_value;
 use super::super::reader::elements::direct_child;
 use super::super::reader::raw::{
     contains_graphic_frame, direct_alternate_content_raw, extract_element_raw_string,
+    relationship_ids_in_raw,
 };
 use super::super::types::{DrawingContent, SpreadsheetGraphicFrame};
 use super::connectors::parse_connector;
@@ -179,22 +180,6 @@ pub(crate) fn parse_drawing_content(xml: &[u8]) -> DrawingContent {
     dispatched.content
 }
 
-fn relationship_ids_in_raw(xml: &str) -> Vec<String> {
-    let bytes = xml.as_bytes();
-    let mut ids = Vec::new();
-    let mut pos = 0;
-    while let Some(attr_pos) = memchr::memmem::find(&bytes[pos..], b"r:id=\"") {
-        let value_start = pos + attr_pos + b"r:id=\"".len();
-        if let Some(end) = memchr::memchr(b'"', &bytes[value_start..]) {
-            ids.push(String::from_utf8_lossy(&bytes[value_start..value_start + end]).to_string());
-            pos = value_start + end + 1;
-        } else {
-            break;
-        }
-    }
-    ids
-}
-
 fn classify_direct_graphic_frame(raw_xml: &str) -> DispatchKind {
     const CHART_URI: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
     if raw_xml.contains(CHART_URI) {
@@ -269,10 +254,10 @@ mod tests {
 
     #[test]
     fn direct_slicer_like_graphic_frame_is_classified_opaque() {
-        let xml = br#"<xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="7" name="Slicer"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2010/slicer"><sle:slicer r:id="rId9"/></a:graphicData></a:graphic></xdr:graphicFrame></xdr:twoCellAnchor>"#;
+        let xml = br#"<xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="7" name="Slicer"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2010/slicer"><sle:slicer r:id="rId9" r:embed="rIdMedia"/></a:graphicData></a:graphic></xdr:graphicFrame></xdr:twoCellAnchor>"#;
         let dispatched = dispatch_drawing_content(xml);
         assert_eq!(dispatched.result.kind, DispatchKind::SlicerGraphicFrame);
         assert_eq!(dispatched.result.preservation, Preservation::OpaqueRawXml);
-        assert_eq!(dispatched.result.relationship_ids, ["rId9"]);
+        assert_eq!(dispatched.result.relationship_ids, ["rId9", "rIdMedia"]);
     }
 }

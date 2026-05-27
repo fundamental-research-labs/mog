@@ -1273,7 +1273,7 @@ mod tests {
     fn conversion_outcome_reports_opaque_graphic_frame_relationships() {
         let frame = ReadGF {
             graphic_xml: Some(
-                r#"<xdr:graphicFrame><a:graphic><a:graphicData><ext r:id="rId9"/></a:graphicData></a:graphic></xdr:graphicFrame>"#
+                r#"<xdr:graphicFrame><a:graphic><a:graphicData><ext r:id="rId9" r:embed="rIdMedia" r:link="rIdExternal"/></a:graphicData></a:graphic></xdr:graphicFrame>"#
                     .into(),
             ),
             ..Default::default()
@@ -1282,7 +1282,10 @@ mod tests {
         let outcome = convert_drawing_content_with_outcome(&DrawingContent::GraphicFrame(frame));
 
         assert_eq!(outcome.status, ConversionStatus::OpaquePassthrough);
-        assert_eq!(outcome.relationship_ids, ["rId9"]);
+        assert_eq!(
+            outcome.relationship_ids,
+            ["rId9", "rIdMedia", "rIdExternal"]
+        );
         assert!(matches!(
             outcome.object,
             Some(write::DrawingObject::GraphicFrame(_))

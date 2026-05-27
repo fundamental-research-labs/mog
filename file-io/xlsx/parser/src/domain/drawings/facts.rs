@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use super::reader::raw::relationship_ids_in_raw;
 use super::types::{
     AbsoluteAnchor, Anchor, BulletColor, BulletProperties, BulletSize, BulletType, CellAnchor,
     ClientData, Drawing, DrawingColor, DrawingContent, Fill, FillMode, GroupShape, Hyperlink,
@@ -193,7 +194,10 @@ fn graphic_frame_fact(
     GraphicFrameFact {
         name: frame.nv_graphic_frame_pr.c_nv_pr.name.clone(),
         classification: classify_graphic_frame(raw),
-        relationship_targets: resolve_ids(relationship_ids_in_raw(raw), rel_targets),
+        relationship_targets: resolve_ids(
+            relationship_ids_in_raw(raw).iter().map(String::as_str),
+            rel_targets,
+        ),
         opaque_preserved: frame.graphic_xml.is_some(),
     }
 }
@@ -622,37 +626,6 @@ where
         }
     }
     targets
-}
-
-fn relationship_ids_in_raw(xml: &str) -> Vec<&str> {
-    const RELATIONSHIP_ATTRIBUTES: [&str; 7] =
-        ["r:id", "r:embed", "r:link", "r:dm", "r:lo", "r:qs", "r:cs"];
-
-    let mut ids = Vec::new();
-    let mut offset = 0;
-    while let Some(pos) = xml[offset..].find("r:") {
-        let attr_start = offset + pos;
-        let candidate = &xml[attr_start..];
-        let Some(eq) = candidate.find('=') else {
-            break;
-        };
-        let attr = candidate[..eq].trim_end();
-        let value = &candidate[eq + 1..];
-        if RELATIONSHIP_ATTRIBUTES.contains(&attr) && value.starts_with('"') {
-            let value = &value[1..];
-            let Some(end) = value.find('"') else {
-                break;
-            };
-            let id = &value[..end];
-            if !ids.contains(&id) {
-                ids.push(id);
-            }
-            offset = attr_start + eq + 2 + end;
-        } else {
-            offset = attr_start + 2;
-        }
-    }
-    ids
 }
 
 #[cfg(test)]

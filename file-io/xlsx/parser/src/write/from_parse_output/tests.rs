@@ -1020,6 +1020,95 @@ fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
 }
 
 #[test]
+fn duplicate_original_worksheet_relationship_ids_do_not_leak_to_generated_relationships() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        comments: vec![Comment {
+            cell_ref: "A1".to_string(),
+            author: "Tester".to_string(),
+            content: Some("Header comment".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        tables: vec![TableSpec {
+            id: 1,
+            name: "Table1".to_string(),
+            display_name: "Table1".to_string(),
+            range_ref: "A1:B2".to_string(),
+            has_headers: true,
+            auto_filter_ref: Some("A1:B2".to_string()),
+            columns: vec![
+                TableColumnSpec {
+                    name: "A".to_string(),
+                    ..Default::default()
+                },
+                TableColumnSpec {
+                    name: "B".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![
+                domain_types::OpcRelationship {
+                    id: "rId4".to_string(),
+                    rel_type: REL_COMMENTS.to_string(),
+                    target: "../comments1.xml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId5".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing1.vml".to_string(),
+                    target_mode: None,
+                },
+                domain_types::OpcRelationship {
+                    id: "rId4".to_string(),
+                    rel_type: REL_TABLE.to_string(),
+                    target: "../tables/table1.xml".to_string(),
+                    target_mode: None,
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels_bytes = archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .unwrap();
+    let rels = crate::domain::workbook::read::parse_all_rels(&sheet_rels_bytes);
+    let comments_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_COMMENTS && rel.target == "../comments1.xml")
+        .expect("comments relationship should be emitted");
+    let vml_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_VML_DRAWING && rel.target == "../drawings/vmlDrawing1.vml")
+        .expect("VML relationship should be emitted");
+    let table_rel = rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_TABLE && rel.target == "../tables/table1.xml")
+        .expect("table relationship should be emitted");
+    let unique_ids: std::collections::BTreeSet<_> = rels.iter().map(|rel| &rel.id).collect();
+
+    assert_eq!(unique_ids.len(), rels.len());
+    assert_eq!(comments_rel.id, "rId4");
+    assert_ne!(table_rel.id, comments_rel.id);
+    assert!(sheet_xml.contains(&format!("<legacyDrawing r:id=\"{}\"/>", vml_rel.id)));
+    assert!(sheet_xml.contains(&format!("<tablePart r:id=\"{}\"/>", table_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_table_sidecar_relationships_are_not_replayed() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

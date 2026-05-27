@@ -2540,6 +2540,15 @@ pub fn write_xlsx_from_parse_output(
         workbook_writer.set_external_reference_r_ids(external_reference_r_ids);
     }
 
+    for sheet_idx in 0..output.sheets.len() {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let rels = package_graph.relationship_manager_for_owner(&owner);
+        sheet_rels_data[sheet_idx] = (!rels.is_empty()).then_some(rels);
+    }
+
     let workbook_rels_xml = workbook_rels.to_xml();
     let workbook_xml = workbook_writer.to_xml();
 

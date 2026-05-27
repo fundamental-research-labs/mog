@@ -615,6 +615,63 @@ fn clean_worksheet_custom_properties_use_graph_registered_parts_and_resolved_ids
 }
 
 #[test]
+fn worksheet_custom_properties_xml_uses_graph_resolved_relationship_id_after_collision() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![Hyperlink {
+            cell_ref: "A1".to_string(),
+            target: Some("https://example.com".to_string()),
+            display: Some("Example".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId1".to_string(),
+                rel_type: worksheet_custom_properties::REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+                target: "../customProperty/item1.xml".to_string(),
+                target_mode: None,
+            }],
+            custom_properties_xml: Some(
+                r#"<customProperties><customPr r:id="rId1" name="CleanProperty"/></customProperties>"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/customProperty/item1.xml".to_string(),
+            worksheet_custom_properties::CT_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+        )],
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/customProperty/item1.xml".to_string(),
+            data: b"<customProperty/>".to_vec(),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_xml.contains(r#"<hyperlink ref="A1" r:id="rId1""#));
+    assert!(sheet_xml.contains(r#"<customPr r:id="rId2" name="CleanProperty"/>"#));
+    assert!(sheet_rels.contains(r#"Id="rId1""#));
+    assert!(sheet_rels.contains(r#"Target="https://example.com" TargetMode="External""#));
+    assert!(sheet_rels.contains(r#"Id="rId2""#));
+    assert!(sheet_rels.contains(r#"Target="../customProperty/item1.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn external_worksheet_custom_property_relationship_is_not_rewritten_as_internal_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -896,6 +953,93 @@ fn stale_table_sidecar_relationships_are_not_replayed() {
     assert!(sheet_xml.contains("<tablePart r:id=\"rId4\"/>"));
     assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
     assert!(!content_types.contains("queryTable+xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn mutated_table_spec_regenerates_table_package_parts_from_current_model() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        tables: vec![TableSpec {
+            id: 1,
+            name: "Table1".to_string(),
+            display_name: "Table1".to_string(),
+            range_ref: "A1:C4".to_string(),
+            has_headers: true,
+            auto_filter_ref: Some("A1:C4".to_string()),
+            columns: vec![
+                TableColumnSpec {
+                    id: 1,
+                    name: "A".to_string(),
+                    ..Default::default()
+                },
+                TableColumnSpec {
+                    id: 2,
+                    name: "B".to_string(),
+                    ..Default::default()
+                },
+                TableColumnSpec {
+                    id: 3,
+                    name: "C".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rId4".to_string(),
+                rel_type: crate::write::REL_TABLE.to_string(),
+                target: "../tables/table9.xml".to_string(),
+                target_mode: None,
+            }],
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0legacyDrawing\0tableParts".to_string(),
+                r#"<tableParts count="1"><tablePart r:id="rIdStale"/></tableParts>"#.to_string(),
+            )],
+            table_xml_passthroughs: vec![domain_types::BlobPart {
+                path: "xl/tables/table9.xml".to_string(),
+                data: br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="9" name="Table1" displayName="Table1" ref="A1:B2"><autoFilter ref="A1:B2"/><tableColumns count="2"><tableColumn id="1" name="OldA"/><tableColumn id="2" name="OldB"/></tableColumns></table>"#
+                    .to_vec(),
+            }],
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/tables/table9.xml".to_string(),
+            crate::write::CT_TABLE.to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let table_xml = String::from_utf8(archive.read_file("xl/tables/table1.xml").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(sheet_xml.contains("<tableParts count=\"1\"><tablePart r:id=\"rId1\"/></tableParts>"));
+    assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
+    assert!(!sheet_rels.contains("table9.xml"));
+    assert!(table_xml.contains("ref=\"A1:C4\""));
+    assert!(table_xml.contains("<autoFilter ref=\"A1:C4\"/>"));
+    assert!(table_xml.contains("<tableColumns count=\"3\">"));
+    assert!(table_xml.contains("name=\"C\""));
+    assert!(!table_xml.contains("A1:B2"));
+    assert!(!table_xml.contains("OldA"));
+    assert!(!archive.contains("xl/tables/table9.xml"));
+    assert!(content_types.contains("PartName=\"/xl/tables/table1.xml\""));
+    assert!(!content_types.contains("PartName=\"/xl/tables/table9.xml\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

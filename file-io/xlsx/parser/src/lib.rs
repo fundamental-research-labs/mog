@@ -165,10 +165,13 @@ pub use write::{
 // =============================================================================
 
 pub use domain::controls::read::{
-    ActiveXControl, AnchorSource, CheckState, ControlAnchor, FormControl, FormControlProperties,
-    FormControlType, ModernAnchorResult, OleObject, WorksheetControl, WorksheetControls,
     extract_vml_shape_number, parse_vml_imagedata, parse_worksheet_controls,
     parse_worksheet_controls_from_xml,
+};
+pub use domain::controls::types::{
+    ActiveXControl, AnchorSource, CheckState, ControlAnchor, FormControl, FormControlProperties,
+    FormControlType, ModernAnchorResult, OleObject, WorksheetControl, WorksheetControlRef,
+    WorksheetControls,
 };
 pub use domain::external::ExternalLinks;
 pub use domain::hyperlinks::{

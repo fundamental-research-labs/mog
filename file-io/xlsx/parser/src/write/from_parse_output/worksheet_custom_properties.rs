@@ -48,6 +48,13 @@ pub(super) fn custom_properties_for_export(
         let rel = sheet_rt.sheet_opc_rels.iter().find(|rel| {
             rel.id == relationship_id && rel.rel_type == REL_WORKSHEET_CUSTOM_PROPERTY
         })?;
+        if rel
+            .target_mode
+            .as_deref()
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
+        {
+            return None;
+        }
         let path = custom_property_part_path(sheet_idx, rel)?;
         let blob = blob_by_path.get(path.as_str())?;
         if content_types.get(path.as_str()).copied() != Some(CT_WORKSHEET_CUSTOM_PROPERTY) {

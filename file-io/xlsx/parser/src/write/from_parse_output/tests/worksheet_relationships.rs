@@ -528,6 +528,51 @@ fn clean_worksheet_custom_properties_use_graph_registered_parts_and_resolved_ids
 }
 
 #[test]
+fn external_worksheet_custom_property_relationship_is_not_rewritten_as_internal_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            sheet_opc_rels: vec![domain_types::OpcRelationship {
+                id: "rIdCustom".to_string(),
+                rel_type: worksheet_custom_properties::REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+                target: "../customProperty/item1.xml".to_string(),
+                target_mode: Some("External".to_string()),
+            }],
+            custom_properties_xml: Some(
+                r#"<customProperties><customPr r:id="rIdCustom" name="ExternalProperty"/></customProperties>"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        content_type_overrides: vec![(
+            "/xl/customProperty/item1.xml".to_string(),
+            worksheet_custom_properties::CT_WORKSHEET_CUSTOM_PROPERTY.to_string(),
+        )],
+        binary_blobs: vec![domain_types::BlobPart {
+            path: "xl/customProperty/item1.xml".to_string(),
+            data: b"<customProperty/>".to_vec(),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert!(!sheet_xml.contains("<customProperties"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert!(!archive.contains("xl/customProperty/item1.xml"));
+    assert!(!content_types.contains("/xl/customProperty/item1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

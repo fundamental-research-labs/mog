@@ -4,7 +4,10 @@ use domain_types::{
 };
 use std::collections::{HashMap, HashSet};
 
-use super::package_graph::{PackageGraphBuilder, ResolvedPackageGraph};
+use super::package_graph::{
+    OpaquePackageOwnershipState, PackageGraphBuilder, PackagePart, PackagePartKind,
+    ResolvedPackageGraph,
+};
 use super::write_error::WriteError;
 use super::zip_writer::ZipWriter;
 use crate::domain::content_types::write::{CT_PIVOT_CACHE, CT_PIVOT_TABLE};
@@ -28,6 +31,34 @@ pub fn register_round_trip_opaque_subgraphs(
     Ok(())
 }
 
+pub fn register_round_trip_opaque_parts(
+    graph: &mut PackageGraphBuilder,
+    round_trip_ctx: Option<&RoundTripContext>,
+    output: &domain_types::ParseOutput,
+) -> Result<(), WriteError> {
+    for subgraph in opaque_subgraphs(round_trip_ctx, output) {
+        if !emits_opaque_part(subgraph.ownership) {
+            continue;
+        }
+        for part in &subgraph.parts {
+            if !emits_opaque_part(part.ownership) {
+                continue;
+            }
+            graph.register_opaque_part(
+                PackagePart {
+                    path: normalize_path(&part.part.path),
+                    content_type: part.content_type.clone(),
+                    default_extension: part.default_extension.clone(),
+                    kind: PackagePartKind::OpaqueClean,
+                    bytes: Some(part.part.data.clone()),
+                },
+                OpaquePackageOwnershipState::Clean,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 pub fn write_opaque_parts(zip: &mut ZipWriter, graph: &ResolvedPackageGraph) {
     for (path, bytes) in graph.raw_opaque_parts() {
         zip.add_file(path, bytes.to_vec());
@@ -35,6 +66,13 @@ pub fn write_opaque_parts(zip: &mut ZipWriter, graph: &ResolvedPackageGraph) {
     for (path, bytes) in graph.opaque_relationship_parts() {
         zip.add_file(&path, bytes);
     }
+}
+
+fn emits_opaque_part(ownership: OpaquePackageOwnership) -> bool {
+    matches!(
+        ownership,
+        OpaquePackageOwnership::CleanImported | OpaquePackageOwnership::OrphanCleanPackageData
+    )
 }
 
 fn opaque_subgraphs(

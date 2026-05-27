@@ -126,7 +126,11 @@ pub(super) fn has_clean_opaque_part(round_trip_ctx: Option<&RoundTripContext>, p
     };
     let normalized = path.trim_start_matches('/');
     ctx.opaque_package_subgraphs.iter().any(|subgraph| {
-        subgraph.parts.iter().any(|part| {
+        matches!(
+            subgraph.ownership,
+            domain_types::OpaquePackageOwnership::CleanImported
+                | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
+        ) && subgraph.parts.iter().any(|part| {
             part.part.path.trim_start_matches('/') == normalized
                 && matches!(
                     part.ownership,
@@ -1209,6 +1213,11 @@ pub fn write_xlsx_from_parse_output(
             entry.relationship_id_hint.as_deref(),
         )?;
     }
+    crate::write::opaque_subgraph::register_round_trip_opaque_parts(
+        &mut package_graph_builder,
+        round_trip_ctx,
+        output,
+    )?;
     for extras in &sheet_extras {
         let Some(hf) = &extras.hf_vml else {
             continue;
@@ -1219,7 +1228,7 @@ pub fn write_xlsx_from_parse_output(
             else {
                 continue;
             };
-            if has_clean_opaque_part(round_trip_ctx, &target_path) {
+            if package_graph_builder.contains_part(&target_path) {
                 crate::write::package_graph::register_part_image_relationship(
                     &mut package_graph_builder,
                     &hf.vml_path,

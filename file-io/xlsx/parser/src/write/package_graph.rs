@@ -390,6 +390,10 @@ impl PackageGraphBuilder {
         self.relationships.push(relationship);
     }
 
+    pub fn contains_part(&self, path: &str) -> bool {
+        self.parts.contains_key(&normalize_part_path(path))
+    }
+
     pub fn add_opaque_relationship(
         &mut self,
         relationship: PackageRelationship,

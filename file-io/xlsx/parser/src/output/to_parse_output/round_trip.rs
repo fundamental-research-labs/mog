@@ -9,7 +9,7 @@ use domain_types::{
     PivotTablePackage, PivotWorkbookCacheEntry, RoundTripContext, SheetRoundTripContext,
     ThemeColor, ThemeColorSource, ThemeData,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::output::results::FullParseResult;
 
@@ -455,6 +455,9 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
 fn build_opaque_package_subgraphs(
     custom_xml_parts: &[BlobPart],
     web_extension_parts: &[BlobPart],
+    binary_blobs: &[BlobPart],
+    sheet_contexts: &[SheetRoundTripContext],
+    sheet_data: &[domain_types::SheetData],
     root_relationships: &[ooxml_types::shared::OpcRelationship],
     workbook_relationships: &[ooxml_types::shared::OpcRelationship],
 ) -> Vec<OpaquePackageSubgraph> {
@@ -467,7 +470,115 @@ fn build_opaque_package_subgraphs(
         custom_xml_parts,
         workbook_relationships,
     ));
+    subgraphs.extend(build_worksheet_drawing_opaque_subgraphs(
+        binary_blobs,
+        sheet_contexts,
+        sheet_data,
+    ));
     subgraphs
+}
+
+fn build_worksheet_drawing_opaque_subgraphs(
+    binary_blobs: &[BlobPart],
+    sheet_contexts: &[SheetRoundTripContext],
+    sheet_data: &[domain_types::SheetData],
+) -> Vec<OpaquePackageSubgraph> {
+    let binary_blobs_by_path: HashMap<_, _> = binary_blobs
+        .iter()
+        .map(|part| (normalize_package_path(&part.path), part))
+        .collect();
+
+    sheet_contexts
+        .iter()
+        .enumerate()
+        .filter(|(sheet_idx, _)| {
+            sheet_data
+                .get(*sheet_idx)
+                .is_none_or(|sheet| sheet.charts.is_empty() && sheet.floating_objects.is_empty())
+        })
+        .filter_map(|(sheet_idx, sheet_rt)| {
+            let imported_drawing = sheet_rt.imported_drawing.as_ref()?;
+            let drawing_path = normalize_package_path(&imported_drawing.path);
+            let owner = OpaquePackageOwner::Worksheet {
+                index: sheet_idx,
+                path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+            };
+            let owner_relationship_id_hint =
+                worksheet_drawing_relationship_id_hint(sheet_idx, sheet_rt, &drawing_path)?;
+
+            let mut parts = vec![OpaquePackagePart {
+                part: BlobPart {
+                    path: drawing_path.clone(),
+                    data: imported_drawing.data.clone(),
+                },
+                content_type: Some(crate::write::CT_DRAWING.to_string()),
+                default_extension: None,
+                ownership: OpaquePackageOwnership::CleanImported,
+            }];
+
+            if let Some(rels) = imported_drawing.rels.as_ref() {
+                for rel in crate::domain::workbook::read::parse_all_rels(&rels.data) {
+                    if rel.target_mode.as_deref() == Some("External") {
+                        continue;
+                    }
+                    let resolved = crate::infra::opc::resolve_relationship_target(
+                        Some(&drawing_path),
+                        &rel.target,
+                    )
+                    .ok()
+                    .map(|path| normalize_package_path(&path))?;
+                    if parts
+                        .iter()
+                        .any(|part| normalize_package_path(&part.part.path) == resolved)
+                    {
+                        continue;
+                    }
+                    let blob = binary_blobs_by_path.get(&resolved)?;
+                    parts.push(binary_opaque_part(blob));
+                }
+            }
+
+            let mut sidecar_parts = parts
+                .iter()
+                .map(|part| part.part.clone())
+                .collect::<Vec<_>>();
+            sidecar_parts.extend(imported_drawing.rels.iter().cloned());
+            let relationships = relationships_from_legacy_sidecars(&sidecar_parts)?;
+
+            Some(OpaquePackageSubgraph {
+                owner: owner.clone(),
+                owner_relationship: OpaquePackageRelationship {
+                    owner,
+                    relationship_type: crate::write::REL_DRAWING.to_string(),
+                    target: OpaqueRelationshipTarget::InternalPart { path: drawing_path },
+                    relationship_id_hint: Some(owner_relationship_id_hint),
+                },
+                parts,
+                relationships,
+                ownership: OpaquePackageOwnership::CleanImported,
+            })
+        })
+        .filter(closed_opaque_subgraph)
+        .collect()
+}
+
+fn worksheet_drawing_relationship_id_hint(
+    sheet_idx: usize,
+    sheet_rt: &SheetRoundTripContext,
+    drawing_path: &str,
+) -> Option<String> {
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    sheet_rt
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| {
+            rel.rel_type == crate::write::REL_DRAWING
+                && rel.target_mode.as_deref() != Some("External")
+                && crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target)
+                    .map(|resolved| normalize_package_path(&resolved) == drawing_path)
+                    .unwrap_or(false)
+        })
+        .map(|rel| rel.id.clone())
 }
 
 fn build_web_extension_opaque_subgraphs(
@@ -606,6 +717,21 @@ fn opaque_part(part: &BlobPart, content_type: Option<String>) -> OpaquePackagePa
     }
 }
 
+fn binary_opaque_part(part: &BlobPart) -> OpaquePackagePart {
+    let path = normalize_package_path(&part.path);
+    OpaquePackagePart {
+        part: BlobPart {
+            path: path.clone(),
+            data: part.data.clone(),
+        },
+        content_type: Some(
+            crate::roundtrip::binary_passthrough::infer_content_type(&path).to_string(),
+        ),
+        default_extension: default_extension_for_path(&path),
+        ownership: OpaquePackageOwnership::CleanImported,
+    }
+}
+
 fn relationship_hint(
     relationships: &[ooxml_types::shared::OpcRelationship],
     relationship_type: &str,
@@ -673,6 +799,32 @@ fn relationships_from_legacy_sidecars(
     Some(relationships)
 }
 
+fn closed_opaque_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
+    let part_paths: HashSet<_> = subgraph
+        .parts
+        .iter()
+        .map(|part| normalize_package_path(&part.part.path))
+        .collect();
+    if let OpaqueRelationshipTarget::InternalPart { path } = &subgraph.owner_relationship.target
+        && !part_paths.contains(&normalize_package_path(path))
+    {
+        return false;
+    }
+    subgraph.relationships.iter().all(|relationship| {
+        if let OpaqueRelationshipTarget::InternalPart { path } = &relationship.target {
+            part_paths.contains(&normalize_package_path(path))
+        } else {
+            true
+        }
+    })
+}
+
+fn default_extension_for_path(path: &str) -> Option<(String, String)> {
+    let extension = path.rsplit_once('.')?.1.to_ascii_lowercase();
+    let content_type = crate::roundtrip::binary_passthrough::infer_content_type(path);
+    Some((extension, content_type.to_string()))
+}
+
 fn is_relationship_part(path: &str) -> bool {
     let path = normalize_package_path(path);
     path.contains("/_rels/") && path.ends_with(".rels")
@@ -696,6 +848,7 @@ fn normalize_package_path(path: &str) -> String {
 
 pub(super) fn build_round_trip_context(
     result: &FullParseResult,
+    sheet_data: &[domain_types::SheetData],
     sheet_contexts: Vec<SheetRoundTripContext>,
 ) -> RoundTripContext {
     let workbook_views = result
@@ -728,9 +881,27 @@ pub(super) fn build_round_trip_context(
                 .collect()
         })
         .unwrap_or_default();
+    let binary_blobs: Vec<BlobPart> = result
+        .extensions
+        .as_ref()
+        .map(|ext| {
+            ext.binary_passthrough
+                .entries()
+                .iter()
+                .filter(|(path, _)| !path.starts_with("xl/webextensions/"))
+                .map(|(path, data)| BlobPart {
+                    path: path.clone(),
+                    data: data.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let opaque_package_subgraphs = build_opaque_package_subgraphs(
         &custom_xml_parts,
         &web_extension_parts,
+        &binary_blobs,
+        &sheet_contexts,
+        sheet_data,
         &result.root_relationships,
         &result.workbook_relationships,
     );
@@ -793,21 +964,7 @@ pub(super) fn build_round_trip_context(
         custom_xml_parts,
         web_extension_parts,
         opaque_package_subgraphs,
-        binary_blobs: result
-            .extensions
-            .as_ref()
-            .map(|ext| {
-                ext.binary_passthrough
-                    .entries()
-                    .iter()
-                    .filter(|(path, _)| !path.starts_with("xl/webextensions/"))
-                    .map(|(path, data)| BlobPart {
-                        path: path.clone(),
-                        data: data.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
+        binary_blobs,
         pivot_package: build_pivot_package_round_trip(result),
         workbook_views,
         extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead

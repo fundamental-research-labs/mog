@@ -351,7 +351,7 @@ pub(crate) fn full_parse_result_to_parse_output(
     };
 
     // 9. Build RoundTripContext
-    let round_trip = build_round_trip_context(result, sheet_rt_vec);
+    let round_trip = build_round_trip_context(result, &parse_output.sheets, sheet_rt_vec);
 
     // 10. Build ParseDiagnostics
     let mut diagnostics = build_diagnostics(result);

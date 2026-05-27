@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use super::fixtures::ZipBuilder;
 use super::helpers::{
     assert_cells_match, cell, formula_cell, make_single_sheet, roundtrip, styled_cell,
 };
@@ -216,6 +217,125 @@ fn assert_roundtrip_partial(original: &ParseOutput, flags: &RoundtripDomainFlags
     }
 
     rt
+}
+
+#[test]
+fn clean_imported_unknown_drawing_roundtrips_as_opaque_subgraph() {
+    let source = imported_unknown_drawing_xlsx();
+    let (output, ctx, _diagnostics) =
+        parse_xlsx_to_output(&source).expect("source XLSX should parse");
+
+    assert!(output.sheets[0].charts.is_empty());
+    assert!(output.sheets[0].floating_objects.is_empty());
+    assert!(
+        ctx.opaque_package_subgraphs.iter().any(|subgraph| {
+            subgraph.owner_relationship.relationship_type == xlsx_parser::write::REL_DRAWING
+        }),
+        "clean imported drawing should lower into an opaque package subgraph"
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx))
+        .expect("opaque drawing export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing7.xml").unwrap()).unwrap();
+    let drawing_rels = String::from_utf8(
+        archive
+            .read_file("xl/drawings/_rels/drawing7.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_xml.contains(r#"<drawing r:id="rIdDrawing"/>"#));
+    assert!(sheet_rels.contains(r#"Id="rIdDrawing""#));
+    assert!(sheet_rels.contains(r#"Target="../drawings/drawing7.xml""#));
+    assert!(drawing_xml.contains("mogOpaqueUnknownDrawing"));
+    assert!(drawing_rels.contains(r#"Id="rIdImage""#));
+    assert!(drawing_rels.contains(r#"Target="../media/image7.png""#));
+    assert_eq!(
+        archive.read_file("xl/media/image7.png").unwrap(),
+        b"opaque image bytes".to_vec()
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+fn imported_unknown_drawing_xlsx() -> Vec<u8> {
+    let mut zip = ZipBuilder::new();
+    zip.add_stored(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/drawings/drawing7.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
+</Types>"#,
+    )
+    .add_stored(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rIdSheet"/>
+  </sheets>
+</workbook>"#,
+    )
+    .add_stored(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetData/>
+  <drawing r:id="rIdDrawing"/>
+</worksheet>"#,
+    )
+    .add_stored(
+        "xl/worksheets/_rels/sheet1.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdDrawing" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing7.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/drawings/drawing7.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
+  <xdr:mogOpaqueUnknownDrawing/>
+</xdr:wsDr>"#,
+    )
+    .add_stored(
+        "xl/drawings/_rels/drawing7.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image7.png"/>
+</Relationships>"#,
+    )
+    .add_stored("xl/media/image7.png", b"opaque image bytes");
+
+    zip.build()
 }
 
 #[test]

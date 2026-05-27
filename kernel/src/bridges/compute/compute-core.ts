@@ -1415,6 +1415,19 @@ export class ComputeCore {
   }
 
   /**
+   * Export the current workbook to XLSX bytes without imported RoundTripContext.
+   *
+   * This is an evaluation-only anti-cheat path: modeled facts should match
+   * normal export while registered opaque subgraphs may differ.
+   */
+  async exportToXlsxBytesContextStripped(): Promise<Uint8Array> {
+    this.ensureInitialized();
+    return this.transport.call<Uint8Array>('compute_export_to_xlsx_bytes_context_stripped', {
+      docId: this.docId,
+    });
+  }
+
+  /**
    * Capture a PNG screenshot of a cell range.
    */
   async captureScreenshot(

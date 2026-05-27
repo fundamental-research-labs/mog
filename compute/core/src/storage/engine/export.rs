@@ -125,13 +125,34 @@ impl YrsComputeEngine {
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
     pub fn export_to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
+        self.write_xlsx_export_result(&result, true)
+    }
 
+    /// Exports the current workbook state without the imported `RoundTripContext`.
+    ///
+    /// This anti-cheat path must agree with normal export for modeled workbook
+    /// facts. Any difference outside registered opaque subgraphs means source
+    /// bytes are still required for modeled correctness.
+    #[bridge::read(scope = "workbook")]
+    #[tracing::instrument(name = "engine_export_to_xlsx_bytes_context_stripped", skip_all)]
+    pub fn export_to_xlsx_bytes_context_stripped(&self) -> Result<Vec<u8>, ComputeError> {
+        let result = self.export_to_parse_output()?;
+        self.write_xlsx_export_result(&result, false)
+    }
+
+    fn write_xlsx_export_result(
+        &self,
+        result: &ExportParseResult,
+        include_round_trip_context: bool,
+    ) -> Result<Vec<u8>, ComputeError> {
         let bytes = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("export", "export_to_xlsx_writer");
             let bytes = xlsx_api::export_from_parse_output(
                 &result.parse_output,
-                result.round_trip_context.as_deref(),
+                include_round_trip_context
+                    .then_some(result.round_trip_context.as_deref())
+                    .flatten(),
             )
             .map_err(|e| ComputeError::ExportError {
                 message: e.to_string(),

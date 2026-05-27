@@ -541,8 +541,14 @@ export interface Workbook {
   // Import / export
   // ===========================================================================
 
-  /** Export the workbook as XLSX binary data. */
-  toXlsx(): Promise<Uint8Array>;
+  /**
+   * Export the workbook as XLSX binary data.
+   *
+   * `contextStripped` is an internal import/export verification mode that
+   * disables imported RoundTripContext preservation so corpus gates can prove
+   * modeled facts do not depend on stale source package bytes.
+   */
+  toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array>;
 
   /**
    * Import sheets from XLSX data.

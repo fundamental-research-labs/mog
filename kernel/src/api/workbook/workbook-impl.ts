@@ -1221,7 +1221,7 @@ export class WorkbookImpl implements WorkbookInternal {
   // Import / Export
   // ===========================================================================
 
-  async toXlsx(): Promise<Uint8Array> {
+  async toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array> {
     this._ensureNotDisposed();
 
     // Host-backed path: export requires authorization through the operation gate.
@@ -1309,6 +1309,15 @@ export class WorkbookImpl implements WorkbookInternal {
       });
     }
 
+    const bridge = this.ctx.computeBridge as typeof this.ctx.computeBridge & {
+      exportToXlsxBytesContextStripped?: () => Promise<Uint8Array>;
+    };
+    if (options?.contextStripped) {
+      if (!bridge.exportToXlsxBytesContextStripped) {
+        throw new Error('context-stripped XLSX export is not available on this compute bridge');
+      }
+      return bridge.exportToXlsxBytesContextStripped();
+    }
     return this.ctx.computeBridge.exportToXlsxBytes();
   }
 

@@ -917,6 +917,10 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.exportToXlsxBytes();
   }
 
+  exportToXlsxBytesContextStripped(): Promise<Uint8Array> {
+    return this.core.exportToXlsxBytesContextStripped();
+  }
+
   importSheetsFromXlsx(
     xlsxData: Uint8Array,
     sheetNames: string[],

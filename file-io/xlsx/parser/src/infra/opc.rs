@@ -982,6 +982,64 @@ mod tests {
     }
 
     #[test]
+    fn known_relationship_types_round_trip_without_unknown_fallback() {
+        let known = [
+            OoxmlRelationshipType::OfficeDocument,
+            OoxmlRelationshipType::CoreProperties,
+            OoxmlRelationshipType::ExtendedProperties,
+            OoxmlRelationshipType::CustomProperties,
+            OoxmlRelationshipType::Worksheet,
+            OoxmlRelationshipType::Styles,
+            OoxmlRelationshipType::Theme,
+            OoxmlRelationshipType::SharedStrings,
+            OoxmlRelationshipType::CalcChain,
+            OoxmlRelationshipType::Comments,
+            OoxmlRelationshipType::ThreadedComments,
+            OoxmlRelationshipType::VmlDrawing,
+            OoxmlRelationshipType::Drawing,
+            OoxmlRelationshipType::Chart,
+            OoxmlRelationshipType::ChartEx,
+            OoxmlRelationshipType::ChartStyle,
+            OoxmlRelationshipType::ChartColorStyle,
+            OoxmlRelationshipType::Image,
+            OoxmlRelationshipType::Table,
+            OoxmlRelationshipType::PivotTable,
+            OoxmlRelationshipType::PivotCacheDefinition,
+            OoxmlRelationshipType::PivotCacheRecords,
+            OoxmlRelationshipType::Hyperlink,
+            OoxmlRelationshipType::PrinterSettings,
+            OoxmlRelationshipType::CtrlProp,
+            OoxmlRelationshipType::CustomProperty,
+            OoxmlRelationshipType::ExternalLink,
+            OoxmlRelationshipType::ExternalLinkPath,
+            OoxmlRelationshipType::ExternalLinkLongPath,
+            OoxmlRelationshipType::XlPathMissing,
+            OoxmlRelationshipType::XlLongPathMissing,
+            OoxmlRelationshipType::XlStartup,
+            OoxmlRelationshipType::XlAlternateStartup,
+            OoxmlRelationshipType::XlLibrary,
+            OoxmlRelationshipType::XlLongStartup,
+            OoxmlRelationshipType::XlLongAlternateStartup,
+            OoxmlRelationshipType::XlLongLibrary,
+            OoxmlRelationshipType::DiagramData,
+            OoxmlRelationshipType::DiagramLayout,
+            OoxmlRelationshipType::DiagramColors,
+            OoxmlRelationshipType::DiagramQuickStyle,
+            OoxmlRelationshipType::DiagramDrawing,
+            OoxmlRelationshipType::Slicer,
+            OoxmlRelationshipType::SlicerCache,
+            OoxmlRelationshipType::Metadata,
+            OoxmlRelationshipType::OleObject,
+            OoxmlRelationshipType::Person,
+            OoxmlRelationshipType::VbaProject,
+        ];
+
+        for rel_type in known {
+            assert_eq!(OoxmlRelationshipType::from_uri(rel_type.uri()), rel_type);
+        }
+    }
+
+    #[test]
     fn external_workbook_base_path_relationships_are_exact() {
         assert!(is_external_workbook_base_path_relationship_type(
             REL_EXTERNAL_LINK_PATH

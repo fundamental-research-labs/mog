@@ -36,6 +36,7 @@ members = [
     "compute/napi",
     "compute/pyo3",
     "compute/api",
+    "file-io/xlsx/test-contracts",
     "file-io/xlsx/parser",
     "file-io/xlsx/parser/xml-derive",
     "file-io/xlsx-api",

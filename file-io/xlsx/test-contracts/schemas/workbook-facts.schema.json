@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mog.xlsx.workbook_facts.v1",
+  "title": "WorkbookFacts",
+  "type": "object",
+  "required": ["schema_version", "workbook", "sheets", "styles", "shared_strings", "formulas", "package"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "workbook": { "type": "object" },
+    "sheets": { "type": "array", "items": { "type": "object" } },
+    "styles": { "type": "object" },
+    "shared_strings": { "type": "object" },
+    "formulas": { "type": "object" },
+    "package": { "type": "object" }
+  },
+  "additionalProperties": false
+}

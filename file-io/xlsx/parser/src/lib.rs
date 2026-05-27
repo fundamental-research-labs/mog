@@ -87,6 +87,7 @@ pub mod domain;
 pub mod output;
 pub mod pipeline; // Parse orchestration
 pub mod roundtrip; // Fidelity preservation
+pub mod testing; // Shared test contract adapters
 pub mod zip; // ZIP archive reading // Result types (was: wasm/)
 
 // Write pipeline

@@ -35,6 +35,11 @@ name = "xlsx-profile-corpus"
 path = "src/bin/profile_corpus.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "xlsx-gate"
+path = "src/bin/xlsx_gate.rs"
+required-features = ["cli"]
+
 [dependencies]
 # XML derive macros for declarative XML <-> Rust struct mapping
 xml-derive = { path = "xml-derive" }
@@ -44,6 +49,7 @@ domain-types = { path = "../../../domain-types" }
 
 # OOXML vocabulary types (shared with other crates)
 ooxml-types = { path = "../../ooxml/types", features = ["serde"] }
+xlsx-test-contracts = { path = "../test-contracts" }
 
 # Bridge types for cross-boundary error handling (XlsxBridgeError)
 bridge-types = { path = "../../../infra/rust-bridge/bridge-types" }

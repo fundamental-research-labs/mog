@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mog.xlsx.workbook_fingerprint.v1",
+  "title": "FailureFingerprint",
+  "type": "object",
+  "required": ["schema_version", "id", "category", "severity", "owner", "summary", "proof"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string" },
+    "category": { "type": "object" },
+    "severity": { "type": "string" },
+    "owner": { "type": "string" },
+    "summary": { "type": "string" },
+    "proof": {
+      "type": "object",
+      "required": ["version", "algorithm", "digest", "canonicalization", "covered_fields", "issued_by"]
+    },
+    "evidence": { "type": "array" }
+  },
+  "additionalProperties": false
+}

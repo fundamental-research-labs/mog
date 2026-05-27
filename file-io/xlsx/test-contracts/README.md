@@ -1,0 +1,33 @@
+# XLSX Test Contracts
+
+Shared Phase 0 contracts for trustworthy file I/O testing.
+
+## Public Locations
+
+- Shared Rust contracts: `file-io/xlsx/test-contracts`
+- Public synthetic/generated fixtures: `file-io/xlsx/parser/test-corpus` or lane-owned public fixture folders under `file-io/xlsx`
+- Public smoke/golden budget files for generated fixtures: lane-owned folders under `file-io/xlsx`
+- Public gate adapters and parser/archive validation: `file-io/xlsx/parser/src/testing`
+- Stable gate command surface: `cargo run -p xlsx-parser --bin xlsx-gate --features cli -- <gate>`
+
+## Internal Locations
+
+- Raw private corpus inputs and corpus snapshots: `../mog-data`
+- Internal plans, private reports, private budget snapshots, and autonomous worker output: `../mog-internal`
+- Public examples and website repos must not depend on these internal artifacts.
+
+## Gate Names
+
+- `ooxml-contract`
+- `package-graph`
+- `l2-contract`
+- `corpus-smoke`
+- `corpus-anti-cheat`
+- `corpus-golden`
+- `perf-smoke`
+- `perf-golden`
+- `corpus-full`
+- `perf-full`
+
+Phase 0 implements the `package-graph` archive adapter and publishes explicit
+`not implemented` stubs for the lane-owned gates.

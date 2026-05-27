@@ -25,6 +25,10 @@ use xlsx_parser::output::results::{
     CELL_TYPE_VAL_NUMBER, CELL_TYPE_VAL_STRING, FullParseResult,
 };
 use xlsx_parser::pipeline::full_parse::parse_xlsx_full_native;
+use xlsx_test_contracts::{
+    CorrectnessFingerprintCategory, FailureFingerprint, FingerprintCategory, FingerprintEvidence,
+    FingerprintOwner, FingerprintSeverity,
+};
 
 // ============================================================================
 // CLI Arguments
@@ -645,6 +649,30 @@ fn fingerprint_to_json(fp: &FileFingerprint) -> String {
     )
 }
 
+fn failure_fingerprint_to_json(status: &str, path: &str, message: &str) -> String {
+    let (id, category, summary) = match status {
+        "panic" => (
+            "corpus-parser-panic",
+            CorrectnessFingerprintCategory::HarnessBug,
+            "corpus parse panicked",
+        ),
+        _ => (
+            "corpus-parser-error",
+            CorrectnessFingerprintCategory::UnsupportedFeaturePolicy,
+            "corpus parse returned an error",
+        ),
+    };
+    let fingerprint = FailureFingerprint::new(
+        id,
+        FingerprintCategory::Correctness(category),
+        FingerprintSeverity::Error,
+        FingerprintOwner::Corpus,
+        summary,
+    )
+    .with_evidence(FingerprintEvidence::message(message).at_path(path));
+    serde_json::to_string(&fingerprint).expect("failure fingerprint should serialize")
+}
+
 fn write_json_report(
     output_path: &Path,
     results: &[FileResult],
@@ -699,17 +727,23 @@ fn write_json_report(
     for r in results {
         match &r.outcome {
             ParseOutcome::Error(msg) => {
+                let failure_fingerprint =
+                    failure_fingerprint_to_json("error", &r.relative_path, msg);
                 error_entries.push(format!(
-                    "{{\"path\":\"{}\",\"status\":\"error\",\"error\":\"{}\"}}",
+                    "{{\"path\":\"{}\",\"status\":\"error\",\"error\":\"{}\",\"failure_fingerprints\":[{}]}}",
                     escape_json(&r.relative_path),
-                    escape_json(msg)
+                    escape_json(msg),
+                    failure_fingerprint
                 ));
             }
             ParseOutcome::Panic(msg) => {
+                let failure_fingerprint =
+                    failure_fingerprint_to_json("panic", &r.relative_path, msg);
                 panic_entries.push(format!(
-                    "{{\"path\":\"{}\",\"status\":\"panic\",\"error\":\"{}\"}}",
+                    "{{\"path\":\"{}\",\"status\":\"panic\",\"error\":\"{}\",\"failure_fingerprints\":[{}]}}",
                     escape_json(&r.relative_path),
-                    escape_json(msg)
+                    escape_json(msg),
+                    failure_fingerprint
                 ));
             }
             ParseOutcome::Pass(_) => {}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mog.xlsx.file_io.report.v1",
+  "title": "GateReport",
+  "type": "object",
+  "required": ["$schema", "eval", "gate", "tier", "run_id", "timestamp", "totals", "duration_ms", "scenarios"],
+  "properties": {
+    "$schema": { "const": "mog.xlsx.file_io.report.v1" },
+    "eval": { "const": "xlsx-file-io" },
+    "gate": { "type": "string" },
+    "tier": { "type": "string" },
+    "run_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "totals": { "type": "object" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "scenarios": { "type": "array", "items": { "type": "object" } },
+    "domain": { "type": "object" }
+  },
+  "additionalProperties": false
+}

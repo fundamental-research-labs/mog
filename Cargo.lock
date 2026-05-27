@@ -3221,7 +3221,16 @@ dependencies = [
  "tracing",
  "unicase",
  "value-types",
+ "xlsx-test-contracts",
  "xml-derive",
+]
+
+[[package]]
+name = "xlsx-test-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

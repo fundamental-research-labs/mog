@@ -504,6 +504,7 @@ fn is_clean_imported_pivot(
     let Some(package) = round_trip_ctx
         .map(|ctx| &ctx.pivot_package)
         .filter(|package| !package.is_empty())
+        .filter(|package| clean_pivot_package_is_closed(package))
     else {
         return false;
     };

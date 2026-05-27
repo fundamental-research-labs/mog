@@ -585,6 +585,115 @@ fn dangling_clean_pivot_package_does_not_reserve_generated_part_paths() {
 }
 
 #[test]
+fn dangling_matching_pivot_package_does_not_suppress_generated_pivot() {
+    let output = pivot_package_output(vec![make_pivot_config(
+        "pivot-generated",
+        "GeneratedPivot",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    let mut ctx = domain_types::RoundTripContext {
+        sheets: vec![
+            domain_types::SheetRoundTripContext::default(),
+            domain_types::SheetRoundTripContext::default(),
+        ],
+        pivot_package: domain_types::PivotPackageRoundTrip {
+            cache_definitions: vec![domain_types::PivotCacheDefinitionPackage {
+                cache_id: 11,
+                definition_path: "xl/pivotCache/pivotCacheDefinition1.xml".to_string(),
+                definition_rels_path: Some(
+                    "xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels".to_string(),
+                ),
+                source_kind: domain_types::PivotCacheSourceKind::External,
+                raw_definition_xml: b"stale cache definition".to_vec(),
+                raw_relationships: vec![domain_types::OpcRelationship {
+                    id: "rIdDangling".to_string(),
+                    rel_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords".to_string(),
+                    target: "missingRecords.xml".to_string(),
+                    target_mode: None,
+                }],
+                records_relationship_id: Some("rIdDangling".to_string()),
+                records_relationship_target: Some("missingRecords.xml".to_string()),
+                records_path: None,
+                raw_records_xml: None,
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            pivot_tables: vec![domain_types::PivotTablePackage {
+                sheet_index: 1,
+                sheet_name: "Pivot".to_string(),
+                sheet_relationship_id: "rId7".to_string(),
+                sheet_relationship_target: "../pivotTables/pivotTable1.xml".to_string(),
+                table_path: "xl/pivotTables/pivotTable1.xml".to_string(),
+                table_rels_path: Some("xl/pivotTables/_rels/pivotTable1.xml.rels".to_string()),
+                pivot_name: Some("GeneratedPivot".to_string()),
+                raw_table_xml: br#"<pivotTableDefinition name="GeneratedPivot" cacheId="11"/>"#
+                    .to_vec(),
+                raw_relationships: Vec::new(),
+                referenced_cache_id: 11,
+                order: 0,
+                ownership: domain_types::PivotPackageOwnership::CleanImported,
+            }],
+            content_type_overrides: vec![
+                domain_types::PivotPackageContentType {
+                    part_name: "/xl/pivotTables/pivotTable1.xml".to_string(),
+                    content_type: CT_PIVOT_TABLE.to_string(),
+                    ownership: domain_types::PivotPackageOwnership::CleanImported,
+                },
+                domain_types::PivotPackageContentType {
+                    part_name: "/xl/pivotCache/pivotCacheDefinition1.xml".to_string(),
+                    content_type: CT_PIVOT_CACHE.to_string(),
+                    ownership: domain_types::PivotPackageOwnership::CleanImported,
+                },
+            ],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    ctx.sheets[1].sheet_opc_rels = vec![domain_types::OpcRelationship {
+        id: "rId7".to_string(),
+        rel_type: REL_PIVOT_TABLE.to_string(),
+        target: "../pivotTables/pivotTable1.xml".to_string(),
+        target_mode: None,
+    }];
+    ctx.sheets[1].sheet_preserved_elements = vec![(
+        "worksheet\0after\0sheetData\0pivotTableDefinition".to_string(),
+        r#"<pivotTableDefinition r:id="rId7"/>"#.to_string(),
+    )];
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet2.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet2.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/pivotTables/pivotTable1.xml"));
+    assert!(archive.contains("xl/pivotCache/pivotCacheDefinition1.xml"));
+    assert!(archive.contains("xl/pivotCache/pivotCacheRecords1.xml"));
+    assert!(workbook_xml.contains("cacheId=\"11\""));
+    assert!(workbook_rels.contains("pivotCache/pivotCacheDefinition1.xml"));
+    assert!(sheet_rels.contains("../pivotTables/pivotTable1.xml"));
+    let pivot_r_id = sheet_rels
+        .split("<Relationship ")
+        .find(|rel| rel.contains("../pivotTables/pivotTable1.xml"))
+        .and_then(|rel| rel.split("Id=\"").nth(1))
+        .and_then(|rel| rel.split('"').next())
+        .expect("generated pivot relationship should have an r:id");
+    assert!(sheet_xml.contains(&format!("<pivotTableDefinition r:id=\"{pivot_r_id}\"/>")));
+    assert!(!workbook_rels.contains("rIdDangling"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",

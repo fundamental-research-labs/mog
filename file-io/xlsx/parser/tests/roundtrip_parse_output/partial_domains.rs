@@ -356,6 +356,61 @@ fn clean_imported_header_footer_vml_roundtrips_as_opaque_authorized_part() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn clean_imported_printer_settings_roundtrips_as_opaque_authorized_part() {
+    let source = imported_printer_settings_xlsx();
+    let (output, ctx, _diagnostics) =
+        parse_xlsx_to_output(&source).expect("source XLSX should parse");
+
+    assert_eq!(
+        output.sheets[0]
+            .print_settings
+            .as_ref()
+            .and_then(|settings| settings.r_id.as_deref()),
+        Some("rIdPrinter"),
+        "pageSetup printer settings relationship id should be modeled"
+    );
+    assert!(
+        ctx.opaque_package_subgraphs.iter().any(|subgraph| {
+            subgraph.ownership == domain_types::OpaquePackageOwnership::OrphanCleanPackageData
+                && subgraph.parts.iter().any(|part| {
+                    part.part.path == "xl/printerSettings/printerSettings9.bin"
+                        && part.ownership
+                            == domain_types::OpaquePackageOwnership::OrphanCleanPackageData
+                })
+        }),
+        "clean imported printer settings binary should lower into an opaque package subgraph"
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx))
+        .expect("printer settings export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+
+    assert_eq!(
+        archive
+            .read_file("xl/printerSettings/printerSettings9.bin")
+            .unwrap(),
+        b"printer settings bytes".to_vec()
+    );
+    assert!(sheet_xml.contains(r#"<pageSetup"#));
+    assert!(sheet_xml.contains(r#"r:id="rIdPrinter""#));
+    assert!(sheet_rels.contains(r#"Id="rIdPrinter""#));
+    assert!(sheet_rels.contains(r#"Target="../printerSettings/printerSettings9.bin""#));
+    assert!(content_types.contains(r#"Extension="bin""#));
+    assert!(content_types.contains(xlsx_parser::write::CT_PRINTER_SETTINGS));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn imported_unknown_drawing_xlsx() -> Vec<u8> {
     let mut zip = ZipBuilder::new();
     zip.add_stored(
@@ -423,6 +478,65 @@ fn imported_unknown_drawing_xlsx() -> Vec<u8> {
 </Relationships>"#,
     )
     .add_stored("xl/media/image7.png", b"opaque image bytes");
+
+    zip.build()
+}
+
+fn imported_printer_settings_xlsx() -> Vec<u8> {
+    let mut zip = ZipBuilder::new();
+    zip.add_stored(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#,
+    )
+    .add_stored(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rIdSheet"/>
+  </sheets>
+</workbook>"#,
+    )
+    .add_stored(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetData/>
+  <pageSetup paperSize="9" r:id="rIdPrinter"/>
+</worksheet>"#,
+    )
+    .add_stored(
+        "xl/worksheets/_rels/sheet1.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdPrinter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings" Target="../printerSettings/printerSettings9.bin"/>
+</Relationships>"#,
+    )
+    .add_stored(
+        "xl/printerSettings/printerSettings9.bin",
+        b"printer settings bytes",
+    );
 
     zip.build()
 }

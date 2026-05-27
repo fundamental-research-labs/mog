@@ -489,6 +489,11 @@ fn build_opaque_package_subgraphs(
         content_type_overrides,
         sheet_contexts,
     ));
+    subgraphs.extend(build_worksheet_printer_settings_opaque_subgraphs(
+        binary_blobs,
+        sheet_contexts,
+        sheet_data,
+    ));
     subgraphs
 }
 
@@ -725,6 +730,67 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .position(|window| window == needle)
+}
+
+fn build_worksheet_printer_settings_opaque_subgraphs(
+    binary_blobs: &[BlobPart],
+    sheet_contexts: &[SheetRoundTripContext],
+    sheet_data: &[domain_types::SheetData],
+) -> Vec<OpaquePackageSubgraph> {
+    let binary_blobs_by_path: HashMap<_, _> = binary_blobs
+        .iter()
+        .map(|part| (normalize_package_path(&part.path), part))
+        .collect();
+
+    sheet_contexts
+        .iter()
+        .enumerate()
+        .filter_map(|(sheet_idx, sheet_rt)| {
+            let r_id = sheet_data
+                .get(sheet_idx)?
+                .print_settings
+                .as_ref()?
+                .r_id
+                .as_ref()?;
+            let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+            let rel = sheet_rt.sheet_opc_rels.iter().find(|rel| {
+                &rel.id == r_id
+                    && rel.rel_type == crate::write::REL_PRINTER_SETTINGS
+                    && rel.target_mode.as_deref() != Some("External")
+            })?;
+            let path =
+                crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target)
+                    .ok()
+                    .map(|path| normalize_package_path(&path))?;
+            let blob = binary_blobs_by_path.get(&path)?;
+            Some(OpaquePackageSubgraph {
+                owner: OpaquePackageOwner::Part { path: path.clone() },
+                owner_relationship: OpaquePackageRelationship {
+                    owner: OpaquePackageOwner::Part { path: path.clone() },
+                    relationship_type: String::new(),
+                    target: OpaqueRelationshipTarget::InternalPath {
+                        target: String::new(),
+                    },
+                    relationship_id_hint: None,
+                },
+                parts: vec![OpaquePackagePart {
+                    part: BlobPart {
+                        path,
+                        data: blob.data.clone(),
+                    },
+                    content_type: None,
+                    default_extension: Some((
+                        "bin".to_string(),
+                        crate::write::CT_PRINTER_SETTINGS.to_string(),
+                    )),
+                    ownership: OpaquePackageOwnership::OrphanCleanPackageData,
+                }],
+                relationships: Vec::new(),
+                ownership: OpaquePackageOwnership::OrphanCleanPackageData,
+            })
+        })
+        .filter(closed_opaque_subgraph)
+        .collect()
 }
 
 fn build_worksheet_drawing_opaque_subgraphs(

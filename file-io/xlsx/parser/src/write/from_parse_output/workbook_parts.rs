@@ -263,15 +263,7 @@ fn raw_xml_contains_prefixed_relationship_id_attr(raw_xml: &str) -> bool {
             pos = attr_end;
             continue;
         }
-        cursor += 1;
-        if bytes
-            .get(cursor..cursor + b"rId".len())
-            .is_some_and(|value| value == b"rId")
-        {
-            return true;
-        }
-
-        pos = attr_end;
+        return true;
     }
 
     false

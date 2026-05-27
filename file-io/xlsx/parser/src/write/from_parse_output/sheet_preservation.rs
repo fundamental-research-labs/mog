@@ -250,15 +250,7 @@ fn raw_xml_contains_prefixed_relationship_id_attr(raw_xml: &str) -> bool {
             pos = attr_end;
             continue;
         }
-        cursor += 1;
-        if bytes
-            .get(cursor..cursor + b"rId".len())
-            .is_some_and(|value| value == b"rId")
-        {
-            return true;
-        }
-
-        pos = attr_end;
+        return true;
     }
 
     false
@@ -487,6 +479,20 @@ mod tests {
             sheet_preserved_elements: vec![(
                 "worksheet\0after\0sheetData".to_string(),
                 r#"<vendor:state rel:id = "rIdStale"/>"#.to_string(),
+            )],
+            ..Default::default()
+        };
+
+        assert!(preserved_elements_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn drops_unknown_preserved_elements_with_nonstandard_prefixed_relationship_ids() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = SheetRoundTripContext {
+            sheet_preserved_elements: vec![(
+                "worksheet\0after\0sheetData".to_string(),
+                r#"<vendor:state rel:id = "customRelationship"/>"#.to_string(),
             )],
             ..Default::default()
         };

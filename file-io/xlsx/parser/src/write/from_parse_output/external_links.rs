@@ -103,7 +103,7 @@ pub(super) fn with_resolved_relationship_ids(
     package_graph: &crate::write::package_graph::ResolvedPackageGraph,
     link: &ExternalLink,
     owner: &crate::write::package_graph::PackageOwner,
-) -> ExternalLink {
+) -> Result<ExternalLink, crate::write::WriteError> {
     let mut link = link.clone();
     let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
     let primary_rel_type = supported_external_link_relationship_type(
@@ -111,24 +111,40 @@ pub(super) fn with_resolved_relationship_ids(
         default_rel_type,
     );
     if let Some(target) = &link.file_path {
-        link.file_path_rid = package_graph
-            .relationship_id(owner, primary_rel_type, target)
-            .map(str::to_string)
-            .or(link.file_path_rid);
+        link.file_path_rid = Some(
+            package_graph
+                .relationship_id(owner, primary_rel_type, target)
+                .map(str::to_string)
+                .ok_or_else(|| missing_relationship_error(owner, primary_rel_type, target))?,
+        );
     }
     if let Some(target) = &link.alternate_url {
-        link.alternate_url_rid = package_graph
-            .relationship_id(owner, default_rel_type, target)
-            .map(str::to_string)
-            .or(link.alternate_url_rid);
+        link.alternate_url_rid = Some(
+            package_graph
+                .relationship_id(owner, default_rel_type, target)
+                .map(str::to_string)
+                .ok_or_else(|| missing_relationship_error(owner, default_rel_type, target))?,
+        );
     }
     if let Some(target) = &link.relative_url {
-        link.relative_url_rid = package_graph
-            .relationship_id(owner, default_rel_type, target)
-            .map(str::to_string)
-            .or(link.relative_url_rid);
+        link.relative_url_rid = Some(
+            package_graph
+                .relationship_id(owner, default_rel_type, target)
+                .map(str::to_string)
+                .ok_or_else(|| missing_relationship_error(owner, default_rel_type, target))?,
+        );
     }
-    link
+    Ok(link)
+}
+
+fn missing_relationship_error(
+    owner: &crate::write::package_graph::PackageOwner,
+    relationship_type: &str,
+    target: &str,
+) -> crate::write::WriteError {
+    crate::write::WriteError::PackageIntegrity(format!(
+        "missing external link relationship for owner {owner:?} type {relationship_type} target {target}"
+    ))
 }
 
 fn supported_external_link_relationship_type<'a>(
@@ -165,5 +181,30 @@ fn normalized_external_link_part_name(part_name: &str) -> Option<String> {
         Some(normalized.to_string())
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::write::package_graph::{PackageGraphBuilder, PackageOwner};
+
+    #[test]
+    fn external_link_xml_requires_graph_resolved_relationship_ids() {
+        let graph = PackageGraphBuilder::new().resolve().unwrap();
+        let owner = PackageOwner::Part {
+            path: "xl/externalLinks/externalLink1.xml".to_string(),
+        };
+        let link = ExternalLink {
+            id: "1".to_string(),
+            file_path: Some("file:///stale.xlsx".to_string()),
+            file_path_rid: Some("rIdStale".to_string()),
+            ..Default::default()
+        };
+
+        let err = with_resolved_relationship_ids(&graph, &link, &owner)
+            .expect_err("stale imported r:id must not be used without graph relationship");
+
+        assert!(format!("{err}").contains("missing external link relationship"));
     }
 }

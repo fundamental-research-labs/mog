@@ -140,7 +140,7 @@ pub(super) fn write_zip_package(
             path: zip_path.clone(),
         };
         let link_for_xml =
-            external_links::with_resolved_relationship_ids(package_graph, link, &owner);
+            external_links::with_resolved_relationship_ids(package_graph, link, &owner)?;
         let xml = crate::domain::external::write::write_external_link_xml(&link_for_xml);
         add_registered_part(package_graph, &mut zip, &zip_path, xml)?;
         let rels = package_graph.relationship_manager_for_owner(&owner);

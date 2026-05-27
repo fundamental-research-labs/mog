@@ -113,6 +113,79 @@ fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
 }
 
 #[test]
+fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
+    let clean_chart_space_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{clean-chart-space}".to_string(),
+        xml: "<cleanChartSpaceExtension/>".to_string(),
+    };
+    let stale_chart_space_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{stale-chart-space}".to_string(),
+        xml: r#"<staleChartSpaceExtension xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rIdStaleChartSpace"/>"#.to_string(),
+    };
+    let clean_chart_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{clean-chart}".to_string(),
+        xml: "<cleanChartExtension/>".to_string(),
+    };
+    let stale_chart_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{stale-chart}".to_string(),
+        xml: r#"<staleChartExtension xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdStaleEmbed"/>"#.to_string(),
+    };
+    let stale_plot_area_extension = ooxml_types::charts::ExtensionEntry {
+        uri: "{stale-plot-area}".to_string(),
+        xml: r#"<stalePlotAreaExtension xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:link="rIdStaleLink"/>"#.to_string(),
+    };
+
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.rt = Some(domain_types::chart::ChartRoundTripData {
+        chart_groups_meta: Vec::new(),
+        axes_ordered: Vec::new(),
+        protection: None,
+        print_settings: None,
+        external_data: None,
+        pivot_source: None,
+        pivot_fmts: Vec::new(),
+        clr_map_ovr: None,
+        user_shapes: None,
+        date1904: None,
+        lang: None,
+        chart_space_extensions: vec![clean_chart_space_extension, stale_chart_space_extension],
+        chart_extensions: vec![clean_chart_extension, stale_chart_extension],
+        plot_area_extensions: vec![stale_plot_area_extension],
+        has_empty_chart_ext_lst: false,
+        plot_area_layout: None,
+        style_alternate_content: None,
+        style_after_chart: false,
+        auxiliary_files: Vec::new(),
+        chart_rels_bytes: None,
+    });
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(chart_xml.contains("cleanChartSpaceExtension"));
+    assert!(chart_xml.contains("cleanChartExtension"));
+    assert!(!chart_xml.contains("staleChartSpaceExtension"));
+    assert!(!chart_xml.contains("staleChartExtension"));
+    assert!(!chart_xml.contains("stalePlotAreaExtension"));
+    assert!(!chart_xml.contains("rIdStaleChartSpace"));
+    assert!(!chart_xml.contains("rIdStaleEmbed"));
+    assert!(!chart_xml.contains("rIdStaleLink"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn modeled_chart_ignores_stale_chart_frame_relationship_target() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());

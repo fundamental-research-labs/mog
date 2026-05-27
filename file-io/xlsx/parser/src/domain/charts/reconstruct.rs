@@ -61,7 +61,7 @@ pub fn reconstruct_chart_space(spec: &ChartSpec) -> ChartSpace {
         user_shapes: None,
         print_settings: rt.and_then(|r| r.print_settings.clone().map(Into::into)),
         extensions: rt
-            .map(|r| r.chart_space_extensions.clone())
+            .map(|r| clean_chart_extensions(&r.chart_space_extensions))
             .unwrap_or_default(),
     }
 }
@@ -91,7 +91,9 @@ fn build_chart(spec: &ChartSpec) -> charts::Chart {
         pivot_fmts: rt
             .map(|r| r.pivot_fmts.iter().cloned().map(Into::into).collect())
             .unwrap_or_default(),
-        extensions: rt.map(|r| r.chart_extensions.clone()).unwrap_or_default(),
+        extensions: rt
+            .map(|r| clean_chart_extensions(&r.chart_extensions))
+            .unwrap_or_default(),
         has_empty_ext_lst: rt.map(|r| r.has_empty_chart_ext_lst).unwrap_or(false),
     }
 }
@@ -110,9 +112,55 @@ fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
         d_table: spec.data_table.as_ref().map(build_data_table),
         sp_pr: spec.plot_format.as_ref().and_then(build_shape_properties),
         extensions: rt
-            .map(|r| r.plot_area_extensions.clone())
+            .map(|r| clean_chart_extensions(&r.plot_area_extensions))
             .unwrap_or_default(),
     }
+}
+
+fn clean_chart_extensions(
+    extensions: &[ooxml_types::charts::ExtensionEntry],
+) -> Vec<ooxml_types::charts::ExtensionEntry> {
+    extensions
+        .iter()
+        .filter(|extension| !raw_chart_extension_contains_relationship_attr(&extension.xml))
+        .cloned()
+        .collect()
+}
+
+fn raw_chart_extension_contains_relationship_attr(xml: &str) -> bool {
+    ["id", "embed", "link"]
+        .iter()
+        .any(|local_name| raw_xml_contains_prefixed_attr(xml, local_name))
+}
+
+fn raw_xml_contains_prefixed_attr(raw_xml: &str, local_name: &str) -> bool {
+    let bytes = raw_xml.as_bytes();
+    let pattern = format!(":{local_name}");
+    let pattern = pattern.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = find_subslice(&bytes[pos..], pattern) {
+        let attr_end = pos + offset + pattern.len();
+        let mut cursor = attr_end;
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            cursor += 1;
+        }
+        if bytes.get(cursor) == Some(&b'=') {
+            return true;
+        }
+        pos = attr_end;
+    }
+
+    false
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 // =============================================================================

@@ -293,9 +293,13 @@ fn regenerated_row_layout_flags_come_from_modeled_state() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
     let (rt, _ctx, _diagnostics) =
         parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
-    assert!(rt.sheets[0].dimensions.row_heights.iter().any(|row| {
-        row.row == 2 && row.custom_height && row.hidden && row.custom_format
-    }));
+    assert!(
+        rt.sheets[0]
+            .dimensions
+            .row_heights
+            .iter()
+            .any(|row| { row.row == 2 && row.custom_height && row.hidden && row.custom_format })
+    );
     assert!(rt.sheets[0].outline_groups.iter().any(|group| {
         group.is_row && group.start == 2 && group.end == 3 && group.level == 1 && group.hidden
     }));

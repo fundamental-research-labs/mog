@@ -16,6 +16,7 @@ mod doc_props;
 mod external_links;
 mod form_controls;
 mod metadata;
+mod opaque_worksheet_drawing;
 mod package_authority;
 mod pivot_package;
 mod sheet_builder;
@@ -221,6 +222,8 @@ pub fn write_xlsx_from_parse_output(
     let mut worksheet_form_control_vml_relationships: Vec<WorksheetFormControlVmlGraphEntry> =
         Vec::new();
     let mut worksheet_drawing_relationships: Vec<WorksheetDrawingGraphEntry> = Vec::new();
+    let opaque_worksheet_drawing_relationships =
+        opaque_worksheet_drawing::relationships_for_export(round_trip_ctx);
     let mut drawing_relationships: Vec<DrawingRelationshipGraphEntry> = Vec::new();
     let mut chart_auxiliary_relationships: Vec<ChartAuxiliaryRelationshipGraphEntry> = Vec::new();
     let mut worksheet_printer_settings_relationships: Vec<WorksheetPrinterSettingsGraphEntry> =
@@ -1724,6 +1727,26 @@ pub fn write_xlsx_from_parse_output(
             .ok_or_else(|| {
                 WriteError::PackageIntegrity(format!(
                     "missing worksheet drawing relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
+        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
+        rels.set_with_id(&r_id, REL_DRAWING, &entry.target);
+        sheet_writers[entry.sheet_idx].set_drawing_r_id(r_id);
+    }
+
+    for entry in &opaque_worksheet_drawing_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: entry.sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
+        };
+        let r_id = package_graph
+            .relationship_id(&owner, REL_DRAWING, &entry.target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing opaque worksheet drawing relationship for sheet {} target {}",
                     entry.sheet_idx + 1,
                     entry.target
                 ))

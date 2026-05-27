@@ -430,7 +430,10 @@ fn modeled_table_export_registers_xml_relationship_and_content_type() {
         .expect("modeled table should parse back");
     assert_eq!(table.range_ref, "A1:C4");
     assert_eq!(table.columns.len(), 3);
-    assert_eq!(table.columns[1].totals_function, Some(TotalsFunction::Average));
+    assert_eq!(
+        table.columns[1].totals_function,
+        Some(TotalsFunction::Average)
+    );
     assert_eq!(table.columns[2].totals_function, Some(TotalsFunction::Sum));
 }
 
@@ -459,8 +462,8 @@ fn threaded_comment_export_registers_comment_and_person_package_graph() {
         ..Default::default()
     }];
 
-    let bytes =
-        write_xlsx_from_parse_output(&output, None).expect("threaded comment export should succeed");
+    let bytes = write_xlsx_from_parse_output(&output, None)
+        .expect("threaded comment export should succeed");
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_rels = String::from_utf8(
         archive

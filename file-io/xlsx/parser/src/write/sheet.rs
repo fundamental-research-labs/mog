@@ -764,12 +764,8 @@ impl SheetWriter {
         self.legacy_drawing_r_id.is_some()
     }
 
-    fn should_skip_preserved_pivot_table_definition(
-        &self,
-        raw_xml: &str,
-        skip_generated_pivot_markers: bool,
-    ) -> bool {
-        if !skip_generated_pivot_markers || !raw_xml.contains("pivotTableDefinition") {
+    fn should_skip_preserved_pivot_table_definition(&self, raw_xml: &str) -> bool {
+        if !raw_xml.contains("pivotTableDefinition") {
             return false;
         }
 
@@ -1004,17 +1000,13 @@ impl SheetWriter {
         // When preserved elements contain sheetProtection, prefer the preserved
         // (verbatim original) version over the domain-generated one for round-trip fidelity.
         let skip_table_parts = self.table_parts_xml.is_some();
-        let skip_pivot_table_definitions = !self.pivot_table_r_ids.is_empty();
         let mut protection_emitted_from_preserved = false;
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("worksheet", "sheetData") {
                 if skip_table_parts && elem.raw_xml.contains("<tableParts") {
                     continue;
                 }
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 if elem.raw_xml.contains("<sheetProtection") {
@@ -1050,10 +1042,7 @@ impl SheetWriter {
                 if skip_table_parts && elem.raw_xml.contains("<tableParts") {
                     continue;
                 }
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -1117,10 +1106,7 @@ impl SheetWriter {
                     if skip_table_parts && elem.raw_xml.contains("<tableParts") {
                         continue;
                     }
-                    if self.should_skip_preserved_pivot_table_definition(
-                        &elem.raw_xml,
-                        skip_pivot_table_definitions,
-                    ) {
+                    if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                         continue;
                     }
                     w.raw_str(&elem.raw_xml);
@@ -1144,10 +1130,7 @@ impl SheetWriter {
                 if skip_table_parts && elem.raw_xml.contains("<tableParts") {
                     continue;
                 }
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -1179,10 +1162,7 @@ impl SheetWriter {
                 if skip_controls && elem.raw_xml.contains("<controls") {
                     continue;
                 }
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -1217,10 +1197,7 @@ impl SheetWriter {
                 if skip_controls && elem.raw_xml.contains("<controls") {
                     continue;
                 }
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);
@@ -1254,10 +1231,7 @@ impl SheetWriter {
         // Tier 2: Emit preserved elements with position Last
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_last("worksheet") {
-                if self.should_skip_preserved_pivot_table_definition(
-                    &elem.raw_xml,
-                    skip_pivot_table_definitions,
-                ) {
+                if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
                     continue;
                 }
                 w.raw_str(&elem.raw_xml);

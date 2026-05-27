@@ -397,4 +397,32 @@ mod tests {
         let charts_2: usize = output2.sheets.iter().map(|s| s.charts.len()).sum();
         assert_eq!(charts_2, charts_1, "charts lost during re-import");
     }
+
+    #[test]
+    fn chart_xml_stabilizes_after_reimport_export() {
+        let fixture = include_bytes!("../test-corpus/parity/charts/chart-bar.xlsx");
+        let (output1, rt1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
+        let exported1 =
+            write::from_parse_output::write_xlsx_from_parse_output(&output1, Some(&rt1))
+                .expect("first export failed");
+
+        let (output2, rt2, _) = parse_xlsx_to_output(&exported1).expect("second parse failed");
+        let exported2 =
+            write::from_parse_output::write_xlsx_from_parse_output(&output2, Some(&rt2))
+                .expect("second export failed");
+
+        let archive1 = crate::zip::XlsxArchive::new(&exported1).expect("first archive");
+        let archive2 = crate::zip::XlsxArchive::new(&exported2).expect("second archive");
+        let chart1 = archive1
+            .read_file("xl/charts/chart1.xml")
+            .expect("first chart XML");
+        let chart2 = archive2
+            .read_file("xl/charts/chart1.xml")
+            .expect("second chart XML");
+
+        assert_eq!(
+            chart2, chart1,
+            "canonical chart XML changed after re-import/export"
+        );
+    }
 }

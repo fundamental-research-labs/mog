@@ -17,8 +17,7 @@
 //! - Trendlines
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_lt_simd,
-    find_tag_simd,
+    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
 use crate::infra::xml::decode_xml_entities;
 
@@ -48,212 +47,22 @@ pub use ooxml_types::charts::{
 // Chart Extension List (extLst) parsing — reusable across all chart elements
 // =============================================================================
 
-/// Parse `<c:extLst>` from an XML fragment and return a `Vec<ExtensionEntry>`.
-///
-/// Each `<c:ext uri="...">...</c:ext>` child is captured with the URI attribute
-/// extracted and the full raw XML stored for lossless round-trip.
-/// Find the position of the top-level `<c:extLst>` in an XML fragment.
-///
-/// Scans through the fragment tracking element nesting depth.  Returns
-/// the position of the `<c:extLst>` that is a direct child of the root
-/// element (depth 1), ignoring nested extLst elements inside child
-/// elements like dLbls, dPt, or inside extensions (filteredSeriesTitle).
+/// Find the direct-child `<c:extLst>` in a series-like XML fragment.
 pub fn find_top_level_ext_lst(xml: &[u8]) -> Option<usize> {
-    // Skip past the root element's opening tag (e.g. <c:ser>)
-    let root_gt = find_gt_simd(xml, 0)?;
-    if root_gt > 0 && xml[root_gt - 1] == b'/' {
-        return None; // self-closing root
-    }
-    let mut pos = root_gt + 1;
-    let mut depth = 1u32; // we're inside the root element
-
-    while pos < xml.len() {
-        if let Some(lt) = find_lt_simd(xml, pos) {
-            let after_lt = lt + 1;
-            if after_lt >= xml.len() {
-                break;
-            }
-
-            if xml[after_lt] == b'/' {
-                // Closing tag — decrement depth
-                let tag_start = after_lt + 1;
-                let _name_end = xml[tag_start..]
-                    .iter()
-                    .position(|&b| matches!(b, b'>' | b' ' | b'\t' | b'\n' | b'\r'))
-                    .map(|p| tag_start + p)
-                    .unwrap_or(xml.len());
-                depth -= 1;
-                if depth == 0 {
-                    break; // Closed root element
-                }
-                pos = find_gt_simd(xml, lt).map(|p| p + 1).unwrap_or(xml.len());
-            } else {
-                // Opening tag
-                let mut name_end = after_lt;
-                while name_end < xml.len() {
-                    let b = xml[name_end];
-                    if matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
-                        break;
-                    }
-                    name_end += 1;
-                }
-                let gt = find_gt_simd(xml, lt).unwrap_or(xml.len());
-                let is_self_closing = gt > 0 && xml[gt - 1] == b'/';
-
-                // At depth 1, check if this is extLst
-                if depth == 1 && tag_name_matches(&xml[after_lt..name_end], b"extLst") {
-                    return Some(lt);
-                }
-
-                if !is_self_closing {
-                    depth += 1;
-                }
-                pos = gt + 1;
-            }
-        } else {
-            break;
-        }
-    }
-    None
-}
-
-/// Check if a tag name matches `target` exactly or with any namespace prefix
-/// (e.g., "ext" matches "ext", "c:ext", "c15:ext" but NOT "extLst" or "c:extLst").
-fn tag_name_matches(name: &[u8], target: &[u8]) -> bool {
-    // Exact match (no namespace prefix)
-    if name == target {
-        return true;
-    }
-    // Match "*:target" — the target must be at the end, preceded by ":"
-    if name.len() > target.len() + 1 {
-        let prefix_end = name.len() - target.len();
-        if name[prefix_end - 1] == b':' && &name[prefix_end..] == target {
-            return true;
-        }
-    }
-    false
-}
-
-/// Depth-aware closing tag search: find the `</tag>` that matches the opening
-/// `<tag>` at `start`, correctly handling nested elements with the same local name.
-///
-/// Returns `Some(lt_pos)` pointing to the `<` of the matching closing tag, or `None`.
-fn find_closing_tag_nested(bytes: &[u8], tag: &[u8], start: usize) -> Option<usize> {
-    let mut pos = find_gt_simd(bytes, start)
-        .map(|p| p + 1)
-        .unwrap_or(start + 1);
-
-    // Self-closing check
-    if pos >= 2 && bytes[pos - 2] == b'/' {
-        return None;
-    }
-
-    let mut depth = 1u32;
-    while pos < bytes.len() && depth > 0 {
-        if let Some(lt) = find_lt_simd(bytes, pos) {
-            let after_lt = lt + 1;
-            if after_lt >= bytes.len() {
-                break;
-            }
-            if bytes[after_lt] == b'/' {
-                // Closing tag
-                let tag_start = after_lt + 1;
-                let name_end = bytes[tag_start..]
-                    .iter()
-                    .position(|&b| matches!(b, b'>' | b' ' | b'\t' | b'\n' | b'\r'))
-                    .map(|p| tag_start + p)
-                    .unwrap_or(bytes.len());
-                if tag_name_matches(&bytes[tag_start..name_end], tag) {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(lt);
-                    }
-                }
-                pos = name_end;
-            } else {
-                // Opening tag
-                let mut name_end = after_lt;
-                while name_end < bytes.len() {
-                    let b = bytes[name_end];
-                    if matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
-                        break;
-                    }
-                    name_end += 1;
-                }
-                if tag_name_matches(&bytes[after_lt..name_end], tag) {
-                    // Check if self-closing
-                    let gt = find_gt_simd(bytes, lt).unwrap_or(bytes.len());
-                    if gt > 0 && bytes[gt - 1] == b'/' {
-                        // Self-closing, no depth change
-                    } else {
-                        depth += 1;
-                    }
-                    pos = gt + 1;
-                } else {
-                    pos = name_end;
-                }
-            }
-        } else {
-            break;
-        }
-    }
-    None
+    super::parse::ext::find_top_level_ext_lst(xml)
 }
 
 /// Parse `<c:extLst>` starting from a known position and return a `Vec<ExtensionEntry>`.
-///
-/// Uses depth-aware tag matching because extensions can contain nested
-/// `<c:extLst><c:ext>...</c:ext></c:extLst>` (e.g. filteredSeriesTitle).
 pub fn parse_chart_ext_lst_at(
     xml: &[u8],
     ext_lst_start: usize,
 ) -> Vec<ooxml_types::charts::ExtensionEntry> {
-    // Use depth-aware search for extLst close (handles nested <c:extLst> inside extensions)
-    let ext_lst_end = find_closing_tag_nested(xml, b"extLst", ext_lst_start)
-        .unwrap_or_else(|| find_closing_tag(xml, b"extLst", ext_lst_start).unwrap_or(xml.len()));
-    let ext_lst_bytes = &xml[ext_lst_start..ext_lst_end];
-    let mut extensions = Vec::new();
-    let mut ext_pos = 0;
-    while let Some(ext_start) = find_tag_simd(ext_lst_bytes, b"ext", ext_pos) {
-        // Check for self-closing <c:ext ... />
-        let tag_gt = find_gt_simd(ext_lst_bytes, ext_start).unwrap_or(ext_lst_bytes.len());
-        let is_self_closing = tag_gt > 0 && ext_lst_bytes.get(tag_gt - 1) == Some(&b'/');
-
-        let close_gt = if is_self_closing {
-            tag_gt + 1
-        } else {
-            // Use depth-aware search for nested <c:ext> elements
-            let ext_end = find_closing_tag_nested(ext_lst_bytes, b"ext", ext_start)
-                .unwrap_or(ext_lst_bytes.len());
-            find_gt_simd(ext_lst_bytes, ext_end)
-                .map(|p| p + 1)
-                .unwrap_or(ext_lst_bytes.len())
-        };
-
-        let ext_elem = &ext_lst_bytes[ext_start..close_gt];
-        let uri = if let Some(uri_pos) = find_attr_simd(ext_elem, b"uri=\"", 0) {
-            let value_start = uri_pos + 5;
-            if let Some((s, e)) = extract_quoted_value(ext_elem, value_start) {
-                String::from_utf8_lossy(&ext_elem[s..e]).to_string()
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        };
-        let raw_xml = String::from_utf8_lossy(ext_elem).to_string();
-        extensions.push(ooxml_types::charts::ExtensionEntry { uri, xml: raw_xml });
-        ext_pos = close_gt;
-    }
-    extensions
+    super::parse::ext::parse_chart_ext_lst_at(xml, ext_lst_start)
 }
 
+/// Parse the first `<c:extLst>` in an XML fragment.
 pub fn parse_chart_ext_lst(xml: &[u8]) -> Vec<ooxml_types::charts::ExtensionEntry> {
-    let ext_lst_start = match find_tag_simd(xml, b"extLst", 0) {
-        Some(pos) => pos,
-        None => return Vec::new(),
-    };
-    parse_chart_ext_lst_at(xml, ext_lst_start)
+    super::parse::ext::parse_chart_ext_lst(xml)
 }
 
 // =============================================================================

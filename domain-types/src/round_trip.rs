@@ -115,39 +115,63 @@ pub struct RoundTripContext {
 
     /// AUDIT WARNING: sharedStrings.xml is generated from modeled cells and
     /// must not be replayed verbatim once cells can change.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_shared_strings_xml: Option<Vec<u8>>,
     /// Compatibility input only. Document properties are modeled through
     /// `ParseOutput.properties` and must be regenerated from that state.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_doc_props_core_xml: Option<Vec<u8>>,
     /// Compatibility input only. Unsupported extended properties are dropped
     /// unless they are promoted to modeled document property state.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_doc_props_app_xml: Option<Vec<u8>>,
     /// Compatibility input only. Modeled custom properties live on
     /// `DocumentProperties.typed_custom` with `DocumentProperties.custom` kept
     /// as a legacy string projection.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_doc_props_custom_xml: Option<Vec<u8>>,
     /// Compatibility input only. Raw `xl/metadata.xml` may seed export only
     /// while current modeled cells still reference cell/value metadata (`cm`
     /// or `vm`); stale metadata must not force package parts by itself.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_metadata_xml: Option<Vec<u8>>,
     /// Compatibility input only. Person identity export is modeled through
     /// `ParseOutput.persons`; stale raw person.xml must not be replayed when
     /// modeled persons are absent.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub raw_persons_xml: Option<Vec<u8>>,
     /// Compatibility input only. External links are modeled through
     /// `ParseOutput.external_links` and imported workbook storage; exporters
     /// must not merge this list back into workbook relationships or parts.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_links: Vec<crate::domain::external_link::ExternalLink>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_xml_parts: Vec<BlobPart>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub web_extension_parts: Vec<BlobPart>,
     /// Explicit clean opaque package subgraphs that may be emitted verbatim.
     ///
@@ -161,8 +185,11 @@ pub struct RoundTripContext {
     /// in the domain (printerSettings, vbaProject, richData, featurePropertyBag,
     /// customProperty, media, timelines, timelineCaches,
     /// queryTables, connections, volatileDependencies, thumbnails, etc.).
-    /// Written back to the output ZIP verbatim.
-    #[serde(default)]
+    ///
+    /// Deprecated compatibility-only input. New exporters must use typed
+    /// feature sidecars or explicit clean `OpaquePackageSubgraph` records
+    /// instead of blanket binary passthrough.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binary_blobs: Vec<BlobPart>,
     /// Typed pivot package preservation data.
     ///
@@ -175,7 +202,7 @@ pub struct RoundTripContext {
     pub pivot_package: PivotPackageRoundTrip,
     /// Compatibility input only. Workbook views are modeled through
     /// `ParseOutput.workbook_views` and must be regenerated from that state.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_views: Vec<crate::domain::workbook::WorkbookView>,
     /// Original `calcId` from `<calcPr>`. Preserved for round-trip fidelity
     /// until iterative_calc settings are properly hydrated into Yrs.
@@ -187,18 +214,18 @@ pub struct RoundTripContext {
     /// even when they match defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub iterative_calc_settings: Option<crate::domain::workbook::CalculationProperties>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extensions: Option<ExtensionPreservation>,
 
     /// Namespace declarations from the `<workbook>` root element.
     /// Each entry is (prefix, uri). Used to reconstruct `mc:Ignorable` and
     /// other extension namespace attrs for round-trip fidelity.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_namespace_attrs: Vec<(String, String)>,
     /// Preserved unknown XML elements from `workbook.xml` as raw XML strings.
     /// Each entry is (position_key, raw_xml) where position_key encodes
     /// the insertion point (e.g., "first:workbook", "after:workbook:fileVersion").
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_preserved_elements: Vec<(String, String)>,
 
     /// Compatibility input only. Hidden and opaque defined names are modeled in
@@ -240,7 +267,11 @@ pub struct RoundTripContext {
     /// Compatibility input only. `docMetadata/LabelInfo.xml` is unsupported
     /// classification-label package data and must not be replayed as a raw
     /// standalone sidecar outside an explicit clean opaque subgraph.
-    #[serde(default, with = "option_bytes")]
+    #[serde(
+        default,
+        with = "option_bytes",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub doc_metadata_label_info: Option<Vec<u8>>,
 }
 
@@ -821,6 +852,20 @@ mod tests {
         assert!(!object.contains_key("rootRelationships"));
         assert!(!object.contains_key("workbookRelationships"));
         assert!(!object.contains_key("sheetWorkbookRIds"));
+        assert!(!object.contains_key("rawSharedStringsXml"));
+        assert!(!object.contains_key("rawDocPropsCoreXml"));
+        assert!(!object.contains_key("rawDocPropsAppXml"));
+        assert!(!object.contains_key("rawDocPropsCustomXml"));
+        assert!(!object.contains_key("rawMetadataXml"));
+        assert!(!object.contains_key("rawPersonsXml"));
+        assert!(!object.contains_key("externalLinks"));
+        assert!(!object.contains_key("customXmlParts"));
+        assert!(!object.contains_key("webExtensionParts"));
+        assert!(!object.contains_key("binaryBlobs"));
+        assert!(!object.contains_key("extensions"));
+        assert!(!object.contains_key("workbookNamespaceAttrs"));
+        assert!(!object.contains_key("workbookPreservedElements"));
+        assert!(!object.contains_key("docMetadataLabelInfo"));
         let sheet = object["sheets"].as_array().unwrap()[0].as_object().unwrap();
         assert!(!sheet.contains_key("sheetOpcRels"));
     }

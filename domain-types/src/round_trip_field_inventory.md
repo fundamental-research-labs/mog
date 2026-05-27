@@ -41,10 +41,10 @@ sidecar; it is not semantic authority.
 | `raw_metadata_xml` | transient parse-output sidecar | metadata with live `cm`/`vm` cell refs | ParseOutput | metadata writer with live refs | metadata part registration | metadata tests |
 | `raw_persons_xml` | deprecated compatibility only | `ParseOutput.persons` | domain | persons writer | persons part registration | person tests |
 | `external_links` | persisted typed metadata | `domain::external_link` | domain | external link writer | workbook external-link registrations | external link tests |
-| `custom_xml_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | legacy lowerer only | clean opaque subgraph registration | opaque custom XML tests |
-| `web_extension_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | legacy lowerer only | clean opaque subgraph registration | web extension tests |
+| `custom_xml_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | opaque custom XML tests |
+| `web_extension_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | web extension tests |
 | `opaque_package_subgraphs` | persisted opaque sidecar | `OpaquePackageSubgraph` | round_trip | `write::opaque_subgraph` | clean subgraph registration | opaque subgraph tests |
-| `binary_blobs` | deprecated compatibility only | opaque subgraphs or typed feature sidecars | round_trip | legacy lowerer only | clean opaque subgraph registration | binary passthrough tests |
+| `binary_blobs` | deprecated compatibility only | opaque subgraphs or typed feature sidecars | round_trip | ignored by writer except when lowered into typed feature state | clean opaque subgraph registration only | binary passthrough tests |
 | `pivot_package` | persisted opaque sidecar | `PivotPackageRoundTrip` | round_trip | pivot writer | pivot package graph registration | pivot package tests |
 | `workbook_views` | typed modeled state | `domain::workbook::WorkbookView` | domain | workbook writer | workbook XML | workbook view tests |
 | `calc_id` | persisted typed metadata | `CalculationProperties.calc_id` | domain | workbook writer | workbook XML | calc property tests |
@@ -107,4 +107,3 @@ sidecar; it is not semantic authority.
 | `drawing_opc_rels` | persisted typed metadata | drawing relationship ID hints | round_trip | drawing writer after owner match | drawing rel registration | drawing rel tests |
 | `has_drawing_rels_file` | persisted typed metadata | drawing rels lexical/package metadata | round_trip | drawing writer when owner exists | drawing rels registration | drawing rel tests |
 | `merge_cells_has_count` | persisted typed metadata | merge-cells lexical metadata | round_trip | sheet writer | worksheet XML | merge tests |
-

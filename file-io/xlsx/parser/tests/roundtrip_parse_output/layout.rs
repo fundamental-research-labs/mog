@@ -8,9 +8,10 @@ use super::helpers::{
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
-    ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
-    ValidationOperator, ValidationRule, ValidationSpec,
+    ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
+    PageMargins, ParseOutput, PrintSettings, RoundTripContext, RowDimension, SheetData,
+    SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule,
+    ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 
@@ -228,6 +229,66 @@ fn roundtrip_hidden_rows_and_cols() {
         hidden_col.is_some(),
         "Hidden col 1 dimension entry should survive round-trip"
     );
+}
+
+#[test]
+fn roundtrip_print_settings_from_modeled_state() {
+    let mut output = make_single_sheet(
+        "Print",
+        vec![cell(0, 0, CellValue::Text(Arc::from("printable")))],
+    );
+    output.sheets[0].print_settings = Some(PrintSettings {
+        paper_size: Some(9),
+        orientation: Some("landscape".to_string()),
+        scale: Some(85),
+        fit_to_width: Some(1),
+        fit_to_height: Some(2),
+        gridlines: true,
+        headings: true,
+        h_centered: true,
+        v_centered: true,
+        margins: Some(PageMargins {
+            left: 0.25,
+            right: 0.25,
+            top: 0.5,
+            bottom: 0.5,
+            header: 0.2,
+            footer: 0.2,
+        }),
+        header_footer: Some(HeaderFooter {
+            odd_header: Some("&CModeled Header".to_string()),
+            odd_footer: Some("&RPage &P".to_string()),
+            even_header: Some("&LEven Header".to_string()),
+            even_footer: Some("&CEven Footer".to_string()),
+            first_header: Some("&LFirst Header".to_string()),
+            first_footer: Some("&RFirst Footer".to_string()),
+            different_odd_even: true,
+            different_first: true,
+            scale_with_doc: Some(false),
+            align_with_margins: Some(false),
+        }),
+        black_and_white: true,
+        draft: true,
+        first_page_number: Some(3),
+        page_order: Some("overThenDown".to_string()),
+        use_printer_defaults: Some(false),
+        horizontal_dpi: Some(300),
+        vertical_dpi: Some(600),
+        r_id: None,
+        has_print_options: true,
+        use_first_page_number: true,
+        has_page_setup: true,
+        cell_comments: Some("asDisplayed".to_string()),
+        print_errors: Some("dash".to_string()),
+    });
+
+    let rt = roundtrip(&output);
+    let rt_print = rt.sheets[0]
+        .print_settings
+        .as_ref()
+        .expect("print settings should round-trip");
+
+    assert_eq!(rt_print, output.sheets[0].print_settings.as_ref().unwrap());
 }
 
 #[test]

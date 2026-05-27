@@ -6,8 +6,8 @@
 /// Convert unified `FloatingObject` items with `FormControl` data into writer `FormControl`.
 pub(super) fn convert_unified_form_controls(
     controls: &[&domain_types::domain::floating_object::FloatingObject],
-) -> Vec<crate::domain::controls::read::FormControl> {
-    use crate::domain::controls::read::{
+) -> Vec<crate::domain::controls::types::FormControl> {
+    use crate::domain::controls::types::{
         AnchorSource, CheckState, ControlAnchor, FormControl, FormControlProperties,
         FormControlType, VmlShapeProps,
     };

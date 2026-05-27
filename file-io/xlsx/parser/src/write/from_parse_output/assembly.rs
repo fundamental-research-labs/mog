@@ -31,7 +31,7 @@ pub(super) struct SheetExtras {
     /// Whether this sheet references a printer settings binary (pageSetup r:id).
     pub(super) has_printer_settings: bool,
     /// Form controls for this sheet (converted from domain types).
-    pub(super) form_controls: Vec<crate::domain::controls::read::FormControl>,
+    pub(super) form_controls: Vec<crate::domain::controls::types::FormControl>,
     /// Clean imported worksheet custom property sidecars.
     pub(super) custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
 }

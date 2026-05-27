@@ -46,7 +46,7 @@ pub use domain_types::domain::drawings::{
 
 impl OleObjectOutput {
     /// Convert an `OleObject` (parser-internal) into an `OleObjectOutput` (WASM-serializable).
-    pub fn from_ole_object(obj: &crate::domain::controls::read::OleObject) -> Self {
+    pub fn from_ole_object(obj: &crate::domain::controls::types::OleObject) -> Self {
         let object_pr = obj.object_pr.as_ref().map(|pr| {
             let anchor = pr.anchor.as_ref().map(|a| OleObjectAnchorOutput {
                 move_with_cells: a.move_with_cells,

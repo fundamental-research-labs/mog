@@ -48,7 +48,7 @@ use std::collections::HashMap;
 use crate::common::range::{ColWidth, MergeRange, RowHeight, SheetPane};
 use crate::domain::cells::{CellData, parse_worksheet_fast};
 use crate::domain::cond_format::read::parse_conditional_formats;
-use crate::domain::controls::read::FormControl;
+use crate::domain::controls::types::FormControl;
 use crate::domain::strings::read::SharedStrings;
 use crate::domain::validation::read::parse_data_validations;
 use crate::domain::workbook::read::parse_workbook;

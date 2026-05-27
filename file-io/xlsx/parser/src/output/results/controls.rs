@@ -134,7 +134,7 @@ pub struct FormControlOutput {
     // --- VML shape-level visual properties ---
     /// VML shape visual properties for round-trip fidelity.
     #[serde(default)]
-    pub vml_shape: crate::domain::controls::read::VmlShapeProps,
+    pub vml_shape: crate::domain::controls::types::VmlShapeProps,
 }
 
 impl FormControlOutput {
@@ -142,8 +142,8 @@ impl FormControlOutput {
     ///
     /// This is the reverse of `from_form_control()` and enables semantic round-trip:
     /// parse → FormControlOutput → FormControl → ControlsWriter → ctrlProp XML.
-    pub fn to_form_control(&self) -> crate::domain::controls::read::FormControl {
-        use crate::domain::controls::read::{
+    pub fn to_form_control(&self) -> crate::domain::controls::types::FormControl {
+        use crate::domain::controls::types::{
             AnchorSource, CheckState, ControlAnchor, FormControl, FormControlProperties,
             FormControlType,
         };
@@ -223,10 +223,10 @@ impl FormControlOutput {
     /// `shape_id` is provided externally because it comes from the worksheet-level
     /// `<control shapeId="...">` element, not from the ctrlProp XML.
     pub fn from_form_control(
-        fc: &crate::domain::controls::read::FormControl,
+        fc: &crate::domain::controls::types::FormControl,
         shape_id: u32,
     ) -> Self {
-        use crate::domain::controls::read::{AnchorSource, CheckState};
+        use crate::domain::controls::types::{AnchorSource, CheckState};
 
         let checked = fc.properties.checked.map(|c| match c {
             CheckState::Unchecked => "Unchecked".to_string(),

@@ -8,9 +8,9 @@ pub(super) fn form_control_base_shape_id(comments: &[Comment]) -> u32 {
 }
 
 pub(super) fn controls_with_shape_ids(
-    controls: &[crate::domain::controls::read::FormControl],
+    controls: &[crate::domain::controls::types::FormControl],
     base_shape_id: u32,
-) -> Vec<crate::domain::controls::read::FormControl> {
+) -> Vec<crate::domain::controls::types::FormControl> {
     controls
         .iter()
         .enumerate()

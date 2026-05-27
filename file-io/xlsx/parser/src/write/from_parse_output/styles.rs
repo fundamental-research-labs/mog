@@ -111,7 +111,10 @@ fn sanitize_unreferenced_lossless_styles(
     }
 
     let mut font_ids = BTreeSet::from([0_u32]);
-    let mut fill_ids = BTreeSet::from([0_u32]);
+    // OOXML stylesheets require both default fill records: `none` and
+    // `gray125`. They may be unreferenced by cellXfs but are still part of the
+    // workbook style contract and should survive sanitized lossless export.
+    let mut fill_ids = BTreeSet::from([0_u32, 1_u32]);
     let mut border_ids = BTreeSet::from([0_u32]);
     let mut num_fmt_ids = BTreeSet::new();
     for xf in kept_cell_xfs.iter().chain(kept_cell_style_xfs.iter()) {

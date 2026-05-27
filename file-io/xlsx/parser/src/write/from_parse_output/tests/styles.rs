@@ -45,7 +45,9 @@ fn unused_imported_stylesheet_is_not_replayed_without_modeled_style_references()
 
     assert!(!styles_xml.contains("StaleFont"));
     assert!(!styles_xml.contains("STALE"));
-    assert!(styles_xml.contains("<cellXfs count=\"1\""));
+    assert!(styles_xml.contains(r#"<fills count="2">"#));
+    assert!(styles_xml.contains(r#"patternType="gray125""#));
+    assert!(styles_xml.contains(r#"<cellXfs count="2">"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

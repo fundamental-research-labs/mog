@@ -935,6 +935,46 @@ fn preserved_pivot_marker_without_clean_package_is_not_replayed() {
 }
 
 #[test]
+fn early_preserved_pivot_marker_without_clean_package_is_not_replayed() {
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "Data".to_string(),
+            ..Default::default()
+        },
+        SheetData {
+            name: "Pivot".to_string(),
+            ..Default::default()
+        },
+    ]);
+    let mut ctx = domain_types::RoundTripContext {
+        sheets: vec![
+            domain_types::SheetRoundTripContext::default(),
+            domain_types::SheetRoundTripContext::default(),
+        ],
+        ..Default::default()
+    };
+    ctx.sheets[1].sheet_opc_rels = vec![domain_types::OpcRelationship {
+        id: "rId7".to_string(),
+        rel_type: REL_PIVOT_TABLE.to_string(),
+        target: "../pivotTables/pivotTable7.xml".to_string(),
+        target_mode: None,
+    }];
+    ctx.sheets[1].sheet_preserved_elements = vec![(
+        "worksheet\0before\0sheetData\0pivotTableDefinition".to_string(),
+        r#"<pivotTableDefinition r:id="rId7"/>"#.to_string(),
+    )];
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet2.xml").unwrap()).unwrap();
+
+    assert!(!sheet_xml.contains("pivotTableDefinition"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet2.xml.rels"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn missing_pivot_cache_ids_are_grouped_by_source_contract() {
     let output = pivot_package_output(vec![
         make_pivot_config(

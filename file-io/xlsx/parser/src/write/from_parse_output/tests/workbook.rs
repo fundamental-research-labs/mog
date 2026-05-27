@@ -618,6 +618,53 @@ fn persons_are_exported_from_modeled_state_not_raw_person_xml() {
 }
 
 #[test]
+fn modeled_persons_reuse_imported_workbook_relationship_identity() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.persons = vec![PersonInfo {
+        id: "{MODELED-PERSON}".to_string(),
+        display_name: "Modeled Person".to_string(),
+        user_id: Some("S::modeled@example.com::1".to_string()),
+        provider_id: Some("AD".to_string()),
+    }];
+    let ctx = domain_types::RoundTripContext {
+        workbook_relationships: vec![domain_types::OpcRelationship {
+            id: "rIdPersons".to_string(),
+            rel_type: crate::write::REL_PERSON.to_string(),
+            target: "persons/person.xml".to_string(),
+            target_mode: None,
+        }],
+        raw_persons_xml: Some(
+            br#"<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"><person displayName="Stale Person" id="{STALE-PERSON}" userId="stale"/></personList>"#
+                .to_vec(),
+        ),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let persons_xml =
+        String::from_utf8(archive.read_file("xl/persons/person.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(workbook_rels.contains(r#"Id="rIdPersons""#));
+    assert!(workbook_rels.contains(crate::write::REL_PERSON));
+    assert!(workbook_rels.contains(r#"Target="persons/person.xml""#));
+    assert!(persons_xml.contains("Modeled Person"));
+    assert!(persons_xml.contains("{MODELED-PERSON}"));
+    assert!(!persons_xml.contains("Stale Person"));
+    assert!(!persons_xml.contains("{STALE-PERSON}"));
+    assert!(content_types.contains(r#"PartName="/xl/persons/person.xml""#));
+    assert!(content_types.contains("application/vnd.ms-excel.person+xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_raw_person_xml_is_dropped_without_modeled_persons() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

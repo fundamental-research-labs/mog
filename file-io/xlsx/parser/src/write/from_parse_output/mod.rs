@@ -213,7 +213,7 @@ pub fn write_xlsx_from_parse_output(
     let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
     let mut worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry> =
         Vec::new();
-    let mut worksheet_table_relationships: Vec<(usize, usize, String)> = Vec::new();
+    let mut worksheet_table_relationships: Vec<(usize, usize)> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
 
     // Per-sheet drawing XML (the drawingN.xml content).
@@ -546,19 +546,7 @@ pub fn write_xlsx_from_parse_output(
 
             for i in 0..extras.tables.len() {
                 let global_idx = tables_before + i + 1;
-                let target = format!("../tables/table{}.xml", global_idx);
-                let table_r_id = if let Some(r_id) = package_authority::relationship_id_hint(
-                    original_sheet_rels,
-                    REL_TABLE,
-                    &target,
-                    None,
-                ) {
-                    rels.add_with_id(&r_id, REL_TABLE, &target);
-                    r_id
-                } else {
-                    rels.add(REL_TABLE, &target)
-                };
-                worksheet_table_relationships.push((sheet_idx, global_idx, table_r_id));
+                worksheet_table_relationships.push((sheet_idx, global_idx));
             }
         }
 
@@ -1357,12 +1345,12 @@ pub fn write_xlsx_from_parse_output(
             entry.relationship_id_hint.as_deref(),
         )?;
     }
-    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_table_relationships {
+    for (sheet_idx, global_idx) in &worksheet_table_relationships {
         crate::write::package_graph::register_worksheet_table(
             &mut package_graph_builder,
             *sheet_idx,
             *global_idx,
-            Some(relationship_id_hint),
+            None,
         )?;
     }
     for entry in &pivot_data.preserved_pivot_table_entries {

@@ -1170,10 +1170,15 @@ fn generated_table_relationship_uses_graph_registered_part_and_resolved_id() {
     let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
         .expect("content types should be UTF-8");
 
+    let table_rel = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes())
+        .into_iter()
+        .find(|rel| rel.rel_type == crate::write::REL_TABLE)
+        .expect("table relationship should be emitted");
+
     assert!(archive.contains("xl/tables/table1.xml"));
     assert!(!archive.contains("xl/tables/table9.xml"));
-    assert!(sheet_xml.contains("<tablePart r:id=\"rId4\"/>"));
-    assert!(sheet_rels.contains("Id=\"rId4\""));
+    assert_ne!(table_rel.id, "rId4");
+    assert!(sheet_xml.contains(&format!("<tablePart r:id=\"{}\"/>", table_rel.id)));
     assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
     assert!(!sheet_rels.contains("table9.xml"));
     assert!(content_types.contains("PartName=\"/xl/tables/table1.xml\""));
@@ -1341,7 +1346,13 @@ fn stale_table_sidecar_relationships_are_not_replayed() {
     assert!(archive.contains("xl/tables/table1.xml"));
     assert!(!archive.contains("xl/tables/_rels/table1.xml.rels"));
     assert!(!archive.contains("xl/queryTables/queryTable1.xml"));
-    assert!(sheet_xml.contains("<tablePart r:id=\"rId4\"/>"));
+    let table_rel = crate::domain::workbook::read::parse_all_rels(sheet_rels.as_bytes())
+        .into_iter()
+        .find(|rel| rel.rel_type == crate::write::REL_TABLE)
+        .expect("table relationship should be emitted");
+
+    assert_ne!(table_rel.id, "rId4");
+    assert!(sheet_xml.contains(&format!("<tablePart r:id=\"{}\"/>", table_rel.id)));
     assert!(sheet_rels.contains("Target=\"../tables/table1.xml\""));
     assert!(!content_types.contains("queryTable+xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

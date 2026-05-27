@@ -1,5 +1,5 @@
 use super::assembly::WorksheetThreadedCommentsGraphEntry;
-use super::{package_authority, worksheet_relative_target};
+use super::worksheet_relative_target;
 use crate::write::REL_THREADED_COMMENT;
 use crate::write::relationships::RelationshipManager;
 
@@ -15,19 +15,7 @@ pub(super) fn add_relationship_for_export(
         .flatten()
         .unwrap_or_else(|| format!("xl/threadedComments/threadedComment{global_idx}.xml"));
     let target = worksheet_relative_target(&path);
-    let relationship_id_hint = if let Some(r_id) = package_authority::relationship_id_hint(
-        original_sheet_rels,
-        REL_THREADED_COMMENT,
-        &target,
-        None,
-    )
-    .filter(|r_id| rels.get_by_id(r_id).is_none())
-    {
-        rels.add_with_id(&r_id, REL_THREADED_COMMENT, &target);
-        Some(r_id)
-    } else {
-        Some(rels.add(REL_THREADED_COMMENT, &target))
-    };
+    let relationship_id_hint = Some(rels.add(REL_THREADED_COMMENT, &target));
 
     WorksheetThreadedCommentsGraphEntry {
         sheet_idx,

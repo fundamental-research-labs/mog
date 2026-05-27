@@ -967,7 +967,7 @@ fn threaded_comment_export_registers_comment_and_person_package_graph() {
 }
 
 #[test]
-fn threaded_comment_export_preserves_imported_part_path_and_relationship_id() {
+fn threaded_comment_export_preserves_imported_part_path_not_relationship_id() {
     let mut output = make_single_sheet(
         "Comments",
         vec![cell(0, 0, CellValue::Text(Arc::from("threaded")))],
@@ -1022,7 +1022,7 @@ fn threaded_comment_export_preserves_imported_part_path_and_relationship_id() {
         .expect("content types should be UTF-8");
 
     assert!(!archive.contains("xl/threadedComments/threadedComment1.xml"));
-    assert!(sheet_rels.contains(r#"Id="rIdThreaded7""#));
+    assert!(!sheet_rels.contains(r#"Id="rIdThreaded7""#));
     assert!(sheet_rels.contains(r#"Target="../threadedComments/threadedComment7.xml""#));
     assert!(content_types.contains(r#"PartName="/xl/threadedComments/threadedComment7.xml""#));
     assert!(threaded_xml.contains(r#"id="thread-7""#));

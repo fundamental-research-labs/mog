@@ -103,8 +103,6 @@ pub(in crate::storage::engine) fn build_workbook_snapshot(
     mirror: &CellMirror,
 ) -> WorkbookSnapshot {
     use crate::storage::sheet::properties;
-    use crate::storage::workbook::named_ranges;
-
     // 1. Build sheet snapshots
     let sheet_ids = stores.storage.sheet_order();
     let sheet_snapshots: Vec<SheetSnapshot> = sheet_ids

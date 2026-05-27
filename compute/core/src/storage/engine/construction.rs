@@ -1,9 +1,10 @@
-//! Shared construction helpers for `YrsComputeEngine`.
+//! Construction, import, and rebuild helpers for `YrsComputeEngine`.
 //!
-//! Deduplicates the grid-index, merge-index, layout-index, observer, undo-manager,
-//! locale, and theme-palette creation that was previously copy-pasted across
-//! `from_snapshot`, `from_xlsx_bytes`, `import_from_xlsx_bytes`, and
-//! `import_from_xlsx_bytes_no_recalc`.
+//! Keep this file as a facade. Implementation belongs in focused private
+//! modules under `construction/`.
+//!
+//! Source-shape budget: this facade should stay below 250 lines. Move new
+//! implementation into the ownership module that matches its behavior.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,8 +51,8 @@ mod types;
 mod xlsx;
 
 pub(super) use assembly::{
-    assemble_engine, assemble_engine_with_alloc, from_snapshot, from_yrs_state,
-    rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
+    assemble_engine, from_snapshot, from_yrs_state, rebuild_engine_from_snapshot,
+    snapshot_id_high_water_mark,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{
@@ -65,27 +66,21 @@ pub(super) use indexes::{
 };
 pub(super) use named_ranges::{
     YrsIdentityFormulaLookup, defined_names_to_named_range_defs, normalize_named_range_refs,
-    normalized_defined_name_text_lost_opaque_ref,
 };
-pub(super) use range_styles::{
-    build_imported_range_style_plan, coalesce_imported_style_positions, range_style_formats_enabled,
-};
+pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
 pub(super) use runtime::{
     create_observer_and_undo, derive_settings, hydrate_mirror_format_ranges,
     load_custom_cell_styles, load_theme_palette, sync_enable_calculation_flags,
 };
 pub(super) use sheet_import::import_sheets_from_xlsx;
 pub use snapshots::build_workbook_snapshot_from_yrs;
-pub(super) use snapshots::{
-    build_sheet_snapshot, build_sheet_snapshot_from_yrs, build_workbook_snapshot,
-    read_tables_from_yrs,
-};
+pub(super) use snapshots::{build_sheet_snapshot_from_yrs, build_workbook_snapshot};
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
-pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes, parse_and_hydrate_xlsx};
+pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
 
 #[cfg(test)]
 mod tests {
-    use super::{build_imported_range_style_plan, normalized_defined_name_text_lost_opaque_ref};
+    use super::{build_imported_range_style_plan, named_ranges};
     use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
     use cell_types::{PayloadEncoding, RangeAnchor, RangeId, RangeKind};
     use domain_types::{CellData, SheetData};
@@ -106,7 +101,7 @@ mod tests {
     fn detects_opaque_defined_name_reference_lost_during_normalization() {
         let identity = identity_template("PRINTLOC");
 
-        assert!(normalized_defined_name_text_lost_opaque_ref(
+        assert!(named_ranges::normalized_defined_name_text_lost_opaque_ref(
             "'FX Build'!PRINTLOC",
             &identity
         ));
@@ -116,7 +111,7 @@ mod tests {
     fn unchanged_no_ref_defined_name_template_does_not_need_raw_preservation() {
         let identity = identity_template("0.01");
 
-        assert!(!normalized_defined_name_text_lost_opaque_ref(
+        assert!(!named_ranges::normalized_defined_name_text_lost_opaque_ref(
             "0.01", &identity
         ));
     }

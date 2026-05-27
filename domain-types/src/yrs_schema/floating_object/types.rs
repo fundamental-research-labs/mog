@@ -1,5 +1,3 @@
-use super::*;
-
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use yrs::types::map::MapRef;
@@ -8,10 +6,10 @@ use yrs::{Any, Map, ReadTxn};
 use crate::domain::floating_object::*;
 use crate::yrs_schema::helpers::*;
 
-const KEY_ANCHOR_ROW_OFFSET_EMU: &str = "anchorRowOffsetEmu";
-const KEY_ANCHOR_COL_OFFSET_EMU: &str = "anchorColOffsetEmu";
-const KEY_END_ROW_OFFSET_EMU: &str = "endRowOffsetEmu";
-const KEY_END_COL_OFFSET_EMU: &str = "endColOffsetEmu";
+pub(super) const KEY_ANCHOR_ROW_OFFSET_EMU: &str = "anchorRowOffsetEmu";
+pub(super) const KEY_ANCHOR_COL_OFFSET_EMU: &str = "anchorColOffsetEmu";
+pub(super) const KEY_END_ROW_OFFSET_EMU: &str = "endRowOffsetEmu";
+pub(super) const KEY_END_COL_OFFSET_EMU: &str = "endColOffsetEmu";
 const KEY_EXTENT_CX_EMU: &str = "extentCxEmu";
 const KEY_EXTENT_CY_EMU: &str = "extentCyEmu";
 

@@ -1,7 +1,5 @@
 use super::*;
-use ooxml_types::cond_format::{
-    CfOperator, CfTimePeriod, CfvoType, DataBarAxisPosition, DataBarDirection, IconSetType,
-};
+use ooxml_types::cond_format::{CfOperator, CfTimePeriod, CfvoType, IconSetType};
 use ooxml_types::styles::{BorderStyle, UnderlineStyle};
 use serde::{Deserialize, Serialize};
 

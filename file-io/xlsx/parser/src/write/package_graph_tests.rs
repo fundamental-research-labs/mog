@@ -546,6 +546,92 @@ fn rejects_dangling_internal_relationship_targets() {
 }
 
 #[test]
+fn validate_for_export_rejects_known_relationship_from_wrong_owner() {
+    let mut graph = PackageGraphBuilder::new();
+    graph
+        .register_part(modeled_part("xl/workbook.xml", CT_WORKBOOK))
+        .unwrap();
+    graph
+        .register_part(modeled_part("xl/drawings/drawing1.xml", CT_DRAWING))
+        .unwrap();
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_DRAWING.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "xl/drawings/drawing1.xml".to_string(),
+        },
+        identity_hint: None,
+    });
+
+    let err = graph
+        .resolve()
+        .unwrap()
+        .validate_for_export()
+        .expect_err("drawing relationship must be worksheet-owned");
+
+    match err {
+        WriteError::PackageIntegrityIssues(issues) => {
+            assert!(issues.iter().any(|issue| matches!(
+                issue,
+                PackageIntegrityIssue::InvalidRelationshipOwner {
+                    rels_path,
+                    relationship_type,
+                    ..
+                } if rels_path == "xl/_rels/workbook.xml.rels"
+                    && relationship_type == REL_DRAWING
+            )));
+        }
+        other => panic!("expected package integrity issues, got {other:?}"),
+    }
+}
+
+#[test]
+fn validate_for_export_does_not_owner_classify_clean_opaque_relationships() {
+    let mut graph = PackageGraphBuilder::new();
+    graph
+        .register_opaque_part(
+            PackagePart {
+                path: "xl/customXml/item1.xml".to_string(),
+                content_type: Some("application/xml".to_string()),
+                default_extension: None,
+                kind: PackagePartKind::OpaqueClean,
+                bytes: Some(b"<root/>".to_vec()),
+            },
+            OpaquePackageOwnershipState::Clean,
+        )
+        .unwrap();
+    graph
+        .register_opaque_part(
+            PackagePart {
+                path: "xl/customXml/item2.xml".to_string(),
+                content_type: Some("application/xml".to_string()),
+                default_extension: None,
+                kind: PackagePartKind::OpaqueClean,
+                bytes: Some(b"<root/>".to_vec()),
+            },
+            OpaquePackageOwnershipState::Clean,
+        )
+        .unwrap();
+    graph
+        .add_opaque_relationship(
+            PackageRelationship {
+                owner: PackageOwner::Part {
+                    path: "xl/customXml/item1.xml".to_string(),
+                },
+                relationship_type: REL_DRAWING.to_string(),
+                target: PackageRelationshipTarget::InternalPart {
+                    path: "xl/customXml/item2.xml".to_string(),
+                },
+                identity_hint: None,
+            },
+            OpaquePackageOwnershipState::Clean,
+        )
+        .unwrap();
+
+    graph.resolve().unwrap().validate_for_export().unwrap();
+}
+
+#[test]
 fn opaque_parts_require_explicit_clean_ownership() {
     let mut graph = PackageGraphBuilder::new();
     let part = PackagePart {

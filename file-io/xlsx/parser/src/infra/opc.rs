@@ -232,6 +232,9 @@ impl PackageOwner {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OoxmlRelationshipType {
     OfficeDocument,
+    CoreProperties,
+    ExtendedProperties,
+    CustomProperties,
     Worksheet,
     Styles,
     Theme,
@@ -283,6 +286,9 @@ impl OoxmlRelationshipType {
     pub fn from_uri(uri: &str) -> Self {
         match uri {
             REL_OFFICE_DOCUMENT => Self::OfficeDocument,
+            REL_CORE_PROPERTIES => Self::CoreProperties,
+            REL_EXTENDED_PROPERTIES => Self::ExtendedProperties,
+            REL_CUSTOM_PROPERTIES => Self::CustomProperties,
             REL_WORKSHEET => Self::Worksheet,
             REL_STYLES => Self::Styles,
             REL_THEME => Self::Theme,
@@ -334,6 +340,9 @@ impl OoxmlRelationshipType {
     pub fn uri(&self) -> &str {
         match self {
             Self::OfficeDocument => REL_OFFICE_DOCUMENT,
+            Self::CoreProperties => REL_CORE_PROPERTIES,
+            Self::ExtendedProperties => REL_EXTENDED_PROPERTIES,
+            Self::CustomProperties => REL_CUSTOM_PROPERTIES,
             Self::Worksheet => REL_WORKSHEET,
             Self::Styles => REL_STYLES,
             Self::Theme => REL_THEME,

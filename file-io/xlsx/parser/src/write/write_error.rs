@@ -37,6 +37,11 @@ pub enum PackageIntegrityIssue {
         target: String,
         resolved_path: String,
     },
+    InvalidRelationshipOwner {
+        rels_path: String,
+        relationship_type: String,
+        expected_owner: String,
+    },
     MissingRequiredRelationship {
         rels_path: String,
         relationship_type: String,
@@ -84,6 +89,14 @@ impl std::fmt::Display for PackageIntegrityIssue {
             } => write!(
                 f,
                 "relationship {id} in {rels_path} targets missing part {resolved_path} from target {target}"
+            ),
+            Self::InvalidRelationshipOwner {
+                rels_path,
+                relationship_type,
+                expected_owner,
+            } => write!(
+                f,
+                "relationship type {relationship_type} in {rels_path} is not valid for that owner; expected {expected_owner}"
             ),
             Self::MissingRequiredRelationship {
                 rels_path,

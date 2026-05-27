@@ -21,6 +21,7 @@ use super::{
 use crate::domain::content_types::write::{
     CT_CHART_COLOR_STYLE, CT_CHART_STYLE, ContentTypesManager,
 };
+use crate::infra::opc::OoxmlRelationshipType;
 use domain_types::{
     OpaquePackageOwner, OpaquePackageOwnership, OpaquePackageSubgraph, OpaqueRelationshipTarget,
     RoundTripContext,
@@ -160,6 +161,8 @@ impl ResolvedPackageGraph {
                     owner_path: owner_part,
                 });
             }
+
+            validate_known_relationship_owner(rel, &self.parts, &mut errors);
 
             if rel.target_mode.as_deref() == Some("External") {
                 continue;
@@ -1469,6 +1472,193 @@ fn validate_required_content_type(part: &PackagePart, errors: &mut Vec<PackageIn
             part_path: part.path.clone(),
             expected_content_type: expected.to_string(),
         });
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelationshipOwnerKind {
+    Root,
+    Workbook,
+    Worksheet,
+    Drawing,
+    Chart,
+    VmlDrawing,
+    PivotTable,
+    PivotCache,
+    ExternalLink,
+    OtherModeled,
+}
+
+fn validate_known_relationship_owner(
+    rel: &ResolvedPackageRelationship,
+    parts: &BTreeMap<String, PackagePart>,
+    errors: &mut Vec<PackageIntegrityIssue>,
+) {
+    let Some(owner_kind) = relationship_owner_kind(&rel.owner_rels_path, parts) else {
+        return;
+    };
+    let rel_type = OoxmlRelationshipType::from_uri(&rel.relationship_type);
+    if relationship_type_allowed_for_owner(owner_kind, &rel_type) {
+        return;
+    }
+    errors.push(PackageIntegrityIssue::InvalidRelationshipOwner {
+        rels_path: rel.owner_rels_path.clone(),
+        relationship_type: rel.relationship_type.clone(),
+        expected_owner: expected_owner_description(&rel_type).to_string(),
+    });
+}
+
+fn relationship_owner_kind(
+    rels_path: &str,
+    parts: &BTreeMap<String, PackagePart>,
+) -> Option<RelationshipOwnerKind> {
+    let owner_part = owner_part_path_from_rels_path(rels_path)?;
+    let Some(path) = owner_part else {
+        return Some(RelationshipOwnerKind::Root);
+    };
+    let part = parts.get(&path)?;
+    if !matches!(part.kind, PackagePartKind::Modeled) {
+        return None;
+    }
+    if path == "xl/workbook.xml" {
+        Some(RelationshipOwnerKind::Workbook)
+    } else if path.starts_with("xl/worksheets/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::Worksheet)
+    } else if path.starts_with("xl/drawings/") && path.ends_with(".vml") {
+        Some(RelationshipOwnerKind::VmlDrawing)
+    } else if path.starts_with("xl/drawings/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::Drawing)
+    } else if path.starts_with("xl/charts/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::Chart)
+    } else if path.starts_with("xl/pivotTables/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::PivotTable)
+    } else if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::PivotCache)
+    } else if path.starts_with("xl/externalLinks/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::ExternalLink)
+    } else {
+        Some(RelationshipOwnerKind::OtherModeled)
+    }
+}
+
+fn relationship_type_allowed_for_owner(
+    owner: RelationshipOwnerKind,
+    rel_type: &OoxmlRelationshipType,
+) -> bool {
+    use OoxmlRelationshipType as Rel;
+    match rel_type {
+        Rel::Unknown(_) => true,
+        Rel::OfficeDocument
+        | Rel::CoreProperties
+        | Rel::ExtendedProperties
+        | Rel::CustomProperties => owner == RelationshipOwnerKind::Root,
+        Rel::Worksheet
+        | Rel::Styles
+        | Rel::Theme
+        | Rel::SharedStrings
+        | Rel::CalcChain
+        | Rel::ExternalLink
+        | Rel::SlicerCache
+        | Rel::Metadata
+        | Rel::Person
+        | Rel::VbaProject => owner == RelationshipOwnerKind::Workbook,
+        Rel::PivotCacheDefinition => {
+            matches!(
+                owner,
+                RelationshipOwnerKind::Workbook | RelationshipOwnerKind::PivotTable
+            )
+        }
+        Rel::Comments
+        | Rel::ThreadedComments
+        | Rel::VmlDrawing
+        | Rel::Drawing
+        | Rel::Table
+        | Rel::PivotTable
+        | Rel::Hyperlink
+        | Rel::PrinterSettings
+        | Rel::CtrlProp
+        | Rel::CustomProperty
+        | Rel::OleObject
+        | Rel::Slicer => owner == RelationshipOwnerKind::Worksheet,
+        Rel::Image => matches!(
+            owner,
+            RelationshipOwnerKind::Drawing
+                | RelationshipOwnerKind::Chart
+                | RelationshipOwnerKind::VmlDrawing
+        ),
+        Rel::Chart
+        | Rel::ChartEx
+        | Rel::DiagramData
+        | Rel::DiagramLayout
+        | Rel::DiagramColors
+        | Rel::DiagramQuickStyle
+        | Rel::DiagramDrawing => owner == RelationshipOwnerKind::Drawing,
+        Rel::ChartStyle | Rel::ChartColorStyle => owner == RelationshipOwnerKind::Chart,
+        Rel::PivotCacheRecords => owner == RelationshipOwnerKind::PivotCache,
+        Rel::ExternalLinkPath
+        | Rel::ExternalLinkLongPath
+        | Rel::XlPathMissing
+        | Rel::XlLongPathMissing
+        | Rel::XlStartup
+        | Rel::XlAlternateStartup
+        | Rel::XlLibrary
+        | Rel::XlLongStartup
+        | Rel::XlLongAlternateStartup
+        | Rel::XlLongLibrary => owner == RelationshipOwnerKind::ExternalLink,
+    }
+}
+
+fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str {
+    use OoxmlRelationshipType as Rel;
+    match rel_type {
+        Rel::OfficeDocument
+        | Rel::CoreProperties
+        | Rel::ExtendedProperties
+        | Rel::CustomProperties => "root package relationships",
+        Rel::Worksheet
+        | Rel::Styles
+        | Rel::Theme
+        | Rel::SharedStrings
+        | Rel::CalcChain
+        | Rel::ExternalLink
+        | Rel::SlicerCache
+        | Rel::Metadata
+        | Rel::Person
+        | Rel::VbaProject => "workbook relationships",
+        Rel::PivotCacheDefinition => "workbook or pivot table relationships",
+        Rel::Comments
+        | Rel::ThreadedComments
+        | Rel::VmlDrawing
+        | Rel::Drawing
+        | Rel::Table
+        | Rel::PivotTable
+        | Rel::Hyperlink
+        | Rel::PrinterSettings
+        | Rel::CtrlProp
+        | Rel::CustomProperty
+        | Rel::OleObject
+        | Rel::Slicer => "worksheet relationships",
+        Rel::Image => "drawing, chart, or VML drawing relationships",
+        Rel::Chart
+        | Rel::ChartEx
+        | Rel::DiagramData
+        | Rel::DiagramLayout
+        | Rel::DiagramColors
+        | Rel::DiagramQuickStyle
+        | Rel::DiagramDrawing => "drawing relationships",
+        Rel::ChartStyle | Rel::ChartColorStyle => "chart relationships",
+        Rel::PivotCacheRecords => "pivot cache relationships",
+        Rel::ExternalLinkPath
+        | Rel::ExternalLinkLongPath
+        | Rel::XlPathMissing
+        | Rel::XlLongPathMissing
+        | Rel::XlStartup
+        | Rel::XlAlternateStartup
+        | Rel::XlLibrary
+        | Rel::XlLongStartup
+        | Rel::XlLongAlternateStartup
+        | Rel::XlLongLibrary => "external link relationships",
+        Rel::Unknown(_) => "unknown relationship owner",
     }
 }
 

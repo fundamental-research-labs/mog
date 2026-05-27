@@ -141,6 +141,20 @@ struct WorksheetDrawingGraphEntry {
     relationship_id_hint: Option<String>,
 }
 
+struct DrawingRelationshipGraphEntry {
+    drawing_path: String,
+    rel_type: String,
+    target_path: String,
+    relationship_id_hint: String,
+}
+
+struct ChartAuxiliaryRelationshipGraphEntry {
+    chart_path: String,
+    rel_type: String,
+    target_path: String,
+    relationship_id_hint: String,
+}
+
 struct WorksheetPrinterSettingsGraphEntry {
     sheet_idx: usize,
     path: String,
@@ -833,6 +847,8 @@ pub fn write_xlsx_from_parse_output(
     let mut worksheet_form_control_vml_relationships: Vec<WorksheetFormControlVmlGraphEntry> =
         Vec::new();
     let mut worksheet_drawing_relationships: Vec<WorksheetDrawingGraphEntry> = Vec::new();
+    let mut drawing_relationships: Vec<DrawingRelationshipGraphEntry> = Vec::new();
+    let mut chart_auxiliary_relationships: Vec<ChartAuxiliaryRelationshipGraphEntry> = Vec::new();
     let mut worksheet_printer_settings_relationships: Vec<WorksheetPrinterSettingsGraphEntry> =
         Vec::new();
     let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
@@ -843,9 +859,12 @@ pub fn write_xlsx_from_parse_output(
 
     // Per-sheet drawing rels XML (for drawing→chart references).
     let mut drawing_rels_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
+    let mut drawing_rels_should_emit: Vec<bool> = Vec::with_capacity(output.sheets.len());
 
     // Per-sheet drawing XML (the drawingN.xml content).
     let mut drawing_xml_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
+    let mut drawing_writer_data: Vec<Option<DrawingWriter>> =
+        Vec::with_capacity(output.sheets.len());
 
     // Track which sheets have drawings (for content types).
     let mut sheets_with_drawings: Vec<usize> = Vec::new();
@@ -1277,7 +1296,7 @@ pub fn write_xlsx_from_parse_output(
             };
             worksheet_drawing_relationships.push(WorksheetDrawingGraphEntry {
                 sheet_idx,
-                path: drawing_path,
+                path: drawing_path.clone(),
                 target: drawing_target,
                 relationship_id_hint: drawing_relationship_id_hint,
             });
@@ -1721,14 +1740,16 @@ pub fn write_xlsx_from_parse_output(
                 }
             }
 
-            let drawing_xml = if has_modeled_drawing_content {
-                drawing_writer.to_xml()
+            if has_modeled_drawing_content {
+                drawing_xml_data.push(None);
+                drawing_writer_data.push(Some(drawing_writer));
             } else if let Some(ref imported) = imported_drawing {
-                imported.data.clone()
+                drawing_xml_data.push(Some(imported.data.clone()));
+                drawing_writer_data.push(None);
             } else {
-                DrawingWriter::new().to_xml()
-            };
-            drawing_xml_data.push(Some(drawing_xml));
+                drawing_xml_data.push(None);
+                drawing_writer_data.push(Some(DrawingWriter::new()));
+            }
             // Emit drawing .rels when there are actual relationships OR when the
             // original archive had a .rels file (even if empty) for round-trip fidelity.
             let had_original_rels_file = round_trip_ctx
@@ -1739,15 +1760,38 @@ pub fn write_xlsx_from_parse_output(
                 && let Some(rels) = imported.rels
             {
                 drawing_rels_data.push(Some(rels.data));
+                drawing_rels_should_emit.push(true);
             } else if !drawing_rels.is_empty() || had_original_rels_file {
-                drawing_rels_data.push(Some(drawing_rels.to_xml()));
+                for rel in drawing_rels.relationships() {
+                    let target_path = crate::infra::opc::resolve_relationship_target(
+                        Some(&drawing_path),
+                        &rel.target,
+                    )
+                    .map_err(|err| {
+                        WriteError::PackageIntegrity(format!(
+                            "invalid drawing relationship target for {}: {} ({:?})",
+                            drawing_path, rel.target, err
+                        ))
+                    })?;
+                    drawing_relationships.push(DrawingRelationshipGraphEntry {
+                        drawing_path: drawing_path.clone(),
+                        rel_type: rel.rel_type.clone(),
+                        target_path,
+                        relationship_id_hint: rel.id.clone(),
+                    });
+                }
+                drawing_rels_data.push(None);
+                drawing_rels_should_emit.push(true);
             } else {
                 drawing_rels_data.push(None);
+                drawing_rels_should_emit.push(false);
             }
             sheets_with_drawings.push(global_drawing_idx);
         } else {
             drawing_xml_data.push(None);
+            drawing_writer_data.push(None);
             drawing_rels_data.push(None);
+            drawing_rels_should_emit.push(false);
         }
 
         // Printer settings relationship.
@@ -1912,6 +1956,155 @@ pub fn write_xlsx_from_parse_output(
             entry.relationship_id_hint.as_deref(),
         )?;
     }
+    let mut registered_chart_auxiliary_parts = std::collections::BTreeSet::new();
+    for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
+        for (local_idx, entry) in chart_entries.iter().enumerate() {
+            let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
+            crate::write::package_graph::register_chart(
+                &mut package_graph_builder,
+                entry.global_idx,
+            )?;
+            if let Some(aux) = round_trip_ctx
+                .and_then(|ctx| ctx.sheets.get(sheet_idx))
+                .and_then(|srt| srt.chart_auxiliary_data.get(local_idx))
+            {
+                let auxiliary_paths: std::collections::BTreeSet<_> = aux
+                    .auxiliary_files
+                    .iter()
+                    .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
+                    .collect();
+                for aux_file in &aux.auxiliary_files {
+                    if registered_chart_auxiliary_parts
+                        .insert(aux_file.path.trim_start_matches('/').to_string())
+                    {
+                        crate::write::package_graph::register_chart_auxiliary_part(
+                            &mut package_graph_builder,
+                            &aux_file.path,
+                        )?;
+                    }
+                }
+                if let Some(rels_data) = &aux.chart_rels {
+                    for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
+                        if rel.target_mode.as_deref() == Some("External") {
+                            continue;
+                        }
+                        let Ok(target_path) = crate::infra::opc::resolve_relationship_target(
+                            Some(&chart_path),
+                            &rel.target,
+                        ) else {
+                            continue;
+                        };
+                        let target_path = target_path.trim_start_matches('/').to_string();
+                        if auxiliary_paths.contains(&target_path) {
+                            chart_auxiliary_relationships.push(
+                                ChartAuxiliaryRelationshipGraphEntry {
+                                    chart_path: chart_path.clone(),
+                                    rel_type: rel.rel_type,
+                                    target_path,
+                                    relationship_id_hint: rel.id,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
+        for (local_idx, entry) in chart_ex_entries.iter().enumerate() {
+            let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
+            crate::write::package_graph::register_chart_ex(
+                &mut package_graph_builder,
+                entry.global_idx,
+            )?;
+            if let Some(aux) = round_trip_ctx
+                .and_then(|ctx| ctx.sheets.get(sheet_idx))
+                .and_then(|srt| srt.chart_ex_auxiliary_data.get(local_idx))
+            {
+                let auxiliary_paths: std::collections::BTreeSet<_> = aux
+                    .auxiliary_files
+                    .iter()
+                    .map(|aux_file| aux_file.path.trim_start_matches('/').to_string())
+                    .collect();
+                for aux_file in &aux.auxiliary_files {
+                    if registered_chart_auxiliary_parts
+                        .insert(aux_file.path.trim_start_matches('/').to_string())
+                    {
+                        crate::write::package_graph::register_chart_auxiliary_part(
+                            &mut package_graph_builder,
+                            &aux_file.path,
+                        )?;
+                    }
+                }
+                if let Some(rels_data) = &aux.chart_rels {
+                    for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
+                        if rel.target_mode.as_deref() == Some("External") {
+                            continue;
+                        }
+                        let Ok(target_path) = crate::infra::opc::resolve_relationship_target(
+                            Some(&chart_path),
+                            &rel.target,
+                        ) else {
+                            continue;
+                        };
+                        let target_path = target_path.trim_start_matches('/').to_string();
+                        if auxiliary_paths.contains(&target_path) {
+                            chart_auxiliary_relationships.push(
+                                ChartAuxiliaryRelationshipGraphEntry {
+                                    chart_path: chart_path.clone(),
+                                    rel_type: rel.rel_type,
+                                    target_path,
+                                    relationship_id_hint: rel.id,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for entry in &chart_auxiliary_relationships {
+        crate::write::package_graph::register_chart_auxiliary_relationship(
+            &mut package_graph_builder,
+            &entry.chart_path,
+            &entry.rel_type,
+            &entry.target_path,
+            &entry.relationship_id_hint,
+        );
+    }
+    for zip_path in all_image_blobs
+        .iter()
+        .map(|(zip_path, _)| zip_path.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        crate::write::package_graph::register_media_part(&mut package_graph_builder, zip_path)?;
+    }
+    for entry in &drawing_relationships {
+        if entry.rel_type == REL_CHART {
+            crate::write::package_graph::register_drawing_chart_relationship(
+                &mut package_graph_builder,
+                &entry.drawing_path,
+                &entry.target_path,
+                &entry.relationship_id_hint,
+            )?;
+        } else if entry.rel_type == REL_CHART_EX {
+            crate::write::package_graph::register_drawing_chart_ex_relationship(
+                &mut package_graph_builder,
+                &entry.drawing_path,
+                &entry.target_path,
+                &entry.relationship_id_hint,
+            )?;
+        } else if entry.rel_type
+            == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+        {
+            crate::write::package_graph::register_drawing_image_relationship(
+                &mut package_graph_builder,
+                &entry.drawing_path,
+                &entry.target_path,
+                &entry.relationship_id_hint,
+            )?;
+        }
+    }
     for entry in &worksheet_printer_settings_relationships {
         crate::write::package_graph::register_worksheet_printer_settings(
             &mut package_graph_builder,
@@ -1968,6 +2161,55 @@ pub fn write_xlsx_from_parse_output(
         &pivot_data,
     )?;
     let package_graph = package_graph_builder.resolve()?;
+
+    for (sheet_idx, drawing_writer) in drawing_writer_data.iter_mut().enumerate() {
+        let Some(drawing_writer) = drawing_writer else {
+            continue;
+        };
+        let drawing_path = worksheet_drawing_relationships
+            .iter()
+            .find(|entry| entry.sheet_idx == sheet_idx)
+            .map(|entry| entry.path.as_str())
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing graph-registered drawing part for sheet {}",
+                    sheet_idx + 1
+                ))
+            })?;
+        let drawing_rels = package_graph.relationship_manager_for_owner(
+            &crate::write::package_graph::PackageOwner::Part {
+                path: drawing_path.to_string(),
+            },
+        );
+        let mut resolved_ids = std::collections::HashMap::new();
+        for entry in drawing_relationships
+            .iter()
+            .filter(|entry| entry.drawing_path == drawing_path)
+        {
+            let resolved_id = drawing_rels
+                .relationships()
+                .iter()
+                .find(|rel| {
+                    rel.rel_type == entry.rel_type
+                        && crate::infra::opc::resolve_relationship_target(
+                            Some(drawing_path),
+                            &rel.target,
+                        )
+                        .map(|target| target == entry.target_path)
+                        .unwrap_or(false)
+                })
+                .map(|rel| rel.id.clone())
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing resolved drawing relationship for {} target {}",
+                        drawing_path, entry.target_path
+                    ))
+                })?;
+            resolved_ids.insert(entry.relationship_id_hint.clone(), resolved_id);
+        }
+        drawing_writer.remap_relationship_ids(&resolved_ids);
+        drawing_xml_data[sheet_idx] = Some(drawing_writer.to_xml());
+    }
 
     for entry in &worksheet_hyperlink_relationships {
         let owner = crate::write::package_graph::PackageOwner::Worksheet {
@@ -2376,97 +2618,9 @@ pub fn write_xlsx_from_parse_output(
     // Pivot table and cache content types are registered through the package graph.
     // Form control (ctrlProp) content types are registered through the package graph.
     // Drawing content types are registered through the package graph when emitted.
-    // Chart content types.
-    for chart_entries in &all_chart_entries {
-        for entry in chart_entries {
-            let path = format!("/xl/charts/chart{}.xml", entry.global_idx);
-            if !content_types.has_override(&path) {
-                content_types.add_chart(entry.global_idx);
-            }
-        }
-    }
-    for chart_ex_entries in &all_chart_ex_entries {
-        for entry in chart_ex_entries {
-            let path = format!("/xl/charts/chartEx{}.xml", entry.global_idx);
-            if !content_types.has_override(&path) {
-                content_types.add_chart_ex(entry.global_idx);
-            }
-        }
-    }
-    // Chart auxiliary file content types (style, colors).
-    if let Some(ctx) = round_trip_ctx {
-        for sheet_rt in &ctx.sheets {
-            for aux in &sheet_rt.chart_auxiliary_data {
-                for aux_file in &aux.auxiliary_files {
-                    let abs_path = if aux_file.path.starts_with('/') {
-                        aux_file.path.clone()
-                    } else {
-                        format!("/{}", aux_file.path)
-                    };
-                    if content_types.has_override(&abs_path) {
-                        continue;
-                    }
-                    if aux_file.path.contains("style") {
-                        content_types.add_chart_style(&aux_file.path);
-                    } else if aux_file.path.contains("colors") || aux_file.path.contains("color") {
-                        content_types.add_chart_color_style(&aux_file.path);
-                    }
-                }
-            }
-        }
-    }
-    // ChartEx auxiliary file content types (style, colors).
-    if let Some(ctx) = round_trip_ctx {
-        for sheet_rt in &ctx.sheets {
-            for aux in &sheet_rt.chart_ex_auxiliary_data {
-                for aux_file in &aux.auxiliary_files {
-                    let abs_path = if aux_file.path.starts_with('/') {
-                        aux_file.path.clone()
-                    } else {
-                        format!("/{}", aux_file.path)
-                    };
-                    if content_types.has_override(&abs_path) {
-                        continue;
-                    }
-                    if aux_file.path.contains("style") {
-                        content_types.add_chart_style(&aux_file.path);
-                    } else if aux_file.path.contains("colors") || aux_file.path.contains("color") {
-                        content_types.add_chart_color_style(&aux_file.path);
-                    }
-                }
-            }
-        }
-    }
-    // Image content types (must be registered BEFORE to_xml()).
-    for (zip_path, _) in &all_image_blobs {
-        let ext = zip_path.rsplit('.').next().unwrap_or("png").to_lowercase();
-        match ext.as_str() {
-            "png" => {
-                content_types.add_default("png", "image/png");
-            }
-            "jpg" | "jpeg" => {
-                content_types.add_default("jpeg", "image/jpeg");
-            }
-            "gif" => {
-                content_types.add_default("gif", "image/gif");
-            }
-            "bmp" => {
-                content_types.add_default("bmp", "image/bmp");
-            }
-            "tiff" | "tif" => {
-                content_types.add_default("tiff", "image/tiff");
-            }
-            "emf" => {
-                content_types.add_default("emf", "image/x-emf");
-            }
-            "wmf" => {
-                content_types.add_default("wmf", "image/x-wmf");
-            }
-            _ => {
-                content_types.add_default(&ext, &format!("image/{}", ext));
-            }
-        }
-    }
+    // Chart and ChartEx content types are registered through the package graph.
+    // Generated media content types are registered through the package graph.
+    // Chart auxiliary content types are registered through the package graph.
     let has_external_links = !external_link_exports.is_empty();
     let content_types_xml = content_types.to_xml();
 
@@ -2826,26 +2980,24 @@ pub fn write_xlsx_from_parse_output(
             let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
 
             for (local_idx, entry) in chart_entries.iter().enumerate() {
-                zip.add_file(
-                    &format!("xl/charts/chart{}.xml", entry.global_idx),
-                    entry.xml.clone(),
-                );
+                let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
+                zip.add_file(&chart_path, entry.xml.clone());
 
-                // Write chart auxiliary files (style XML, colors XML, .rels) from round-trip context.
+                // Write chart auxiliary files (style XML, colors XML) from round-trip context.
                 if let Some(srt) = sheet_rt {
                     if let Some(aux) = srt.chart_auxiliary_data.get(local_idx) {
-                        // Write chart .rels
-                        if let Some(ref rels_data) = aux.chart_rels {
-                            let rels_path =
-                                format!("xl/charts/_rels/chart{}.xml.rels", entry.global_idx);
-                            zip.add_file(&rels_path, rels_data.clone());
-                        }
-
                         // Write auxiliary files (style, colors XML) preserving their original paths.
                         for aux_file in &aux.auxiliary_files {
                             zip.add_file(&aux_file.path, aux_file.data.clone());
                         }
                     }
+                }
+                let chart_rels = package_graph.relationship_manager_for_owner(
+                    &crate::write::package_graph::PackageOwner::Part { path: chart_path },
+                );
+                if !chart_rels.is_empty() {
+                    let rels_path = format!("xl/charts/_rels/chart{}.xml.rels", entry.global_idx);
+                    zip.add_file(&rels_path, chart_rels.to_xml());
                 }
             }
         }
@@ -2857,23 +3009,23 @@ pub fn write_xlsx_from_parse_output(
             let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
 
             for (local_idx, entry) in chart_ex_entries.iter().enumerate() {
-                zip.add_file(
-                    &format!("xl/charts/chartEx{}.xml", entry.global_idx),
-                    entry.xml.clone(),
-                );
+                let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
+                zip.add_file(&chart_path, entry.xml.clone());
 
                 // Write ChartEx auxiliary files from round-trip context.
                 if let Some(srt) = sheet_rt {
                     if let Some(aux) = srt.chart_ex_auxiliary_data.get(local_idx) {
-                        if let Some(ref rels_data) = aux.chart_rels {
-                            let rels_path =
-                                format!("xl/charts/_rels/chartEx{}.xml.rels", entry.global_idx);
-                            zip.add_file(&rels_path, rels_data.clone());
-                        }
                         for aux_file in &aux.auxiliary_files {
                             zip.add_file(&aux_file.path, aux_file.data.clone());
                         }
                     }
+                }
+                let chart_rels = package_graph.relationship_manager_for_owner(
+                    &crate::write::package_graph::PackageOwner::Part { path: chart_path },
+                );
+                if !chart_rels.is_empty() {
+                    let rels_path = format!("xl/charts/_rels/chartEx{}.xml.rels", entry.global_idx);
+                    zip.add_file(&rels_path, chart_rels.to_xml());
                 }
             }
         }
@@ -2909,8 +3061,17 @@ pub fn write_xlsx_from_parse_output(
                 zip.add_file(drawing_path, drawing_xml.clone());
             }
 
-            if let Some(ref drawing_rels_xml) = drawing_rels_data[idx] {
-                zip.add_file(&drawing_rels_path, drawing_rels_xml.clone());
+            if drawing_rels_should_emit[idx] {
+                if let Some(ref drawing_rels_xml) = drawing_rels_data[idx] {
+                    zip.add_file(&drawing_rels_path, drawing_rels_xml.clone());
+                } else {
+                    let drawing_rels = package_graph.relationship_manager_for_owner(
+                        &crate::write::package_graph::PackageOwner::Part {
+                            path: drawing_path.to_string(),
+                        },
+                    );
+                    zip.add_file(&drawing_rels_path, drawing_rels.to_xml());
+                }
             }
         }
     }

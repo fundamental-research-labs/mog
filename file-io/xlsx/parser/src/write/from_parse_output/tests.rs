@@ -421,8 +421,18 @@ fn test_api_created_data_range_chart_exports_valid_chart_xml() {
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    let drawing_rels_bytes = archive
+        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+        .unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_bytes);
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let chart_rel = drawing_rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_CHART && rel.target == "../charts/chart1.xml")
+        .expect("drawing should relate to generated chart part");
 
     assert!(chart_xml.contains("<c:barChart>"));
     assert_eq!(chart_xml.matches("<c:ser>").count(), 1);
@@ -442,6 +452,8 @@ fn test_api_created_data_range_chart_exports_valid_chart_xml() {
             .count(),
         1
     );
+    assert!(drawing_xml.contains(&format!(r#"r:id="{}""#, chart_rel.id)));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {

@@ -8,6 +8,8 @@
 //! - `text` — Rich text body, paragraphs, run properties, bullets
 //! - `styling` — Fills, outlines, effects, hyperlinks, style references
 
+use std::collections::HashMap;
+
 mod objects;
 mod styling;
 mod text;
@@ -176,6 +178,52 @@ impl DrawingWriter {
     pub fn add_anchor(&mut self, anchor: DrawingAnchor) -> &mut Self {
         self.anchors.push(anchor);
         self
+    }
+
+    /// Remap embedded relationship IDs after package graph resolution.
+    pub fn remap_relationship_ids(&mut self, resolved_ids: &HashMap<String, String>) {
+        for anchor in &mut self.anchors {
+            let obj = match anchor {
+                DrawingAnchor::TwoCell(_, obj)
+                | DrawingAnchor::OneCell(_, obj)
+                | DrawingAnchor::Absolute(_, obj) => obj,
+            };
+            Self::remap_object_relationship_ids(obj, resolved_ids);
+        }
+    }
+
+    fn remap_object_relationship_ids(
+        obj: &mut DrawingObject,
+        resolved_ids: &HashMap<String, String>,
+    ) {
+        match obj {
+            DrawingObject::Picture(image) => {
+                if let Some(resolved) = resolved_ids.get(&image.r_id) {
+                    image.r_id = resolved.clone();
+                }
+            }
+            DrawingObject::Chart(chart) => {
+                if let Some(resolved) = resolved_ids.get(&chart.r_id) {
+                    chart.r_id = resolved.clone();
+                }
+            }
+            DrawingObject::ChartEx(chart_ex) => {
+                if let Some(resolved) = resolved_ids.get(&chart_ex.r_id) {
+                    chart_ex.r_id = resolved.clone();
+                }
+            }
+            DrawingObject::Slicer { r_id, .. } => {
+                if let Some(resolved) = resolved_ids.get(r_id) {
+                    *r_id = resolved.clone();
+                }
+            }
+            DrawingObject::GroupShape(group) => {
+                for child in &mut group.children {
+                    Self::remap_object_relationship_ids(child, resolved_ids);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Insert a drawing anchor at a specific position.

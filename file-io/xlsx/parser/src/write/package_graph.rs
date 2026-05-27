@@ -9,15 +9,18 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::relationships::{Relationship, RelationshipManager};
 use super::write_error::WriteError;
 use super::{
-    CONTENT_TYPE_CTRL_PROP, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
-    CT_EXTENDED_PROPERTIES, CT_METADATA, CT_PIVOT_CACHE, CT_PIVOT_TABLE, CT_SHARED_STRINGS,
-    CT_STYLES, CT_TABLE, CT_THEME, CT_WORKBOOK, CT_WORKSHEET, REL_COMMENTS, REL_CORE_PROPERTIES,
-    REL_CTRL_PROP, REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK,
-    REL_HYPERLINK, REL_METADATA, REL_OFFICE_DOCUMENT, REL_PIVOT_CACHE, REL_PIVOT_TABLE,
-    REL_PRINTER_SETTINGS, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME,
-    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
+    CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
+    CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
+    CT_PIVOT_TABLE, CT_PNG, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WMF, CT_WORKBOOK,
+    CT_WORKSHEET, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
+    REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_HYPERLINK,
+    REL_METADATA, REL_OFFICE_DOCUMENT, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS,
+    REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_WORKSHEET,
 };
-use crate::domain::content_types::write::ContentTypesManager;
+use crate::domain::content_types::write::{
+    CT_CHART_COLOR_STYLE, CT_CHART_STYLE, ContentTypesManager,
+};
 use domain_types::{
     OpaquePackageOwner, OpaquePackageOwnership, OpaquePackageSubgraph, OpaqueRelationshipTarget,
     RoundTripContext,
@@ -33,6 +36,8 @@ const REL_PIVOT_CACHE_RECORDS: &str =
 const CT_THREADED_COMMENTS: &str = "application/vnd.ms-excel.threadedcomments+xml";
 const CT_VML_DRAWING: &str = "application/vnd.openxmlformats-officedocument.vmlDrawing";
 const CT_DOC_METADATA_LABEL_INFO: &str = "application/vnd.ms-office.classificationlabels+xml";
+const CT_CHART_EX: &str = "application/vnd.ms-office.chartex+xml";
+const REL_IMAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -645,6 +650,146 @@ pub fn register_worksheet_drawing(
             path: drawing_path.to_string(),
         },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_chart(
+    graph: &mut PackageGraphBuilder,
+    global_idx: usize,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(
+        &format!("xl/charts/chart{global_idx}.xml"),
+        CT_CHART,
+    ))
+}
+
+pub fn register_chart_ex(
+    graph: &mut PackageGraphBuilder,
+    global_idx: usize,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(
+        &format!("xl/charts/chartEx{global_idx}.xml"),
+        CT_CHART_EX,
+    ))
+}
+
+pub fn register_chart_auxiliary_part(
+    graph: &mut PackageGraphBuilder,
+    path: &str,
+) -> Result<(), WriteError> {
+    if path.contains("style") {
+        graph.register_part(modeled_part(path, CT_CHART_STYLE))?;
+    } else if path.contains("colors") || path.contains("color") {
+        graph.register_part(modeled_part(path, CT_CHART_COLOR_STYLE))?;
+    }
+    Ok(())
+}
+
+pub fn register_chart_auxiliary_relationship(
+    graph: &mut PackageGraphBuilder,
+    chart_path: &str,
+    relationship_type: &str,
+    target_path: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_part_path(chart_path),
+        },
+        relationship_type: relationship_type.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(target_path),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
+pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Result<(), WriteError> {
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+    let content_type = match extension.as_str() {
+        "png" => CT_PNG.to_string(),
+        "jpg" | "jpeg" => CT_JPEG.to_string(),
+        "gif" => CT_GIF.to_string(),
+        "bmp" => "image/bmp".to_string(),
+        "tif" | "tiff" => "image/tiff".to_string(),
+        "emf" => CT_EMF.to_string(),
+        "wmf" => CT_WMF.to_string(),
+        other => format!("image/{other}"),
+    };
+    graph.register_part(PackagePart {
+        path: normalize_part_path(path),
+        content_type: None,
+        default_extension: Some((extension, content_type)),
+        kind: PackagePartKind::Modeled,
+        bytes: None,
+    })
+}
+
+pub fn register_drawing_chart_relationship(
+    graph: &mut PackageGraphBuilder,
+    drawing_path: &str,
+    chart_path: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    register_drawing_relationship(
+        graph,
+        drawing_path,
+        REL_CHART,
+        chart_path,
+        relationship_id_hint,
+    )
+}
+
+pub fn register_drawing_chart_ex_relationship(
+    graph: &mut PackageGraphBuilder,
+    drawing_path: &str,
+    chart_ex_path: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    register_drawing_relationship(
+        graph,
+        drawing_path,
+        REL_CHART_EX,
+        chart_ex_path,
+        relationship_id_hint,
+    )
+}
+
+pub fn register_drawing_image_relationship(
+    graph: &mut PackageGraphBuilder,
+    drawing_path: &str,
+    image_path: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    register_drawing_relationship(
+        graph,
+        drawing_path,
+        REL_IMAGE,
+        image_path,
+        relationship_id_hint,
+    )
+}
+
+fn register_drawing_relationship(
+    graph: &mut PackageGraphBuilder,
+    drawing_path: &str,
+    relationship_type: &str,
+    target_path: &str,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_part_path(drawing_path),
+        },
+        relationship_type: relationship_type.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(target_path),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
     Ok(())
 }
@@ -1314,6 +1459,73 @@ mod tests {
         resolved.add_content_types_to(&mut content_types);
 
         assert!(content_types.has_override("/docMetadata/LabelInfo.xml"));
+    }
+
+    #[test]
+    fn registers_chart_content_types_when_emitted() {
+        let mut graph = PackageGraphBuilder::new();
+        register_chart(&mut graph, 2).unwrap();
+        register_chart_ex(&mut graph, 3).unwrap();
+        register_chart_auxiliary_part(&mut graph, "xl/charts/style1.xml").unwrap();
+        register_chart_auxiliary_part(&mut graph, "xl/charts/colors1.xml").unwrap();
+        let resolved = graph.resolve().unwrap();
+        let mut content_types = ContentTypesManager::new();
+
+        resolved.add_content_types_to(&mut content_types);
+        let xml = String::from_utf8(content_types.to_xml()).unwrap();
+
+        assert!(xml.contains(r#"PartName="/xl/charts/chart2.xml""#));
+        assert!(xml.contains(
+            r#"ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml""#
+        ));
+        assert!(xml.contains(r#"PartName="/xl/charts/chartEx3.xml""#));
+        assert!(xml.contains(r#"ContentType="application/vnd.ms-office.chartex+xml""#));
+        assert!(xml.contains(r#"PartName="/xl/charts/style1.xml""#));
+        assert!(xml.contains(r#"ContentType="application/vnd.ms-office.chartstyle+xml""#));
+        assert!(xml.contains(r#"PartName="/xl/charts/colors1.xml""#));
+        assert!(xml.contains(r#"ContentType="application/vnd.ms-office.chartcolorstyle+xml""#));
+    }
+
+    #[test]
+    fn registers_chart_auxiliary_relationship_with_resolved_id() {
+        let mut graph = PackageGraphBuilder::new();
+        register_chart(&mut graph, 2).unwrap();
+        register_chart_auxiliary_part(&mut graph, "xl/charts/style1.xml").unwrap();
+        register_chart_auxiliary_relationship(
+            &mut graph,
+            "xl/charts/chart2.xml",
+            "http://schemas.microsoft.com/office/2011/relationships/chartStyle",
+            "xl/charts/style1.xml",
+            "rId8",
+        );
+        let rels = graph
+            .resolve()
+            .unwrap()
+            .relationship_manager_for_owner(&PackageOwner::Part {
+                path: "xl/charts/chart2.xml".to_string(),
+            });
+
+        let rel = rels.get_by_id("rId8").unwrap();
+        assert_eq!(rel.target, "style1.xml");
+        assert_eq!(
+            rel.rel_type,
+            "http://schemas.microsoft.com/office/2011/relationships/chartStyle"
+        );
+    }
+
+    #[test]
+    fn registers_media_default_content_types_when_emitted() {
+        let mut graph = PackageGraphBuilder::new();
+        register_media_part(&mut graph, "xl/media/image1.png").unwrap();
+        register_media_part(&mut graph, "xl/media/image2.jpg").unwrap();
+        let resolved = graph.resolve().unwrap();
+        let mut content_types = ContentTypesManager::new();
+
+        resolved.add_content_types_to(&mut content_types);
+        let xml = String::from_utf8(content_types.to_xml()).unwrap();
+
+        assert!(xml.contains(r#"Extension="png" ContentType="image/png""#));
+        assert!(xml.contains(r#"Extension="jpg" ContentType="image/jpeg""#));
     }
 
     #[test]

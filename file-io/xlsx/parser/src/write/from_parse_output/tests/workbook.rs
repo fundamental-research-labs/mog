@@ -669,6 +669,64 @@ fn stale_doc_metadata_label_info_is_not_emitted_as_raw_sidecar() {
 }
 
 #[test]
+fn deprecated_named_range_roundtrip_fields_do_not_resurrect_deleted_names() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.named_ranges = vec![NamedRange {
+        name: "ModeledName".to_string(),
+        refers_to: "Sheet1!$A$1".to_string(),
+        local_sheet_id: Some(0),
+        hidden: true,
+        function: true,
+        xlm: true,
+        ..Default::default()
+    }];
+    let ctx = domain_types::RoundTripContext {
+        skipped_named_ranges: vec![NamedRange {
+            name: "DeletedSkippedName".to_string(),
+            refers_to: "Sheet1!$Z$99".to_string(),
+            hidden: true,
+            ..Default::default()
+        }],
+        original_named_ranges_order: vec![
+            NamedRange {
+                name: "DeletedOriginalName".to_string(),
+                refers_to: "Sheet1!$Y$99".to_string(),
+                ..Default::default()
+            },
+            NamedRange {
+                name: "ModeledName".to_string(),
+                refers_to: "Sheet1!$A$1".to_string(),
+                ..Default::default()
+            },
+        ],
+        workbook_preserved_elements: vec![(
+            "workbook\0after\0workbookProtection\0definedNames".to_string(),
+            r#"<definedNames><definedName name="DeletedPreservedName">Sheet1!$X$99</definedName></definedNames>"#
+                .to_string(),
+        )],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert_eq!(workbook_xml.matches("<definedName ").count(), 1);
+    assert!(workbook_xml.contains(r#"name="ModeledName""#));
+    assert!(workbook_xml.contains(r#"localSheetId="0""#));
+    assert!(workbook_xml.contains(r#"hidden="1""#));
+    assert!(workbook_xml.contains(r#"function="1""#));
+    assert!(workbook_xml.contains(r#"xlm="1""#));
+    assert!(!workbook_xml.contains("DeletedSkippedName"));
+    assert!(!workbook_xml.contains("DeletedOriginalName"));
+    assert!(!workbook_xml.contains("DeletedPreservedName"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_raw_metadata_xml_is_dropped_without_current_cell_metadata_references() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

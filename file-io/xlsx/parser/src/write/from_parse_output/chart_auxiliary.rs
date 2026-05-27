@@ -32,6 +32,10 @@ pub(super) fn chart_ex_number(aux: &ChartAuxiliaryData) -> Option<usize> {
     original_chart_number(aux, "chartEx")
 }
 
+pub(super) fn chart_frame_identity_matches_path(chart_spec: &ChartSpec, chart_path: &str) -> bool {
+    chart_identity_path(chart_spec).as_deref() == Some(&normalize_path(chart_path))
+}
+
 fn chart_auxiliary_data_by_identity<'a>(
     sheet_rt: Option<&'a SheetRoundTripContext>,
     chart_spec: &ChartSpec,

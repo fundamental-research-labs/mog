@@ -1362,11 +1362,23 @@ pub fn write_xlsx_from_parse_output(
                     let Some(cx_entry) = chart_ex_entry_map.get(&source_idx) else {
                         continue;
                     };
-                    let cx_target = chart_frame
-                        .and_then(|frame| frame.relationship_target.clone())
-                        .unwrap_or_else(|| format!("../charts/chartEx{}.xml", cx_entry.global_idx));
-                    let cx_r_id = if let Some(rid) =
-                        chart_frame.and_then(|frame| frame.relationship_id.clone())
+                    let default_cx_target = format!("../charts/chartEx{}.xml", cx_entry.global_idx);
+                    let cx_path = format!("xl/charts/chartEx{}.xml", cx_entry.global_idx);
+                    let use_imported_relationship_identity =
+                        chart_allows_auxiliary_replay(chart_spec)
+                            && chart_auxiliary::chart_frame_identity_matches_path(
+                                chart_spec, &cx_path,
+                            );
+                    let cx_target = if use_imported_relationship_identity {
+                        chart_frame
+                            .and_then(|frame| frame.relationship_target.clone())
+                            .unwrap_or(default_cx_target)
+                    } else {
+                        default_cx_target
+                    };
+                    let cx_r_id = if use_imported_relationship_identity
+                        && let Some(rid) =
+                            chart_frame.and_then(|frame| frame.relationship_id.clone())
                     {
                         if drawing_rels.get_by_id(&rid).is_none() {
                             drawing_rels.add_with_id(&rid, REL_CHART_EX, &cx_target);
@@ -1430,11 +1442,23 @@ pub fn write_xlsx_from_parse_output(
                     };
                     let default_chart_target =
                         format!("../charts/chart{}.xml", chart_entry.global_idx);
-                    let chart_target = chart_frame
-                        .and_then(|frame| frame.relationship_target.clone())
-                        .unwrap_or(default_chart_target);
-                    let chart_r_id = if let Some(rid) =
-                        chart_frame.and_then(|frame| frame.relationship_id.clone())
+                    let chart_path = format!("xl/charts/chart{}.xml", chart_entry.global_idx);
+                    let use_imported_relationship_identity =
+                        chart_allows_auxiliary_replay(chart_spec)
+                            && chart_auxiliary::chart_frame_identity_matches_path(
+                                chart_spec,
+                                &chart_path,
+                            );
+                    let chart_target = if use_imported_relationship_identity {
+                        chart_frame
+                            .and_then(|frame| frame.relationship_target.clone())
+                            .unwrap_or(default_chart_target)
+                    } else {
+                        default_chart_target
+                    };
+                    let chart_r_id = if use_imported_relationship_identity
+                        && let Some(rid) =
+                            chart_frame.and_then(|frame| frame.relationship_id.clone())
                     {
                         if drawing_rels.get_by_id(&rid).is_none() {
                             drawing_rels.add_with_id(&rid, REL_CHART, &chart_target);

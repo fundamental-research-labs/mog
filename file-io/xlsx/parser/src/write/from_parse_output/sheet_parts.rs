@@ -544,7 +544,7 @@ fn imported_comment_vml_path_for_export(
         .iter()
         .find(|rel| {
             &rel.id == legacy_drawing_r_id
-                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.rel_type == crate::infra::opc::REL_VML_DRAWING
                 && rel.target_mode.as_deref() != Some("External")
         })
         .and_then(|rel| resolve_relationship_target(Some(&owner_path), &rel.target).ok())

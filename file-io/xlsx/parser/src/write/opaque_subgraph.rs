@@ -245,7 +245,7 @@ fn comment_vml_path(
         .iter()
         .find(|rel| {
             &rel.id == legacy_drawing_r_id
-                && rel.rel_type.ends_with("/vmlDrawing")
+                && rel.rel_type == crate::infra::opc::REL_VML_DRAWING
                 && rel.target_mode.as_deref() != Some("External")
         })
         .and_then(|rel| {

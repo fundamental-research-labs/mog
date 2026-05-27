@@ -45,7 +45,7 @@
 #![allow(clippy::string_slice)]
 
 use crate::infra::opc::{
-    parse_owned_relationships, PackageOwner, RelationshipTargetMode, WorksheetRelationships,
+    PackageOwner, RelationshipTargetMode, WorksheetRelationships, parse_owned_relationships,
 };
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;

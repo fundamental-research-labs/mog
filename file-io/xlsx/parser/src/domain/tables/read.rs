@@ -12,7 +12,7 @@
 #![allow(clippy::string_slice)]
 
 use crate::domain::tables;
-use crate::infra::opc::{parse_owned_relationships, PackageOwner, WorksheetRelationships};
+use crate::infra::opc::{PackageOwner, WorksheetRelationships, parse_owned_relationships};
 use crate::output::results::{
     ParsedCellRange, ParsedTable, ParsedTableColumn, ParsedTableSortCondition, ParsedTableSortState,
 };

@@ -3,9 +3,7 @@
 //! This module contains common utility functions used across the drawings
 //! submodules for parsing values, extracting attributes, and decoding entities.
 
-use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_tag_simd,
-};
+use crate::infra::scanner::{extract_quoted_value, find_attr_simd};
 
 use super::types::EditAs;
 
@@ -42,28 +40,6 @@ pub fn parse_edit_as(bytes: &[u8]) -> Option<EditAs> {
     } else {
         None
     }
-}
-
-/// Extract raw `<extLst>...</extLst>` XML from a slice, including the opening `<` and closing `>`.
-///
-/// `xml` should be a slice that may contain an `<a:extLst>` (or `<extLst>`) element.
-/// Returns the complete element as a `String`, or `None` if no extLst is found.
-pub fn extract_ext_lst_raw(xml: &[u8]) -> Option<String> {
-    // find_tag_simd returns the position of the '<' character in '<a:extLst>'.
-    let open = find_tag_simd(xml, b"extLst", 0)?;
-    // find_closing_tag returns the position of '<' in '</a:extLst>'.
-    let close_lt = find_closing_tag(xml, b"extLst", open)?;
-    // Walk forward past the closing '>' of '</a:extLst>'.
-    let mut close_end = close_lt;
-    while close_end < xml.len() && xml[close_end] != b'>' {
-        close_end += 1;
-    }
-    if close_end < xml.len() {
-        close_end += 1;
-    }
-    std::str::from_utf8(&xml[open..close_end])
-        .ok()
-        .map(|s| s.to_string())
 }
 
 /// Decode XML entities in bytes

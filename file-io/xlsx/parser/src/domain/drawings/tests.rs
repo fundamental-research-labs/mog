@@ -648,6 +648,61 @@ fn test_parse_multiple_anchors() {
     assert!(matches!(drawing.anchors[2], Anchor::Absolute(_)));
 }
 
+#[test]
+fn test_anchor_geometry_uses_direct_child_extent() {
+    let xml = br#"<xdr:oneCellAnchor>
+    <xdr:from><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+    <xdr:ext cx="100" cy="200"/>
+    <xdr:pic>
+        <xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1"/></xdr:nvPicPr>
+        <xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill>
+        <xdr:spPr><a:xfrm><a:ext cx="999" cy="999"/></a:xfrm></xdr:spPr>
+    </xdr:pic>
+</xdr:oneCellAnchor>"#;
+
+    let drawing = parse_drawing(xml);
+    assert_eq!(drawing.anchors.len(), 1);
+    let Anchor::OneCell(anchor) = &drawing.anchors[0] else {
+        panic!("Expected OneCell anchor");
+    };
+    assert_eq!(anchor.extent.cx, 100);
+    assert_eq!(anchor.extent.cy, 200);
+}
+
+#[test]
+fn test_alternate_content_graphic_frame_precedes_fallback_shape() {
+    let xml = br#"<xdr:twoCellAnchor>
+    <xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+    <xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>8</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+    <mc:AlternateContent>
+        <mc:Choice Requires="cx1">
+            <xdr:graphicFrame>
+                <xdr:nvGraphicFramePr><xdr:cNvPr id="3" name="ChartEx 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
+                <xdr:xfrm/>
+                <a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart r:id="rId5"/></a:graphicData></a:graphic>
+            </xdr:graphicFrame>
+        </mc:Choice>
+        <mc:Fallback>
+            <xdr:sp><xdr:nvSpPr><xdr:cNvPr id="4" name="Fallback Shape"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/></xdr:sp>
+        </mc:Fallback>
+    </mc:AlternateContent>
+    <xdr:clientData/>
+</xdr:twoCellAnchor>"#;
+
+    let drawing = parse_drawing(xml);
+    assert_eq!(drawing.anchors.len(), 1);
+    let Anchor::TwoCell(anchor) = &drawing.anchors[0] else {
+        panic!("Expected TwoCell anchor");
+    };
+    assert!(anchor.mc_alternate_content.is_some());
+    let DrawingContent::GraphicFrame(frame) = &anchor.content else {
+        panic!("Expected GraphicFrame content");
+    };
+    let raw = frame.graphic_xml.as_deref().unwrap_or_default();
+    assert!(raw.contains("<mc:AlternateContent>"));
+    assert!(raw.contains("rId5"));
+}
+
 // -------------------------------------------------------------------------
 // Malformed input tests
 // -------------------------------------------------------------------------

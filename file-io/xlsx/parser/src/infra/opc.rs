@@ -98,8 +98,7 @@ pub const REL_XL_PATH_MISSING: &str =
     "http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlPathMissing";
 
 /// Relationship type for a missing long external workbook path.
-pub const REL_XL_LONG_PATH_MISSING: &str =
-    "http://schemas.microsoft.com/office/2009/04/relationships/xlExternalLinkLongPath/xlPathMissing";
+pub const REL_XL_LONG_PATH_MISSING: &str = "http://schemas.microsoft.com/office/2009/04/relationships/xlExternalLinkLongPath/xlPathMissing";
 
 /// Relationship type for an external workbook path rooted at Excel's startup directory.
 pub const REL_XL_STARTUP: &str =
@@ -118,8 +117,7 @@ pub const REL_XL_LONG_STARTUP: &str =
     "http://schemas.microsoft.com/office/2019/04/relationships/xlExternalLinkLongPath/xlStartup";
 
 /// Relationship type for a long external workbook path rooted at Excel's alternate startup directory.
-pub const REL_XL_LONG_ALTERNATE_STARTUP: &str =
-    "http://schemas.microsoft.com/office/2019/04/relationships/xlExternalLinkLongPath/xlAlternateStartup";
+pub const REL_XL_LONG_ALTERNATE_STARTUP: &str = "http://schemas.microsoft.com/office/2019/04/relationships/xlExternalLinkLongPath/xlAlternateStartup";
 
 /// Relationship type for a long external workbook path rooted at Excel's library directory.
 pub const REL_XL_LONG_LIBRARY: &str =

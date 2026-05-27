@@ -11,8 +11,8 @@ use value_types::CellValue;
 use xlsx_test_contracts::{
     BudgetResult, FailureFingerprint, FingerprintCategory, FingerprintEvidence, FingerprintOwner,
     FingerprintSeverity, GateName, GateReport, GateReportDomain, GateScenario, GateStatus,
-    MetricValue, PackageFacts, PerformanceFingerprintCategory, SharedStringFacts, SheetFacts,
-    StyleFacts, UsedRangeFacts, WorkbookFacts, WorkbookSummaryFacts,
+    MetricValue, PackageFacts, PerformanceFingerprintCategory, SharedStringFacts,
+    SheetDrawingFacts, SheetFacts, StyleFacts, UsedRangeFacts, WorkbookFacts, WorkbookSummaryFacts,
 };
 
 use crate::output::results::{FullParseResult, ParseTimings};
@@ -607,6 +607,19 @@ fn workbook_facts(
         .iter()
         .enumerate()
         .map(|(idx, sheet)| sheet_facts(idx, sheet))
+        .collect();
+    facts.drawings = output
+        .sheets
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, sheet)| {
+            let drawing = parsed.sheets.get(idx)?.parsed_drawing.as_ref()?;
+            Some(SheetDrawingFacts {
+                sheet_index: idx as u32,
+                sheet_name: sheet.name.clone(),
+                drawing: crate::domain::drawings::facts::drawing_facts(drawing),
+            })
+        })
         .collect();
     facts.styles = StyleFacts {
         number_format_count: 0,

@@ -31,7 +31,7 @@
 
 pub(crate) mod convert;
 mod helpers;
-mod types;
+pub(crate) mod types;
 mod writer;
 
 #[cfg(test)]

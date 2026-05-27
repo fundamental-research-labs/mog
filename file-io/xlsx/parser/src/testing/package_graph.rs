@@ -1,6 +1,6 @@
 //! Parser adapter for the shared package graph validation contract.
 
-use crate::infra::package_integrity::{validate_archive_package_integrity, PackageIntegrityError};
+use crate::infra::package_integrity::{PackageIntegrityError, validate_archive_package_integrity};
 use crate::zip::XlsxArchive;
 use xlsx_test_contracts::{
     PackageGraphValidationReport, PackageGraphViolation, PackageGraphViolationCode,

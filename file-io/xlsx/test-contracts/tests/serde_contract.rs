@@ -1,8 +1,11 @@
 use xlsx_test_contracts::{
+    AnchorFact, AnchorGeometryFact, AnchorKindFact, CellAnchorFact, ClientDataFact, DrawingFacts,
+    FailureFingerprint, FingerprintCategory, FingerprintOwner, FingerprintSeverity, GateName,
+    GateReport, GateScenario, GateStatus, GateSuiteName, ObjectFact, REPORT_SCHEMA_VERSION,
+    ParagraphFact, SheetDrawingFacts, TextFact, TextRunFact, TextRunPropertiesFact,
+    WORKBOOK_FACTS_SCHEMA_VERSION, WorkbookFacts,
     autonomous_full_run_schedule, enforce_rollout_report_policy, gate_command_contracts,
-    gate_suite_contract, gate_suite_readiness, FailureFingerprint, FingerprintCategory,
-    FingerprintOwner, FingerprintSeverity, GateName, GateReport, GateScenario, GateStatus,
-    GateSuiteName, REPORT_SCHEMA_VERSION,
+    gate_suite_contract, gate_suite_readiness,
 };
 
 #[test]
@@ -14,6 +17,128 @@ fn report_envelope_uses_stable_schema_and_snake_case() {
     assert!(json.contains("\"release_blocking_failures\""));
     assert!(!json.contains("releaseBlockingFailures"));
     assert_eq!(report.schema, REPORT_SCHEMA_VERSION);
+}
+
+#[test]
+fn workbook_facts_publish_drawing_facts_as_snake_case_schema_v3() {
+    let mut facts = WorkbookFacts::new();
+    facts.drawings.push(SheetDrawingFacts {
+        sheet_index: 2,
+        sheet_name: " Sheet 2 ".to_string(),
+        drawing: DrawingFacts {
+            anchors: vec![AnchorFact {
+                kind: AnchorKindFact::TwoCell,
+                geometry: AnchorGeometryFact::TwoCell {
+                    from: CellAnchorFact {
+                        col: 1,
+                        row: 2,
+                        col_off: 3,
+                        row_off: 4,
+                    },
+                    to: CellAnchorFact {
+                        col: 5,
+                        row: 6,
+                        col_off: 7,
+                        row_off: 8,
+                    },
+                    edit_as: Some("OneCell".to_string()),
+                },
+                object: ObjectFact::Unknown,
+                client_data: ClientDataFact {
+                    locks_with_sheet: true,
+                    prints_with_sheet: false,
+                },
+                raw_alternate_content: true,
+            }],
+        },
+    });
+
+    facts.normalize();
+    let json = serde_json::to_string(&facts).expect("workbook facts serialize");
+
+    assert_eq!(facts.schema_version, WORKBOOK_FACTS_SCHEMA_VERSION);
+    assert_eq!(WORKBOOK_FACTS_SCHEMA_VERSION, 3);
+    assert_eq!(facts.drawings[0].sheet_name, "Sheet 2");
+    assert!(json.contains("\"drawings\""));
+    assert!(json.contains("\"sheet_index\""));
+    assert!(json.contains("\"raw_alternate_content\""));
+    assert!(json.contains("\"two_cell\""));
+    assert!(!json.contains("rawAlternateContent"));
+}
+
+#[test]
+fn drawing_text_facts_publish_rich_text_shape_details() {
+    let mut facts = WorkbookFacts::new();
+    facts.drawings.push(SheetDrawingFacts {
+        sheet_index: 0,
+        sheet_name: "Sheet1".to_string(),
+        drawing: DrawingFacts {
+            anchors: vec![AnchorFact {
+                kind: AnchorKindFact::TwoCell,
+                geometry: AnchorGeometryFact::TwoCell {
+                    from: CellAnchorFact {
+                        col: 0,
+                        row: 0,
+                        col_off: 0,
+                        row_off: 0,
+                    },
+                    to: CellAnchorFact {
+                        col: 1,
+                        row: 1,
+                        col_off: 0,
+                        row_off: 0,
+                    },
+                    edit_as: None,
+                },
+                object: ObjectFact::Shape(xlsx_test_contracts::ShapeFact {
+                    name: "Text Box 1".to_string(),
+                    preset: Some("Rect".to_string()),
+                    text: TextFact {
+                        paragraph_count: 1,
+                        run_count: 1,
+                        text: "Styled".to_string(),
+                        paragraphs: vec![ParagraphFact {
+                            index: 0,
+                            align: Some("Center".to_string()),
+                            default_run: Some(TextRunPropertiesFact {
+                                latin_font: Some("Aptos".to_string()),
+                                ..TextRunPropertiesFact::default()
+                            }),
+                            ..ParagraphFact::default()
+                        }],
+                        runs: vec![TextRunFact {
+                            paragraph_index: 0,
+                            run_index: 0,
+                            text: "Styled".to_string(),
+                            properties: TextRunPropertiesFact {
+                                size: Some(1400),
+                                bold: Some(true),
+                                color: Some("srgb:FF0000:transforms=0".to_string()),
+                                latin_font: Some("Arial".to_string()),
+                                ..TextRunPropertiesFact::default()
+                            },
+                        }],
+                        ..TextFact::default()
+                    },
+                    properties: xlsx_test_contracts::ShapePropertiesFact::default(),
+                }),
+                client_data: ClientDataFact {
+                    locks_with_sheet: false,
+                    prints_with_sheet: false,
+                },
+                raw_alternate_content: false,
+            }],
+        },
+    });
+
+    let json = serde_json::to_string(&facts).expect("workbook facts serialize");
+
+    assert!(json.contains("\"paragraphs\""));
+    assert!(json.contains("\"default_run\""));
+    assert!(json.contains("\"runs\""));
+    assert!(json.contains("\"latin_font\""));
+    assert!(json.contains("\"srgb:FF0000:transforms=0\""));
+    assert!(!json.contains("defaultRun"));
 }
 
 #[test]

@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use xlsx_parser::testing::{
-    autonomous_full_run_schedule, enforce_rollout_report_policy, gate_command_contracts,
-    gate_suite_contract, gate_suite_contracts, gate_suite_readiness, run_ooxml_contract_gate,
-    run_perf_gate, validate_package_graph_bytes, GateName, GateReport, GateReportDomain,
-    GateScenario, GateStatus, GateSuiteName, MetricValue, PerfGateOptions,
+    GateName, GateReport, GateReportDomain, GateScenario, GateStatus, GateSuiteName, MetricValue,
+    PerfGateOptions, autonomous_full_run_schedule, enforce_rollout_report_policy,
+    gate_command_contracts, gate_suite_contract, gate_suite_contracts, gate_suite_readiness,
+    run_ooxml_contract_gate, run_perf_gate, validate_package_graph_bytes,
 };
 
 fn main() {

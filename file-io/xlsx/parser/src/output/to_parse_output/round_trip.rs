@@ -11,8 +11,8 @@ use domain_types::{
 };
 use std::collections::{HashMap, HashSet};
 
+use crate::infra::opc::{OoxmlRelationshipType, REL_VML_DRAWING, resolve_relationship_target};
 use crate::output::results::FullParseResult;
-use crate::infra::opc::{resolve_relationship_target, OoxmlRelationshipType, REL_VML_DRAWING};
 
 use super::normalize_rgb_color;
 
@@ -259,10 +259,9 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
 
     if pivot_blobs.is_empty()
         && result.pivot_cache_paths.is_empty()
-        && result
-            .workbook_relationships
-            .iter()
-            .all(|rel| !relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition))
+        && result.workbook_relationships.iter().all(|rel| {
+            !relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition)
+        })
     {
         return PivotPackageRoundTrip::default();
     }
@@ -311,9 +310,8 @@ fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRound
             .as_ref()
             .map(|path| normalize_part_path(path))
             .or_else(|| {
-                records_relationship.and_then(|rel| {
-                    resolve_internal_rel(Some(&definition_path), &rel.target)
-                })
+                records_relationship
+                    .and_then(|rel| resolve_internal_rel(Some(&definition_path), &rel.target))
             });
         if let Some(path) = &records_path {
             claimed_paths.insert(path.clone());

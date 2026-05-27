@@ -2,13 +2,14 @@
 //!
 //! Parses `<a:scene3d>` and `<a:sp3d>` elements into typed structs from `ooxml_types`.
 
-use crate::infra::scanner::{find_closing_tag, find_tag_simd};
-
 use super::helpers::{extract_attr_value_in_element, parse_i64};
+use super::reader::elements::{direct_child_elements, direct_child_slice, document_element};
+use super::reader::raw::extract_ext_lst_raw;
+use super::transforms::parse_color;
 use ooxml_types::drawings::{
     Backdrop, Bevel, BevelPresetType, Camera, DrawingColor, LightRig, LightRigDirection,
-    LightRigType, Point3D, PresetCameraType, PresetMaterialType, Rotation3D, Scene3D, SchemeColor,
-    Shape3D, StCoordinate, StFovAngle, StPositiveCoordinate, StPositiveFixedAngle,
+    LightRigType, Point3D, PresetCameraType, PresetMaterialType, Rotation3D, Scene3D, Shape3D,
+    StCoordinate, StFovAngle, StPositiveCoordinate, StPositiveFixedAngle,
 };
 
 /// Parse a `<a:rot>` element into a `Rotation3D`.
@@ -39,76 +40,23 @@ fn parse_bevel(xml: &[u8]) -> Bevel {
 
 /// Parse a color reference child element (schemeClr, srgbClr, sysClr, prstClr, hslClr).
 ///
-/// Looks for the first recognized color child element in the given XML slice.
+/// Reads the scoped root color element or the first direct color child.
 fn parse_color_ref(xml: &[u8]) -> Option<DrawingColor> {
-    if let Some(start) = find_tag_simd(xml, b"schemeClr", 0) {
-        let val_str = extract_attr_value_in_element(&xml[start..], b"val=\"")
-            .and_then(|v| std::str::from_utf8(v).ok())?;
-        let scheme = SchemeColor::from_ooxml(val_str).unwrap_or_default();
-        return Some(DrawingColor::SchemeClr {
-            val: scheme,
-            transforms: vec![],
-        });
+    let root = document_element(xml)?;
+    if is_color_element(root.local_name) {
+        return Some(parse_color(root.full_slice(xml)));
     }
-    if let Some(start) = find_tag_simd(xml, b"srgbClr", 0) {
-        let val = extract_attr_value_in_element(&xml[start..], b"val=\"")
-            .and_then(|v| std::str::from_utf8(v).ok())
-            .map(|s| s.to_string())?;
-        return Some(DrawingColor::SrgbClr {
-            val,
-            transforms: vec![],
-        });
-    }
-    if let Some(start) = find_tag_simd(xml, b"sysClr", 0) {
-        let val = extract_attr_value_in_element(&xml[start..], b"val=\"")
-            .and_then(|v| std::str::from_utf8(v).ok())
-            .map(ooxml_types::drawings::SystemColorVal::from_ooxml)?;
-        return Some(DrawingColor::SysClr {
-            val,
-            last_clr: None,
-            transforms: vec![],
-        });
-    }
-    if let Some(start) = find_tag_simd(xml, b"prstClr", 0) {
-        let val = extract_attr_value_in_element(&xml[start..], b"val=\"")
-            .and_then(|v| std::str::from_utf8(v).ok())
-            .map(ooxml_types::drawings::PresetColorVal::from_ooxml)?;
-        return Some(DrawingColor::PrstClr {
-            val,
-            transforms: vec![],
-        });
-    }
-    if let Some(start) = find_tag_simd(xml, b"hslClr", 0) {
-        let el = &xml[start..];
-        let hue = extract_attr_value_in_element(el, b"hue=\"").and_then(|v| parse_i64(v))? as i32;
-        let sat = extract_attr_value_in_element(el, b"sat=\"").and_then(|v| parse_i64(v))? as i32;
-        let lum = extract_attr_value_in_element(el, b"lum=\"").and_then(|v| parse_i64(v))? as i32;
-        return Some(DrawingColor::HslClr {
-            hue,
-            sat,
-            lum,
-            transforms: vec![],
-        });
-    }
-    if let Some(start) = find_tag_simd(xml, b"scrgbClr", 0) {
-        let el = &xml[start..];
-        let r = extract_attr_value_in_element(el, b"r=\"")
-            .and_then(|v| parse_i64(v))
-            .unwrap_or(0) as i32;
-        let g = extract_attr_value_in_element(el, b"g=\"")
-            .and_then(|v| parse_i64(v))
-            .unwrap_or(0) as i32;
-        let b = extract_attr_value_in_element(el, b"b=\"")
-            .and_then(|v| parse_i64(v))
-            .unwrap_or(0) as i32;
-        return Some(DrawingColor::ScrgbClr {
-            r,
-            g,
-            b,
-            transforms: vec![],
-        });
-    }
-    None
+
+    direct_child_elements(root.full_slice(xml))
+        .find(|child| is_color_element(child.local_name))
+        .map(|child| parse_color(child.full_slice(root.full_slice(xml))))
+}
+
+fn is_color_element(local_name: &[u8]) -> bool {
+    matches!(
+        local_name,
+        b"schemeClr" | b"srgbClr" | b"sysClr" | b"prstClr" | b"hslClr" | b"scrgbClr"
+    )
 }
 
 /// Parse a `<a:scene3d>` element into a typed `Scene3D`.
@@ -120,14 +68,12 @@ fn parse_color_ref(xml: &[u8]) -> Option<DrawingColor> {
 /// or if their required attributes cannot be parsed.
 pub fn parse_scene3d(xml: &[u8]) -> Option<Scene3D> {
     // Parse camera
-    let cam_start = find_tag_simd(xml, b"camera", 0)?;
-    let cam_el = &xml[cam_start..];
+    let cam_el = direct_child_slice(xml, b"camera")?;
     let prst = extract_attr_value_in_element(cam_el, b"prst=\"")
         .and_then(|v| std::str::from_utf8(v).ok())
         .map(PresetCameraType::from_ooxml)?;
     let fov = extract_attr_value_in_element(cam_el, b"fov=\"").and_then(|v| parse_i64(v));
-    let cam_rot = find_tag_simd(cam_el, b"rot", 0)
-        .and_then(|rot_start| parse_rotation_3d(&cam_el[rot_start..]));
+    let cam_rot = direct_child_slice(cam_el, b"rot").and_then(parse_rotation_3d);
     let zoom = extract_attr_value_in_element(cam_el, b"zoom=\"")
         .and_then(|v| std::str::from_utf8(v).ok())
         .and_then(|v| v.parse::<u32>().ok());
@@ -139,16 +85,14 @@ pub fn parse_scene3d(xml: &[u8]) -> Option<Scene3D> {
     };
 
     // Parse light rig
-    let lr_start = find_tag_simd(xml, b"lightRig", 0)?;
-    let lr_el = &xml[lr_start..];
+    let lr_el = direct_child_slice(xml, b"lightRig")?;
     let rig = extract_attr_value_in_element(lr_el, b"rig=\"")
         .and_then(|v| std::str::from_utf8(v).ok())
         .map(LightRigType::from_ooxml)?;
     let dir = extract_attr_value_in_element(lr_el, b"dir=\"")
         .and_then(|v| std::str::from_utf8(v).ok())
         .map(LightRigDirection::from_ooxml)?;
-    let lr_rot = find_tag_simd(lr_el, b"rot", 0)
-        .and_then(|rot_start| parse_rotation_3d(&lr_el[rot_start..]));
+    let lr_rot = direct_child_slice(lr_el, b"rot").and_then(parse_rotation_3d);
     let light_rig = LightRig {
         rig,
         dir,
@@ -156,91 +100,11 @@ pub fn parse_scene3d(xml: &[u8]) -> Option<Scene3D> {
     };
 
     // Parse optional backdrop
-    let backdrop = find_tag_simd(xml, b"backdrop", 0).and_then(|bd_start| {
-        let bd_end = find_closing_tag(xml, b"backdrop", bd_start).unwrap_or(xml.len());
-        let bd_slice = &xml[bd_start..bd_end];
-
-        let anchor = find_tag_simd(bd_slice, b"anchor", 0).map(|s| {
-            let el = &bd_slice[s..];
-            Point3D {
-                x: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"x=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                y: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"y=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                z: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"z=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-            }
-        })?;
-
-        let norm = find_tag_simd(bd_slice, b"norm", 0).map(|s| {
-            let el = &bd_slice[s..];
-            Point3D {
-                x: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"x=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                y: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"y=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                z: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"z=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-            }
-        })?;
-
-        let up = find_tag_simd(bd_slice, b"up", 0).map(|s| {
-            let el = &bd_slice[s..];
-            Point3D {
-                x: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"x=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                y: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"y=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-                z: StCoordinate::new(
-                    extract_attr_value_in_element(el, b"z=\"")
-                        .and_then(|v| parse_i64(v))
-                        .unwrap_or(0),
-                ),
-            }
-        })?;
-
-        let ext_lst = find_tag_simd(bd_slice, b"extLst", 0).and_then(|ext_start| {
-            let mut open = ext_start;
-            while open > 0 && bd_slice[open - 1] != b'<' {
-                open -= 1;
-            }
-            open = open.saturating_sub(1);
-            find_closing_tag(bd_slice, b"extLst", ext_start).and_then(|close_lt| {
-                let mut close_end = close_lt;
-                while close_end < bd_slice.len() && bd_slice[close_end] != b'>' {
-                    close_end += 1;
-                }
-                if close_end < bd_slice.len() {
-                    Some(String::from_utf8_lossy(&bd_slice[open..=close_end]).into_owned())
-                } else {
-                    None
-                }
-            })
-        });
+    let backdrop = direct_child_slice(xml, b"backdrop").and_then(|bd_slice| {
+        let anchor = direct_child_slice(bd_slice, b"anchor").map(parse_point3d)?;
+        let norm = direct_child_slice(bd_slice, b"norm").map(parse_point3d)?;
+        let up = direct_child_slice(bd_slice, b"up").map(parse_point3d)?;
+        let ext_lst = extract_ext_lst_raw(bd_slice);
 
         Some(Backdrop {
             anchor,
@@ -251,24 +115,7 @@ pub fn parse_scene3d(xml: &[u8]) -> Option<Scene3D> {
     });
 
     // Parse optional ext_lst for Scene3D
-    let ext_lst = find_tag_simd(xml, b"extLst", 0).and_then(|ext_start| {
-        let mut open = ext_start;
-        while open > 0 && xml[open - 1] != b'<' {
-            open -= 1;
-        }
-        open = open.saturating_sub(1);
-        find_closing_tag(xml, b"extLst", ext_start).and_then(|close_lt| {
-            let mut close_end = close_lt;
-            while close_end < xml.len() && xml[close_end] != b'>' {
-                close_end += 1;
-            }
-            if close_end < xml.len() {
-                Some(String::from_utf8_lossy(&xml[open..=close_end]).into_owned())
-            } else {
-                None
-            }
-        })
-    });
+    let ext_lst = extract_ext_lst_raw(xml);
 
     Some(Scene3D {
         camera,
@@ -276,6 +123,26 @@ pub fn parse_scene3d(xml: &[u8]) -> Option<Scene3D> {
         backdrop,
         ext_lst,
     })
+}
+
+fn parse_point3d(xml: &[u8]) -> Point3D {
+    Point3D {
+        x: StCoordinate::new(
+            extract_attr_value_in_element(xml, b"x=\"")
+                .and_then(|v| parse_i64(v))
+                .unwrap_or(0),
+        ),
+        y: StCoordinate::new(
+            extract_attr_value_in_element(xml, b"y=\"")
+                .and_then(|v| parse_i64(v))
+                .unwrap_or(0),
+        ),
+        z: StCoordinate::new(
+            extract_attr_value_in_element(xml, b"z=\"")
+                .and_then(|v| parse_i64(v))
+                .unwrap_or(0),
+        ),
+    }
 }
 
 /// Parse an `<a:sp3d>` element into a typed `Shape3D`.
@@ -296,42 +163,19 @@ pub fn parse_shape3d(xml: &[u8]) -> Option<Shape3D> {
     let contour_w = extract_attr_value_in_element(xml, b"contourW=\"").and_then(|v| parse_i64(v));
 
     // Parse top bevel
-    let bevel_t = find_tag_simd(xml, b"bevelT", 0).map(|start| parse_bevel(&xml[start..]));
+    let bevel_t = direct_child_slice(xml, b"bevelT").map(parse_bevel);
 
     // Parse bottom bevel
-    let bevel_b = find_tag_simd(xml, b"bevelB", 0).map(|start| parse_bevel(&xml[start..]));
+    let bevel_b = direct_child_slice(xml, b"bevelB").map(parse_bevel);
 
     // Parse extrusion color
-    let extrusion_clr = find_tag_simd(xml, b"extrusionClr", 0).and_then(|start| {
-        let end = find_closing_tag(xml, b"extrusionClr", start).unwrap_or(xml.len());
-        parse_color_ref(&xml[start..end])
-    });
+    let extrusion_clr = direct_child_slice(xml, b"extrusionClr").and_then(parse_color_ref);
 
     // Parse contour color
-    let contour_clr = find_tag_simd(xml, b"contourClr", 0).and_then(|start| {
-        let end = find_closing_tag(xml, b"contourClr", start).unwrap_or(xml.len());
-        parse_color_ref(&xml[start..end])
-    });
+    let contour_clr = direct_child_slice(xml, b"contourClr").and_then(parse_color_ref);
 
     // Parse optional ext_lst for Shape3D
-    let ext_lst = find_tag_simd(xml, b"extLst", 0).and_then(|ext_start| {
-        let mut open = ext_start;
-        while open > 0 && xml[open - 1] != b'<' {
-            open -= 1;
-        }
-        open = open.saturating_sub(1);
-        find_closing_tag(xml, b"extLst", ext_start).and_then(|close_lt| {
-            let mut close_end = close_lt;
-            while close_end < xml.len() && xml[close_end] != b'>' {
-                close_end += 1;
-            }
-            if close_end < xml.len() {
-                Some(String::from_utf8_lossy(&xml[open..=close_end]).into_owned())
-            } else {
-                None
-            }
-        })
-    });
+    let ext_lst = extract_ext_lst_raw(xml);
 
     Some(Shape3D {
         bevel_t,
@@ -349,6 +193,7 @@ pub fn parse_shape3d(xml: &[u8]) -> Option<Shape3D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ooxml_types::drawings::SchemeColor;
 
     #[test]
     fn test_parse_scene3d_full() {
@@ -543,6 +388,31 @@ mod tests {
     }
 
     #[test]
+    fn color_ref_reads_root_or_direct_color_only() {
+        let xml = br#"<a:extrusionClr>
+            <a:extLst><a:ext><a:srgbClr val="111111"/></a:ext></a:extLst>
+            <a:srgbClr val="222222"/>
+        </a:extrusionClr>"#;
+        let clr = parse_color_ref(xml).expect("direct color");
+        assert_eq!(
+            clr,
+            DrawingColor::SrgbClr {
+                val: "222222".into(),
+                transforms: vec![]
+            }
+        );
+
+        let root = br#"<a:schemeClr val="accent2"/>"#;
+        assert!(matches!(
+            parse_color_ref(root),
+            Some(DrawingColor::SchemeClr {
+                val: ooxml_types::drawings::SchemeColor::Accent2,
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn test_parse_color_ref_no_color_child() {
         let xml = b"<a:extrusionClr></a:extrusionClr>";
         assert!(parse_color_ref(xml).is_none());
@@ -624,6 +494,59 @@ mod tests {
         assert_eq!(scene.camera.fov, Some(StFovAngle::new_clamped(3_600_000)));
         assert_eq!(scene.light_rig.rig, LightRigType::ThreePt);
         assert_eq!(scene.light_rig.dir, LightRigDirection::Top);
+    }
+
+    #[test]
+    fn scene3d_uses_direct_camera_and_light_rig_children() {
+        let xml = br#"<a:scene3d>
+            <a:extLst><a:ext><a:camera prst="legacyObliqueTop"/></a:ext></a:extLst>
+            <a:camera prst="orthographicFront"><a:rot lat="1" lon="2" rev="3"/></a:camera>
+            <a:lightRig rig="threePt" dir="t">
+                <a:extLst><a:rot lat="9" lon="9" rev="9"/></a:extLst>
+                <a:rot lat="4" lon="5" rev="6"/>
+            </a:lightRig>
+        </a:scene3d>"#;
+
+        let scene = parse_scene3d(xml).expect("scene");
+
+        assert_eq!(scene.camera.prst, PresetCameraType::OrthographicFront);
+        assert_eq!(
+            scene.camera.rot.unwrap().lat,
+            StPositiveFixedAngle::new_clamped(1)
+        );
+        assert_eq!(
+            scene.light_rig.rot.unwrap().lat,
+            StPositiveFixedAngle::new_clamped(4)
+        );
+    }
+
+    #[test]
+    fn shape3d_uses_direct_children_only() {
+        let xml = br#"<a:sp3d prstMaterial="plastic">
+            <a:extLst>
+                <a:ext>
+                    <a:bevelT w="1" h="1"/>
+                    <a:extrusionClr><a:srgbClr val="111111"/></a:extrusionClr>
+                </a:ext>
+            </a:extLst>
+            <a:bevelT w="63500" h="25400" prst="circle"/>
+            <a:extrusionClr><a:srgbClr val="FF0000"/></a:extrusionClr>
+        </a:sp3d>"#;
+
+        let sp3d = parse_shape3d(xml).expect("shape3d");
+
+        assert_eq!(
+            sp3d.bevel_t.unwrap().w,
+            Some(StPositiveCoordinate::new_clamped(63_500))
+        );
+        assert_eq!(
+            sp3d.extrusion_clr,
+            Some(DrawingColor::SrgbClr {
+                val: "FF0000".into(),
+                transforms: vec![]
+            })
+        );
+        assert!(sp3d.ext_lst.as_deref().unwrap().contains("111111"));
     }
 
     // =========================================================================

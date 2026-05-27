@@ -45,7 +45,7 @@
 //! ```
 
 use crate::infra::scanner::{
-    find_closing_tag, find_gt_simd, find_start_tag_end_quoted, find_tag_simd, StartTagEnd,
+    StartTagEnd, find_closing_tag, find_gt_simd, find_start_tag_end_quoted, find_tag_simd,
 };
 use crate::infra::xml::{parse_string_attr_quoted, parse_u32_attr};
 

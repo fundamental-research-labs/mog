@@ -613,7 +613,9 @@ mod tests {
         let xml = write_external_link_xml(&link);
         let xml_str = String::from_utf8(xml).unwrap();
 
-        assert!(xml_str.contains("<ddeLink ddeService=\"Excel\" ddeTopic=\"[Book1.xlsx]Sheet1\"/>"));
+        assert!(
+            xml_str.contains("<ddeLink ddeService=\"Excel\" ddeTopic=\"[Book1.xlsx]Sheet1\"/>")
+        );
     }
 
     #[test]

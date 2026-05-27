@@ -1632,10 +1632,6 @@ pub fn write_xlsx_from_parse_output(
         let Some(r_id) = r_id else {
             continue;
         };
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        if rels.find_by_target(&entry.target).is_none() {
-            rels.add_with_id(&r_id, REL_PRINTER_SETTINGS, &entry.target);
-        }
         sheet_writers[entry.sheet_idx]
             .ensure_print_writer()
             .set_printer_settings_r_id(Some(r_id));
@@ -1656,10 +1652,6 @@ pub fn write_xlsx_from_parse_output(
                 ))
             })?
             .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        if rels.find_by_target(&entry.target).is_none() {
-            rels.add_with_id(&r_id, REL_VML_DRAWING, &entry.target);
-        }
         sheet_writers[entry.sheet_idx].set_legacy_drawing_hf_r_id(r_id);
     }
 
@@ -1678,8 +1670,6 @@ pub fn write_xlsx_from_parse_output(
                 ))
             })?
             .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        rels.set_with_id(&r_id, REL_VML_DRAWING, &entry.target);
         sheet_writers[entry.sheet_idx].set_legacy_drawing_r_id(r_id);
     }
 
@@ -1698,8 +1688,6 @@ pub fn write_xlsx_from_parse_output(
                 ))
             })?
             .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        rels.set_with_id(&r_id, REL_DRAWING, &entry.target);
         sheet_writers[entry.sheet_idx].set_drawing_r_id(r_id);
     }
 
@@ -1718,8 +1706,6 @@ pub fn write_xlsx_from_parse_output(
                 ))
             })?
             .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        rels.set_with_id(&r_id, REL_DRAWING, &entry.target);
         sheet_writers[entry.sheet_idx].set_drawing_r_id(r_id);
     }
 
@@ -1728,7 +1714,7 @@ pub fn write_xlsx_from_parse_output(
             index: entry.sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
         };
-        let comments_r_id = package_graph
+        package_graph
             .relationship_id(&owner, REL_COMMENTS, &entry.comments_target)
             .ok_or_else(|| {
                 WriteError::PackageIntegrity(format!(
@@ -1736,12 +1722,7 @@ pub fn write_xlsx_from_parse_output(
                     entry.sheet_idx + 1,
                     entry.comments_target
                 ))
-            })?
-            .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        if rels.find_by_target(&entry.comments_target).is_none() {
-            rels.add_with_id(&comments_r_id, REL_COMMENTS, &entry.comments_target);
-        }
+            })?;
 
         let vml_r_id = package_graph
             .relationship_id(&owner, REL_VML_DRAWING, &entry.vml_target)
@@ -1753,10 +1734,6 @@ pub fn write_xlsx_from_parse_output(
                 ))
             })?
             .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        if rels.find_by_target(&entry.vml_target).is_none() {
-            rels.add_with_id(&vml_r_id, REL_VML_DRAWING, &entry.vml_target);
-        }
         sheet_writers[entry.sheet_idx].set_legacy_drawing_r_id(vml_r_id);
     }
 
@@ -1765,7 +1742,7 @@ pub fn write_xlsx_from_parse_output(
             index: entry.sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
         };
-        let r_id = package_graph
+        package_graph
             .relationship_id(&owner, REL_THREADED_COMMENT, &entry.target)
             .ok_or_else(|| {
                 WriteError::PackageIntegrity(format!(
@@ -1773,12 +1750,7 @@ pub fn write_xlsx_from_parse_output(
                     entry.sheet_idx + 1,
                     entry.target
                 ))
-            })?
-            .to_string();
-        let rels = sheet_rels_data[entry.sheet_idx].get_or_insert_with(create_sheet_rels);
-        if rels.find_by_target(&entry.target).is_none() {
-            rels.add_with_id(&r_id, REL_THREADED_COMMENT, &entry.target);
-        }
+            })?;
     }
 
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {

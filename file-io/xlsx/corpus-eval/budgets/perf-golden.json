@@ -5,6 +5,7 @@
       "budgets": {
         "import_ms_p95": 5000,
         "export_ms_p95": 5000,
+        "peak_rss_mb": 1000,
         "output_size_ratio_max": 5
       },
       "reason": "initial Lane D generated golden sentinel budget"
@@ -14,6 +15,7 @@
       "budgets": {
         "import_ms_p95": 30000,
         "export_ms_p95": 30000,
+        "peak_rss_mb": 2000,
         "output_size_ratio_max": 5
       },
       "reason": "initial Lane D generated golden scale budget"

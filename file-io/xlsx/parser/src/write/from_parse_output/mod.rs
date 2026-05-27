@@ -15,6 +15,7 @@ mod chart_auxiliary;
 mod doc_props;
 mod external_links;
 mod form_controls;
+mod hyperlink_targets;
 mod metadata;
 mod opaque_worksheet_drawing;
 mod pivot_package;
@@ -291,17 +292,6 @@ pub fn write_xlsx_from_parse_output(
 
         let mut rels = create_sheet_rels();
 
-        // Classify whether a hyperlink target needs a relationship (r:id) or can be
-        // written as a plain `location` attribute. External URLs, `#`-prefixed internal
-        // refs (originally stored as rels), and UNC/file paths need rels. Plain internal
-        // locations like "Sheet1!A1" don't.
-        fn target_needs_rel(target: &str) -> bool {
-            target.starts_with('#')
-                || target.contains("://")
-                || target.starts_with("\\\\")
-                || target.starts_with("file:")
-        }
-
         // Hyperlink rels (external URLs and internal links stored as rels).
         if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
             let mut hyperlink_outputs = Vec::with_capacity(sheet_data.hyperlinks.len());
@@ -317,7 +307,7 @@ pub fn write_xlsx_from_parse_output(
                     });
                     continue;
                 };
-                if !target_needs_rel(&target) {
+                if !hyperlink_targets::needs_relationship(&target) {
                     hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
                         cell_ref: hl.cell_ref.clone(),
                         location: hl.location.clone().unwrap_or(target),

@@ -201,6 +201,10 @@ fn calculation_properties_from_settings(
             RefMode::A1
         },
         full_precision: settings.full_precision,
+        calc_completed: settings.calc_completed,
+        calc_on_save: settings.calc_on_save,
+        concurrent_calc: settings.concurrent_calc,
+        concurrent_manual_count: settings.concurrent_manual_count,
         force_full_calc: settings.force_full_calc,
         calc_id: calc_id_hint,
         has_explicit_iterate_count: settings.has_explicit_iterate_count,

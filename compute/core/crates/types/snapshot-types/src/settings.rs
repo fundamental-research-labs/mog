@@ -66,6 +66,25 @@ pub struct CalculationSettings {
     #[serde(default)]
     pub full_calc_on_load: bool,
 
+    /// Whether the workbook calculation completed successfully when last saved.
+    /// Preserved for XLSX import/export fidelity.
+    #[serde(default = "default_true")]
+    pub calc_completed: bool,
+
+    /// Whether Excel should recalculate on save.
+    /// Excel's OOXML default is true; imported files may explicitly set false.
+    #[serde(default = "default_true")]
+    pub calc_on_save: bool,
+
+    /// Whether Excel may use concurrent calculation.
+    /// Preserved for XLSX import/export fidelity.
+    #[serde(default = "default_true")]
+    pub concurrent_calc: bool,
+
+    /// Explicit concurrent calculation thread count, when present in OOXML.
+    #[serde(default)]
+    pub concurrent_manual_count: Option<u32>,
+
     /// Whether Excel should force a full recalculation even in manual mode.
     #[serde(default)]
     pub force_full_calc: bool,
@@ -93,6 +112,10 @@ impl Default for CalculationSettings {
             full_precision: true,
             r1c1_mode: false,
             full_calc_on_load: false,
+            calc_completed: true,
+            calc_on_save: true,
+            concurrent_calc: true,
+            concurrent_manual_count: None,
             force_full_calc: false,
             has_explicit_iterate_count: false,
             has_explicit_iterate_delta: false,
@@ -672,6 +695,10 @@ impl From<domain_types::domain::workbook::CalculationProperties> for Calculation
             full_precision: v.full_precision,
             r1c1_mode: v.ref_mode == domain_types::domain::workbook::RefMode::R1C1,
             full_calc_on_load: v.full_calc_on_load,
+            calc_completed: v.calc_completed,
+            calc_on_save: v.calc_on_save,
+            concurrent_calc: v.concurrent_calc,
+            concurrent_manual_count: v.concurrent_manual_count,
             force_full_calc: v.force_full_calc,
             has_explicit_iterate_count: v.has_explicit_iterate_count,
             has_explicit_iterate_delta: v.has_explicit_iterate_delta,
@@ -718,6 +745,10 @@ mod tests {
         assert_eq!(settings.full_precision, false);
         assert_eq!(settings.r1c1_mode, true);
         assert_eq!(settings.full_calc_on_load, true);
+        assert_eq!(settings.calc_completed, false);
+        assert_eq!(settings.calc_on_save, false);
+        assert_eq!(settings.concurrent_calc, false);
+        assert_eq!(settings.concurrent_manual_count, Some(4));
         assert_eq!(settings.force_full_calc, true);
     }
 
@@ -842,6 +873,7 @@ mod tests {
             r1c1_mode: true,
             full_calc_on_load: true,
             force_full_calc: true,
+            ..Default::default()
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: CalculationSettings = serde_json::from_str(&json).unwrap();

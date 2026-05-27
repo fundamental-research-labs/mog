@@ -223,10 +223,6 @@ pub fn write_xlsx_from_parse_output(
     let mut worksheet_table_relationships: Vec<(usize, usize, String)> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
 
-    // Per-sheet drawing rels XML (for drawing→chart references).
-    let mut drawing_rels_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
-    let mut drawing_rels_should_emit: Vec<bool> = Vec::with_capacity(output.sheets.len());
-
     // Per-sheet drawing XML (the drawingN.xml content).
     let mut drawing_xml_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
     let mut drawing_writer_data: Vec<Option<DrawingWriter>> =
@@ -292,7 +288,6 @@ pub fn write_xlsx_from_parse_output(
             && !has_custom_properties
             && !has_pivot_tables
         {
-            drawing_rels_data.push(None);
             drawing_xml_data.push(None);
             continue;
         }
@@ -1059,18 +1054,11 @@ pub fn write_xlsx_from_parse_output(
                         relationship_id_hint: rel.id.clone(),
                     });
                 }
-                drawing_rels_data.push(None);
-                drawing_rels_should_emit.push(true);
-            } else {
-                drawing_rels_data.push(None);
-                drawing_rels_should_emit.push(false);
             }
             sheets_with_drawings.push(global_drawing_idx);
         } else {
             drawing_xml_data.push(None);
             drawing_writer_data.push(None);
-            drawing_rels_data.push(None);
-            drawing_rels_should_emit.push(false);
         }
 
         // Printer settings relationship.
@@ -1867,8 +1855,6 @@ pub fn write_xlsx_from_parse_output(
         &all_chart_ex_entries,
         all_image_blobs,
         &drawing_xml_data,
-        &drawing_rels_data,
-        &drawing_rels_should_emit,
         &worksheet_form_control_vml_relationships,
         &worksheet_drawing_relationships,
         &worksheet_threaded_comments_relationships,

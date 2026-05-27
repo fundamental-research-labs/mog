@@ -36,8 +36,6 @@ pub(super) fn write_zip_package(
     all_chart_ex_entries: &[Vec<ChartExEntry>],
     all_image_blobs: Vec<(String, Vec<u8>)>,
     drawing_xml_data: &[Option<Vec<u8>>],
-    drawing_rels_data: &[Option<Vec<u8>>],
-    drawing_rels_should_emit: &[bool],
     worksheet_form_control_vml_relationships: &[WorksheetFormControlVmlGraphEntry],
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
     worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
@@ -490,17 +488,13 @@ pub(super) fn write_zip_package(
                 add_registered_part(package_graph, &mut zip, drawing_path, drawing_xml.clone())?;
             }
 
-            if drawing_rels_should_emit[idx] {
-                if let Some(ref drawing_rels_xml) = drawing_rels_data[idx] {
-                    zip.add_file(&drawing_rels_path, drawing_rels_xml.clone());
-                } else {
-                    let drawing_rels = package_graph.relationship_manager_for_owner(
-                        &crate::write::package_graph::PackageOwner::Part {
-                            path: drawing_path.to_string(),
-                        },
-                    );
-                    zip.add_file(&drawing_rels_path, drawing_rels.to_xml());
-                }
+            let drawing_rels = package_graph.relationship_manager_for_owner(
+                &crate::write::package_graph::PackageOwner::Part {
+                    path: drawing_path.to_string(),
+                },
+            );
+            if !drawing_rels.is_empty() {
+                zip.add_file(&drawing_rels_path, drawing_rels.to_xml());
             }
         }
     }

@@ -58,8 +58,10 @@ function hasOverlap(a: PrefetchBounds, b: PrefetchBounds): boolean {
   );
 }
 
-const HORIZONTAL_FREE_SCROLL_OVERSCAN_ROWS = 64;
-const HORIZONTAL_FREE_SCROLL_OVERSCAN_COLS = 100;
+// Horizontal wheel bursts in the free viewport need column runway, but should
+// not materially expand the off-axis row fetch during dense movement.
+const HORIZONTAL_FREE_SCROLL_OVERSCAN_ROWS = 32;
+const HORIZONTAL_FREE_SCROLL_OVERSCAN_COLS = 64;
 
 function isHorizontalOnlyMovement(
   current: PrefetchBounds,

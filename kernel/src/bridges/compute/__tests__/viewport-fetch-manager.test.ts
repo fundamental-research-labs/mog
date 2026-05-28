@@ -181,9 +181,9 @@ describe('ViewportFetchManager', () => {
       expect(registerCall).toBeDefined();
       const [, args] = registerCall!;
       expect(args.startRow).toBe(0);
-      expect(args.endRow).toBe(114);
+      expect(args.endRow).toBe(82);
       expect(args.startCol).toBe(0);
-      expect(args.endCol).toBe(180);
+      expect(args.endCol).toBe(144);
     });
   });
 

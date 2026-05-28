@@ -133,3 +133,27 @@ pub(in crate::storage::engine) fn load_custom_cell_styles(stores: &mut EngineSto
         }
     }
 }
+
+pub(in crate::storage::engine) fn load_custom_table_styles(stores: &mut EngineStores) {
+    use compute_document::schema::KEY_CUSTOM_TABLE_STYLES;
+    use compute_table::custom_styles::CustomTableStyleConfig;
+
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let styles_map = match workbook.get(&txn, KEY_CUSTOM_TABLE_STYLES) {
+        Some(Out::YMap(m)) => m,
+        _ => return,
+    };
+
+    for (key, value) in styles_map.iter(&txn) {
+        let json_str = match value {
+            Out::Any(Any::String(s)) => s,
+            _ => continue,
+        };
+        if let Ok(style) = serde_json::from_str::<CustomTableStyleConfig>(&json_str) {
+            stores.custom_table_styles.insert(key.to_string(), style);
+        }
+    }
+}

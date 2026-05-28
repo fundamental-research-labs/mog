@@ -392,6 +392,7 @@ fn roundtrip_spacer_content_dimensions() {
                 hidden: false,
                 custom_format: false,
                 descent: None,
+                ..Default::default()
             },
             RowDimension {
                 row: 1,
@@ -400,6 +401,7 @@ fn roundtrip_spacer_content_dimensions() {
                 hidden: false,
                 custom_format: false,
                 descent: None,
+                ..Default::default()
             },
             RowDimension {
                 row: 2,
@@ -408,6 +410,7 @@ fn roundtrip_spacer_content_dimensions() {
                 hidden: false,
                 custom_format: false,
                 descent: None,
+                ..Default::default()
             },
             RowDimension {
                 row: 3,
@@ -416,6 +419,7 @@ fn roundtrip_spacer_content_dimensions() {
                 hidden: false,
                 custom_format: false,
                 descent: None,
+                ..Default::default()
             },
             RowDimension {
                 row: 4,
@@ -424,6 +428,7 @@ fn roundtrip_spacer_content_dimensions() {
                 hidden: false,
                 custom_format: false,
                 descent: None,
+                ..Default::default()
             },
         ],
         ..Default::default()

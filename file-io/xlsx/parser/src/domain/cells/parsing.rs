@@ -369,6 +369,10 @@ fn parse_worksheet_core(
                             rh.thick_top = ra.thick_top;
                             rh.thick_bot = ra.thick_bot;
                             rh.outline_level = ra.outline_level;
+                            rh.spans = ra
+                                .spans
+                                .and_then(|b| std::str::from_utf8(b).ok())
+                                .map(|s| s.to_string());
                             row_heights.push(rh);
                         }
                     }
@@ -432,6 +436,8 @@ fn parse_worksheet_core(
                             && ra.hidden.is_none()
                             && ra.collapsed.is_none()
                             && ra.outline_level.is_none()
+                            && !ra.thick_top
+                            && !ra.thick_bot
                             && !ra.custom_format
                         {
                             ext.bare_empty_rows.push(current_row);

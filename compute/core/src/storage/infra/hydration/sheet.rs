@@ -19,6 +19,7 @@ use super::features::{
     hydrate_comments, hydrate_conditional_formats, hydrate_data_validations,
     hydrate_floating_objects, hydrate_hidden_rows_cols, hydrate_hyperlinks, hydrate_merges,
     hydrate_outline_groups, hydrate_row_heights, hydrate_sort_state, hydrate_sparklines,
+    hydrate_x14_data_validations,
 };
 use super::styles::{
     ImportedRangeStyle, hydrate_authored_style_runs, hydrate_cell_styles, hydrate_col_styles,
@@ -101,6 +102,18 @@ fn sheet_identity_extent(sheet: &SheetData) -> (u32, u32) {
     }
 
     (rows, cols)
+}
+
+fn sheet_color_to_hex(color: &ooxml_types::styles::ColorDef) -> Option<String> {
+    match color {
+        ooxml_types::styles::ColorDef::Rgb { val, .. } => {
+            let rgb = val.strip_prefix("FF").unwrap_or(val);
+            Some(format!("#{rgb}"))
+        }
+        ooxml_types::styles::ColorDef::Indexed { .. }
+        | ooxml_types::styles::ColorDef::Theme { .. }
+        | ooxml_types::styles::ColorDef::Auto { .. } => None,
+    }
 }
 
 fn allocate_anchored_identities(
@@ -377,6 +390,12 @@ pub(crate) fn hydrate_sheet(
     // Store sheet uid (xr:uid) for round-trip fidelity
     if let Some(ref uid) = sheet.uid {
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
+    }
+    if let Some(properties) = &sheet.sheet_properties {
+        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
+        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
+            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
+        }
     }
 
     // 4. Cells map
@@ -684,6 +703,104 @@ pub(crate) fn hydrate_sheet(
         meta_map.insert(txn, "rowDescents", Any::String(Arc::from(json)));
     }
 
+    let row_metadata: Vec<&domain_types::RowDimension> = sheet
+        .dimensions
+        .row_heights
+        .iter()
+        .filter(|r| {
+            r.explicit_hidden
+                || r.outline_level.is_some()
+                || r.explicit_outline_level_zero
+                || r.collapsed.is_some()
+                || r.thick_top
+                || r.thick_bot
+                || !r.xml_hints.is_empty()
+        })
+        .collect();
+    if !row_metadata.is_empty() {
+        let row_outline_levels: Vec<(u32, u8)> = row_metadata
+            .iter()
+            .filter_map(|r| r.outline_level.map(|level| (r.row, level)))
+            .collect();
+        if !row_outline_levels.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_outline_levels)
+        {
+            meta_map.insert(txn, "rowOutlineLevels", Any::String(Arc::from(json)));
+        }
+        let row_explicit_hidden: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.explicit_hidden)
+            .map(|r| r.row)
+            .collect();
+        if !row_explicit_hidden.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_explicit_hidden)
+        {
+            meta_map.insert(txn, "rowExplicitHidden", Any::String(Arc::from(json)));
+        }
+        let row_explicit_outline_zero: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.explicit_outline_level_zero)
+            .map(|r| r.row)
+            .collect();
+        if !row_explicit_outline_zero.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_explicit_outline_zero)
+        {
+            meta_map.insert(
+                txn,
+                "rowExplicitOutlineLevelZero",
+                Any::String(Arc::from(json)),
+            );
+        }
+        let row_collapsed: Vec<(u32, bool)> = row_metadata
+            .iter()
+            .filter_map(|r| r.collapsed.map(|collapsed| (r.row, collapsed)))
+            .collect();
+        if !row_collapsed.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_collapsed)
+        {
+            meta_map.insert(txn, "rowCollapsed", Any::String(Arc::from(json)));
+        }
+        let row_thick_top: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.thick_top)
+            .map(|r| r.row)
+            .collect();
+        if !row_thick_top.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_thick_top)
+        {
+            meta_map.insert(txn, "rowThickTop", Any::String(Arc::from(json)));
+        }
+        let row_thick_bot: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.thick_bot)
+            .map(|r| r.row)
+            .collect();
+        if !row_thick_bot.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_thick_bot)
+        {
+            meta_map.insert(txn, "rowThickBot", Any::String(Arc::from(json)));
+        }
+        let row_spans: Vec<(u32, String)> = row_metadata
+            .iter()
+            .filter_map(|r| r.xml_hints.spans.as_ref().map(|spans| (r.row, spans.clone())))
+            .collect();
+        if !row_spans.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_spans)
+        {
+            meta_map.insert(txn, "rowSpans", Any::String(Arc::from(json)));
+        }
+        let bare_empty_rows: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.xml_hints.bare_empty)
+            .map(|r| r.row)
+            .collect();
+        if !bare_empty_rows.is_empty()
+            && let Ok(json) = serde_json::to_string(&bare_empty_rows)
+        {
+            meta_map.insert(txn, "bareEmptyRows", Any::String(Arc::from(json)));
+        }
+    }
+
     // --- Hidden rows/cols (from dimension data) ---
     hydrate_hidden_rows_cols(
         txn,
@@ -736,6 +853,15 @@ pub(crate) fn hydrate_sheet(
         sheet.data_validations_y_window,
         sheet.data_validations_declared_count,
     );
+    hydrate_x14_data_validations(
+        txn,
+        &meta_map,
+        &sheet.x14_data_validations,
+        sheet.x14_data_validations_disable_prompts,
+        sheet.x14_data_validations_x_window,
+        sheet.x14_data_validations_y_window,
+        sheet.x14_data_validations_declared_count,
+    );
 
     // --- Filters (typed AutoFilter at properties/autoFilter + runtime FilterState) ---
     hydrate_auto_filter(txn, &meta_map, &filters_map, &pos_map, &sheet.auto_filter);
@@ -748,7 +874,11 @@ pub(crate) fn hydrate_sheet(
         txn,
         &grouping_map,
         &sheet.outline_groups,
-        sheet.outline_properties.as_ref(),
+        sheet
+            .sheet_properties
+            .as_ref()
+            .and_then(|properties| properties.outline_pr.as_ref())
+            .or(sheet.outline_properties.as_ref()),
         &sheet_hex,
     );
 
@@ -817,6 +947,12 @@ pub(crate) fn hydrate_sheet(
     // --- Sheet UID (xr:uid on <worksheet> root) ---
     if let Some(ref uid) = sheet.uid {
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
+    }
+    if let Some(properties) = &sheet.sheet_properties {
+        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
+        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
+            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
+        }
     }
 
     // Collect physical phantom cells — entries in pos_map that weren't in the
@@ -1214,6 +1350,104 @@ pub(crate) fn hydrate_sheet_with_allocation(
         meta_map.insert(txn, "rowDescents", Any::String(Arc::from(json)));
     }
 
+    let row_metadata: Vec<&domain_types::RowDimension> = sheet
+        .dimensions
+        .row_heights
+        .iter()
+        .filter(|r| {
+            r.explicit_hidden
+                || r.outline_level.is_some()
+                || r.explicit_outline_level_zero
+                || r.collapsed.is_some()
+                || r.thick_top
+                || r.thick_bot
+                || !r.xml_hints.is_empty()
+        })
+        .collect();
+    if !row_metadata.is_empty() {
+        let row_outline_levels: Vec<(u32, u8)> = row_metadata
+            .iter()
+            .filter_map(|r| r.outline_level.map(|level| (r.row, level)))
+            .collect();
+        if !row_outline_levels.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_outline_levels)
+        {
+            meta_map.insert(txn, "rowOutlineLevels", Any::String(Arc::from(json)));
+        }
+        let row_explicit_hidden: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.explicit_hidden)
+            .map(|r| r.row)
+            .collect();
+        if !row_explicit_hidden.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_explicit_hidden)
+        {
+            meta_map.insert(txn, "rowExplicitHidden", Any::String(Arc::from(json)));
+        }
+        let row_explicit_outline_zero: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.explicit_outline_level_zero)
+            .map(|r| r.row)
+            .collect();
+        if !row_explicit_outline_zero.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_explicit_outline_zero)
+        {
+            meta_map.insert(
+                txn,
+                "rowExplicitOutlineLevelZero",
+                Any::String(Arc::from(json)),
+            );
+        }
+        let row_collapsed: Vec<(u32, bool)> = row_metadata
+            .iter()
+            .filter_map(|r| r.collapsed.map(|collapsed| (r.row, collapsed)))
+            .collect();
+        if !row_collapsed.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_collapsed)
+        {
+            meta_map.insert(txn, "rowCollapsed", Any::String(Arc::from(json)));
+        }
+        let row_thick_top: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.thick_top)
+            .map(|r| r.row)
+            .collect();
+        if !row_thick_top.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_thick_top)
+        {
+            meta_map.insert(txn, "rowThickTop", Any::String(Arc::from(json)));
+        }
+        let row_thick_bot: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.thick_bot)
+            .map(|r| r.row)
+            .collect();
+        if !row_thick_bot.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_thick_bot)
+        {
+            meta_map.insert(txn, "rowThickBot", Any::String(Arc::from(json)));
+        }
+        let row_spans: Vec<(u32, String)> = row_metadata
+            .iter()
+            .filter_map(|r| r.xml_hints.spans.as_ref().map(|spans| (r.row, spans.clone())))
+            .collect();
+        if !row_spans.is_empty()
+            && let Ok(json) = serde_json::to_string(&row_spans)
+        {
+            meta_map.insert(txn, "rowSpans", Any::String(Arc::from(json)));
+        }
+        let bare_empty_rows: Vec<u32> = row_metadata
+            .iter()
+            .filter(|r| r.xml_hints.bare_empty)
+            .map(|r| r.row)
+            .collect();
+        if !bare_empty_rows.is_empty()
+            && let Ok(json) = serde_json::to_string(&bare_empty_rows)
+        {
+            meta_map.insert(txn, "bareEmptyRows", Any::String(Arc::from(json)));
+        }
+    }
+
     hydrate_hidden_rows_cols(
         txn,
         &hidden_rows_map,
@@ -1250,13 +1484,26 @@ pub(crate) fn hydrate_sheet_with_allocation(
         sheet.data_validations_y_window,
         sheet.data_validations_declared_count,
     );
+    hydrate_x14_data_validations(
+        txn,
+        &meta_map,
+        &sheet.x14_data_validations,
+        sheet.x14_data_validations_disable_prompts,
+        sheet.x14_data_validations_x_window,
+        sheet.x14_data_validations_y_window,
+        sheet.x14_data_validations_declared_count,
+    );
     hydrate_auto_filter(txn, &meta_map, &filters_map, &pos_map, &sheet.auto_filter);
     hydrate_sort_state(txn, &meta_map, &sheet.sort_state);
     hydrate_outline_groups(
         txn,
         &grouping_map,
         &sheet.outline_groups,
-        sheet.outline_properties.as_ref(),
+        sheet
+            .sheet_properties
+            .as_ref()
+            .and_then(|properties| properties.outline_pr.as_ref())
+            .or(sheet.outline_properties.as_ref()),
         sheet_hex,
     );
     let chart_fos: Vec<domain_types::domain::floating_object::FloatingObject> = sheet

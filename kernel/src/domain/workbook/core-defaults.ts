@@ -156,11 +156,14 @@ export const DEFAULT_SHEET_SETTINGS: SheetSettings = Object.freeze(
  */
 export const DEFAULT_SHEET_PRINT_SETTINGS: PrintSettings = Object.freeze({
   paperSize: null,
+  paperWidth: null,
+  paperHeight: null,
   orientation: null,
   scale: null,
   fitToWidth: null,
   fitToHeight: null,
   gridlines: false,
+  gridLinesSet: true,
   headings: false,
   hCentered: false,
   vCentered: false,
@@ -176,6 +179,8 @@ export const DEFAULT_SHEET_PRINT_SETTINGS: PrintSettings = Object.freeze({
   rId: null,
   hasPrintOptions: false,
   hasPageSetup: false,
+  copies: null,
+  pageSetupProperties: null,
   useFirstPageNumber: false,
   printComments: null,
   printErrors: null,

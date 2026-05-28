@@ -51,6 +51,17 @@ pub struct FontFormat {
     pub superscript: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subscript: Option<bool>,
+    /// OOXML `<vertAlign>` token ("baseline", "superscript", "subscript").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vertical_align: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condense: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extend: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outline: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub charset: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -178,6 +189,11 @@ impl std::hash::Hash for FontFormat {
         self.strikethrough.hash(state);
         self.superscript.hash(state);
         self.subscript.hash(state);
+        self.vertical_align.hash(state);
+        self.condense.hash(state);
+        self.extend.hash(state);
+        self.outline.hash(state);
+        self.shadow.hash(state);
         self.charset.hash(state);
         self.family.hash(state);
         self.scheme.hash(state);
@@ -505,6 +521,17 @@ impl From<&CellFormat> for DocumentFormat {
                 strikethrough: cf.strikethrough,
                 superscript: cf.superscript,
                 subscript: cf.subscript,
+                vertical_align: if cf.superscript == Some(true) {
+                    Some("superscript".to_string())
+                } else if cf.subscript == Some(true) {
+                    Some("subscript".to_string())
+                } else {
+                    None
+                },
+                condense: None,
+                extend: None,
+                outline: None,
+                shadow: None,
                 charset: cf.font_charset,
                 family: cf.font_family_type,
                 scheme: cf.font_theme.clone(),

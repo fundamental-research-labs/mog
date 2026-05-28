@@ -6,6 +6,8 @@
 use super::header_footer::HeaderFooter;
 use super::page_setup::{PageMargins, PageSetup, parse_page_margins};
 use super::print_options::{PageBreaks, PrintOptions};
+use crate::domain::worksheet::read::parse_page_setup_properties;
+use ooxml_types::worksheet::PageSetupProperties;
 
 // ============================================================================
 // Combined Print Settings
@@ -22,6 +24,8 @@ pub struct PrintSettings {
     pub header_footer: Option<HeaderFooter>,
     /// Print options (gridlines, headings, centering)
     pub print_options: Option<PrintOptions>,
+    /// Sheet-level page setup properties from `<sheetPr><pageSetUpPr>`.
+    pub page_setup_properties: Option<PageSetupProperties>,
     /// Row page breaks
     pub row_breaks: Option<PageBreaks>,
     /// Column page breaks
@@ -42,6 +46,7 @@ impl PrintSettings {
             page_margins: parse_page_margins(xml),
             header_footer: HeaderFooter::parse(xml),
             print_options: PrintOptions::parse(xml),
+            page_setup_properties: parse_page_setup_properties(xml),
             row_breaks: PageBreaks::parse_row_breaks(xml),
             col_breaks: PageBreaks::parse_col_breaks(xml),
         }
@@ -53,6 +58,7 @@ impl PrintSettings {
             || self.page_margins.is_some()
             || self.header_footer.is_some()
             || self.print_options.is_some()
+            || self.page_setup_properties.is_some()
             || self.row_breaks.is_some()
             || self.col_breaks.is_some()
     }

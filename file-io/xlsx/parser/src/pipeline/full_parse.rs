@@ -35,7 +35,7 @@ use crate::domain::strings::read::SharedStrings;
 use crate::domain::styles::read::{parse_known_fonts, parse_styles};
 use crate::domain::tables::read::parse_tables_for_sheet;
 use crate::domain::themes;
-use crate::domain::validation::read::parse_data_validations;
+use crate::domain::validation::read::{parse_data_validations, parse_x14_data_validations};
 use crate::domain::workbook::read as workbook;
 use crate::domain::workbook::read::parse_calc_settings;
 use crate::domain::worksheet::read::{
@@ -323,6 +323,7 @@ fn parse_xlsx_full_native_impl(
         crate::domain::workbook::read::parse_workbook_properties(&workbook_xml);
     let file_version = crate::domain::workbook::read::parse_file_version(&workbook_xml);
     let file_sharing = crate::domain::workbook::read::parse_file_sharing(&workbook_xml);
+    let web_publishing = crate::domain::workbook::read::parse_web_publishing(&workbook_xml);
 
     // Parse all pivot cache definitions (workbook-level, needed before per-sheet pivot tables)
     let pivot_caches = parse_all_pivot_caches(&archive);
@@ -931,6 +932,7 @@ fn parse_xlsx_full_native_impl(
         workbook_properties,
         file_version,
         file_sharing,
+        web_publishing,
         extensions: {
             let mut binary_passthrough =
                 crate::roundtrip::binary_passthrough::BinaryPassthrough::new();
@@ -1092,7 +1094,10 @@ fn process_sheet_core(
     let custom_height = fmt_pr.custom_height;
     let zero_height = fmt_pr.zero_height;
 
-    let outline_properties = crate::domain::worksheet::read::parse_outline_properties(pre_sd);
+    let sheet_properties = crate::domain::worksheet::read::parse_sheet_properties(pre_sd);
+    let outline_properties = sheet_properties
+        .as_ref()
+        .and_then(|properties| properties.outline_pr.clone());
 
     let explicit_blank_cells = extract_explicit_blank_cells(worksheet_xml);
     let header_footer_xml = extract_raw_element_xml(worksheet_xml, b"headerFooter");
@@ -1186,6 +1191,16 @@ fn process_sheet_core(
     let data_validations_disable_prompts = dv_container_attrs.disable_prompts;
     let data_validations_x_window = dv_container_attrs.x_window;
     let data_validations_y_window = dv_container_attrs.y_window;
+    let (x14_data_validations, x14_dv_container_attrs) = parse_x14_data_validations(post_sd);
+    ensure_count_limit(
+        "x14 data validation",
+        x14_data_validations.len(),
+        MAX_VALIDATIONS,
+    )?;
+    let x14_data_validations_declared_count = x14_dv_container_attrs.declared_count;
+    let x14_data_validations_disable_prompts = x14_dv_container_attrs.disable_prompts;
+    let x14_data_validations_x_window = x14_dv_container_attrs.x_window;
+    let x14_data_validations_y_window = x14_dv_container_attrs.y_window;
     let auto_filter = crate::domain::auto_filter::read::parse_auto_filter(post_sd);
     let sort_state = crate::domain::worksheet::read::parse_standalone_sort_state(post_sd);
     let custom_properties_xml =
@@ -1240,7 +1255,10 @@ fn process_sheet_core(
             select_unlocked_cells: sp.select_unlocked_cells,
         });
 
-    let ps = print::PrintSettings::parse(post_sd);
+    let mut ps = print::PrintSettings::parse(post_sd);
+    ps.page_setup_properties = sheet_properties
+        .as_ref()
+        .and_then(|properties| properties.page_set_up_pr.clone());
     let (print_settings, page_breaks) = crate::output::results::build_print_settings_output(&ps);
 
     // Frozen pane is in pre-sheetData XML. Col widths and row heights
@@ -1298,6 +1316,11 @@ fn process_sheet_core(
         data_validations_disable_prompts,
         data_validations_x_window,
         data_validations_y_window,
+        x14_data_validations,
+        x14_data_validations_declared_count,
+        x14_data_validations_disable_prompts,
+        x14_data_validations_x_window,
+        x14_data_validations_y_window,
         tables,
         table_xml_passthroughs,
         parsed_pivot_configs: Vec::new(), // Set after process_sheet_core by caller
@@ -1328,6 +1351,7 @@ fn process_sheet_core(
         row_heights,
         frozen_pane,
         view_options,
+        sheet_properties,
         outline_properties,
         charts,
         smartart_diagrams,
@@ -1493,8 +1517,11 @@ fn parse_sheets_sequential(
         let custom_height = fmt_pr_seq.custom_height;
         let zero_height = fmt_pr_seq.zero_height;
 
-        let outline_properties =
-            crate::domain::worksheet::read::parse_outline_properties(pre_sd_early);
+        let sheet_properties =
+            crate::domain::worksheet::read::parse_sheet_properties(pre_sd_early);
+        let outline_properties = sheet_properties
+            .as_ref()
+            .and_then(|properties| properties.outline_pr.clone());
 
         let explicit_blank_cells = extract_explicit_blank_cells(&worksheet_xml);
         let header_footer_xml = extract_raw_element_xml(&worksheet_xml, b"headerFooter");
@@ -1596,6 +1623,16 @@ fn parse_sheets_sequential(
         let data_validations_disable_prompts = dv_container_attrs.disable_prompts;
         let data_validations_x_window = dv_container_attrs.x_window;
         let data_validations_y_window = dv_container_attrs.y_window;
+        let (x14_data_validations, x14_dv_container_attrs) = parse_x14_data_validations(post_sd);
+        ensure_count_limit(
+            "x14 data validation",
+            x14_data_validations.len(),
+            MAX_VALIDATIONS,
+        )?;
+        let x14_data_validations_declared_count = x14_dv_container_attrs.declared_count;
+        let x14_data_validations_disable_prompts = x14_dv_container_attrs.disable_prompts;
+        let x14_data_validations_x_window = x14_dv_container_attrs.x_window;
+        let x14_data_validations_y_window = x14_dv_container_attrs.y_window;
         let auto_filter = crate::domain::auto_filter::read::parse_auto_filter(post_sd);
         let sort_state = crate::domain::worksheet::read::parse_standalone_sort_state(post_sd);
         let custom_properties_xml =
@@ -1651,7 +1688,10 @@ fn parse_sheets_sequential(
             });
         let aux_t5 = tick(timings);
 
-        let ps = print::PrintSettings::parse(post_sd);
+        let mut ps = print::PrintSettings::parse(post_sd);
+        ps.page_setup_properties = sheet_properties
+            .as_ref()
+            .and_then(|properties| properties.page_set_up_pr.clone());
         let (print_settings, page_breaks) =
             crate::output::results::build_print_settings_output(&ps);
         let aux_t6 = tick(timings);
@@ -1836,6 +1876,11 @@ fn parse_sheets_sequential(
             data_validations_disable_prompts,
             data_validations_x_window,
             data_validations_y_window,
+            x14_data_validations,
+            x14_data_validations_declared_count,
+            x14_data_validations_disable_prompts,
+            x14_data_validations_x_window,
+            x14_data_validations_y_window,
             tables,
             table_xml_passthroughs,
             parsed_pivot_configs,
@@ -1866,6 +1911,7 @@ fn parse_sheets_sequential(
             row_heights,
             frozen_pane,
             view_options,
+            sheet_properties,
             outline_properties,
             charts,
             smartart_diagrams,

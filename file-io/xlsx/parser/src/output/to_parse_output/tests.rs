@@ -933,6 +933,7 @@ fn threading_result(
         workbook_properties: None,
         file_version: None,
         file_sharing: None,
+        web_publishing: None,
     }
 }
 

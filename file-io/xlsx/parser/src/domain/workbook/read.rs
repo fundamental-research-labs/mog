@@ -618,6 +618,42 @@ pub fn parse_file_sharing(xml: &[u8]) -> Option<domain_types::domain::workbook::
     Some(ooxml_fs.into())
 }
 
+/// Parse the `<webPublishing>` element from workbook.xml.
+///
+/// Returns `None` if no `<webPublishing>` element is found.
+pub fn parse_web_publishing(
+    xml: &[u8],
+) -> Option<domain_types::domain::workbook::WorkbookWebPublishing> {
+    let tag_start = find_tag_simd(xml, b"webPublishing", 0)?;
+    let tag_end = find_gt_simd(xml, tag_start)
+        .map(|p| p + 1)
+        .unwrap_or(xml.len());
+    let elem = &xml[tag_start..tag_end];
+
+    let parse_bool = |attr: &[u8]| -> Option<bool> {
+        extract_attr_value_in_range(elem, attr)
+            .map(|v| !v.is_empty() && (v[0] == b'1' || v[0] == b't' || v[0] == b'T'))
+    };
+    let parse_u32 = |attr: &[u8]| -> Option<u32> {
+        extract_attr_value_in_range(elem, attr)
+            .and_then(|v| std::str::from_utf8(v).ok())
+            .and_then(|s| s.parse::<u32>().ok())
+    };
+    let target_screen_size = extract_attr_value_in_range(elem, b"targetScreenSize=\"")
+        .and_then(|v| std::str::from_utf8(v).ok())
+        .map(ooxml_types::web_publish::TargetScreenSize::from_ooxml);
+
+    Some(domain_types::domain::workbook::WorkbookWebPublishing {
+        css: parse_bool(b"css=\""),
+        thicket: parse_bool(b"thicket=\""),
+        long_file_names: parse_bool(b"longFileNames=\""),
+        vml: parse_bool(b"vml=\""),
+        allow_png: parse_bool(b"allowPng=\""),
+        target_screen_size,
+        dpi: parse_u32(b"dpi=\""),
+    })
+}
+
 // ============================================================================
 // Unit Tests
 // ============================================================================
@@ -644,6 +680,27 @@ mod tests {
         assert_eq!(sheets[0].name, "Sheet1");
         assert_eq!(sheets[0].sheet_id, 1);
         assert_eq!(sheets[0].r_id, "rId1");
+    }
+
+    #[test]
+    fn test_parse_web_publishing() {
+        let xml = br#"<?xml version="1.0"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <webPublishing css="1" thicket="0" longFileNames="1" vml="0" allowPng="1" targetScreenSize="1280x1024" dpi="150"/>
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#;
+
+        let web = parse_web_publishing(xml).expect("webPublishing should parse");
+        assert_eq!(web.css, Some(true));
+        assert_eq!(web.thicket, Some(false));
+        assert_eq!(web.long_file_names, Some(true));
+        assert_eq!(web.vml, Some(false));
+        assert_eq!(web.allow_png, Some(true));
+        assert_eq!(
+            web.target_screen_size,
+            Some(ooxml_types::web_publish::TargetScreenSize::Size1280x1024)
+        );
+        assert_eq!(web.dpi, Some(150));
     }
 
     #[test]

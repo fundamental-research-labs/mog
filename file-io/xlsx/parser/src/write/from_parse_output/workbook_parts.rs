@@ -90,6 +90,9 @@ pub(super) fn build_workbook_xml(
     if let Some(ref workbook_properties) = output.workbook_properties {
         workbook_writer.set_workbook_properties(workbook_properties.clone());
     }
+    if let Some(ref web_publishing) = output.web_publishing {
+        workbook_writer.set_web_publishing(web_publishing.clone());
+    }
 
     // ── Workbook Preserved Namespaces + Elements (round-trip) ─────
     if let Some(ctx) = round_trip_ctx {

@@ -9,10 +9,12 @@ use yrs::{Any, Map, ReadTxn, TransactionMut};
 
 use super::helpers::*;
 use crate::domain::print::{
-    HeaderFooter, ImportedPrinterSettingsIdentity, PageMargins, PrintSettings,
+    HeaderFooter, ImportedPrinterSettingsIdentity, PageMargins, PageSetupProperties, PrintSettings,
 };
 
 pub const KEY_PAPER_SIZE: &str = "paperSize";
+pub const KEY_PAPER_WIDTH: &str = "paperWidth";
+pub const KEY_PAPER_HEIGHT: &str = "paperHeight";
 pub const KEY_ORIENTATION: &str = "orientation";
 pub const KEY_SCALE: &str = "scale";
 pub const KEY_FIT_TO_WIDTH: &str = "fitToWidth";
@@ -27,6 +29,7 @@ pub const KEY_BLACK_AND_WHITE: &str = "blackAndWhite";
 pub const KEY_DRAFT: &str = "draft";
 pub const KEY_FIRST_PAGE_NUMBER: &str = "firstPageNumber";
 pub const KEY_IMPORTED_PRINTER_SETTINGS: &str = "importedPrinterSettings";
+pub const KEY_PAGE_SETUP_PROPERTIES: &str = "pageSetupProperties";
 
 /// Convert a [`PrintSettings`] to Yrs prelim entries for initial hydration.
 pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
@@ -40,6 +43,12 @@ pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
     ];
     if let Some(paper_size) = settings.paper_size {
         entries.push((KEY_PAPER_SIZE, Any::Number(paper_size as f64)));
+    }
+    if let Some(paper_width) = &settings.paper_width {
+        entries.push((KEY_PAPER_WIDTH, Any::String(Arc::from(paper_width.as_str()))));
+    }
+    if let Some(paper_height) = &settings.paper_height {
+        entries.push((KEY_PAPER_HEIGHT, Any::String(Arc::from(paper_height.as_str()))));
     }
     if let Some(orientation) = &settings.orientation {
         entries.push((
@@ -99,6 +108,17 @@ pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
     if settings.has_page_setup {
         entries.push(("hasPageSetup", Any::Bool(true)));
     }
+    if let Some(copies) = settings.copies {
+        entries.push(("copies", Any::Number(copies as f64)));
+    }
+    if !settings.grid_lines_set {
+        entries.push(("gridLinesSet", Any::Bool(false)));
+    }
+    if let Some(page_setup_properties) = &settings.page_setup_properties
+        && let Ok(json) = serde_json::to_string(page_setup_properties)
+    {
+        entries.push((KEY_PAGE_SETUP_PROPERTIES, Any::String(Arc::from(json))));
+    }
     if let Some(ref cc) = settings.cell_comments {
         entries.push(("cellComments", Any::String(Arc::from(cc.as_str()))));
     }
@@ -112,6 +132,8 @@ pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
 pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<PrintSettings> {
     Some(PrintSettings {
         paper_size: read_u32(map, txn, KEY_PAPER_SIZE),
+        paper_width: read_string(map, txn, KEY_PAPER_WIDTH),
+        paper_height: read_string(map, txn, KEY_PAPER_HEIGHT),
         orientation: read_string(map, txn, KEY_ORIENTATION),
         scale: read_u32(map, txn, KEY_SCALE),
         fit_to_width: read_u32(map, txn, KEY_FIT_TO_WIDTH),
@@ -136,6 +158,10 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<PrintSettings> 
             .and_then(|s| serde_json::from_str::<ImportedPrinterSettingsIdentity>(&s).ok()),
         has_print_options: read_bool(map, txn, "hasPrintOptions").unwrap_or(false),
         has_page_setup: read_bool(map, txn, "hasPageSetup").unwrap_or(false),
+        copies: read_u32(map, txn, "copies"),
+        grid_lines_set: read_bool(map, txn, "gridLinesSet").unwrap_or(true),
+        page_setup_properties: read_string(map, txn, KEY_PAGE_SETUP_PROPERTIES)
+            .and_then(|s| serde_json::from_str::<PageSetupProperties>(&s).ok()),
         use_first_page_number: read_bool(map, txn, "useFirstPageNumber").unwrap_or(false),
         cell_comments: read_string(map, txn, "cellComments"),
         print_errors: read_string(map, txn, "printErrors"),

@@ -2,9 +2,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
 pub struct PrintSettings {
     pub paper_size: Option<u32>,
+    /// Custom paper width, e.g. "210mm" or "8.5in".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper_width: Option<String>,
+    /// Custom paper height, e.g. "297mm" or "11in".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper_height: Option<String>,
     /// "portrait", "landscape"
     pub orientation: Option<String>,
     /// Percentage
@@ -52,6 +57,15 @@ pub struct PrintSettings {
     /// Whether a `<pageSetup>` element was present in the original XML.
     #[serde(default)]
     pub has_page_setup: bool,
+    /// Number of copies to print.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copies: Option<u32>,
+    /// PrintOptions gridLinesSet flag. OOXML defaults this to true.
+    #[serde(default = "default_grid_lines_set")]
+    pub grid_lines_set: bool,
+    /// `<sheetPr><pageSetUpPr>` print-related sheet properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_setup_properties: Option<PageSetupProperties>,
     /// How to print cell comments: "none", "atEnd", "asDisplayed".
     /// None means the attribute was absent (defaults to "none").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -60,6 +74,69 @@ pub struct PrintSettings {
     /// None means the attribute was absent (defaults to "displayed").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub print_errors: Option<String>,
+}
+
+fn default_grid_lines_set() -> bool {
+    true
+}
+
+impl Default for PrintSettings {
+    fn default() -> Self {
+        Self {
+            paper_size: None,
+            paper_width: None,
+            paper_height: None,
+            orientation: None,
+            scale: None,
+            fit_to_width: None,
+            fit_to_height: None,
+            gridlines: false,
+            headings: false,
+            h_centered: false,
+            v_centered: false,
+            margins: None,
+            header_footer: None,
+            black_and_white: false,
+            draft: false,
+            first_page_number: None,
+            page_order: None,
+            use_printer_defaults: None,
+            horizontal_dpi: None,
+            vertical_dpi: None,
+            r_id: None,
+            imported_printer_settings: None,
+            has_print_options: false,
+            use_first_page_number: false,
+            has_page_setup: false,
+            copies: None,
+            grid_lines_set: true,
+            page_setup_properties: None,
+            cell_comments: None,
+            print_errors: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSetupProperties {
+    #[serde(default = "default_auto_page_breaks")]
+    pub auto_page_breaks: bool,
+    #[serde(default)]
+    pub fit_to_page: bool,
+}
+
+fn default_auto_page_breaks() -> bool {
+    true
+}
+
+impl Default for PageSetupProperties {
+    fn default() -> Self {
+        Self {
+            auto_page_breaks: true,
+            fit_to_page: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,6 +153,10 @@ pub struct ImportedPrinterSettingsIdentity {
 #[derive(Default)]
 pub struct PrinterSettingsPageSetupFingerprint {
     pub paper_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper_height: Option<String>,
     pub orientation: Option<String>,
     pub scale: Option<u32>,
     pub fit_to_width: Option<u32>,
@@ -89,6 +170,8 @@ pub struct PrinterSettingsPageSetupFingerprint {
     pub vertical_dpi: Option<u32>,
     pub use_first_page_number: bool,
     pub has_page_setup: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copies: Option<u32>,
     pub cell_comments: Option<String>,
     pub print_errors: Option<String>,
 }
@@ -97,6 +180,8 @@ impl PrinterSettingsPageSetupFingerprint {
     pub fn from_print_settings(settings: &PrintSettings) -> Self {
         Self {
             paper_size: settings.paper_size,
+            paper_width: settings.paper_width.clone(),
+            paper_height: settings.paper_height.clone(),
             orientation: settings.orientation.clone(),
             scale: settings.scale,
             fit_to_width: settings.fit_to_width,
@@ -110,6 +195,7 @@ impl PrinterSettingsPageSetupFingerprint {
             vertical_dpi: settings.vertical_dpi,
             use_first_page_number: settings.use_first_page_number,
             has_page_setup: settings.has_page_setup,
+            copies: settings.copies,
             cell_comments: settings.cell_comments.clone(),
             print_errors: settings.print_errors.clone(),
         }

@@ -3,8 +3,9 @@
 use std::collections::HashSet;
 
 use domain_types::{
-    AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue, SheetData,
-    SheetRoundTripContext,
+    AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue,
+    SheetPaneConfig as DomainSheetPaneConfig, SheetData, SheetRoundTripContext,
+    SheetView as DomainSheetView,
 };
 use domain_types::{DataTableRegion, OutlineGroup};
 
@@ -34,8 +35,41 @@ pub(super) fn build_sheet(
     emit_cell_metadata_refs: bool,
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
-    if let Some(outline_properties) = &sheet_data.outline_properties {
-        writer.set_outline_properties(outline_properties.clone());
+    if let Some(sheet_properties) = &sheet_data.sheet_properties {
+        let mut sheet_properties = sheet_properties.clone();
+        if let Some(print_settings) = &sheet_data.print_settings
+            && let Some(page_setup_properties) = &print_settings.page_setup_properties
+        {
+            sheet_properties.page_set_up_pr = Some(ooxml_types::worksheet::PageSetupProperties {
+                auto_page_breaks: page_setup_properties.auto_page_breaks,
+                fit_to_page: page_setup_properties.fit_to_page,
+            });
+        }
+        writer.set_sheet_properties(sheet_properties);
+    } else if let Some(outline_properties) = &sheet_data.outline_properties {
+        let mut sheet_properties = ooxml_types::worksheet::SheetProperties {
+            outline_pr: Some(outline_properties.clone()),
+            ..Default::default()
+        };
+        if let Some(print_settings) = &sheet_data.print_settings
+            && let Some(page_setup_properties) = &print_settings.page_setup_properties
+        {
+            sheet_properties.page_set_up_pr = Some(ooxml_types::worksheet::PageSetupProperties {
+                auto_page_breaks: page_setup_properties.auto_page_breaks,
+                fit_to_page: page_setup_properties.fit_to_page,
+            });
+        }
+        writer.set_sheet_properties(sheet_properties);
+    } else if let Some(print_settings) = &sheet_data.print_settings
+        && let Some(page_setup_properties) = &print_settings.page_setup_properties
+    {
+        writer.set_sheet_properties(ooxml_types::worksheet::SheetProperties {
+            page_set_up_pr: Some(ooxml_types::worksheet::PageSetupProperties {
+                auto_page_breaks: page_setup_properties.auto_page_breaks,
+                fit_to_page: page_setup_properties.fit_to_page,
+            }),
+            ..Default::default()
+        });
     }
 
     // ── Sheet format properties (default row height, column width) ─────
@@ -287,14 +321,34 @@ pub(super) fn build_sheet(
                 writer.set_row_height_no_custom(row_dim.row, row_dim.height);
             }
         }
-        if row_dim.hidden {
-            writer.set_row_hidden(row_dim.row, true);
+        if row_dim.hidden || row_dim.explicit_hidden {
+            writer.set_row_hidden(row_dim.row, row_dim.hidden);
         }
         if let Some(d) = row_dim.descent {
             writer.set_row_descent(row_dim.row, d);
         }
         if row_dim.custom_format {
             writer.set_row_custom_format(row_dim.row, true);
+        }
+        if let Some(level) = row_dim.outline_level {
+            writer.set_row_outline_level(row_dim.row, level);
+        } else if row_dim.explicit_outline_level_zero {
+            writer.set_row_outline_level(row_dim.row, 0);
+        }
+        if let Some(collapsed) = row_dim.collapsed {
+            writer.set_row_collapsed(row_dim.row, collapsed);
+        }
+        if row_dim.thick_top {
+            writer.set_row_thick_top(row_dim.row, true);
+        }
+        if row_dim.thick_bot {
+            writer.set_row_thick_bot(row_dim.row, true);
+        }
+        if let Some(spans) = &row_dim.xml_hints.spans {
+            writer.set_row_spans(row_dim.row, spans.clone());
+        }
+        if row_dim.xml_hints.bare_empty {
+            writer.mark_bare_empty_row(row_dim.row);
         }
     }
     for rs in &sheet_data.row_styles {
@@ -424,6 +478,7 @@ pub(super) fn build_sheet(
         || view.color_id.is_some()
         || view.tab_selected
         || has_selection
+        || view.pane.is_some()
         || view.view.is_some()
         || view.zoom_scale_normal.is_some()
         || view.zoom_scale_page_layout_view.is_some()
@@ -454,6 +509,7 @@ pub(super) fn build_sheet(
         if let Some(z) = view.zoom_scale_sheet_layout_view {
             sheet_view.zoom_scale_sheet_layout_view = Some(z);
         }
+        sheet_view.workbook_view_id = view.workbook_view_id;
         if !view.show_gridlines {
             sheet_view.show_grid_lines = false;
         }
@@ -491,40 +547,39 @@ pub(super) fn build_sheet(
             sheet_view.color_id = cid;
         }
 
-        // Re-apply frozen pane on the new view
-        if let Some(ref frozen) = sheet_data.frozen_pane {
-            if frozen.rows > 0 || frozen.cols > 0 {
-                let mut pane = SheetPane::frozen(frozen.rows, frozen.cols);
-                // Preserve the original scroll position (topLeftCell) if available.
-                // SheetPane::frozen() defaults to the cell adjacent to the frozen area,
-                // but the user may have scrolled elsewhere.
-                if let Some(ref tlc) = frozen.top_left_cell {
-                    pane.top_left_cell = Some(tlc.clone());
-                }
-                sheet_view.pane = Some(pane);
+        sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
 
-                // Use preserved selections for round-trip fidelity when available.
-                // Only reconstruct a default selection when the view explicitly
-                // specifies an active cell — if neither selections nor active_cell
-                // are present, the original had no <selection> element.
-                let preserved_selections =
-                    compatible_selections_for_pane(&view.selections, sheet_view.pane.as_ref());
-                if !preserved_selections.is_empty() {
-                    sheet_view.selections = preserved_selections;
-                } else if view.active_cell.is_some() || view.sqref.is_some() {
-                    let active_pane = sheet_view.pane.as_ref().unwrap().effective_active_pane();
-                    let sel_active = view
-                        .active_cell
-                        .clone()
-                        .or_else(|| sheet_view.pane.as_ref().unwrap().top_left_cell.clone());
-                    let sel_sqref = view.sqref.clone().or_else(|| sel_active.clone());
-                    sheet_view.selections = vec![Selection {
-                        pane: Some(active_pane),
-                        active_cell: sel_active,
-                        active_cell_id: None,
-                        sqref: sel_sqref,
-                    }];
+        // Re-apply legacy frozen pane projection when no typed pane is present.
+        if sheet_view.pane.is_none() {
+            if let Some(ref frozen) = sheet_data.frozen_pane {
+                if frozen.rows > 0 || frozen.cols > 0 {
+                    let mut pane = SheetPane::frozen(frozen.rows, frozen.cols);
+                    if let Some(ref tlc) = frozen.top_left_cell {
+                        pane.top_left_cell = Some(tlc.clone());
+                    }
+                    sheet_view.pane = Some(pane);
                 }
+            }
+        }
+
+        if sheet_view.pane.is_some() {
+            let preserved_selections =
+                compatible_selections_for_pane(&view.selections, sheet_view.pane.as_ref());
+            if !preserved_selections.is_empty() {
+                sheet_view.selections = preserved_selections;
+            } else if view.active_cell.is_some() || view.sqref.is_some() {
+                let active_pane = sheet_view.pane.as_ref().unwrap().effective_active_pane();
+                let sel_active = view
+                    .active_cell
+                    .clone()
+                    .or_else(|| sheet_view.pane.as_ref().unwrap().top_left_cell.clone());
+                let sel_sqref = view.sqref.clone().or_else(|| sel_active.clone());
+                sheet_view.selections = vec![Selection {
+                    pane: Some(active_pane),
+                    active_cell: sel_active,
+                    active_cell_id: None,
+                    sqref: sel_sqref,
+                }];
             }
         } else if !view.selections.is_empty() {
             // Non-frozen sheet with preserved selections
@@ -561,7 +616,8 @@ pub(super) fn build_sheet(
                 sheet_data
                     .extra_sheet_views
                     .iter()
-                    .map(|view| normalize_extra_sheet_view(view, current_pane.as_ref())),
+                    .map(domain_view_to_ooxml)
+                    .map(|view| normalize_extra_sheet_view(&view, current_pane.as_ref())),
             );
             writer.set_views(all_views);
         }
@@ -577,6 +633,68 @@ fn normalize_extra_sheet_view(view: &SheetView, current_pane: Option<&SheetPane>
     }
     view.selections = compatible_selections_for_pane(&view.selections, view.pane.as_ref());
     view
+}
+
+fn domain_pane_to_ooxml(pane: &DomainSheetPaneConfig) -> SheetPane {
+    pane.to_ooxml()
+}
+
+fn domain_view_to_ooxml(view: &DomainSheetView) -> SheetView {
+    let mut sheet_view = SheetView::default();
+    if view.window_protection {
+        sheet_view.window_protection = true;
+    }
+    if view.show_formulas {
+        sheet_view.show_formulas = true;
+    }
+    if !view.show_gridlines {
+        sheet_view.show_grid_lines = false;
+    }
+    if !view.show_row_col_headers {
+        sheet_view.show_row_col_headers = false;
+    }
+    if !view.show_zeros {
+        sheet_view.show_zeros = false;
+    }
+    if view.right_to_left {
+        sheet_view.right_to_left = true;
+    }
+    if view.tab_selected {
+        sheet_view.tab_selected = true;
+    }
+    if !view.show_ruler {
+        sheet_view.show_ruler = false;
+    }
+    if !view.show_outline_symbols {
+        sheet_view.show_outline_symbols = false;
+    }
+    if !view.default_grid_color {
+        sheet_view.default_grid_color = false;
+    }
+    if !view.show_white_space {
+        sheet_view.show_white_space = false;
+    }
+    if let Some(ref view_type) = view.view {
+        sheet_view.view = ooxml_types::worksheet::SheetViewType::from_ooxml(view_type);
+    }
+    if view.scroll_row != 0 || view.scroll_col != 0 || view.has_explicit_top_left_cell {
+        sheet_view.top_left_cell = Some(to_a1(view.scroll_row, view.scroll_col));
+    }
+    if let Some(color_id) = view.color_id {
+        sheet_view.color_id = color_id;
+    }
+    if let Some(zoom) = view.zoom_scale {
+        sheet_view.zoom_scale = zoom;
+    }
+    if let Some(zoom) = view.zoom_scale_normal {
+        sheet_view.zoom_scale_normal = zoom;
+    }
+    sheet_view.zoom_scale_page_layout_view = view.zoom_scale_page_layout_view;
+    sheet_view.zoom_scale_sheet_layout_view = view.zoom_scale_sheet_layout_view;
+    sheet_view.workbook_view_id = view.workbook_view_id;
+    sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
+    sheet_view.selections = view.selections.clone();
+    sheet_view
 }
 
 fn compatible_selections_for_pane(

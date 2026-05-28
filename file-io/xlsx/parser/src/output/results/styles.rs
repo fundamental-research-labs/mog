@@ -219,6 +219,14 @@ pub struct FontOutput {
     pub scheme: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vert_align: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condense: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extend: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outline: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<bool>,
 }
 
 impl From<&FontDef> for FontOutput {
@@ -234,6 +242,10 @@ impl From<&FontDef> for FontOutput {
             family: f.family,
             scheme: f.scheme.map(|s| s.to_ooxml().to_string()),
             vert_align: f.vert_align.map(|v| v.to_ooxml().to_string()),
+            condense: f.condense,
+            extend: f.extend,
+            outline: f.outline,
+            shadow: f.shadow,
         }
     }
 }

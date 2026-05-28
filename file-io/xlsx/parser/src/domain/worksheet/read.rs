@@ -8,7 +8,8 @@ use crate::infra::scanner;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use crate::output::results::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
-use ooxml_types::worksheet::OutlineProperties;
+use ooxml_types::styles::ColorDef;
+use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetProperties};
 
 // =============================================================================
 // Merge Cells
@@ -85,6 +86,84 @@ pub fn parse_outline_properties(xml: &[u8]) -> Option<OutlineProperties> {
     }
 
     Some(props)
+}
+
+/// Parse modeled worksheet properties from `<sheetPr>`.
+pub fn parse_sheet_properties(xml: &[u8]) -> Option<SheetProperties> {
+    let sheet_pr_start = find_tag_simd(xml, b"sheetPr", 0)?;
+    let sheet_pr_tag_end = find_gt_simd(xml, sheet_pr_start)?;
+    let sheet_pr_tag = &xml[sheet_pr_start..=sheet_pr_tag_end];
+    let sheet_pr_end = scanner::find_closing_tag(xml, b"sheetPr", sheet_pr_start)
+        .map(|p| p + b"</sheetPr>".len())
+        .unwrap_or(sheet_pr_tag_end + 1);
+    let sheet_pr = &xml[sheet_pr_start..sheet_pr_end.min(xml.len())];
+
+    let mut props = SheetProperties::default();
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"syncHorizontal=\"") {
+        props.sync_horizontal = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"syncVertical=\"") {
+        props.sync_vertical = v;
+    }
+    props.sync_ref = parse_string_attr(sheet_pr_tag, b"syncRef=\"");
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"transitionEvaluation=\"") {
+        props.transition_evaluation = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"transitionEntry=\"") {
+        props.transition_entry = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"published=\"") {
+        props.published = v;
+    }
+    props.code_name = parse_string_attr(sheet_pr_tag, b"codeName=\"");
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"filterMode=\"") {
+        props.filter_mode = v;
+    }
+    if let Some(v) =
+        parse_bool_attr_opt(sheet_pr_tag, b"enableFormatConditionsCalculation=\"")
+    {
+        props.enable_format_conditions_calculation = v;
+    }
+
+    props.tab_color = parse_sheet_pr_color(sheet_pr, b"tabColor");
+    props.outline_pr = parse_outline_properties(sheet_pr);
+    props.page_set_up_pr = parse_page_setup_properties(sheet_pr);
+
+    Some(props)
+}
+
+pub fn parse_page_setup_properties(xml: &[u8]) -> Option<PageSetupProperties> {
+    let start = find_tag_simd(xml, b"pageSetUpPr", 0)?;
+    let end = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(xml.len());
+    let element = &xml[start..end];
+    let mut props = PageSetupProperties::default();
+    if let Some(v) = parse_bool_attr_opt(element, b"autoPageBreaks=\"") {
+        props.auto_page_breaks = v;
+    }
+    if let Some(v) = parse_bool_attr_opt(element, b"fitToPage=\"") {
+        props.fit_to_page = v;
+    }
+    Some(props)
+}
+
+fn parse_sheet_pr_color(xml: &[u8], tag: &[u8]) -> Option<ColorDef> {
+    let start = find_tag_simd(xml, tag, 0)?;
+    let end = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(xml.len());
+    let element = &xml[start..end];
+    let tint = parse_string_attr(element, b"tint=\"");
+    if let Some(theme_id) = parse_u32_attr(element, b"theme=\"") {
+        return Some(ColorDef::Theme { id: theme_id, tint });
+    }
+    if let Some(rgb) = parse_string_attr(element, b"rgb=\"") {
+        return Some(ColorDef::Rgb { val: rgb, tint });
+    }
+    if let Some(idx) = parse_u32_attr(element, b"indexed=\"") {
+        return Some(ColorDef::Indexed { id: idx, tint });
+    }
+    if parse_bool_attr_opt(element, b"auto=\"").unwrap_or(false) {
+        return Some(ColorDef::Auto { tint });
+    }
+    None
 }
 
 // =============================================================================
@@ -618,6 +697,12 @@ pub fn parse_dimensions(xml: &[u8]) -> (Vec<ColWidth>, Vec<RowHeight>) {
                     .and_then(|(s, e)| std::str::from_utf8(&row_elem[s..e]).ok()?.parse().ok())
             });
         let has_custom_format = find_attr_simd(row_elem, b"customFormat=\"1\"", 0).is_some();
+        let spans: Option<String> = find_attr_simd(row_elem, b"spans=\"", 0).and_then(|p| {
+            let vs = p + 7;
+            extract_quoted_value(row_elem, vs)
+                .and_then(|(s, e)| std::str::from_utf8(&row_elem[s..e]).ok())
+                .map(|s| s.to_string())
+        });
         let style: Option<u32> = if has_custom_format {
             find_attr_simd(row_elem, b"s=\"", 0).and_then(|p| {
                 let vs = p + 3; // len of b"s=\""
@@ -635,6 +720,7 @@ pub fn parse_dimensions(xml: &[u8]) -> (Vec<ColWidth>, Vec<RowHeight>) {
             || has_thick_top
             || has_thick_bot
             || outline_level.is_some()
+            || spans.is_some()
             || style.is_some()
             || has_custom_format;
 
@@ -647,6 +733,7 @@ pub fn parse_dimensions(xml: &[u8]) -> (Vec<ColWidth>, Vec<RowHeight>) {
             rh.thick_bot = has_thick_bot;
             rh.collapsed = collapsed_val;
             rh.outline_level = outline_level;
+            rh.spans = spans;
             rh.custom_format = has_custom_format;
             rh.style = style;
             row_heights.push(rh);
@@ -1206,6 +1293,34 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_sheet_properties() {
+        let xml = br#"<worksheet><sheetPr codeName="SheetCode" filterMode="1" published="0" syncHorizontal="1" syncVertical="1" syncRef="A1:B2" transitionEvaluation="1" transitionEntry="1" enableFormatConditionsCalculation="0"><tabColor rgb="FFFF0000"/><outlinePr applyStyles="1" summaryBelow="0" summaryRight="0" showOutlineSymbols="0"/><pageSetUpPr fitToPage="1" autoPageBreaks="0"/></sheetPr><sheetData/></worksheet>"#;
+        let props = parse_sheet_properties(xml).expect("sheetPr should parse");
+
+        assert_eq!(props.code_name.as_deref(), Some("SheetCode"));
+        assert!(props.filter_mode);
+        assert!(!props.published);
+        assert!(props.sync_horizontal);
+        assert!(props.sync_vertical);
+        assert_eq!(props.sync_ref.as_deref(), Some("A1:B2"));
+        assert!(props.transition_evaluation);
+        assert!(props.transition_entry);
+        assert!(!props.enable_format_conditions_calculation);
+        assert!(matches!(
+            props.tab_color,
+            Some(ColorDef::Rgb { ref val, .. }) if val == "FFFF0000"
+        ));
+        let outline = props.outline_pr.expect("outlinePr should parse");
+        assert!(outline.apply_styles);
+        assert!(!outline.summary_below);
+        assert!(!outline.summary_right);
+        assert!(!outline.show_outline_symbols);
+        let page_setup = props.page_set_up_pr.expect("pageSetUpPr should parse");
+        assert!(page_setup.fit_to_page);
+        assert!(!page_setup.auto_page_breaks);
+    }
+
+    #[test]
     fn test_parse_frozen_pane() {
         let xml = br#"<worksheet><sheetViews><sheetView><pane xSplit="1" ySplit="2" topLeftCell="B3" state="frozen"/></sheetView></sheetViews></worksheet>"#;
         let pane = parse_frozen_pane(xml);
@@ -1272,12 +1387,18 @@ mod tests {
 
     #[test]
     fn test_parse_dimensions_row_heights() {
-        let xml = br#"<worksheet><sheetData><row r="1" ht="20.0"/><row r="2"/><row r="3" ht="25.5"/></sheetData></worksheet>"#;
+        let xml = br#"<worksheet><sheetData><row r="1" ht="20.0" spans="1:4" hidden="0" outlineLevel="0" collapsed="0" thickTop="1" thickBot="1"/><row r="2"/><row r="3" ht="25.5"/></sheetData></worksheet>"#;
         let (col_widths, row_heights) = parse_dimensions(xml);
         assert!(col_widths.is_empty());
         assert_eq!(row_heights.len(), 2);
         assert_eq!(row_heights[0].row, 0); // 0-based
         assert_eq!(row_heights[0].height, 20.0);
+        assert_eq!(row_heights[0].spans.as_deref(), Some("1:4"));
+        assert_eq!(row_heights[0].hidden, Some(false));
+        assert_eq!(row_heights[0].outline_level, Some(0));
+        assert_eq!(row_heights[0].collapsed, Some(false));
+        assert!(row_heights[0].thick_top);
+        assert!(row_heights[0].thick_bot);
         assert_eq!(row_heights[1].row, 2);
         assert_eq!(row_heights[1].height, 25.5);
     }

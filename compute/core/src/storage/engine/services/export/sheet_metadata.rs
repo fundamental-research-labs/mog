@@ -157,6 +157,17 @@ pub(in crate::storage::engine) fn export_dv_disable_prompts(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> bool {
+    export_meta_bool(stores, sheet_id, "dvDisablePrompts")
+}
+
+pub(in crate::storage::engine) fn export_x14_dv_disable_prompts(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+) -> bool {
+    export_meta_bool(stores, sheet_id, "x14DvDisablePrompts")
+}
+
+fn export_meta_bool(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> bool {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
     let txn = doc.transact();
@@ -171,7 +182,7 @@ pub(in crate::storage::engine) fn export_dv_disable_prompts(
         _ => return false,
     };
 
-    match meta_map.get(&txn, "dvDisablePrompts") {
+    match meta_map.get(&txn, key) {
         Some(Out::Any(Any::Bool(b))) => b,
         _ => false,
     }
@@ -209,6 +220,17 @@ pub(in crate::storage::engine) fn export_dv_declared_count(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<u32> {
+    export_meta_u32(stores, sheet_id, "dvDeclaredCount")
+}
+
+pub(in crate::storage::engine) fn export_x14_dv_declared_count(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+) -> Option<u32> {
+    export_meta_u32(stores, sheet_id, "x14DvDeclaredCount")
+}
+
+fn export_meta_u32(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> Option<u32> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
     let txn = doc.transact();
@@ -223,7 +245,7 @@ pub(in crate::storage::engine) fn export_dv_declared_count(
         _ => return None,
     };
 
-    match meta_map.get(&txn, "dvDeclaredCount") {
+    match meta_map.get(&txn, key) {
         Some(Out::Any(Any::BigInt(v))) if v >= 0 => Some(v as u32),
         Some(Out::Any(Any::Number(v))) if v.is_finite() && v >= 0.0 => Some(v as u32),
         _ => None,
@@ -235,6 +257,21 @@ pub(in crate::storage::engine) fn export_dv_declared_count(
 pub(in crate::storage::engine) fn export_data_validations_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
+) -> Vec<ValidationSpec> {
+    export_validation_array(stores, sheet_id, "dataValidations")
+}
+
+pub(in crate::storage::engine) fn export_x14_data_validations_for_sheet(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+) -> Vec<ValidationSpec> {
+    export_validation_array(stores, sheet_id, "x14DataValidations")
+}
+
+fn export_validation_array(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    key: &str,
 ) -> Vec<ValidationSpec> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
@@ -250,7 +287,7 @@ pub(in crate::storage::engine) fn export_data_validations_for_sheet(
         _ => return vec![],
     };
 
-    match meta_map.get(&txn, "dataValidations") {
+    match meta_map.get(&txn, key) {
         Some(Out::YArray(arr)) => {
             let mut specs = Vec::new();
             for item in arr.iter(&txn) {

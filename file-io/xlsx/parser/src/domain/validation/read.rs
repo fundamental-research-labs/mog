@@ -19,7 +19,8 @@ use compute_parser::parsed_expr::{ParsedExpr, SqrefList};
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    parse_bool_attr_opt, parse_bytes_attr, parse_element_content, parse_string_attr, parse_u32_attr,
+    decode_xml_entities, parse_bool_attr_opt, parse_bytes_attr, parse_element_content,
+    parse_string_attr, parse_u32_attr,
 };
 
 /// Find a non-namespaced XML tag, skipping namespace-prefixed variants.
@@ -34,6 +35,23 @@ fn find_non_namespaced_tag(bytes: &[u8], tag: &[u8], start: usize) -> Option<usi
         // pos points to '<'. The byte at pos+1 should be the first byte of `tag`
         // for the non-namespaced variant.
         if pos + 1 < bytes.len() && bytes[pos + 1] == tag[0] {
+            return Some(pos);
+        }
+        search_from = pos + 1;
+    }
+}
+
+fn find_prefixed_tag(bytes: &[u8], prefix: &[u8], tag: &[u8], start: usize) -> Option<usize> {
+    let mut search_from = start;
+    loop {
+        let pos = find_tag_simd(bytes, tag, search_from)?;
+        let name_start = pos + 1;
+        let prefix_end = name_start + prefix.len();
+        if prefix_end < bytes.len()
+            && &bytes[name_start..prefix_end] == prefix
+            && bytes[prefix_end] == b':'
+            && bytes.get(prefix_end + 1) == Some(&tag[0])
+        {
             return Some(pos);
         }
         search_from = pos + 1;
@@ -374,7 +392,12 @@ impl DataValidations {
         // Find <dataValidations> section (non-namespaced only;
         // x14:dataValidations inside extLst has a different schema).
         let dv_start = find_non_namespaced_tag(xml, b"dataValidations", 0)?;
-        let dv_end = find_closing_tag(xml, b"dataValidations", dv_start).unwrap_or(xml.len());
+        let open_end = find_gt_simd(xml, dv_start).unwrap_or(xml.len().saturating_sub(1));
+        let dv_end = if open_end > dv_start && xml.get(open_end.saturating_sub(1)) == Some(&b'/') {
+            open_end + 1
+        } else {
+            find_closing_tag(xml, b"dataValidations", dv_start).unwrap_or(xml.len())
+        };
 
         let section = &xml[dv_start..dv_end];
         let mut validations = DataValidations::default();
@@ -401,7 +424,12 @@ impl DataValidations {
             pos = element_end;
         }
 
-        if validations.validations.is_empty() {
+        if validations.validations.is_empty()
+            && !validations.disable_prompts
+            && validations.x_window.is_none()
+            && validations.y_window.is_none()
+            && validations.count.is_none()
+        {
             None
         } else {
             Some(validations)
@@ -566,6 +594,80 @@ impl DataValidation {
 
         Some(dv)
     }
+
+    fn parse_x14(xml: &[u8]) -> Option<Self> {
+        let mut dv = DataValidation::default();
+
+        let tag_end = find_gt_simd(xml, 0)?;
+        let tag = &xml[..tag_end];
+
+        if let Some(sqref) = parse_element_content(xml, b"sqref") {
+            dv.sqref = SqrefList::parse(&sqref).unwrap_or_default();
+        } else {
+            return None;
+        }
+
+        if let Some(value) = parse_bytes_attr(tag, b"type=\"") {
+            dv.validation_type = DataValidationType::from_bytes(value);
+        }
+        if let Some(value) = parse_bytes_attr(tag, b"operator=\"") {
+            dv.operator = DataValidationOperator::from_bytes(value);
+        }
+        if let Some(value) = parse_bool_attr_opt(tag, b"allowBlank=\"") {
+            dv.allow_blank = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(tag, b"showDropDown=\"") {
+            dv.show_drop_down = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(tag, b"showInputMessage=\"") {
+            dv.show_input_message = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(tag, b"showErrorMessage=\"") {
+            dv.show_error_message = value;
+        }
+        if let Some(value) = parse_bytes_attr(tag, b"errorStyle=\"") {
+            dv.error_style = DataValidationErrorStyle::from_bytes(value);
+        }
+        if let Some(value) = parse_string_attr(tag, b"errorTitle=\"") {
+            dv.error_title = Some(value);
+        }
+        if let Some(value) = parse_string_attr(tag, b"error=\"") {
+            dv.error = Some(value);
+        }
+        if let Some(value) = parse_string_attr(tag, b"promptTitle=\"") {
+            dv.prompt_title = Some(value);
+        }
+        if let Some(value) = parse_string_attr(tag, b"prompt=\"") {
+            dv.prompt = Some(value);
+        }
+        if let Some(value) = parse_bytes_attr(tag, b"imeMode=\"") {
+            dv.ime_mode = ImeMode::from_bytes(value);
+        }
+        dv.uid = parse_string_attr(tag, b"xr:uid=\"");
+
+        if let Some(formula) = parse_x14_formula(xml, b"formula1") {
+            dv.formula1 = Some(ParsedExpr::classify(&formula));
+            dv.formula1_raw = Some(formula);
+        }
+        if let Some(formula) = parse_x14_formula(xml, b"formula2") {
+            dv.formula2 = Some(ParsedExpr::classify(&formula));
+            dv.formula2_raw = Some(formula);
+        }
+
+        Some(dv)
+    }
+}
+
+fn parse_x14_formula(xml: &[u8], tag_name: &[u8]) -> Option<String> {
+    let tag_start = find_tag_simd(xml, tag_name, 0)?;
+    let tag_end = find_closing_tag(xml, tag_name, tag_start)?;
+    let section = &xml[tag_start..tag_end];
+    if let Some(f_start) = find_prefixed_tag(section, b"xm", b"f", 0) {
+        let content_start = find_gt_simd(section, f_start)? + 1;
+        let content_end = find_closing_tag(section, b"f", content_start)?;
+        return Some(decode_xml_entities(&section[content_start..content_end]));
+    }
+    parse_element_content(section, tag_name)
 }
 
 // ============================================================================
@@ -658,6 +760,84 @@ pub fn parse_data_validations(
             (summaries, attrs)
         })
         .unwrap_or_default()
+}
+
+pub fn parse_x14_data_validations(
+    xml: &[u8],
+) -> (
+    Vec<crate::output::results::DvSummary>,
+    DataValidationsContainerAttrs,
+) {
+    let Some(dv_start) = find_prefixed_tag(xml, b"x14", b"dataValidations", 0) else {
+        return Default::default();
+    };
+    let open_end = find_gt_simd(xml, dv_start).unwrap_or(xml.len().saturating_sub(1));
+    let dv_end = if open_end > dv_start && xml.get(open_end.saturating_sub(1)) == Some(&b'/') {
+        open_end + 1
+    } else {
+        find_closing_tag(xml, b"dataValidations", dv_start).unwrap_or(xml.len())
+    };
+    let section = &xml[dv_start..dv_end];
+
+    let mut container = DataValidations::default();
+    container.parse_container_attrs(section);
+
+    let mut pos = 0;
+    while let Some(dv_pos) = find_prefixed_tag(section, b"x14", b"dataValidation", pos) {
+        let after_name = dv_pos + 1 + b"x14:dataValidation".len();
+        if section.get(after_name) == Some(&b's') {
+            pos = dv_pos + 1;
+            continue;
+        }
+
+        let element_end = DataValidations::find_element_end(section, dv_pos);
+        if let Some(dv) = DataValidation::parse_x14(&section[dv_pos..element_end]) {
+            container.validations.push(dv);
+        }
+        pos = element_end;
+    }
+
+    let attrs = DataValidationsContainerAttrs {
+        disable_prompts: container.disable_prompts,
+        x_window: container.x_window,
+        y_window: container.y_window,
+        declared_count: container.count,
+    };
+    let summaries = container
+        .validations
+        .iter()
+        .map(|dv| {
+            let show_dropdown = !dv.show_drop_down;
+            let ime_mode_str = if dv.ime_mode == ImeMode::NoControl {
+                String::new()
+            } else {
+                dv.ime_mode.as_str().to_string()
+            };
+            crate::output::results::DvSummary {
+                sqref: dv.sqref.to_a1_string(),
+                validation_type: dv.validation_type.as_str().to_string(),
+                operator: dv.operator.as_str().to_string(),
+                allow_blank: dv.allow_blank,
+                formula1: dv.formula1_raw.clone().or_else(|| {
+                    dv.formula1.as_ref().map(|p| p.to_a1_string().into_owned())
+                }),
+                formula2: dv.formula2_raw.clone().or_else(|| {
+                    dv.formula2.as_ref().map(|p| p.to_a1_string().into_owned())
+                }),
+                show_dropdown,
+                error_style: dv.error_style.as_str().to_string(),
+                show_error: dv.show_error_message,
+                error_title: dv.error_title.clone(),
+                error_message: dv.error.clone(),
+                show_input: dv.show_input_message,
+                prompt_title: dv.prompt_title.clone(),
+                prompt_message: dv.prompt.clone(),
+                ime_mode: ime_mode_str,
+                uid: dv.uid.clone(),
+            }
+        })
+        .collect();
+    (summaries, attrs)
 }
 
 // ============================================================================
@@ -1393,6 +1573,42 @@ mod tests {
             summaries[0].formula1.as_deref(),
             Some("\"Not Started / Holding,Planning,In Progress,Complete,Delayed\"")
         );
+    }
+
+    #[test]
+    fn parse_x14_data_validations_captures_typed_rules() {
+        let xml = br#"
+            <worksheet>
+                <extLst>
+                    <ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}">
+                        <x14:dataValidations xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main" count="1">
+                            <x14:dataValidation type="whole" operator="greaterThan" allowBlank="1">
+                                <x14:formula1><xm:f>5</xm:f></x14:formula1>
+                                <xm:sqref>A1:A3</xm:sqref>
+                            </x14:dataValidation>
+                        </x14:dataValidations>
+                    </ext>
+                </extLst>
+            </worksheet>
+        "#;
+
+        let (summaries, attrs) = parse_x14_data_validations(xml);
+        assert_eq!(attrs.declared_count, Some(1));
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].validation_type, "whole");
+        assert_eq!(summaries[0].operator, "greaterThan");
+        assert_eq!(summaries[0].formula1.as_deref(), Some("5"));
+        assert_eq!(summaries[0].sqref, "A1:A3");
+    }
+
+    #[test]
+    fn parse_empty_data_validations_preserves_container_attrs() {
+        let xml = br#"<worksheet><dataValidations disablePrompts="1" count="0"/></worksheet>"#;
+        let (summaries, attrs) = parse_data_validations(xml);
+
+        assert!(summaries.is_empty());
+        assert!(attrs.disable_prompts);
+        assert_eq!(attrs.declared_count, Some(0));
     }
 
     // -------------------------------------------------------------------------

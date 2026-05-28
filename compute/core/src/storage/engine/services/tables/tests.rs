@@ -991,4 +991,45 @@ mod tests {
         assert!(!binding.auto_expand);
         assert!(!binding.auto_calculated_columns);
     }
+
+    #[test]
+    fn custom_table_style_mutation_persists_to_yrs_and_export() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let style = compute_table::custom_styles::CustomTableStyleConfig {
+            id: "custom-1".to_string(),
+            name: "CustomExportStyle".to_string(),
+            created_at: 1.0,
+            updated_at: 1.0,
+            header_row: Default::default(),
+            total_row: Default::default(),
+            first_column: Default::default(),
+            last_column: Default::default(),
+            row_stripes: Default::default(),
+            column_stripes: Default::default(),
+            whole_table: Default::default(),
+        };
+
+        engine
+            .create_custom_table_style(style)
+            .expect("create custom table style");
+
+        let exported = engine.build_parse_output_from_yrs();
+        assert!(
+            exported
+                .custom_table_styles
+                .iter()
+                .any(|style| style.name == "CustomExportStyle")
+        );
+        let doc = engine.stores.storage.doc().clone();
+        let txn = doc.transact();
+        let workbook = engine.stores.storage.workbook_map();
+        let styles_map = match workbook.get(
+            &txn,
+            compute_document::schema::KEY_CUSTOM_TABLE_STYLES,
+        ) {
+            Some(yrs::Out::YMap(map)) => map,
+            _ => panic!("custom table styles map should exist"),
+        };
+        assert!(styles_map.get(&txn, "CustomExportStyle").is_some());
+    }
 }

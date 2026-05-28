@@ -238,6 +238,8 @@ fn test_hyperlink_minimal_roundtrip() {
 fn test_print_yrs_roundtrip() {
     let original = PrintSettings {
         paper_size: Some(9),
+        paper_width: Some("210mm".to_string()),
+        paper_height: Some("297mm".to_string()),
         orientation: Some("landscape".to_string()),
         scale: Some(85),
         fit_to_width: Some(1),
@@ -277,6 +279,8 @@ fn test_print_yrs_roundtrip() {
             relationship_id: Some("rId1".to_string()),
             page_setup: crate::PrinterSettingsPageSetupFingerprint {
                 paper_size: Some(9),
+                paper_width: Some("210mm".to_string()),
+                paper_height: Some("297mm".to_string()),
                 orientation: Some("landscape".to_string()),
                 scale: Some(85),
                 fit_to_width: Some(1),
@@ -290,12 +294,19 @@ fn test_print_yrs_roundtrip() {
                 vertical_dpi: Some(300),
                 use_first_page_number: false,
                 has_page_setup: true,
+                copies: Some(2),
                 cell_comments: None,
                 print_errors: None,
             },
         }),
         has_print_options: true,
         has_page_setup: true,
+        copies: Some(2),
+        grid_lines_set: false,
+        page_setup_properties: Some(crate::PageSetupProperties {
+            fit_to_page: true,
+            auto_page_breaks: false,
+        }),
         use_first_page_number: false,
         cell_comments: None,
         print_errors: None,

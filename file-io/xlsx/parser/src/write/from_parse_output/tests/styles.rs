@@ -25,6 +25,107 @@ fn test_hex_to_color_def_no_hash() {
 }
 
 #[test]
+fn writes_table_styles_from_typed_parse_output() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.custom_table_styles = vec![ooxml_types::styles::TableStyleDef {
+        name: "MyCustomTableStyle".to_string(),
+        pivot: Some(false),
+        table: Some(true),
+        count: Some(1),
+        elements: vec![ooxml_types::styles::TableStyleElementDef {
+            style_type: ooxml_types::styles::TableStyleType::WholeTable,
+            dxf_id: Some(0),
+            size: None,
+        }],
+        xr_uid: None,
+    }];
+    output.default_table_style = Some("MyCustomTableStyle".to_string());
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"defaultTableStyle="MyCustomTableStyle""#));
+    assert!(styles_xml.contains(r#"<tableStyle name="MyCustomTableStyle""#));
+    assert!(styles_xml.contains(r#"<tableStyleElement type="wholeTable" dxfId="0"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn workbook_stylesheet_dxfs_export_without_round_trip_context() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        conditional_formats: vec![ConditionalFormat {
+            ranges: vec![CFCellRange {
+                start_row: 0,
+                start_col: 0,
+                end_row: 0,
+                end_col: 0,
+            }],
+            rules: vec![CFRule::CellValue {
+                operator: "greaterThan".to_string(),
+                formula1: "1".to_string(),
+                formula2: None,
+                style: CFStyle {
+                    dxf_id: Some(0),
+                    ..Default::default()
+                },
+                priority: 1,
+                stop_if_true: false,
+            }],
+        }],
+        ..Default::default()
+    }]);
+    output.workbook_stylesheet = Some(WorkbookStylesheet {
+        stylesheet: ooxml_types::styles::Stylesheet {
+            dxfs: vec![ooxml_types::styles::DxfDef {
+                font: Some(ooxml_types::styles::FontDef {
+                    bold: Some(true),
+                    color: Some(ooxml_types::styles::ColorDef::Rgb {
+                        val: "FFFF0000".to_string(),
+                        tint: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
+    assert!(styles_xml.contains(r#"<color rgb="FFFF0000"/>"#), "{styles_xml}");
+}
+
+#[test]
+fn stale_round_trip_styles_ext_lst_is_ignored_without_typed_stylesheet() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let ctx = RoundTripContext {
+        styles_ext_lst_xml: Some(br#"<extLst><ext uri="{stale}"/></extLst>"#.to_vec()),
+        styles_namespace_attrs: vec![("x14".to_string(), "urn:stale".to_string())],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(!styles_xml.contains("{stale}"), "{styles_xml}");
+    assert!(!styles_xml.contains("urn:stale"), "{styles_xml}");
+}
+
+#[test]
 fn test_style_mapping_font() {
     let palette = vec![DocumentFormat {
         font: Some(FontFormat {

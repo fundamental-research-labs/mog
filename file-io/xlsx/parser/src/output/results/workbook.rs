@@ -186,6 +186,21 @@ pub struct FullParsedSheet {
     /// Y window position for the data validation prompt dialog.
     #[serde(skip)]
     pub data_validations_y_window: Option<u32>,
+    /// Data validations from the worksheet x14 extension list.
+    #[serde(skip)]
+    pub x14_data_validations: Vec<DvSummary>,
+    /// Declared count attribute on the `<x14:dataValidations>` container.
+    #[serde(skip)]
+    pub x14_data_validations_declared_count: Option<u32>,
+    /// Whether the `<x14:dataValidations>` container had `disablePrompts="1"`.
+    #[serde(skip)]
+    pub x14_data_validations_disable_prompts: bool,
+    /// X window position for the x14 data validation prompt dialog.
+    #[serde(skip)]
+    pub x14_data_validations_x_window: Option<u32>,
+    /// Y window position for the x14 data validation prompt dialog.
+    #[serde(skip)]
+    pub x14_data_validations_y_window: Option<u32>,
     /// Tables (structured objects matching TypeScript Table interface)
     pub tables: Vec<ParsedTable>,
     /// Parsed pivot tables with compute-ready config + OOXML sidecar.
@@ -262,6 +277,9 @@ pub struct FullParsedSheet {
     /// Sheet view options (gridlines, headers visibility).
     /// Multiple `<sheetView>` elements are preserved for round-trip fidelity.
     pub view_options: Vec<SheetViewOutput>,
+    /// Worksheet properties from `<sheetPr>`.
+    #[serde(skip)]
+    pub sheet_properties: Option<ooxml_types::worksheet::SheetProperties>,
     /// Outline properties from `<sheetPr><outlinePr>`.
     #[serde(skip)]
     pub outline_properties: Option<ooxml_types::worksheet::OutlineProperties>,
@@ -631,4 +649,7 @@ pub struct FullParseResult {
     /// Parsed file sharing settings from `<fileSharing>` for domain output.
     #[serde(skip)]
     pub file_sharing: Option<domain_types::domain::workbook::FileSharing>,
+    /// Parsed workbook web publishing settings from `<webPublishing>`.
+    #[serde(skip)]
+    pub web_publishing: Option<domain_types::domain::workbook::WorkbookWebPublishing>,
 }

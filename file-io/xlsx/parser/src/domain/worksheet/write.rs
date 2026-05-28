@@ -20,8 +20,10 @@ use crate::domain::print::write::format_f64;
 use crate::infra::a1::to_a1;
 use crate::write::sheet::SheetFormatPr;
 use crate::write::xml_writer::XmlWriter;
+use ooxml_types::styles::ColorDef;
 use ooxml_types::worksheet::{
-    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetView,
+    ColWidth, MergeRange, OutlineProperties, PageSetupProperties, Selection, SheetPane,
+    SheetProperties, SheetView,
 };
 
 // ============================================================================
@@ -47,13 +49,55 @@ pub fn write_dimensions(w: &mut XmlWriter, dimension: Option<(u32, u32, u32, u32
         .self_close();
 }
 
-/// Write modeled worksheet properties currently represented in `SheetData`.
-pub fn write_sheet_properties(w: &mut XmlWriter, outline_properties: Option<&OutlineProperties>) {
-    let Some(outline_properties) = outline_properties else {
+/// Write modeled worksheet properties.
+pub fn write_sheet_properties(w: &mut XmlWriter, sheet_properties: Option<&SheetProperties>) {
+    let Some(sheet_properties) = sheet_properties else {
         return;
     };
 
-    w.start_element("sheetPr").end_attrs();
+    w.start_element("sheetPr");
+    if sheet_properties.sync_horizontal {
+        w.attr("syncHorizontal", "1");
+    }
+    if sheet_properties.sync_vertical {
+        w.attr("syncVertical", "1");
+    }
+    if let Some(sync_ref) = &sheet_properties.sync_ref {
+        w.attr("syncRef", sync_ref);
+    }
+    if sheet_properties.transition_evaluation {
+        w.attr("transitionEvaluation", "1");
+    }
+    if sheet_properties.transition_entry {
+        w.attr("transitionEntry", "1");
+    }
+    if !sheet_properties.published {
+        w.attr("published", "0");
+    }
+    if let Some(code_name) = &sheet_properties.code_name {
+        w.attr("codeName", code_name);
+    }
+    if sheet_properties.filter_mode {
+        w.attr("filterMode", "1");
+    }
+    if !sheet_properties.enable_format_conditions_calculation {
+        w.attr("enableFormatConditionsCalculation", "0");
+    }
+    w.end_attrs();
+
+    if let Some(tab_color) = &sheet_properties.tab_color {
+        write_color(w, "tabColor", tab_color);
+    }
+    if let Some(outline_properties) = &sheet_properties.outline_pr {
+        write_outline_properties(w, outline_properties);
+    }
+    if let Some(page_setup_properties) = &sheet_properties.page_set_up_pr {
+        write_page_setup_properties(w, page_setup_properties);
+    }
+    w.end_element("sheetPr");
+}
+
+fn write_outline_properties(w: &mut XmlWriter, outline_properties: &OutlineProperties) {
     w.start_element("outlinePr");
     if outline_properties.apply_styles {
         w.attr("applyStyles", "1");
@@ -68,7 +112,48 @@ pub fn write_sheet_properties(w: &mut XmlWriter, outline_properties: Option<&Out
         w.attr("showOutlineSymbols", "0");
     }
     w.self_close();
-    w.end_element("sheetPr");
+}
+
+fn write_page_setup_properties(w: &mut XmlWriter, properties: &PageSetupProperties) {
+    w.start_element("pageSetUpPr");
+    if !properties.auto_page_breaks {
+        w.attr("autoPageBreaks", "0");
+    }
+    if properties.fit_to_page {
+        w.attr("fitToPage", "1");
+    }
+    w.self_close();
+}
+
+fn write_color(w: &mut XmlWriter, element_name: &str, color: &ColorDef) {
+    w.start_element(element_name);
+    match color {
+        ColorDef::Indexed { id, tint } => {
+            w.attr_num("indexed", *id);
+            if let Some(tint) = tint {
+                w.attr("tint", tint);
+            }
+        }
+        ColorDef::Rgb { val, tint } => {
+            w.attr("rgb", val);
+            if let Some(tint) = tint {
+                w.attr("tint", tint);
+            }
+        }
+        ColorDef::Theme { id, tint } => {
+            w.attr_num("theme", *id);
+            if let Some(tint) = tint {
+                w.attr("tint", tint);
+            }
+        }
+        ColorDef::Auto { tint } => {
+            w.attr("auto", "1");
+            if let Some(tint) = tint {
+                w.attr("tint", tint);
+            }
+        }
+    }
+    w.self_close();
 }
 
 /// Write the `<sheetViews>` element including frozen-pane and selection children.
@@ -338,6 +423,7 @@ fn write_selection(w: &mut XmlWriter, sel: &Selection) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ooxml_types::styles::ColorDef;
     use ooxml_types::worksheet::ColWidth;
 
     #[test]
@@ -362,5 +448,44 @@ mod tests {
             !xml.contains("style="),
             "Expected no style attribute, got: {xml}"
         );
+    }
+
+    #[test]
+    fn test_write_sheet_properties() {
+        let mut props = SheetProperties {
+            code_name: Some("SheetCode".to_string()),
+            filter_mode: true,
+            published: false,
+            sync_horizontal: true,
+            sync_vertical: true,
+            sync_ref: Some("A1:B2".to_string()),
+            transition_evaluation: true,
+            transition_entry: true,
+            enable_format_conditions_calculation: false,
+            tab_color: Some(ColorDef::Rgb {
+                val: "FFFF0000".to_string(),
+                tint: None,
+            }),
+            page_set_up_pr: Some(PageSetupProperties {
+                fit_to_page: true,
+                auto_page_breaks: false,
+            }),
+            ..Default::default()
+        };
+        props.outline_pr = Some(OutlineProperties {
+            apply_styles: true,
+            summary_below: false,
+            summary_right: false,
+            show_outline_symbols: false,
+        });
+
+        let mut w = XmlWriter::new();
+        write_sheet_properties(&mut w, Some(&props));
+        let xml = String::from_utf8(w.into_bytes()).unwrap();
+
+        assert!(xml.contains(r#"<sheetPr syncHorizontal="1" syncVertical="1" syncRef="A1:B2" transitionEvaluation="1" transitionEntry="1" published="0" codeName="SheetCode" filterMode="1" enableFormatConditionsCalculation="0">"#));
+        assert!(xml.contains(r#"<tabColor rgb="FFFF0000"/>"#));
+        assert!(xml.contains(r#"<outlinePr applyStyles="1" summaryBelow="0" summaryRight="0" showOutlineSymbols="0"/>"#));
+        assert!(xml.contains(r#"<pageSetUpPr autoPageBreaks="0" fitToPage="1"/>"#));
     }
 }

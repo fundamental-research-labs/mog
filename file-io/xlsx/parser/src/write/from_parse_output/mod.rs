@@ -186,7 +186,25 @@ pub fn write_xlsx_from_parse_output(
     };
 
     let mut styles_writer = build_styles(style_palette_for_export);
-    styles_writer.dxfs = differential_formats::collect(output);
+    if let Some(workbook_stylesheet) = &output.workbook_stylesheet {
+        apply_workbook_stylesheet(
+            &mut styles_writer,
+            workbook_stylesheet,
+            has_style_references,
+        );
+    }
+    if styles_writer.dxfs.is_empty() {
+        styles_writer.dxfs = differential_formats::collect(output);
+    }
+    if styles_writer.table_styles.is_empty() {
+        styles_writer.table_styles = output.custom_table_styles.clone();
+    }
+    if styles_writer.default_table_style.is_none() {
+        styles_writer.default_table_style = output.default_table_style.clone();
+    }
+    if styles_writer.default_pivot_style.is_none() {
+        styles_writer.default_pivot_style = output.default_pivot_style.clone();
+    }
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
     let mut shared_strings = sheet_parts::build_shared_strings(output);
@@ -1725,7 +1743,7 @@ pub fn write_xlsx_from_parse_output(
     )
 }
 
-use styles::{build_styles, output_references_style_ids};
+use styles::{apply_workbook_stylesheet, build_styles, output_references_style_ids};
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');

@@ -145,6 +145,7 @@ fn roundtrip_font_size_preserved() {
             ..Default::default()
         }],
         style_palette: vec![small, large],
+        workbook_stylesheet: None,
         ..Default::default()
     };
 

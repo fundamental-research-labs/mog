@@ -234,6 +234,11 @@ fn stale_workbook_preserved_known_children_are_not_replayed() {
                 "workbook\0after\0definedNames\0calcPr".to_string(),
                 r#"<calcPr calcId="999999"/>"#.to_string(),
             ),
+            (
+                "workbook\0after\0pivotCaches\0webPublishing".to_string(),
+                r#"<webPublishing css="0" thicket="1" allowPng="0" dpi="999"/>"#
+                    .to_string(),
+            ),
         ],
         ..Default::default()
     };
@@ -247,6 +252,39 @@ fn stale_workbook_preserved_known_children_are_not_replayed() {
     assert!(!workbook_xml.contains("<workbookProtection"));
     assert!(!workbook_xml.contains("StaleName"));
     assert!(!workbook_xml.contains("999999"));
+    assert!(!workbook_xml.contains("<webPublishing"));
+    assert!(!workbook_xml.contains("dpi=\"999\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn workbook_web_publishing_is_written_from_typed_state() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.web_publishing = Some(domain_types::domain::workbook::WorkbookWebPublishing {
+        css: Some(true),
+        thicket: Some(false),
+        long_file_names: Some(true),
+        vml: Some(false),
+        allow_png: Some(true),
+        target_screen_size: Some(ooxml_types::web_publish::TargetScreenSize::Size1024x768),
+        dpi: Some(144),
+    });
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<webPublishing "#));
+    assert!(workbook_xml.contains(r#"css="1""#));
+    assert!(workbook_xml.contains(r#"thicket="0""#));
+    assert!(workbook_xml.contains(r#"longFileNames="1""#));
+    assert!(workbook_xml.contains(r#"vml="0""#));
+    assert!(workbook_xml.contains(r#"allowPng="1""#));
+    assert!(workbook_xml.contains(r#"targetScreenSize="1024x768""#));
+    assert!(workbook_xml.contains(r#"dpi="144""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1041,6 +1079,69 @@ fn x14_worksheet_ext_lst_is_preserved_without_modeled_standard_owner() {
 }
 
 #[test]
+fn typed_x14_data_validations_are_written_without_round_trip_context() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        x14_data_validations: vec![domain_types::ValidationSpec {
+            ranges: vec!["A1:A3".to_string()],
+            rule: domain_types::ValidationRule::WholeNumber {
+                operator: domain_types::ValidationOperator::GreaterThan,
+                formula1: "5".to_string(),
+                formula2: None,
+            },
+            allow_blank: true,
+            ..Default::default()
+        }],
+        x14_data_validations_declared_count: Some(1),
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<extLst>"));
+    assert!(sheet_xml.contains("<x14:dataValidations"));
+    assert!(sheet_xml.contains(r#"<x14:dataValidation type="whole" operator="greaterThan" allowBlank="1">"#));
+    assert!(sheet_xml.contains("<x14:formula1><xm:f>5</xm:f></x14:formula1>"));
+    assert!(sheet_xml.contains("<xm:sqref>A1:A3</xm:sqref>"));
+}
+
+#[test]
+fn stale_raw_x14_validation_is_not_replayed_when_typed_x14_owner_exists() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        x14_data_validations: vec![domain_types::ValidationSpec {
+            ranges: vec!["C1".to_string()],
+            rule: domain_types::ValidationRule::Custom {
+                formula1: "TRUE".to_string(),
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            ext_lst_xml: Some(
+                r#"<extLst><ext><x14:dataValidations count="1"><x14:dataValidation type="whole"><xm:sqref>A1</xm:sqref></x14:dataValidation></x14:dataValidations></ext></extLst>"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<xm:sqref>C1</xm:sqref>"));
+    assert!(!sheet_xml.contains("<xm:sqref>A1</xm:sqref>"));
+}
+
+#[test]
 fn relationship_bearing_x14_worksheet_ext_lst_is_dropped() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -1173,7 +1274,7 @@ fn stale_row_roundtrip_hints_do_not_create_deleted_rows() {
 }
 
 #[test]
-fn row_roundtrip_hints_decorate_current_modeled_rows() {
+fn typed_row_metadata_decorates_current_modeled_rows() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         cells: vec![make_cell(
@@ -1181,22 +1282,28 @@ fn row_roundtrip_hints_decorate_current_modeled_rows() {
             0,
             DomainValue::Number(FiniteF64::new(1.0).unwrap()),
         )],
+        dimensions: domain_types::SheetDimensions {
+            row_heights: vec![domain_types::RowDimension {
+                row: 0,
+                hidden: false,
+                explicit_hidden: true,
+                outline_level: Some(0),
+                explicit_outline_level_zero: true,
+                collapsed: Some(false),
+                thick_top: true,
+                thick_bot: true,
+                xml_hints: domain_types::RowXmlHints {
+                    spans: Some("1:1".to_string()),
+                    bare_empty: false,
+                },
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            row_spans: [(0, "1:1".to_string())].into_iter().collect(),
-            row_thick_bot: vec![0],
-            row_thick_top: vec![0],
-            row_collapsed: [(0, false)].into_iter().collect(),
-            row_hidden_explicit_false: vec![0],
-            row_outline_level_zero: vec![0],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
 
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();

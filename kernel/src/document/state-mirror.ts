@@ -590,11 +590,14 @@ function clonePlainData<T>(value: T): T {
 function normalizePrintSettings(wire: WirePrintSettings): PrintSettings {
   return {
     paperSize: wire.paperSize,
+    paperWidth: wire.paperWidth ?? null,
+    paperHeight: wire.paperHeight ?? null,
     orientation: wire.orientation,
     scale: wire.scale,
     fitToWidth: wire.fitToWidth,
     fitToHeight: wire.fitToHeight,
     gridlines: wire.gridlines,
+    gridLinesSet: wire.gridLinesSet ?? true,
     headings: wire.headings,
     hCentered: wire.hCentered,
     vCentered: wire.vCentered,
@@ -610,6 +613,8 @@ function normalizePrintSettings(wire: WirePrintSettings): PrintSettings {
     rId: wire.rId ?? null,
     hasPrintOptions: wire.hasPrintOptions,
     hasPageSetup: wire.hasPageSetup,
+    copies: wire.copies ?? null,
+    pageSetupProperties: wire.pageSetupProperties ?? null,
     useFirstPageNumber: wire.useFirstPageNumber,
     printComments: wire.cellComments ?? null,
     printErrors: wire.printErrors ?? null,

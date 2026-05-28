@@ -164,6 +164,59 @@ fn roundtrip_data_validation_declared_count_survives_l2_hydration_export() {
 }
 
 #[test]
+fn roundtrip_x14_data_validation_survives_l2_hydration_export() {
+    let mut output = make_single_sheet(
+        "DV_X14",
+        vec![cell(0, 0, CellValue::Number(FiniteF64::new(7.0).unwrap()))],
+    );
+    output.sheets[0].x14_data_validations = vec![ValidationSpec {
+        ranges: vec!["A1:A3".to_string()],
+        rule: ValidationRule::WholeNumber {
+            operator: ValidationOperator::GreaterThan,
+            formula1: "5".to_string(),
+            formula2: None,
+        },
+        allow_blank: true,
+        ..Default::default()
+    }];
+    output.sheets[0].x14_data_validations_declared_count = Some(1);
+
+    let xlsx_bytes =
+        write_xlsx_from_parse_output(&output, None).expect("write_xlsx_from_parse_output");
+    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+
+    assert_eq!(exported.sheets[0].x14_data_validations_declared_count, Some(1));
+    assert_eq!(exported.sheets[0].x14_data_validations.len(), 1);
+    assert_eq!(
+        exported.sheets[0].x14_data_validations[0].ranges,
+        vec!["A1:A3".to_string()]
+    );
+}
+
+#[test]
+fn roundtrip_empty_data_validation_container_survives_l2_hydration_export() {
+    let mut output = make_single_sheet("DV_EmptyContainer", vec![]);
+    output.sheets[0].data_validations_disable_prompts = true;
+    output.sheets[0].data_validations_declared_count = Some(0);
+
+    let xlsx_bytes =
+        write_xlsx_from_parse_output(&output, None).expect("write_xlsx_from_parse_output");
+    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+
+    assert!(exported.sheets[0].data_validations.is_empty());
+    assert!(exported.sheets[0].data_validations_disable_prompts);
+    assert_eq!(exported.sheets[0].data_validations_declared_count, Some(0));
+}
+
+#[test]
 fn roundtrip_data_validation_custom() {
     let mut output = make_single_sheet(
         "DV_Custom",

@@ -427,8 +427,10 @@ fn stale_extra_sheet_view_pane_selection_is_dropped_without_current_pane() {
             sqref: Some("A1".to_string()),
             ..Default::default()
         },
-        extra_sheet_views: vec![ooxml_types::worksheet::SheetView {
-            pane: Some(ooxml_types::worksheet::SheetPane::frozen(1, 1)),
+        extra_sheet_views: vec![domain_types::SheetView {
+            pane: Some(domain_types::SheetPaneConfig::from_ooxml(
+                &ooxml_types::worksheet::SheetPane::frozen(1, 1),
+            )),
             selections: vec![ooxml_types::worksheet::Selection {
                 pane: Some(ooxml_types::worksheet::Pane::BottomRight),
                 active_cell: Some("C3".to_string()),
@@ -451,6 +453,71 @@ fn stale_extra_sheet_view_pane_selection_is_dropped_without_current_pane() {
     assert!(!sheet_xml.contains(r#"activeCell="C3""#));
     assert!(!sheet_xml.contains(r#"sqref="C3""#));
     assert!(sheet_xml.contains(r#"<selection activeCell="A1" sqref="A1"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn split_pane_exports_from_typed_view_state() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        view: domain_types::SheetView {
+            pane: Some(domain_types::SheetPaneConfig {
+                state: domain_types::SheetPaneState::Split,
+                x_split: 1200.5,
+                y_split: 2400.25,
+                top_left_cell: Some("C5".to_string()),
+                active_pane: Some(domain_types::SheetPaneId::BottomRight),
+            }),
+            selections: vec![ooxml_types::worksheet::Selection {
+                pane: Some(ooxml_types::worksheet::Pane::BottomRight),
+                active_cell: Some("C5".to_string()),
+                active_cell_id: None,
+                sqref: Some("C5".to_string()),
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"state="split""#));
+    assert!(sheet_xml.contains(r#"xSplit="1200.5""#));
+    assert!(sheet_xml.contains(r#"ySplit="2400.25""#));
+    assert!(!sheet_xml.contains(r#"state="frozen""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn extra_sheet_view_exports_from_domain_view_state() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        extra_sheet_views: vec![domain_types::SheetView {
+            workbook_view_id: 1,
+            view: Some("pageLayout".to_string()),
+            pane: Some(domain_types::SheetPaneConfig {
+                state: domain_types::SheetPaneState::Split,
+                x_split: 90.0,
+                y_split: 0.0,
+                top_left_cell: None,
+                active_pane: Some(domain_types::SheetPaneId::TopRight),
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"workbookViewId="1""#));
+    assert!(sheet_xml.contains(r#"view="pageLayout""#));
+    assert!(sheet_xml.contains(r#"state="split""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -518,6 +585,7 @@ fn test_styled_cells() {
             ..Default::default()
         }],
         style_palette: palette,
+        workbook_stylesheet: None,
         ..Default::default()
     };
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();

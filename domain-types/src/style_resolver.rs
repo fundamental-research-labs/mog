@@ -80,6 +80,10 @@ pub struct FontInput {
     pub scheme: Option<String>,
     /// Vertical alignment: "superscript", "subscript", or `None`.
     pub vert_align: Option<String>,
+    pub condense: Option<bool>,
+    pub extend: Option<bool>,
+    pub outline: Option<bool>,
+    pub shadow: Option<bool>,
     /// Font charset (e.g. 0 = ANSI, 1 = default, 128 = ShiftJIS).
     pub charset: Option<u32>,
     /// Font family number (e.g. 1 = Roman, 2 = Swiss).
@@ -725,12 +729,22 @@ fn resolve_font(
     match font.vert_align.as_deref() {
         Some("superscript") => {
             ff.superscript = Some(true);
+            ff.vertical_align = Some("superscript".to_string());
         }
         Some("subscript") => {
             ff.subscript = Some(true);
+            ff.vertical_align = Some("subscript".to_string());
+        }
+        Some("baseline") => {
+            ff.vertical_align = Some("baseline".to_string());
         }
         _ => {}
     }
+
+    ff.condense = font.condense;
+    ff.extend = font.extend;
+    ff.outline = font.outline;
+    ff.shadow = font.shadow;
 
     // Charset and family
     ff.charset = font.charset;
@@ -1101,6 +1115,10 @@ mod tests {
                     color: None,
                     scheme: Some("minor".to_string()),
                     vert_align: None,
+                    condense: None,
+                    extend: None,
+                    outline: None,
+                    shadow: None,
                     charset: None,
                     family: None,
                 },
@@ -1121,6 +1139,10 @@ mod tests {
                     }),
                     scheme: None,
                     vert_align: Some("superscript".to_string()),
+                    condense: None,
+                    extend: None,
+                    outline: None,
+                    shadow: None,
                     charset: None,
                     family: None,
                 },

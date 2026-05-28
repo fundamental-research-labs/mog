@@ -20,13 +20,14 @@ use crate::storage::YrsStorage;
 
 use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
-use super::styles::{ImportedRangeStyle, hydrate_style_palette};
+use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_stylesheet};
 use super::workbook::{
     hydrate_shared_string_hints, hydrate_workbook_calculation, hydrate_workbook_metadata,
     hydrate_workbook_named_ranges, hydrate_workbook_parsed_pivot_tables,
     hydrate_workbook_pivot_cache_records, hydrate_workbook_protection, hydrate_workbook_slicers,
-    hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
-    hydrate_workbook_views,
+    hydrate_workbook_table_styles, hydrate_workbook_tables, hydrate_workbook_theme,
+    hydrate_workbook_threaded_comment_persons,
+    hydrate_workbook_views, hydrate_workbook_web_publishing,
 };
 use super::{HydrationIdMap, IdAllocator};
 
@@ -125,6 +126,7 @@ impl YrsStorage {
         // Write the style palette to a workbook-level Yrs map so that compact
         // cell properties (`{"s": N}`) can resolve their format at read time.
         hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
+        hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
 
         for sheet_data in &output.sheets {
             let (
@@ -186,6 +188,13 @@ impl YrsStorage {
             })
             .collect();
         hydrate_workbook_tables(&self.workbook, &all_tables, &mut txn);
+        hydrate_workbook_table_styles(
+            &self.workbook,
+            &output.custom_table_styles,
+            &output.default_table_style,
+            &output.default_pivot_style,
+            &mut txn,
+        );
         hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);
         hydrate_workbook_protection(&self.workbook, &output.protection, &mut txn);
 
@@ -210,6 +219,7 @@ impl YrsStorage {
 
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
         hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
         hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_workbook_metadata(
@@ -260,6 +270,7 @@ impl YrsStorage {
         let order_arr = self.ensure_sheet_order_array(&mut txn);
         tracing::info!(target: "deferred_hydration", "hydrate: style palette");
         hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
+        hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
         tracing::info!(target: "deferred_hydration", "hydrate: sheets start, count={}", output.sheets.len());
 
         for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
@@ -412,6 +423,7 @@ impl YrsStorage {
         );
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
         hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
         hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_workbook_metadata(

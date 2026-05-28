@@ -84,6 +84,7 @@ pub const KEY_VALIDATION_RULES: &str = "validationRules";
 
 /// Workbook-level domain maps
 pub const KEY_STYLE_PALETTE: &str = "stylePalette";
+pub const KEY_WORKBOOK_STYLESHEET: &str = "workbookStylesheet";
 pub const KEY_SHARED_STRING_HINTS: &str = "sharedStringHints";
 pub const KEY_WORKBOOK_SETTINGS: &str = "workbookSettings";
 pub const KEY_WORKBOOK_IDENTITY: &str = "workbookIdentity";
@@ -93,6 +94,8 @@ pub const KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE: &str = "importedExternalUsageP
 pub const KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS: &str = "importedExternalPackageArtifacts";
 pub const KEY_NAMED_RANGES: &str = "namedRanges";
 pub const KEY_TABLES: &str = "tables";
+pub const KEY_CUSTOM_TABLE_STYLES: &str = "customTableStyles";
+pub const KEY_XLSX_TABLE_STYLES: &str = "xlsxTableStyles";
 pub const KEY_DATA_TABLE_REGIONS: &str = "dataTableRegions";
 pub const KEY_SLICERS: &str = "slicers";
 pub const KEY_PIVOT_SPECS: &str = "pivotSpecs";
@@ -107,6 +110,7 @@ pub const KEY_EXTENDED_DOCUMENT_PROPERTIES: &str = "extendedDocumentProperties";
 pub const KEY_XLSX_METADATA: &str = "xlsxMetadata";
 pub const KEY_FILE_VERSION: &str = "fileVersion";
 pub const KEY_FILE_SHARING: &str = "fileSharing";
+pub const KEY_WEB_PUBLISHING: &str = "webPublishing";
 pub const KEY_THREADED_COMMENT_PERSONS: &str = "threadedCommentPersons";
 
 /// Meta map keys

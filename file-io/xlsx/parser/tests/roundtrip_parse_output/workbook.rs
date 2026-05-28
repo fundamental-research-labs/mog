@@ -431,6 +431,7 @@ fn roundtrip_comprehensive() {
             ..Default::default()
         }],
         style_palette: vec![bold, highlighted],
+        workbook_stylesheet: None,
         named_ranges: vec![NamedRange {
             name: "Totals".to_string(),
             refers_to: "Report!$C$2:$C$3".to_string(),

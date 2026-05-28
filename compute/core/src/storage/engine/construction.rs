@@ -70,7 +70,8 @@ pub(super) use named_ranges::{
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
 pub(super) use runtime::{
     create_observer_and_undo, derive_settings, hydrate_mirror_format_ranges,
-    load_custom_cell_styles, load_theme_palette, sync_enable_calculation_flags,
+    load_custom_cell_styles, load_custom_table_styles, load_theme_palette,
+    sync_enable_calculation_flags,
 };
 pub(super) use sheet_import::import_sheets_from_xlsx;
 pub use snapshots::build_workbook_snapshot_from_yrs;

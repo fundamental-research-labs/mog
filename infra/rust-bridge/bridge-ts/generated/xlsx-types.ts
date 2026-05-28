@@ -645,11 +645,14 @@ export interface ParsedTableSortState {
 
 export interface PrintSettingsOutput {
   paperSize?: number;
+  paperWidth?: string;
+  paperHeight?: string;
   orientation: string;
   scale?: number;
   fitToWidth?: number;
   fitToHeight?: number;
   gridLines: boolean;
+  gridLinesSet: boolean;
   headings: boolean;
   horizontalCentered: boolean;
   verticalCentered: boolean;
@@ -669,6 +672,12 @@ export interface PrintSettingsOutput {
   cellComments?: string;
   printErrors?: string;
   copies?: number;
+  pageSetupProperties?: PageSetupPropertiesOutput;
+}
+
+export interface PageSetupPropertiesOutput {
+  fitToPage: boolean;
+  autoPageBreaks: boolean;
 }
 
 export interface ProtectionOutput {

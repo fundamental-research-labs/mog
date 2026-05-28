@@ -41,6 +41,9 @@ pub(crate) fn convert_print_settings(
         black_and_white,
         draft,
         first_page_number,
+        paper_width,
+        paper_height,
+        copies,
     ) = if ps.has_page_setup {
         (
             non_empty(&ps.orientation),
@@ -50,13 +53,18 @@ pub(crate) fn convert_print_settings(
             ps.black_and_white,
             ps.draft,
             ps.first_page_number,
+            ps.paper_width.clone(),
+            ps.paper_height.clone(),
+            ps.copies,
         )
     } else {
-        (None, None, None, None, false, false, None)
+        (None, None, None, None, false, false, None, None, None, None)
     };
 
     let mut settings = PrintSettings {
         paper_size: ps.paper_size.map(|p| p as u32),
+        paper_width,
+        paper_height,
         orientation,
         scale,
         fit_to_width,
@@ -65,6 +73,7 @@ pub(crate) fn convert_print_settings(
         headings: ps.headings,
         h_centered: ps.horizontal_centered,
         v_centered: ps.vertical_centered,
+        grid_lines_set: ps.grid_lines_set,
         margins,
         header_footer,
         black_and_white,
@@ -78,6 +87,14 @@ pub(crate) fn convert_print_settings(
         use_first_page_number: ps.use_first_page_number,
         has_print_options: ps.has_print_options,
         has_page_setup: ps.has_page_setup,
+        copies,
+        page_setup_properties: ps
+            .page_setup_properties
+            .as_ref()
+            .map(|props| domain_types::PageSetupProperties {
+                fit_to_page: props.fit_to_page,
+                auto_page_breaks: props.auto_page_breaks,
+            }),
         cell_comments: ps.cell_comments.clone(),
         print_errors: ps.print_errors.clone(),
         imported_printer_settings: None,

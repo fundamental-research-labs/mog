@@ -10,7 +10,7 @@ use domain_types::{
     AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
     domain::comment::{Comment, CommentType, PersonInfo},
     domain::external_link::{ExternalLink, ImportedExternalLinkIdentity},
-    domain::workbook::{WorkbookView, WorkbookViewVisibility},
+    domain::workbook::{WorkbookView, WorkbookViewVisibility, WorkbookWebPublishing},
 };
 use formula_types::CellRef;
 use std::sync::Arc;
@@ -159,6 +159,38 @@ fn shared_string_hints_survive_yrs_hydration_export() {
     let exported = engine.export_to_parse_output().unwrap().parse_output;
 
     assert_eq!(exported.shared_string_hints, input.shared_string_hints);
+}
+
+#[test]
+fn workbook_stylesheet_survives_yrs_hydration_export() {
+    let mut input = ParseOutput::default();
+    input.sheets = vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }];
+    input.workbook_stylesheet = Some(domain_types::WorkbookStylesheet {
+        stylesheet: ooxml_types::styles::Stylesheet {
+            dxfs: vec![ooxml_types::styles::DxfDef {
+                font: Some(ooxml_types::styles::FontDef {
+                    bold: Some(true),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            default_table_style: Some("TableStyleMedium4".to_string()),
+            ..Default::default()
+        },
+        root_namespace_attrs: vec![(
+            "x14".to_string(),
+            "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main".to_string(),
+        )],
+        ext_lst_xml: Some(br#"<extLst><ext uri="{typed-style-ext}"/></extLst>"#.to_vec()),
+    });
+
+    let engine = engine_from_parse_output_normal_with_roundtrip(&input, None);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.workbook_stylesheet, input.workbook_stylesheet);
 }
 
 #[test]
@@ -500,6 +532,34 @@ fn build_parse_output_from_yrs_preserves_workbook_views() {
     let exported = engine.build_parse_output_from_yrs();
 
     assert_eq!(exported.workbook_views, output.workbook_views);
+}
+
+#[test]
+fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Web".to_string(),
+            rows: 1,
+            cols: 1,
+            dimensions: SheetDimensions::default(),
+            ..Default::default()
+        }],
+        web_publishing: Some(WorkbookWebPublishing {
+            css: Some(true),
+            thicket: Some(false),
+            long_file_names: Some(true),
+            vml: Some(false),
+            allow_png: Some(true),
+            target_screen_size: Some(ooxml_types::web_publish::TargetScreenSize::Size1600x1200),
+            dpi: Some(192),
+        }),
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal_with_roundtrip(&output, None);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.web_publishing, output.web_publishing);
 }
 
 #[test]

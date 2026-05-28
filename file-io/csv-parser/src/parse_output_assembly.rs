@@ -205,6 +205,7 @@ pub fn parse_csv_to_parse_output(
             ..SheetData::default()
         }],
         style_palette: palette_entries,
+        workbook_stylesheet: None,
         ..ParseOutput::default()
     };
 
@@ -230,6 +231,7 @@ fn empty_output(sheet_name: &str) -> ParseOutput {
             ..SheetData::default()
         }],
         style_palette: palette_entries,
+        workbook_stylesheet: None,
         ..ParseOutput::default()
     }
 }

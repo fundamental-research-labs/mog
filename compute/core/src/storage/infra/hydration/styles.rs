@@ -4,7 +4,7 @@ use std::sync::Arc;
 use yrs::{Any, Map, MapPrelim, MapRef, Out};
 
 use domain_types::yrs_schema;
-use domain_types::{CellData, DocumentFormat, SheetData};
+use domain_types::{CellData, DocumentFormat, SheetData, WorkbookStylesheet};
 
 use compute_document::hex::{SmallHex, id_to_hex};
 use compute_document::schema::*;
@@ -103,6 +103,24 @@ pub(super) fn hydrate_style_palette(
             serde_json::to_string(&cell_fmt).expect("CellFormat serialization should not fail");
         let key = i.to_string();
         palette_map.insert(txn, &*key, Any::String(Arc::from(json.as_str())));
+    }
+}
+
+pub(super) fn hydrate_workbook_stylesheet(
+    txn: &mut yrs::TransactionMut,
+    workbook: &MapRef,
+    workbook_stylesheet: &Option<WorkbookStylesheet>,
+) {
+    if let Some(stylesheet) = workbook_stylesheet {
+        let json = serde_json::to_string(stylesheet)
+            .expect("WorkbookStylesheet serialization should not fail");
+        workbook.insert(
+            txn,
+            KEY_WORKBOOK_STYLESHEET,
+            Any::String(Arc::from(json.as_str())),
+        );
+    } else {
+        workbook.remove(txn, KEY_WORKBOOK_STYLESHEET);
     }
 }
 

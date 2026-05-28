@@ -24,9 +24,11 @@ pub mod named_range;
 pub mod page_breaks;
 pub mod print;
 pub mod protection;
+pub mod sheet_properties;
 pub mod sheet_view;
 // outline module deleted — hydration now writes SheetGroupingConfig directly via storage layer
 pub mod sparkline;
+pub mod web_publishing;
 pub mod workbook_properties;
 
 // Tier 1b: Y.Map with JSON bridge for complex nested fields

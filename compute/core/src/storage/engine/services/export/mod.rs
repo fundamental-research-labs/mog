@@ -29,6 +29,8 @@ pub(in crate::storage::engine) use sheet_metadata::{
     export_dv_window_attr, export_floating_objects_for_sheet, export_hyperlinks_for_sheet,
     export_outline_groups_for_sheet, export_page_breaks_for_sheet, export_sheet_protection,
     export_sort_state_for_sheet, export_sparkline_groups_for_sheet, export_sparklines_for_sheet,
+    export_x14_data_validations_for_sheet, export_x14_dv_declared_count,
+    export_x14_dv_disable_prompts,
 };
 pub(in crate::storage::engine) use workbook::{
     export_workbook_parsed_pivot_tables, export_workbook_protection, export_workbook_slicer_caches,
@@ -63,7 +65,8 @@ use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_document_properties, export_external_links,
     export_file_sharing, export_file_version, export_shared_string_hints,
-    export_workbook_named_ranges, export_workbook_properties, export_workbook_views,
+    export_workbook_named_ranges, export_workbook_properties, export_workbook_table_styles,
+    export_workbook_stylesheet, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -213,9 +216,6 @@ fn export_single_sheet(
         })
         .collect();
 
-    // --- Frozen panes ---
-    let frozen = queries::get_frozen_panes_query(stores, sheet_id);
-
     // --- View settings ---
     let view_opts = queries::get_view_options_query(stores, sheet_id);
     let scroll = queries::get_scroll_position_query(stores, sheet_id);
@@ -229,6 +229,7 @@ fn export_single_sheet(
         sqref,
         has_explicit_top_left_cell,
         frozen_pane_tlc,
+        pane_config,
         selections,
         extra_sheet_views,
         rt_view_type,
@@ -238,6 +239,7 @@ fn export_single_sheet(
         rt_default_grid_color,
         rt_window_protection,
         rt_color_id,
+        workbook_view_id,
     ) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
@@ -285,6 +287,12 @@ fn export_single_sheet(
                     Out::Any(Any::String(s)) => Some(s.to_string()),
                     _ => None,
                 });
+                let pane = m
+                    .get(&txn, "sheetPaneConfig")
+                    .and_then(|v| match v {
+                        Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
+                        _ => None,
+                    });
                 let sels = m
                     .get(&txn, "selections")
                     .and_then(|v| match v {
@@ -342,9 +350,16 @@ fn export_single_sheet(
                     Out::Any(Any::Number(n)) => Some(n as u32),
                     _ => None,
                 });
+                let wvid = m
+                    .get(&txn, "workbookViewId")
+                    .and_then(|v| match v {
+                        Out::Any(Any::Number(n)) => Some(n as u32),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
                 (
-                    zsn, zsplv, zsslv, ts, ac, sq, etlc, fp_tlc, sels, esv, vt, sos, sr, sws, dgc,
-                    wp, cid,
+                    zsn, zsplv, zsslv, ts, ac, sq, etlc, fp_tlc, pane, sels, esv, vt, sos, sr, sws,
+                    dgc, wp, cid, wvid,
                 )
             }
             None => (
@@ -356,6 +371,7 @@ fn export_single_sheet(
                 None,
                 false,
                 None,
+                None,
                 Vec::new(),
                 Vec::new(),
                 None,
@@ -365,14 +381,23 @@ fn export_single_sheet(
                 true,
                 false,
                 None,
+                0,
             ),
         }
     };
-    let frozen_pane = if frozen.rows > 0 || frozen.cols > 0 {
+    let frozen_pane = if pane_config
+        .as_ref()
+        .is_some_and(|pane| pane.state.is_frozen())
+    {
         Some(FrozenPane {
-            rows: frozen.rows,
-            cols: frozen.cols,
-            top_left_cell: frozen_pane_tlc,
+            rows: pane_config.as_ref().unwrap().y_split as u32,
+            cols: pane_config.as_ref().unwrap().x_split as u32,
+            top_left_cell: pane_config
+                .as_ref()
+                .unwrap()
+                .top_left_cell
+                .clone()
+                .or(frozen_pane_tlc),
         })
     } else {
         None
@@ -394,12 +419,14 @@ fn export_single_sheet(
         view: rt_view_type,
         zoom_scale_page_layout_view,
         zoom_scale_sheet_layout_view,
+        workbook_view_id,
         scroll_row: scroll.top_row,
         scroll_col: scroll.left_col,
         has_explicit_top_left_cell,
         tab_selected,
         active_cell,
         sqref,
+        pane: pane_config,
         selections,
     };
 
@@ -463,6 +490,7 @@ fn export_single_sheet(
 
     // --- Data validations ---
     let data_validations = export_data_validations_for_sheet(stores, sheet_id);
+    let x14_data_validations = export_x14_data_validations_for_sheet(stores, sheet_id);
 
     // --- Print settings ---
     let ps = print::get_print_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
@@ -565,7 +593,7 @@ fn export_single_sheet(
     charts.sort_by_key(|c| c.z_index);
 
     // --- Sheet metadata from Yrs meta map ---
-    let (original_sheet_id, visibility, sheet_uid) = {
+    let (original_sheet_id, visibility, sheet_uid, mut sheet_properties) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
         match meta {
@@ -599,11 +627,43 @@ fn export_single_sheet(
                     Out::Any(Any::String(s)) => Some(s.to_string()),
                     _ => None,
                 });
-                (osi, vis, uid)
+                let mut sheet_properties = m
+                    .get(&txn, domain_types::yrs_schema::sheet_properties::PROPERTY_KEY)
+                    .and_then(|v| match v {
+                        Out::YMap(map) => {
+                            domain_types::yrs_schema::sheet_properties::from_yrs_map(&map, &txn)
+                        }
+                        _ => None,
+                    });
+                let tab_color = m.get(&txn, "tabColor").and_then(|v| match v {
+                    Out::Any(Any::String(s)) => Some(s.to_string()),
+                    _ => None,
+                });
+                if let Some(tab_color) = tab_color {
+                    let properties = sheet_properties.get_or_insert_with(Default::default);
+                    properties.tab_color = Some(tab_color_to_ooxml_color(&tab_color));
+                }
+                (osi, vis, uid, sheet_properties)
             }
-            None => (None, domain_types::SheetState::Visible, None),
+            None => (None, domain_types::SheetState::Visible, None, None),
         }
     };
+    if let Some(outline) = outline_properties.clone() {
+        sheet_properties
+            .get_or_insert_with(Default::default)
+            .outline_pr = Some(outline);
+    }
+
+    let mut sheet_properties = sheet_properties;
+    if let Some(print_settings) = &print_settings
+        && let Some(page_setup_properties) = &print_settings.page_setup_properties
+    {
+        let properties = sheet_properties.get_or_insert_with(Default::default);
+        properties.page_set_up_pr = Some(ooxml_types::worksheet::PageSetupProperties {
+            auto_page_breaks: page_setup_properties.auto_page_breaks,
+            fit_to_page: page_setup_properties.fit_to_page,
+        });
+    }
 
     let sheet = SheetData {
         name,
@@ -626,6 +686,11 @@ fn export_single_sheet(
         data_validations_disable_prompts: export_dv_disable_prompts(stores, sheet_id),
         data_validations_x_window: export_dv_window_attr(stores, sheet_id, "dvXWindow"),
         data_validations_y_window: export_dv_window_attr(stores, sheet_id, "dvYWindow"),
+        x14_data_validations,
+        x14_data_validations_declared_count: export_x14_dv_declared_count(stores, sheet_id),
+        x14_data_validations_disable_prompts: export_x14_dv_disable_prompts(stores, sheet_id),
+        x14_data_validations_x_window: export_dv_window_attr(stores, sheet_id, "x14DvXWindow"),
+        x14_data_validations_y_window: export_dv_window_attr(stores, sheet_id, "x14DvYWindow"),
         print_settings,
         hf_images,
         protection,
@@ -642,6 +707,7 @@ fn export_single_sheet(
         auto_filter,
         sort_state,
         outline_groups,
+        sheet_properties,
         outline_properties,
         extra_sheet_views,
     };
@@ -695,6 +761,19 @@ fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Ve
         )
     });
     regions
+}
+
+fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
+    let hex = color.strip_prefix('#').unwrap_or(color);
+    let argb = if hex.len() == 6 {
+        format!("FF{hex}")
+    } else {
+        hex.to_string()
+    };
+    ooxml_types::styles::ColorDef::Rgb {
+        val: argb,
+        tint: None,
+    }
 }
 
 // -------------------------------------------------------------------
@@ -763,17 +842,23 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
     let slicer_caches = export_workbook_slicer_caches(stores);
+    let (custom_table_styles, default_table_style, default_pivot_style) =
+        export_workbook_table_styles(stores);
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
 
     ParseOutput {
         sheets: output_sheets,
         style_palette,
+        workbook_stylesheet: export_workbook_stylesheet(stores),
         shared_string_hints: export_shared_string_hints(stores),
         named_ranges,
         pivot_tables: export_workbook_parsed_pivot_tables(stores),
         pivot_cache_records: workbook::export_pivot_cache_records(stores),
         data_table_regions,
         slicer_caches,
+        custom_table_styles,
+        default_table_style,
+        default_pivot_style,
         theme,
         properties: export_document_properties(stores),
         extended_properties: workbook::export_extended_document_properties(stores),
@@ -784,6 +869,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),
         file_sharing: export_file_sharing(stores),
+        web_publishing: workbook::export_workbook_web_publishing(stores),
         external_links: export_external_links(stores),
         persons: export_workbook_threaded_comment_persons(stores),
     }

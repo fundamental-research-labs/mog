@@ -165,8 +165,11 @@ pub fn to_yrs_prelim(spec: &ValidationSpec) -> Vec<(&str, Any)> {
             entries.push((KEY_RULE_TYPE, Any::String(Arc::from("custom"))));
             entries.push((KEY_FORMULA1, Any::String(Arc::from(formula1.as_str()))));
         }
-        ValidationRule::None { .. } => {
+        ValidationRule::None { formula1 } => {
             entries.push((KEY_RULE_TYPE, Any::String(Arc::from("none"))));
+            if !formula1.is_empty() {
+                entries.push((KEY_FORMULA1, Any::String(Arc::from(formula1.as_str()))));
+            }
         }
     }
 
@@ -248,4 +251,32 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<ValidationSpec>
             .unwrap_or_default(),
         uid: read_string(map, txn, KEY_UID),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yrs::{Doc, Map, Transact};
+
+    #[test]
+    fn none_rule_formula1_round_trips_through_yrs_schema() {
+        let spec = ValidationSpec {
+            ranges: vec!["A1".to_string()],
+            rule: ValidationRule::None {
+                formula1: "TRUE".to_string(),
+            },
+            ..Default::default()
+        };
+        let doc = Doc::new();
+        let map = doc.get_or_insert_map("validation");
+        let mut txn = doc.transact_mut();
+        for (key, value) in to_yrs_prelim(&spec) {
+            map.insert(&mut txn, key, value);
+        }
+        drop(txn);
+
+        let txn = doc.transact();
+        let round_tripped = from_yrs_map(&map, &txn).expect("validation should hydrate");
+        assert_eq!(round_tripped.rule, spec.rule);
+    }
 }

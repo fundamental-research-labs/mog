@@ -1076,6 +1076,10 @@ export interface Hyperlink {
 export interface PrintSettings {
   /** Paper size */
   paperSize?: number;
+  /** Custom paper width */
+  paperWidth?: string;
+  /** Custom paper height */
+  paperHeight?: string;
   /** Orientation */
   orientation?: 'portrait' | 'landscape';
   /** Scale percentage */
@@ -1096,6 +1100,8 @@ export interface PrintSettings {
   headerFooter?: HeaderFooter;
   /** Print gridlines */
   gridLines?: boolean;
+  /** Gridlines set flag */
+  gridLinesSet?: boolean;
   /** Print headings */
   headings?: boolean;
   /** Center horizontally on page */
@@ -1112,6 +1118,17 @@ export interface PrintSettings {
   horizontalDpi?: number;
   /** Vertical DPI */
   verticalDpi?: number;
+  /** Number of copies */
+  copies?: number;
+  /** Page setup properties */
+  pageSetupProperties?: PageSetupProperties;
+}
+
+export interface PageSetupProperties {
+  /** Fit to page */
+  fitToPage: boolean;
+  /** Automatic page breaks */
+  autoPageBreaks: boolean;
 }
 
 /**

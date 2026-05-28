@@ -56,6 +56,7 @@ use domain_types::{
     PersonInfo,
     RoundTripContext,
     RowDimension,
+    RowXmlHints,
     RowStyleEntry,
     SheetData,
     SheetDimensions,
@@ -249,15 +250,41 @@ pub fn full_parse_result_to_parse_output(
             .collect();
 
     // 9. Build ParseOutput
+    let workbook_stylesheet = result.parsed_stylesheet.clone().map(|stylesheet| {
+        let root_namespace_attrs = result
+            .extensions
+            .as_ref()
+            .map(|ext| {
+                ext.styles_namespaces
+                    .all()
+                    .iter()
+                    .map(|decl| {
+                        let prefix = decl.prefix.clone().unwrap_or_default();
+                        (prefix, decl.uri.clone())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        domain_types::WorkbookStylesheet {
+            stylesheet,
+            root_namespace_attrs,
+            ext_lst_xml: result.styles_ext_lst_xml.clone(),
+        }
+    });
+
     let parse_output = ParseOutput {
         sheets: sheet_data_vec,
         style_palette,
+        workbook_stylesheet,
         shared_string_hints: build_shared_string_hints(result),
         named_ranges,
         pivot_tables: all_parsed_pivots,
         pivot_cache_records,
         data_table_regions: all_data_table_regions,
         slicer_caches,
+        custom_table_styles: result.styles.raw_table_styles.clone(),
+        default_table_style: result.styles.default_table_style.clone(),
+        default_pivot_style: result.styles.default_pivot_style.clone(),
         theme,
         properties,
         extended_properties: result.doc_props_app.clone(),
@@ -273,6 +300,7 @@ pub fn full_parse_result_to_parse_output(
         workbook_properties: result.workbook_properties.clone(),
         file_version: result.file_version.clone(),
         file_sharing: result.file_sharing.clone(),
+        web_publishing: result.web_publishing.clone(),
         external_links: result.external_links.clone(),
         persons,
     };
@@ -813,13 +841,76 @@ fn convert_sheet(
             height: rh.height,
             custom_height: rh.custom_height,
             hidden: rh.hidden.unwrap_or(false),
+            explicit_hidden: rh.hidden.is_some(),
             custom_format: rh.custom_format,
+            outline_level: rh.outline_level,
+            explicit_outline_level_zero: rh.outline_level == Some(0),
+            collapsed: rh.collapsed,
+            thick_top: rh.thick_top,
+            thick_bot: rh.thick_bot,
             descent: sheet.row_descents.get(&rh.row).copied(),
+            xml_hints: RowXmlHints {
+                spans: rh
+                    .spans
+                    .clone()
+                    .or_else(|| sheet.row_spans.get(&rh.row).cloned()),
+                bare_empty: false,
+            },
         })
         .collect();
-    // Add descent-only entries for rows that have dyDescent but no RowHeight entry.
-    // Without this, per-row dyDescent data is lost for rows without explicit height/style.
+    // Add metadata-only entries for rows that have typed row-owned metadata but
+    // no RowHeight entry.
     {
+        let existing_rows: std::collections::HashSet<u32> =
+            row_heights.iter().map(|rd| rd.row).collect();
+        for (&row, spans) in &sheet.row_spans {
+            if !existing_rows.contains(&row) {
+                row_heights.push(RowDimension {
+                    row,
+                    height: 0.0,
+                    custom_height: false,
+                    hidden: false,
+                    explicit_hidden: false,
+                    custom_format: false,
+                    outline_level: None,
+                    explicit_outline_level_zero: false,
+                    collapsed: None,
+                    thick_top: false,
+                    thick_bot: false,
+                    descent: None,
+                    xml_hints: RowXmlHints {
+                        spans: Some(spans.clone()),
+                        bare_empty: false,
+                    },
+                });
+            }
+        }
+        let existing_rows: std::collections::HashSet<u32> =
+            row_heights.iter().map(|rd| rd.row).collect();
+        for &row in &sheet.bare_empty_rows {
+            if !existing_rows.contains(&row) {
+                row_heights.push(RowDimension {
+                    row,
+                    height: 0.0,
+                    custom_height: false,
+                    hidden: false,
+                    explicit_hidden: false,
+                    custom_format: false,
+                    outline_level: None,
+                    explicit_outline_level_zero: false,
+                    collapsed: None,
+                    thick_top: false,
+                    thick_bot: false,
+                    descent: None,
+                    xml_hints: RowXmlHints {
+                        spans: None,
+                        bare_empty: true,
+                    },
+                });
+            } else if let Some(dim) = row_heights.iter_mut().find(|rd| rd.row == row) {
+                dim.xml_hints.bare_empty = true;
+            }
+        }
         let existing_rows: std::collections::HashSet<u32> =
             row_heights.iter().map(|rd| rd.row).collect();
         for (&row, &d) in &sheet.row_descents {
@@ -829,8 +920,15 @@ fn convert_sheet(
                     height: 0.0,
                     custom_height: false,
                     hidden: false,
+                    explicit_hidden: false,
                     custom_format: false,
+                    outline_level: None,
+                    explicit_outline_level_zero: false,
+                    collapsed: None,
+                    thick_top: false,
+                    thick_bot: false,
                     descent: Some(d),
+                    xml_hints: RowXmlHints::default(),
                 });
             }
         }
@@ -905,75 +1003,32 @@ fn convert_sheet(
         .collect();
 
     // --- Frozen pane ---
-    let frozen_pane = sheet.frozen_pane.as_ref().map(|fp| FrozenPane {
-        rows: fp.y_split as u32,
-        cols: fp.x_split as u32,
-        top_left_cell: fp.top_left_cell.clone(),
-    });
+    let primary_pane = sheet
+        .view_options
+        .first()
+        .and_then(|view| view.pane.as_ref())
+        .or(sheet.frozen_pane.as_ref());
+    let frozen_pane = primary_pane
+        .filter(|pane| pane.is_frozen())
+        .map(|fp| FrozenPane {
+            rows: fp.y_split as u32,
+            cols: fp.x_split as u32,
+            top_left_cell: fp.top_left_cell.clone(),
+        });
 
     // --- Sheet view ---
     let view = sheet
         .view_options
         .first()
-        .map(|v| {
-            let (scroll_row, scroll_col) = v
-                .top_left_cell
-                .as_deref()
-                .and_then(crate::infra::a1::parse_a1_cell)
-                .unwrap_or((0, 0));
-
-            // Extract the primary selection (last selection element, or the one without
-            // a pane attribute). In OOXML, the last <selection> is the active one.
-            let primary_selection = v.selections.last();
-            let active_cell = primary_selection.and_then(|s| s.active_cell.clone());
-            let sqref = primary_selection.and_then(|s| s.sqref.clone());
-
-            SheetView {
-                show_gridlines: v.show_grid_lines,
-                show_row_col_headers: v.show_row_col_headers,
-                show_zeros: v.show_zeros,
-                show_outline_symbols: v.show_outline_symbols,
-                show_formulas: v.show_formulas,
-                right_to_left: v.right_to_left,
-                show_ruler: v.show_ruler,
-                show_white_space: v.show_white_space,
-                default_grid_color: v.default_grid_color,
-                window_protection: v.window_protection,
-                color_id: if v.color_id == 64 {
-                    None
-                } else {
-                    Some(v.color_id)
-                },
-                zoom_scale: if v.zoom_scale == 100 {
-                    None
-                } else {
-                    Some(v.zoom_scale)
-                },
-                zoom_scale_normal: if v.zoom_scale_normal == 0 {
-                    None
-                } else {
-                    Some(v.zoom_scale_normal)
-                },
-                view: v.view.clone(),
-                zoom_scale_page_layout_view: v.zoom_scale_page_layout_view,
-                zoom_scale_sheet_layout_view: v.zoom_scale_sheet_layout_view,
-                scroll_row,
-                scroll_col,
-                has_explicit_top_left_cell: v.top_left_cell.is_some(),
-                tab_selected: v.tab_selected,
-                active_cell,
-                sqref,
-                selections: v.selections.clone(),
-            }
-        })
+        .map(SheetView::from_ooxml)
         .unwrap_or_default();
 
     // Extra sheet views (index 1+) for round-trip fidelity of multiple <sheetView> elements.
-    let extra_sheet_views: Vec<ooxml_types::worksheet::SheetView> = sheet
+    let extra_sheet_views: Vec<SheetView> = sheet
         .view_options
         .iter()
         .skip(1)
-        .map(|v| v.clone().into())
+        .map(SheetView::from_ooxml)
         .collect();
 
     // --- Comments ---
@@ -1162,6 +1217,7 @@ fn convert_sheet(
     let conditional_formats =
         convert_conditional_formats(&sheet.conditional_formatting_full, dxfs, theme_colors);
     let data_validations = convert_data_validations(&sheet.data_validations);
+    let x14_data_validations = convert_data_validations(&sheet.x14_data_validations);
     // Slicers and anchors are already ooxml-types — pass through directly
     let slicers = sheet.slicers.clone();
     let slicer_anchors = sheet.slicer_anchors.clone();
@@ -1186,6 +1242,11 @@ fn convert_sheet(
     let hf_images = convert_hf_images(sheet);
 
     // --- Build SheetData ---
+    let mut sheet_properties = sheet.sheet_properties.clone();
+    if let Some(properties) = &mut sheet_properties {
+        properties.page_set_up_pr = None;
+    }
+
     let sheet_data = SheetData {
         name: sheet.name.clone(),
         rows,
@@ -1207,6 +1268,7 @@ fn convert_sheet(
         comments,
         hyperlinks,
         data_validations,
+        x14_data_validations,
         sparklines,
         sparkline_groups,
         tables: Vec::new(), // Populated by caller with per-sheet tables.
@@ -1229,7 +1291,12 @@ fn convert_sheet(
         data_validations_disable_prompts: sheet.data_validations_disable_prompts,
         data_validations_x_window: sheet.data_validations_x_window,
         data_validations_y_window: sheet.data_validations_y_window,
+        x14_data_validations_declared_count: sheet.x14_data_validations_declared_count,
+        x14_data_validations_disable_prompts: sheet.x14_data_validations_disable_prompts,
+        x14_data_validations_x_window: sheet.x14_data_validations_x_window,
+        x14_data_validations_y_window: sheet.x14_data_validations_y_window,
         outline_groups,
+        sheet_properties,
         outline_properties: sheet.outline_properties.clone(),
         extra_sheet_views,
     };

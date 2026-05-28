@@ -3020,11 +3020,14 @@ export interface PrintRange {
 
 export interface PrintSettings {
   paperSize: number | null;
+  paperWidth?: string;
+  paperHeight?: string;
   orientation: string | null;
   scale: number | null;
   fitToWidth: number | null;
   fitToHeight: number | null;
   gridlines: boolean;
+  gridLinesSet: boolean;
   headings: boolean;
   hCentered: boolean;
   vCentered: boolean;
@@ -3041,8 +3044,15 @@ export interface PrintSettings {
   hasPrintOptions: boolean;
   useFirstPageNumber: boolean;
   hasPageSetup: boolean;
+  copies?: number;
+  pageSetupProperties?: PageSetupProperties;
   cellComments?: string;
   printErrors?: string;
+}
+
+export interface PageSetupProperties {
+  fitToPage: boolean;
+  autoPageBreaks: boolean;
 }
 
 export interface PrintSettingsChange {

@@ -22,6 +22,8 @@ use value_types::CellValue;
 pub struct ParseOutput {
     pub sheets: Vec<SheetData>,
     pub style_palette: Vec<DocumentFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_stylesheet: Option<WorkbookStylesheet>,
     /// Typed import hints for shared-string entries that cannot be regenerated
     /// from plain cell text alone, such as rich text and phonetic metadata.
     ///
@@ -40,6 +42,13 @@ pub struct ParseOutput {
     pub pivot_cache_records: std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
     pub data_table_regions: Vec<DataTableRegion>,
     pub slicer_caches: Vec<OoxmlSlicerCacheDef>,
+    /// Workbook-level table style definitions from `xl/styles.xml`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom_table_styles: Vec<ooxml_types::styles::TableStyleDef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_table_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_pivot_style: Option<String>,
     pub theme: Option<ThemeData>,
     pub properties: Option<DocumentProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -56,6 +65,8 @@ pub struct ParseOutput {
     pub file_version: Option<FileVersion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_sharing: Option<FileSharing>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_publishing: Option<WorkbookWebPublishing>,
     /// Workbook external-link definitions that should be emitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_links: Vec<ExternalLink>,
@@ -63,6 +74,16 @@ pub struct ParseOutput {
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub persons: Vec<PersonInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookStylesheet {
+    pub stylesheet: ooxml_types::styles::Stylesheet,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub root_namespace_attrs: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -210,9 +231,8 @@ pub struct SheetData {
     pub frozen_pane: Option<FrozenPane>,
     pub view: SheetView,
     /// Additional `<sheetView>` elements beyond the primary one (index 1+).
-    /// Stored as `ooxml_types::worksheet::SheetView` for lossless round-trip fidelity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extra_sheet_views: Vec<ooxml_types::worksheet::SheetView>,
+    pub extra_sheet_views: Vec<SheetView>,
     pub row_styles: Vec<RowStyleEntry>,
     pub col_styles: Vec<ColStyleEntry>,
     // Domain objects
@@ -233,6 +253,16 @@ pub struct SheetData {
     /// Container-level yWindow attribute on `<dataValidations>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_validations_y_window: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub x14_data_validations: Vec<ValidationSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x14_data_validations_declared_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub x14_data_validations_disable_prompts: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x14_data_validations_x_window: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x14_data_validations_y_window: Option<u32>,
     pub sparklines: Vec<Sparkline>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sparkline_groups: Vec<SparklineGroup>,
@@ -257,6 +287,9 @@ pub struct SheetData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sort_state: Option<SortState>,
     pub outline_groups: Vec<OutlineGroup>,
+    /// Worksheet-level `<sheetPr>` attributes and child properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_properties: Option<ooxml_types::worksheet::SheetProperties>,
     /// Outline (grouping) properties from `<sheetPr><outlinePr>`.
     /// Controls summary row/column placement and outline symbol visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -387,13 +420,51 @@ pub struct RowDimension {
     pub height: f64,
     pub custom_height: bool,
     pub hidden: bool,
+    /// Whether the row had an explicit hidden attribute. This distinguishes an
+    /// authored `hidden="0"` from an omitted default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub explicit_hidden: bool,
     /// Whether the row has customFormat="1" without an explicit style (s attribute).
     /// This preserves the flag for round-trip fidelity.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_format: bool,
+    /// Per-row outline level. `Some(0)` means the source authored
+    /// `outlineLevel="0"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_level: Option<u8>,
+    /// Whether the row had an authored `outlineLevel="0"` attribute.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub explicit_outline_level_zero: bool,
+    /// Authored collapsed attribute. `Some(false)` preserves `collapsed="0"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collapsed: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub thick_top: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub thick_bot: bool,
     /// Per-row text baseline descent (x14ac:dyDescent attribute).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub descent: Option<f64>,
+    /// Typed lexical hints owned by this row.
+    #[serde(default, skip_serializing_if = "RowXmlHints::is_empty")]
+    pub xml_hints: RowXmlHints,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RowXmlHints {
+    /// Authored `spans` attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spans: Option<String>,
+    /// Authored row element with no cells and no semantic attributes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bare_empty: bool,
+}
+
+impl RowXmlHints {
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_none() && !self.bare_empty
+    }
 }
 
 /// Dimension data for a single column.
@@ -446,6 +517,100 @@ pub struct FrozenPane {
     pub top_left_cell: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SheetPaneState {
+    Frozen,
+    FrozenSplit,
+    Split,
+}
+
+impl SheetPaneState {
+    pub fn from_ooxml(state: ooxml_types::worksheet::PaneState) -> Self {
+        match state {
+            ooxml_types::worksheet::PaneState::Frozen => Self::Frozen,
+            ooxml_types::worksheet::PaneState::FrozenSplit => Self::FrozenSplit,
+            ooxml_types::worksheet::PaneState::Split => Self::Split,
+        }
+    }
+
+    pub fn to_ooxml(self) -> ooxml_types::worksheet::PaneState {
+        match self {
+            Self::Frozen => ooxml_types::worksheet::PaneState::Frozen,
+            Self::FrozenSplit => ooxml_types::worksheet::PaneState::FrozenSplit,
+            Self::Split => ooxml_types::worksheet::PaneState::Split,
+        }
+    }
+
+    pub fn is_frozen(self) -> bool {
+        matches!(self, Self::Frozen | Self::FrozenSplit)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SheetPaneId {
+    BottomLeft,
+    BottomRight,
+    TopLeft,
+    TopRight,
+}
+
+impl SheetPaneId {
+    pub fn from_ooxml(pane: ooxml_types::worksheet::Pane) -> Self {
+        match pane {
+            ooxml_types::worksheet::Pane::BottomLeft => Self::BottomLeft,
+            ooxml_types::worksheet::Pane::BottomRight => Self::BottomRight,
+            ooxml_types::worksheet::Pane::TopLeft => Self::TopLeft,
+            ooxml_types::worksheet::Pane::TopRight => Self::TopRight,
+        }
+    }
+
+    pub fn to_ooxml(self) -> ooxml_types::worksheet::Pane {
+        match self {
+            Self::BottomLeft => ooxml_types::worksheet::Pane::BottomLeft,
+            Self::BottomRight => ooxml_types::worksheet::Pane::BottomRight,
+            Self::TopLeft => ooxml_types::worksheet::Pane::TopLeft,
+            Self::TopRight => ooxml_types::worksheet::Pane::TopRight,
+        }
+    }
+}
+
+/// Typed OOXML pane metadata for the primary sheet view.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetPaneConfig {
+    pub state: SheetPaneState,
+    pub x_split: f64,
+    pub y_split: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_left_cell: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_pane: Option<SheetPaneId>,
+}
+
+impl SheetPaneConfig {
+    pub fn from_ooxml(pane: &ooxml_types::worksheet::SheetPane) -> Self {
+        Self {
+            state: SheetPaneState::from_ooxml(pane.effective_state()),
+            x_split: pane.x_split,
+            y_split: pane.y_split,
+            top_left_cell: pane.top_left_cell.clone(),
+            active_pane: pane.active_pane.map(SheetPaneId::from_ooxml),
+        }
+    }
+
+    pub fn to_ooxml(&self) -> ooxml_types::worksheet::SheetPane {
+        ooxml_types::worksheet::SheetPane {
+            x_split: self.x_split,
+            y_split: self.y_split,
+            top_left_cell: self.top_left_cell.clone(),
+            active_pane: self.active_pane.map(SheetPaneId::to_ooxml),
+            state: Some(self.state.to_ooxml()),
+        }
+    }
+}
+
 /// Sheet view settings (zoom, visibility toggles, scroll position).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -482,6 +647,8 @@ pub struct SheetView {
     /// Zoom scale for page break preview (zoomScaleSheetLayoutView).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zoom_scale_sheet_layout_view: Option<u32>,
+    #[serde(default, skip_serializing_if = "crate::is_zero_u32")]
+    pub workbook_view_id: u32,
     pub scroll_row: u32,
     pub scroll_col: u32,
     /// Whether the original file had an explicit `topLeftCell` attribute on `<sheetView>`.
@@ -496,6 +663,9 @@ pub struct SheetView {
     /// Selection range from `<selection sqref="...">` (e.g. "E16" or "A1:B5").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqref: Option<String>,
+    /// Typed pane configuration from this `<sheetView>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane: Option<SheetPaneConfig>,
     /// All selection elements for round-trip fidelity.
     /// When present, these are used instead of active_cell/sqref to preserve
     /// multi-pane selections (frozen pane sheets have up to 4 selection elements).
@@ -522,15 +692,101 @@ impl Default for SheetView {
             view: None,
             zoom_scale_page_layout_view: None,
             zoom_scale_sheet_layout_view: None,
+            workbook_view_id: 0,
             scroll_row: 0,
             scroll_col: 0,
             has_explicit_top_left_cell: false,
             tab_selected: false,
             active_cell: None,
             sqref: None,
+            pane: None,
             selections: Vec::new(),
         }
     }
+}
+
+impl SheetView {
+    pub fn from_ooxml(sv: &ooxml_types::worksheet::SheetView) -> Self {
+        let (scroll_row, scroll_col) = sv
+            .top_left_cell
+            .as_deref()
+            .and_then(parse_a1_cell_ref)
+            .unwrap_or((0, 0));
+        let primary_selection = sv.selections.last();
+        Self {
+            show_gridlines: sv.show_grid_lines,
+            show_row_col_headers: sv.show_row_col_headers,
+            show_zeros: sv.show_zeros,
+            show_outline_symbols: sv.show_outline_symbols,
+            show_formulas: sv.show_formulas,
+            right_to_left: sv.right_to_left,
+            show_ruler: sv.show_ruler,
+            show_white_space: sv.show_white_space,
+            default_grid_color: sv.default_grid_color,
+            window_protection: sv.window_protection,
+            color_id: if sv.color_id == 64 {
+                None
+            } else {
+                Some(sv.color_id)
+            },
+            zoom_scale: if sv.zoom_scale == 100 {
+                None
+            } else {
+                Some(sv.zoom_scale)
+            },
+            zoom_scale_normal: if sv.zoom_scale_normal == 0 {
+                None
+            } else {
+                Some(sv.zoom_scale_normal)
+            },
+            view: if sv.view.is_default() {
+                None
+            } else {
+                Some(sv.view.to_ooxml().to_string())
+            },
+            zoom_scale_page_layout_view: sv.zoom_scale_page_layout_view,
+            zoom_scale_sheet_layout_view: sv.zoom_scale_sheet_layout_view,
+            workbook_view_id: sv.workbook_view_id,
+            scroll_row,
+            scroll_col,
+            has_explicit_top_left_cell: sv.top_left_cell.is_some(),
+            tab_selected: sv.tab_selected,
+            active_cell: primary_selection.and_then(|s| s.active_cell.clone()),
+            sqref: primary_selection.and_then(|s| s.sqref.clone()),
+            pane: sv.pane.as_ref().map(SheetPaneConfig::from_ooxml),
+            selections: sv.selections.clone(),
+        }
+    }
+}
+
+fn parse_a1_cell_ref(cell_ref: &str) -> Option<(u32, u32)> {
+    let mut col: u32 = 0;
+    let mut row_start = 0;
+    let bytes = cell_ref.as_bytes();
+    let mut i = 0;
+    if bytes.get(i) == Some(&b'$') {
+        i += 1;
+    }
+    while let Some(&b) = bytes.get(i) {
+        if b.is_ascii_alphabetic() {
+            col = col * 26 + (b.to_ascii_uppercase() - b'A' + 1) as u32;
+            row_start = i + 1;
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    if bytes.get(row_start) == Some(&b'$') {
+        row_start += 1;
+    }
+    if col == 0 || row_start >= cell_ref.len() {
+        return None;
+    }
+    let row: u32 = cell_ref[row_start..].parse().ok()?;
+    if row == 0 {
+        return None;
+    }
+    Some((row - 1, col - 1))
 }
 
 // MergeRegion is defined in domain::merge and re-exported via `use crate::domain::*` above.

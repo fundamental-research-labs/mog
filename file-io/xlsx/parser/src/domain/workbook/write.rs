@@ -22,6 +22,7 @@ pub use super::types::{CalcMode, CalcSettings, SheetDef, SheetState, WorkbookVie
 use crate::write::xml_writer::XmlWriter;
 use domain_types::domain::workbook::{
     FileSharing, FileVersion, ObjectDisplayMode, UpdateLinks, WorkbookProperties,
+    WorkbookWebPublishing,
 };
 
 /// Spreadsheet ML namespace
@@ -173,6 +174,8 @@ pub struct WorkbookWriter {
     file_sharing: Option<FileSharing>,
     /// Workbook properties.
     workbook_properties: Option<WorkbookProperties>,
+    /// Workbook web publishing metadata.
+    web_publishing: Option<WorkbookWebPublishing>,
     /// Sheet definitions
     sheets: Vec<SheetDef>,
     /// Defined names
@@ -329,6 +332,12 @@ impl WorkbookWriter {
         self
     }
 
+    /// Set workbook web publishing metadata.
+    pub fn set_web_publishing(&mut self, web_publishing: WorkbookWebPublishing) -> &mut Self {
+        self.web_publishing = Some(web_publishing);
+        self
+    }
+
     /// Set the raw `<pivotCaches>` XML element for workbook.xml.
     pub fn set_pivot_caches_xml(&mut self, xml: String) -> &mut Self {
         self.pivot_caches_xml = Some(xml);
@@ -385,6 +394,7 @@ impl WorkbookWriter {
             "definedNames",
             "calcPr",
             "pivotCaches",
+            "webPublishing",
         ]
         .iter()
         .any(|name| raw_xml_contains_element(raw_xml, name))
@@ -548,6 +558,8 @@ impl WorkbookWriter {
             w.raw_str(pivot_caches);
         }
 
+        self.write_web_publishing(&mut w);
+
         // Emit preserved elements after pivotCaches
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("workbook", "pivotCaches") {
@@ -676,6 +688,33 @@ impl WorkbookWriter {
         }
         elem.attr_num_if("defaultThemeVersion", properties.default_theme_version)
             .self_close();
+    }
+
+    fn write_web_publishing(&self, w: &mut XmlWriter) {
+        let Some(web_publishing) = &self.web_publishing else {
+            return;
+        };
+
+        let mut elem = w.start_element("webPublishing");
+        if let Some(value) = web_publishing.css {
+            elem = elem.attr_bool("css", value);
+        }
+        if let Some(value) = web_publishing.thicket {
+            elem = elem.attr_bool("thicket", value);
+        }
+        if let Some(value) = web_publishing.long_file_names {
+            elem = elem.attr_bool("longFileNames", value);
+        }
+        if let Some(value) = web_publishing.vml {
+            elem = elem.attr_bool("vml", value);
+        }
+        if let Some(value) = web_publishing.allow_png {
+            elem = elem.attr_bool("allowPng", value);
+        }
+        if let Some(value) = web_publishing.target_screen_size {
+            elem = elem.attr("targetScreenSize", value.to_ooxml());
+        }
+        elem.attr_num_if("dpi", web_publishing.dpi).self_close();
     }
 
     fn write_external_references(&self, w: &mut XmlWriter) {

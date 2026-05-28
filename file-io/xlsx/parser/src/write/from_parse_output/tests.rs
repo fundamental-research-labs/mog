@@ -4,10 +4,11 @@ use crate::domain::styles::write::ColorDef;
 use crate::infra::package_integrity::validate_archive_package_integrity;
 use crate::write::REL_PIVOT_TABLE;
 use domain_types::{
-    AnchorPosition, BorderFormat, BorderSide as DomainBorderSide, CellData as DomainCellData,
-    CellValue as DomainValue, ChartSpec, ChartType, ColDimension, ColStyleEntry,
-    DataTableOoxmlFlags, DataTableRegion, DocumentFormat, FillFormat, FontFormat, FrozenPane,
-    MergeRegion, NamedRange, ObjectSize, ParseOutput, RowDimension, SheetData, SheetDimensions,
+    AnchorPosition, BorderFormat, BorderSide as DomainBorderSide, CFCellRange, CFRule, CFStyle,
+    CellData as DomainCellData, CellValue as DomainValue, ChartSpec, ChartType, ColDimension,
+    ColStyleEntry, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentFormat,
+    FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ObjectSize, ParseOutput,
+    RoundTripContext, RowDimension, SheetData, SheetDimensions, WorkbookStylesheet,
 };
 use formula_types::CellRef;
 use std::sync::Arc;

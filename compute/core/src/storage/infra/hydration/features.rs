@@ -676,17 +676,24 @@ pub(super) fn hydrate_data_validations(
     y_window: Option<u32>,
     declared_count: Option<u32>,
 ) {
-    if data_validations.is_empty() {
+    if data_validations.is_empty()
+        && !disable_prompts
+        && x_window.is_none()
+        && y_window.is_none()
+        && declared_count.is_none()
+    {
         return;
     }
 
-    let dv_arr: yrs::ArrayRef =
-        meta_map.insert(txn, "dataValidations", yrs::ArrayPrelim::default());
+    if !data_validations.is_empty() {
+        let dv_arr: yrs::ArrayRef =
+            meta_map.insert(txn, "dataValidations", yrs::ArrayPrelim::default());
 
-    for dv in data_validations.iter() {
-        let entries = yrs_schema::validation::to_yrs_prelim(dv);
-        let dv_entry_prelim: MapPrelim = entries.into_iter().collect();
-        dv_arr.push_back(txn, dv_entry_prelim);
+        for dv in data_validations.iter() {
+            let entries = yrs_schema::validation::to_yrs_prelim(dv);
+            let dv_entry_prelim: MapPrelim = entries.into_iter().collect();
+            dv_arr.push_back(txn, dv_entry_prelim);
+        }
     }
 
     // Store container-level disablePrompts flag for round-trip fidelity
@@ -703,6 +710,49 @@ pub(super) fn hydrate_data_validations(
     // File-format container metadata; runtime validation edits clear this key.
     if let Some(count) = declared_count {
         meta_map.insert(txn, "dvDeclaredCount", count as i64);
+    }
+}
+
+pub(super) fn hydrate_x14_data_validations(
+    txn: &mut yrs::TransactionMut,
+    meta_map: &MapRef,
+    data_validations: &[domain_types::domain::validation::ValidationSpec],
+    disable_prompts: bool,
+    x_window: Option<u32>,
+    y_window: Option<u32>,
+    declared_count: Option<u32>,
+) {
+    if data_validations.is_empty()
+        && !disable_prompts
+        && x_window.is_none()
+        && y_window.is_none()
+        && declared_count.is_none()
+    {
+        return;
+    }
+
+    if !data_validations.is_empty() {
+        let dv_arr: yrs::ArrayRef =
+            meta_map.insert(txn, "x14DataValidations", yrs::ArrayPrelim::default());
+
+        for dv in data_validations.iter() {
+            let entries = yrs_schema::validation::to_yrs_prelim(dv);
+            let dv_entry_prelim: MapPrelim = entries.into_iter().collect();
+            dv_arr.push_back(txn, dv_entry_prelim);
+        }
+    }
+
+    if disable_prompts {
+        meta_map.insert(txn, "x14DvDisablePrompts", true);
+    }
+    if let Some(x) = x_window {
+        meta_map.insert(txn, "x14DvXWindow", x as i64);
+    }
+    if let Some(y) = y_window {
+        meta_map.insert(txn, "x14DvYWindow", y as i64);
+    }
+    if let Some(count) = declared_count {
+        meta_map.insert(txn, "x14DvDeclaredCount", count as i64);
     }
 }
 

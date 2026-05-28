@@ -338,6 +338,10 @@ fn test_styles_output_camel_case() {
             family: Some(2),
             scheme: Some("minor".to_string()),
             vert_align: None,
+            condense: None,
+            extend: None,
+            outline: None,
+            shadow: None,
         }],
         fills: vec![FillOutput {
             fill_type: "pattern".to_string(),

@@ -572,7 +572,10 @@ pub(in crate::storage::engine) fn create_custom_table_style(
     style: compute_table::custom_styles::CustomTableStyleConfig,
 ) -> Result<MutationResult, ComputeError> {
     let style_name = style.name.clone();
-    stores.custom_table_styles.insert(style_name.clone(), style);
+    stores
+        .custom_table_styles
+        .insert(style_name.clone(), style.clone());
+    persist_custom_table_style(stores, &style_name, &style)?;
     let mut result = MutationResult::empty();
     result.table_changes.push(TableChange {
         name: style_name.clone(),
@@ -588,6 +591,7 @@ pub(in crate::storage::engine) fn delete_custom_table_style(
     style_name: &str,
 ) -> Result<MutationResult, ComputeError> {
     stores.custom_table_styles.remove(style_name);
+    remove_custom_table_style(stores, style_name);
     Ok(MutationResult::empty())
 }
 
@@ -599,8 +603,46 @@ pub(in crate::storage::engine) fn update_custom_table_style(
 ) -> Result<MutationResult, ComputeError> {
     stores
         .custom_table_styles
-        .insert(style_name.to_string(), style);
+        .insert(style_name.to_string(), style.clone());
+    persist_custom_table_style(stores, style_name, &style)?;
     Ok(MutationResult::empty())
+}
+
+fn persist_custom_table_style(
+    stores: &mut EngineStores,
+    style_name: &str,
+    style: &compute_table::custom_styles::CustomTableStyleConfig,
+) -> Result<(), ComputeError> {
+    let json = serde_json::to_string(style).map_err(|e| ComputeError::Eval {
+        message: format!("Failed to serialize table style: {}", e),
+    })?;
+    let doc = stores.storage.doc();
+    let workbook = stores.storage.workbook_map();
+    let mut txn =
+        doc.transact_mut_with(yrs::Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
+    let styles_map = crate::storage::ensure_workbook_child_map(
+        workbook,
+        &mut txn,
+        compute_document::schema::KEY_CUSTOM_TABLE_STYLES,
+    );
+    styles_map.insert(
+        &mut txn,
+        style_name,
+        yrs::Any::String(std::sync::Arc::from(json.as_str())),
+    );
+    Ok(())
+}
+
+fn remove_custom_table_style(stores: &mut EngineStores, style_name: &str) {
+    let doc = stores.storage.doc();
+    let workbook = stores.storage.workbook_map();
+    let mut txn =
+        doc.transact_mut_with(yrs::Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
+    if let Some(yrs::Out::YMap(styles_map)) =
+        workbook.get(&txn, compute_document::schema::KEY_CUSTOM_TABLE_STYLES)
+    {
+        styles_map.remove(&mut txn, style_name);
+    }
 }
 
 /// Set a table definition from a `TableDef`.

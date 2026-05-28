@@ -378,6 +378,7 @@ fn regenerated_row_layout_flags_come_from_modeled_state() {
             hidden: true,
             custom_format: true,
             descent: Some(0.25),
+            ..Default::default()
         }],
         ..Default::default()
     };
@@ -441,6 +442,8 @@ fn roundtrip_print_settings_from_modeled_state() {
     );
     output.sheets[0].print_settings = Some(PrintSettings {
         paper_size: Some(9),
+        paper_width: Some("210mm".to_string()),
+        paper_height: Some("297mm".to_string()),
         orientation: Some("landscape".to_string()),
         scale: Some(85),
         fit_to_width: Some(1),
@@ -481,6 +484,12 @@ fn roundtrip_print_settings_from_modeled_state() {
         has_print_options: true,
         use_first_page_number: true,
         has_page_setup: true,
+        copies: Some(2),
+        grid_lines_set: false,
+        page_setup_properties: Some(domain_types::PageSetupProperties {
+            fit_to_page: true,
+            auto_page_breaks: false,
+        }),
         cell_comments: Some("asDisplayed".to_string()),
         print_errors: Some("dash".to_string()),
     });

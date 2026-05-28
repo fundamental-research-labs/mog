@@ -2,12 +2,13 @@
 
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat, ParseOutput,
-    ProtectionFormat,
+    ProtectionFormat, WorkbookStylesheet,
 };
 
 use crate::domain::styles::types::{
     AlignmentDef, BorderDef, BorderSideDef, BorderStyle, CellXfDef, ColorDef, FillDef, FontDef,
-    FontScheme, HorizontalAlign, PatternType, ProtectionDef, UnderlineStyle, VerticalAlign,
+    FontScheme, GradientStop, GradientType, HorizontalAlign, PatternType, ProtectionDef,
+    UnderlineStyle, VerticalAlign, VerticalAlignRun,
 };
 use crate::domain::styles::write::StylesWriter;
 
@@ -58,6 +59,62 @@ pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     }
 
     writer
+}
+
+pub(super) fn apply_workbook_stylesheet(
+    writer: &mut StylesWriter,
+    workbook_stylesheet: &WorkbookStylesheet,
+    include_cell_xfs: bool,
+) {
+    let stylesheet = &workbook_stylesheet.stylesheet;
+    writer.num_fmts = stylesheet.num_fmts.clone();
+    if !stylesheet.fonts.is_empty() {
+        writer.fonts = stylesheet.fonts.clone();
+    }
+    if !stylesheet.fills.is_empty() {
+        writer.fills = stylesheet.fills.clone();
+    }
+    if !stylesheet.borders.is_empty() {
+        writer.borders = stylesheet.borders.clone();
+    }
+    if !stylesheet.cell_style_xfs.is_empty() {
+        writer.cell_style_xfs = stylesheet.cell_style_xfs.clone();
+    }
+    if !stylesheet.cell_styles.is_empty() {
+        writer.cell_styles = stylesheet.cell_styles.clone();
+    }
+    writer.dxfs = stylesheet.dxfs.clone();
+    writer.colors = stylesheet.colors.clone();
+    writer.table_styles = stylesheet.table_styles.clone();
+    writer.default_table_style = stylesheet.default_table_style.clone();
+    writer.default_pivot_style = stylesheet.default_pivot_style.clone();
+    writer.known_fonts = stylesheet.known_fonts;
+    writer.ext_lst_raw = workbook_stylesheet.ext_lst_xml.clone();
+
+    if include_cell_xfs {
+        writer.cell_xfs.clear();
+        writer.cell_xfs.push(CellXfDef {
+            num_fmt_id: Some(0),
+            font_id: Some(0),
+            fill_id: Some(0),
+            border_id: Some(0),
+            xf_id: Some(0),
+            ..Default::default()
+        });
+        writer.cell_xfs.extend(stylesheet.cell_xfs.iter().cloned());
+    }
+
+    if !workbook_stylesheet.root_namespace_attrs.is_empty() {
+        let mut ns = crate::roundtrip::namespaces::NamespaceMap::new();
+        for (prefix, uri) in &workbook_stylesheet.root_namespace_attrs {
+            if prefix.is_empty() {
+                ns.set_default(uri.clone());
+            } else {
+                ns.add_prefixed(prefix.clone(), uri.clone());
+            }
+        }
+        writer.preserved_namespaces = Some(ns);
+    }
 }
 
 struct StyleComponentIds {
@@ -230,11 +287,27 @@ fn convert_font(font: &FontFormat) -> FontDef {
             "minor" => FontScheme::Minor,
             _ => FontScheme::None,
         }),
-        condense: None,
-        extend: None,
-        outline: None,
-        shadow: None,
-        vert_align: None,
+        condense: font.condense,
+        extend: font.extend,
+        outline: font.outline,
+        shadow: font.shadow,
+        vert_align: font
+            .vertical_align
+            .as_deref()
+            .and_then(|s| match s {
+                "baseline" => Some(VerticalAlignRun::Baseline),
+                "superscript" => Some(VerticalAlignRun::Superscript),
+                "subscript" => Some(VerticalAlignRun::Subscript),
+                _ => None,
+            })
+            .or_else(|| {
+                font.superscript
+                    .and_then(|v| v.then_some(VerticalAlignRun::Superscript))
+                    .or_else(|| {
+                        font.subscript
+                            .and_then(|v| v.then_some(VerticalAlignRun::Subscript))
+                    })
+            }),
     }
 }
 
@@ -281,6 +354,28 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
         .as_deref()
         .map(|c| hex_to_color_def_with_tint(c, fill.background_color_tint));
 
+    if let Some(gradient) = &fill.gradient_fill {
+        return FillDef::Gradient {
+            gradient_type: match gradient.gradient_type.as_str() {
+                "path" => GradientType::Path,
+                _ => GradientType::Linear,
+            },
+            degree: gradient.degree,
+            stops: gradient
+                .stops
+                .iter()
+                .map(|stop| GradientStop {
+                    position: stop.position,
+                    color: hex_to_color_def(&stop.color),
+                })
+                .collect(),
+            left: gradient.center.as_ref().map(|c| c.left),
+            right: None,
+            top: gradient.center.as_ref().map(|c| c.top),
+            bottom: None,
+        };
+    }
+
     FillDef::Pattern {
         pattern_type: Some(pattern_type),
         fg_color,
@@ -296,7 +391,10 @@ fn convert_border(border: &BorderFormat) -> BorderDef {
                 tracing::warn!(token = %s.style, "unknown BorderStyle on BorderSide → BorderSideDef conversion; using None");
                 BorderStyle::None
             });
-            let color = s.color.as_deref().map(hex_to_color_def);
+            let color = s
+                .color
+                .as_deref()
+                .map(|color| hex_to_color_def_with_tint(color, s.color_tint));
             BorderSideDef { style, color }
         })
     };

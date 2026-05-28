@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use super::helpers::*;
-use domain_types::{ColDimension, FrozenPane, MergeRegion, RowDimension, SheetDimensions};
+use domain_types::{
+    ColDimension, FrozenPane, MergeRegion, RowDimension, RowXmlHints, SheetDimensions,
+};
 use value_types::{CellValue, FiniteF64};
 
 #[test]
@@ -140,6 +142,55 @@ fn roundtrip_row_and_col_dimensions() {
         let diff = (orig_w - rt_w).abs();
         assert!(diff < 0.01, "Col {col} width mismatch: {orig_w} vs {rt_w}");
     }
+}
+
+#[test]
+fn roundtrip_row_metadata_through_yrs() {
+    let mut output = make_single_sheet(
+        "Row metadata",
+        vec![cell(0, 0, CellValue::Number(FiniteF64::new(1.0).unwrap()))],
+    );
+    output.sheets[0].dimensions.row_heights = vec![
+        RowDimension {
+            row: 0,
+            hidden: false,
+            explicit_hidden: true,
+            outline_level: Some(0),
+            explicit_outline_level_zero: true,
+            collapsed: Some(false),
+            thick_top: true,
+            thick_bot: true,
+            xml_hints: RowXmlHints {
+                spans: Some("1:4".to_string()),
+                bare_empty: false,
+            },
+            ..Default::default()
+        },
+        RowDimension {
+            row: 3,
+            xml_hints: RowXmlHints {
+                spans: None,
+                bare_empty: true,
+            },
+            ..Default::default()
+        },
+    ];
+    output.sheets[0].rows = 4;
+    output.sheets[0].cols = 1;
+
+    let rt = roundtrip(&output);
+    let rows = &rt.sheets[0].dimensions.row_heights;
+    let row0 = rows.iter().find(|r| r.row == 0).expect("row 1 metadata");
+    assert!(row0.explicit_hidden);
+    assert_eq!(row0.outline_level, Some(0));
+    assert!(row0.explicit_outline_level_zero);
+    assert_eq!(row0.collapsed, Some(false));
+    assert!(row0.thick_top);
+    assert!(row0.thick_bot);
+    assert_eq!(row0.xml_hints.spans.as_deref(), Some("1:4"));
+
+    let row3 = rows.iter().find(|r| r.row == 3).expect("bare row metadata");
+    assert!(row3.xml_hints.bare_empty);
 }
 
 #[test]

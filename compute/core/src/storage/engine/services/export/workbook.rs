@@ -14,7 +14,9 @@ use domain_types::{
     NamedRange, PersonInfo,
     domain::external_link::ExternalLink,
     domain::theme::ThemeData,
-    domain::workbook::{CalculationProperties, RefMode, WorkbookProtection, WorkbookView},
+    domain::workbook::{
+        CalculationProperties, RefMode, WorkbookProtection, WorkbookView, WorkbookWebPublishing,
+    },
     yrs_schema,
 };
 use yrs::{Any, Map, Out, Transact};
@@ -173,6 +175,72 @@ pub(super) fn export_shared_string_hints(
     };
 
     serde_json::from_str::<Vec<domain_types::SharedStringHint>>(&json_str).unwrap_or_default()
+}
+
+pub(super) fn export_workbook_stylesheet(
+    stores: &EngineStores,
+) -> Option<domain_types::WorkbookStylesheet> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let json = match workbook.get(&txn, KEY_WORKBOOK_STYLESHEET) {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return None,
+    };
+
+    serde_json::from_str::<domain_types::WorkbookStylesheet>(&json).ok()
+}
+
+pub(super) fn export_workbook_table_styles(
+    stores: &EngineStores,
+) -> (
+    Vec<ooxml_types::styles::TableStyleDef>,
+    Option<String>,
+    Option<String>,
+) {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let mut styles = Vec::<ooxml_types::styles::TableStyleDef>::new();
+    let mut default_table_style = None;
+    let mut default_pivot_style = None;
+
+    if let Some(Out::YMap(styles_map)) = workbook.get(&txn, KEY_XLSX_TABLE_STYLES) {
+        if let Some(Out::Any(Any::String(json))) = styles_map.get(&txn, "styles") {
+            styles = serde_json::from_str::<Vec<ooxml_types::styles::TableStyleDef>>(&json)
+                .unwrap_or_default();
+        }
+        if let Some(Out::Any(Any::String(value))) =
+            styles_map.get(&txn, "defaultTableStyle")
+        {
+            default_table_style = Some(value.to_string());
+        }
+        if let Some(Out::Any(Any::String(value))) =
+            styles_map.get(&txn, "defaultPivotStyle")
+        {
+            default_pivot_style = Some(value.to_string());
+        }
+    }
+
+    let mut existing_names: std::collections::HashSet<String> =
+        styles.iter().map(|style| style.name.to_lowercase()).collect();
+    for style in stores.custom_table_styles.values() {
+        if existing_names.insert(style.name.to_lowercase()) {
+            styles.push(ooxml_types::styles::TableStyleDef {
+                name: style.name.clone(),
+                pivot: Some(false),
+                table: Some(true),
+                count: Some(0),
+                elements: Vec::new(),
+                xr_uid: None,
+            });
+        }
+    }
+    styles.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    (styles, default_table_style, default_pivot_style)
 }
 
 pub(super) fn export_pivot_cache_records(
@@ -369,6 +437,27 @@ pub(super) fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> 
     };
 
     serde_json::from_str::<Vec<WorkbookView>>(&json).unwrap_or_default()
+}
+
+/// Export workbook web publishing metadata from the workbook-level Y.Map.
+pub(super) fn export_workbook_web_publishing(
+    stores: &EngineStores,
+) -> Option<WorkbookWebPublishing> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let web_map = match workbook.get(&txn, KEY_WEB_PUBLISHING) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let web_publishing = yrs_schema::web_publishing::from_yrs_map(&web_map, &txn);
+    if web_publishing == WorkbookWebPublishing::default() {
+        None
+    } else {
+        Some(web_publishing)
+    }
 }
 
 /// Export workbook-level threaded comment person identities.

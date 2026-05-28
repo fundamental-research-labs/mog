@@ -82,10 +82,13 @@ pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter
 
     // Page setup
     let has_page_setup = ps.paper_size.is_some()
+        || ps.paper_width.is_some()
+        || ps.paper_height.is_some()
         || ps.orientation.is_some()
         || ps.scale.is_some()
         || ps.fit_to_width.is_some()
         || ps.fit_to_height.is_some()
+        || ps.copies.is_some()
         || ps.black_and_white
         || ps.draft
         || ps.first_page_number.is_some()
@@ -96,12 +99,19 @@ pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter
         || ps.vertical_dpi.is_some()
         || ps.r_id.is_some()
         || ps.cell_comments.is_some()
-        || ps.print_errors.is_some();
+        || ps.print_errors.is_some()
+        || ps.has_page_setup;
 
     if has_page_setup {
         let mut setup = PageSetup::default();
         if let Some(paper_size) = ps.paper_size {
             setup.paper_size = Some(crate::domain::print::PaperSize::from_u32(paper_size));
+        }
+        if let Some(ref paper_width) = ps.paper_width {
+            setup.paper_width = ooxml_types::print::UniversalMeasure::from_ooxml(paper_width);
+        }
+        if let Some(ref paper_height) = ps.paper_height {
+            setup.paper_height = ooxml_types::print::UniversalMeasure::from_ooxml(paper_height);
         }
         if let Some(ref orient) = ps.orientation {
             setup.orientation = Orientation::from_ooxml(orient);
@@ -130,6 +140,9 @@ pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter
         }
         if let Some(vdpi) = ps.vertical_dpi {
             setup.vertical_dpi = Some(vdpi);
+        }
+        if let Some(copies) = ps.copies {
+            setup.copies = Some(copies.max(1));
         }
         if let Some(ref rid) = ps.r_id {
             setup.r_id = Some(rid.clone());
@@ -174,9 +187,16 @@ pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter
     }
 
     // Print options (gridlines, headings, centering)
-    if ps.gridlines || ps.headings || ps.h_centered || ps.v_centered || ps.has_print_options {
+    if ps.gridlines
+        || ps.headings
+        || ps.h_centered
+        || ps.v_centered
+        || !ps.grid_lines_set
+        || ps.has_print_options
+    {
         let mut options = PrintOptions::default();
         options.grid_lines = ps.gridlines;
+        options.grid_lines_set = ps.grid_lines_set;
         options.headings = ps.headings;
         options.horizontal_centered = ps.h_centered;
         options.vertical_centered = ps.v_centered;

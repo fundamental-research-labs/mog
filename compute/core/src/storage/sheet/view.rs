@@ -9,6 +9,7 @@ use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 use cell_types::SheetId;
 use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use domain_types::domain::sheet::{FrozenPanes, SheetScrollPosition, SheetViewOptions};
+use domain_types::{SheetPaneConfig, SheetPaneId, SheetPaneState};
 
 use super::yrs_helpers::{
     KEY_FROZEN_COLS, KEY_FROZEN_ROWS, KEY_RIGHT_TO_LEFT, KEY_SCROLL_LEFT_COL, KEY_SCROLL_TOP_ROW,
@@ -45,7 +46,43 @@ pub(crate) fn set_frozen_panes(
     if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
         meta.insert(&mut txn, KEY_FROZEN_ROWS, Any::Number(rows as f64));
         meta.insert(&mut txn, KEY_FROZEN_COLS, Any::Number(cols as f64));
+        if rows > 0 || cols > 0 {
+            let active_pane = match (rows > 0, cols > 0) {
+                (true, true) => SheetPaneId::BottomRight,
+                (true, false) => SheetPaneId::BottomLeft,
+                (false, true) => SheetPaneId::TopRight,
+                (false, false) => SheetPaneId::TopLeft,
+            };
+            let pane = SheetPaneConfig {
+                state: SheetPaneState::Frozen,
+                x_split: cols as f64,
+                y_split: rows as f64,
+                top_left_cell: Some(to_a1_cell(rows, cols)),
+                active_pane: Some(active_pane),
+            };
+            if let Ok(json) = serde_json::to_string(&pane) {
+                meta.insert(
+                    &mut txn,
+                    "sheetPaneConfig",
+                    Any::String(Arc::from(json.as_str())),
+                );
+            }
+        } else {
+            meta.remove(&mut txn, "sheetPaneConfig");
+            meta.remove(&mut txn, "frozenPaneTopLeftCell");
+        }
     }
+}
+
+fn to_a1_cell(row: u32, col: u32) -> String {
+    let mut col_num = col + 1;
+    let mut letters = String::new();
+    while col_num > 0 {
+        col_num -= 1;
+        letters.insert(0, (b'A' + (col_num % 26) as u8) as char);
+        col_num /= 26;
+    }
+    format!("{}{}", letters, row + 1)
 }
 
 // =========================================================================

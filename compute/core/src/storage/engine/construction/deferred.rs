@@ -624,6 +624,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             custom_cell_styles: FxHashMap::default(),
         };
         load_custom_cell_styles(&mut stores);
+        load_custom_table_styles(&mut stores);
 
         DeferredHydrationCompletion {
             stores,

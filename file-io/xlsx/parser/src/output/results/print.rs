@@ -41,6 +41,10 @@ pub struct HeaderFooterOutput {
 pub struct PrintSettingsOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub paper_size: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paper_width: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paper_height: Option<String>,
     pub orientation: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scale: Option<u16>,
@@ -51,6 +55,8 @@ pub struct PrintSettingsOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fit_to_height: Option<u16>,
     pub grid_lines: bool,
+    #[serde(default = "default_grid_lines_set")]
+    pub grid_lines_set: bool,
     pub headings: bool,
     pub horizontal_centered: bool,
     pub vertical_centered: bool,
@@ -99,6 +105,19 @@ pub struct PrintSettingsOutput {
     /// Number of copies to print.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub copies: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_setup_properties: Option<PageSetupPropertiesOutput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSetupPropertiesOutput {
+    pub fit_to_page: bool,
+    pub auto_page_breaks: bool,
+}
+
+fn default_grid_lines_set() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +195,8 @@ pub fn build_print_settings_output(
 
     let settings = PrintSettingsOutput {
         paper_size: page_setup.and_then(|p| p.paper_size.map(|ps| ps.as_u32() as u8)),
+        paper_width: page_setup.and_then(|p| p.paper_width.as_ref().map(|v| v.to_ooxml())),
+        paper_height: page_setup.and_then(|p| p.paper_height.as_ref().map(|v| v.to_ooxml())),
         orientation: page_setup
             .map(|p| p.orientation.to_ooxml().to_string())
             .unwrap_or_else(|| "default".to_string()),
@@ -183,6 +204,7 @@ pub fn build_print_settings_output(
         fit_to_width: page_setup.and_then(|p| p.fit_to_width),
         fit_to_height: page_setup.and_then(|p| p.fit_to_height),
         grid_lines: print_options.map(|o| o.grid_lines).unwrap_or(false),
+        grid_lines_set: print_options.map(|o| o.grid_lines_set).unwrap_or(true),
         headings: print_options.map(|o| o.headings).unwrap_or(false),
         horizontal_centered: print_options
             .map(|o| o.horizontal_centered)
@@ -218,6 +240,13 @@ pub fn build_print_settings_output(
             }
         }),
         copies: page_setup.and_then(|p| p.copies),
+        page_setup_properties: ps
+            .page_setup_properties
+            .as_ref()
+            .map(|props| PageSetupPropertiesOutput {
+                fit_to_page: props.fit_to_page,
+                auto_page_breaks: props.auto_page_breaks,
+            }),
     };
 
     let row_breaks: Vec<PageBreakOutput> = ps

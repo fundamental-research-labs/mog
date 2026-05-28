@@ -181,6 +181,29 @@ pub(super) fn hydrate_workbook_tables(
     }
 }
 
+pub(super) fn hydrate_workbook_table_styles(
+    workbook: &MapRef,
+    table_styles: &[ooxml_types::styles::TableStyleDef],
+    default_table_style: &Option<String>,
+    default_pivot_style: &Option<String>,
+    txn: &mut yrs::TransactionMut,
+) {
+    if table_styles.is_empty() && default_table_style.is_none() && default_pivot_style.is_none() {
+        return;
+    }
+
+    let styles_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_XLSX_TABLE_STYLES);
+    if let Ok(json) = serde_json::to_string(table_styles) {
+        styles_map.insert(txn, "styles", Any::String(Arc::from(json.as_str())));
+    }
+    if let Some(style) = default_table_style {
+        styles_map.insert(txn, "defaultTableStyle", Any::String(Arc::from(style.as_str())));
+    }
+    if let Some(style) = default_pivot_style {
+        styles_map.insert(txn, "defaultPivotStyle", Any::String(Arc::from(style.as_str())));
+    }
+}
+
 /// Write a `ThemeData` value into the workbook-level `"theme"` map in Yrs.
 ///
 /// This is the single source of truth for persisting theme data. Both the
@@ -270,6 +293,28 @@ pub(super) fn hydrate_workbook_views(
         crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_SETTINGS);
     if let Ok(json) = serde_json::to_string(workbook_views) {
         settings_map.insert(txn, "workbookViews", Any::String(Arc::from(json.as_str())));
+    }
+}
+
+/// Hydrate workbook web publishing metadata into a workbook-level Y.Map.
+pub(super) fn hydrate_workbook_web_publishing(
+    workbook: &MapRef,
+    web_publishing: &Option<domain_types::domain::workbook::WorkbookWebPublishing>,
+    txn: &mut yrs::TransactionMut,
+) {
+    let Some(web_publishing) = web_publishing else {
+        return;
+    };
+
+    let entries = yrs_schema::web_publishing::to_yrs_prelim(web_publishing);
+    if entries.is_empty() {
+        return;
+    }
+
+    let web_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WEB_PUBLISHING);
+    for (key, value) in entries {
+        web_map.insert(txn, key, value);
     }
 }
 

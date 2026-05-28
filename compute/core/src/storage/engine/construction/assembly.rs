@@ -262,6 +262,7 @@ fn assemble_engine_inner(
     };
 
     load_custom_cell_styles(&mut engine.stores);
+    load_custom_table_styles(&mut engine.stores);
     engine.init_cf_caches();
     normalize_named_range_refs(&mut engine);
     sync_enable_calculation_flags(&mut engine);

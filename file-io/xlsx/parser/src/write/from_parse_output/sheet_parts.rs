@@ -131,11 +131,6 @@ pub(super) fn build_sheet_parts(
                     }
                     sheet_writer.set_preserved_namespaces(ns_map);
                 }
-                sheet_preservation::apply_row_hints_for_export(
-                    &mut sheet_writer,
-                    sheet_data,
-                    sheet_rt,
-                );
                 if let Some(preserved) =
                     sheet_preservation::preserved_elements_for_export(sheet_data, sheet_rt)
                 {
@@ -156,7 +151,12 @@ pub(super) fn build_sheet_parts(
         // `data_validations_disable_prompts`, `data_validations_x_window`,
         // `data_validations_y_window`). The former raw-XML sidecar on
         // `SheetRoundTripContext.data_validations_xml` has been removed.
-        if !sheet_data.data_validations.is_empty() {
+        if !sheet_data.data_validations.is_empty()
+            || sheet_data.data_validations_disable_prompts
+            || sheet_data.data_validations_x_window.is_some()
+            || sheet_data.data_validations_y_window.is_some()
+            || sheet_data.data_validations_declared_count.is_some()
+        {
             let xml = crate::domain::validation::write::validations_xml_from_domain_with_opts(
                 &sheet_data.data_validations,
                 sheet_data.data_validations_disable_prompts,
@@ -214,13 +214,7 @@ pub(super) fn build_sheet_parts(
         // Re-apply explicit hidden="0" AFTER outline groups, because
         // apply_outline_groups_rows_only may override hidden=true for grouped rows
         // that were actually visible in the original (e.g., partially expanded groups).
-        if let Some(sheet_rt) = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)) {
-            sheet_preservation::apply_visible_row_hints_for_export(
-                &mut sheet_writer,
-                sheet_data,
-                sheet_rt,
-            );
-        }
+        sheet_preservation::apply_visible_row_hints_for_export(&mut sheet_writer, sheet_data);
         // ── Auto Filter ─────────────────────────────────────────────────
         // Typed OOXML preservation: auto filter now reconstructs from the typed
         // `SheetData.auto_filter` only. The former raw-XML sidecar
@@ -243,19 +237,41 @@ pub(super) fn build_sheet_parts(
 
         // ── Sparklines / extLst ──────────────────────────────────────────
         let sheet_rt_for_ext = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
+        let mut ext_entries = Vec::new();
         if !sheet_data.sparkline_groups.is_empty() {
             let xml = crate::domain::sparklines::write::sparkline_groups_xml_from_domain(
                 &sheet_data.name,
                 &sheet_data.sparklines,
                 &sheet_data.sparkline_groups,
             );
-            sheet_writer.set_ext_lst_xml(xml);
+            ext_entries.push(xml);
         } else if !sheet_data.sparklines.is_empty() {
             let xml = crate::domain::sparklines::write::sparklines_xml_from_domain(
                 &sheet_data.name,
                 &sheet_data.sparklines,
             );
-            sheet_writer.set_ext_lst_xml(xml);
+            ext_entries.push(xml);
+        }
+        if !sheet_data.x14_data_validations.is_empty()
+            || sheet_data.x14_data_validations_disable_prompts
+            || sheet_data.x14_data_validations_x_window.is_some()
+            || sheet_data.x14_data_validations_y_window.is_some()
+            || sheet_data.x14_data_validations_declared_count.is_some()
+        {
+            let xml =
+                crate::domain::validation::write::x14_validations_ext_xml_from_domain_with_opts(
+                    &sheet_data.x14_data_validations,
+                    sheet_data.x14_data_validations_disable_prompts,
+                    sheet_data.x14_data_validations_x_window,
+                    sheet_data.x14_data_validations_y_window,
+                    sheet_data.x14_data_validations_declared_count,
+                );
+            if !xml.is_empty() {
+                ext_entries.push(xml);
+            }
+        }
+        if !ext_entries.is_empty() {
+            sheet_writer.set_ext_lst_xml(combine_ext_lst_entries(&ext_entries));
         } else {
             if let Some(sheet_rt) = sheet_rt_for_ext {
                 if let Some(ext_xml) =
@@ -484,6 +500,25 @@ pub(super) fn build_sheet_parts(
         all_chart_entries,
         all_chart_ex_entries,
     }
+}
+
+fn combine_ext_lst_entries(parts: &[String]) -> String {
+    let mut xml = String::from("<extLst>");
+    for part in parts {
+        if let Some(inner) = ext_lst_inner(part) {
+            xml.push_str(inner);
+        } else {
+            xml.push_str(part);
+        }
+    }
+    xml.push_str("</extLst>");
+    xml
+}
+
+fn ext_lst_inner(xml: &str) -> Option<&str> {
+    let start_tag_end = xml.find("<extLst>").map(|pos| pos + "<extLst>".len())?;
+    let end = xml.rfind("</extLst>")?;
+    (start_tag_end <= end).then_some(&xml[start_tag_end..end])
 }
 
 fn original_drawing_path_for_export(

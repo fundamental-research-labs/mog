@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use domain_types::{SheetData, SheetRoundTripContext};
 
 use crate::write::sheet::SheetWriter;
@@ -26,59 +24,13 @@ pub(super) fn preserved_elements_for_export(
         .then(|| crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(&pairs))
 }
 
-pub(super) fn apply_row_hints_for_export(
-    writer: &mut SheetWriter,
-    sheet_data: &SheetData,
-    sheet_rt: &SheetRoundTripContext,
-) {
-    let rows = modeled_rows(sheet_data);
-
-    for (row, spans) in &sheet_rt.row_spans {
-        if rows.contains(row) {
-            writer.set_row_spans(*row, spans.clone());
-        }
-    }
-    for &row in &sheet_rt.row_thick_bot {
-        if rows.contains(&row) {
-            writer.set_row_thick_bot(row, true);
-        }
-    }
-    for &row in &sheet_rt.row_thick_top {
-        if rows.contains(&row) {
-            writer.set_row_thick_top(row, true);
-        }
-    }
-    for (&row, &collapsed) in &sheet_rt.row_collapsed {
-        if rows.contains(&row) {
-            writer.set_row_collapsed(row, collapsed);
-        }
-    }
-    for &row in &sheet_rt.row_hidden_explicit_false {
-        if rows.contains(&row) {
-            writer.set_row_hidden(row, false);
-        }
-    }
-    for &row in &sheet_rt.row_outline_level_zero {
-        if rows.contains(&row) {
-            writer.set_row_outline_level(row, 0);
-        }
-    }
-    for &row in &sheet_rt.bare_empty_rows {
-        if rows.contains(&row) {
-            writer.mark_bare_empty_row(row);
-        }
-    }
-}
-
 pub(super) fn apply_visible_row_hints_for_export(
     writer: &mut SheetWriter,
     sheet_data: &SheetData,
-    sheet_rt: &SheetRoundTripContext,
 ) {
-    let rows = modeled_rows(sheet_data);
-    for &row in &sheet_rt.row_hidden_explicit_false {
-        if rows.contains(&row) {
-            writer.set_row_hidden(row, false);
+    for row_dim in &sheet_data.dimensions.row_heights {
+        if row_dim.explicit_hidden && !row_dim.hidden {
+            writer.set_row_hidden(row_dim.row, false);
         }
     }
 }
@@ -96,12 +48,7 @@ pub(super) fn standalone_ext_lst_for_export<'a>(
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
     if raw_xml_contains_element(xml, "sheetPr") {
-        if sheet_data.outline_properties.is_some() || raw_xml_contains_element(xml, "outlinePr") {
-            return false;
-        }
-        if sheet_data.print_settings.is_some() && raw_xml_contains_element(xml, "pageSetUpPr") {
-            return false;
-        }
+        return false;
     }
     if raw_worksheet_element_contains_modeled_child(xml) {
         return false;
@@ -177,6 +124,7 @@ fn sheet_has_modeled_ext_lst_owner(sheet_data: &SheetData) -> bool {
     !sheet_data.sparklines.is_empty()
         || !sheet_data.sparkline_groups.is_empty()
         || !sheet_data.data_validations.is_empty()
+        || !sheet_data.x14_data_validations.is_empty()
         || !sheet_data.conditional_formats.is_empty()
 }
 
@@ -191,7 +139,9 @@ fn raw_ext_lst_conflicts_with_modeled_owner(sheet_data: &SheetData, xml: &str) -
         return true;
     }
 
-    if owners.x14_data_validations && !sheet_data.data_validations.is_empty() {
+    if owners.x14_data_validations
+        && (!sheet_data.data_validations.is_empty() || !sheet_data.x14_data_validations.is_empty())
+    {
         return true;
     }
 
@@ -285,24 +235,6 @@ fn raw_xml_start_element_names(xml: &str) -> Vec<(Option<&str>, &str)> {
     }
 
     names
-}
-
-fn modeled_rows(sheet_data: &SheetData) -> HashSet<u32> {
-    let mut rows: HashSet<u32> = sheet_data.cells.iter().map(|cell| cell.row).collect();
-    rows.extend(sheet_data.dimensions.row_heights.iter().map(|row| row.row));
-    rows.extend(sheet_data.row_styles.iter().map(|row| row.row));
-    for run in &sheet_data.authored_style_runs {
-        rows.extend(run.start_row..=run.end_row);
-    }
-    for group in &sheet_data.outline_groups {
-        if group.is_row {
-            rows.extend(group.start..=group.end);
-            if group.collapsed && !group.collapsed_on_member {
-                rows.insert(group.end + 1);
-            }
-        }
-    }
-    rows
 }
 
 #[cfg(test)]

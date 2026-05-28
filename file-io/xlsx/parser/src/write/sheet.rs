@@ -32,7 +32,8 @@ use crate::domain::worksheet::write::{
 use crate::roundtrip::unknown_elements::PreservedXml;
 use domain_types::AuthoredStyleRun;
 pub use ooxml_types::worksheet::{
-    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetView, SheetViewType,
+    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
+    SheetViewType,
 };
 use std::collections::BTreeMap;
 
@@ -69,7 +70,7 @@ pub struct SheetWriter {
     /// Sheet view settings (one or more `<sheetView>` elements)
     sheet_views: Vec<SheetView>,
     /// Modeled worksheet properties emitted as `<sheetPr>`.
-    outline_properties: Option<OutlineProperties>,
+    sheet_properties: Option<SheetProperties>,
     /// Print settings (margins, page setup, header/footer, print options, breaks)
     print_writer: Option<PrintWriter>,
     /// Sheet format properties (default row height, column width)
@@ -129,7 +130,7 @@ impl SheetWriter {
             authored_style_runs: Vec::new(),
             merges: Vec::new(),
             sheet_views: vec![SheetView::default()],
-            outline_properties: None,
+            sheet_properties: None,
             print_writer: None,
             sheet_format_pr: SheetFormatPr::default(),
             uid: None,
@@ -618,7 +619,15 @@ impl SheetWriter {
 
     /// Set modeled worksheet outline properties.
     pub fn set_outline_properties(&mut self, outline_properties: OutlineProperties) -> &mut Self {
-        self.outline_properties = Some(outline_properties);
+        let mut properties = self.sheet_properties.take().unwrap_or_default();
+        properties.outline_pr = Some(outline_properties);
+        self.sheet_properties = Some(properties);
+        self
+    }
+
+    /// Set modeled worksheet properties.
+    pub fn set_sheet_properties(&mut self, sheet_properties: SheetProperties) -> &mut Self {
+        self.sheet_properties = Some(sheet_properties);
         self
     }
 
@@ -789,6 +798,10 @@ impl SheetWriter {
             || self
                 .data_validations_xml
                 .as_ref()
+                .map_or(false, |xml| xml.contains("xr:uid"))
+            || self
+                .ext_lst_xml
+                .as_ref()
                 .map_or(false, |xml| xml.contains("xr:uid"));
 
         // Build mc:Ignorable from Tier 1 + Tier 2 prefixes.
@@ -921,7 +934,7 @@ impl SheetWriter {
             }
         }
 
-        write_sheet_properties(&mut w, self.outline_properties.as_ref());
+        write_sheet_properties(&mut w, self.sheet_properties.as_ref());
 
         // Write dimension
         self.write_dimension(&mut w);
@@ -1328,6 +1341,8 @@ impl SheetWriter {
             && row_def.outline_level.is_none()
             && row_def.descent.is_none()
             && row_def.collapsed.is_none()
+            && !row_def.thick_top
+            && !row_def.thick_bot
             && row_def.spans.is_none()
             && !row_def.bare_empty
         {

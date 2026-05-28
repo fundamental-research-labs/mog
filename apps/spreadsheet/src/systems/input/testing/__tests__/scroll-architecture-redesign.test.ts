@@ -249,6 +249,16 @@ describe('Trackpad vs discrete wheel detection', () => {
     expect(coordinator.detectTrackpadInput(event)).toBe(false);
   });
 
+  it('deltaMode === 0 + large vertical pixel delta → direct pixel scroll', () => {
+    const event = createWheelEvent({ deltaMode: 0, deltaX: 0, deltaY: 3000 });
+    expect(coordinator.detectTrackpadInput(event)).toBe(true);
+  });
+
+  it('deltaMode === 0 + large horizontal pixel delta → direct pixel scroll', () => {
+    const event = createWheelEvent({ deltaMode: 0, deltaX: -3000, deltaY: 0 });
+    expect(coordinator.detectTrackpadInput(event)).toBe(true);
+  });
+
   it('deltaMode === 0 + integer deltas + high frequency (dt < 50ms) → trackpad', () => {
     // Simulate two rapid events to establish high frequency
     const event1 = createWheelEvent({ deltaMode: 0, deltaX: 0, deltaY: 10 });

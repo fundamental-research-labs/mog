@@ -786,6 +786,9 @@ export class InputCoordinator {
    *
    * Heuristic (applied to RAW event data before normalization):
    * - deltaMode !== 0 → discrete wheel (line/page mode; trackpads always send pixel mode)
+   * - deltaMode === 0 + very large pixel delta → direct pixel scroll / trackpad-like
+   * (app-eval and programmatic pixel scrolls have already supplied the full distance,
+   * so app-generated mouse-wheel momentum must not amplify them)
    * - deltaMode === 0 + fractional deltas → trackpad (discrete wheels produce integers)
    * - deltaMode === 0 + integer deltas + high frequency (dt < 50ms) → trackpad
    * (trackpads emit many small events at high frequency during inertia)
@@ -794,6 +797,9 @@ export class InputCoordinator {
   detectTrackpadInput(event: WheelEvent): boolean {
     // Non-pixel deltaMode is always a discrete wheel
     if (event.deltaMode !== 0) return false;
+
+    // Large pixel-mode deltas are direct scroll distances, not physical wheel ticks.
+    if (Math.max(Math.abs(event.deltaX), Math.abs(event.deltaY)) >= 1000) return true;
 
     // Fractional deltas are a strong trackpad signal — discrete wheels produce integers
     if (event.deltaX % 1 !== 0 || event.deltaY % 1 !== 0) return true;

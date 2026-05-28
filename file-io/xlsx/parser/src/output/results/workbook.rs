@@ -638,6 +638,11 @@ pub struct FullParseResult {
     /// Extracted from `<sheet r:id="rIdN"/>` in workbook.xml.
     #[serde(skip)]
     pub sheet_workbook_r_ids: Vec<String>,
+    /// Workbook-order sheet/package inventory resolved from workbook.xml,
+    /// workbook relationships, content types, and package membership before
+    /// worksheet parsing.
+    #[serde(skip)]
+    pub workbook_sheet_inventory: Vec<domain_types::WorkbookSheetPackageInfo>,
     /// Imported `xl/media/*` bytes used only to hydrate current picture and
     /// OLE-preview owners before parser state is dropped.
     #[serde(skip)]

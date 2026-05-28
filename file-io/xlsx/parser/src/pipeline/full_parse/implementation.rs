@@ -37,7 +37,7 @@ use crate::domain::tables::read::parse_tables_for_sheet;
 use crate::domain::themes;
 use crate::domain::validation::read::{parse_data_validations, parse_x14_data_validations};
 use crate::domain::workbook::read as workbook;
-use crate::domain::workbook::read::parse_calc_settings;
+use crate::domain::workbook::read::{SheetPackageContext, parse_calc_settings};
 use crate::domain::worksheet::read::{
     parse_col_widths, parse_frozen_pane, parse_merge_cells, parse_sheet_format_pr,
     parse_sheet_views,
@@ -184,6 +184,18 @@ fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
         pos = next;
     }
     count
+}
+
+fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
+    context
+        .owner_part_path
+        .as_deref()
+        .and_then(|path| {
+            path.strip_prefix("xl/worksheets/sheet")
+                .and_then(|tail| tail.strip_suffix(".xml"))
+                .and_then(|digits| digits.parse::<usize>().ok())
+        })
+        .unwrap_or(context.workbook_order + 1)
 }
 
 /// Parse an XLSX file from raw bytes and return a full structured result.
@@ -351,6 +363,37 @@ pub(super) fn parse_xlsx_full_native_impl(
         .map_err(|e| format!("Failed to read xl/_rels/workbook.xml.rels: {}", e))?;
     let workbook_relationships = workbook::parse_all_rels(&wb_rels_xml);
 
+    // Parse [Content_Types].xml before worksheet parsing so workbook sheet
+    // identity is relationship/content-type driven instead of physical path
+    // driven.
+    let parsed_content_types = archive
+        .get_content_types()
+        .ok()
+        .and_then(|xml| crate::domain::content_types::read::ContentTypes::parse(&xml).ok());
+    let content_type_defaults = parsed_content_types
+        .as_ref()
+        .map(|ct| {
+            ct.ordered_defaults()
+                .map(|(ext, mime)| (ext.to_string(), mime.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let content_type_overrides = parsed_content_types
+        .as_ref()
+        .map(|ct| {
+            ct.ordered_overrides()
+                .map(|(part, mime)| (part.to_string(), mime.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
+        &sheet_infos,
+        &workbook_relationships,
+        parsed_content_types.as_ref(),
+        &archive,
+    );
+    let sheet_package_contexts = workbook::sheet_package_contexts(&workbook_sheet_inventory);
+
     // Parse defined names
     let defined_names_parser = names::DefinedNames::parse(&workbook_xml);
     let defined_names: Vec<DefinedNameOutput> = defined_names_parser
@@ -396,8 +439,10 @@ pub(super) fn parse_xlsx_full_native_impl(
 
     let t4 = tick(&timings);
 
-    // Parse each worksheet
-    let sheet_count = archive.worksheet_count();
+    // Parse each editable worksheet in workbook order. Workbook inventory keeps
+    // non-worksheet sheet kinds and invalid tabs without turning them into
+    // editable worksheet payloads.
+    let sheet_count = sheet_package_contexts.len();
     // When max_sheets is set, only parse cell data for the first N sheets.
     let parse_cell_count = match max_sheets {
         Some(n) => sheet_count.min(n),
@@ -441,17 +486,22 @@ pub(super) fn parse_xlsx_full_native_impl(
             parsed_chart_ex: Vec<crate::output::results::ParsedChartEx>,
         }
 
-        let mut pre_sheets: Vec<PreDecompressed> = Vec::with_capacity(sheet_count);
-        for sheet_idx in 0..sheet_count {
-            let sheet_num = sheet_idx + 1;
-            let sheet_name = sheet_infos
-                .get(sheet_idx)
-                .map(|si| si.name.clone())
-                .unwrap_or_else(|| format!("Sheet{}", sheet_num));
+        let mut pre_sheets: Vec<PreDecompressed> = Vec::with_capacity(parse_cell_count);
+        for (sheet_idx, sheet_context) in sheet_package_contexts
+            .iter()
+            .take(parse_cell_count)
+            .enumerate()
+        {
+            let sheet_num = legacy_sheet_num_for_context(sheet_context);
+            let sheet_name = sheet_context.sheet_name.clone();
+            let sheet_path = sheet_context
+                .owner_part_path
+                .as_deref()
+                .ok_or_else(|| format!("Workbook sheet {} has no worksheet part path", sheet_name))?;
 
             let worksheet_xml = archive
-                .get_worksheet(sheet_num)
-                .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_num, e))?;
+                .read_file(sheet_path)
+                .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_path, e))?;
             ensure_count_limit(
                 "worksheet cell",
                 count_worksheet_cell_elements(&worksheet_xml),
@@ -588,10 +638,10 @@ pub(super) fn parse_xlsx_full_native_impl(
         let mut par_sheet_namespaces = Vec::with_capacity(sorted.len());
         for r in sorted {
             let mut s = r.sheet;
-            s.sheet_id = sheet_infos.get(s.index).map(|si| si.sheet_id);
-            s.state = sheet_infos
+            s.sheet_id = sheet_package_contexts.get(s.index).and_then(|ctx| ctx.sheet_id);
+            s.state = sheet_package_contexts
                 .get(s.index)
-                .map(|si| si.state)
+                .map(|ctx| ctx.visibility)
                 .unwrap_or_default();
             sheets.push(s);
             par_sheet_namespaces.push(r.namespaces);
@@ -602,8 +652,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         // Fall through to sequential path when profiling is enabled
         parse_sheets_sequential(
             &archive,
-            sheet_count,
-            &sheet_infos,
+            &sheet_package_contexts[..parse_cell_count],
             &shared_strings,
             &pivot_caches,
             &mut ctx,
@@ -619,8 +668,7 @@ pub(super) fn parse_xlsx_full_native_impl(
     #[cfg(not(all(not(target_arch = "wasm32"), feature = "parallel")))]
     let mut sheets: Vec<FullParsedSheet> = parse_sheets_sequential(
         &archive,
-        parse_cell_count,
-        &sheet_infos,
+        &sheet_package_contexts[..parse_cell_count],
         &shared_strings,
         &pivot_caches,
         &mut ctx,
@@ -726,27 +774,6 @@ pub(super) fn parse_xlsx_full_native_impl(
         crate::domain::web_extensions::read::parse_web_extensions(&archive).map(|(_, parts)| parts);
     ensure_no_archive_safety_error(&archive)?;
 
-    // Parse [Content_Types].xml to preserve original default and override mappings for round-trip fidelity
-    let parsed_content_types = archive
-        .get_content_types()
-        .ok()
-        .and_then(|xml| crate::domain::content_types::read::ContentTypes::parse(&xml).ok());
-    let content_type_defaults = parsed_content_types
-        .as_ref()
-        .map(|ct| {
-            ct.ordered_defaults()
-                .map(|(ext, mime)| (ext.to_string(), mime.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let content_type_overrides = parsed_content_types
-        .as_ref()
-        .map(|ct| {
-            ct.ordered_overrides()
-                .map(|(part, mime)| (part.to_string(), mime.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     let imported_media_parts =
         collect_imported_binary_parts(&archive, "xl/media/", &content_type_overrides);
     let imported_ole_parts =
@@ -773,7 +800,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         errors,
         stats: ParseStats {
             total_cells,
-            total_sheets: sheet_count as u32,
+            total_sheets: workbook_sheet_inventory.len() as u32,
             parse_time_us: 0, // Timing is done on JS side
         },
         calc_id: calc_settings.calc_id,
@@ -811,6 +838,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         root_relationships,
         workbook_relationships,
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),
+        workbook_sheet_inventory,
         imported_media_parts,
         imported_ole_parts,
         raw_metadata_xml,
@@ -1286,8 +1314,7 @@ fn process_sheet_parallel(
 /// Sequential worksheet loop with per-sheet profiling support.
 fn parse_sheets_sequential(
     archive: &XlsxArchive,
-    sheet_count: usize,
-    sheet_infos: &[workbook::SheetInfo],
+    sheet_package_contexts: &[SheetPackageContext],
     shared_strings: &[String],
     pivot_caches: &std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
     ctx: &mut ParseContext,
@@ -1298,24 +1325,24 @@ fn parse_sheets_sequential(
     // Tier 2: Per-sheet extension data outputs
     ext_namespaces_out: &mut Vec<NamespaceMap>,
 ) -> Result<Vec<FullParsedSheet>, String> {
-    let mut sheets: Vec<FullParsedSheet> = Vec::with_capacity(sheet_count);
+    let mut sheets: Vec<FullParsedSheet> = Vec::with_capacity(sheet_package_contexts.len());
 
-    for sheet_idx in 0..sheet_count {
-        let sheet_num = sheet_idx + 1;
-        let sheet_path = format!("xl/worksheets/sheet{}.xml", sheet_num);
+    for (sheet_idx, sheet_context) in sheet_package_contexts.iter().enumerate() {
+        let sheet_num = legacy_sheet_num_for_context(sheet_context);
+        let sheet_path = sheet_context
+            .owner_part_path
+            .as_deref()
+            .ok_or_else(|| format!("Workbook sheet {} has no worksheet part path", sheet_context.sheet_name))?;
         ctx.set_current_part(&sheet_path);
 
-        let sheet_info = sheet_infos.get(sheet_idx);
-        let sheet_name = sheet_info
-            .map(|si| si.name.clone())
-            .unwrap_or_else(|| format!("Sheet{}", sheet_num));
-        let _sheet_id = sheet_info.map(|si| si.sheet_id);
+        let sheet_name = sheet_context.sheet_name.clone();
+        let _sheet_id = sheet_context.sheet_id;
 
         // --- Sub-phase: ZIP decompression ---
         let ws_t0 = tick(timings);
         let worksheet_xml = archive
-            .get_worksheet(sheet_num)
-            .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_num, e))?;
+            .read_file(sheet_path)
+            .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_path, e))?;
         ensure_count_limit(
             "worksheet cell",
             count_worksheet_cell_elements(&worksheet_xml),
@@ -1687,11 +1714,8 @@ fn parse_sheets_sequential(
         sheets.push(FullParsedSheet {
             name: sheet_name,
             index: sheet_idx,
-            sheet_id: sheet_infos.get(sheet_idx).map(|si| si.sheet_id),
-            state: sheet_infos
-                .get(sheet_idx)
-                .map(|si| si.state)
-                .unwrap_or_default(),
+            sheet_id: sheet_context.sheet_id,
+            state: sheet_context.visibility,
             cells,
             authored_style_runs,
             explicit_blank_cells,

@@ -932,6 +932,7 @@ fn threading_result(
         root_relationships: Vec::new(),
         workbook_relationships: Vec::new(),
         sheet_workbook_r_ids: Vec::new(),
+        workbook_sheet_inventory: Vec::new(),
         imported_media_parts: Vec::new(),
         imported_ole_parts: Vec::new(),
         extensions: None,

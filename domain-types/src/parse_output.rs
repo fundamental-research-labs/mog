@@ -21,6 +21,12 @@ use value_types::CellValue;
 #[serde(rename_all = "camelCase")]
 pub struct ParseOutput {
     pub sheets: Vec<SheetData>,
+    /// Workbook-order package inventory resolved from workbook sheet entries
+    /// and workbook relationships before worksheet parsing. This is durable
+    /// sheet/package identity; editable worksheet payloads remain in
+    /// `sheets`, linked by `editable_sheet_index`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workbook_sheet_inventory: Vec<WorkbookSheetPackageInfo>,
     /// Workbook-owned root XML namespace declarations captured from
     /// `xl/workbook.xml`.
     #[serde(default, skip_serializing_if = "XmlNamespaceDeclarations::is_empty")]

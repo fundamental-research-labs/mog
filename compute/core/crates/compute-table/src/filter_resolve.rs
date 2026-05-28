@@ -27,6 +27,18 @@ use average::resolve_average_filter;
 use chrono::{NaiveDate, Weekday};
 use date_range::resolve_date_range_filter_for_rule;
 
+#[cfg(test)]
+use average::resolve_average_filter as test_resolve_average_filter;
+#[cfg(test)]
+use date_range::{
+    add_months as test_add_months, end_of_month as test_end_of_month,
+    quarter as test_quarter,
+    resolve_date_range_filter_for_rule as test_resolve_date_range_filter_for_rule,
+    start_of_week as test_start_of_week, subtract_months as test_subtract_months,
+};
+#[cfg(test)]
+use top_bottom::compute_top_bottom_cutoff as test_compute_top_bottom_cutoff;
+
 use crate::types::{
     ConditionFilter, DynamicFilter, DynamicFilterRule, FilterCriteria, FilterLogic, FilterOperator,
 };

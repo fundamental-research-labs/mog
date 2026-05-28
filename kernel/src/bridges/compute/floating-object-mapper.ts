@@ -32,6 +32,7 @@ import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import { getAllDefaultToolSettings } from '../../domain/drawing/ink/ink-tool-defaults';
 import { getEquationStyleDefaults } from '../../domain/equations/equation-defaults';
+import { normalizeImportedComboChart } from './chart-import-normalization';
 
 import type {
   FloatingObject as WireFloatingObject,
@@ -710,57 +711,59 @@ function toConnectorObject(d: WireConnector): ConnectorObject {
 }
 
 function toChartObject(d: WireChart): ChartObject {
+  const chart = normalizeImportedComboChart(d);
   // Sanitize title: treat the literal string "undefined" as missing (null).
   // This can happen when JS `undefined` leaks through a JSON/NAPI bridge as a string.
-  const sanitizedTitle = d.title != null && d.title !== 'undefined' ? d.title : undefined;
+  const sanitizedTitle =
+    chart.title != null && chart.title !== 'undefined' ? chart.title : undefined;
   const sanitizedSubtitle =
-    d.subtitle != null && d.subtitle !== 'undefined' ? d.subtitle : undefined;
+    chart.subtitle != null && chart.subtitle !== 'undefined' ? chart.subtitle : undefined;
 
   const chartConfig: Record<string, unknown> = {
-    subType: d.subType,
-    seriesOrientation: d.seriesOrientation,
-    dataRange: d.dataRange,
-    dataRangeIdentity: d.dataRangeIdentity,
-    seriesRange: d.seriesRange,
-    seriesRangeIdentity: d.seriesRangeIdentity,
-    categoryRange: d.categoryRange,
-    categoryRangeIdentity: d.categoryRangeIdentity,
+    subType: chart.subType,
+    seriesOrientation: chart.seriesOrientation,
+    dataRange: chart.dataRange,
+    dataRangeIdentity: chart.dataRangeIdentity,
+    seriesRange: chart.seriesRange,
+    seriesRangeIdentity: chart.seriesRangeIdentity,
+    categoryRange: chart.categoryRange,
+    categoryRangeIdentity: chart.categoryRangeIdentity,
     title: sanitizedTitle,
     subtitle: sanitizedSubtitle,
-    legend: d.legend,
-    axis: d.axis,
-    colors: d.colors,
-    series: d.series,
-    dataLabels: d.dataLabels,
-    pieSlice: d.pieSlice,
-    trendline: d.trendline,
-    showLines: d.showLines,
-    smoothLines: d.smoothLines,
-    radarFilled: d.radarFilled,
-    radarMarkers: d.radarMarkers,
-    waterfall: d.waterfall,
-    sourceTableId: d.sourceTableId,
-    tableDataColumns: d.tableDataColumns,
-    tableCategoryColumn: d.tableCategoryColumn,
-    useTableColumnNamesAsLabels: d.useTableColumnNamesAsLabels,
-    tableColumnNames: d.tableColumnNames,
-    ooxml: d.ooxml,
+    legend: chart.legend,
+    axis: chart.axis,
+    colors: chart.colors,
+    series: chart.series,
+    dataLabels: chart.dataLabels,
+    pieSlice: chart.pieSlice,
+    trendline: chart.trendline,
+    showLines: chart.showLines,
+    smoothLines: chart.smoothLines,
+    radarFilled: chart.radarFilled,
+    radarMarkers: chart.radarMarkers,
+    waterfall: chart.waterfall,
+    sourceTableId: chart.sourceTableId,
+    tableDataColumns: chart.tableDataColumns,
+    tableCategoryColumn: chart.tableCategoryColumn,
+    useTableColumnNamesAsLabels: chart.useTableColumnNamesAsLabels,
+    tableColumnNames: chart.tableColumnNames,
+    ooxml: chart.ooxml,
   };
   return {
     ...buildBaseFields(d),
     type: 'chart' as const,
-    chartType: (d.chartType && d.chartType !== 'undefined'
-      ? d.chartType
+    chartType: (chart.chartType && chart.chartType !== 'undefined'
+      ? chart.chartType
       : 'column') as ChartObjectType,
-    anchorMode: (d.anchor.anchorMode === 'twoCell'
+    anchorMode: (chart.anchor.anchorMode === 'twoCell'
       ? 'twoCell'
       : 'oneCell') as ChartObject['anchorMode'],
-    widthCells: d.widthCells ?? d.width ?? 8,
-    heightCells: d.heightCells ?? d.height ?? 15,
+    widthCells: chart.widthCells ?? chart.width ?? 8,
+    heightCells: chart.heightCells ?? chart.height ?? 15,
     chartConfig,
-    dataRangeIdentity: d.dataRangeIdentity,
-    seriesRangeIdentity: d.seriesRangeIdentity,
-    categoryRangeIdentity: d.categoryRangeIdentity,
+    dataRangeIdentity: chart.dataRangeIdentity,
+    seriesRangeIdentity: chart.seriesRangeIdentity,
+    categoryRangeIdentity: chart.categoryRangeIdentity,
   };
 }
 

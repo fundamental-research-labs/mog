@@ -24,6 +24,7 @@
 
 import type { StoredChartConfig } from '@mog/charts';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
+import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import { pointInRect } from '@mog/geometry';
 import type { FloatingObjectBase, ObjectPosition } from '@mog-sdk/contracts/floating-objects';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
@@ -153,21 +154,23 @@ export async function convertChartToFloatingObject(
   chart: ChartFloatingObject,
   ctx: { computeBridge: ComputeBridge | null },
 ): Promise<ChartObject | null> {
-  if (!chart.sheetId) {
+  const normalizedChart = normalizeImportedComboChart(chart);
+
+  if (!normalizedChart.sheetId) {
     console.warn('[ChartManager] Chart has no sheetId, cannot convert to floating object');
     return null;
   }
-  const containerId: SheetId = toSheetId(chart.sheetId);
+  const containerId: SheetId = toSheetId(normalizedChart.sheetId);
 
   if (!ctx.computeBridge) {
     console.warn('[ChartManager] No compute bridge, cannot convert chart position');
     return null;
   }
 
-  const anchorRow = chart.anchor.anchorRow;
-  const anchorCol = chart.anchor.anchorCol;
-  const widthCells = chart.widthCells ?? chart.width;
-  const heightCells = chart.heightCells ?? chart.height;
+  const anchorRow = normalizedChart.anchor.anchorRow;
+  const anchorCol = normalizedChart.anchor.anchorCol;
+  const widthCells = normalizedChart.widthCells ?? normalizedChart.width;
+  const heightCells = normalizedChart.heightCells ?? normalizedChart.height;
 
   const pixelBounds = await cellsToPixels(
     anchorRow,
@@ -181,7 +184,7 @@ export async function convertChartToFloatingObject(
   // Charts get anchorCellId from ChartFloatingObject (wire data).
   // Rust handles CellId resolution internally.
   const fromAnchor = {
-    cellId: toCellId(chart.anchorCellId ?? 'cell-0-0'),
+    cellId: toCellId(normalizedChart.anchorCellId ?? 'cell-0-0'),
     xOffset: 0,
     yOffset: 0,
   };
@@ -197,22 +200,22 @@ export async function convertChartToFloatingObject(
   };
 
   const chartObject: ChartObject = {
-    id: chart.id,
+    id: normalizedChart.id,
     type: 'chart',
     sheetId: containerId,
     containerId,
-    chartId: chart.id,
-    chartType: chart.chartType,
-    chartConfig: chart as unknown as StoredChartConfig,
+    chartId: normalizedChart.id,
+    chartType: normalizedChart.chartType,
+    chartConfig: normalizedChart as unknown as StoredChartConfig,
     position,
     anchor: position,
-    zIndex: chart.zIndex ?? 0,
+    zIndex: normalizedChart.zIndex ?? 0,
     locked: false,
     printable: true,
-    name: chart.title ?? `Chart ${chart.id.slice(-4)}`,
-    altText: chart.title,
-    createdAt: chart.createdAt,
-    updatedAt: chart.updatedAt,
+    name: normalizedChart.title ?? `Chart ${normalizedChart.id.slice(-4)}`,
+    altText: normalizedChart.title,
+    createdAt: normalizedChart.createdAt,
+    updatedAt: normalizedChart.updatedAt,
   };
 
   return chartObject;

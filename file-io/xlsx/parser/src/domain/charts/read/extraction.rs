@@ -540,12 +540,16 @@ pub fn extract_chart_spec_from_chart_space(
     let plot_area = &chart.plot_area;
 
     // -------------------------------------------------------------------------
-    // (a) chart_type — from first chart group
+    // (a) chart_type - combo for multiple chart groups, otherwise from first group
     // -------------------------------------------------------------------------
     let first_group = plot_area.chart_groups.first();
-    let chart_type = first_group
-        .map(|g| map_ooxml_chart_type_to_domain(g.chart_type, &g.config))
-        .unwrap_or(domain_types::ChartType::Column);
+    let chart_type = if plot_area.chart_groups.len() > 1 {
+        domain_types::ChartType::Combo
+    } else {
+        first_group
+            .map(|g| map_ooxml_chart_type_to_domain(g.chart_type, &g.config))
+            .unwrap_or(domain_types::ChartType::Column)
+    };
 
     // -------------------------------------------------------------------------
     // (b) sub_type — from first chart group's config grouping

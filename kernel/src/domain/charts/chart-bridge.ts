@@ -63,6 +63,7 @@ import { parseCellRange, cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { getValue } from '../cells/cell-reads';
 import * as Charts from './chart-crud';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
+import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import {
   wireToAxisConfig,
   wireToDataLabelConfig,
@@ -226,44 +227,51 @@ function importStatusToTerminalRenderStatus(status: unknown): ImportedChartRende
  * Provides defaults for required fields that are optional in the gen type.
  */
 function toChartConfig(chart: ChartFloatingObject): ChartConfig {
+  const normalizedChart = normalizeImportedComboChart(chart);
   return {
-    type: (chart.chartType ?? 'bar') as ChartType,
-    anchorRow: chart.anchor.anchorRow,
-    anchorCol: chart.anchor.anchorCol,
-    width: chart.widthCells ?? chart.width ?? 4,
-    height: chart.heightCells ?? chart.height ?? 10,
-    dataRange: chart.dataRange ?? '',
-    seriesRange: chart.seriesRange,
-    categoryRange: chart.categoryRange,
-    seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
-    title: chart.title,
-    subtitle: chart.subtitle,
+    type: (normalizedChart.chartType ?? 'bar') as ChartType,
+    anchorRow: normalizedChart.anchor.anchorRow,
+    anchorCol: normalizedChart.anchor.anchorCol,
+    width: normalizedChart.widthCells ?? normalizedChart.width ?? 4,
+    height: normalizedChart.heightCells ?? normalizedChart.height ?? 10,
+    dataRange: normalizedChart.dataRange ?? '',
+    seriesRange: normalizedChart.seriesRange,
+    categoryRange: normalizedChart.categoryRange,
+    seriesOrientation: normalizedChart.seriesOrientation as ChartConfig['seriesOrientation'],
+    title: normalizedChart.title,
+    subtitle: normalizedChart.subtitle,
     // Narrow wire shapes to public *Config at the boundary — see
     // chart-type-converters.ts for why this is not a cast.
-    legend: chart.legend ? wireToLegendConfig(chart.legend) : undefined,
-    axis: chart.axis ? normalizeAxisForRendering(wireToAxisConfig(chart.axis)) : undefined,
-    colors: chart.colors,
-    series: chart.series ? wireToSeriesConfigArray(chart.series) : undefined,
-    dataLabels: chart.dataLabels ? wireToDataLabelConfig(chart.dataLabels) : undefined,
-    pieSlice: chart.pieSlice,
-    trendline: Array.isArray(chart.trendline) ? chart.trendline[0] : chart.trendline,
-    trendlines: chart.trendline,
-    showLines: chart.showLines,
-    smoothLines: chart.smoothLines,
-    radarFilled: chart.radarFilled,
-    radarMarkers: chart.radarMarkers,
-    waterfall: chart.waterfall as ChartConfig['waterfall'],
-    displayBlanksAs: chart.displayBlanksAs as ChartConfig['displayBlanksAs'],
-    plotVisibleOnly: chart.plotVisibleOnly,
-    gapWidth: chart.gapWidth,
-    overlap: chart.overlap,
-    doughnutHoleSize: chart.doughnutHoleSize,
-    firstSliceAngle: chart.firstSliceAngle,
-    bubbleScale: chart.bubbleScale,
-    splitType: chart.splitType as ChartConfig['splitType'],
-    splitValue: chart.splitValue,
-    subType: chart.subType as ChartConfig['subType'],
-    extra: chart.ooxml,
+    legend: normalizedChart.legend ? wireToLegendConfig(normalizedChart.legend) : undefined,
+    axis: normalizedChart.axis
+      ? normalizeAxisForRendering(wireToAxisConfig(normalizedChart.axis))
+      : undefined,
+    colors: normalizedChart.colors,
+    series: normalizedChart.series ? wireToSeriesConfigArray(normalizedChart.series) : undefined,
+    dataLabels: normalizedChart.dataLabels
+      ? wireToDataLabelConfig(normalizedChart.dataLabels)
+      : undefined,
+    pieSlice: normalizedChart.pieSlice,
+    trendline: Array.isArray(normalizedChart.trendline)
+      ? normalizedChart.trendline[0]
+      : normalizedChart.trendline,
+    trendlines: normalizedChart.trendline,
+    showLines: normalizedChart.showLines,
+    smoothLines: normalizedChart.smoothLines,
+    radarFilled: normalizedChart.radarFilled,
+    radarMarkers: normalizedChart.radarMarkers,
+    waterfall: normalizedChart.waterfall as ChartConfig['waterfall'],
+    displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
+    plotVisibleOnly: normalizedChart.plotVisibleOnly,
+    gapWidth: normalizedChart.gapWidth,
+    overlap: normalizedChart.overlap,
+    doughnutHoleSize: normalizedChart.doughnutHoleSize,
+    firstSliceAngle: normalizedChart.firstSliceAngle,
+    bubbleScale: normalizedChart.bubbleScale,
+    splitType: normalizedChart.splitType as ChartConfig['splitType'],
+    splitValue: normalizedChart.splitValue,
+    subType: normalizedChart.subType as ChartConfig['subType'],
+    extra: normalizedChart.ooxml,
   };
 }
 
@@ -1398,7 +1406,8 @@ export class ChartBridge implements IChartBridge {
   /**
    * Convert ChartFloatingObject + ChartData to ChartSpec for the grammar compiler.
    */
-  private chartToSpec(chart: ChartFloatingObject, data: ChartData): ChartSpec {
+  private chartToSpec(rawChart: ChartFloatingObject, data: ChartData): ChartSpec {
+    const chart = normalizeImportedComboChart(rawChart);
     // Map chart type to mark type
     const markTypeMap: Record<string, string> = {
       bar: 'bar',

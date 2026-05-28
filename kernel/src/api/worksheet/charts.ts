@@ -30,6 +30,7 @@ import type {
 } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
+import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import type { DocumentContext } from '../../context';
 import type { ChartLayoutSnapshot } from '@mog-sdk/contracts/bridges';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
@@ -643,7 +644,8 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
 /**
  * Convert internal ChartFloatingObject to the public Chart type from contracts.
  */
-function serializedChartToChart(chart: ChartFloatingObject): Chart {
+function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
+  const chart = normalizeImportedComboChart(rawChart);
   // Group B2: Detect exploded pie variants on read.
   // If the internal type is 'pie'/'doughnut'/'pie3d' and the pieSlice indicates
   // full explosion (explosion > 0 on all slices or explicit flag), report as exploded type.

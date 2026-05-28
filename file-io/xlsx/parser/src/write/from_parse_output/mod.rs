@@ -12,6 +12,7 @@
 
 mod assembly;
 mod chart_auxiliary;
+mod differential_formats;
 mod doc_props;
 mod external_links;
 mod form_controls;
@@ -155,7 +156,8 @@ pub fn write_xlsx_from_parse_output(
         &[]
     };
 
-    let styles_writer = build_styles(style_palette_for_export);
+    let mut styles_writer = build_styles(style_palette_for_export);
+    styles_writer.dxfs = differential_formats::collect(output);
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
     let mut shared_strings = sheet_parts::build_shared_strings(output);

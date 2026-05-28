@@ -70,6 +70,41 @@ fn cf_cell_value_rule_round_trips() {
 }
 
 #[test]
+fn cf_formula_dxf_fill_round_trips() {
+    let cf = ConditionalFormat {
+        id: "cf-formula-dxf".to_string(),
+        sheet_id: String::new(),
+        pivot: None,
+        ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
+        range_identities: None,
+        rules: vec![CFRule::Formula {
+            id: "rule-formula".to_string(),
+            priority: 1,
+            stop_if_true: None,
+            formula: "A1>0".to_string(),
+            style: CFStyle {
+                background_color: Some("#FFCCCC".to_string()),
+                dxf_id: Some(0),
+                ..Default::default()
+            },
+            text: None,
+        }],
+    };
+
+    let po = make_sheet_with_cf(cf);
+    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
+    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+
+    match &rt.sheets[0].conditional_formats[0].rules[0] {
+        CFRule::Formula { style, .. } => {
+            assert_eq!(style.dxf_id, Some(0));
+            assert_eq!(style.background_color.as_deref(), Some("#ffcccc"));
+        }
+        other => panic!("expected Formula rule, got {:?}", other),
+    }
+}
+
+#[test]
 fn cf_color_scale_rule_round_trips_with_typed_value_refs() {
     // Exercises the CFValueRef typed boundary (typed OOXML preservation 6.1) that row 5.4
     // depends on: min / percentile / max points serialize as `<cfvo>` with

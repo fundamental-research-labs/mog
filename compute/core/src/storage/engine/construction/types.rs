@@ -3,7 +3,6 @@ use super::*;
 pub(in crate::storage::engine) type XlsxHydrateResult = (
     YrsStorage,
     WorkbookSnapshot,
-    domain_types::RoundTripContext,
     Vec<(SheetId, CellId, u32, u32)>,
 );
 
@@ -15,7 +14,6 @@ pub struct DeferredHydrationData {
     pub(in crate::storage::engine) allocations:
         Vec<crate::storage::infra::hydration::SheetIdAllocation>,
     pub(in crate::storage::engine) workbook_snap: WorkbookSnapshot,
-    pub(in crate::storage::engine) round_trip_ctx: domain_types::RoundTripContext,
     /// Raw XLSX bytes for full re-parse during deferred hydration.
     /// The fast-path parse uses values_only + skip options; the full parse
     /// during hydration needs the complete data.
@@ -29,7 +27,6 @@ pub(in crate::storage::engine) struct DeferredHydrationCompletion {
     pub(in crate::storage::engine) stores: EngineStores,
     pub(in crate::storage::engine) mirror: CellMirror,
     pub(in crate::storage::engine) settings: EngineSettings,
-    pub(in crate::storage::engine) round_trip_ctx: domain_types::RoundTripContext,
     pub(in crate::storage::engine) phantom_cells: Vec<(SheetId, CellId, u32, u32)>,
     pub(in crate::storage::engine) calculation: domain_types::CalculationProperties,
 }

@@ -4,24 +4,20 @@
 //! - `parse()` — default options (Lenient, parse everything)
 //! - `parse_with_options()` — configurable mode, profiling, etc.
 //!
-//! Returns `ParsedWorkbook` containing domain-typed `ParseOutput`, `RoundTripContext`,
-//! and `ImportReport`. The internal `FullParseResult` is no longer exposed.
+//! Returns `ParsedWorkbook` containing domain-typed `ParseOutput` and `ImportReport`.
+//! The internal `FullParseResult` is no longer exposed.
 
 use crate::error::{XlsxApiError, from_parse_string_error};
 use crate::options::ParseOptions;
-use domain_types::{ImportReport, ParseDiagnostics, ParseOutput, RoundTripContext};
+use domain_types::{ImportReport, ParseDiagnostics, ParseOutput};
 
 /// Result of a successful parse. Contains domain-typed parse output.
 #[derive(Debug)]
 pub struct ParsedWorkbook {
     /// Semantic data: cells, merges, styles, domain objects.
     pub output: ParseOutput,
-    /// Raw XML preservation blobs for lossless re-export.
-    pub round_trip_ctx: RoundTripContext,
     /// Public import report with diagnostics, statistics, and recalc hints.
     pub import_report: ImportReport,
-    /// Temporary compatibility bridge for callers still using the old diagnostics
-    /// field. Prefer `import_report`.
     pub diagnostics: ParseDiagnostics,
 }
 
@@ -74,12 +70,11 @@ pub fn parse_with_options(
     }
 
     // Parse XLSX bytes directly into domain types via the unified pipeline.
-    let (output, round_trip_ctx, diagnostics) =
+    let (output, diagnostics) =
         xlsx_parser::parse_xlsx_to_output(xlsx_data).map_err(from_parse_string_error)?;
 
     Ok(ParsedWorkbook {
         output,
-        round_trip_ctx,
         import_report: diagnostics.clone().into_import_report(),
         diagnostics,
     })
@@ -90,13 +85,12 @@ pub fn parse_max_sheets(
     xlsx_data: &[u8],
     max_sheets: usize,
 ) -> Result<ParsedWorkbook, XlsxApiError> {
-    let (output, round_trip_ctx, diagnostics) =
+    let (output, diagnostics) =
         xlsx_parser::parse_xlsx_to_output_max_sheets(xlsx_data, max_sheets)
             .map_err(from_parse_string_error)?;
 
     Ok(ParsedWorkbook {
         output,
-        round_trip_ctx,
         import_report: diagnostics.clone().into_import_report(),
         diagnostics,
     })

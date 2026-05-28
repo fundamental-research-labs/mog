@@ -10,16 +10,11 @@ use super::*;
 // `parse_output_to_workbook_snapshot` with range classification →
 // `hydrate_from_parse_output_with_ranges` → `rebuild_engine_from_snapshot`.
 //
-// `RoundTripContext` is empty for CSV — there's no original XLSX to
-// round-trip back to. CSV warnings flow through `tracing::warn!` (matching
-// the XLSX diagnostics-handling pattern at the top of
-// `parse_and_hydrate_xlsx`); they do NOT cross the bridge as TS errors.
+// CSV warnings flow through `tracing::warn!` (matching the XLSX
+// diagnostics-handling pattern at the top of `parse_and_hydrate_xlsx`);
+// they do NOT cross the bridge as TS errors.
 
 /// Parse CSV bytes and hydrate a new `YrsStorage` from the parse output.
-///
-/// Returns `(storage, workbook_snapshot, round_trip_context, phantom_cells)`.
-/// `round_trip_context` is `RoundTripContext::default()` because CSV has
-/// no original XLSX to round-trip to.
 pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
@@ -135,12 +130,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     };
     eprintln!("[construction] csv hydrate: {}ms", t2.elapsed().as_millis());
 
-    Ok((
-        storage,
-        workbook_snap,
-        domain_types::RoundTripContext::default(),
-        id_map.phantom_cells,
-    ))
+    Ok((storage, workbook_snap, id_map.phantom_cells))
 }
 
 /// Construct a `YrsComputeEngine` from raw CSV bytes without recalculation.
@@ -148,20 +138,13 @@ pub(in crate::storage::engine) fn from_csv_bytes(
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, round_trip_ctx, phantom_cells) =
-        parse_and_hydrate_csv(csv_data, options)?;
+    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_csv(csv_data, options)?;
 
     let mut mirror = CellMirror::from_snapshot(workbook_snap.clone())?;
     let mut compute = ComputeCore::new();
     let recalc_result = compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
 
-    let mut engine = assemble_engine(
-        storage,
-        mirror,
-        compute,
-        &workbook_snap,
-        Some(round_trip_ctx),
-    )?;
+    let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
 
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
@@ -179,10 +162,8 @@ pub(in crate::storage::engine) fn import_from_csv_bytes(
     options: &csv_parser::CsvImportOptions,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, round_trip_ctx, phantom_cells) =
-        parse_and_hydrate_csv(csv_data, options)?;
-    let result =
-        rebuild_engine_from_snapshot(engine, storage, workbook_snap, round_trip_ctx, do_recalc)?;
+    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_csv(csv_data, options)?;
+    let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);

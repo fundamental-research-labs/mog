@@ -358,9 +358,9 @@ fn assert_l1_contract(
     row: &OoxmlContractRow,
     fixture: &GeneratedOoxmlFixture,
 ) -> Result<(), String> {
-    let (output, round_trip, _diagnostics) = crate::parse_xlsx_to_output(&fixture.bytes)
+    let (output, _diagnostics) = crate::parse_xlsx_to_output(&fixture.bytes)
         .map_err(|err| format!("parse failed: {err}"))?;
-    let exported = write_xlsx_from_parse_output(&output, Some(&round_trip))
+    let exported = write_xlsx_from_parse_output(&output)
         .map_err(|err| format!("L1 export failed: {err}"))?;
     let archive = XlsxArchive::new(&exported).map_err(|err| err.to_string())?;
     assert_package_graph_ok(

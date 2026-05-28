@@ -5,7 +5,7 @@ use compute_document::hex::{id_to_hex, parse_cell_id};
 use compute_document::schema::*;
 use domain_types::{
     AuthoredStyleRun, CellData, CellFormat, ColStyleEntry, DocumentFormat,
-    ImportedCellProjectionRole, RoundTripContext, RowStyleEntry,
+    ImportedCellProjectionRole, RowStyleEntry,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 use value_types::CellValue;
@@ -22,22 +22,17 @@ use super::PaletteOps;
 // Combined batch Yrs reads (O2+O3 optimization)
 // -------------------------------------------------------------------
 
-/// Batch-read cell properties AND raw formulas in a single Yrs transaction.
+/// Batch-read cell properties, array refs, and formula metadata in a single Yrs transaction.
 ///
 /// Combines what was previously two separate operations:
 /// 1. `properties::get_all_properties()` — reads `properties` Y.Map
-/// 2. Raw formula extraction — reads `cells` Y.Map
-///
-/// Sharing a single transaction eliminates the overhead of opening a
-/// second snapshot. Uses `CellId` keys to avoid per-cell `id_to_hex()`
-/// String allocations (~3.1M saved for large workbooks).
-fn batch_read_props_formulas_and_array_refs(
+/// Sharing a single transaction eliminates duplicate transaction setup.
+/// Uses `CellId` keys to avoid per-cell `id_to_hex()` String allocations.
+fn batch_read_props_array_refs_and_formula_metadata(
     stores: &EngineStores,
     sheet_id: &SheetId,
-    read_raw_formulas: bool,
 ) -> (
     FxHashMap<CellId, CellProperties>,
-    FxHashMap<CellId, String>,
     FxHashMap<CellId, String>,
     FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
 ) {
@@ -78,8 +73,7 @@ fn batch_read_props_formulas_and_array_refs(
         }
     }
 
-    // --- Raw formulas (only for lossless round-trip) + array formula refs ---
-    let mut raw_formulas = FxHashMap::default();
+    // --- Array formula refs + formula metadata ---
     let mut array_refs = FxHashMap::default();
     let mut formula_metadata = FxHashMap::default();
     if let Some(cells_map) = crate::storage::infra::grid_helpers::get_cells_map(
@@ -87,7 +81,6 @@ fn batch_read_props_formulas_and_array_refs(
         stores.storage.sheets(),
         &sheet_hex,
     ) {
-        raw_formulas.reserve(cells_map.len(&txn) as usize);
         array_refs.reserve(cells_map.len(&txn) as usize);
         formula_metadata.reserve(cells_map.len(&txn) as usize);
         for (cell_hex, value) in cells_map.iter(&txn) {
@@ -97,11 +90,6 @@ fn batch_read_props_formulas_and_array_refs(
             let Some(cell_id) = parse_cell_id(cell_hex) else {
                 continue;
             };
-            if read_raw_formulas
-                && let Some(Out::Any(Any::String(f))) = cell_map.get(&txn, KEY_FORMULA)
-            {
-                raw_formulas.insert(cell_id, f.to_string());
-            }
             if let Some(Out::Any(Any::String(array_ref))) = cell_map.get(&txn, KEY_ARRAY_REF) {
                 array_refs.insert(cell_id, array_ref.to_string());
             }
@@ -111,7 +99,7 @@ fn batch_read_props_formulas_and_array_refs(
         }
     }
 
-    (all_props, raw_formulas, array_refs, formula_metadata)
+    (all_props, array_refs, formula_metadata)
 }
 
 fn read_formula_metadata_from_yrs<T: yrs::ReadTxn>(
@@ -160,17 +148,16 @@ fn format_range_style_id_at(
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
-    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<CellData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_cells_for_sheet");
 
-    // Batch-read ALL cell properties and raw formulas in a single Yrs
-    // transaction, avoiding duplicate transaction setup overhead (O2+O3).
+    // Batch-read all cell properties and formula metadata in a single Yrs
+    // transaction, avoiding duplicate transaction setup overhead.
     // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
-    let (all_props, raw_formulas, array_refs, formula_metadata) =
-        batch_read_props_formulas_and_array_refs(stores, sheet_id, false);
+    let (all_props, array_refs, formula_metadata) =
+        batch_read_props_array_refs_and_formula_metadata(stores, sheet_id);
 
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
     let grid = stores.grid_indexes.get(sheet_id);
@@ -204,7 +191,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 row,
                 col,
                 &all_props,
-                &raw_formulas,
                 &array_refs,
                 &formula_metadata,
                 palette,
@@ -265,7 +251,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     row,
                     col,
                     &all_props,
-                    &raw_formulas,
                     &array_refs,
                     &formula_metadata,
                     palette,
@@ -344,7 +329,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     _stores: &EngineStores,
     mirror: &CellMirror,
-    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<AuthoredStyleRun> {
@@ -384,7 +368,6 @@ fn build_cell_data_for_cell_id(
     row: u32,
     col: u32,
     all_props: &FxHashMap<CellId, CellProperties>,
-    raw_formulas: &FxHashMap<CellId, String>,
     array_refs: &FxHashMap<CellId, String>,
     formula_metadata: &FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
     palette: &impl PaletteOps,
@@ -402,11 +385,10 @@ fn build_cell_data_for_cell_id(
                 .unwrap_or(CellValue::Null)
         });
 
-    // Get formula text — prefer raw Yrs formula for lossless round-trip.
-    let formula = raw_formulas
-        .get(cell_id)
-        .cloned()
-        .or_else(|| stores.compute.get_formula(cell_id).map(|s| s.to_string()))
+    let formula = stores
+        .compute
+        .get_formula(cell_id)
+        .map(|s| s.to_string())
         .or_else(|| {
             mirror
                 .get_formula(cell_id)
@@ -575,7 +557,6 @@ fn explicit_blank_cell(row: u32, col: u32) -> CellData {
 /// thousands of redundant Yrs transactions.
 pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     stores: &EngineStores,
-    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     _max_row: u32,
     _max_col: u32,
@@ -690,20 +671,11 @@ mod tests {
             }],
             ..Default::default()
         };
-        let ctx = domain_types::RoundTripContext::default();
-
-        xlsx_parser::write::write_xlsx_from_parse_output(&output, Some(&ctx))
+        xlsx_parser::write::write_xlsx_from_parse_output(&output)
             .expect("source XLSX should be writable")
     }
 
     fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (YrsComputeEngine, SheetId) {
-        engine_from_parse_output_with_roundtrip(output, None)
-    }
-
-    fn engine_from_parse_output_with_roundtrip(
-        output: &domain_types::ParseOutput,
-        round_trip_context: Option<domain_types::RoundTripContext>,
-    ) -> (YrsComputeEngine, SheetId) {
         let mut storage = YrsStorage::new();
         let mut allocator = DefaultIdAllocator::new();
         let id_map = storage
@@ -718,8 +690,7 @@ mod tests {
             .init_from_snapshot_no_recalc(&mut mirror, snapshot.clone())
             .expect("compute init");
         let sheet_id = id_map.sheet_ids[0];
-        let engine = assemble_engine(storage, mirror, compute, &snapshot, round_trip_context)
-            .expect("engine");
+        let engine = assemble_engine(storage, mirror, compute, &snapshot).expect("engine");
         (engine, sheet_id)
     }
 
@@ -869,7 +840,6 @@ mod tests {
                 ..Default::default()
             },
         );
-        let raw_formulas = FxHashMap::default();
         let array_refs = FxHashMap::default();
         let formula_metadata = FxHashMap::default();
         let mut palette = Vec::new();
@@ -885,7 +855,6 @@ mod tests {
             1,
             55,
             &props,
-            &raw_formulas,
             &array_refs,
             &formula_metadata,
             &palette,
@@ -901,7 +870,7 @@ mod tests {
     #[test]
     fn xlsx_import_rebuild_hydrates_authored_style_ranges() {
         let output = authored_style_run_output();
-        let source_xlsx = xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+        let source_xlsx = xlsx_parser::write::write_xlsx_from_parse_output(&output)
             .expect("source XLSX should be writable");
         let bootstrap = WorkbookSnapshot {
             sheets: vec![SheetSnapshot {
@@ -948,7 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn skipped_spill_target_is_not_replayed_from_roundtrip_sidecar() {
+    fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         let source = domain_types::CellData {
             row: 0,
             col: 0,
@@ -996,7 +965,7 @@ mod tests {
         assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
         assert!(
             !cells.iter().any(|cell| (cell.row, cell.col) == (0, 1)),
-            "spill target sidecars are no longer replayed through roundtrip context"
+            "spill target sidecars are no longer replayed into modeled export"
         );
     }
 

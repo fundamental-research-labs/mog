@@ -68,45 +68,17 @@ fn assemble_engine_from_parse_output_storage(
     storage: crate::storage::YrsStorage,
     workbook_snap: crate::snapshot::WorkbookSnapshot,
 ) -> YrsComputeEngine {
-    assemble_engine_from_parse_output_storage_with_roundtrip(
-        storage,
-        workbook_snap,
-        Some(domain_types::RoundTripContext::default()),
-    )
-}
-
-fn assemble_engine_from_parse_output_storage_with_roundtrip(
-    storage: crate::storage::YrsStorage,
-    workbook_snap: crate::snapshot::WorkbookSnapshot,
-    round_trip_context: Option<domain_types::RoundTripContext>,
-) -> YrsComputeEngine {
     let mut mirror =
         crate::mirror::CellMirror::from_snapshot(workbook_snap.clone()).expect("mirror");
     let mut compute = crate::scheduler::ComputeCore::new();
     compute
         .init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())
         .expect("compute init");
-    super::super::construction::assemble_engine(
-        storage,
-        mirror,
-        compute,
-        &workbook_snap,
-        round_trip_context,
-    )
-    .expect("assemble engine")
+    super::super::construction::assemble_engine(storage, mirror, compute, &workbook_snap)
+        .expect("assemble engine")
 }
 
 fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComputeEngine {
-    engine_from_parse_output_normal_with_roundtrip(
-        output,
-        Some(domain_types::RoundTripContext::default()),
-    )
-}
-
-fn engine_from_parse_output_normal_with_roundtrip(
-    output: &ParseOutput,
-    round_trip_context: Option<domain_types::RoundTripContext>,
-) -> YrsComputeEngine {
     let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
     let mut storage = crate::storage::YrsStorage::new();
     let id_map = storage
@@ -118,11 +90,7 @@ fn engine_from_parse_output_normal_with_roundtrip(
         &mut allocator,
     );
 
-    assemble_engine_from_parse_output_storage_with_roundtrip(
-        storage,
-        workbook_snap,
-        round_trip_context,
-    )
+    assemble_engine_from_parse_output_storage(storage, workbook_snap)
 }
 
 #[test]
@@ -187,7 +155,7 @@ fn workbook_stylesheet_survives_yrs_hydration_export() {
         ext_lst_xml: Some(br#"<extLst><ext uri="{typed-style-ext}"/></extLst>"#.to_vec()),
     });
 
-    let engine = engine_from_parse_output_normal_with_roundtrip(&input, None);
+    let engine = engine_from_parse_output_normal(&input);
     let exported = engine.build_parse_output_from_yrs();
 
     assert_eq!(exported.workbook_stylesheet, input.workbook_stylesheet);
@@ -226,14 +194,14 @@ fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
         ]],
     );
 
-    let engine = engine_from_parse_output_normal_with_roundtrip(&input, None);
+    let engine = engine_from_parse_output_normal(&input);
     let exported = engine.build_parse_output_from_yrs();
 
     assert_eq!(exported.pivot_cache_records, input.pivot_cache_records);
 }
 
 #[test]
-fn round_trip_context_does_not_recreate_absent_pivot_cache_records() {
+fn modeled_export_does_not_recreate_absent_pivot_cache_records() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -244,10 +212,7 @@ fn round_trip_context_does_not_recreate_absent_pivot_cache_records() {
         ..Default::default()
     };
 
-    let engine = engine_from_parse_output_normal_with_roundtrip(
-        &input,
-        Some(domain_types::RoundTripContext::default()),
-    );
+    let engine = engine_from_parse_output_normal(&input);
     let exported = engine.build_parse_output_from_yrs();
 
     assert!(exported.pivot_cache_records.is_empty());
@@ -554,7 +519,7 @@ fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
         ..Default::default()
     };
 
-    let engine = engine_from_parse_output_normal_with_roundtrip(&output, None);
+    let engine = engine_from_parse_output_normal(&output);
     let exported = engine.build_parse_output_from_yrs();
 
     assert_eq!(exported.web_publishing, output.web_publishing);
@@ -924,7 +889,7 @@ fn range_export_snapshot() -> WorkbookSnapshot {
 }
 
 #[test]
-fn xlsx_export_calculation_settings_use_modeled_storage_not_roundtrip_context() {
+fn xlsx_export_calculation_settings_use_modeled_storage() {
     let mut input = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -941,7 +906,7 @@ fn xlsx_export_calculation_settings_use_modeled_storage_not_roundtrip_context() 
     input.calculation.iterate_delta = 0.25;
     input.calculation.calc_id = Some(191029);
 
-    let input_bytes = xlsx_api::export_from_parse_output(&input, None).expect("write input xlsx");
+    let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&input_bytes, false)
@@ -998,7 +963,7 @@ fn imported_external_links_export_from_modeled_storage() {
     };
     input.external_links = vec![imported_external_link()];
 
-    let input_bytes = xlsx_api::export_from_parse_output(&input, None).expect("write input xlsx");
+    let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&input_bytes, false)
@@ -1035,10 +1000,7 @@ fn absent_modeled_external_links_do_not_export_external_references() {
         }],
         ..Default::default()
     };
-    let engine = engine_from_parse_output_normal_with_roundtrip(
-        &input,
-        Some(domain_types::RoundTripContext::default()),
-    );
+    let engine = engine_from_parse_output_normal(&input);
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
     let parsed = xlsx_api::parse(&exported_bytes).expect("parse exported xlsx");
@@ -1199,7 +1161,7 @@ fn workbook_scoped_broken_defined_name_exports_from_modeled_storage() {
 }
 
 #[test]
-fn stale_roundtrip_named_range_lists_do_not_resurrect_deleted_names() {
+fn deleted_named_ranges_do_not_resurrect_on_export() {
     let stale_name = domain_types::NamedRange {
         name: "ToDelete".to_string(),
         refers_to: "Names!$A$1".to_string(),
@@ -1216,10 +1178,7 @@ fn stale_roundtrip_named_range_lists_do_not_resurrect_deleted_names() {
         named_ranges: vec![stale_name.clone()],
         ..Default::default()
     };
-    let round_trip_context = domain_types::RoundTripContext::default();
-
-    let mut engine =
-        engine_from_parse_output_normal_with_roundtrip(&input, Some(round_trip_context));
+    let mut engine = engine_from_parse_output_normal(&input);
     let id = engine
         .get_named_ranges_by_scope(None)
         .into_iter()
@@ -1237,7 +1196,7 @@ fn stale_roundtrip_named_range_lists_do_not_resurrect_deleted_names() {
 
     assert!(
         exported.named_ranges.is_empty(),
-        "stale RoundTripContext name list must not override modeled deletion"
+        "modeled deletion must control defined-name export"
     );
 }
 
@@ -1351,7 +1310,7 @@ fn worksheet_sort_state_survives_range_aware_parse_output_hydration_export() {
 #[test]
 fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter_sort() {
     let input = worksheet_sort_state_parse_output(true);
-    let input_bytes = xlsx_api::export_from_parse_output(&input, None).expect("write input xlsx");
+    let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine

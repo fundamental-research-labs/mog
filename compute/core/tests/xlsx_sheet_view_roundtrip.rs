@@ -5,7 +5,7 @@ use domain_types::{
 use xlsx_parser::write::write_xlsx_from_parse_output;
 
 fn sheet_xml_after_hydrate_export(output: &ParseOutput) -> String {
-    let input = write_xlsx_from_parse_output(output, None).expect("write input xlsx");
+    let input = write_xlsx_from_parse_output(output).expect("write input xlsx");
     let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input).expect("hydrate xlsx");
     let exported = engine.export_to_xlsx_bytes().expect("export hydrated xlsx");
     let archive = xlsx_parser::XlsxArchive::new(&exported).expect("exported archive");

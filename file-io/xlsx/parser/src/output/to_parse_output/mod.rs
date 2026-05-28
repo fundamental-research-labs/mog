@@ -1,4 +1,4 @@
-//! `FullParseResult` → `ParseOutput` + `RoundTripContext` + `ParseDiagnostics` conversion.
+//! `FullParseResult` -> `ParseOutput` + `ParseDiagnostics` conversion.
 //!
 //! This module converts the parser's raw output into the shared domain types defined
 //! in the `domain-types` crate. It is the bridge between the XLSX parser's internal
@@ -10,8 +10,6 @@
 //! - **Style resolution**: Uses `domain_types::style_resolver::resolve_styles()` to flatten
 //!   the OOXML multi-level style tables into a `Vec<DocumentFormat>` palette.
 //! - **Shared string resolution**: Inlines SST references at conversion time.
-//! - **Round-trip data**: Raw XML blobs, OPC relationships, and other byte-level preservation
-//!   data is moved into `RoundTripContext` — kept separate from the semantic data.
 //! - **Diagnostics**: Parse errors and statistics are moved into `ParseDiagnostics`.
 //!
 //! ## Stubbed domains
@@ -20,16 +18,18 @@
 //! stubbed with empty Vecs until export support is wired.
 
 mod cells;
+mod dropped_import_diagnostics;
 mod features;
 mod metadata;
 pub(crate) mod pivot_convert;
-mod round_trip;
 mod styles;
-use crate::infra::opc::{REL_DRAWING, resolve_relationship_target};
+mod workbook_metadata;
+use crate::infra::opc::resolve_relationship_target;
 use cells::*;
 use features::*;
-use round_trip::*;
+use dropped_import_diagnostics::append_dropped_import_diagnostics;
 use styles::*;
+use workbook_metadata::*;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -37,7 +37,6 @@ use std::collections::HashSet;
 use base64::Engine as _;
 use domain_types::{
     AuthoredStyleRun,
-    BlobPart,
     // Round-trip types
     CalculationProperties,
     // Parse output types
@@ -54,17 +53,13 @@ use domain_types::{
     ParseDiagnostics,
     ParseOutput,
     PersonInfo,
-    RoundTripContext,
     RowDimension,
     RowStyleEntry,
     RowXmlHints,
     SheetData,
     SheetDimensions,
-    SheetRoundTripContext,
     SheetView,
     TrailingColRange,
-    VmlDrawingPart,
-    VmlRels,
 };
 use formula_types::{CellRef, RangeType};
 use ooxml_types::doc_props::CustomPropertyValue;
@@ -103,20 +98,18 @@ fn custom_property_value_to_domain(
 
 /// Convert a `FullParseResult` into the shared pipeline types.
 ///
-/// Returns a triple:
+/// Returns:
 /// - `ParseOutput`: Semantic data (cells, merges, styles, named ranges, etc.)
-/// - `RoundTripContext`: Raw XML/OPC preservation blobs for lossless re-export
 /// - `ParseDiagnostics`: Errors, statistics, and recalc hints
 pub fn full_parse_result_to_parse_output(
     result: &FullParseResult,
-) -> (ParseOutput, RoundTripContext, ParseDiagnostics) {
+) -> (ParseOutput, ParseDiagnostics) {
     // 1. Resolve styles into a flat DocumentFormat palette
     let style_input = build_style_input(&result.styles, result);
     let style_palette = domain_types::style_resolver::resolve_styles(&style_input);
 
     // 2. Convert sheets, collecting workbook-level items along the way
     let mut sheet_data_vec = Vec::with_capacity(result.sheets.len());
-    let mut sheet_rt_vec = Vec::with_capacity(result.sheets.len());
     let mut all_parsed_pivots = Vec::new();
     let mut all_data_table_regions = Vec::new();
 
@@ -130,7 +123,7 @@ pub fn full_parse_result_to_parse_output(
     let media_data_urls = build_media_data_url_map(result);
 
     for (sheet_idx, sheet) in result.sheets.iter().enumerate() {
-        let (mut sd, mut srt) = convert_sheet(
+        let mut sd = convert_sheet(
             sheet,
             &result.shared_strings,
             &result.shared_strings_rich_runs,
@@ -144,24 +137,7 @@ pub fn full_parse_result_to_parse_output(
         // Collect the ParsedPivotTable (config + ooxml sidecar) from the v2 converter
         all_parsed_pivots.extend(sheet.parsed_pivot_configs.iter().cloned());
         all_data_table_regions.extend(convert_data_tables(&sheet.data_tables, sheet_idx as u32));
-        // Preserve namespace declarations and unknown elements from <worksheet> for round-trip
-        if let Some(ref ext) = result.extensions {
-            if let Some(ns_map) = ext.sheet_namespaces.get(sheet_idx) {
-                srt.preserved_namespace_attrs = ns_map
-                    .all()
-                    .iter()
-                    .map(|decl| {
-                        let prefix = decl.prefix.clone().unwrap_or_default();
-                        (prefix, decl.uri.clone())
-                    })
-                    .collect();
-            }
-            if let Some(preserved) = ext.sheet_preserved.get(sheet_idx) {
-                srt.sheet_preserved_elements = preserved.to_position_pairs();
-            }
-        }
         sheet_data_vec.push(sd);
-        sheet_rt_vec.push(srt);
     }
 
     // 3. Convert named ranges
@@ -265,11 +241,11 @@ pub fn full_parse_result_to_parse_output(
                     .collect()
             })
             .unwrap_or_default();
-        domain_types::WorkbookStylesheet {
+        domain_types::WorkbookStylesheet::from_stylesheet(
             stylesheet,
             root_namespace_attrs,
-            ext_lst_xml: result.styles_ext_lst_xml.clone(),
-        }
+            result.styles_ext_lst_xml.clone(),
+        )
     });
 
     let parse_output = ParseOutput {
@@ -305,15 +281,13 @@ pub fn full_parse_result_to_parse_output(
         persons,
     };
 
-    // 9. Build RoundTripContext
-    let round_trip = build_round_trip_context(result, &parse_output.sheets, sheet_rt_vec);
-
     // 10. Build ParseDiagnostics
     let mut diagnostics = build_diagnostics(result);
+    append_dropped_import_diagnostics(result, &mut diagnostics);
     append_import_compatibility_acknowledgements(&result.sheets, &mut diagnostics);
     append_object_import_diagnostics(&parse_output, &mut diagnostics);
 
-    (parse_output, round_trip, diagnostics)
+    (parse_output, diagnostics)
 }
 
 fn build_shared_string_hints(result: &FullParseResult) -> Vec<domain_types::SharedStringHint> {
@@ -777,7 +751,7 @@ fn image_mime_type_for_path(path: &str) -> &'static str {
     }
 }
 
-/// Convert a single `FullParsedSheet` into `SheetData` + `SheetRoundTripContext`.
+/// Convert a single `FullParsedSheet` into `SheetData`.
 fn convert_sheet(
     sheet: &FullParsedSheet,
     shared_strings: &[String],
@@ -786,7 +760,7 @@ fn convert_sheet(
     dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
     media_data_urls: &HashMap<String, String>,
-) -> (SheetData, SheetRoundTripContext) {
+) -> SheetData {
     // --- Cells ---
     let projection_roles = build_projection_roles(&sheet.cells);
     let compact_sst_provenance = env_flag_default_true("MOG_XLSX_COMPACT_SST_PROVENANCE");
@@ -1251,7 +1225,7 @@ fn convert_sheet(
         properties.page_set_up_pr = None;
     }
 
-    let sheet_data = SheetData {
+    SheetData {
         name: sheet.name.clone(),
         rows,
         cols,
@@ -1283,13 +1257,7 @@ fn convert_sheet(
         page_breaks,
         hf_images,
         protection,
-        // Typed OOXML preservation: typed auto_filter flows from the parse path
-        // directly; the former `SheetRoundTripContext.auto_filter_xml`
-        // raw-XML passthrough is deleted.
         auto_filter: sheet.auto_filter.clone(),
-        // Typed OOXML preservation: standalone worksheet-level sort state now flows
-        // through the typed field rather than through
-        // `SheetRoundTripContext.sort_state_xml`.
         sort_state: sheet.sort_state.clone(),
         data_validations_declared_count: sheet.data_validations_declared_count,
         data_validations_disable_prompts: sheet.data_validations_disable_prompts,
@@ -1303,134 +1271,7 @@ fn convert_sheet(
         sheet_properties,
         outline_properties: sheet.outline_properties.clone(),
         extra_sheet_views,
-    };
-
-    // --- Build SheetRoundTripContext ---
-    let sheet_rt = SheetRoundTripContext {
-        sheet_opc_rels: sheet
-            .sheet_opc_rels
-            .iter()
-            .map(|r| domain_types::OpcRelationship {
-                id: r.id.clone(),
-                rel_type: r.rel_type.clone(),
-                target: r.target.clone(),
-                target_mode: r.target_mode.clone(),
-            })
-            .collect(),
-        raw_vml_drawings: sheet
-            .raw_vml_drawings
-            .iter()
-            .map(|(path, data, rels)| VmlDrawingPart {
-                path: path.clone(),
-                data: data.clone(),
-                rels: rels.as_ref().map(|(rp, rd)| VmlRels {
-                    path: rp.clone(),
-                    data: rd.clone(),
-                }),
-            })
-            .collect(),
-        legacy_drawing_r_id: sheet.legacy_drawing_r_id.clone(),
-        legacy_drawing_hf_r_id: sheet.legacy_drawing_hf_r_id.clone(),
-        comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
-        comment_authors: sheet.comment_authors.clone(),
-        ext_lst_xml: sheet.ext_lst_xml.clone(),
-        preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
-        custom_properties_xml: sheet.custom_properties_xml.clone(),
-        sheet_preserved_elements: Vec::new(),
-        // Collect drawing anchor passthroughs: twoCellAnchors with content-level
-        // mc:AlternateContent (e.g., ChartEx wrapped in mc:AlternateContent).
-        // These need verbatim round-trip to preserve the mc wrapper, fallback shape,
-        // original relationship IDs, and cNvPr extensions (creationId, etc.).
-        drawing_anchor_passthroughs: sheet
-            .parsed_drawing
-            .as_ref()
-            .map(|d| {
-                d.anchors
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, a)| {
-                        match a {
-                            crate::domain::drawings::Anchor::TwoCell(tc) => {
-                                if let Some(ref mc) = tc.mc_alternate_content {
-                                    // Only include content-level mc:AlternateContent (starts with <xdr:twoCellAnchor).
-                                    // Form control mc:AlternateContent wraps the anchor (starts with <mc:AlternateContent)
-                                    // and must NOT be included — form controls are handled via the floating objects path.
-                                    if mc.raw_xml.starts_with("<xdr:twoCellAnchor") {
-                                        return Some((idx, mc.raw_xml.clone()));
-                                    }
-                                }
-                            }
-                            crate::domain::drawings::Anchor::OneCell(oc) => {
-                                if let Some(ref mc) = oc.mc_alternate_content {
-                                    // Content-level mc:AlternateContent in oneCellAnchors
-                                    // (e.g., slicer/timeslicer graphicFrames).
-                                    if mc.raw_xml.starts_with("<xdr:oneCellAnchor") {
-                                        return Some((idx, mc.raw_xml.clone()));
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                        None
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-        imported_drawing: sheet.parsed_drawing.as_ref().and_then(|d| {
-            let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
-            let path = sheet
-                .sheet_opc_rels
-                .iter()
-                .find(|r| r.rel_type == REL_DRAWING)
-                .and_then(|r| resolve_relationship_target(Some(&owner_path), &r.target).ok())?;
-            let data = d.raw_drawing_xml.clone()?;
-            let rels = d.raw_drawing_rels_xml.clone().map(|data| {
-                let filename = path.rsplit('/').next().unwrap_or("drawing.xml");
-                BlobPart {
-                    path: format!("xl/drawings/_rels/{filename}.rels"),
-                    data,
-                }
-            });
-            Some(domain_types::ImportedDrawingPart { path, data, rels })
-        }),
-        drawing_root_namespace_attrs: sheet
-            .parsed_drawing
-            .as_ref()
-            .map(|d| d.root_namespace_attrs.clone())
-            .unwrap_or_default(),
-        original_drawing_path: sheet
-            .sheet_opc_rels
-            .iter()
-            .find(|r| r.rel_type == REL_DRAWING)
-            .and_then(|r| {
-                let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
-                resolve_relationship_target(Some(&owner_path), &r.target).ok()
-            }),
-        // Preserve drawing OPC rels for relationship ID fidelity.
-        drawing_opc_rels: sheet
-            .parsed_drawing
-            .as_ref()
-            .map(|d| {
-                d.opc_rels
-                    .iter()
-                    .map(|r| domain_types::OpcRelationship {
-                        id: r.id.clone(),
-                        rel_type: r.rel_type.clone(),
-                        target: r.target.clone(),
-                        target_mode: r.target_mode.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-        // Preserve whether a drawing .rels file existed (even if empty).
-        has_drawing_rels_file: sheet
-            .parsed_drawing
-            .as_ref()
-            .map(|d| d.has_rels_file)
-            .unwrap_or(false),
-    };
-
-    (sheet_data, sheet_rt)
+    }
 }
 
 // =============================================================================

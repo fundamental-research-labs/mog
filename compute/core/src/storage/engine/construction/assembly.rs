@@ -24,7 +24,7 @@ pub(in crate::storage::engine) fn from_snapshot(
         (compute, recalc_result, mirror)
     };
 
-    let engine = assemble_engine(storage, mirror, compute, &snapshot, None)?;
+    let engine = assemble_engine(storage, mirror, compute, &snapshot)?;
 
     Ok((engine, recalc_result))
 }
@@ -76,7 +76,6 @@ pub(in crate::storage::engine) fn from_yrs_state(
         mirror,
         compute,
         &snapshot,
-        None,
         collab_alloc.clone(),
         collab_alloc,
     )?;
@@ -126,7 +125,6 @@ pub(in crate::storage::engine) fn assemble_engine(
     mirror: CellMirror,
     mut compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
-    round_trip_context: Option<domain_types::RoundTripContext>,
 ) -> Result<YrsComputeEngine, ComputeError> {
     let seed = snapshot_id_high_water_mark(snapshot);
     let grid_id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed));
@@ -141,7 +139,6 @@ pub(in crate::storage::engine) fn assemble_engine(
         mirror,
         compute,
         snapshot,
-        round_trip_context,
         grid_id_alloc,
         id_alloc,
     )
@@ -153,7 +150,6 @@ pub(in crate::storage::engine) fn assemble_engine_with_alloc(
     mirror: CellMirror,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
-    round_trip_context: Option<domain_types::RoundTripContext>,
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
 ) -> Result<YrsComputeEngine, ComputeError> {
@@ -162,7 +158,6 @@ pub(in crate::storage::engine) fn assemble_engine_with_alloc(
         mirror,
         compute,
         snapshot,
-        round_trip_context,
         grid_id_alloc,
         id_alloc,
     )
@@ -173,7 +168,6 @@ fn assemble_engine_inner(
     mut mirror: CellMirror,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
-    round_trip_context: Option<domain_types::RoundTripContext>,
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
 ) -> Result<YrsComputeEngine, ComputeError> {
@@ -252,7 +246,6 @@ fn assemble_engine_inner(
         },
         viewport: ViewportService::new(),
         settings,
-        round_trip_context: round_trip_context.map(std::sync::Arc::new),
         security,
         security_events,
         update_buffer,
@@ -276,7 +269,6 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     engine: &mut YrsComputeEngine,
     new_storage: YrsStorage,
     workbook_snap: WorkbookSnapshot,
-    round_trip_ctx: domain_types::RoundTripContext,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
     engine.stores.storage = new_storage;
@@ -290,8 +282,6 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     );
     // CellMirror is built inside init_from_snapshot / init_from_snapshot_minimal.
     // Don't build it separately to avoid the double-build overhead.
-    engine.round_trip_context = Some(std::sync::Arc::new(round_trip_ctx));
-
     // Rebuild ComputeCore (also rebuilds CellMirror)
     let recalc_result = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");

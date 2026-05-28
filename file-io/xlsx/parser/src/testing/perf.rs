@@ -228,11 +228,11 @@ fn run_perf_fixture(
     let import_ms = import_started.elapsed().as_secs_f64() * 1000.0;
 
     let hydrate_started = Instant::now();
-    let (output, round_trip_ctx, _diagnostics) = full_parse_result_to_parse_output(&parsed);
+    let (output, _diagnostics) = full_parse_result_to_parse_output(&parsed);
     let hydrate_ms = hydrate_started.elapsed().as_secs_f64() * 1000.0;
 
     let export_started = Instant::now();
-    let exported = match write_xlsx_from_parse_output(&output, Some(&round_trip_ctx)) {
+    let exported = match write_xlsx_from_parse_output(&output) {
         Ok(bytes) => bytes,
         Err(err) => {
             return failed_result(&fixture.id, started, format!("export failed: {err}"));
@@ -529,7 +529,7 @@ fn load_fixture_bytes(fixture: &PerfFixture) -> Result<Vec<u8>, String> {
         PerfSource::File(path) => fs::read(path).map_err(|err| format!("read failed: {err}")),
         PerfSource::Generated(scale) => {
             let output = generated_parse_output(scale);
-            write_xlsx_from_parse_output(&output, None)
+            write_xlsx_from_parse_output(&output)
                 .map_err(|err| format!("generated fixture write failed: {err}"))
         }
     }

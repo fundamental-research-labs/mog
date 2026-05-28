@@ -271,18 +271,10 @@ pub(crate) use output::to_parse_output::full_parse_result_to_parse_output;
 ///
 /// Returns:
 /// - `ParseOutput`: Semantic data (cells, merges, styles, domain objects)
-/// - `RoundTripContext`: Raw XML preservation blobs for lossless re-export
 /// - `ParseDiagnostics`: Parse errors and statistics
 pub fn parse_xlsx_to_output(
     xlsx_data: &[u8],
-) -> Result<
-    (
-        domain_types::ParseOutput,
-        domain_types::RoundTripContext,
-        domain_types::ParseDiagnostics,
-    ),
-    String,
-> {
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
     let result = parse_xlsx_full_native(xlsx_data, None)?;
     Ok(full_parse_result_to_parse_output(&result))
 }
@@ -293,14 +285,7 @@ pub fn parse_xlsx_to_output(
 pub fn parse_xlsx_to_output_max_sheets(
     xlsx_data: &[u8],
     max_sheets: usize,
-) -> Result<
-    (
-        domain_types::ParseOutput,
-        domain_types::RoundTripContext,
-        domain_types::ParseDiagnostics,
-    ),
-    String,
-> {
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
     let result =
         pipeline::full_parse::parse_xlsx_full_native_max_sheets(xlsx_data, None, max_sheets)?;
     Ok(full_parse_result_to_parse_output(&result))
@@ -368,12 +353,12 @@ mod tests {
     #[test]
     fn test_chart_double_round_trip() {
         let fixture = include_bytes!("../test-corpus/parity/charts/chart-bar.xlsx");
-        let (output1, rt1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
+        let (output1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
         let charts_1: usize = output1.sheets.iter().map(|s| s.charts.len()).sum();
         assert!(charts_1 > 0, "original should have charts");
 
         // Export
-        let exported = write::from_parse_output::write_xlsx_from_parse_output(&output1, Some(&rt1))
+        let exported = write::from_parse_output::write_xlsx_from_parse_output(&output1)
             .expect("export failed");
 
         // Verify drawing paths in the exported archive are correct
@@ -395,7 +380,7 @@ mod tests {
         }
 
         // Re-import and verify charts survive
-        let (output2, _, _) = parse_xlsx_to_output(&exported).expect("re-import failed");
+        let (output2, _) = parse_xlsx_to_output(&exported).expect("re-import failed");
         let charts_2: usize = output2.sheets.iter().map(|s| s.charts.len()).sum();
         assert_eq!(charts_2, charts_1, "charts lost during re-import");
     }
@@ -403,15 +388,13 @@ mod tests {
     #[test]
     fn chart_xml_stabilizes_after_reimport_export() {
         let fixture = include_bytes!("../test-corpus/parity/charts/chart-bar.xlsx");
-        let (output1, rt1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
-        let exported1 =
-            write::from_parse_output::write_xlsx_from_parse_output(&output1, Some(&rt1))
-                .expect("first export failed");
+        let (output1, _) = parse_xlsx_to_output(fixture).expect("first parse failed");
+        let exported1 = write::from_parse_output::write_xlsx_from_parse_output(&output1)
+            .expect("first export failed");
 
-        let (output2, rt2, _) = parse_xlsx_to_output(&exported1).expect("second parse failed");
-        let exported2 =
-            write::from_parse_output::write_xlsx_from_parse_output(&output2, Some(&rt2))
-                .expect("second export failed");
+        let (output2, _) = parse_xlsx_to_output(&exported1).expect("second parse failed");
+        let exported2 = write::from_parse_output::write_xlsx_from_parse_output(&output2)
+            .expect("second export failed");
 
         let archive1 = crate::zip::XlsxArchive::new(&exported1).expect("first archive");
         let archive2 = crate::zip::XlsxArchive::new(&exported2).expect("second archive");

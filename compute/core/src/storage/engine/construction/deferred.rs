@@ -28,7 +28,6 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         parsed
     };
     let parse_output = parsed.output;
-    let round_trip_ctx = parsed.round_trip_ctx;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -331,7 +330,6 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     engine.mutation.undo_manager = undo_manager;
     engine.settings = derive_settings(&engine.stores.storage);
     engine.viewport.clear();
-    engine.round_trip_context = Some(std::sync::Arc::new(round_trip_ctx.clone()));
 
     // Register phantom cells from first sheet
     for (sheet_id, cell_id, row, col) in &id_map.phantom_cells {
@@ -347,7 +345,6 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         parse_output,
         allocations,
         workbook_snap,
-        round_trip_ctx,
         raw_xlsx_bytes: Some(xlsx_data.to_vec()),
     });
 
@@ -377,22 +374,21 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let (full_parse_output, full_round_trip_ctx) = {
+        let full_parse_output = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
             let parsed = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
                 let parsed = xlsx_api::parse(raw_bytes).map_err(|e| ComputeError::Deserialize {
                     message: format!("XLSX full re-parse error: {}", e),
                 })?;
-                (parsed.output, parsed.round_trip_ctx)
+                parsed.output
             } else {
-                (data.parse_output.clone(), data.round_trip_ctx.clone())
+                data.parse_output.clone()
             };
-            profile.counter("sheets", parsed.0.sheets.len() as u64);
+            profile.counter("sheets", parsed.sheets.len() as u64);
             profile.counter(
                 "cells",
                 parsed
-                    .0
                     .sheets
                     .iter()
                     .map(|sheet| sheet.cells.len() as u64)
@@ -630,7 +626,6 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             stores,
             mirror: new_mirror,
             settings,
-            round_trip_ctx: full_round_trip_ctx,
             phantom_cells: id_map.phantom_cells,
             calculation,
         }
@@ -665,7 +660,6 @@ pub(in crate::storage::engine) fn commit_deferred_hydration(
 
     normalize_named_range_refs(engine);
     sync_enable_calculation_flags(engine);
-    engine.round_trip_context = Some(std::sync::Arc::new(completion.round_trip_ctx));
 
     for (sheet_id, cell_id, row, col) in completion.phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {

@@ -48,10 +48,6 @@ pub use properties::*;
 mod metadata;
 pub use metadata::*;
 
-// Round-trip preservation (opaque XML blobs)
-pub mod round_trip;
-pub use round_trip::*;
-
 // Import diagnostics (diagnostics, stats, force-recalc hints)
 mod diagnostics;
 pub use diagnostics::*;

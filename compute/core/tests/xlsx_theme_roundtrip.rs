@@ -16,7 +16,7 @@ fn l2_roundtrip_preserves_modeled_theme_format_scheme_and_sidecars() {
         .expect("theme should hydrate into modeled workbook state");
     assert!(
         theme.format_scheme.is_some(),
-        "theme format scheme must use modeled ThemeData, not RoundTripContext"
+        "theme format scheme must use modeled ThemeData"
     );
     assert_eq!(
         theme.object_defaults_xml.as_deref(),

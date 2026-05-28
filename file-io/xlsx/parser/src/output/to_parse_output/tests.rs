@@ -205,7 +205,7 @@ fn sheet_protection_modern_hash_fields_reach_parse_output() {
         Vec::new(),
     );
 
-    let (output, _, _) = full_parse_result_to_parse_output(&result);
+    let (output, _) = full_parse_result_to_parse_output(&result);
     let protection = output.sheets[0]
         .protection
         .as_ref()
@@ -349,7 +349,7 @@ fn projection_roles_preserve_authored_cm_cells_and_classify_only_proven_spills()
     };
     let result = threading_result(sheet, None, Vec::new());
 
-    let (output, _rt_ctx, _diagnostics) = full_parse_result_to_parse_output(&result);
+    let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
     let cells = &output.sheets[0].cells;
     assert_eq!(cells.len(), 4);
 
@@ -971,7 +971,7 @@ fn typed_custom_doc_props_populate_parse_output() {
         ],
     });
 
-    let (output, _round_trip, _diagnostics) = full_parse_result_to_parse_output(&result);
+    let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
     let props = output
         .properties
         .expect("custom properties should be modeled");
@@ -1039,7 +1039,7 @@ fn workbook_views_populate_parse_output() {
         },
     ];
 
-    let (output, _round_trip, _diagnostics) = full_parse_result_to_parse_output(&result);
+    let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
 
     assert_eq!(output.workbook_views.len(), 2);
 

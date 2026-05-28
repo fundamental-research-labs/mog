@@ -4,8 +4,8 @@
 //! This is the reverse of `hydration.rs`: instead of writing structured Y.Maps
 //! from a `ParseOutput`, we READ the structured Y.Maps and produce a `ParseOutput`.
 //!
-//! This is needed so the unified XLSX writer can consume `ParseOutput` for both
-//! import-export round-trip and clean export from the running engine.
+//! This is needed so the unified XLSX writer can consume modeled `ParseOutput`
+//! from the running engine.
 //!
 //! ## Architecture
 //!
@@ -33,8 +33,7 @@ use bridge_core as bridge;
 use value_types::ComputeError;
 
 use domain_types::{
-    CellData, ColStyleEntry, DocumentFormat, ParseOutput, RoundTripContext, RowStyleEntry,
-    SheetDimensions,
+    CellData, ColStyleEntry, DocumentFormat, ParseOutput, RowStyleEntry, SheetDimensions,
     domain::filter::AutoFilter,
     domain::floating_object::FloatingObject,
     domain::hyperlink::Hyperlink,
@@ -88,20 +87,11 @@ pub(super) fn sorted_map_entries<T: ReadTxn>(map: &MapRef, txn: &T) -> Vec<(Stri
 // Export result type
 // =============================================================================
 
-/// Result of `export_to_parse_output`: the semantic data (`ParseOutput`) plus
-/// an optional `RoundTripContext` for lossless re-export of imported files.
-///
-/// When the engine was created from an XLSX import, `round_trip_context` is
-/// `Some(...)` and contains raw XML blobs, OPC relationships, and other
-/// byte-level preservation data. When the engine was created from a blank
-/// document or snapshot, it is `None`.
+/// Result of `export_to_parse_output`.
 #[derive(Debug, Clone)]
 pub struct ExportParseResult {
     /// Semantic spreadsheet data (same type the XLSX parser emits).
     pub parse_output: ParseOutput,
-    /// Preservation context for lossless round-trip, if available.
-    /// Wrapped in `Arc` for O(1) clone (the context can be tens of MB).
-    pub round_trip_context: Option<std::sync::Arc<RoundTripContext>>,
 }
 
 // =============================================================================
@@ -119,16 +109,15 @@ impl YrsComputeEngine {
     /// Exports the current workbook state to XLSX bytes in a single call.
     ///
     /// Uses the export path: Yrs → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
-    /// This produces a rich XLSX (styles, comments, dimensions, named ranges) and supports
-    /// round-trip fidelity when the document was originally imported from an XLSX file.
+    /// This produces a rich XLSX (styles, comments, dimensions, named ranges).
     #[bridge::read(scope = "workbook")]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
     pub fn export_to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
-        self.write_xlsx_export_result(&result, true)
+        self.write_xlsx_export_result(&result)
     }
 
-    /// Exports the current workbook state without the imported `RoundTripContext`.
+    /// Exports the current workbook state through the modeled parse-output path.
     ///
     /// This anti-cheat path must agree with normal export for modeled workbook
     /// facts. Any difference outside registered opaque subgraphs means source
@@ -137,23 +126,14 @@ impl YrsComputeEngine {
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes_context_stripped", skip_all)]
     pub fn export_to_xlsx_bytes_context_stripped(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
-        self.write_xlsx_export_result(&result, false)
+        self.write_xlsx_export_result(&result)
     }
 
-    fn write_xlsx_export_result(
-        &self,
-        result: &ExportParseResult,
-        include_round_trip_context: bool,
-    ) -> Result<Vec<u8>, ComputeError> {
+    fn write_xlsx_export_result(&self, result: &ExportParseResult) -> Result<Vec<u8>, ComputeError> {
         let bytes = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("export", "export_to_xlsx_writer");
-            let bytes = xlsx_api::export_from_parse_output(
-                &result.parse_output,
-                include_round_trip_context
-                    .then_some(result.round_trip_context.as_deref())
-                    .flatten(),
-            )
+            let bytes = xlsx_api::export_from_parse_output(&result.parse_output)
             .map_err(|e| ComputeError::ExportError {
                 message: e.to_string(),
             })?;
@@ -184,7 +164,7 @@ impl YrsComputeEngine {
     ///
     /// Reads structured Y.Map fields (not JSON blobs) for all domains.
     /// This produces the same type that the XLSX parser emits, enabling
-    /// the unified XLSX writer to consume it for both round-trip and clean export.
+    /// the unified XLSX writer to consume it.
     #[tracing::instrument(name = "build_parse_output_from_yrs", skip_all)]
     pub fn build_parse_output_from_yrs(&self) -> ParseOutput {
         let mut profile =
@@ -192,7 +172,6 @@ impl YrsComputeEngine {
         let parse_output = super::services::export::build_parse_output_from_yrs(
             &self.stores,
             &self.mirror,
-            self.round_trip_context.as_deref(),
         );
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
@@ -206,19 +185,12 @@ impl YrsComputeEngine {
         parse_output
     }
 
-    /// Export the engine state as a `ParseOutput` bundled with the optional
-    /// `RoundTripContext` for lossless re-export.
-    ///
-    /// The bridge's `export_to_xlsx_bytes` calls this, then passes the result
-    /// to the unified XLSX writer to produce `.xlsx` bytes.
+    /// Export the engine state as a `ParseOutput`.
     #[tracing::instrument(name = "engine_export_to_parse_output", skip_all)]
     pub fn export_to_parse_output(&self) -> Result<ExportParseResult, ComputeError> {
         self.require_all_sheets_materialized("export_to_parse_output")?;
         let parse_output = self.build_parse_output_from_yrs();
-        Ok(ExportParseResult {
-            parse_output,
-            round_trip_context: self.round_trip_context.clone(),
-        })
+        Ok(ExportParseResult { parse_output })
     }
 }
 
@@ -259,7 +231,6 @@ impl YrsComputeEngine {
         let result = super::services::export::export_cells_for_sheet(
             &self.stores,
             &self.mirror,
-            self.round_trip_context.as_deref(),
             sheet_id,
             &palette,
         );
@@ -276,7 +247,6 @@ impl YrsComputeEngine {
         super::services::export::export_dimensions_for_sheet(
             &self.stores,
             &self.mirror,
-            self.round_trip_context.as_deref(),
             sheet_id,
             override_max_col,
         )
@@ -297,7 +267,6 @@ impl YrsComputeEngine {
         let palette = super::services::export::LocalPalette::from_vec(style_palette);
         let result = super::services::export::export_row_col_styles_for_sheet(
             &self.stores,
-            self.round_trip_context.as_deref(),
             sheet_id,
             max_row,
             max_col,

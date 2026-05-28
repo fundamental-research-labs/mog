@@ -319,8 +319,7 @@ fn calculation_properties_from_settings(settings: &CalculationSettings) -> Calcu
 ///
 /// Hidden names are included here because they are workbook state, not UI query
 /// output. Unsupported or opaque references must be present in
-/// `DefinedName.raw_refers_to`; stale `RoundTripContext` skipped-name lists are
-/// intentionally not consulted.
+/// `DefinedName.raw_refers_to`.
 pub(super) fn export_workbook_named_ranges(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -532,10 +531,6 @@ pub(super) fn export_file_sharing(
 }
 
 /// Export workbook external links from workbook-owned imported-cache records.
-///
-/// The original parser `RoundTripContext.external_links` is import input only.
-/// Once hydrated, the workbook link registry and imported cache map own the
-/// current external-link export set.
 pub(super) fn export_external_links(stores: &EngineStores) -> Vec<ExternalLink> {
     let doc = stores.storage.doc();
     let txn = doc.transact();

@@ -15,7 +15,7 @@ parallel = ["native", "xlsx-parser/parallel"]
 # The parser we wrap
 xlsx-parser = { path = "../xlsx/parser" }
 
-# Domain types (ParseOutput, RoundTripContext) for the unified export path
+# Domain types (ParseOutput) for the unified export path
 domain-types = { path = "../../domain-types" }
 
 # Bridge framework for proc-macro annotations (#[bridge::api], #[bridge::pure])

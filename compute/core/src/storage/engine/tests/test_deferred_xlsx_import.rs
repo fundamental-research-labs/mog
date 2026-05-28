@@ -126,7 +126,7 @@ fn style_only_empty_fill_fixture_xlsx() -> Vec<u8> {
         ..Default::default()
     };
 
-    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+    xlsx_parser::write::write_xlsx_from_parse_output(&output)
         .expect("style-only empty fill fixture should be writable")
 }
 
@@ -156,7 +156,7 @@ fn formula_text_fixture_xlsx() -> Vec<u8> {
         ..Default::default()
     };
 
-    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+    xlsx_parser::write::write_xlsx_from_parse_output(&output)
         .expect("formula text fixture should be writable")
 }
 
@@ -240,7 +240,7 @@ fn mixed_cbor_deferred_import_fixture_xlsx(rows: u32, cols: u32) -> Vec<u8> {
         ..Default::default()
     };
 
-    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+    xlsx_parser::write::write_xlsx_from_parse_output(&output)
         .expect("mixed-cbor fixture should be writable")
 }
 
@@ -281,7 +281,7 @@ fn basic_import_fixture_xlsx() -> Vec<u8> {
         ..Default::default()
     };
 
-    xlsx_parser::write::write_xlsx_from_parse_output(&output, None)
+    xlsx_parser::write::write_xlsx_from_parse_output(&output)
         .expect("basic import fixture should be writable")
 }
 

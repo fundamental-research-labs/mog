@@ -237,7 +237,7 @@ fn export_round_trip_preserves_basic_structure() {
     );
 
     // Step 2: Export to bytes via ParseOutput path
-    let exported_bytes = export_from_parse_output(&original.output, Some(&original.round_trip_ctx))
+    let exported_bytes = export_from_parse_output(&original.output)
         .expect("export_from_parse_output should succeed");
     assert!(
         !exported_bytes.is_empty(),

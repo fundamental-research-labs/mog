@@ -9,7 +9,7 @@ use xlsx_parser::write::write_xlsx_from_parse_output;
 /// Returns the round-tripped ParseOutput for further assertions.
 pub(super) fn roundtrip(original: &ParseOutput) -> ParseOutput {
     // Step 1: Write XLSX bytes from ParseOutput
-    let bytes = write_xlsx_from_parse_output(original, None)
+    let bytes = write_xlsx_from_parse_output(original)
         .expect("write_xlsx_from_parse_output should succeed");
 
     // Sanity: output should be a valid ZIP (starts with PK)
@@ -21,7 +21,7 @@ pub(super) fn roundtrip(original: &ParseOutput) -> ParseOutput {
     assert_eq!(&bytes[0..2], b"PK", "Output is not a valid ZIP archive");
 
     // Step 2: Parse the XLSX bytes into ParseOutput via the unified pipeline
-    let (round_tripped, _rt_ctx, _diagnostics) =
+    let (round_tripped, _diagnostics) =
         xlsx_parser::parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
 
     round_tripped

@@ -40,8 +40,7 @@ pub(in crate::storage::engine) use workbook::{
 use cell_types::SheetId;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
-    DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, ParseOutput, RoundTripContext,
-    SheetData, SheetView,
+    DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, ParseOutput, SheetData, SheetView,
     domain::chart::ChartSpec,
     domain::comment::{Comment, CommentType},
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
@@ -181,7 +180,6 @@ impl PaletteOps for SharedPalette {
 fn export_single_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
-    round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     sheet_idx: usize,
     palette: &impl PaletteOps,
@@ -192,9 +190,9 @@ fn export_single_sheet(
     let name = queries::get_sheet_name(stores, sheet_id)?;
 
     // --- Cells ---
-    let cells = export_cells_for_sheet(stores, mirror, round_trip_context, sheet_id, palette);
+    let cells = export_cells_for_sheet(stores, mirror, sheet_id, palette);
     let authored_style_runs =
-        export_authored_style_runs_for_sheet(stores, mirror, round_trip_context, sheet_id, palette);
+        export_authored_style_runs_for_sheet(stores, mirror, sheet_id, palette);
 
     // --- Merges ---
     let merges_raw = match stores.grid_indexes.get(sheet_id) {
@@ -436,7 +434,7 @@ fn export_single_sheet(
         stores.grid_indexes.get(sheet_id),
     );
     let sheet_dimensions =
-        export_dimensions_for_sheet(stores, mirror, round_trip_context, sheet_id, stored_max_col);
+        export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
 
     // --- Comments ---
     let raw_comments = get_all_comments(stores, sheet_id);
@@ -548,7 +546,6 @@ fn export_single_sheet(
     // --- Row/Col styles ---
     let (row_styles, col_styles) = export_row_col_styles_for_sheet(
         stores,
-        round_trip_context,
         sheet_id,
         style_max_row,
         max_col,
@@ -783,14 +780,13 @@ fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
 
 /// Build a complete `ParseOutput` from the current Yrs storage state.
 /// This produces the same type that the XLSX parser emits, enabling
-/// the unified XLSX writer to consume it for both round-trip and clean export.
+/// the unified XLSX writer to consume it.
 ///
 /// On native targets (with rayon), sheets are exported in parallel using a
 /// shared thread-safe style palette. On WASM, sheets are processed sequentially.
 pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     stores: &EngineStores,
     mirror: &CellMirror,
-    round_trip_context: Option<&RoundTripContext>,
 ) -> ParseOutput {
     let sheet_ids = stores.storage.sheet_order();
 
@@ -803,14 +799,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
             .par_iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(
-                    stores,
-                    mirror,
-                    round_trip_context,
-                    sheet_id,
-                    sheet_idx,
-                    &palette,
-                )
+                export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
             })
             .collect();
         (sheets, palette.into_vec())
@@ -823,14 +812,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
             .iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(
-                    stores,
-                    mirror,
-                    round_trip_context,
-                    sheet_id,
-                    sheet_idx,
-                    &palette,
-                )
+                export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
             })
             .collect();
         (sheets, palette.into_vec())

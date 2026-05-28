@@ -79,11 +79,127 @@ pub struct ParseOutput {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookStylesheet {
+    /// Legacy in-memory scaffold for tests/migration callers that still build a
+    /// whole OOXML stylesheet. Production parser/Yrs/export paths lower into
+    /// the explicit registries below instead of serializing this blob.
+    #[serde(default, skip)]
     pub stylesheet: ooxml_types::styles::Stylesheet,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub number_formats: Vec<ooxml_types::styles::NumberFormatDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fonts: Vec<ooxml_types::styles::FontDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fills: Vec<ooxml_types::styles::FillDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub borders: Vec<ooxml_types::styles::BorderDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_style_xfs: Vec<ooxml_types::styles::CellXfDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_xfs: Vec<ooxml_types::styles::CellXfDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub named_cell_styles: Vec<ooxml_types::styles::CellStyleDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub differential_formats: Vec<ooxml_types::styles::DxfDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub table_styles: Vec<ooxml_types::styles::TableStyleDef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub indexed_colors: Option<ooxml_types::styles::ColorsDef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_table_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_pivot_style: Option<String>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub known_fonts: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_namespace_attrs: Vec<(String, String)>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<Vec<u8>>,
+}
+
+impl WorkbookStylesheet {
+    #[must_use]
+    pub fn from_stylesheet(
+        stylesheet: ooxml_types::styles::Stylesheet,
+        root_namespace_attrs: Vec<(String, String)>,
+        ext_lst_xml: Option<Vec<u8>>,
+    ) -> Self {
+        Self {
+            number_formats: stylesheet.num_fmts,
+            fonts: stylesheet.fonts,
+            known_fonts: stylesheet.known_fonts,
+            fills: stylesheet.fills,
+            borders: stylesheet.borders,
+            cell_style_xfs: stylesheet.cell_style_xfs,
+            cell_xfs: stylesheet.cell_xfs,
+            named_cell_styles: stylesheet.cell_styles,
+            differential_formats: stylesheet.dxfs,
+            indexed_colors: stylesheet.colors,
+            table_styles: stylesheet.table_styles,
+            default_table_style: stylesheet.default_table_style,
+            default_pivot_style: stylesheet.default_pivot_style,
+            root_namespace_attrs,
+            ext_lst_xml,
+            stylesheet: ooxml_types::styles::Stylesheet::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn to_stylesheet(&self) -> ooxml_types::styles::Stylesheet {
+        if self.is_registry_empty()
+            && self.stylesheet != ooxml_types::styles::Stylesheet::default()
+        {
+            return self.stylesheet.clone();
+        }
+
+        ooxml_types::styles::Stylesheet {
+            num_fmts: self.number_formats.clone(),
+            fonts: self.fonts.clone(),
+            known_fonts: self.known_fonts,
+            fills: self.fills.clone(),
+            borders: self.borders.clone(),
+            cell_style_xfs: self.cell_style_xfs.clone(),
+            cell_xfs: self.cell_xfs.clone(),
+            cell_styles: self.named_cell_styles.clone(),
+            dxfs: self.differential_formats.clone(),
+            colors: self.indexed_colors.clone(),
+            table_styles: self.table_styles.clone(),
+            default_table_style: self.default_table_style.clone(),
+            default_pivot_style: self.default_pivot_style.clone(),
+            ext_lst: None,
+        }
+    }
+
+    #[must_use]
+    pub fn normalized(&self) -> Self {
+        if self.is_registry_empty()
+            && self.stylesheet != ooxml_types::styles::Stylesheet::default()
+        {
+            return Self::from_stylesheet(
+                self.stylesheet.clone(),
+                self.root_namespace_attrs.clone(),
+                self.ext_lst_xml.clone(),
+            );
+        }
+        let mut normalized = self.clone();
+        normalized.stylesheet = ooxml_types::styles::Stylesheet::default();
+        normalized
+    }
+
+    fn is_registry_empty(&self) -> bool {
+        self.number_formats.is_empty()
+            && self.fonts.is_empty()
+            && self.fills.is_empty()
+            && self.borders.is_empty()
+            && self.cell_style_xfs.is_empty()
+            && self.cell_xfs.is_empty()
+            && self.named_cell_styles.is_empty()
+            && self.differential_formats.is_empty()
+            && self.table_styles.is_empty()
+            && self.indexed_colors.is_none()
+            && self.default_table_style.is_none()
+            && self.default_pivot_style.is_none()
+            && !self.known_fonts
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -280,12 +396,12 @@ pub struct SheetData {
     // Structure
     pub auto_filter: Option<AutoFilter>,
     /// Worksheet-level `<sortState>` element (not nested inside `<autoFilter>`).
-    ///
-    /// Previously stored as raw XML on `SheetRoundTripContext.sort_state_xml`
-    /// and silently dropped when the blob was absent. Now typed directly so
-    /// parse -> domain -> write reconstructs losslessly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sort_state: Option<SortState>,
+    /// Known worksheet semantic containers whose full OOXML model is not yet
+    /// decomposed into smaller runtime objects.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub worksheet_semantic_containers: Vec<WorksheetSemanticContainer>,
     pub outline_groups: Vec<OutlineGroup>,
     /// Worksheet-level `<sheetPr>` attributes and child properties.
     #[serde(default, skip_serializing_if = "Option::is_none")]

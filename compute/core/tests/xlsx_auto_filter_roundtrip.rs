@@ -170,7 +170,7 @@ fn rich_auto_filter_survives_hydrate_export_roundtrip() {
     // Serialize → parse round-trip gives us the XLSX bytes we then hydrate
     // through the engine (the production path).
     let xlsx_bytes =
-        write_xlsx_from_parse_output(&parse_output, None).expect("write_xlsx_from_parse_output");
+        write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
 
     let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
 
@@ -282,7 +282,7 @@ fn childless_and_explicit_empty_values_filters_survive_hydrate_export_roundtrip(
     };
     let parse_output = build_parse_output_with_filter(af.clone());
     let xlsx_bytes =
-        write_xlsx_from_parse_output(&parse_output, None).expect("write_xlsx_from_parse_output");
+        write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
 
     let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
@@ -321,7 +321,7 @@ fn simple_auto_filter_survives_when_no_column_filters() {
     let parse_output = build_parse_output_with_filter(af.clone());
 
     let xlsx_bytes =
-        write_xlsx_from_parse_output(&parse_output, None).expect("write_xlsx_from_parse_output");
+        write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
     let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
     let (reparsed, _ctx, _diags) =

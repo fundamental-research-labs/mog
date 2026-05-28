@@ -105,7 +105,6 @@ pub struct YrsComputeEngine {
     pub(crate) mutation: MutationCoordinator,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,
-    round_trip_context: Option<std::sync::Arc<domain_types::RoundTripContext>>,
     /// Security state — R2.3. Owns the live `PolicyEngine`, the version
     /// counters, the matrix cache, and the shared `active` flag that
     /// `ComputeService` reads for its gated-delegate fast path.

@@ -6,8 +6,7 @@
 use cell_types::SheetId;
 use compute_document::schema::*;
 use domain_types::{
-    ColDimension, RoundTripContext, RowDimension, RowXmlHints, SheetDimensions,
-    domain::table::TableSpec, yrs_schema,
+    ColDimension, RowDimension, RowXmlHints, SheetDimensions, domain::table::TableSpec, yrs_schema,
 };
 use yrs::{Map, Out, Transact};
 
@@ -28,7 +27,6 @@ use crate::storage::sheet::{dimensions, settings};
 pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
-    round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     override_max_col: Option<u32>,
 ) -> SheetDimensions {
@@ -320,10 +318,6 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     };
 
     // Read customWidth column set from meta.
-    // When round-trip context is available (XLSX import), use stored flags
-    // exclusively — the `width_differs` fallback would spuriously mark default
-    // columns as custom when their width differs from the Yrs default (64.0).
-    let has_roundtrip_ctx = round_trip_context.is_some();
     let custom_width_cols: std::collections::HashSet<u32> = {
         let txn = stores.storage.doc().transact();
         get_meta_for_export(&txn, stores.storage.sheets(), sheet_id)
@@ -368,16 +362,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
             Some(width) => {
                 let is_custom_width = custom_width_cols.contains(&col);
                 let width_differs = (width.0 - default_col_width.0).abs() > 0.01;
-                // During round-trip, trust the stored customWidth flags exclusively.
-                // Without this, columns with a non-default width (e.g., 10.83 from
-                // baseColWidth=10) that were NOT marked as customWidth in the original
-                // XLSX get spuriously marked because their width differs from Yrs's
-                // internal default (64.0).
-                let custom = if has_roundtrip_ctx {
-                    is_custom_width
-                } else {
-                    is_custom_width || width_differs
-                };
+                let custom = is_custom_width || width_differs;
                 let is_collapsed = collapsed_cols.contains(&col);
                 if custom || width_differs || is_hidden || is_best_fit || is_collapsed {
                     col_widths.push(ColDimension {

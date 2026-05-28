@@ -4,8 +4,7 @@ use super::*;
 pub(in crate::storage::engine) fn from_xlsx_bytes(
     xlsx_data: &[u8],
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, round_trip_ctx, phantom_cells) =
-        parse_and_hydrate_xlsx(xlsx_data)?;
+    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_xlsx(xlsx_data)?;
 
     let (mirror, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
@@ -25,13 +24,7 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
         (mirror, compute, recalc_result)
     };
 
-    let mut engine = assemble_engine(
-        storage,
-        mirror,
-        compute,
-        &workbook_snap,
-        Some(round_trip_ctx),
-    )?;
+    let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
 
     // Register physical phantom cells (created during hydration for merges and
     // hyperlinks on cells with no data) in the GridIndex so position-based
@@ -56,10 +49,8 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     xlsx_data: &[u8],
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, round_trip_ctx, phantom_cells) =
-        parse_and_hydrate_xlsx(xlsx_data)?;
-    let result =
-        rebuild_engine_from_snapshot(engine, storage, workbook_snap, round_trip_ctx, do_recalc)?;
+    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_xlsx(xlsx_data)?;
+    let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);
@@ -98,7 +89,6 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         parsed
     };
     let parse_output = parsed.output;
-    let round_trip_ctx = parsed.round_trip_ctx;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -316,5 +306,5 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         (storage, id_map)
     };
 
-    Ok((storage, workbook_snap, round_trip_ctx, id_map.phantom_cells))
+    Ok((storage, workbook_snap, id_map.phantom_cells))
 }

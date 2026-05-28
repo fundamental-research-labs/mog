@@ -30,6 +30,7 @@ const ALL_COMMAND_BAR_TABS: readonly CommandBarTabId[] = [
   'home',
   'insert',
   'draw',
+  'page',
   'formulas',
   'data',
   'review',
@@ -47,6 +48,7 @@ export function mergeFeatureGates(
     tabs: { ...(base?.tabs as FeatureGates['tabs'] | undefined) },
     groups: { ...(base?.groups as FeatureGates['groups'] | undefined) },
     capabilities: { ...(base?.capabilities as FeatureGates['capabilities'] | undefined) },
+    ribbonVisibility: base?.ribbonVisibility,
   };
 
   if (base?.commandBar === false) {

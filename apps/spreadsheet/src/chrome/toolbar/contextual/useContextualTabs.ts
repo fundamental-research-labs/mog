@@ -22,7 +22,10 @@
 import { useEffect, useMemo } from 'react';
 import { useStore } from 'zustand';
 import type { RibbonTabId } from '@mog-sdk/contracts/actions';
+import type { RibbonVisibilityTabKey } from '@mog-sdk/contracts/ribbon';
+import { isRibbonPathVisible } from '@mog-sdk/contracts/ribbon';
 import { useDocumentContext } from '../../../internal-api';
+import { useFeatureGates } from '../../../infra/context/feature-gates-context';
 import { useChartUI } from '../../../hooks/charts/use-chart';
 import { useFloatingObject } from '../../../hooks/objects/use-floating-object';
 import { useObjectInteraction } from '../../../hooks/objects/use-object-interaction';
@@ -61,6 +64,7 @@ export function useContextualTabs(): ContextualTabConfig[] {
   const tableSelection = useTableSelection();
   const chartUI = useChartUI();
   const objectInteraction = useObjectInteraction();
+  const featureGates = useFeatureGates();
   const { uiStore } = useDocumentContext();
   // Get slicer selection state from UIStore
   // Note: The actual selectedSlicerId may be managed elsewhere, but we use UIStore
@@ -160,8 +164,14 @@ export function useContextualTabs(): ContextualTabConfig[] {
   // Compute visible contextual tabs
   // This will re-compute whenever any of the context dependencies change
   const visibleTabs = useMemo(() => {
-    return getVisibleContextualTabs(context);
-  }, [context]);
+    const contextualTabs = getVisibleContextualTabs(context);
+    return contextualTabs.filter((tab) => {
+      const visibilityKey = contextualTabVisibilityKey(tab.id);
+      return visibilityKey
+        ? isRibbonPathVisible(featureGates.ribbonVisibility, [visibilityKey])
+        : true;
+    });
+  }, [context, featureGates.ribbonVisibility]);
 
   // visible-tabs ownership: push contextual ids into the ribbon slice so
   // `setActiveRibbonTab` can validate against `[...visibleBaseTabs,
@@ -175,4 +185,25 @@ export function useContextualTabs(): ContextualTabConfig[] {
   }, [contextualIds, uiStore]);
 
   return visibleTabs;
+}
+
+function contextualTabVisibilityKey(tabId: string): RibbonVisibilityTabKey | null {
+  switch (tabId) {
+    case 'table-design':
+      return 'tableDesign';
+    case 'chart-design':
+      return 'chartDesign';
+    case 'picture-tools':
+      return 'pictureTools';
+    case 'slicer-tools':
+      return 'slicerTools';
+    case 'sparkline-tools':
+      return 'sparklineTools';
+    case 'diagram-design':
+      return 'diagramDesign';
+    case 'diagram-format':
+      return 'diagramFormat';
+    default:
+      return null;
+  }
 }

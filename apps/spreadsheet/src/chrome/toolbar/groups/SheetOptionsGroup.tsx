@@ -25,6 +25,7 @@ import {
 } from '../../../internal-api';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { GridlinesIcon, HeadingsIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Component
@@ -72,22 +73,26 @@ export function SheetOptionsGroup() {
             <GridlinesIcon />
             <span className="text-ribbon text-ss-text-tertiary font-medium">Gridlines</span>
           </div>
-          <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
-            <Checkbox
-              checked={showViewGridlines}
-              onChange={() => dispatch('TOGGLE_VIEW_GRIDLINES')}
-              className="m-0"
-            />
-            <span>View</span>
-          </label>
-          <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
-            <Checkbox
-              checked={showPrintGridlines}
-              onChange={() => dispatch('TOGGLE_PRINT_GRIDLINES')}
-              className="m-0"
-            />
-            <span>Print</span>
-          </label>
+          <RibbonVisibilityItem item="gridlinesView">
+            <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
+              <Checkbox
+                checked={showViewGridlines}
+                onChange={() => dispatch('TOGGLE_VIEW_GRIDLINES')}
+                className="m-0"
+              />
+              <span>View</span>
+            </label>
+          </RibbonVisibilityItem>
+          <RibbonVisibilityItem item="gridlinesPrint">
+            <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
+              <Checkbox
+                checked={showPrintGridlines}
+                onChange={() => dispatch('TOGGLE_PRINT_GRIDLINES')}
+                className="m-0"
+              />
+              <span>Print</span>
+            </label>
+          </RibbonVisibilityItem>
         </div>
 
         {/* Headings column */}
@@ -96,22 +101,26 @@ export function SheetOptionsGroup() {
             <HeadingsIcon />
             <span className="text-ribbon text-ss-text-tertiary font-medium">Headings</span>
           </div>
-          <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
-            <Checkbox
-              checked={showViewHeadings}
-              onChange={() => dispatch('TOGGLE_VIEW_HEADINGS')}
-              className="m-0"
-            />
-            <span>View</span>
-          </label>
-          <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
-            <Checkbox
-              checked={showPrintHeadings}
-              onChange={() => dispatch('TOGGLE_PRINT_HEADINGS')}
-              className="m-0"
-            />
-            <span>Print</span>
-          </label>
+          <RibbonVisibilityItem item="headingsView">
+            <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
+              <Checkbox
+                checked={showViewHeadings}
+                onChange={() => dispatch('TOGGLE_VIEW_HEADINGS')}
+                className="m-0"
+              />
+              <span>View</span>
+            </label>
+          </RibbonVisibilityItem>
+          <RibbonVisibilityItem item="headingsPrint">
+            <label className="flex items-center gap-1 text-ribbon text-ss-text-secondary cursor-pointer">
+              <Checkbox
+                checked={showPrintHeadings}
+                onChange={() => dispatch('TOGGLE_PRINT_HEADINGS')}
+                className="m-0"
+              />
+              <span>Print</span>
+            </label>
+          </RibbonVisibilityItem>
         </div>
       </div>
     </ToolbarGroup>

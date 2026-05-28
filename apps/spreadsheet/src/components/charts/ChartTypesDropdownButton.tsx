@@ -5,6 +5,7 @@ import { GalleryItem } from '../../chrome/toolbar/galleries/GalleryItem';
 import { GallerySection } from '../../chrome/toolbar/galleries/GallerySection';
 import { RibbonButton } from '../../chrome/toolbar/primitives/RibbonButton';
 import { ChartIcon } from '../../chrome/toolbar/primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../../chrome/toolbar/visibility/RibbonVisibilityContext';
 
 import { ChartVariantThumbnail } from './ChartVariantThumbnail';
 import type { ChartCategory, ChartVariant } from './chart-variants';
@@ -56,6 +57,7 @@ export function ChartTypesDropdownButton({
       title={disabled ? 'Select cells to insert a chart' : 'Insert chart'}
       aria-label="Charts"
       data-testid="ribbon-chart-types-dropdown"
+      visibilityKey="charts"
     />
   );
 
@@ -86,21 +88,23 @@ export function ChartTypesDropdownButton({
 
       {onOpenWizard && (
         <div className="mt-2 pt-2 border-t border-ss-border">
-          <button
-            type="button"
-            className="
+          <RibbonVisibilityItem item="moreCharts">
+            <button
+              type="button"
+              className="
  w-full px-2 py-1.5 text-left
  text-dropdown text-ss-primary
  hover:bg-ss-surface-hover rounded
  transition-colors
  "
-            onClick={() => {
-              handleClose();
-              onOpenWizard();
-            }}
-          >
-            More Charts...
-          </button>
+              onClick={() => {
+                handleClose();
+                onOpenWizard();
+              }}
+            >
+              More Charts...
+            </button>
+          </RibbonVisibilityItem>
         </div>
       )}
     </GalleryDropdown>

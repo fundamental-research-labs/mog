@@ -80,6 +80,7 @@ import {
   StrikethroughIcon,
   UnderlineIcon,
 } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 // Note: DropdownArrowIcon is still used for the font picker dropdown
 import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from '../primitives/ToolbarStyles';
 
@@ -444,34 +445,34 @@ export const FontGroup = React.memo(function FontGroup() {
         {/* Row 1: Font family & size */}
         <div className="flex gap-1">
           {/* Font Family Picker */}
-          <div id="font-family-picker" className="relative inline-flex">
-            {isIconsMode ? (
-              // Icons mode: Show icon-only button
-              <Tooltip title={`Font: ${fontFamily ?? DEFAULT_FONT_FAMILY}`}>
-                <RibbonButton
-                  layout="icon-only"
-                  // This branch only renders when isIconsMode is true, so the
-                  // testid is unconditionally correct here. The full-picker
-                  // branch below has no testid to avoid harness ambiguity
-                  // during responsive remounts.
+          <RibbonVisibilityItem item="fontFamily">
+            <div id="font-family-picker" className="relative inline-flex">
+              {isIconsMode ? (
+                // Icons mode: Show icon-only button
+                <Tooltip title={`Font: ${fontFamily ?? DEFAULT_FONT_FAMILY}`}>
+                  <RibbonButton
+                    layout="icon-only"
+                    // This branch only renders when isIconsMode is true, so the
+                    // testid is unconditionally correct here. The full-picker
+                    // branch below has no testid to avoid harness ambiguity
+                    // during responsive remounts.
+                    data-testid="ribbon-dropdown-font-family"
+                    icon={<FontIcon />}
+                    onClick={() => setFontPickerOpen(!fontPickerOpen)}
+                    isOpen={fontPickerOpen}
+                    aria-label="Font family"
+                    aria-expanded={fontPickerOpen}
+                    aria-haspopup="listbox"
+                  />
+                </Tooltip>
+              ) : (
+                // Full/Compact mode: Show full picker
+                <button
+                  type="button"
                   data-testid="ribbon-dropdown-font-family"
-                  icon={<FontIcon />}
                   onClick={() => setFontPickerOpen(!fontPickerOpen)}
-                  isOpen={fontPickerOpen}
                   disabled={!canFormatCells}
-                  aria-label="Font family"
-                  aria-expanded={fontPickerOpen}
-                  aria-haspopup="listbox"
-                />
-              </Tooltip>
-            ) : (
-              // Full/Compact mode: Show full picker
-              <button
-                type="button"
-                data-testid="ribbon-dropdown-font-family"
-                onClick={() => setFontPickerOpen(!fontPickerOpen)}
-                disabled={!canFormatCells}
-                className={`
+                  className={`
  h-7 px-2 ${isCompactMode ? 'min-w-[80px] max-w-[100px]' : 'min-w-[100px] max-w-[130px]'}
  flex items-center justify-between
  border rounded
@@ -481,55 +482,58 @@ export const FontGroup = React.memo(function FontGroup() {
  hover:bg-ss-surface-hover
  ${fontPickerOpen ? 'border-ss-primary ring-1 ring-ss-primary' : 'border-ss-border'}
  `}
-                style={{ fontFamily: `"${fontFamily ?? DEFAULT_FONT_FAMILY}", sans-serif` }}
-                title="Font family"
-                aria-label="Font family"
-                aria-expanded={fontPickerOpen}
-                aria-haspopup="listbox"
-              >
-                <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                  {fontFamily ?? DEFAULT_FONT_FAMILY}
-                </span>
-                <DropdownArrowIcon className="ml-1" />
-              </button>
-            )}
-            <RibbonDropdownPanel open={fontPickerOpen} onClose={() => setFontPickerOpen(false)}>
-              <div data-testid="ribbon-dropdown-menu-font-family">
-                <FontPicker
-                  value={fontFamily ?? DEFAULT_FONT_FAMILY}
-                  theme={OFFICE_THEME} // TODO: Get from workbook settings when theme switching is implemented
-                  onChange={(family) => {
-                    dispatch('SET_FONT_FAMILY', { family });
-                    setFontPickerOpen(false);
-                  }}
-                  onSelect={(result: FontPickerResult) => {
-                    // New callback - handles both theme fonts and concrete fonts
-                    if (result.type === 'theme') {
-                      dispatch('SET_FONT_THEME', { fontTheme: result.fontTheme });
-                    } else {
-                      dispatch('SET_FONT_FAMILY', { family: result.fontFamily });
-                    }
-                    setFontPickerOpen(false);
-                  }}
-                  onClose={() => setFontPickerOpen(false)}
-                />
-              </div>
-            </RibbonDropdownPanel>
-          </div>
+                  style={{ fontFamily: `"${fontFamily ?? DEFAULT_FONT_FAMILY}", sans-serif` }}
+                  title="Font family"
+                  aria-label="Font family"
+                  aria-expanded={fontPickerOpen}
+                  aria-haspopup="listbox"
+                >
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                    {fontFamily ?? DEFAULT_FONT_FAMILY}
+                  </span>
+                  <DropdownArrowIcon className="ml-1" />
+                </button>
+              )}
+              <RibbonDropdownPanel open={fontPickerOpen} onClose={() => setFontPickerOpen(false)}>
+                <div data-testid="ribbon-dropdown-menu-font-family">
+                  <FontPicker
+                    value={fontFamily ?? DEFAULT_FONT_FAMILY}
+                    theme={OFFICE_THEME} // TODO: Get from workbook settings when theme switching is implemented
+                    onChange={(family) => {
+                      dispatch('SET_FONT_FAMILY', { family });
+                      setFontPickerOpen(false);
+                    }}
+                    onSelect={(result: FontPickerResult) => {
+                      // New callback - handles both theme fonts and concrete fonts
+                      if (result.type === 'theme') {
+                        dispatch('SET_FONT_THEME', { fontTheme: result.fontTheme });
+                      } else {
+                        dispatch('SET_FONT_FAMILY', { family: result.fontFamily });
+                      }
+                      setFontPickerOpen(false);
+                    }}
+                    onClose={() => setFontPickerOpen(false)}
+                  />
+                </div>
+              </RibbonDropdownPanel>
+            </div>
+          </RibbonVisibilityItem>
 
           {/* Font Size Picker - dispatch SET_FONT_SIZE */}
-          {!isIconsMode && (
-            <div id="font-size-picker">
-              <div className={!canFormatCells ? 'pointer-events-none opacity-50 grayscale' : ''}>
-                <FontSizePicker
-                  value={fontSize ?? DEFAULT_FONT_SIZE}
-                  onChange={(size) => dispatch('SET_FONT_SIZE', { size })}
-                  onDismiss={() => coordinator.input.focusGrid()}
-                  isCompact={isCompactMode}
-                />
+          <RibbonVisibilityItem item="fontSize">
+            {!isIconsMode && (
+              <div id="font-size-picker">
+                <div className={!canFormatCells ? 'pointer-events-none opacity-50 grayscale' : ''}>
+                  <FontSizePicker
+                    value={fontSize ?? DEFAULT_FONT_SIZE}
+                    onChange={(size) => dispatch('SET_FONT_SIZE', { size })}
+                    onDismiss={() => coordinator.input.focusGrid()}
+                    isCompact={isCompactMode}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </RibbonVisibilityItem>
 
           {/* Increase Font Size */}
           <Tooltip title="Increase Font Size">
@@ -622,6 +626,7 @@ export const FontGroup = React.memo(function FontGroup() {
                 disabled={!canFormatCells}
                 title="Font Color"
                 aria-label="Font color"
+                visibilityKey="fontColor"
                 dropdownTestId="font-color-dropdown-trigger"
               />
             </Tooltip>
@@ -655,6 +660,7 @@ export const FontGroup = React.memo(function FontGroup() {
                 disabled={!canFormatCells}
                 title="Fill Color"
                 aria-label="Fill color"
+                visibilityKey="fillColor"
                 dropdownTestId="fill-color-dropdown-trigger"
               />
             </Tooltip>
@@ -688,6 +694,7 @@ export const FontGroup = React.memo(function FontGroup() {
                 disabled={!canFormatCells}
                 title="Borders"
                 aria-label="Borders"
+                visibilityKey="borders"
                 dropdownTestId="ribbon-dropdown-border"
               />
             </Tooltip>

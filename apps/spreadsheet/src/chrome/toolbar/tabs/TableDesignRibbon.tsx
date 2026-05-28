@@ -12,7 +12,7 @@
  * - Using Button, Checkbox, Input primitives from ../ui/
  */
 
-import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FocusEvent } from 'react';
 
 import { DARK_STYLES, getTableStyleColors, LIGHT_STYLES, MEDIUM_STYLES } from '@mog/grid-renderer';
 import { useUIStore } from '../../../internal-api';
@@ -29,6 +29,7 @@ import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 import {
   ConvertToRangeIcon,
   DeleteTableIcon,
@@ -280,6 +281,7 @@ export function TableDesignRibbon({
   onConvertToRange,
 }: TableDesignRibbonProps) {
   const [localName, setLocalName] = useState(tableName ?? '');
+  const localNameRef = useRef(tableName ?? '');
   const dispatch = useDispatch();
 
   // style gallery dropdown lifted into the ribbonDropdowns slice so
@@ -298,24 +300,31 @@ export function TableDesignRibbon({
   );
 
   const handleNameChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    localNameRef.current = e.target.value;
     setLocalName(e.target.value);
   }, []);
 
-  const handleNameBlur = useCallback(() => {
-    if (!isValidTableNameSyntax(localName)) {
-      setLocalName(tableName ?? '');
-      return;
-    }
-    if (localName !== tableName) {
-      onRenameTable(localName);
-    }
-  }, [localName, tableName, onRenameTable]);
+  const handleNameBlur = useCallback(
+    (e: FocusEvent<HTMLInputElement>) => {
+      const nextName = localNameRef.current || e.currentTarget.value;
+      if (!isValidTableNameSyntax(nextName)) {
+        localNameRef.current = tableName ?? '';
+        setLocalName(tableName ?? '');
+        return;
+      }
+      if (nextName !== tableName) {
+        onRenameTable(nextName);
+      }
+    },
+    [tableName, onRenameTable],
+  );
 
   const handleNameKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.currentTarget.blur();
       } else if (e.key === 'Escape') {
+        localNameRef.current = tableName ?? '';
         setLocalName(tableName ?? '');
         e.currentTarget.blur();
       }
@@ -323,14 +332,13 @@ export function TableDesignRibbon({
     [tableName],
   );
 
-  // Update local name when table changes
-  if (
-    tableName !== null &&
-    localName !== tableName &&
-    document.activeElement?.tagName !== 'INPUT'
-  ) {
+  // Update local name when the selected table changes, without clobbering an
+  // in-progress edit on every controlled-input render.
+  useEffect(() => {
+    if (tableName === null || document.activeElement?.tagName === 'INPUT') return;
+    localNameRef.current = tableName;
     setLocalName(tableName);
-  }
+  }, [tableName]);
 
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
@@ -391,6 +399,7 @@ export function TableDesignRibbon({
       {/* Properties Group */}
       <ToolbarGroup
         label="Properties"
+        visibilityKey="tableProperties"
         collapseConfig={TABLE_PROPERTIES_COLLAPSE_CONFIG}
         dropdownIcon={<TableIcon />}
       >
@@ -399,16 +408,18 @@ export function TableDesignRibbon({
             <TableIcon />
             <span className="text-ribbon text-ss-text-tertiary">Table Name:</span>
           </div>
-          <Input
-            type="text"
-            value={localName}
-            onChange={handleNameChange}
-            onBlur={handleNameBlur}
-            onKeyDown={handleNameKeyDown}
-            className="w-25 px-1 py-0.5 text-ribbon"
-            title="Table name (used in structured references)"
-            aria-label="Table Name"
-          />
+          <RibbonVisibilityItem item="tableName">
+            <Input
+              type="text"
+              value={localName}
+              onChange={handleNameChange}
+              onBlur={handleNameBlur}
+              onKeyDown={handleNameKeyDown}
+              className="w-25 px-1 py-0.5 text-ribbon"
+              title="Table name (used in structured references)"
+              aria-label="Table Name"
+            />
+          </RibbonVisibilityItem>
         </div>
       </ToolbarGroup>
 
@@ -421,56 +432,70 @@ export function TableDesignRibbon({
         <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
           {/* Row options */}
           <div className="flex gap-2">
-            <Checkbox
-              id="table-header-row"
-              checked={hasHeaderRow}
-              onChange={onToggleHeaderRow}
-              label="Header Row"
-              className="text-ribbon"
-            />
-            <Checkbox
-              id="table-total-row"
-              checked={hasTotalRow}
-              onChange={onToggleTotalRow}
-              label="Total Row"
-              className="text-ribbon"
-            />
-            <Checkbox
-              id="table-banded-rows"
-              checked={showBandedRows}
-              onChange={onToggleBandedRows}
-              label="Banded Rows"
-              className="text-ribbon"
-            />
+            <RibbonVisibilityItem item="headerRow">
+              <Checkbox
+                id="table-header-row"
+                checked={hasHeaderRow}
+                onChange={onToggleHeaderRow}
+                label="Header Row"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
+            <RibbonVisibilityItem item="totalRow">
+              <Checkbox
+                id="table-total-row"
+                checked={hasTotalRow}
+                onChange={onToggleTotalRow}
+                label="Total Row"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
+            <RibbonVisibilityItem item="bandedRows">
+              <Checkbox
+                id="table-banded-rows"
+                checked={showBandedRows}
+                onChange={onToggleBandedRows}
+                label="Banded Rows"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
           </div>
           {/* Column options */}
           <div className="flex gap-2">
-            <Checkbox
-              checked={showFirstColumnHighlight}
-              onChange={onToggleFirstColumnHighlight}
-              label="First Column"
-              className="text-ribbon"
-            />
-            <Checkbox
-              checked={showLastColumnHighlight}
-              onChange={onToggleLastColumnHighlight}
-              label="Last Column"
-              className="text-ribbon"
-            />
-            <Checkbox
-              checked={showBandedColumns}
-              onChange={onToggleBandedColumns}
-              label="Banded Columns"
-              className="text-ribbon"
-            />
+            <RibbonVisibilityItem item="firstColumn">
+              <Checkbox
+                checked={showFirstColumnHighlight}
+                onChange={onToggleFirstColumnHighlight}
+                label="First Column"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
+            <RibbonVisibilityItem item="lastColumn">
+              <Checkbox
+                checked={showLastColumnHighlight}
+                onChange={onToggleLastColumnHighlight}
+                label="Last Column"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
+            <RibbonVisibilityItem item="bandedColumns">
+              <Checkbox
+                checked={showBandedColumns}
+                onChange={onToggleBandedColumns}
+                label="Banded Columns"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
             {/* Filter Button Toggle */}
-            <Checkbox
-              id="table-filter-button"
-              checked={showFilterButtons}
-              onChange={onToggleFilterButtons}
-              label="Filter Button"
-              className="text-ribbon"
-            />
+            <RibbonVisibilityItem item="filterButton">
+              <Checkbox
+                id="table-filter-button"
+                checked={showFilterButtons}
+                onChange={onToggleFilterButtons}
+                label="Filter Button"
+                className="text-ribbon"
+              />
+            </RibbonVisibilityItem>
           </div>
         </div>
       </ToolbarGroup>
@@ -568,6 +593,7 @@ export function TableDesignRibbon({
             onClick={onDeleteTable}
             title="Delete table (removes table and data)"
             aria-label="Delete Table"
+            visibilityKey="delete"
           />
         </div>
       </ToolbarGroup>

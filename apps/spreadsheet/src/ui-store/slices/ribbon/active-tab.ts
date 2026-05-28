@@ -23,6 +23,8 @@
 
 import type { RibbonTabId } from '@mog-sdk/contracts/actions';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
+import type { RibbonVisibilityConfig, RibbonVisibilityTabKey } from '@mog-sdk/contracts/ribbon';
+import { isRibbonPathVisible } from '@mog-sdk/contracts/ribbon';
 import type { StateCreator } from 'zustand';
 
 // =============================================================================
@@ -43,28 +45,34 @@ export const RIBBON_BASE_TABS: ReadonlyArray<{
   id: RibbonTabId;
   label: string;
   gateKey?: string;
+  visibilityKey: RibbonVisibilityTabKey;
 }> = [
-  { id: 'home', label: 'Home', gateKey: 'home' },
-  { id: 'insert', label: 'Insert', gateKey: 'insert' },
+  { id: 'home', label: 'Home', gateKey: 'home', visibilityKey: 'home' },
+  { id: 'insert', label: 'Insert', gateKey: 'insert', visibilityKey: 'insert' },
   // Draw/ink is not supported in the ribbon product surface yet. Keep the
   // contract gate for legacy host policies, but do not register a visible tab.
-  { id: 'page', label: 'Page Layout' },
-  { id: 'formulas', label: 'Formulas', gateKey: 'formulas' },
-  { id: 'data', label: 'Data', gateKey: 'data' },
-  { id: 'review', label: 'Review', gateKey: 'review' },
-  { id: 'view', label: 'View', gateKey: 'view' },
+  { id: 'page', label: 'Page Layout', gateKey: 'page', visibilityKey: 'pageLayout' },
+  { id: 'formulas', label: 'Formulas', gateKey: 'formulas', visibilityKey: 'formulas' },
+  { id: 'data', label: 'Data', gateKey: 'data', visibilityKey: 'data' },
+  { id: 'review', label: 'Review', gateKey: 'review', visibilityKey: 'review' },
+  { id: 'view', label: 'View', gateKey: 'view', visibilityKey: 'view' },
 ];
 
 /**
  * Compute the gates-filtered subset of `RIBBON_BASE_TABS` ids. Default
  * for any unset gate is `true` (shown).
  */
-function filterBaseTabsByGates(gates: FeatureGates['tabs'] | undefined): RibbonTabId[] {
+function filterBaseTabsByGates(
+  gates: FeatureGates['tabs'] | undefined,
+  ribbonVisibility: RibbonVisibilityConfig | undefined,
+): RibbonTabId[] {
   const tabsGates = (gates ?? {}) as Record<string, boolean | undefined>;
   const out: RibbonTabId[] = [];
   for (const tab of RIBBON_BASE_TABS) {
     const gated = tab.gateKey ? tabsGates[tab.gateKey] : undefined;
     if (gated === false) continue;
+    if (tab.id === 'page' && tabsGates.pageLayout === false) continue;
+    if (!isRibbonPathVisible(ribbonVisibility, [tab.visibilityKey])) continue;
     out.push(tab.id);
   }
   return out;
@@ -108,7 +116,10 @@ export interface ActiveRibbonTabSlice {
    * that can introduce an invalid active tab, so simply replacing the
    * list is safe.
    */
-  setRibbonGates: (gates: FeatureGates['tabs'] | undefined) => void;
+  setRibbonGates: (
+    gates: FeatureGates['tabs'] | undefined,
+    ribbonVisibility?: RibbonVisibilityConfig,
+  ) => void;
   /**
    * Replace the contextual tab id list. Performs an **atomic two-field
    * transition** in a single `set()` call: writes the new id list and
@@ -142,7 +153,7 @@ export const createActiveRibbonTabSlice: StateCreator<
   activeRibbonTab: 'home',
   // Default: all base tabs visible (no gates applied yet). The
   // `FeatureGatesProvider` pushes the real gated set on mount.
-  visibleBaseTabs: filterBaseTabsByGates(undefined),
+  visibleBaseTabs: filterBaseTabsByGates(undefined, undefined),
   contextualTabIds: [],
 
   setActiveRibbonTab: (tabId) => {
@@ -179,8 +190,8 @@ export const createActiveRibbonTabSlice: StateCreator<
     set({ activeRibbonTab: tabId });
   },
 
-  setRibbonGates: (gates) => {
-    const next = filterBaseTabsByGates(gates);
+  setRibbonGates: (gates, ribbonVisibility) => {
+    const next = filterBaseTabsByGates(gates, ribbonVisibility);
     const prev = get().visibleBaseTabs;
     // Skip the set() if the gated subset is identical to what's
     // already stored. The React-side bridge (`RibbonGatesBridge`)

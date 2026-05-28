@@ -167,6 +167,7 @@ export function ThemeFontsGallery({ className = '' }: ThemeFontsGalleryProps) {
       aria-label="Fonts"
       aria-expanded={isOpen}
       aria-haspopup="menu"
+      visibilityKey="themeFonts"
     />
   );
 

@@ -77,6 +77,7 @@ import {
   TraceDependentsIcon,
   TracePrecedentsIcon,
 } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Function Category Data
@@ -981,6 +982,7 @@ export function FormulasRibbon() {
                 isOpen={autoSumOpen}
                 title="AutoSum - Insert SUM formula (Alt+=)"
                 aria-label="AutoSum"
+                visibilityKey="autoSum"
               />
             }
             width="auto"
@@ -1282,6 +1284,7 @@ export function FormulasRibbon() {
             onClick={handleDefineName}
             title="Define Name - Create a named range from selection"
             aria-label="Define Name"
+            visibilityKey="defineName"
           />
 
           <RibbonDropdown
@@ -1338,6 +1341,7 @@ export function FormulasRibbon() {
             onClick={handleCreateFromSelection}
             title="Create from Selection - Create names from row/column labels (Ctrl+Shift+F3)"
             aria-label="Create from Selection"
+            visibilityKey="createFromSelection"
           />
         </div>
       </ToolbarGroup>
@@ -1358,6 +1362,7 @@ export function FormulasRibbon() {
             onClick={handleTracePrecedents}
             title="Trace Precedents - Show cells that affect selected cell"
             aria-label="Trace Precedents"
+            visibilityKey="tracePrecedents"
           />
 
           <RibbonButton
@@ -1369,6 +1374,7 @@ export function FormulasRibbon() {
             onClick={handleTraceDependents}
             title="Trace Dependents - Show cells affected by selected cell"
             aria-label="Trace Dependents"
+            visibilityKey="traceDependents"
           />
 
           {/* F3: Remove Arrows Dropdown (B2.5) */}
@@ -1390,6 +1396,7 @@ export function FormulasRibbon() {
                 disabled={!hasArrows}
                 title="Remove Arrows - Remove trace arrows"
                 aria-label="Remove Arrows"
+                visibilityKey="removeArrows"
               />
             }
             width="auto"
@@ -1417,6 +1424,7 @@ export function FormulasRibbon() {
             title={`Show Formulas (Ctrl+\`) - ${showFormulas ? 'ON' : 'OFF'}`}
             aria-label="Show Formulas"
             aria-pressed={showFormulas}
+            visibilityKey="showFormulas"
           />
 
           {/* F3: Error Checking */}
@@ -1429,6 +1437,7 @@ export function FormulasRibbon() {
             onClick={handleFormulaReferences}
             title="Formula References"
             aria-label="Formula References"
+            visibilityKey="errorChecking"
           />
         </div>
       </ToolbarGroup>
@@ -1441,34 +1450,36 @@ export function FormulasRibbon() {
         dropdownIcon={<CalculateIcon />}
       >
         <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="h-7 min-w-[90px] px-2 text-ribbon text-ss-text-secondary bg-transparent border border-transparent rounded hover:bg-ss-surface-hover focus:border-ss-border-focus cursor-pointer outline-none flex items-center justify-between gap-1"
-                title="Calculation Options"
-                aria-label="Calculation Mode"
-              >
-                <span>{calculationMode === 'auto' ? 'Automatic' : 'Manual'}</span>
-                <ChevronDownSvg className="w-3 h-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuRadioGroup
-                value={calculationMode}
-                onValueChange={handleCalculationModeChange}
-              >
-                <DropdownMenuRadioItem value="auto">Automatic</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="manual">Manual</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-              <DropdownMenuCheckboxItem
-                id="formulas-iterative-calculation"
-                checked={iterativeCalculationEnabled}
-                onCheckedChange={handleIterativeCalculationChange}
-              >
-                Enable Iterative Calculation
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RibbonVisibilityItem item="calculationOptions">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-7 min-w-[90px] px-2 text-ribbon text-ss-text-secondary bg-transparent border border-transparent rounded hover:bg-ss-surface-hover focus:border-ss-border-focus cursor-pointer outline-none flex items-center justify-between gap-1"
+                  title="Calculation Options"
+                  aria-label="Calculation Mode"
+                >
+                  <span>{calculationMode === 'auto' ? 'Automatic' : 'Manual'}</span>
+                  <ChevronDownSvg className="w-3 h-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuRadioGroup
+                  value={calculationMode}
+                  onValueChange={handleCalculationModeChange}
+                >
+                  <DropdownMenuRadioItem value="auto">Automatic</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="manual">Manual</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuCheckboxItem
+                  id="formulas-iterative-calculation"
+                  checked={iterativeCalculationEnabled}
+                  onCheckedChange={handleIterativeCalculationChange}
+                >
+                  Enable Iterative Calculation
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </RibbonVisibilityItem>
 
           <RibbonButton
             layout="vertical"
@@ -1479,6 +1490,7 @@ export function FormulasRibbon() {
             onClick={handleCalculateNow}
             title="Calculate Now (F9) - Recalculate all formulas in workbook"
             aria-label="Calculate Now"
+            visibilityKey="calculateNow"
           />
 
           {/* F4: Calculate Sheet */}
@@ -1491,6 +1503,7 @@ export function FormulasRibbon() {
             onClick={handleCalculateSheet}
             title="Calculate Sheet (Shift+F9) - Recalculate active sheet only"
             aria-label="Calculate Sheet"
+            visibilityKey="calculateSheet"
           />
         </div>
       </ToolbarGroup>

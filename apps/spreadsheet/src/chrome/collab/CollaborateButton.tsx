@@ -12,6 +12,10 @@ import { CollabStatusBadge } from './CollabStatusBadge';
 import { generateDefaultAvatarUrl } from './default-avatar';
 import { PRESENCE_COLORS } from './presence-colors';
 import { useCollabStore } from './use-collab-store';
+import {
+  RibbonVisibilityPathItem,
+  useRibbonVisibilityPathVisible,
+} from '../toolbar/visibility/RibbonVisibilityContext';
 
 const SESSION_PARTICIPANT_KEY = 'mog:collab-participant-id';
 
@@ -25,6 +29,7 @@ function getOrCreateSessionParticipantId(): string {
 }
 
 export function CollaborateButton() {
+  const visible = useRibbonVisibilityPathVisible(['collaboration', 'tabBar', 'collaborate']);
   const enabled = useCollabStore((s) => s.enabled);
   const connecting = useCollabStore((s) => s.connecting);
   const roomId = useCollabStore((s) => s.roomId);
@@ -45,6 +50,8 @@ export function CollaborateButton() {
 
   const isActive = enabled && (status === 'online' || status === 'reconnecting');
   const isReconnecting = enabled && status === 'reconnecting';
+
+  if (!visible) return null;
 
   const activeRoomId = isRoomBacked ? documentMode.roomId : roomId;
   const collabLink =
@@ -249,14 +256,16 @@ export function CollaborateButton() {
               value={collabLink}
               className="min-w-0 flex-1 bg-transparent text-[11px] text-neutral-600 outline-none"
             />
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50"
-            >
-              {copied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
+            <RibbonVisibilityPathItem path={['collaboration', 'popover', 'copyLink']}>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50"
+              >
+                {copied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </RibbonVisibilityPathItem>
           </div>
           <p className="mb-3 text-[10px] text-neutral-400">
             Anyone with this link can edit this spreadsheet in real-time.
@@ -307,14 +316,16 @@ export function CollaborateButton() {
 
           {/* Stop collaborating */}
           <div className="border-t border-neutral-100 pt-2">
-            <button
-              type="button"
-              onClick={handleStopCollaborating}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-              Stop collaborating
-            </button>
+            <RibbonVisibilityPathItem path={['collaboration', 'popover', 'stopCollaborating']}>
+              <button
+                type="button"
+                onClick={handleStopCollaborating}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                Stop collaborating
+              </button>
+            </RibbonVisibilityPathItem>
           </div>
         </PopoverContent>
       )}

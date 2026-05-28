@@ -56,6 +56,7 @@ import React from 'react';
 
 import type { GroupRenderMode } from '@mog-sdk/contracts/ribbon';
 import { useGroupRenderMode } from '../collapse/context';
+import { useRibbonButtonVisible } from '../visibility/RibbonVisibilityContext';
 import { DropdownArrowIcon } from './ToolbarIcons';
 
 // =============================================================================
@@ -142,6 +143,8 @@ interface CommonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'chi
   dropdownPosition?: 'bottom' | 'inline';
   /** Whether the dropdown is open or button is in "pressed" state */
   isOpen?: boolean;
+  /** Optional typed ribbon visibility key. Defaults to test id, label, title, then aria-label. */
+  visibilityKey?: string;
 }
 
 export type RibbonButtonProps = LayoutProps & CommonProps;
@@ -311,6 +314,7 @@ export const RibbonButton = React.memo(function RibbonButton(props: RibbonButton
     isOpen = false,
     className = '',
     disabled = false,
+    visibilityKey,
     ...rest
   } = props;
 
@@ -321,6 +325,18 @@ export const RibbonButton = React.memo(function RibbonButton(props: RibbonButton
   const preferredLayout = props.layout;
   const icon = 'icon' in props ? props.icon : undefined;
   const label = 'label' in props ? props.label : undefined;
+  const restRecord = rest as Record<string, unknown>;
+  const visible = useRibbonButtonVisible({
+    visibilityKey,
+    label,
+    testId: restRecord['data-testid'] as string | undefined,
+    title: restRecord.title as string | undefined,
+    ariaLabel: restRecord['aria-label'] as string | undefined,
+  });
+
+  if (!visible) {
+    return null;
+  }
 
   // Derive actual layout based on group render mode
   const layout = deriveLayout(preferredLayout, groupMode);
@@ -330,6 +346,7 @@ export const RibbonButton = React.memo(function RibbonButton(props: RibbonButton
 
   // Filter out layout-specific props before passing to button
   const { layout: _layout, icon: _icon, ...buttonProps } = rest as Record<string, unknown>;
+  delete buttonProps.visibilityKey;
   if ('height' in buttonProps) delete buttonProps.height;
   if ('width' in buttonProps) delete buttonProps.width;
   if ('label' in buttonProps) delete buttonProps.label;

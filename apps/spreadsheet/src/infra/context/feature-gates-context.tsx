@@ -70,8 +70,8 @@ export function RibbonGatesBridge({
   uiStore: StoreApi<ActiveRibbonTabSlice>;
 }): null {
   useEffect(() => {
-    uiStore.getState().setRibbonGates(gates.tabs);
-  }, [gates.tabs, uiStore]);
+    uiStore.getState().setRibbonGates(gates.tabs, gates.ribbonVisibility);
+  }, [gates.ribbonVisibility, gates.tabs, uiStore]);
   return null;
 }
 

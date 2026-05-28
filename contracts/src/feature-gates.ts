@@ -9,6 +9,7 @@
  * 2. Tabs — hide entire ribbon tabs
  * 3. Groups — hide ribbon groups within tabs
  * 4. Capabilities — hide individual features (finest)
+ * 5. Ribbon visibility — typed tab/group/button rollout config
  *
  * @example
  * ```ts
@@ -23,6 +24,8 @@
  * ```
  */
 
+import type { RibbonVisibilityConfig } from './ribbon';
+
 // =============================================================================
 // FeatureGates Type
 // =============================================================================
@@ -36,6 +39,11 @@ export interface FeatureGates {
   // ── Top-Level Modes ────────────────────────────────────────
   /** Hide the entire ribbon toolbar (replaces old `hideRibbon` prop) */
   ribbon?: boolean;
+  /**
+   * Strongly typed tab -> group -> button visibility config for staged
+   * ribbon rollouts. This is evaluated after the legacy tabs/groups gates.
+   */
+  ribbonVisibility?: RibbonVisibilityConfig;
   /** Allow editing (replaces old `readOnly` prop). When false, all mutation UI is suppressed. */
   editing?: boolean;
 
@@ -45,6 +53,8 @@ export interface FeatureGates {
     home?: boolean;
     insert?: boolean;
     draw?: boolean;
+    page?: boolean;
+    pageLayout?: boolean;
     formulas?: boolean;
     data?: boolean;
     review?: boolean;

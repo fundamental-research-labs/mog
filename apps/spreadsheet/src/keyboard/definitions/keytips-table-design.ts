@@ -9,7 +9,7 @@
  * entries below fire after the third-keystroke follow-on, so the full
  * chord is `Alt+J,T,<key>`.
  *
- * Alt+J,T,KeyC → Convert to Range (CONVERT_TO_RANGE)
+ * Alt+J,T,KeyC → Confirm Convert to Range (OPEN_CONVERT_TO_RANGE_DIALOG)
  * Alt+J,T,KeyD → Delete table (DELETE_TABLE)
  * Alt+J,T,KeyS → Style gallery dropdown (OPEN_RIBBON_DROPDOWN: table-design.style-gallery)
  * Alt+J,T,KeyH → Toggle Header row (TOGGLE_TABLE_HEADER_ROW)
@@ -28,15 +28,15 @@ export const KEYTIPS_TABLE_DESIGN_SHORTCUTS: KeyboardShortcut[] = [
     id: 'keytips-table-design.convert-to-range',
     bindings: altBinding('KeyJ'),
     sequence: ['KeyT', 'KeyC'],
-    description: 'Convert table to range (Alt+J,T,C)',
-    action: 'CONVERT_TO_RANGE',
+    description: 'Confirm convert table to range (Alt+J,T,C)',
+    action: 'OPEN_CONVERT_TO_RANGE_DIALOG',
     enabled: true,
     priority: 'medium',
     category: 'data',
     contexts: TABLE_DESIGN_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
-    notes: 'Excel 365: Table Design → C converts table to a normal range.',
+    notes: 'Excel 365: Table Design → C opens confirmation before converting to a normal range.',
   },
   {
     id: 'keytips-table-design.delete',

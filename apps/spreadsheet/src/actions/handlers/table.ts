@@ -300,17 +300,15 @@ export const CLOSE_RESIZE_TABLE_DIALOG: ActionHandler = (
  * Opens the convert to range confirmation dialog.
  *
  * Payload:
- * - tableId: string - The table to convert
+ * - tableId?: string - The table to convert (resolved from active cell if omitted)
  */
-export const OPEN_CONVERT_TO_RANGE_DIALOG: ActionHandler = (
+export const OPEN_CONVERT_TO_RANGE_DIALOG: AsyncActionHandler = async (
   deps: ActionDependencies,
-  payload?: { tableId: string },
-): ActionResult => {
-  if (!payload?.tableId) {
-    return {
-      handled: false,
-      error: 'OPEN_CONVERT_TO_RANGE_DIALOG requires payload with tableId',
-    };
+  payload?: { tableId?: string },
+): Promise<ActionResult> => {
+  const tableId = await resolveTableId(deps, payload);
+  if (!tableId) {
+    return { handled: false, error: 'no-table' };
   }
 
   const uiStore = deps.uiStore as { getState: () => UIState } | undefined;
@@ -320,7 +318,7 @@ export const OPEN_CONVERT_TO_RANGE_DIALOG: ActionHandler = (
 
   const state = uiStore.getState();
   if (typeof state.openConvertToRangeDialog === 'function') {
-    state.openConvertToRangeDialog(payload.tableId);
+    state.openConvertToRangeDialog(tableId);
   }
 
   return { handled: true };

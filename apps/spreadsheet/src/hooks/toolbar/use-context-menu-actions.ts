@@ -1251,7 +1251,7 @@ export function useContextMenuActions(
   }, [wb, activeSheetId, activeCell.row, activeCell.col]);
 
   const isInTable = tableAtActiveCell !== undefined;
-  const tableIdAtActiveCell = tableAtActiveCell?.id ?? null;
+  const tableIdAtActiveCell = tableAtActiveCell?.name ?? tableAtActiveCell?.id ?? null;
 
   // Insert table row above
   const insertTableRowAbove = useCallback(() => {
@@ -1337,7 +1337,7 @@ export function useContextMenuActions(
   // Convert table to range
   const convertTableToRange = useCallback(() => {
     if (!tableIdAtActiveCell) return;
-    dispatch('CONVERT_TO_RANGE', actionDeps, {
+    dispatch('OPEN_CONVERT_TO_RANGE_DIALOG', actionDeps, {
       tableId: tableIdAtActiveCell,
     });
     closeContextMenu();

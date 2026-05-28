@@ -73,3 +73,74 @@ pub(crate) fn parse_item_type_attr(xml: &[u8]) -> PivotItemType {
 pub(crate) fn parse_data_field_sentinel(xml: &[u8]) -> bool {
     parse_u32_attr(xml, b"field=\"") == Some(4294967294)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subtotal_attr_maps_all_known_values_and_fallbacks() {
+        let cases = [
+            ("sum", Subtotal::Sum),
+            ("count", Subtotal::Count),
+            ("average", Subtotal::Average),
+            ("max", Subtotal::Max),
+            ("min", Subtotal::Min),
+            ("product", Subtotal::Product),
+            ("countNums", Subtotal::CountNums),
+            ("stdDev", Subtotal::StdDev),
+            ("stdDevp", Subtotal::StdDevP),
+            ("var", Subtotal::Var),
+            ("varp", Subtotal::VarP),
+            ("unexpected", Subtotal::Sum),
+        ];
+
+        for (raw, expected) in cases {
+            let xml = format!(r#"<dataField subtotal="{raw}"/>"#);
+            assert_eq!(parse_subtotal_attr(xml.as_bytes()), expected);
+        }
+        assert_eq!(parse_subtotal_attr(br#"<dataField/>"#), Subtotal::Sum);
+    }
+
+    #[test]
+    fn pivot_item_type_attr_maps_all_known_values_and_fallbacks() {
+        let cases = [
+            ("data", PivotItemType::Data),
+            ("default", PivotItemType::Default),
+            ("sum", PivotItemType::Sum),
+            ("countA", PivotItemType::CountA),
+            ("avg", PivotItemType::Avg),
+            ("max", PivotItemType::Max),
+            ("min", PivotItemType::Min),
+            ("product", PivotItemType::Product),
+            ("count", PivotItemType::Count),
+            ("stdDev", PivotItemType::Stddev),
+            ("stdDevP", PivotItemType::StddevP),
+            ("var", PivotItemType::Var),
+            ("varP", PivotItemType::VarP),
+            ("grand", PivotItemType::Grand),
+            ("blank", PivotItemType::Blank),
+            ("unexpected", PivotItemType::Data),
+        ];
+
+        for (raw, expected) in cases {
+            let xml = format!(r#"<item t="{raw}"/>"#);
+            assert_eq!(parse_item_type_attr(xml.as_bytes()), expected);
+        }
+        assert_eq!(parse_item_type_attr(br#"<item/>"#), PivotItemType::Data);
+    }
+
+    #[test]
+    fn axis_and_sort_unknowns_return_none() {
+        assert_eq!(parse_axis_attr(br#"<pivotField axis="axisRow"/>"#), Some(PivotAxis::Row));
+        assert_eq!(parse_axis_attr(br#"<pivotField axis="unknown"/>"#), None);
+        assert_eq!(parse_axis_attr(br#"<pivotField/>"#), None);
+
+        assert_eq!(
+            parse_sort_attr(br#"<pivotField sortType="ascending"/>"#),
+            Some(SortType::Ascending)
+        );
+        assert_eq!(parse_sort_attr(br#"<pivotField sortType="unknown"/>"#), None);
+        assert_eq!(parse_sort_attr(br#"<pivotField/>"#), None);
+    }
+}

@@ -234,3 +234,118 @@ fn parse_x_values(xml: &[u8]) -> Vec<Option<u32>> {
 
     values
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::pivot::model::{PivotAxis, PivotItemType, Subtotal};
+
+    #[test]
+    fn parses_pivot_items_and_item_flags() {
+        let xml = br#"<items count="4">
+            <item x="0"/>
+            <item x="1" h="1"/>
+            <item t="default"/>
+            <item t="grand"/>
+        </items>"#;
+
+        let items = parse_pivot_items(xml);
+
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].x, Some(0));
+        assert!(items[1].hidden);
+        assert_eq!(items[2].item_type, PivotItemType::Default);
+        assert_eq!(items[3].item_type, PivotItemType::Grand);
+    }
+
+    #[test]
+    fn parses_data_fields_and_subtotals() {
+        let xml = br#"<dataFields count="2">
+            <dataField name="Sum of Sales" fld="3" subtotal="sum"/>
+            <dataField name="Count of Items" fld="4" subtotal="count"/>
+        </dataFields>"#;
+
+        let fields = parse_data_fields(xml);
+
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].name, Some("Sum of Sales".to_string()));
+        assert_eq!(fields[0].field_index, 3);
+        assert_eq!(fields[0].subtotal, Subtotal::Sum);
+        assert_eq!(fields[1].name, Some("Count of Items".to_string()));
+        assert_eq!(fields[1].subtotal, Subtotal::Count);
+    }
+
+    #[test]
+    fn non_self_closing_data_field_uses_child_pivot_show_as_when_attribute_absent() {
+        let xml = br#"<dataFields count="1">
+            <dataField name="Percent" fld="4" subtotal="sum">
+                <pivotShowAs pivotShowAs="percentOfTotal"/>
+            </dataField>
+        </dataFields>"#;
+
+        let fields = parse_data_fields(xml);
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].show_data_as, Some("percentOfTotal".to_string()));
+    }
+
+    #[test]
+    fn data_field_show_data_as_attribute_wins_over_child_pivot_show_as() {
+        let xml = br#"<dataFields count="1">
+            <dataField name="Percent" fld="4" subtotal="sum" showDataAs="difference">
+                <pivotShowAs pivotShowAs="percentOfTotal"/>
+            </dataField>
+        </dataFields>"#;
+
+        let fields = parse_data_fields(xml);
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].show_data_as, Some("difference".to_string()));
+    }
+
+    #[test]
+    fn auto_sort_scope_reads_data_field_sentinel_and_second_reference() {
+        let xml = br#"<pivotFields count="1">
+            <pivotField axis="axisRow" sortType="descending">
+                <autoSortScope>
+                    <pivotArea>
+                        <references count="2">
+                            <reference field="4294967294"><x v="2"/></reference>
+                            <reference field="3"><x v="7"/></reference>
+                        </references>
+                    </pivotArea>
+                </autoSortScope>
+            </pivotField>
+        </pivotFields>"#;
+
+        let fields = parse_pivot_fields(xml);
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].axis, Some(PivotAxis::Row));
+        assert_eq!(fields[0].auto_sort_data_field, Some(2));
+        assert_eq!(fields[0].auto_sort_column_field, Some(3));
+        assert_eq!(fields[0].auto_sort_column_item, Some(7));
+    }
+
+    #[test]
+    fn auto_sort_scope_handles_missing_second_reference_malformed_x_and_absent_scope() {
+        let missing_second = parse_pivot_fields(
+            br#"<pivotField><autoSortScope><reference field="4294967294"><x v="5"/></reference></autoSortScope></pivotField>"#,
+        );
+        assert_eq!(missing_second[0].auto_sort_data_field, Some(5));
+        assert_eq!(missing_second[0].auto_sort_column_field, None);
+        assert_eq!(missing_second[0].auto_sort_column_item, None);
+
+        let malformed_x = parse_pivot_fields(
+            br#"<pivotField><autoSortScope><reference field="4294967294"><x v="bad"/></reference><reference field="4"><x v="also-bad"/></reference></autoSortScope></pivotField>"#,
+        );
+        assert_eq!(malformed_x[0].auto_sort_data_field, None);
+        assert_eq!(malformed_x[0].auto_sort_column_field, Some(4));
+        assert_eq!(malformed_x[0].auto_sort_column_item, None);
+
+        let no_scope = parse_pivot_fields(br#"<pivotField axis="axisCol"/>"#);
+        assert_eq!(no_scope[0].auto_sort_data_field, None);
+        assert_eq!(no_scope[0].auto_sort_column_field, None);
+        assert_eq!(no_scope[0].auto_sort_column_item, None);
+    }
+}

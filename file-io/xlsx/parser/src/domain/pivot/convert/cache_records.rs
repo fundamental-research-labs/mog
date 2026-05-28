@@ -116,4 +116,44 @@ mod tests {
         assert_eq!(records[0][0], value_types::CellValue::Text("East".into()));
         assert_eq!(records[0][1], value_types::CellValue::number(10.0));
     }
+
+    #[test]
+    fn invalid_error_values_resolve_to_null() {
+        let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
+            definition: ooxml_types::pivot::PivotCacheDefinition {
+                cache_fields: ooxml_types::pivot::PivotCacheFields {
+                    count: Some(1),
+                    items: vec![ooxml_types::pivot::PivotCacheField {
+                        name: "Error".to_string(),
+                        shared_items: Some(ooxml_types::pivot::SharedItems {
+                            items: vec![ooxml_types::pivot::SharedItem::Error(
+                                "not-an-error".to_string(),
+                            )],
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                },
+                ..Default::default()
+            },
+            records: ooxml_types::pivot::PivotCacheRecords {
+                records: vec![
+                    ooxml_types::pivot::cache::PivotRecord {
+                        values: vec![ooxml_types::pivot::cache::PivotRecordValue::Index(0)],
+                    },
+                    ooxml_types::pivot::cache::PivotRecord {
+                        values: vec![ooxml_types::pivot::cache::PivotRecordValue::Error(
+                            "not-an-error".to_string(),
+                        )],
+                    },
+                ],
+                ..Default::default()
+            },
+        };
+
+        let records = resolve_cache_records(Some(&parsed_cache));
+
+        assert_eq!(records[0][0], value_types::CellValue::Null);
+        assert_eq!(records[1][0], value_types::CellValue::Null);
+    }
 }

@@ -100,3 +100,80 @@ pub(crate) fn parse_cache_fields(xml: &[u8]) -> Vec<CacheField> {
 
     fields
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::pivot::model::SharedItem;
+
+    #[test]
+    fn parses_cache_definition_root_source_and_fields() {
+        let xml = br#"<?xml version="1.0"?>
+<pivotCacheDefinition refreshOnLoad="1" recordCount="100">
+    <cacheSource type="worksheet">
+        <worksheetSource ref="A1:D100" sheet="Data"/>
+    </cacheSource>
+    <cacheFields count="1">
+        <cacheField name="Category" numFmtId="0">
+            <sharedItems count="1"><s v="Electronics"/></sharedItems>
+        </cacheField>
+    </cacheFields>
+</pivotCacheDefinition>"#;
+
+        let cache = parse_pivot_cache_definition(xml);
+
+        assert!(cache.refresh_on_load);
+        assert_eq!(cache.record_count, Some(100));
+        assert_eq!(cache.source_type, CacheSourceType::Worksheet);
+        assert_eq!(cache.source_ref, Some("A1:D100".to_string()));
+        assert_eq!(cache.source_sheet, Some("Data".to_string()));
+        assert_eq!(cache.fields.len(), 1);
+        assert_eq!(cache.fields[0].name, "Category");
+        assert_eq!(
+            cache.fields[0].shared_items,
+            vec![SharedItem::String("Electronics".to_string())]
+        );
+    }
+
+    #[test]
+    fn maps_cache_source_types_and_falls_back_to_worksheet() {
+        let cases = [
+            ("worksheet", CacheSourceType::Worksheet),
+            ("external", CacheSourceType::External),
+            ("consolidation", CacheSourceType::Consolidation),
+            ("scenario", CacheSourceType::Scenario),
+            ("unknown", CacheSourceType::Worksheet),
+        ];
+
+        for (raw, expected) in cases {
+            let xml =
+                format!(r#"<pivotCacheDefinition><cacheSource type="{raw}"/></pivotCacheDefinition>"#);
+            assert_eq!(parse_pivot_cache_definition(xml.as_bytes()).source_type, expected);
+        }
+
+        assert_eq!(
+            parse_pivot_cache_definition(br#"<pivotCacheDefinition/>"#).source_type,
+            CacheSourceType::Worksheet
+        );
+    }
+
+    #[test]
+    fn parses_shared_item_metadata_flags() {
+        let xml = br#"<pivotCacheDefinition>
+    <cacheFields count="1">
+        <cacheField name="Amount" numFmtId="4">
+            <sharedItems containsDate="1" containsNumber="1" containsInteger="1" containsBlank="1" containsMixedTypes="1" count="0"/>
+        </cacheField>
+    </cacheFields>
+</pivotCacheDefinition>"#;
+
+        let cache = parse_pivot_cache_definition(xml);
+        let field = &cache.fields[0];
+
+        assert!(field.contains_date);
+        assert!(field.contains_number);
+        assert!(field.contains_integer);
+        assert!(field.contains_blank);
+        assert!(field.contains_mixed_types);
+    }
+}

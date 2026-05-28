@@ -95,7 +95,10 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
             rel.target.path().map(|path| {
                 (
                     rel.id.clone(),
-                    (rel.target.raw().to_string(), path.to_string()),
+                    (
+                        rel.target.raw().to_string(),
+                        workbook_pivot_cache_definition_path(rel.target.raw(), path),
+                    ),
                 )
             })
         })
@@ -139,6 +142,14 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
     }
 
     discovery
+}
+
+fn workbook_pivot_cache_definition_path(raw_target: &str, resolved_path: &str) -> String {
+    if raw_target.starts_with("xl/") {
+        raw_target.to_string()
+    } else {
+        resolved_path.to_string()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -476,6 +487,161 @@ mod tests {
                 relationship_target: None,
                 records_path: Some("xl/pivotCache/pivotCacheRecords9.xml".to_string()),
                 source: PivotCacheRecordsPathSource::Fallback,
+            }
+        );
+    }
+
+    #[test]
+    fn workbook_relationship_targets_resolve_absolute_xl_prefixed_and_workbook_relative_paths() {
+        let cases = [
+            (
+                "/xl/pivotCache/pivotCacheDefinition4.xml",
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+            ),
+            (
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+            ),
+            (
+                "pivotCache/pivotCacheDefinition4.xml",
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+            ),
+        ];
+
+        for (target, expected_path) in cases {
+            let rels = format!(
+                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="{target}"/></Relationships>"#
+            );
+            let bytes = archive_with(&[
+                (
+                    "xl/workbook.xml",
+                    br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pivotCaches><pivotCache cacheId="4" r:id="rId7"/></pivotCaches></workbook>"#
+                        .to_vec(),
+                ),
+                ("xl/_rels/workbook.xml.rels", rels.into_bytes()),
+                (expected_path, pivot_cache_definition_xml("Data")),
+                (
+                    "xl/pivotCache/pivotCacheRecords4.xml",
+                    pivot_cache_records_xml("0"),
+                ),
+            ]);
+            let archive =
+                crate::zip::XlsxArchive::new(&bytes).expect("fixture archive should open");
+
+            let discovery = parse_pivot_cache_packages(&archive);
+
+            assert_eq!(discovery.links.len(), 1);
+            assert_eq!(discovery.links[0].workbook_relationship_target, target);
+            assert_eq!(discovery.links[0].definition_path, expected_path);
+        }
+    }
+
+    #[test]
+    fn worksheet_relationship_targets_resolve_parent_absolute_and_local_paths() {
+        let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/>
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="/xl/pivotTables/pivotTable2.xml"/>
+            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="pivotTable3.xml"/>
+        </Relationships>"#;
+
+        assert_eq!(
+            extract_pivot_table_paths_for_sheet(1, rels),
+            vec![
+                "xl/pivotTables/pivotTable1.xml".to_string(),
+                "xl/pivotTables/pivotTable2.xml".to_string(),
+                "xl/worksheets/pivotTable3.xml".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn cache_definition_relationships_select_pivot_records_after_non_pivot_relationships() {
+        let bytes = archive_with(&[
+            (
+                "xl/workbook.xml",
+                br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pivotCaches><pivotCache cacheId="4" r:id="rId7"/></pivotCaches></workbook>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition4.xml"/></Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+                pivot_cache_definition_xml("Data"),
+            ),
+            (
+                "xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                    <Relationship Id="rId0" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+                    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords4.xml"/>
+                </Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheRecords4.xml",
+                pivot_cache_records_xml("0"),
+            ),
+        ]);
+        let archive = crate::zip::XlsxArchive::new(&bytes).expect("fixture archive should open");
+
+        let discovery = parse_pivot_cache_packages(&archive);
+
+        assert_eq!(discovery.links.len(), 1);
+        assert_eq!(discovery.links[0].records.relationship_id, Some("rId1".to_string()));
+        assert_eq!(
+            discovery.links[0].records.records_path,
+            Some("xl/pivotCache/pivotCacheRecords4.xml".to_string())
+        );
+        assert_eq!(
+            discovery.links[0].records.source,
+            PivotCacheRecordsPathSource::Relationship
+        );
+    }
+
+    #[test]
+    fn cache_definition_rels_without_pivot_records_reports_missing_without_fallback() {
+        let bytes = archive_with(&[
+            (
+                "xl/workbook.xml",
+                br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pivotCaches><pivotCache cacheId="4" r:id="rId7"/></pivotCaches></workbook>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition4.xml"/></Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheDefinition4.xml",
+                pivot_cache_definition_xml("Data"),
+            ),
+            (
+                "xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels",
+                br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                    <Relationship Id="rId0" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+                </Relationships>"#
+                    .to_vec(),
+            ),
+            (
+                "xl/pivotCache/pivotCacheRecords4.xml",
+                pivot_cache_records_xml("0"),
+            ),
+        ]);
+        let archive = crate::zip::XlsxArchive::new(&bytes).expect("fixture archive should open");
+
+        let discovery = parse_pivot_cache_packages(&archive);
+
+        assert_eq!(discovery.links.len(), 1);
+        assert_eq!(
+            discovery.links[0].records,
+            PivotCacheRecordsLink {
+                rels_path: Some("xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels".to_string()),
+                relationship_id: None,
+                relationship_target: None,
+                records_path: None,
+                source: PivotCacheRecordsPathSource::Missing,
             }
         );
     }

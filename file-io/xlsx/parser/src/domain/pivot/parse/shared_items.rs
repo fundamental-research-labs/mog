@@ -57,3 +57,48 @@ pub(crate) fn parse_shared_items(xml: &[u8]) -> Vec<SharedItem> {
 
     items
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_all_shared_item_value_variants() {
+        let xml = br##"<sharedItems count="6">
+            <s v="text"/>
+            <n v="42.5"/>
+            <b v="1"/>
+            <e v="#N/A"/>
+            <d v="2024-01-15T10:30:00"/>
+            <m/>
+        </sharedItems>"##;
+
+        let items = parse_shared_items(xml);
+
+        assert_eq!(items.len(), 6);
+        assert_eq!(items[0], SharedItem::String("text".to_string()));
+        assert_eq!(items[1], SharedItem::Number(42.5));
+        assert_eq!(items[2], SharedItem::Boolean(true));
+        assert_eq!(items[3], SharedItem::Error("#N/A".to_string()));
+        assert_eq!(
+            items[4],
+            SharedItem::DateTime("2024-01-15T10:30:00".to_string())
+        );
+        assert_eq!(items[5], SharedItem::Missing);
+    }
+
+    #[test]
+    fn ignores_unknown_shared_item_tags() {
+        let xml = br#"<sharedItems><s v="first"/><q v="ignored"/><s v="second"/></sharedItems>"#;
+
+        let items = parse_shared_items(xml);
+
+        assert_eq!(
+            items,
+            vec![
+                SharedItem::String("first".to_string()),
+                SharedItem::String("second".to_string())
+            ]
+        );
+    }
+}

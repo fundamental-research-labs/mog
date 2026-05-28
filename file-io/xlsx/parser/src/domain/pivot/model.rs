@@ -412,3 +412,53 @@ impl Default for CacheRecordValue {
         CacheRecordValue::Missing
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pivot_table_default_preserves_read_contract() {
+        let pivot = PivotTable::default();
+
+        assert!(pivot.name.is_empty());
+        assert_eq!(pivot.cache_id, 0);
+        assert!(!pivot.data_on_rows);
+        assert!(pivot.row_grand_totals);
+        assert!(pivot.col_grand_totals);
+        assert!(!pivot.grid_drop_zones);
+        assert!(!pivot.show_error);
+        assert!(pivot.show_missing);
+        assert!(pivot.grand_total_caption.is_none());
+        assert!(pivot.row_header_caption.is_none());
+        assert!(pivot.col_header_caption.is_none());
+        assert!(pivot.error_caption.is_none());
+        assert!(pivot.missing_caption.is_none());
+    }
+
+    #[test]
+    fn pivot_location_default_has_no_typed_ref() {
+        let loc = PivotLocation::default();
+
+        assert!(loc.ref_.is_none());
+        assert_eq!(loc.first_header_row, 0);
+        assert_eq!(loc.first_data_row, 0);
+        assert_eq!(loc.first_data_col, 0);
+    }
+
+    #[test]
+    fn enum_defaults_match_legacy_read_surface() {
+        assert_eq!(Subtotal::default(), Subtotal::Sum);
+        assert_eq!(PivotItemType::default(), PivotItemType::Data);
+        assert_eq!(CacheSourceType::default(), CacheSourceType::Worksheet);
+        assert_eq!(SharedItem::default(), SharedItem::Missing);
+        assert_eq!(CacheRecordValue::default(), CacheRecordValue::Missing);
+    }
+
+    #[test]
+    fn shared_item_variants_are_distinct() {
+        assert!(matches!(SharedItem::String("test".to_string()), SharedItem::String(_)));
+        assert!(matches!(SharedItem::Number(42.0), SharedItem::Number(_)));
+        assert!(matches!(SharedItem::Missing, SharedItem::Missing));
+    }
+}

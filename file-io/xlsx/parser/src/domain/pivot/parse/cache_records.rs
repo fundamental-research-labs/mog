@@ -107,3 +107,67 @@ pub(crate) fn parse_cache_record(xml: &[u8]) -> CacheRecord {
 
     record
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_cache_records_preserving_record_and_field_order() {
+        let xml = br##"<?xml version="1.0"?>
+<pivotCacheRecords count="2">
+    <r>
+        <x v="0"/>
+        <s v="inline"/>
+        <n v="100.50"/>
+        <b v="1"/>
+        <e v="#N/A"/>
+        <d v="2024-01-15T10:30:00"/>
+        <m/>
+        <unknown v="ignored"/>
+    </r>
+    <r>
+        <x v="1"/>
+        <n v="200.75"/>
+        <m/>
+    </r>
+</pivotCacheRecords>"##;
+
+        let records = parse_pivot_cache_records(xml);
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(
+            records[0].values,
+            vec![
+                CacheRecordValue::Index(0),
+                CacheRecordValue::String("inline".to_string()),
+                CacheRecordValue::Number(100.50),
+                CacheRecordValue::Boolean(true),
+                CacheRecordValue::Error("#N/A".to_string()),
+                CacheRecordValue::DateTime("2024-01-15T10:30:00".to_string()),
+                CacheRecordValue::Missing,
+            ]
+        );
+        assert_eq!(
+            records[1].values,
+            vec![
+                CacheRecordValue::Index(1),
+                CacheRecordValue::Number(200.75),
+                CacheRecordValue::Missing,
+            ]
+        );
+    }
+
+    #[test]
+    fn self_closing_record_is_currently_ignored() {
+        let xml = br#"<pivotCacheRecords count="2"><r/><r><s v="kept"/></r></pivotCacheRecords>"#;
+
+        let records = parse_pivot_cache_records(xml);
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(
+            records[0].values,
+            vec![CacheRecordValue::String("kept".to_string())]
+        );
+    }
+}

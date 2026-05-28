@@ -90,3 +90,82 @@ pub(crate) fn parse_style_info(xml: &[u8]) -> PivotStyleInfo {
         show_last_column: parse_bool_attr(xml, b"showLastColumn=\""),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::pivot::model::PivotAxis;
+
+    #[test]
+    fn empty_input_returns_default_pivot_table() {
+        let pivot = parse_pivot_table(b"<?xml version=\"1.0\"?><worksheet></worksheet>");
+
+        assert!(pivot.name.is_empty());
+        assert_eq!(pivot.cache_id, 0);
+        assert!(pivot.location.ref_.is_none());
+    }
+
+    #[test]
+    fn parses_root_attributes_location_and_entities() {
+        let xml = br#"<?xml version="1.0"?>
+<pivotTableDefinition name="Sales &amp; Marketing" cacheId="1" dataOnRows="1">
+    <location ref="A3:D10" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/>
+</pivotTableDefinition>"#;
+
+        let pivot = parse_pivot_table(xml);
+
+        assert_eq!(pivot.name, "Sales & Marketing");
+        assert_eq!(pivot.cache_id, 1);
+        assert!(pivot.data_on_rows);
+        assert_eq!(
+            pivot.location.ref_.as_ref().map(|r| r.to_a1_string()),
+            Some("A3:D10".to_string())
+        );
+        assert_eq!(pivot.location.first_header_row, 1);
+        assert_eq!(pivot.location.first_data_row, 2);
+        assert_eq!(pivot.location.first_data_col, 1);
+    }
+
+    #[test]
+    fn parses_fields_and_style_sections() {
+        let xml = br#"<?xml version="1.0"?>
+<pivotTableDefinition name="Test" cacheId="1">
+    <location ref="A1:C5"/>
+    <rowFields count="2"><field x="0"/><field x="1"/></rowFields>
+    <pivotFields count="2">
+        <pivotField axis="axisRow" showAll="1" sortType="ascending">
+            <items count="2"><item x="0"/><item x="1"/></items>
+        </pivotField>
+        <pivotField axis="axisCol" dataField="1"/>
+    </pivotFields>
+    <pivotTableStyleInfo name="PivotStyleMedium9" showRowHeaders="1" showColHeaders="1"/>
+</pivotTableDefinition>"#;
+
+        let pivot = parse_pivot_table(xml);
+
+        assert_eq!(pivot.row_fields.len(), 2);
+        assert_eq!(pivot.row_fields[0].x, 0);
+        assert_eq!(pivot.row_fields[1].x, 1);
+        assert_eq!(pivot.pivot_fields.len(), 2);
+        assert_eq!(pivot.pivot_fields[0].axis, Some(PivotAxis::Row));
+        assert_eq!(pivot.pivot_fields[0].items.len(), 2);
+        assert!(pivot.pivot_fields[1].data_field);
+        let style = pivot.style_info.expect("style info should parse");
+        assert_eq!(style.name, Some("PivotStyleMedium9".to_string()));
+        assert!(style.show_row_headers);
+        assert!(style.show_col_headers);
+    }
+
+    #[test]
+    fn typed_location_refs_keep_absolute_refs_and_reject_absent_empty_or_malformed_refs() {
+        let absolute = parse_location(br#"<location ref="$A$1:$D$10"/>"#);
+        assert_eq!(
+            absolute.ref_.as_ref().map(|r| r.to_a1_string()),
+            Some("$A$1:$D$10".to_string())
+        );
+
+        assert!(parse_location(br#"<location firstDataRow="1"/>"#).ref_.is_none());
+        assert!(parse_location(br#"<location ref=""/>"#).ref_.is_none());
+        assert!(parse_location(b"<location ref=\"not-a-range\"/>").ref_.is_none());
+    }
+}

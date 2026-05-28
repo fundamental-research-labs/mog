@@ -1409,6 +1409,24 @@ export class GridEditingSystem implements IGridEditingSystem {
             transpose,
           );
       },
+      addComment: async (sheetId, row, col, content, author, options) => {
+        const ws = workbook.getSheetById(sheetId);
+        const text = content.map((segment) => segment.text ?? '').join('');
+        if (!text.trim()) return;
+
+        if (options?.commentType === 'note') {
+          await ws.comments.addNote(row, col, { text, author });
+          return;
+        }
+
+        const comment = await ws.comments.add(row, col, { text, author });
+        if (options?.resolved && comment.threadId) {
+          await ws.comments.resolveThread(comment.threadId, true);
+        }
+      },
+      setHyperlink: (sheetId, row, col, url) => {
+        void workbook.getSheetById(sheetId).hyperlinks.set(row, col, url ?? '');
+      },
       setRangeSchema: (sheetId, range, schema, enforcement, ui) => {
         // PasteStoreOperations declares the schema's `type` as `string` for
         // domain neutrality; the kernel internal API typechecks against the

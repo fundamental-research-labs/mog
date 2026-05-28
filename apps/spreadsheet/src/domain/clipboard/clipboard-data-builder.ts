@@ -10,7 +10,7 @@
  */
 
 import type { CellId } from '@mog-sdk/contracts/cell-identity';
-import type { Comment } from '@mog-sdk/contracts/comments';
+import type { Comment } from '@mog-sdk/contracts/api';
 import type { ConditionalFormat } from '@mog-sdk/contracts/conditional-format';
 import type { CellFormat, SheetId } from '@mog-sdk/contracts/core';
 import type { RangeSchema } from '@mog-sdk/contracts/schema';
@@ -160,8 +160,11 @@ export function buildClipboardData(
           continue;
         }
 
-        // Use visible indices for relative positioning (compacted)
-        const key = `${visibleRowIndex},${visibleColIndex}`;
+        // Normal copies keep sparse offsets relative to the original selection
+        // origin. Hidden-row compaction is the only mode that rewrites offsets.
+        const key = skipHidden
+          ? `${visibleRowIndex},${visibleColIndex}`
+          : `${row - normalized.startRow},${col - normalized.startCol}`;
 
         const cellData = store.getCellData(sheetId, row, col);
         const format = store.getCellFormat(sheetId, row, col);
@@ -568,8 +571,11 @@ function captureCommentsForCell(
       author: comment.author,
       authorId: comment.authorId,
       content: extractPlainTextFromComment(comment),
-      createdAt: comment.createdAt,
+      createdAt: comment.createdAt ?? Date.now(),
       resolved: comment.resolved,
+      commentType: comment.commentType,
+      threadId: comment.threadId,
+      parentId: comment.parentId,
     }),
   );
 }
@@ -579,11 +585,13 @@ function captureCommentsForCell(
  * For clipboard purposes, we flatten rich text to plain string.
  */
 function extractPlainTextFromComment(comment: Comment): string {
-  if (!comment.content || !Array.isArray(comment.content)) {
-    return '';
+  if (typeof comment.content === 'string') {
+    return comment.content;
   }
-  // RichText is an array of RichTextSegment, each with a 'text' property
-  return comment.content.map((segment) => segment.text ?? '').join('');
+  if (Array.isArray(comment.runs) && comment.runs.length > 0) {
+    return comment.runs.map((segment) => segment.text ?? '').join('');
+  }
+  return '';
 }
 
 /**

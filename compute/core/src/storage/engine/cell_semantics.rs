@@ -211,15 +211,10 @@ impl YrsComputeEngine {
         let formula = if include_formula {
             cell_id
                 .and_then(|cid| {
-                    self.stores
-                        .compute
+                    self.mirror
                         .get_formula(&cid)
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            self.mirror.get_formula(&cid).map(|f| {
-                                self.stores.compute.to_a1_display(&self.mirror, sheet_id, f)
-                            })
-                        })
+                        .map(|f| self.stores.compute.to_a1_display(&self.mirror, sheet_id, f))
+                        .or_else(|| self.stores.compute.get_formula(&cid).map(|s| s.to_string()))
                 })
                 .or_else(|| super::data_table_formula::formula_at(&self.mirror, sheet_id, row, col))
         } else {

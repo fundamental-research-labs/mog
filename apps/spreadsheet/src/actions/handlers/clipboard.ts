@@ -78,12 +78,36 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   // Worksheet API for cell/merge reads and visibility checks
   const ws = deps.workbook.getSheetById(sheetId);
 
+  const usedRange = await ws.getUsedRange().catch(() => null);
+  const allComments = await ws.comments.list().catch(() => []);
+  const commentPositions = await ws._internal
+    .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
+    .catch(() => new Map<string, { row: number; col: number }>());
+  const commentsByCellId = new Map<string, typeof allComments>();
+  const cellIdByPosition = new Map<string, string>();
+  for (const comment of allComments) {
+    const position = commentPositions.get(comment.cellRef);
+    if (!position) continue;
+    if (!isCellInAnyRange(position.row, position.col, ranges)) continue;
+    cellIdByPosition.set(`${position.row},${position.col}`, comment.cellRef);
+    const existing = commentsByCellId.get(comment.cellRef);
+    if (existing) {
+      existing.push(comment);
+    } else {
+      commentsByCellId.set(comment.cellRef, [comment]);
+    }
+  }
+
+  const captureRanges = ranges.map((range) =>
+    boundClipboardCaptureRange(range, usedRange, commentPositions),
+  );
+
   // Compute the bounding box across all ranges for batch queries
   let minRow = Infinity,
     maxRow = -Infinity,
     minCol = Infinity,
     maxCol = -Infinity;
-  for (const range of ranges) {
+  for (const range of captureRanges) {
     minRow = Math.min(minRow, range.startRow);
     maxRow = Math.max(maxRow, range.endRow);
     minCol = Math.min(minCol, range.startCol);
@@ -190,6 +214,9 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     isColHidden: (_sid: string, col: number) => hiddenColsMap.get(col) ?? false,
     getRangeSchemas: (_sid: string) => rangeSchemas,
     getConditionalFormats: (_sid: string) => conditionalFormats,
+    getCellIdAt: (_sid: string, row: number, col: number) =>
+      cellIdByPosition.get(`${row},${col}`) ?? null,
+    getCommentsForCell: (_sid: string, cellId: string) => commentsByCellId.get(cellId) ?? [],
   };
 
   // Export options using pre-fetched data
@@ -211,11 +238,12 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   return {
     commands: deps.commands.clipboard,
     buildData: (clipRanges: CellRange[]): ClipboardData => {
-      const data = buildClipboardData(clipRanges, sheetId, storeReader);
+      const data = buildClipboardData(captureRanges, sheetId, storeReader);
+      data.sourceRanges = clipRanges;
       return data;
     },
     generateTSV: (clipRanges: CellRange[]): string => {
-      const range = clipRanges[0];
+      const range = captureRanges[0] ?? clipRanges[0];
       return rangeToTSV(
         sheetId,
         range,
@@ -224,7 +252,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
       );
     },
     generateHTML: (clipRanges: CellRange[]): string => {
-      const range = clipRanges[0];
+      const range = captureRanges[0] ?? clipRanges[0];
       return rangeToHTML(
         sheetId,
         range,
@@ -237,11 +265,52 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   };
 }
 
+function isCellInAnyRange(row: number, col: number, ranges: CellRange[]): boolean {
+  return ranges.some(
+    (range) =>
+      row >= range.startRow && row <= range.endRow && col >= range.startCol && col <= range.endCol,
+  );
+}
+
+function boundClipboardCaptureRange(
+  range: CellRange,
+  usedRange: CellRange | null,
+  commentPositions: Map<string, { row: number; col: number }>,
+): CellRange {
+  const hasFullColumnIntent = range.isFullColumn === true;
+  const hasFullRowIntent = range.isFullRow === true;
+  if (!hasFullColumnIntent && !hasFullRowIntent) {
+    return range;
+  }
+
+  let maxRelevantRow = usedRange ? Math.min(range.endRow, usedRange.endRow) : range.startRow;
+  let maxRelevantCol = usedRange ? Math.min(range.endCol, usedRange.endCol) : range.startCol;
+
+  for (const position of commentPositions.values()) {
+    if (
+      position.row >= range.startRow &&
+      position.row <= range.endRow &&
+      position.col >= range.startCol &&
+      position.col <= range.endCol
+    ) {
+      maxRelevantRow = Math.max(maxRelevantRow, position.row);
+      maxRelevantCol = Math.max(maxRelevantCol, position.col);
+    }
+  }
+
+  return {
+    ...range,
+    endRow: hasFullColumnIntent ? maxRelevantRow : range.endRow,
+    endCol: hasFullRowIntent ? maxRelevantCol : range.endCol,
+  };
+}
+
 // =============================================================================
 // Selection Size Guard
 // =============================================================================
 
 const MAX_CLIPBOARD_CELLS = 100_000;
+let clipboardSettlementSequence = 0;
 
 function totalCells(ranges: CellRange[]): number {
   let total = 0;
@@ -288,7 +357,7 @@ export const COPY: ActionHandler = (deps) => {
   const sheetId = deps.getActiveSheetId();
 
   // Guard: Prevent browser hang when copying very large selections (e.g. entire column = 1M+ rows).
-  if (totalCells(mutableRanges) > MAX_CLIPBOARD_CELLS) {
+  if (totalCells(mutableRanges) > MAX_CLIPBOARD_CELLS && !hasFullShapeIntent(mutableRanges)) {
     getUIStore(deps).getState().announce('Selection too large to copy', 'assertive');
     return handled();
   }
@@ -309,6 +378,7 @@ export const COPY: ActionHandler = (deps) => {
     resolveData = res;
     rejectData = rej;
   });
+  const settlementId = ++clipboardSettlementSequence;
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
@@ -333,9 +403,14 @@ export const COPY: ActionHandler = (deps) => {
       copyCutDeps.commands.copy(mutableRanges, data);
 
       // Await the clipboard write — best-effort, failure is non-fatal.
-      clipboardWritePromise.catch((clipErr) => {
-        console.warn('System clipboard write failed (copy):', clipErr);
-      });
+      void clipboardWritePromise
+        .then(() => {
+          emitClipboardSettlement('copy', settlementId, tsv, true);
+        })
+        .catch((clipErr) => {
+          console.warn('System clipboard write failed (copy):', clipErr);
+          emitClipboardSettlement('copy', settlementId, tsv, false, clipErr);
+        });
 
       // Accessibility announcement for copy operation
       getUIStore(deps).getState().announce('Copied to clipboard', 'polite');
@@ -381,7 +456,7 @@ export const CUT: ActionHandler = (deps) => {
   const sheetId = deps.getActiveSheetId();
 
   // Guard: Prevent browser hang when cutting very large selections.
-  if (totalCells(mutableRanges) > MAX_CLIPBOARD_CELLS) {
+  if (totalCells(mutableRanges) > MAX_CLIPBOARD_CELLS && !hasFullShapeIntent(mutableRanges)) {
     getUIStore(deps).getState().announce('Selection too large to cut', 'assertive');
     return handled();
   }
@@ -394,6 +469,7 @@ export const CUT: ActionHandler = (deps) => {
     resolveData = res;
     rejectData = rej;
   });
+  const settlementId = ++clipboardSettlementSequence;
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
@@ -418,9 +494,14 @@ export const CUT: ActionHandler = (deps) => {
       copyCutDeps.commands.cut(mutableRanges, data);
 
       // Await the clipboard write — best-effort, failure is non-fatal.
-      clipboardWritePromise.catch((clipErr) => {
-        console.warn('System clipboard write failed (cut):', clipErr);
-      });
+      void clipboardWritePromise
+        .then(() => {
+          emitClipboardSettlement('cut', settlementId, tsv, true);
+        })
+        .catch((clipErr) => {
+          console.warn('System clipboard write failed (cut):', clipErr);
+          emitClipboardSettlement('cut', settlementId, tsv, false, clipErr);
+        });
 
       // Accessibility announcement for cut operation
       getUIStore(deps).getState().announce('Cut to clipboard', 'polite');
@@ -432,6 +513,31 @@ export const CUT: ActionHandler = (deps) => {
 
   return handled();
 };
+
+function hasFullShapeIntent(ranges: CellRange[]): boolean {
+  return ranges.some((range) => range.isFullColumn === true || range.isFullRow === true);
+}
+
+function emitClipboardSettlement(
+  operation: 'copy' | 'cut',
+  sequence: number,
+  tsv: string,
+  systemClipboardWritten: boolean,
+  error?: unknown,
+): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent('mog:clipboard-settled', {
+      detail: {
+        operation,
+        sequence,
+        tsv,
+        systemClipboardWritten,
+        error: error instanceof Error ? error.message : error ? String(error) : undefined,
+      },
+    }),
+  );
+}
 
 /**
  * Paste from clipboard (Ctrl+V).

@@ -180,6 +180,23 @@ export function buildPasteStoreOperations(
         transpose,
       );
     },
+    addComment: async (sheetId, row, col, content, author, options) => {
+      if (sheetId !== ws.getSheetId()) {
+        throw new Error('addComment target sheet does not match adapter worksheet');
+      }
+      const text = content.map((segment) => segment.text ?? '').join('');
+      if (!text.trim()) return;
+
+      if (options?.commentType === 'note') {
+        await ws.comments.addNote(row, col, { text, author });
+        return;
+      }
+
+      const comment = await ws.comments.add(row, col, { text, author });
+      if (options?.resolved && comment.threadId) {
+        await ws.comments.resolveThread(comment.threadId, true);
+      }
+    },
     createConditionalFormat: async (sheetId, ranges, rules) => {
       if (sheetId !== ws.getSheetId()) {
         throw new Error('createConditionalFormat target sheet does not match adapter worksheet');

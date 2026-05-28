@@ -242,11 +242,18 @@ export interface PasteStoreOperations {
    */
   addComment?(
     sheetId: SheetId,
-    cellId: CellId,
+    row: number,
+    col: number,
     content: RichText,
     author: string,
-    options?: { authorId?: string },
-  ): void;
+    options?: {
+      authorId?: string;
+      commentType?: 'note' | 'threadedComment';
+      resolved?: boolean;
+      threadId?: string | null;
+      parentId?: string | null;
+    },
+  ): Promise<void> | void;
   /**
    * Check if a row is hidden (Hidden/Filtered Row Handling).
    * Used to skip hidden rows during paste operations.
@@ -818,10 +825,22 @@ export async function executePaste(
       data.sourceSheetId !== EXTERNAL_SOURCE_SHEET_ID &&
       data.sourceSheetId !== '' &&
       data.sourceRanges.length === 1;
-    // Only use the core fast path for the default "paste all" case.
-    // Paste-Special Values/Formulas/Formats still route through the TS
-    // synthesis so the paste-special dialog semantics (e.g. "formulas only,
-    // no shift") match the existing behavior.
+    const coreCopyType: 'all' | 'formulas' | 'values' | 'formats' | null = pasteAll
+      ? 'all'
+      : formulasOnly && !valuesOnly && !formatsOnly && !pasteLink
+        ? 'formulas'
+        : valuesOnly && !formulasOnly && !formatsOnly && !pasteLink
+          ? 'values'
+          : formatsOnly && !valuesOnly && !formulasOnly && !pasteLink
+            ? 'formats'
+            : null;
+    const clipboardHasFormat = Object.values(data.cells).some(
+      (c) => c.format && Object.keys(c.format as object).length > 0,
+    );
+    const clipboardHasFormula = Object.values(data.cells).some((c) => c.formula !== undefined);
+    const clipboardHasValue = Object.values(data.cells).some(
+      (c) => c.raw !== undefined && c.raw !== null,
+    );
     //
     // A clipboard entry built by buildClipboardData includes cells that have
     // only format (raw/formula undefined) — cutting a source and re-copying
@@ -831,15 +850,21 @@ export async function executePaste(
     // which the old TS path silently skipped because its valueUpdates list
     // excluded `raw === undefined` cells. Require at least one cell with
     // actual value/formula content to take the fast path.
-    const clipboardHasData = Object.values(data.cells).some(
-      (c) => (c.raw !== undefined && c.raw !== null) || c.formula !== undefined,
-    );
+    const clipboardHasCorePayload =
+      coreCopyType === 'all'
+        ? clipboardHasValue || clipboardHasFormula
+        : coreCopyType === 'formats'
+          ? clipboardHasFormat
+          : coreCopyType === 'formulas'
+            ? clipboardHasFormula
+            : coreCopyType === 'values'
+              ? clipboardHasValue || clipboardHasFormula
+              : false;
     const useCoreCopyRange =
       isInternalSource &&
-      data.sourceSheetId === sheetId &&
-      clipboardHasData &&
+      clipboardHasCorePayload &&
       !!store.copyRange &&
-      pasteAll &&
+      coreCopyType !== null &&
       operation === 'none' &&
       !(options.skipHiddenRows && store.isRowHidden) &&
       !options.skipCells;
@@ -1080,7 +1105,7 @@ export async function executePaste(
         sheetId,
         target.row,
         target.col,
-        'all',
+        coreCopyType ?? 'all',
         options.skipBlanks ?? false,
         options.transpose ?? false,
       );
@@ -1128,17 +1153,18 @@ export async function executePaste(
 
     // Step 7.5: Apply comments from clipboard
     // Comments are applied after values so the cells exist for comment attachment
-    if (commentUpdates.length > 0 && store.getOrCreateCellId && store.addComment) {
+    if (commentUpdates.length > 0 && store.addComment) {
       for (const { row, col, comments } of commentUpdates) {
-        // Get or create the cell to attach comments to
-        const cellId = store.getOrCreateCellId(sheetId, row, col);
-
         // Add each comment
         for (const comment of comments) {
           // Convert plain text content to RichText format
           const richTextContent: RichText = [{ text: comment.content }];
-          store.addComment(sheetId, cellId, richTextContent, comment.author, {
+          await store.addComment(sheetId, row, col, richTextContent, comment.author, {
             authorId: comment.authorId,
+            commentType: comment.commentType,
+            resolved: comment.resolved,
+            threadId: comment.threadId,
+            parentId: comment.parentId,
           });
         }
       }

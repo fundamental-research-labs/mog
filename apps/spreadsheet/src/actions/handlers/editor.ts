@@ -450,9 +450,7 @@ export const CLEAR_CONTENTS: AsyncActionHandler = async (deps) => {
 };
 
 /**
- * Clear all - clear both contents and formats from selected cells.
- *
- * Uses ws.setCell(row, col, null) and ws.clearFormat(row, col).
+ * Clear all cell-attached payloads from selected cells.
  *
  * Multi-Sheet Support
  * - Broadcasts to all selected sheets when multiple sheets are selected
@@ -465,32 +463,51 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
     for (const sheetId of targetSheetIds) {
       const ws = getWorksheet(deps, sheetId);
       for (const range of ranges) {
-        // Clear contents: batch null values (1 IPC).
-        // PartialArrayWrite is possible if the range covers part of a CSE
-        // array; mirror CLEAR_CONTENTS by exiting early on rejection so
-        // subsequent ranges are skipped.
-        const rows = range.endRow - range.startRow + 1;
-        const cols = range.endCol - range.startCol + 1;
-        const nullValues = Array.from({ length: rows }, () => Array(cols).fill(null));
-        const ok = await guardBridgeMutation(() =>
-          ws.setRange(range.startRow, range.startCol, nullValues),
-        );
+        const ok = await guardBridgeMutation(() => ws.clear(range, 'all'));
         if (!ok) return;
-        // Clear formats: use clearFormatForRanges (removes all explicit formatting).
-        // Format clears cannot raise PartialArrayWrite, so they don't need
-        // the guard.
-        await ws.formats.clearRange({
-          startRow: range.startRow,
-          startCol: range.startCol,
-          endRow: range.endRow,
-          endCol: range.endCol,
-        });
+        await clearRangeMetadata(ws, range);
       }
     }
   });
 
   return handled();
 };
+
+async function clearRangeMetadata(ws: Worksheet, range: CellRange): Promise<void> {
+  await Promise.all([
+    clearCommentsInRange(ws, range),
+    ws.validations.clear(range),
+    ws.conditionalFormats.clearInRanges([range]),
+  ]);
+}
+
+async function clearCommentsInRange(ws: Worksheet, range: CellRange): Promise<void> {
+  const comments = await ws.comments.list();
+  if (comments.length === 0) return;
+
+  const positions = await ws._internal.batchGetCellPositions(
+    comments.map((comment) => comment.cellRef),
+  );
+  const removals: Promise<void>[] = [];
+  const seenCells = new Set<string>();
+  for (const comment of comments) {
+    const position = positions.get(comment.cellRef);
+    if (!position) continue;
+    if (
+      position.row < range.startRow ||
+      position.row > range.endRow ||
+      position.col < range.startCol ||
+      position.col > range.endCol
+    ) {
+      continue;
+    }
+    const key = `${position.row},${position.col}`;
+    if (seenCells.has(key)) continue;
+    seenCells.add(key);
+    removals.push(ws.comments.removeForCell(position.row, position.col).then(() => undefined));
+  }
+  await Promise.all(removals);
+}
 
 /**
  * Clear formats only from selected cells.

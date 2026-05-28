@@ -438,6 +438,7 @@ describe('ViewportFetchManager', () => {
       const { manager } = createManager(transport);
 
       await manager.refresh('main', 'sheet-1', bounds);
+      const expectedVisibleBounds = { ...bounds };
 
       manager.invalidateAllPrefetch();
       let state = manager.getPerViewportStates().get('main')!;
@@ -448,7 +449,13 @@ describe('ViewportFetchManager', () => {
 
       state = manager.getPerViewportStates().get('main')!;
       expect(state.prefetchBounds).not.toBeNull();
-      expect(state.lastVisibleBounds).not.toBeNull();
+      expect(state.prefetchBounds).toEqual({
+        startRow: manager.getBuffer('main')!.getBounds()!.startRow,
+        startCol: manager.getBuffer('main')!.getBounds()!.startCol,
+        endRow: manager.getBuffer('main')!.getBounds()!.endRow,
+        endCol: manager.getBuffer('main')!.getBounds()!.endCol,
+      });
+      expect(state.lastVisibleBounds).toEqual(expectedVisibleBounds);
       expect(state.prefetchDirtyState.dirtyRegion).toBeNull();
       expect(state.prefetchDirtyState.staleCells.size).toBe(0);
     });
@@ -495,6 +502,7 @@ describe('ViewportFetchManager', () => {
 
       await manager.refresh('main:sheet-1', 'sheet-1', bounds);
       await manager.refresh('main:sheet-2', 'sheet-2', bounds);
+      const expectedVisibleBounds = { ...bounds };
 
       manager.invalidateAllPrefetch();
       let sheet1State = manager.getPerViewportStates().get('main:sheet-1')!;
@@ -511,7 +519,13 @@ describe('ViewportFetchManager', () => {
       expect(sheet1State.prefetchBounds).toBeNull();
       expect(sheet1State.lastVisibleBounds).toBeNull();
       expect(sheet2State.prefetchBounds).not.toBeNull();
-      expect(sheet2State.lastVisibleBounds).not.toBeNull();
+      expect(sheet2State.prefetchBounds).toEqual({
+        startRow: manager.getBuffer('main:sheet-2')!.getBounds()!.startRow,
+        startCol: manager.getBuffer('main:sheet-2')!.getBounds()!.startCol,
+        endRow: manager.getBuffer('main:sheet-2')!.getBounds()!.endRow,
+        endCol: manager.getBuffer('main:sheet-2')!.getBounds()!.endCol,
+      });
+      expect(sheet2State.lastVisibleBounds).toEqual(expectedVisibleBounds);
       expect(sheet2State.prefetchDirtyState.dirtyRegion).toBeNull();
       expect(sheet2State.prefetchDirtyState.staleCells.size).toBe(0);
     });

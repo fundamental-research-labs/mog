@@ -192,15 +192,19 @@ export class ViewportFetchManager {
     };
   }
 
+  /**
+   * Force refreshes bypass refresh(), so mirror the committed coordinator
+   * buffer back into the per-viewport cache that render/devtools consumers read.
+   */
   private markForceRefreshedViewportFresh(
-    viewportId: string,
-    refreshedBufferBounds: ViewportBounds,
     coordinator: ViewportCoordinator,
+    fallbackBufferBounds: ViewportBounds,
     previousVisibleBounds: PrefetchBounds | null,
   ): void {
-    const vpState = this.perViewportState.get(viewportId);
+    const vpState = this.perViewportState.get(coordinator.viewportId);
     if (!vpState) return;
 
+    const refreshedBufferBounds = coordinator.base.getBounds() ?? fallbackBufferBounds;
     const refreshedPrefetchBounds = this.stripSheetId(refreshedBufferBounds);
     const visibleWindow = coordinator.base.getVisibleWindow();
 
@@ -428,7 +432,6 @@ export class ViewportFetchManager {
 
     for (const coordinator of coordinators) {
       // Use the coordinator's current buffer bounds to know what region to re-fetch.
-      // Use the coordinator's current buffer bounds to know what region to re-fetch
       const bounds = coordinator.base.getBounds();
       if (!bounds || !coordinator.base.hasBuffer()) continue;
       const previousVisibleBounds =
@@ -453,13 +456,7 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
-          const refreshedBufferBounds = coordinator.base.getBounds() ?? bounds;
-          this.markForceRefreshedViewportFresh(
-            coordinator.viewportId,
-            refreshedBufferBounds,
-            coordinator,
-            previousVisibleBounds,
-          );
+          this.markForceRefreshedViewportFresh(coordinator, bounds, previousVisibleBounds);
         })(),
       );
     }
@@ -501,13 +498,7 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
-          const refreshedBufferBounds = coordinator.base.getBounds() ?? bounds;
-          this.markForceRefreshedViewportFresh(
-            coordinator.viewportId,
-            refreshedBufferBounds,
-            coordinator,
-            previousVisibleBounds,
-          );
+          this.markForceRefreshedViewportFresh(coordinator, bounds, previousVisibleBounds);
         })(),
       );
     }

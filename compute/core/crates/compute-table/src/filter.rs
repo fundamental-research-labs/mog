@@ -528,5 +528,4 @@ fn condition_value_to_string(value: &CellValue) -> String {
 }
 
 #[cfg(test)]
-#[path = "filter_tests.rs"]
 mod tests;

@@ -43,6 +43,17 @@
 pub mod types;
 pub mod writer;
 
+mod borders;
+mod cell_styles;
+mod colors;
+mod dxfs;
+mod fills;
+mod fonts;
+mod number_formats;
+mod root;
+mod table_styles;
+mod xfs;
+
 #[cfg(test)]
 mod tests;
 

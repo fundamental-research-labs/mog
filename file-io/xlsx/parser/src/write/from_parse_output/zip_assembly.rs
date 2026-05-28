@@ -30,6 +30,7 @@ pub(super) fn write_zip_package(
     app_props_xml: Option<Vec<u8>>,
     custom_props_xml: Option<Vec<u8>>,
     metadata_xml: Option<Vec<u8>>,
+    rich_data_parts: Vec<domain_types::RichDataPart>,
     persons_xml: Option<Vec<u8>>,
     all_chart_entries: &[Vec<ChartEntry>],
     all_chart_ex_entries: &[Vec<ChartExEntry>],
@@ -126,6 +127,18 @@ pub(super) fn write_zip_package(
     // Metadata passthrough
     if let Some(ref meta) = metadata_xml {
         add_registered_part(package_graph, &mut zip, "xl/metadata.xml", meta.clone())?;
+    }
+    for part in rich_data_parts {
+        add_registered_part(package_graph, &mut zip, &part.path, part.data)?;
+        if !part.relationships.is_empty() {
+            let rels = crate::write::relationships::RelationshipManager::from_original(
+                &part.relationships,
+            );
+            zip.add_file(
+                &crate::write::package_graph::part_relationships_path(&part.path),
+                rels.to_xml(),
+            );
+        }
     }
     // Persons (threaded comments author list)
     if let Some(ref persons) = persons_xml {

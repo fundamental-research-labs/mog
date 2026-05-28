@@ -108,6 +108,14 @@ pub struct CellMetadataBlock {
     pub records: Vec<CellMetadataRecord>,
 }
 
+/// A single block (`<bk>`) within `<valueMetadata>`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValueMetadataBlock {
+    /// Records within this block
+    pub records: Vec<CellMetadataRecord>,
+}
+
 /// Parsed metadata from `xl/metadata.xml`.
 ///
 /// This represents the OOXML metadata part (ECMA-376 Part 1, Section 18.9).
@@ -122,4 +130,7 @@ pub struct MetadataOutput {
     pub future_metadata: Vec<FutureMetadataGroup>,
     /// Cell metadata blocks from `<cellMetadata>`
     pub cell_metadata: Vec<CellMetadataBlock>,
+    /// Value metadata blocks from `<valueMetadata>`
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value_metadata: Vec<ValueMetadataBlock>,
 }

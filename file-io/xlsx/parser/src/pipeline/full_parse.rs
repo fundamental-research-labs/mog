@@ -93,6 +93,53 @@ fn ensure_no_archive_safety_error(archive: &XlsxArchive<'_>) -> Result<(), Strin
     }
 }
 
+fn collect_rich_data_parts(
+    archive: &XlsxArchive<'_>,
+    content_type_overrides: &[(String, String)],
+) -> Option<domain_types::WorkbookRichData> {
+    let mut parts = Vec::new();
+    for entry in archive.entries() {
+        let path = entry.name.replace('\\', "/");
+        if !path.starts_with("xl/richData/") || !path.ends_with(".xml") || path.contains("/_rels/")
+        {
+            continue;
+        }
+
+        let Ok(data) = archive.read_file(&path) else {
+            continue;
+        };
+        let relationships = {
+            let rels_path = crate::write::package_graph::part_relationships_path(&path);
+            archive
+                .read_file(&rels_path)
+                .map(|rels| workbook::parse_all_rels(&rels))
+                .unwrap_or_default()
+        };
+        parts.push(domain_types::RichDataPart {
+            content_type: content_type_for_part(&path, content_type_overrides)
+                .unwrap_or("application/xml")
+                .to_string(),
+            path,
+            data,
+            relationships,
+        });
+    }
+
+    parts.sort_by(|a, b| a.path.cmp(&b.path));
+    (!parts.is_empty()).then_some(domain_types::WorkbookRichData { parts })
+}
+
+fn content_type_for_part<'a>(
+    path: &str,
+    content_type_overrides: &'a [(String, String)],
+) -> Option<&'a str> {
+    let normalized = path.trim_start_matches('/');
+    content_type_overrides
+        .iter()
+        .find(|(part_name, _)| part_name.trim_start_matches('/') == normalized)
+        .map(|(_, content_type)| content_type.as_str())
+}
+
 fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
     let mut count = 0usize;
     let mut pos = 0usize;
@@ -879,6 +926,7 @@ fn parse_xlsx_full_native_impl(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let rich_data = collect_rich_data_parts(&archive, &content_type_overrides);
     ensure_no_archive_safety_error(&archive)?;
 
     // Build result
@@ -924,6 +972,7 @@ fn parse_xlsx_full_native_impl(
         raw_doc_props_app_xml,
         raw_doc_props_custom_xml,
         metadata,
+        rich_data,
         content_type_defaults,
         content_type_overrides,
         root_relationships,
@@ -959,8 +1008,6 @@ fn parse_xlsx_full_native_impl(
                     || entry.name.starts_with("xl/media/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
-                    || entry.name.starts_with("xl/richData/")
-                    || entry.name.starts_with("xl/volatileDependencies.xml")
                     || entry.name.starts_with("xl/connections.xml")
                     || entry.name.starts_with("xl/queryTables/")
                     || entry.name.starts_with("xl/timelineCaches/")

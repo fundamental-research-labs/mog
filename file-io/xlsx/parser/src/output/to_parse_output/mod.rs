@@ -200,10 +200,15 @@ pub fn full_parse_result_to_parse_output(
             ..Default::default()
         });
 
-    let metadata = result
+    let mut metadata = result
         .metadata
         .as_ref()
         .and_then(metadata::metadata_to_domain);
+    if let Some(rich_data) = result.rich_data.clone() {
+        metadata
+            .get_or_insert_with(domain_types::WorkbookMetadata::default)
+            .rich_data = Some(rich_data);
+    }
 
     // 8. Slicer caches (workbook-level) — already ooxml-types, pass through directly
     let slicer_caches = result.slicer_caches.clone();

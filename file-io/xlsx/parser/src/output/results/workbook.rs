@@ -590,6 +590,9 @@ pub struct FullParseResult {
     /// Metadata from `xl/metadata.xml` (cell metadata for dynamic arrays, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<MetadataOutput>,
+    /// Typed richData package parts referenced by value metadata (`vm`) cells.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rich_data: Option<domain_types::WorkbookRichData>,
     /// Original content type default mappings from `[Content_Types].xml`.
     /// Preserves the exact extension-to-MIME mappings (e.g., `"jpg" -> "image/jpg"`)
     /// from the source file so that round-trip writing maintains fidelity.

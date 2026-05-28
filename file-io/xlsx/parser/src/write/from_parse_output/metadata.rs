@@ -5,8 +5,15 @@ pub(super) fn metadata_xml_for_export(output: &ParseOutput) -> Option<Vec<u8>> {
     output
         .metadata
         .as_ref()
-        .filter(|metadata| !metadata.is_empty())
+        .filter(|metadata| has_metadata_xml_state(metadata))
         .map(write_metadata_xml)
+}
+
+fn has_metadata_xml_state(metadata: &WorkbookMetadata) -> bool {
+    !metadata.metadata_types.is_empty()
+        || !metadata.future_metadata.is_empty()
+        || !metadata.cell_metadata.is_empty()
+        || !metadata.value_metadata.is_empty()
 }
 
 fn write_metadata_xml(metadata: &WorkbookMetadata) -> Vec<u8> {
@@ -77,6 +84,23 @@ fn write_metadata_xml(metadata: &WorkbookMetadata) -> Vec<u8> {
             w.end_element("bk");
         }
         w.end_element("cellMetadata");
+    }
+
+    if !metadata.value_metadata.is_empty() {
+        w.start_element("valueMetadata")
+            .attr_num("count", metadata.value_metadata.len())
+            .end_attrs();
+        for block in &metadata.value_metadata {
+            w.start_element("bk").end_attrs();
+            for record in &block.records {
+                w.start_element("rc")
+                    .attr_num("t", record.t)
+                    .attr_num("v", record.v)
+                    .self_close();
+            }
+            w.end_element("bk");
+        }
+        w.end_element("valueMetadata");
     }
 
     w.end_element("metadata");

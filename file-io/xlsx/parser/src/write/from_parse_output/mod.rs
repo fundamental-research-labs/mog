@@ -19,6 +19,7 @@ mod hyperlink_targets;
 mod metadata;
 mod pivot_package;
 mod printer_settings;
+mod rich_data;
 mod sheet_builder;
 mod sheet_parts;
 mod sheet_preservation;
@@ -957,6 +958,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let app_props_xml = doc_props_xml.app;
     let custom_props_xml = doc_props_xml.custom;
     let metadata_xml = metadata::metadata_xml_for_export(output);
+    let rich_data_parts = rich_data::parts_for_export(output);
     let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
         Some(crate::domain::comments::write::persons_xml_from_domain(
             &output.persons,
@@ -998,6 +1000,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.global_idx,
         )?;
     }
+    rich_data::register_parts(&mut package_graph_builder, &rich_data_parts)?;
     for entry in &worksheet_hyperlink_relationships {
         crate::write::package_graph::register_worksheet_hyperlink(
             &mut package_graph_builder,
@@ -1628,6 +1631,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         app_props_xml,
         custom_props_xml,
         metadata_xml,
+        rich_data_parts,
         persons_xml,
         &all_chart_entries,
         &all_chart_ex_entries,

@@ -917,6 +917,7 @@ fn threading_result(
         raw_doc_props_app_xml: None,
         raw_doc_props_custom_xml: None,
         metadata: None,
+        rich_data: None,
         content_type_defaults: Vec::new(),
         content_type_overrides: Vec::new(),
         root_relationships: Vec::new(),

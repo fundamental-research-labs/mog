@@ -397,6 +397,8 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
         cell_metadata: vec![domain_types::CellMetadataBlock {
             records: vec![domain_types::CellMetadataRecord { t: 1, v: 0 }],
         }],
+        value_metadata: vec![],
+        rich_data: None,
     });
 
     let engine = engine_from_parse_output_normal(&output);

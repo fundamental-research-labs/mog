@@ -49,6 +49,21 @@ pub(super) fn metadata_to_domain(
                     .collect(),
             })
             .collect(),
+        value_metadata: metadata
+            .value_metadata
+            .iter()
+            .map(|block| domain_types::ValueMetadataBlock {
+                records: block
+                    .records
+                    .iter()
+                    .map(|record| domain_types::CellMetadataRecord {
+                        t: record.t,
+                        v: record.v,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        rich_data: None,
     };
 
     (!result.is_empty()).then_some(result)

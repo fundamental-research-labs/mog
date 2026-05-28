@@ -58,10 +58,42 @@ pub struct CellMetadataBlock {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ValueMetadataBlock {
+    pub records: Vec<CellMetadataRecord>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RichDataPart {
+    pub path: String,
+    pub content_type: String,
+    pub data: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<ooxml_types::shared::OpcRelationship>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookRichData {
+    pub parts: Vec<RichDataPart>,
+}
+
+impl WorkbookRichData {
+    pub fn is_empty(&self) -> bool {
+        self.parts.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkbookMetadata {
     pub metadata_types: Vec<MetadataType>,
     pub future_metadata: Vec<FutureMetadataGroup>,
     pub cell_metadata: Vec<CellMetadataBlock>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value_metadata: Vec<ValueMetadataBlock>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich_data: Option<WorkbookRichData>,
 }
 
 impl WorkbookMetadata {
@@ -69,5 +101,10 @@ impl WorkbookMetadata {
         self.metadata_types.is_empty()
             && self.future_metadata.is_empty()
             && self.cell_metadata.is_empty()
+            && self.value_metadata.is_empty()
+            && self
+                .rich_data
+                .as_ref()
+                .is_none_or(WorkbookRichData::is_empty)
     }
 }

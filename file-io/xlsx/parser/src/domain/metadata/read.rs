@@ -9,7 +9,7 @@
 
 use crate::output::results::{
     CellMetadataBlock, CellMetadataRecord, FutureMetadataBlock, FutureMetadataGroup,
-    MetadataOutput, MetadataTypeOutput,
+    MetadataOutput, MetadataTypeOutput, ValueMetadataBlock,
 };
 
 use crate::pipeline::full_parse::extract_attr_value;
@@ -33,11 +33,13 @@ pub(crate) fn parse_metadata(xml: &[u8]) -> MetadataOutput {
     let metadata_types = parse_metadata_types(xml_str);
     let future_metadata = parse_future_metadata(xml_str);
     let cell_metadata = parse_cell_metadata(xml_str);
+    let value_metadata = parse_value_metadata(xml_str);
 
     MetadataOutput {
         metadata_types,
         future_metadata,
         cell_metadata,
+        value_metadata,
     }
 }
 
@@ -151,13 +153,28 @@ fn parse_future_metadata(xml: &str) -> Vec<FutureMetadataGroup> {
 
 /// Parse `<cellMetadata>` section.
 fn parse_cell_metadata(xml: &str) -> Vec<CellMetadataBlock> {
+    parse_metadata_block_list(xml, "cellMetadata")
+        .into_iter()
+        .map(|records| CellMetadataBlock { records })
+        .collect()
+}
+
+fn parse_value_metadata(xml: &str) -> Vec<ValueMetadataBlock> {
+    parse_metadata_block_list(xml, "valueMetadata")
+        .into_iter()
+        .map(|records| ValueMetadataBlock { records })
+        .collect()
+}
+
+fn parse_metadata_block_list(xml: &str, element_name: &str) -> Vec<Vec<CellMetadataRecord>> {
     let mut result = Vec::new();
 
-    let section_start = match xml.find("<cellMetadata") {
+    let section_start = match xml.find(&format!("<{element_name}")) {
         Some(pos) => pos,
         None => return result,
     };
-    let section_end = match xml[section_start..].find("</cellMetadata>") {
+    let close = format!("</{element_name}>");
+    let section_end = match xml[section_start..].find(&close) {
         Some(pos) => section_start + pos,
         None => return result,
     };
@@ -199,7 +216,7 @@ fn parse_cell_metadata(xml: &str) -> Vec<CellMetadataBlock> {
             rc_pos = rc_tag_end;
         }
 
-        result.push(CellMetadataBlock { records });
+        result.push(records);
         bk_pos = bk_end + "</bk>".len();
     }
 

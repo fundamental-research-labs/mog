@@ -120,8 +120,12 @@ pub struct SheetRoundTripContext {
     /// other non-standard namespace attrs for round-trip fidelity.
     #[serde(default)]
     pub preserved_namespace_attrs: Vec<(String, String)>,
-    /// Raw `<customProperties>...</customProperties>` element from the worksheet.
-    /// These are worksheet-level custom property references (with r:id links to binary parts).
+    /// Immediate parse-output sidecar for worksheet-level custom property refs.
+    ///
+    /// These refs are not semantic workbook state and must not be persisted in
+    /// document round-trip sidecars. The XLSX parser may populate this for the
+    /// same import/export operation; serialized documents drop it.
+    #[serde(skip)]
     pub custom_properties_xml: Option<String>,
     /// Preserved unknown XML elements from the worksheet as raw XML strings.
     /// Each entry is (position_key, raw_xml) — same format as `workbook_preserved_elements`.

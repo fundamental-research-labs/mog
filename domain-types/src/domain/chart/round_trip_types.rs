@@ -12,14 +12,11 @@
 //!   converters covering the structural content of the mirror.
 //!
 //! Types with deeply nested OOXML sub-parts that overlap the broader
-//! drawings/text-body elevation (ChartPivotFormat → sp_pr/tx_pr/marker/d_lbl;
-//! ChartTypeConfig → chart-type-specific deep configs) land here as
-//! **minimum viable wrappers**: the outer shape is domain-owned and fully
-//! round-trip-safe via `From`/`Into`, while deep inner OOXML structs are
-//! carried opaquely until the matching drawing/text primitives are elevated
-//! in a follow-up slice. This trades perfect layering purity for corpus
-//! fidelity now — the relevant `ooxml_types::*` fields have already been
-//! lifted off `ChartRoundTripData`.
+//! drawings/text-body model (ChartPivotFormat -> sp_pr/tx_pr/marker/d_lbl;
+//! ChartTypeConfig -> chart-type-specific deep configs) keep the outer chart
+//! contract typed and use the established OOXML extension-entry structures for
+//! opaque vendor extension payloads. Round-trip storage is reserved for chart
+//! constructs that do not yet have a first-class Mog editing surface.
 
 use serde::{Deserialize, Serialize};
 
@@ -336,7 +333,7 @@ impl From<ChartPrintSettings> for ocharts::PrintSettings {
 // ===========================================================================
 
 /// Pivot source metadata (CT_PivotSource) — links a chart to its source pivot.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct ChartPivotSource {
@@ -344,39 +341,27 @@ pub struct ChartPivotSource {
     pub name: String,
     /// Format ID (`<c:fmtId>` / `@val`).
     pub fmt_id: u32,
-    /// Opaque extension list (`<c:extLst>`) — serialized as JSON for round trip;
-    /// follow-up will type these as first-class `ExtensionEntry` domain values
-    /// alongside the existing `chart_space_extensions` et al.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ext_lst: Option<String>,
+    /// Opaque extension entries from `<c:extLst>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extensions: Vec<ocharts::ExtensionEntry>,
 }
 
 impl From<&ocharts::PivotSource> for ChartPivotSource {
     fn from(p: &ocharts::PivotSource) -> Self {
-        let ext_lst = if p.extensions.is_empty() {
-            None
-        } else {
-            serde_json::to_string(&p.extensions).ok()
-        };
         Self {
             name: p.name.clone(),
             fmt_id: p.fmt_id,
-            ext_lst,
+            extensions: p.extensions.clone(),
         }
     }
 }
 
 impl From<ChartPivotSource> for ocharts::PivotSource {
     fn from(p: ChartPivotSource) -> Self {
-        let extensions = p
-            .ext_lst
-            .as_deref()
-            .and_then(|s| serde_json::from_str::<Vec<ocharts::ExtensionEntry>>(s).ok())
-            .unwrap_or_default();
         Self {
             name: p.name,
             fmt_id: p.fmt_id,
-            extensions,
+            extensions: p.extensions,
         }
     }
 }
@@ -927,6 +912,21 @@ mod tests {
             name: "PivotTable1".into(),
             fmt_id: 0,
             extensions: Vec::new(),
+        };
+        let dom: ChartPivotSource = (&original).into();
+        let round: ocharts::PivotSource = dom.into();
+        assert_eq!(original, round);
+    }
+
+    #[test]
+    fn pivot_source_round_trip_extensions() {
+        let original = ocharts::PivotSource {
+            name: "PivotTable1".into(),
+            fmt_id: 7,
+            extensions: vec![ocharts::ExtensionEntry {
+                uri: "{pivot-source-ext}".into(),
+                xml: "<c15:pivotSourceExt/>".into(),
+            }],
         };
         let dom: ChartPivotSource = (&original).into();
         let round: ocharts::PivotSource = dom.into();

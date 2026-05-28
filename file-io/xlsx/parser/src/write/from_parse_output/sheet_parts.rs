@@ -8,7 +8,7 @@ use super::{
     chart_allows_auxiliary_replay, comments_have_imported_identity, sheet_preservation,
     should_reconstruct_chart_space, worksheet_custom_properties,
 };
-use crate::domain::charts::chart_ex_write::serialize_chart_ex_space;
+use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::opc::resolve_relationship_target;
 use crate::write::{SharedStringsWriter, SheetWriter};

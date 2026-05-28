@@ -18,7 +18,7 @@ pub fn parse_chart_ex_for_sheet(
     archive: &XlsxArchive,
     sheet_num: usize,
 ) -> Vec<crate::output::results::ParsedChartEx> {
-    use crate::domain::charts::chart_ex_read::parse_chart_ex;
+    use crate::domain::charts::chart_ex::read::parse_chart_ex;
 
     let mut result = Vec::new();
 

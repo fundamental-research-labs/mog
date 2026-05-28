@@ -25,8 +25,6 @@
 
 pub mod axes;
 pub mod chart_ex;
-pub mod chart_ex_read;
-pub mod chart_ex_write;
 pub mod model;
 pub mod parse;
 pub mod read;

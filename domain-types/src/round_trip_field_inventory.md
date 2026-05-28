@@ -47,7 +47,7 @@ sidecar; it is not semantic authority.
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |
 | `ChartSpec.rt.auxiliary_files` | persisted chart-owned sidecar | chart style/color parts for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
 | `ChartSpec.rt.chart_rels_bytes` | persisted chart-owned sidecar | chart sidecar relationships for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
-| `custom_properties_xml` | transient parse-output sidecar | worksheet custom property refs until modeled | ParseOutput | feature writer with live refs | feature-owned relationship registration | custom property tests |
+| `custom_properties_xml` | transient parse-output sidecar | worksheet custom property refs until modeled; `serde(skip)` in `SheetRoundTripContext` so it cannot persist as document round-trip state | none | feature writer with live refs during same import/export operation | feature-owned relationship registration | custom property tests |
 | `sheet_preserved_elements` | persisted typed metadata | worksheet unknown elements | round_trip | sheet writer after modeled filtering | worksheet XML | unknown element tests |
 | `drawing_anchor_passthroughs` | persisted typed metadata | drawing anchor lexical metadata | round_trip | drawing writer | drawing part registration | drawing tests |
 | `imported_drawing` | persisted opaque sidecar | clean imported drawing part | round_trip | drawing writer | drawing part and rel registration | drawing package tests |

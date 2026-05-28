@@ -666,7 +666,10 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/spec.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/view_3d.rs"),
         format!("{manifest_dir}/../../../domain-types/src/diagnostics.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/filter.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/filter/ooxml_sort.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/filter/ooxml.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/filter/advanced.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/filter/runtime.rs"),
         // SmartArt types — must come BEFORE floating object types because SmartArtData
         // references SmartArtDefinition and SmartArtCategory.
         format!("{manifest_dir}/../../../domain-types/src/domain/smartart.rs"),

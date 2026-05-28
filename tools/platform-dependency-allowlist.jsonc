@@ -3821,17 +3821,6 @@
       "migrationPlan": "Replace with the semantic owner contract named by the platform facts matrix.",
     },
     {
-      "path": "domain-types/src/domain/filter.rs",
-      "ruleId": "rs-system-time-now",
-      "category": "rust-wall-time",
-      "line": 19,
-      "column": 15,
-      "match": "SystemTime::now(",
-      "owner": "platform-contract-migration",
-      "reason": "Existing direct platform dependency captured by the platform dependency inventory.",
-      "migrationPlan": "Replace with the semantic owner contract named by the platform facts matrix.",
-    },
-    {
       "path": "file-io/ooxml/spec/tools/audit-rust-types.ts",
       "ruleId": "ts-process-global",
       "category": "runtime-detection",

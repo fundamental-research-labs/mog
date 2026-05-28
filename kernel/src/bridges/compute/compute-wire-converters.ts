@@ -280,7 +280,7 @@ export function columnFilterCriteriaToCompute(criteria: ColumnFilterCriteria): C
       };
     case 'color':
       // Wire field is `by_font` (snake_case) — the Rust ColumnFilter::Color
-      // variant in domain-types/src/domain/filter.rs declares `by_font: bool`
+      // variant in domain-types/src/domain/filter/runtime.rs declares `by_font: bool`
       // and serde's `rename_all = "camelCase"` on the enum applies to variant
       // names only, not to fields within struct variants. The codegen produces
       // `byFont`; we cast through `unknown` to send the field name Rust expects.

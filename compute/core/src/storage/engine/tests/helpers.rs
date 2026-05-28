@@ -10,6 +10,44 @@ use compute_wire::constants::{MUTATION_HEADER_SIZE, NO_STRING, PATCH_STRIDE};
 // Snapshot Builders
 // -------------------------------------------------------------------
 
+pub(super) fn num(value: f64) -> CellValue {
+    CellValue::Number(FiniteF64::must(value))
+}
+
+pub(super) fn cell_value_at(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> CellValue {
+    engine
+        .mirror()
+        .get_cell_value_at(sheet_id, SheetPos::new(row, col))
+        .cloned()
+        .unwrap_or(CellValue::Null)
+}
+
+pub(super) fn empty_bulk_snapshot() -> WorkbookSnapshot {
+    WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id().to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 0,
+            cols: 0,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    }
+}
+
 /// Build a simple snapshot with one sheet and a few cells.
 pub(super) fn simple_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {

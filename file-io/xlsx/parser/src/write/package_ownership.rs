@@ -652,6 +652,115 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 04",
     },
     OoxmlOwnershipRow {
+        surface: "worksheet form controls and VML control shapes",
+        package_part_patterns: &[
+            "xl/ctrlProps/ctrlProp*.xml",
+            "xl/drawings/vmlDrawing*.vml",
+            "worksheet <controls>",
+        ],
+        ooxml_modules: &["controls", "drawings"],
+        canonical_type_status: CanonicalTypeStatus::ProductionReady,
+        classification: OoxmlOwnershipClassification::TypedViewOnly,
+        production_reader: "domain::controls::worksheet, domain::controls::form_control_props, domain::controls::vml",
+        private_parser_adapter: "FormControlOutput -> FloatingObjectData::FormControl",
+        full_parse_result_field: "sheets[*].form_controls",
+        parse_output_domain_owner: "SheetData.floating_objects FormControl",
+        yrs_app_persistence_owner: "floating object app state",
+        api_exposure: ApiExposureLevel::ReadOnly,
+        production_writer: "write::from_parse_output::form_controls and controls/VML writers",
+        package_feature_owner: Some(PackageFeatureOwner::Controls),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
+        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        unsupported_diagnostic_policy:
+            "macro-bearing controls use security-disabled diagnostics; imported controls are preserved as non-editable typed objects",
+        dirty_invalidation_triggers: &[
+            "form control add/update/delete",
+            "control property mutation",
+            "VML control shape mutation",
+        ],
+        semantic_references: &[
+            "worksheet control shapeId",
+            "worksheet control r:id",
+            "ctrlProp part path",
+            "VML shape id",
+            "linked cell/range formulas",
+        ],
+        user_visible_behavior: "visible form control placeholder, linked-cell metadata, and disabled macro assignment",
+        fixture_coverage:
+            "domain::controls tests cover worksheet controls, VML controls, props, and writer roundtrip",
+    },
+    OoxmlOwnershipRow {
+        surface: "embedded OLE, linked-only OLE, and OLE preview media",
+        package_part_patterns: &[
+            "xl/embeddings/oleObject*.bin",
+            "worksheet <oleObjects>",
+            "xl/media/*",
+            "xl/drawings/vmlDrawing*.vml",
+        ],
+        ooxml_modules: &["ole", "drawings"],
+        canonical_type_status: CanonicalTypeStatus::ProductionReady,
+        classification: OoxmlOwnershipClassification::SafeInert,
+        production_reader: "domain::controls::ole and VML preview relationship scanner",
+        private_parser_adapter: "OleObjectOutput -> FloatingObjectData::OleObject",
+        full_parse_result_field: "sheets[*].ole_objects",
+        parse_output_domain_owner: "SheetData.floating_objects OleObject",
+        yrs_app_persistence_owner: "floating object app state",
+        api_exposure: ApiExposureLevel::ReadOnly,
+        production_writer: "write::from_parse_output::ole_objects and OLE/VML writers",
+        package_feature_owner: Some(PackageFeatureOwner::OleObjects),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
+        opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
+        unsupported_diagnostic_policy:
+            "linked OLE uses security-disabled diagnostics; missing embedded bytes use missing-part diagnostics",
+        dirty_invalidation_triggers: &[
+            "OLE object add/delete/update",
+            "embedded binary mutation",
+            "preview media mutation",
+        ],
+        semantic_references: &[
+            "worksheet OLE r:id",
+            "objectPr anchor",
+            "shapeId",
+            "embedded binary path",
+            "linked target",
+            "preview media r:id",
+        ],
+        user_visible_behavior:
+            "disabled OLE placeholder with preview image when available and link/embed identity",
+        fixture_coverage: "domain::controls OLE parser/writer tests and package graph ownership gates",
+    },
+    OoxmlOwnershipRow {
+        surface: "ActiveX controls and persistence payloads",
+        package_part_patterns: &[
+            "xl/activeX/activeX*.xml",
+            "xl/activeX/activeX*.bin",
+            "worksheet ActiveX control refs",
+        ],
+        ooxml_modules: &["controls"],
+        canonical_type_status: CanonicalTypeStatus::InventoryOnly,
+        classification: OoxmlOwnershipClassification::UnsupportedActive,
+        production_reader: "domain::controls::active_x scanner where reachable",
+        private_parser_adapter: "ActiveXControl parser struct",
+        full_parse_result_field: "diagnostics / controls inventory",
+        parse_output_domain_owner: "diagnostics only until disabled placeholders are persisted",
+        yrs_app_persistence_owner: "diagnostic-only",
+        api_exposure: ApiExposureLevel::DiagnosticOnly,
+        production_writer: "diagnostic/drop; never emits enabled ActiveX",
+        package_feature_owner: Some(PackageFeatureOwner::Controls),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
+        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        unsupported_diagnostic_policy:
+            "security-disabled-active-content diagnostic with package part and relationship fingerprints",
+        dirty_invalidation_triggers: &[
+            "ActiveX XML detected",
+            "ActiveX binary detected",
+            "control persistence relationship detected",
+        ],
+        semantic_references: &["class id", "persistence r:id", "ActiveX XML path", "ActiveX binary path"],
+        user_visible_behavior: "diagnostic-only disabled active content",
+        fixture_coverage: "domain::controls active_x parser tests; production placeholder persistence pending",
+    },
+    OoxmlOwnershipRow {
         surface: "pivot tables, pivot caches, slicers, timelines, metadata, rich data, and MDX/cube adjuncts",
         package_part_patterns: &[
             "xl/pivotTables/pivotTable*.xml",
@@ -863,7 +972,10 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
         || (path.starts_with("xl/charts/chart") && path.ends_with(".xml"))
     {
         Some(PackageFeatureOwner::DrawingObjects)
-    } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {
+    } else if (path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml"))
+        || (path.starts_with("xl/activeX/activeX")
+            && (path.ends_with(".xml") || path.ends_with(".bin")))
+    {
         Some(PackageFeatureOwner::Controls)
     } else if path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin") {
         Some(PackageFeatureOwner::PrintSettings)
@@ -902,7 +1014,7 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || path.starts_with("xl/queryTables/")
     {
         Some(AuxiliaryPackagePartPolicy::TypedOwned)
-    } else if path == "xl/vbaProject.bin" {
+    } else if path == "xl/vbaProject.bin" || path.starts_with("xl/activeX/") {
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden)
     } else if path.starts_with("xl/webextensions/") {
         Some(AuxiliaryPackagePartPolicy::ExternalCapable)

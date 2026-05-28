@@ -1,4 +1,8 @@
 use super::*;
+use domain_types::{
+    ImportDiagnosticRef, ImportEditability, ImportFeatureKind, ImportObjectStatus,
+    ImportRecoverability, ImportRenderability, ImportSource,
+};
 
 // =============================================================================
 // Domain conversions: Form controls
@@ -66,6 +70,8 @@ pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<Float
                 control_pr_attrs: fc.control_pr_attrs.clone(),
                 vml_shape: Some(fc.vml_shape.clone()),
             };
+            let object_id = format!("form-control-shape-{}", fc.shape_id);
+            let import_status = Some(form_control_import_status(fc, &object_id));
             FloatingObject {
                 common: FloatingObjectCommon {
                     id: format!("fobj-fc-{}", idx),
@@ -90,7 +96,7 @@ pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<Float
                     lock_aspect_ratio: None,
                     alt_text_title: None,
                     display_name: None,
-                    import_status: None,
+                    import_status,
                 },
                 data: FloatingObjectData::FormControl(FormControlData {
                     control_type: fc.object_type.clone(),
@@ -167,6 +173,8 @@ pub(crate) fn convert_ole_objects(
                     bytes,
                 })
             });
+            let object_id = format!("ole-shape-{}", o.shape_id);
+            let import_status = Some(ole_object_import_status(o, &object_id, &embedding, &preview));
             let ooxml = OleObjectOoxmlProps {
                 shape_id: o.shape_id,
                 r_id: o.r_id.clone(),
@@ -209,7 +217,7 @@ pub(crate) fn convert_ole_objects(
                     lock_aspect_ratio: None,
                     alt_text_title: None,
                     display_name: None,
-                    import_status: None,
+                    import_status,
                 },
                 data: FloatingObjectData::OleObject(OleObjectData {
                     prog_id: o.prog_id.clone(),
@@ -226,6 +234,151 @@ pub(crate) fn convert_ole_objects(
             }
         })
         .collect()
+}
+
+fn form_control_import_status(
+    fc: &FormControlOutput,
+    object_id: &str,
+) -> ImportObjectStatus {
+    let mut diagnostics = Vec::new();
+    if fc.macro_name.is_some() {
+        diagnostics.push(ImportDiagnosticRef {
+            id: Some("form-control-macro-disabled".to_string()),
+            feature_kind: Some(ImportFeatureKind::FormControl),
+            object_id: Some(object_id.to_string()),
+            object_name: fc.name.clone(),
+            ..ImportDiagnosticRef::default()
+        });
+    }
+
+    let reference = ImportDiagnosticRef {
+        id: Some(object_id.to_string()),
+        feature_kind: Some(ImportFeatureKind::FormControl),
+        object_id: Some(object_id.to_string()),
+        object_name: fc.name.clone(),
+        related_parts: form_control_related_parts(fc),
+        ..ImportDiagnosticRef::default()
+    };
+
+    ImportObjectStatus {
+        source: ImportSource::Xlsx,
+        feature_kind: ImportFeatureKind::FormControl,
+        recoverability: if fc.macro_name.is_some() {
+            ImportRecoverability::SecurityDisabled
+        } else {
+            ImportRecoverability::PreservedNotEditable
+        },
+        renderability: ImportRenderability::Renderable,
+        editability: ImportEditability::NotEditable,
+        diagnostics,
+        reference: Some(reference),
+    }
+}
+
+fn form_control_related_parts(fc: &FormControlOutput) -> Vec<String> {
+    let mut related_parts = Vec::new();
+    if fc.anchor_source == "Modern" {
+        related_parts.push("worksheet controls".to_string());
+    }
+    if !fc.control_pr_attrs.is_empty() {
+        related_parts.push("ctrlProp".to_string());
+    }
+    if fc.anchor_source == "Vml"
+        || fc.vml_shape.style.is_some()
+        || fc.vml_shape.textbox_content.is_some()
+    {
+        related_parts.push("VML shape".to_string());
+    }
+    related_parts
+}
+
+fn ole_object_import_status(
+    o: &OleObjectOutput,
+    object_id: &str,
+    embedding: &Option<OleObjectPackageIdentity>,
+    preview: &Option<OleObjectPreviewIdentity>,
+) -> ImportObjectStatus {
+    let has_link = o.link.is_some();
+    let has_embedding = embedding.is_some();
+    let missing_embedding = o.data_path.is_some() && !has_embedding;
+
+    let mut diagnostics = Vec::new();
+    if has_link {
+        diagnostics.push(ImportDiagnosticRef {
+            id: Some("ole-linked-object-disabled".to_string()),
+            feature_kind: Some(ImportFeatureKind::OleObject),
+            object_id: Some(object_id.to_string()),
+            object_name: o.name.clone(),
+            relationship_id: o.r_id.clone(),
+            relationship_target: o.link.clone(),
+            ..ImportDiagnosticRef::default()
+        });
+    }
+    if missing_embedding {
+        diagnostics.push(ImportDiagnosticRef {
+            id: Some("ole-embedding-bytes-missing".to_string()),
+            feature_kind: Some(ImportFeatureKind::OleObject),
+            object_id: Some(object_id.to_string()),
+            object_name: o.name.clone(),
+            relationship_id: o.r_id.clone(),
+            relationship_target: o.data_path.clone(),
+            ..ImportDiagnosticRef::default()
+        });
+    }
+
+    let reference = ImportDiagnosticRef {
+        id: Some(object_id.to_string()),
+        part: o.data_path.clone(),
+        relationship_id: o.r_id.clone(),
+        relationship_target: o.link.clone().or_else(|| o.data_path.clone()),
+        feature_kind: Some(ImportFeatureKind::OleObject),
+        object_id: Some(object_id.to_string()),
+        object_name: o.name.clone(),
+        related_parts: ole_related_parts(o, embedding, preview),
+        ..ImportDiagnosticRef::default()
+    };
+
+    ImportObjectStatus {
+        source: ImportSource::Xlsx,
+        feature_kind: ImportFeatureKind::OleObject,
+        recoverability: if missing_embedding {
+            ImportRecoverability::PartiallySupported
+        } else if has_link {
+            ImportRecoverability::SecurityDisabled
+        } else {
+            ImportRecoverability::UnsupportedPreserved
+        },
+        renderability: if preview.is_some() {
+            ImportRenderability::Renderable
+        } else {
+            ImportRenderability::Placeholder
+        },
+        editability: ImportEditability::NotEditable,
+        diagnostics,
+        reference: Some(reference),
+    }
+}
+
+fn ole_related_parts(
+    o: &OleObjectOutput,
+    embedding: &Option<OleObjectPackageIdentity>,
+    preview: &Option<OleObjectPreviewIdentity>,
+) -> Vec<String> {
+    let mut related_parts = Vec::new();
+    if let Some(embedding) = embedding {
+        related_parts.push(embedding.path.clone());
+    } else if let Some(path) = &o.data_path {
+        related_parts.push(path.clone());
+    }
+    if let Some(preview) = preview {
+        related_parts.push(preview.path.clone());
+    } else if let Some(path) = &o.preview_image_path {
+        related_parts.push(path.clone());
+    }
+    if let Some(link) = &o.link {
+        related_parts.push(link.clone());
+    }
+    related_parts
 }
 
 fn resolve_binary_part(binary_parts: &HashMap<String, Vec<u8>>, target: &str) -> Option<Vec<u8>> {

@@ -11,43 +11,23 @@ pub(super) fn append_object_import_diagnostics(
             let Some(status) = chart.import_status.as_ref() else {
                 continue;
             };
-            if status.recoverability == domain_types::ImportRecoverability::FullySupported {
+            let Some(diagnostic) = degraded_object_diagnostic(status, sheet_idx) else {
                 continue;
-            }
-
-            let mut reference = status.reference.clone().unwrap_or_default();
-            if reference.part.is_none() {
-                reference.part = Some(format!("sheet:{}", sheet_idx));
-            }
-            if reference.feature_kind.is_none() {
-                reference.feature_kind = Some(status.feature_kind);
-            }
-
-            let id = reference.id.clone().unwrap_or_else(|| {
-                domain_types::deterministic_diagnostic_id(
-                    &domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
-                    reference.part.as_deref(),
-                    reference.relationship_id.as_deref(),
-                    None,
-                    None,
-                    reference.object_name.as_deref(),
-                )
-            });
-            let message = match status.recoverability {
-                domain_types::ImportRecoverability::PreservedNotRenderable => {
-                    "Imported chart was preserved but is not renderable".to_string()
-                }
-                _ => format!("Imported {:?} has degraded support", status.feature_kind),
             };
 
-            let diagnostic = domain_types::ImportDiagnostic {
-                id,
-                code: domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
-                severity: domain_types::ImportSeverity::Warning,
-                feature: status.feature_kind,
-                recoverability: status.recoverability,
-                message,
-                reference: Some(reference),
+            diagnostics
+                .errors
+                .push(domain_types::ParseError::from(diagnostic.clone()));
+            report.diagnostics.push(diagnostic);
+            report.object_statuses.push(status.clone());
+        }
+
+        for object in &sheet.floating_objects {
+            let Some(status) = object.common.import_status.as_ref() else {
+                continue;
+            };
+            let Some(diagnostic) = degraded_object_diagnostic(status, sheet_idx) else {
+                continue;
             };
 
             diagnostics
@@ -59,6 +39,111 @@ pub(super) fn append_object_import_diagnostics(
     }
 
     diagnostics.import_report = Some(report.canonicalized());
+}
+
+fn degraded_object_diagnostic(
+    status: &domain_types::ImportObjectStatus,
+    sheet_idx: usize,
+) -> Option<domain_types::ImportDiagnostic> {
+    if status.recoverability == domain_types::ImportRecoverability::FullySupported {
+        return None;
+    }
+
+    let mut reference = status.reference.clone().unwrap_or_default();
+    if reference.part.is_none() {
+        reference.part = Some(format!("sheet:{}", sheet_idx));
+    }
+    if reference.sheet_index.is_none() {
+        reference.sheet_index = Some(sheet_idx as u32);
+    }
+    if reference.feature_kind.is_none() {
+        reference.feature_kind = Some(status.feature_kind);
+    }
+
+    let code = diagnostic_code_for_status(status);
+    let id = domain_types::deterministic_diagnostic_id(
+        &code,
+        reference.part.as_deref(),
+        reference.relationship_id.as_deref(),
+        None,
+        None,
+        reference
+            .object_id
+            .as_deref()
+            .or(reference.object_name.as_deref()),
+    );
+
+    Some(domain_types::ImportDiagnostic {
+        id,
+        code,
+        severity: diagnostic_severity_for_status(status),
+        feature: status.feature_kind,
+        recoverability: status.recoverability,
+        message: diagnostic_message_for_status(status),
+        reference: Some(reference),
+    })
+}
+
+fn diagnostic_code_for_status(
+    status: &domain_types::ImportObjectStatus,
+) -> domain_types::ImportDiagnosticCode {
+    match status.recoverability {
+        domain_types::ImportRecoverability::SecurityDisabled => {
+            domain_types::ImportDiagnosticCode::SecurityDisabledActiveContent
+        }
+        domain_types::ImportRecoverability::UnsupportedDropped
+        | domain_types::ImportRecoverability::MalformedDropped => {
+            domain_types::ImportDiagnosticCode::UnsupportedFeature
+        }
+        domain_types::ImportRecoverability::PartiallySupported
+            if status.feature_kind == domain_types::ImportFeatureKind::OleObject =>
+        {
+            domain_types::ImportDiagnosticCode::MissingPart
+        }
+        _ if status.feature_kind == domain_types::ImportFeatureKind::Chart => {
+            domain_types::ImportDiagnosticCode::ChartPartEmptySeries
+        }
+        _ => domain_types::ImportDiagnosticCode::UnsupportedFeature,
+    }
+}
+
+fn diagnostic_severity_for_status(
+    status: &domain_types::ImportObjectStatus,
+) -> domain_types::ImportSeverity {
+    match status.recoverability {
+        domain_types::ImportRecoverability::MalformedDropped => domain_types::ImportSeverity::Error,
+        _ => domain_types::ImportSeverity::Warning,
+    }
+}
+
+fn diagnostic_message_for_status(status: &domain_types::ImportObjectStatus) -> String {
+    match (status.feature_kind, status.recoverability) {
+        (
+            domain_types::ImportFeatureKind::Chart,
+            domain_types::ImportRecoverability::PreservedNotRenderable,
+        ) => "Imported chart was preserved but is not renderable".to_string(),
+        (
+            domain_types::ImportFeatureKind::FormControl,
+            domain_types::ImportRecoverability::SecurityDisabled,
+        ) => "Imported form control has disabled macro behavior".to_string(),
+        (
+            domain_types::ImportFeatureKind::FormControl,
+            domain_types::ImportRecoverability::PreservedNotEditable,
+        ) => "Imported form control was preserved as a non-editable object".to_string(),
+        (
+            domain_types::ImportFeatureKind::OleObject,
+            domain_types::ImportRecoverability::SecurityDisabled,
+        ) => "Imported linked OLE object was preserved with active linking disabled".to_string(),
+        (
+            domain_types::ImportFeatureKind::OleObject,
+            domain_types::ImportRecoverability::UnsupportedPreserved,
+        ) => "Imported embedded OLE object was preserved as a disabled placeholder".to_string(),
+        (
+            domain_types::ImportFeatureKind::OleObject,
+            domain_types::ImportRecoverability::PartiallySupported,
+        ) => "Imported OLE object is missing an owned embedded package payload".to_string(),
+        _ => format!("Imported {:?} has degraded support", status.feature_kind),
+    }
 }
 
 pub(super) fn append_import_compatibility_acknowledgements(

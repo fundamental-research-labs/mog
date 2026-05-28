@@ -51,8 +51,5 @@ pub mod sort_state;
 pub mod floating_object;
 pub mod slicer;
 
-// TEMPORARILY DISABLED: yrs_schema tests are broken due to concurrent domain type
-// restructurings (sparkline, conditional, comment, chart, pivot, etc.).
-// Re-enable once those modules are updated.
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;

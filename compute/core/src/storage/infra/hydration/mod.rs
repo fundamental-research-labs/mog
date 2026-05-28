@@ -31,6 +31,7 @@
 // and `import.rs` (XLSX import path). This is valid Rust — impl blocks can span multiple files
 // in the same crate.
 
+mod data_tables;
 mod features;
 mod helpers;
 mod import;

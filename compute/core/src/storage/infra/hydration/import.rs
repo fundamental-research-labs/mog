@@ -18,6 +18,7 @@ use value_types::ComputeError;
 
 use crate::storage::YrsStorage;
 
+use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
 use super::styles::{ImportedRangeStyle, hydrate_style_palette};
 use super::workbook::{
@@ -211,7 +212,7 @@ impl YrsStorage {
             &output.file_sharing,
             &mut txn,
         );
-        // TODO: Hydrate data_table_regions
+        hydrate_data_table_regions_from_parse_output(&self.workbook, output, &id_map, &mut txn);
 
         // Stamp schema version — import always creates a new document.
         write_schema_version(&mut txn, &self.workbook);
@@ -405,6 +406,7 @@ impl YrsStorage {
             &output.file_sharing,
             &mut txn,
         );
+        hydrate_data_table_regions_from_parse_output(&self.workbook, output, &id_map, &mut txn);
 
         write_schema_version(&mut txn, &self.workbook);
 

@@ -17,10 +17,21 @@ use crate::domain::slicer::{SlicerSource, SlicerStyle, StoredSlicer};
 const KEY_ID: &str = "id";
 const KEY_SHEET_ID: &str = "si";
 const KEY_SOURCE: &str = "sr"; // JSON
+const KEY_CACHE_NAME: &str = "cn";
+const KEY_CACHE_UID: &str = "cu";
 const KEY_CAPTION: &str = "ca";
 const KEY_NAME: &str = "nm";
 const KEY_STYLE: &str = "sy"; // JSON
+const KEY_TABLE_COLUMN_INDEX: &str = "tc";
+const KEY_PIVOT_CACHE_ID: &str = "pc";
+const KEY_PIVOT_TABLE_TAB_ID: &str = "pt";
+const KEY_ROW_HEIGHT: &str = "rh";
+const KEY_LEVEL: &str = "lv";
+const KEY_UID: &str = "ui";
+const KEY_EXT_LST_XML: &str = "ex";
+const KEY_CACHE_EXT_LST_XML: &str = "ce";
 const KEY_POSITION: &str = "po"; // JSON
+const KEY_ANCHOR_OBJECT_ID: &str = "ao";
 const KEY_Z_INDEX: &str = "zi";
 const KEY_LOCKED: &str = "lk";
 const KEY_SHOW_HEADER: &str = "sh";
@@ -49,9 +60,18 @@ pub fn to_yrs_prelim(slicer: &StoredSlicer) -> Vec<(&str, Any)> {
 
     // Optional native string fields
     entries.push((KEY_NAME, option_string(&slicer.name)));
+    entries.push((KEY_CACHE_NAME, option_string(&slicer.cache_name)));
+    entries.push((KEY_CACHE_UID, option_string(&slicer.cache_uid)));
+    entries.push((KEY_UID, option_string(&slicer.uid)));
+    entries.push((KEY_EXT_LST_XML, option_string(&slicer.ext_lst_xml)));
+    entries.push((
+        KEY_CACHE_EXT_LST_XML,
+        option_string(&slicer.cache_ext_lst_xml),
+    ));
 
     // Native number fields
     entries.push((KEY_Z_INDEX, Any::Number(slicer.z_index as f64)));
+    entries.push((KEY_LEVEL, Any::Number(slicer.level as f64)));
 
     // Native bool fields
     entries.push((KEY_LOCKED, Any::Bool(slicer.locked)));
@@ -60,6 +80,17 @@ pub fn to_yrs_prelim(slicer: &StoredSlicer) -> Vec<(&str, Any)> {
 
     // Optional number fields
     entries.push((KEY_START_ITEM, option_i32(&slicer.start_item)));
+    entries.push((
+        KEY_TABLE_COLUMN_INDEX,
+        option_u32(&slicer.table_column_index),
+    ));
+    entries.push((KEY_PIVOT_CACHE_ID, option_u32(&slicer.pivot_cache_id)));
+    entries.push((
+        KEY_PIVOT_TABLE_TAB_ID,
+        option_u32(&slicer.pivot_table_tab_id),
+    ));
+    entries.push((KEY_ROW_HEIGHT, option_u32(&slicer.row_height)));
+    entries.push((KEY_ANCHOR_OBJECT_ID, option_u32(&slicer.anchor_object_id)));
     entries.push((KEY_CREATED_AT, option_number(&slicer.created_at)));
     entries.push((KEY_UPDATED_AT, option_number(&slicer.updated_at)));
 
@@ -108,6 +139,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
 
     let caption = read_string(map, txn, KEY_CAPTION).unwrap_or_default();
     let name = read_string(map, txn, KEY_NAME);
+    let cache_name = read_string(map, txn, KEY_CACHE_NAME);
+    let cache_uid = read_string(map, txn, KEY_CACHE_UID);
 
     let style: SlicerStyle = read_string(map, txn, KEY_STYLE)
         .and_then(|s| serde_json::from_str(&s).ok())
@@ -127,9 +160,18 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
         read_string(map, txn, KEY_POSITION).and_then(|s| serde_json::from_str(&s).ok());
 
     let z_index = read_i32(map, txn, KEY_Z_INDEX).unwrap_or(0);
+    let level = read_u32(map, txn, KEY_LEVEL).unwrap_or(0);
     let locked = read_bool(map, txn, KEY_LOCKED).unwrap_or(false);
     let show_header = read_bool(map, txn, KEY_SHOW_HEADER).unwrap_or(true);
     let start_item = read_i32(map, txn, KEY_START_ITEM);
+    let table_column_index = read_u32(map, txn, KEY_TABLE_COLUMN_INDEX);
+    let pivot_cache_id = read_u32(map, txn, KEY_PIVOT_CACHE_ID);
+    let pivot_table_tab_id = read_u32(map, txn, KEY_PIVOT_TABLE_TAB_ID);
+    let row_height = read_u32(map, txn, KEY_ROW_HEIGHT);
+    let uid = read_string(map, txn, KEY_UID);
+    let ext_lst_xml = read_string(map, txn, KEY_EXT_LST_XML);
+    let cache_ext_lst_xml = read_string(map, txn, KEY_CACHE_EXT_LST_XML);
+    let anchor_object_id = read_u32(map, txn, KEY_ANCHOR_OBJECT_ID);
     let multi_select = read_bool(map, txn, KEY_MULTI_SELECT).unwrap_or(true);
 
     let selected_values: Vec<value_types::CellValue> = read_string(map, txn, KEY_SELECTED_VALUES)
@@ -143,10 +185,21 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
         id,
         sheet_id,
         source,
+        cache_name,
+        cache_uid,
         caption,
         name,
         style,
+        table_column_index,
+        pivot_cache_id,
+        pivot_table_tab_id,
+        row_height,
+        level,
+        uid,
+        ext_lst_xml,
+        cache_ext_lst_xml,
         position,
+        anchor_object_id,
         z_index,
         locked,
         show_header,

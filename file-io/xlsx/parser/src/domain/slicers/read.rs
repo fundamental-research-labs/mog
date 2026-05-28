@@ -485,11 +485,13 @@ pub fn parse_slicer_anchors_from_drawing(drawing_xml: &[u8]) -> Vec<SlicerAnchor
                 if requires.as_deref() == Some("a14") || requires.as_deref() == Some("sle") {
                     // Look for sle:slicer element within this block
                     if let Some(slicer_name) = extract_slicer_name_from_block(ac_block) {
+                        let object_id = extract_slicer_object_id_from_block(ac_block);
                         // Extract the twoCellAnchor from/to from the parent context
                         // We need to look at the twoCellAnchor that contains this mc:AlternateContent
-                        if let Some(anchor) =
+                        if let Some(mut anchor) =
                             extract_two_cell_anchor_for_slicer(drawing_xml, ac_start, &slicer_name)
                         {
+                            anchor.object_id = object_id;
                             anchors.push(anchor);
                         }
                     }
@@ -532,6 +534,14 @@ fn extract_slicer_name_from_block(block: &[u8]) -> Option<String> {
     parse_string_attr(slicer_elem, b"name=\"")
 }
 
+fn extract_slicer_object_id_from_block(block: &[u8]) -> Option<u32> {
+    let c_nv_pr = find_tag_simd(block, b"cNvPr", 0)?;
+    let elem_end = find_gt_simd(block, c_nv_pr)
+        .map(|p| p + 1)
+        .unwrap_or(block.len());
+    parse_u32_attr(&block[c_nv_pr..elem_end], b"id=\"")
+}
+
 /// Find the parent twoCellAnchor for a slicer mc:AlternateContent and extract from/to anchors.
 fn extract_two_cell_anchor_for_slicer(
     drawing_xml: &[u8],
@@ -553,6 +563,7 @@ fn extract_two_cell_anchor_for_slicer(
 
     Some(SlicerAnchor {
         slicer_name: slicer_name.to_string(),
+        object_id: None,
         from,
         to,
     })

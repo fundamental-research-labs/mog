@@ -150,6 +150,13 @@ pub const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relations
 pub const REL_SLICER_CACHE: &str =
     "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
 
+/// Relationship type for timelines (sheet-level, Microsoft extension).
+pub const REL_TIMELINE: &str = "http://schemas.microsoft.com/office/2011/relationships/timeline";
+
+/// Relationship type for timeline caches (workbook-level, Microsoft extension).
+pub const REL_TIMELINE_CACHE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/timelineCache";
+
 /// Relationship type for spreadsheet metadata (xl/metadata.xml).
 pub const REL_METADATA: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata";
@@ -273,6 +280,8 @@ pub enum OoxmlRelationshipType {
     DiagramDrawing,
     Slicer,
     SlicerCache,
+    Timeline,
+    TimelineCache,
     Metadata,
     OleObject,
     Person,
@@ -327,6 +336,8 @@ impl OoxmlRelationshipType {
             REL_DIAGRAM_DRAWING => Self::DiagramDrawing,
             REL_SLICER => Self::Slicer,
             REL_SLICER_CACHE => Self::SlicerCache,
+            REL_TIMELINE => Self::Timeline,
+            REL_TIMELINE_CACHE => Self::TimelineCache,
             REL_METADATA => Self::Metadata,
             REL_OLE_OBJECT => Self::OleObject,
             REL_PERSON => Self::Person,
@@ -381,6 +392,8 @@ impl OoxmlRelationshipType {
             Self::DiagramDrawing => REL_DIAGRAM_DRAWING,
             Self::Slicer => REL_SLICER,
             Self::SlicerCache => REL_SLICER_CACHE,
+            Self::Timeline => REL_TIMELINE,
+            Self::TimelineCache => REL_TIMELINE_CACHE,
             Self::Metadata => REL_METADATA,
             Self::OleObject => REL_OLE_OBJECT,
             Self::Person => REL_PERSON,
@@ -593,6 +606,13 @@ impl<'a> WorkbookRelationships<'a> {
             .filter(|rel| rel.rel_type == OoxmlRelationshipType::SlicerCache)
             .collect()
     }
+
+    pub fn timeline_caches(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::TimelineCache)
+            .collect()
+    }
 }
 
 impl<'a> WorksheetRelationships<'a> {
@@ -648,6 +668,13 @@ impl<'a> WorksheetRelationships<'a> {
         self.relationships
             .iter()
             .filter(|rel| rel.rel_type == OoxmlRelationshipType::Slicer)
+            .collect()
+    }
+
+    pub fn timelines(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::Timeline)
             .collect()
     }
 }
@@ -1026,6 +1053,8 @@ mod tests {
             OoxmlRelationshipType::DiagramDrawing,
             OoxmlRelationshipType::Slicer,
             OoxmlRelationshipType::SlicerCache,
+            OoxmlRelationshipType::Timeline,
+            OoxmlRelationshipType::TimelineCache,
             OoxmlRelationshipType::Metadata,
             OoxmlRelationshipType::OleObject,
             OoxmlRelationshipType::Person,

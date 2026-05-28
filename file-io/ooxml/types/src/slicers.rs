@@ -273,6 +273,9 @@ pub struct TableSlicerCache {
 pub struct SlicerAnchor {
     /// Slicer name (links back to `SlicerDef.name`).
     pub slicer_name: String,
+    /// Drawing object identity from `xdr:cNvPr/@id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_id: Option<u32>,
     /// Top-left anchor position.
     pub from: CellAnchor,
     /// Bottom-right anchor position.

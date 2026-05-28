@@ -1,0 +1,57 @@
+//! Timeline slicer OOXML types (Office 2013+ x15 extensions).
+
+use crate::drawings::CellAnchor;
+
+pub const CONTENT_TYPE_TIMELINE: &str = "application/vnd.ms-excel.timeline+xml";
+pub const CONTENT_TYPE_TIMELINE_CACHE: &str = "application/vnd.ms-excel.timelineCache+xml";
+pub const REL_TIMELINE: &str = "http://schemas.microsoft.com/office/2011/relationships/timeline";
+pub const REL_TIMELINE_CACHE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/timelineCache";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimelineLevel {
+    Years,
+    Quarters,
+    #[default]
+    Months,
+    Days,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineDef {
+    pub name: String,
+    pub cache: String,
+    pub caption: Option<String>,
+    pub level: TimelineLevel,
+    pub uid: Option<String>,
+    pub ext_lst: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineCacheDef {
+    pub name: String,
+    pub uid: Option<String>,
+    pub source_name: String,
+    pub pivot_cache_id: Option<u32>,
+    pub pivot_tables: Vec<TimelinePivotTableRef>,
+    pub ext_lst: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelinePivotTableRef {
+    pub tab_id: u32,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineAnchor {
+    pub timeline_name: String,
+    pub from: CellAnchor,
+    pub to: CellAnchor,
+    pub object_id: Option<u32>,
+}

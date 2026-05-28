@@ -42,6 +42,11 @@ const CT_WORKSHEET_CUSTOM_PROPERTY: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml";
 const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
+const CT_SLICER: &str = "application/vnd.ms-excel.slicer+xml";
+const CT_SLICER_CACHE: &str = "application/vnd.ms-excel.slicerCache+xml";
+const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relationships/slicer";
+const REL_SLICER_CACHE: &str =
+    "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -608,6 +613,39 @@ pub fn register_worksheet_table(
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         },
         relationship_type: REL_TABLE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_slicer(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/slicers/slicer{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_SLICER))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_SLICER.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_workbook_slicer_cache(
+    graph: &mut PackageGraphBuilder,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/slicerCaches/slicerCache{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_SLICER_CACHE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_SLICER_CACHE.to_string(),
         target: PackageRelationshipTarget::InternalPart { path },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
@@ -1268,6 +1306,7 @@ fn relationship_type_allowed_for_owner(
         | Rel::SharedStrings
         | Rel::CalcChain
         | Rel::SlicerCache
+        | Rel::TimelineCache
         | Rel::Metadata
         | Rel::Person
         | Rel::VbaProject => owner == RelationshipOwnerKind::Workbook,
@@ -1294,7 +1333,8 @@ fn relationship_type_allowed_for_owner(
         | Rel::CtrlProp
         | Rel::CustomProperty
         | Rel::OleObject
-        | Rel::Slicer => owner == RelationshipOwnerKind::Worksheet,
+        | Rel::Slicer
+        | Rel::Timeline => owner == RelationshipOwnerKind::Worksheet,
         Rel::Image => matches!(
             owner,
             RelationshipOwnerKind::Drawing
@@ -1336,6 +1376,7 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::SharedStrings
         | Rel::CalcChain
         | Rel::SlicerCache
+        | Rel::TimelineCache
         | Rel::Metadata
         | Rel::Person
         | Rel::VbaProject => "workbook relationships",
@@ -1352,7 +1393,8 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::CtrlProp
         | Rel::CustomProperty
         | Rel::OleObject
-        | Rel::Slicer => "worksheet relationships",
+        | Rel::Slicer
+        | Rel::Timeline => "worksheet relationships",
         Rel::Image => "drawing, chart, or VML drawing relationships",
         Rel::Chart
         | Rel::ChartEx
@@ -1490,6 +1532,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
             relationship_type: REL_PIVOT_CACHE,
         });
     }
+    if path.starts_with("xl/slicerCaches/slicerCache") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_SLICER_CACHE,
+        });
+    }
     if let Some(relationship_type) = relationship_type_for_worksheet_child(path) {
         return Some(RequiredRelationship {
             rels_path: None,
@@ -1562,6 +1610,10 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_METADATA)
     } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
         Some(CT_TABLE)
+    } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
+        Some(CT_SLICER)
+    } else if path.starts_with("xl/slicerCaches/slicerCache") && path.ends_with(".xml") {
+        Some(CT_SLICER_CACHE)
     } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
         Some(CT_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
@@ -1596,6 +1648,8 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
 fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
     if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
         Some(REL_TABLE)
+    } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
+        Some(REL_SLICER)
     } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
         Some(REL_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {

@@ -753,6 +753,23 @@ impl SheetWriter {
         self
     }
 
+    /// Append a generated `<ext ...>` entry to the worksheet `<extLst>`.
+    pub fn append_ext_lst_entry(&mut self, ext_xml: String) -> &mut Self {
+        match self.ext_lst_xml.as_mut() {
+            Some(existing) => {
+                if let Some(pos) = existing.rfind("</extLst>") {
+                    existing.insert_str(pos, &ext_xml);
+                } else {
+                    existing.push_str(&ext_xml);
+                }
+            }
+            None => {
+                self.ext_lst_xml = Some(format!("<extLst>{ext_xml}</extLst>"));
+            }
+        }
+        self
+    }
+
     /// Set raw mc:AlternateContent controls XML for form controls.
     pub fn set_controls_xml(&mut self, xml: String) -> &mut Self {
         self.controls_xml = Some(xml);

@@ -99,6 +99,7 @@ pub const KEY_CUSTOM_TABLE_STYLES: &str = "customTableStyles";
 pub const KEY_XLSX_TABLE_STYLES: &str = "xlsxTableStyles";
 pub const KEY_DATA_TABLE_REGIONS: &str = "dataTableRegions";
 pub const KEY_SLICERS: &str = "slicers";
+pub const KEY_TIMELINES: &str = "timelines";
 pub const KEY_PIVOT_SPECS: &str = "pivotSpecs";
 pub const KEY_PIVOT_CACHE_SOURCES: &str = "pivotCacheSources";
 pub const KEY_PIVOT_CACHE_RECORDS: &str = "pivotCacheRecords";
@@ -289,6 +290,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_NAMED_RANGES, empty());
     workbook.insert(&mut txn, KEY_TABLES, empty());
     workbook.insert(&mut txn, KEY_SLICERS, empty());
+    workbook.insert(&mut txn, KEY_TIMELINES, empty());
     workbook.insert(&mut txn, KEY_POWER_QUERY, empty());
     workbook.insert(&mut txn, KEY_SCENARIOS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_SPECS, empty());
@@ -490,6 +492,7 @@ mod tests {
             KEY_NAMED_RANGES,
             KEY_TABLES,
             KEY_SLICERS,
+            KEY_TIMELINES,
             KEY_POWER_QUERY,
             KEY_SCENARIOS,
             KEY_PIVOT_CACHE_RECORDS,

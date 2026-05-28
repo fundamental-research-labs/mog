@@ -248,11 +248,41 @@ pub struct StoredSlicer {
     pub id: String,
     pub sheet_id: String,
     pub source: SlicerSource,
+    /// OOXML slicer cache name referenced by the slicer `cache` attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_name: Option<String>,
+    /// OOXML slicer cache UID (`xr10:uid`/`uid`) from the cache definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_uid: Option<String>,
     pub caption: String,
     /// Programmatic name (OOXML `name` attribute). Falls back to `caption` when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub style: SlicerStyle,
+    /// Table-backed slicer source column index from `x15:tableSlicerCache`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_column_index: Option<u32>,
+    /// Pivot-backed slicer cache id from `x14:tabular/@pivotCacheId`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_cache_id: Option<u32>,
+    /// Pivot-backed slicer pivot table tab id from `x14:pivotTable/@tabId`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_table_tab_id: Option<u32>,
+    /// OOXML slicer row height.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_height: Option<u32>,
+    /// OOXML slicer hierarchy level.
+    #[serde(default)]
+    pub level: u32,
+    /// OOXML rich-data UID from `xr10:uid`/`uid` on the slicer definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    /// Opaque extension XML from the slicer definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
+    /// Opaque extension XML from the slicer cache definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ext_lst_xml: Option<String>,
     /// Canonical anchor/position payload — shared with `FloatingObjectCommon`.
     ///
     /// Slicers are floating objects; their on-sheet position follows the
@@ -260,6 +290,9 @@ pub struct StoredSlicer {
     /// Absent on freshly created slicers until a position is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<FloatingObjectAnchor>,
+    /// Drawing object identity (`xdr:cNvPr/@id`) for the slicer anchor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_object_id: Option<u32>,
     #[serde(default)]
     pub z_index: i32,
     #[serde(default)]
@@ -278,6 +311,61 @@ pub struct StoredSlicer {
     pub created_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimelineLevel {
+    Years,
+    Quarters,
+    Months,
+    Days,
+}
+
+impl Default for TimelineLevel {
+    fn default() -> Self {
+        Self::Months
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredTimelineCache {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    pub source_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_cache_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_table_tab_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot_table_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredTimeline {
+    pub id: String,
+    pub sheet_id: String,
+    pub name: String,
+    pub cache_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    #[serde(default)]
+    pub level: TimelineLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<StoredTimelineCache>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<FloatingObjectAnchor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_object_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 /// Partial update for a slicer — only present fields are applied.
@@ -520,6 +608,8 @@ pub fn xlsx_import_to_stored_slicer(
         id,
         sheet_id: sheet_id.to_string(),
         source,
+        cache_name: Some(slicer.cache.clone()),
+        cache_uid: cache.and_then(|c| c.uid.clone()),
         caption: slicer
             .caption
             .clone()
@@ -536,7 +626,22 @@ pub fn xlsx_import_to_stored_slicer(
             show_items_with_no_data,
             sort_order,
         },
+        table_column_index: cache
+            .and_then(|c| c.table_slicer_cache.as_ref())
+            .map(|tsc| tsc.column),
+        pivot_cache_id: cache
+            .and_then(|c| c.tabular_data.as_ref())
+            .map(|tab| tab.pivot_cache_id),
+        pivot_table_tab_id: cache
+            .and_then(|c| c.pivot_tables.first())
+            .map(|pt| pt.tab_id),
+        row_height: slicer.row_height,
+        level: slicer.level,
+        uid: slicer.uid.clone(),
+        ext_lst_xml: slicer.ext_lst.clone(),
+        cache_ext_lst_xml: cache.and_then(|c| c.ext_lst.clone()),
         position,
+        anchor_object_id: anchor.and_then(|a| a.object_id),
         z_index: 0,
         locked: slicer.locked_position,
         show_header: slicer.show_caption,
@@ -553,7 +658,10 @@ pub fn xlsx_import_to_stored_slicer(
 /// Used by the export path to produce `ParseOutput.slicer_caches` from
 /// the workbook `slicers` Y.Map.
 pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef {
-    let cache_name = format!("Slicer_{}", stored.caption);
+    let cache_name = stored
+        .cache_name
+        .clone()
+        .unwrap_or_else(|| format!("Slicer_{}", stored.caption));
     match &stored.source {
         SlicerSource::Table {
             table_id,
@@ -561,19 +669,19 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
         } => {
             OoxmlSlicerCacheDef {
                 name: cache_name,
-                uid: None,
+                uid: stored.cache_uid.clone(),
                 source_name: column_cell_id.clone(),
                 pivot_tables: vec![],
                 tabular_data: None,
                 table_slicer_cache: Some(TableSlicerCache {
                     table_id: table_id.parse::<u32>().unwrap_or(0),
-                    column: 0, // Column index not available from StoredSlicer
+                    column: stored.table_column_index.unwrap_or(0),
                     sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),
                     custom_list_sort: stored.style.custom_list_sort,
                     cross_filter: domain_cross_filter_to_ooxml(stored.style.cross_filter),
                     ext_lst: None,
                 }),
-                ext_lst: None,
+                ext_lst: stored.cache_ext_lst_xml.clone(),
             }
         }
         SlicerSource::Pivot {
@@ -593,14 +701,14 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
                 .collect();
             OoxmlSlicerCacheDef {
                 name: cache_name,
-                uid: None,
+                uid: stored.cache_uid.clone(),
                 source_name: field_name.clone(),
                 pivot_tables: vec![ooxml_types::slicers::SlicerPivotTableRef {
-                    tab_id: 0,
+                    tab_id: stored.pivot_table_tab_id.unwrap_or(0),
                     name: pivot_id.clone(),
                 }],
                 tabular_data: Some(ooxml_types::slicers::SlicerTabularData {
-                    pivot_cache_id: 0,
+                    pivot_cache_id: stored.pivot_cache_id.unwrap_or(0),
                     sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),
                     custom_list_sort: stored.style.custom_list_sort,
                     show_missing: stored.style.show_items_with_no_data,
@@ -609,7 +717,7 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
                     ext_lst: None,
                 }),
                 table_slicer_cache: None,
-                ext_lst: None,
+                ext_lst: stored.cache_ext_lst_xml.clone(),
             }
         }
     }
@@ -620,7 +728,10 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
 /// Used by the export path to produce `SheetData.slicers` from
 /// the workbook `slicers` Y.Map.
 pub fn stored_slicer_to_slicer_def(stored: &StoredSlicer) -> OoxmlSlicerDef {
-    let cache_name = format!("Slicer_{}", stored.caption);
+    let cache_name = stored
+        .cache_name
+        .clone()
+        .unwrap_or_else(|| format!("Slicer_{}", stored.caption));
     let style_name = stored.style.preset.map(|p| {
         let variant = match p {
             SlicerStylePreset::Light1 => "Light1",
@@ -653,12 +764,12 @@ pub fn stored_slicer_to_slicer_def(stored: &StoredSlicer) -> OoxmlSlicerDef {
         start_item: stored.start_item.map(|v| v as u32),
         column_count: stored.style.column_count as u32,
         show_caption: stored.show_header,
-        level: 0,
+        level: stored.level,
         style: style_name,
         locked_position: stored.locked,
-        row_height: None,
-        uid: None,
-        ext_lst: None,
+        row_height: stored.row_height,
+        uid: stored.uid.clone(),
+        ext_lst: stored.ext_lst_xml.clone(),
     }
 }
 
@@ -681,6 +792,7 @@ pub fn stored_slicer_to_anchor(stored: &StoredSlicer) -> Option<OoxmlSlicerAncho
                 .unwrap_or(&stored.id)
                 .to_string()
         }),
+        object_id: stored.anchor_object_id,
         from: CellAnchor {
             col: pos.anchor_col,
             col_off: pos.anchor_col_offset,
@@ -709,6 +821,8 @@ mod tests {
                 table_id: "table-1".into(),
                 column_cell_id: "cell-1".into(),
             },
+            cache_name: None,
+            cache_uid: None,
             caption: "Region".into(),
             name: None,
             style: SlicerStyle {
@@ -722,7 +836,16 @@ mod tests {
                 show_items_with_no_data: false,
                 sort_order: SlicerSortOrder::Ascending,
             },
+            table_column_index: None,
+            pivot_cache_id: None,
+            pivot_table_tab_id: None,
+            row_height: None,
+            level: 0,
+            uid: None,
+            ext_lst_xml: None,
+            cache_ext_lst_xml: None,
             position: None,
+            anchor_object_id: None,
             z_index: 0,
             locked: false,
             show_header: true,
@@ -751,6 +874,8 @@ mod tests {
                 field_name: "Category".into(),
                 field_area: PivotFieldArea::Row,
             },
+            cache_name: None,
+            cache_uid: None,
             caption: "Category".into(),
             name: None,
             style: SlicerStyle {
@@ -777,12 +902,21 @@ mod tests {
                 show_items_with_no_data: true,
                 sort_order: SlicerSortOrder::DataSourceOrder,
             },
+            table_column_index: None,
+            pivot_cache_id: None,
+            pivot_table_tab_id: None,
+            row_height: None,
+            level: 0,
+            uid: None,
+            ext_lst_xml: None,
+            cache_ext_lst_xml: None,
             position: Some(FloatingObjectAnchor {
                 anchor_mode: AnchorMode::Absolute,
                 anchor_row_offset: 200 * 9525,
                 anchor_col_offset: 100 * 9525,
                 ..Default::default()
             }),
+            anchor_object_id: None,
             z_index: 5,
             locked: true,
             show_header: false,
@@ -853,6 +987,8 @@ mod tests {
                 table_id: "t1".into(),
                 column_cell_id: "c1".into(),
             },
+            cache_name: None,
+            cache_uid: None,
             caption: "Old".into(),
             name: None,
             style: SlicerStyle {
@@ -866,7 +1002,16 @@ mod tests {
                 show_items_with_no_data: false,
                 sort_order: SlicerSortOrder::Ascending,
             },
+            table_column_index: None,
+            pivot_cache_id: None,
+            pivot_table_tab_id: None,
+            row_height: None,
+            level: 0,
+            uid: None,
+            ext_lst_xml: None,
+            cache_ext_lst_xml: None,
             position: None,
+            anchor_object_id: None,
             z_index: 0,
             locked: false,
             show_header: true,
@@ -1041,6 +1186,7 @@ mod tests {
         };
         let anchor = OoxmlSlicerAnchor {
             slicer_name: "Region".into(),
+            object_id: Some(42),
             from: CellAnchor {
                 col: 5,
                 col_off: 200,
@@ -1151,6 +1297,8 @@ mod tests {
                 table_id: "1".into(),
                 column_cell_id: "Region".into(),
             },
+            cache_name: Some("Slicer_Region".into()),
+            cache_uid: Some("{CACHE-UID}".into()),
             caption: "Region".into(),
             name: Some("Region".into()),
             style: SlicerStyle {
@@ -1187,6 +1335,7 @@ mod tests {
                 extent_cx: None,
                 extent_cy: None,
             }),
+            anchor_object_id: Some(7),
             z_index: 0,
             locked: true,
             show_header: true,
@@ -1223,6 +1372,8 @@ mod tests {
                 table_id: "t1".into(),
                 column_cell_id: "c1".into(),
             },
+            cache_name: None,
+            cache_uid: None,
             caption: "Cap".into(),
             name: name.map(|s| s.into()),
             style: SlicerStyle {
@@ -1236,7 +1387,16 @@ mod tests {
                 show_items_with_no_data: false,
                 sort_order: SlicerSortOrder::Ascending,
             },
+            table_column_index: None,
+            pivot_cache_id: None,
+            pivot_table_tab_id: None,
+            row_height: None,
+            level: 0,
+            uid: None,
+            ext_lst_xml: None,
+            cache_ext_lst_xml: None,
             position: None,
+            anchor_object_id: None,
             z_index: 0,
             locked: false,
             show_header: true,

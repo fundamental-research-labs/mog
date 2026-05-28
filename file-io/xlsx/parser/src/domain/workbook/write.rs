@@ -196,6 +196,8 @@ pub struct WorkbookWriter {
     workbook_protection: Option<domain_types::WorkbookProtection>,
     /// Raw XML for the <pivotCaches> element.
     pivot_caches_xml: Option<String>,
+    /// Generated workbook extension entries.
+    ext_lst_entries: Vec<String>,
     /// Workbook relationship ids for `<externalReferences>` in formula ordinal order.
     external_reference_r_ids: Vec<String>,
     /// Tier 2: Captured namespace declarations for round-trip fidelity
@@ -355,6 +357,11 @@ impl WorkbookWriter {
     /// Set workbook external reference relationship ids in formula ordinal order.
     pub fn set_external_reference_r_ids(&mut self, r_ids: Vec<String>) -> &mut Self {
         self.external_reference_r_ids = r_ids;
+        self
+    }
+
+    pub fn add_ext_lst_entry(&mut self, ext_xml: String) -> &mut Self {
+        self.ext_lst_entries.push(ext_xml);
         self
     }
 
@@ -573,6 +580,14 @@ impl WorkbookWriter {
         }
 
         self.write_web_publishing(&mut w);
+
+        if !self.ext_lst_entries.is_empty() {
+            w.start_element("extLst").end_attrs();
+            for ext in &self.ext_lst_entries {
+                w.raw_str(ext);
+            }
+            w.end_element("extLst");
+        }
 
         // Emit preserved elements after pivotCaches
         if let Some(ref preserved) = self.preserved_elements {
@@ -1505,5 +1520,4 @@ mod tests {
 
         assert_eq!(plain.to_xml(), with_empty_preserved.to_xml());
     }
-
 }

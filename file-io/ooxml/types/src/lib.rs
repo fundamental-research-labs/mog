@@ -42,6 +42,7 @@ pub mod sparklines;
 pub mod styles;
 pub mod tables;
 pub mod themes;
+pub mod timelines;
 pub mod workbook;
 pub mod worksheet;
 

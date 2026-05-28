@@ -46,7 +46,7 @@ use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
     REL_HYPERLINK, REL_OLE_OBJECT, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE,
-    REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_SLICER, REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 use assembly::{
@@ -268,6 +268,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         Vec::new();
     let mut worksheet_table_relationships: Vec<(usize, usize)> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
+    let mut worksheet_slicer_relationships: Vec<(usize, usize)> = Vec::new();
 
     // Per-sheet drawing XML (the drawingN.xml content).
     let mut drawing_xml_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
@@ -297,6 +298,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
     // Global ctrlProp counter for archive paths (xl/ctrlProps/ctrlProp{N}.xml).
     let mut global_ctrl_prop_idx: usize = 0;
+    let mut global_slicer_idx: usize = 0;
 
     // Also re-process hyperlinks to assign correct r:ids.
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
@@ -304,11 +306,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let has_comments = extras.comments.is_some();
         let has_threaded_comments = extras.threaded_comments.is_some();
         let has_tables = !extras.tables.is_empty();
+        let has_slicers = !sheet_data.slicers.is_empty();
         let has_hyperlinks = extras.has_external_hyperlinks;
         let has_charts = extras.has_charts;
         let has_chart_ex = extras.has_chart_ex;
         let has_floating_objects = extras.has_floating_objects;
-        let needs_drawing = has_charts || has_chart_ex || has_floating_objects;
+        let has_slicer_anchors = !sheet_data.slicer_anchors.is_empty();
+        let needs_drawing = has_charts || has_chart_ex || has_floating_objects || has_slicer_anchors;
 
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
@@ -330,6 +334,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             && !has_form_controls
             && !has_custom_properties
             && !has_pivot_tables
+            && !has_slicers
         {
             drawing_xml_data.push(None);
             drawing_writer_data.push(None);
@@ -563,6 +568,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             }
         }
 
+        if has_slicers {
+            for _ in &sheet_data.slicers {
+                global_slicer_idx += 1;
+                worksheet_slicer_relationships.push((sheet_idx, global_slicer_idx));
+            }
+        }
+
         // Pivot table rels (sheet → pivotTable) and worksheet-level references.
         //
         // OOXML consumers discover worksheet-owned pivot tables from structured
@@ -606,6 +618,32 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             // Build DrawingWriter with all anchors (charts + floating objects).
             let mut drawing_writer = DrawingWriter::new();
             drawing_writer.set_suppress_unregistered_relationships(true);
+            for anchor in &sheet_data.slicer_anchors {
+                drawing_writer.add_anchor(DrawingAnchor::TwoCell(
+                    TwoCellAnchor {
+                        from: CellAnchor {
+                            col: anchor.from.col,
+                            col_off: anchor.from.col_off,
+                            row: anchor.from.row,
+                            row_off: anchor.from.row_off,
+                        },
+                        to: CellAnchor {
+                            col: anchor.to.col,
+                            col_off: anchor.to.col_off,
+                            row: anchor.to.row,
+                            row_off: anchor.to.row_off,
+                        },
+                        edit_as: None,
+                        client_data: ClientData::default(),
+                        mc_alternate_content: None,
+                    },
+                    DrawingObject::Slicer {
+                        original_id: anchor.object_id,
+                        name: anchor.slicer_name.clone(),
+                        r_id: String::new(),
+                    },
+                ));
+            }
             // ── Floating objects (images, shapes, text boxes, groups, connectors, SmartArt) ──
             // IMPORTANT: Image rels must be registered BEFORE chart rels so that
             // `add_with_id` bumps `next_id` past the provisional image rIds. Otherwise
@@ -1434,6 +1472,21 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             None,
         )?;
     }
+    for (sheet_idx, global_idx) in &worksheet_slicer_relationships {
+        crate::write::package_graph::register_worksheet_slicer(
+            &mut package_graph_builder,
+            *sheet_idx,
+            *global_idx,
+            None,
+        )?;
+    }
+    for (idx, _) in output.slicer_caches.iter().enumerate() {
+        crate::write::package_graph::register_workbook_slicer_cache(
+            &mut package_graph_builder,
+            idx + 1,
+            None,
+        )?;
+    }
     for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_pivot_table_relationships {
         crate::write::package_graph::register_generated_worksheet_pivot_table(
             &mut package_graph_builder,
@@ -1666,6 +1719,28 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             })?
             .to_string();
         sheet_writers[entry.sheet_idx].set_drawing_r_id(r_id);
+    }
+
+    for (sheet_idx, global_idx) in &worksheet_slicer_relationships {
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: *sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", *sheet_idx + 1),
+        };
+        let target = format!("../slicers/slicer{global_idx}.xml");
+        let r_id = package_graph
+            .relationship_id(&owner, REL_SLICER, &target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet slicer relationship for sheet {} target {}",
+                    *sheet_idx + 1,
+                    target
+                ))
+            })?
+            .to_string();
+        let mut writer = crate::write::xml_writer::XmlWriter::new();
+        crate::domain::slicers::write::write_worksheet_slicer_ext(&mut writer, &r_id);
+        sheet_writers[*sheet_idx]
+            .append_ext_lst_entry(String::from_utf8(writer.finish()).unwrap_or_default());
     }
 
     for entry in &worksheet_comments_relationships {

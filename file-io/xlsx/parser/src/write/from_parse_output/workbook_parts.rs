@@ -6,7 +6,8 @@ use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer;
 use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{
-    DefinedNameDef, REL_EXTERNAL_LINK, REL_PIVOT_CACHE, REL_WORKSHEET, SheetDef, WorkbookWriter,
+    DefinedNameDef, REL_EXTERNAL_LINK, REL_PIVOT_CACHE, REL_SLICER_CACHE, REL_WORKSHEET, SheetDef,
+    WorkbookWriter,
 };
 
 pub(super) struct WorkbookXmlParts {
@@ -124,6 +125,28 @@ pub(super) fn build_workbook_xml(
     if !pivot_cache_xml_entries.is_empty() {
         let pivot_caches_xml = pivot_writer::build_pivot_caches_xml(&pivot_cache_xml_entries);
         workbook_writer.set_pivot_caches_xml(pivot_caches_xml);
+    }
+
+    let slicer_cache_r_ids: Vec<String> = output
+        .slicer_caches
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, _)| {
+            let target = format!("slicerCaches/slicerCache{}.xml", idx + 1);
+            package_graph
+                .relationship_id(
+                    &crate::write::package_graph::PackageOwner::Workbook,
+                    REL_SLICER_CACHE,
+                    &target,
+                )
+                .map(str::to_string)
+        })
+        .collect();
+    if !slicer_cache_r_ids.is_empty() {
+        let refs: Vec<&str> = slicer_cache_r_ids.iter().map(String::as_str).collect();
+        let mut writer = crate::write::xml_writer::XmlWriter::new();
+        crate::domain::slicers::write::write_workbook_slicer_caches_ext(&mut writer, &refs);
+        workbook_writer.add_ext_lst_entry(String::from_utf8(writer.finish()).unwrap_or_default());
     }
 
     if !external_link_exports.is_empty() {

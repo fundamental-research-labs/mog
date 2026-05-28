@@ -421,6 +421,35 @@ pub(super) fn write_zip_package(
         }
     }
 
+    // Slicer XML files
+    {
+        let mut slicer_global = 0usize;
+        for sheet in &output.sheets {
+            for slicer in &sheet.slicers {
+                slicer_global += 1;
+                let xml = crate::domain::slicers::write::write_slicer_part(std::slice::from_ref(
+                    slicer,
+                ));
+                add_registered_part(
+                    package_graph,
+                    &mut zip,
+                    &format!("xl/slicers/slicer{}.xml", slicer_global),
+                    xml,
+                )?;
+            }
+        }
+    }
+
+    for (idx, cache) in output.slicer_caches.iter().enumerate() {
+        let xml = crate::domain::slicers::write::write_slicer_cache(cache);
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            &format!("xl/slicerCaches/slicerCache{}.xml", idx + 1),
+            xml,
+        )?;
+    }
+
     // Pivot table and cache XML files
     for entry in &pivot_data.pivot_table_entries {
         let pivot_table_path = format!("xl/pivotTables/pivotTable{}.xml", entry.global_idx);

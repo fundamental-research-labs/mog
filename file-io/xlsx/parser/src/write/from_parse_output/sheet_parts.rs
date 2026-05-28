@@ -20,9 +20,7 @@ pub(super) struct BuiltSheetParts {
     pub(super) all_chart_ex_entries: Vec<Vec<ChartExEntry>>,
 }
 
-pub(super) fn build_shared_strings(
-    _round_trip_ctx: Option<&RoundTripContext>,
-) -> SharedStringsWriter {
+pub(super) fn build_shared_strings() -> SharedStringsWriter {
     SharedStringsWriter::new()
 }
 
@@ -130,11 +128,6 @@ pub(super) fn build_sheet_parts(
                         }
                     }
                     sheet_writer.set_preserved_namespaces(ns_map);
-                }
-                if let Some(dim) =
-                    sheet_preservation::original_dimension_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_dimension_ref(dim.clone());
                 }
                 sheet_preservation::apply_row_hints_for_export(
                     &mut sheet_writer,

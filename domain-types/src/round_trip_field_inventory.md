@@ -36,7 +36,6 @@ sidecar; it is not semantic authority.
 | `legacy_drawing_hf_r_id` | persisted typed metadata | header/footer drawing rel hint | round_trip | header/footer writer after owner match | generated sheet rel | header/footer tests |
 | `comments_root_namespace_attrs` | persisted typed metadata | comments lexical metadata | round_trip | comments writer | comments part registration | comments tests |
 | `comment_authors` | persisted typed metadata | comments author metadata | round_trip | comments writer | comments part registration | comments tests |
-| `row_descents` | persisted typed metadata | worksheet row metadata | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `row_spans` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `bare_empty_rows` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `row_thick_bot` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
@@ -44,7 +43,6 @@ sidecar; it is not semantic authority.
 | `row_collapsed` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `row_hidden_explicit_false` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `row_outline_level_zero` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `original_dimension` | persisted typed metadata | worksheet dimension hint | round_trip | sheet writer only if current bounds match | worksheet XML | dimension tests |
 | `has_empty_ext_lst` | transient parse-output sidecar | no durable owner | ParseOutput | filtered worksheet writer | worksheet XML only | extLst tests |
 | `ext_lst_xml` | transient parse-output sidecar | unknown worksheet extensions | ParseOutput | worksheet writer after modeled filtering | worksheet XML only | extension tests |
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |

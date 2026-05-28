@@ -77,8 +77,6 @@ pub struct SheetRoundTripContext {
     /// only includes authors referenced by actual comments, dropping unused authors.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comment_authors: Vec<String>,
-    #[serde(default)]
-    pub row_descents: HashMap<u32, f64>,
     /// Compatibility identity hints for lexical row attributes.
     /// Export may use them only to decorate rows that still exist in modeled
     /// worksheet state; these hints must not create deleted rows by themselves.
@@ -109,10 +107,6 @@ pub struct SheetRoundTripContext {
     /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_outline_level_zero: Vec<u32>,
-    /// Compatibility identity hint for the imported `<dimension ref="..."/>`.
-    /// Export may use it only when it matches current modeled worksheet bounds;
-    /// stale imported dimensions must not override generated sheet state.
-    pub original_dimension: Option<String>,
     /// Whether the original worksheet had an empty `<extLst/>` element.
     /// Compatibility input only; emitted only when no modeled worksheet
     /// extension owner is present.

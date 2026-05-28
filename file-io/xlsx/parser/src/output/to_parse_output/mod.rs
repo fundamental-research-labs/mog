@@ -1214,7 +1214,6 @@ fn convert_sheet(
         legacy_drawing_hf_r_id: sheet.legacy_drawing_hf_r_id.clone(),
         comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
         comment_authors: sheet.comment_authors.clone(),
-        row_descents: sheet.row_descents.clone(),
         row_spans: sheet.row_spans.clone(),
         bare_empty_rows: sheet.bare_empty_rows.clone(),
         row_thick_bot: sheet
@@ -1246,9 +1245,8 @@ fn convert_sheet(
             .filter(|rh| rh.outline_level == Some(0))
             .map(|rh| rh.row)
             .collect(),
-        original_dimension: sheet.original_dimension.clone(),
-        has_empty_ext_lst: false,
-        ext_lst_xml: None,
+        has_empty_ext_lst: sheet.has_empty_ext_lst,
+        ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
         custom_properties_xml: None,
         sheet_preserved_elements: Vec::new(),

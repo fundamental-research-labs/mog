@@ -1089,62 +1089,6 @@ fn unknown_raw_worksheet_ext_lst_is_preserved_without_modeled_owner() {
 }
 
 #[test]
-fn stale_original_dimension_is_dropped_when_cells_change() {
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        cells: vec![make_cell(
-            0,
-            0,
-            DomainValue::Number(FiniteF64::new(1.0).unwrap()),
-        )],
-        ..Default::default()
-    }]);
-    let ctx = domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            original_dimension: Some("A1:Z99".to_string()),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let sheet_xml =
-        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
-
-    assert!(sheet_xml.contains(r#"<dimension ref="A1:A1"/>"#));
-    assert!(!sheet_xml.contains("A1:Z99"));
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
-fn matching_original_dimension_remains_as_identity_hint() {
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        cells: vec![
-            make_cell(0, 0, DomainValue::Number(FiniteF64::new(1.0).unwrap())),
-            make_cell(1, 1, DomainValue::Number(FiniteF64::new(2.0).unwrap())),
-        ],
-        ..Default::default()
-    }]);
-    let ctx = domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            original_dimension: Some("A1:B2".to_string()),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let sheet_xml =
-        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
-
-    assert!(sheet_xml.contains(r#"<dimension ref="A1:B2"/>"#));
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
 fn stale_row_roundtrip_hints_do_not_create_deleted_rows() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

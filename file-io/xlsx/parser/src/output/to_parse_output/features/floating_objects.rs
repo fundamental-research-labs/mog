@@ -6,6 +6,239 @@ use super::*;
 
 /// EMUs per pixel at 96 DPI (standard screen resolution).
 const EMUS_PER_PIXEL: i64 = 9525;
+const EMUS_PER_POINT: f64 = 12_700.0;
+const DEFAULT_OUTLINE_WIDTH_PT: f64 = 0.75;
+
+fn normalize_hex_color(value: &str) -> Option<String> {
+    let hex = value.trim().trim_start_matches('#');
+    if hex.len() != 6 || !hex.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return None;
+    }
+    Some(format!("#{hex}").to_uppercase())
+}
+
+fn alpha_transparency(
+    transforms: &[ooxml_types::drawings::ColorTransform],
+) -> Option<f64> {
+    let mut alpha = 100_000.0;
+    let mut touched = false;
+
+    for transform in transforms {
+        match transform {
+            ooxml_types::drawings::ColorTransform::Alpha { val } => {
+                alpha = *val as f64;
+                touched = true;
+            }
+            ooxml_types::drawings::ColorTransform::AlphaMod { val } => {
+                alpha *= *val as f64 / 100_000.0;
+                touched = true;
+            }
+            ooxml_types::drawings::ColorTransform::AlphaOff { val } => {
+                alpha += *val as f64;
+                touched = true;
+            }
+            _ => {}
+        }
+    }
+
+    touched.then(|| (1.0 - (alpha / 100_000.0).clamp(0.0, 1.0)).clamp(0.0, 1.0))
+}
+
+fn preset_color_hex(val: ooxml_types::drawings::PresetColorVal) -> Option<&'static str> {
+    use ooxml_types::drawings::PresetColorVal;
+
+    match val {
+        PresetColorVal::Black => Some("#000000"),
+        PresetColorVal::White => Some("#FFFFFF"),
+        PresetColorVal::Red => Some("#FF0000"),
+        PresetColorVal::Green => Some("#008000"),
+        PresetColorVal::Blue => Some("#0000FF"),
+        PresetColorVal::Yellow => Some("#FFFF00"),
+        PresetColorVal::Cyan | PresetColorVal::Aqua => Some("#00FFFF"),
+        PresetColorVal::Magenta | PresetColorVal::Fuchsia => Some("#FF00FF"),
+        _ => None,
+    }
+}
+
+fn scheme_color_hex(val: ooxml_types::drawings::SchemeColor) -> Option<&'static str> {
+    use ooxml_types::drawings::SchemeColor;
+
+    match val {
+        SchemeColor::Dk1 | SchemeColor::Tx1 => Some("#000000"),
+        SchemeColor::Lt1 | SchemeColor::Bg1 => Some("#FFFFFF"),
+        SchemeColor::Dk2 | SchemeColor::Tx2 => Some("#1F497D"),
+        SchemeColor::Lt2 | SchemeColor::Bg2 => Some("#EEECE1"),
+        SchemeColor::Accent1 => Some("#4472C4"),
+        SchemeColor::Accent2 => Some("#ED7D31"),
+        SchemeColor::Accent3 => Some("#A5A5A5"),
+        SchemeColor::Accent4 => Some("#FFC000"),
+        SchemeColor::Accent5 => Some("#5B9BD5"),
+        SchemeColor::Accent6 => Some("#70AD47"),
+        SchemeColor::Hlink => Some("#0563C1"),
+        SchemeColor::FolHlink => Some("#954F72"),
+        SchemeColor::PhClr => None,
+    }
+}
+
+fn resolve_drawing_color(
+    color: &ooxml_types::drawings::DrawingColor,
+) -> Option<(String, Option<f64>)> {
+    use ooxml_types::drawings::DrawingColor;
+
+    match color {
+        DrawingColor::SrgbClr { val, transforms } => Some((
+            normalize_hex_color(val)?,
+            alpha_transparency(transforms.as_slice()),
+        )),
+        DrawingColor::SysClr {
+            last_clr: Some(last_clr),
+            transforms,
+            ..
+        } => Some((
+            normalize_hex_color(last_clr)?,
+            alpha_transparency(transforms.as_slice()),
+        )),
+        DrawingColor::PrstClr { val, transforms } => Some((
+            preset_color_hex(*val)?.to_string(),
+            alpha_transparency(transforms.as_slice()),
+        )),
+        DrawingColor::SchemeClr { val, transforms } => Some((
+            scheme_color_hex(*val)?.to_string(),
+            alpha_transparency(transforms.as_slice()),
+        )),
+        _ => None,
+    }
+}
+
+fn project_drawing_fill(
+    fill: &ooxml_types::drawings::DrawingFill,
+) -> Option<domain_types::domain::floating_object::ObjectFill> {
+    use domain_types::domain::floating_object::{FillType, ObjectFill};
+    use ooxml_types::drawings::DrawingFill;
+
+    match fill {
+        DrawingFill::NoFill => Some(ObjectFill {
+            fill_type: FillType::None,
+            ..ObjectFill::default()
+        }),
+        DrawingFill::Solid(solid) => {
+            let (color, transparency) = resolve_drawing_color(&solid.color)?;
+            Some(ObjectFill {
+                fill_type: FillType::Solid,
+                color: Some(color),
+                transparency,
+                ..ObjectFill::default()
+            })
+        }
+        _ => None,
+    }
+}
+
+fn project_line_fill(
+    fill: &ooxml_types::drawings::LineFill,
+) -> Option<(domain_types::domain::floating_object::OutlineStyle, String, Option<f64>, bool)> {
+    use domain_types::domain::floating_object::OutlineStyle;
+    use ooxml_types::drawings::LineFill;
+
+    match fill {
+        LineFill::NoFill => Some((OutlineStyle::None, String::new(), None, false)),
+        LineFill::Solid(solid) => {
+            let (color, transparency) = resolve_drawing_color(&solid.color)?;
+            Some((OutlineStyle::Solid, color, transparency, true))
+        }
+        _ => None,
+    }
+}
+
+fn project_line_dash(
+    dash: &ooxml_types::drawings::LineDash,
+) -> (
+    domain_types::domain::floating_object::OutlineStyle,
+    Option<domain_types::domain::text_effects::LineDash>,
+) {
+    use domain_types::domain::floating_object::OutlineStyle;
+    use domain_types::domain::text_effects::LineDash as DomainLineDash;
+    use ooxml_types::drawings::{DashStyle, LineDash};
+
+    let preset = match dash {
+        LineDash::Preset(preset) => preset,
+        LineDash::Custom(_) => return (OutlineStyle::Dashed, None),
+    };
+
+    match preset {
+        DashStyle::Solid => (OutlineStyle::Solid, Some(DomainLineDash::Solid)),
+        DashStyle::Dot | DashStyle::SystemDot => (OutlineStyle::Dotted, Some(DomainLineDash::Dot)),
+        DashStyle::Dash | DashStyle::SystemDash => {
+            (OutlineStyle::Dashed, Some(DomainLineDash::Dash))
+        }
+        DashStyle::DashDot | DashStyle::SystemDashDot => {
+            (OutlineStyle::Dashed, Some(DomainLineDash::DashDot))
+        }
+        DashStyle::LongDash => (OutlineStyle::Dashed, Some(DomainLineDash::LgDash)),
+        DashStyle::LongDashDot => (OutlineStyle::Dashed, Some(DomainLineDash::LgDashDot)),
+        DashStyle::LongDashDotDot => (
+            OutlineStyle::Dashed,
+            Some(DomainLineDash::LgDashDotDot),
+        ),
+        DashStyle::SystemDashDotDot => (
+            OutlineStyle::Dashed,
+            Some(DomainLineDash::SysDashDotDot),
+        ),
+    }
+}
+
+fn project_compound_line(
+    compound: ooxml_types::drawings::CompoundLine,
+) -> domain_types::domain::floating_object::CompoundLineStyle {
+    use domain_types::domain::floating_object::CompoundLineStyle;
+    use ooxml_types::drawings::CompoundLine;
+
+    match compound {
+        CompoundLine::Single => CompoundLineStyle::Single,
+        CompoundLine::Double => CompoundLineStyle::Double,
+        CompoundLine::ThickThin => CompoundLineStyle::ThickThin,
+        CompoundLine::ThinThick => CompoundLineStyle::ThinThick,
+        CompoundLine::Triple => CompoundLineStyle::Triple,
+    }
+}
+
+fn project_shape_outline(
+    outline: &ooxml_types::drawings::Outline,
+) -> Option<domain_types::domain::floating_object::ShapeOutline> {
+    use domain_types::domain::floating_object::{OutlineStyle, ShapeOutline};
+
+    let (mut style, color, transparency, visible) = match outline.fill.as_ref() {
+        Some(fill) => project_line_fill(fill)?,
+        None => (
+            OutlineStyle::Solid,
+            String::from("#000000"),
+            None,
+            true,
+        ),
+    };
+
+    let dash = outline.dash.as_ref().and_then(|dash| {
+        let (dash_style, dash) = project_line_dash(dash);
+        if style != OutlineStyle::None {
+            style = dash_style;
+        }
+        dash
+    });
+
+    Some(ShapeOutline {
+        style,
+        color,
+        width: outline
+            .width
+            .map(|width| width as f64 / EMUS_PER_POINT)
+            .unwrap_or(DEFAULT_OUTLINE_WIDTH_PT),
+        dash,
+        transparency,
+        compound: outline.compound.map(project_compound_line),
+        visible: Some(visible),
+        ..ShapeOutline::default()
+    })
+}
 
 fn resolve_media_data_url(
     media_data_urls: &HashMap<String, String>,
@@ -248,6 +481,8 @@ pub(crate) fn convert_floating_objects(
 
                 // Determine if this is a textbox
                 let is_textbox = shp.nv_sp_pr.tx_box;
+                let projected_fill = shp.sp_pr.fill.as_ref().and_then(project_drawing_fill);
+                let projected_outline = shp.sp_pr.ln.as_ref().and_then(project_shape_outline);
 
                 let text_content = shp.tx_body.as_ref().and_then(|tb| {
                     let text: String = tb
@@ -289,8 +524,8 @@ pub(crate) fn convert_floating_objects(
                                     text_body: None,
                                 }
                             }),
-                            fill: None,
-                            border: None,
+                            fill: projected_fill,
+                            border: projected_outline,
                             text_effects: None,
                             ooxml: Some(shape_ooxml),
                         },
@@ -298,8 +533,8 @@ pub(crate) fn convert_floating_objects(
                 } else {
                     FloatingObjectData::Shape(ShapeData {
                         shape_type: preset_type,
-                        fill: None,
-                        outline: None,
+                        fill: projected_fill,
+                        outline: projected_outline,
                         text: text_content.map(|t| {
                             domain_types::domain::floating_object::ShapeText {
                                 content: t,

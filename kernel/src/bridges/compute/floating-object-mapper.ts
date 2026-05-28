@@ -47,6 +47,8 @@ import type {
   FloatingObjectAnchor,
   DiagramData,
   OleObjectData,
+  ObjectFill,
+  ShapeOutline,
 } from './compute-types.gen';
 
 // =============================================================================
@@ -70,6 +72,379 @@ type FloatingObjectAnchorWire = Partial<FloatingObjectAnchor> &
 
 function emuToPx(value: number | undefined): number | undefined {
   return value == null ? undefined : value / EMU_PER_PX;
+}
+
+const EMU_PER_PT = 12700;
+const DEFAULT_OUTLINE_WIDTH_PT = 0.75;
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value != null && typeof value === 'object' ? (value as UnknownRecord) : undefined;
+}
+
+function readRecord(source: unknown, ...keys: string[]): UnknownRecord | undefined {
+  const record = asRecord(source);
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = asRecord(record[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function readAny(source: unknown, ...keys: string[]): unknown {
+  const record = asRecord(source);
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+function normalizeHexColor(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const hex = value.trim().replace(/^#/, '');
+  return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : undefined;
+}
+
+function alphaTransparency(transforms: unknown): number | undefined {
+  if (!Array.isArray(transforms)) return undefined;
+  let alpha = 100000;
+  let touched = false;
+
+  for (const transform of transforms) {
+    const record = asRecord(transform);
+    if (!record) continue;
+    const type = typeof record.type === 'string' ? record.type : undefined;
+    const val = typeof record.val === 'number' ? record.val : undefined;
+    const variant = Object.keys(record)[0];
+    const nested = variant ? asRecord(record[variant]) : undefined;
+    const nestedVal = typeof nested?.val === 'number' ? nested.val : val;
+    const transformType = type ?? variant;
+
+    if (transformType === 'Alpha' || transformType === 'alpha') {
+      alpha = nestedVal ?? 100000;
+      touched = true;
+    } else if (transformType === 'AlphaMod' || transformType === 'alphaMod') {
+      alpha *= (nestedVal ?? 100000) / 100000;
+      touched = true;
+    } else if (transformType === 'AlphaOff' || transformType === 'alphaOff') {
+      alpha += nestedVal ?? 0;
+      touched = true;
+    }
+  }
+
+  return touched ? Math.max(0, Math.min(1, 1 - Math.max(0, Math.min(100000, alpha)) / 100000)) : undefined;
+}
+
+function presetColorHex(value: unknown): string | undefined {
+  const key = typeof value === 'string' ? value : undefined;
+  switch (key) {
+    case 'Black':
+    case 'black':
+      return '#000000';
+    case 'White':
+    case 'white':
+      return '#FFFFFF';
+    case 'Red':
+    case 'red':
+      return '#FF0000';
+    case 'Green':
+    case 'green':
+      return '#008000';
+    case 'Blue':
+    case 'blue':
+      return '#0000FF';
+    case 'Yellow':
+    case 'yellow':
+      return '#FFFF00';
+    case 'Cyan':
+    case 'cyan':
+    case 'Aqua':
+    case 'aqua':
+      return '#00FFFF';
+    case 'Magenta':
+    case 'magenta':
+    case 'Fuchsia':
+    case 'fuchsia':
+      return '#FF00FF';
+    default:
+      return undefined;
+  }
+}
+
+function schemeColorHex(value: unknown): string | undefined {
+  const key = typeof value === 'string' ? value : undefined;
+  switch (key) {
+    case 'Dk1':
+    case 'dk1':
+    case 'Tx1':
+    case 'tx1':
+      return '#000000';
+    case 'Lt1':
+    case 'lt1':
+    case 'Bg1':
+    case 'bg1':
+      return '#FFFFFF';
+    case 'Dk2':
+    case 'dk2':
+    case 'Tx2':
+    case 'tx2':
+      return '#1F497D';
+    case 'Lt2':
+    case 'lt2':
+    case 'Bg2':
+    case 'bg2':
+      return '#EEECE1';
+    case 'Accent1':
+    case 'accent1':
+      return '#4472C4';
+    case 'Accent2':
+    case 'accent2':
+      return '#ED7D31';
+    case 'Accent3':
+    case 'accent3':
+      return '#A5A5A5';
+    case 'Accent4':
+    case 'accent4':
+      return '#FFC000';
+    case 'Accent5':
+    case 'accent5':
+      return '#5B9BD5';
+    case 'Accent6':
+    case 'accent6':
+      return '#70AD47';
+    case 'Hlink':
+    case 'hlink':
+      return '#0563C1';
+    case 'FolHlink':
+    case 'folHlink':
+      return '#954F72';
+    default:
+      return undefined;
+  }
+}
+
+function enumPayload(value: unknown, ...keys: string[]): UnknownRecord | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  for (const key of keys) {
+    const payload = record[key];
+    if (payload === null) return {};
+    const payloadRecord = asRecord(payload);
+    if (payloadRecord) return payloadRecord;
+  }
+  return undefined;
+}
+
+function enumTag(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  const record = asRecord(value);
+  return record ? Object.keys(record)[0] : undefined;
+}
+
+function colorResult(
+  color: string,
+  transparency: number | undefined,
+): { color: string; transparency?: number } {
+  return transparency === undefined ? { color } : { color, transparency };
+}
+
+function resolveDrawingColor(color: unknown): { color: string; transparency?: number } | undefined {
+  const srgb =
+    enumPayload(color, 'SrgbClr', 'srgbClr', 'srgb_clr') ??
+    readRecord(color, 'srgbClr', 'srgb_clr');
+  if (srgb) {
+    const resolved = normalizeHexColor(readAny(srgb, 'val'));
+    return resolved
+      ? colorResult(resolved, alphaTransparency(readAny(srgb, 'transforms')))
+      : undefined;
+  }
+
+  const sys =
+    enumPayload(color, 'SysClr', 'sysClr', 'sys_clr') ??
+    readRecord(color, 'sysClr', 'sys_clr');
+  if (sys) {
+    const resolved = normalizeHexColor(readAny(sys, 'lastClr', 'last_clr'));
+    return resolved
+      ? colorResult(resolved, alphaTransparency(readAny(sys, 'transforms')))
+      : undefined;
+  }
+
+  const preset =
+    enumPayload(color, 'PrstClr', 'prstClr', 'prst_clr') ??
+    readRecord(color, 'prstClr', 'prst_clr');
+  if (preset) {
+    const resolved = presetColorHex(readAny(preset, 'val'));
+    return resolved
+      ? colorResult(resolved, alphaTransparency(readAny(preset, 'transforms')))
+      : undefined;
+  }
+
+  const scheme =
+    enumPayload(color, 'SchemeClr', 'schemeClr', 'scheme_clr') ??
+    readRecord(color, 'schemeClr', 'scheme_clr');
+  if (scheme) {
+    const resolved = schemeColorHex(readAny(scheme, 'val'));
+    return resolved
+      ? colorResult(resolved, alphaTransparency(readAny(scheme, 'transforms')))
+      : undefined;
+  }
+
+  const direct = asRecord(color);
+  const directColor = normalizeHexColor(readAny(direct, 'val', 'lastClr', 'last_clr'));
+  return directColor
+    ? colorResult(directColor, alphaTransparency(readAny(direct, 'transforms')))
+    : undefined;
+}
+
+function projectDrawingFill(fill: unknown): ObjectFill | undefined {
+  const tag = enumTag(fill);
+  if (tag === 'NoFill' || tag === 'noFill') return { type: 'none' };
+
+  const solid =
+    enumPayload(fill, 'Solid', 'solid', 'solidFill') ?? readRecord(fill, 'solidFill', 'solid');
+  if (!solid) return undefined;
+
+  const resolved = resolveDrawingColor(readAny(solid, 'color'));
+  return resolved ? { type: 'solid', ...resolved } : undefined;
+}
+
+function projectLineFill(
+  fill: unknown,
+): Pick<ShapeOutline, 'style' | 'color' | 'transparency' | 'visible'> | undefined {
+  const tag = enumTag(fill);
+  if (tag === 'NoFill' || tag === 'noFill') {
+    return { style: 'none', color: '', visible: false };
+  }
+
+  const solid =
+    enumPayload(fill, 'Solid', 'solid', 'solidFill') ?? readRecord(fill, 'solidFill', 'solid');
+  if (!solid) return undefined;
+
+  const resolved = resolveDrawingColor(readAny(solid, 'color'));
+  return resolved ? { style: 'solid', visible: true, ...resolved } : undefined;
+}
+
+function projectLineDash(dash: unknown): Pick<ShapeOutline, 'style' | 'dash'> {
+  const presetPayload = enumPayload(dash, 'Preset', 'preset');
+  const value = readAny(presetPayload, 'val') ?? readAny(dash, 'val') ?? enumTag(dash);
+  switch (value) {
+    case 'Solid':
+    case 'solid':
+      return { style: 'solid', dash: 'solid' };
+    case 'Dot':
+    case 'dot':
+    case 'SystemDot':
+    case 'sysDot':
+      return { style: 'dotted', dash: 'dot' };
+    case 'Dash':
+    case 'dash':
+    case 'SystemDash':
+    case 'sysDash':
+      return { style: 'dashed', dash: 'dash' };
+    case 'DashDot':
+    case 'dashDot':
+    case 'SystemDashDot':
+    case 'sysDashDot':
+      return { style: 'dashed', dash: 'dashDot' };
+    case 'LongDash':
+    case 'lgDash':
+      return { style: 'dashed', dash: 'lgDash' };
+    case 'LongDashDot':
+    case 'lgDashDot':
+      return { style: 'dashed', dash: 'lgDashDot' };
+    case 'LongDashDotDot':
+    case 'lgDashDotDot':
+      return { style: 'dashed', dash: 'lgDashDotDot' };
+    case 'SystemDashDotDot':
+    case 'sysDashDotDot':
+      return { style: 'dashed', dash: 'sysDashDotDot' };
+    default:
+      return { style: 'dashed' };
+  }
+}
+
+function projectCompoundLine(value: unknown): ShapeOutline['compound'] {
+  switch (value) {
+    case 'Single':
+    case 'single':
+    case 'sng':
+      return 'single';
+    case 'Double':
+    case 'double':
+    case 'dbl':
+      return 'double';
+    case 'ThickThin':
+    case 'thickThin':
+      return 'thickThin';
+    case 'ThinThick':
+    case 'thinThick':
+      return 'thinThick';
+    case 'Triple':
+    case 'triple':
+    case 'tri':
+      return 'triple';
+    default:
+      return undefined;
+  }
+}
+
+function projectShapeOutline(outline: unknown): ShapeOutline | undefined {
+  const outlineRecord = asRecord(outline);
+  if (!outlineRecord) return undefined;
+
+  const lineFill = readAny(outlineRecord, 'fill');
+  const projectedFill =
+    lineFill !== undefined
+      ? projectLineFill(lineFill)
+      : { style: 'solid' as const, color: '#000000', visible: true };
+  if (!projectedFill) return undefined;
+
+  const widthEmu = readAny(outlineRecord, 'width', 'w');
+  const projected: ShapeOutline = {
+    style: projectedFill.style,
+    color: projectedFill.color,
+    width: typeof widthEmu === 'number' ? widthEmu / EMU_PER_PT : DEFAULT_OUTLINE_WIDTH_PT,
+  };
+  if (projectedFill.visible !== undefined) projected.visible = projectedFill.visible;
+  if (projectedFill.transparency !== undefined) projected.transparency = projectedFill.transparency;
+
+  const dash = readAny(outlineRecord, 'dash', 'prstDash');
+  if (dash !== undefined && projected.style !== 'none') {
+    const projectedDash = projectLineDash(dash);
+    projected.style = projectedDash.style;
+    if (projectedDash.dash) projected.dash = projectedDash.dash;
+  }
+
+  const compound = projectCompoundLine(readAny(outlineRecord, 'compound', 'cmpd'));
+  if (compound) projected.compound = compound;
+
+  return projected;
+}
+
+function shapeSpPrFromOoxml(ooxml: unknown): UnknownRecord | undefined {
+  const shape = readRecord(ooxml, 'shape');
+  return readRecord(shape, 'spPr', 'sp_pr');
+}
+
+function fallbackShapeFill(d: { fill?: ObjectFill; ooxml?: unknown }): ObjectFill | undefined {
+  return d.fill ?? projectDrawingFill(readAny(shapeSpPrFromOoxml(d.ooxml), 'fill'));
+}
+
+function fallbackShapeOutline(d: {
+  outline?: ShapeOutline;
+  ooxml?: unknown;
+}): ShapeOutline | undefined {
+  return d.outline ?? projectShapeOutline(readAny(shapeSpPrFromOoxml(d.ooxml), 'ln', 'outline'));
+}
+
+function fallbackTextboxBorder(d: {
+  border?: ShapeOutline;
+  ooxml?: unknown;
+}): ShapeOutline | undefined {
+  return d.border ?? projectShapeOutline(readAny(shapeSpPrFromOoxml(d.ooxml), 'ln', 'outline'));
 }
 
 function readNumber(source: unknown, key: string): number | undefined {
@@ -283,8 +658,8 @@ function toShapeObject(d: WireShape): ShapeObject {
     ...buildBaseFields(d),
     type: 'shape' as const,
     shapeType: (d.shapeType ?? 'rect') as ShapeType,
-    fill: d.fill,
-    outline: d.outline,
+    fill: fallbackShapeFill(d),
+    outline: fallbackShapeOutline(d),
     text: d.text,
     shadow: d.shadow,
     adjustments: d.adjustments as Record<string, number> | undefined,
@@ -316,8 +691,8 @@ function toTextBoxObject(d: WireTextbox): TextBoxObject {
     ...buildBaseFields(d),
     type: 'textbox' as const,
     text: d.text,
-    fill: d.fill,
-    border: d.border as TextBoxObject['border'],
+    fill: fallbackShapeFill(d),
+    border: fallbackTextboxBorder(d) as TextBoxObject['border'],
     textEffects: textEffects as TextBoxObject['textEffects'],
   };
 }

@@ -720,6 +720,7 @@ export const ChartIcon = createIcon(ChartSvg, iconStyleLarge);
 export const ChartColumnIcon = createIcon(ChartColumnSvg, iconStyleLarge);
 export const ChartBarIcon = createIcon(ChartBarSvg, iconStyleLarge);
 export const ChartLineIcon = createIcon(ChartLineSvg, iconStyleLarge);
+export const ForecastSheetIcon = createIcon(ChartLineSvg, iconStyleLarge);
 export const ChartAreaIcon = createIcon(ChartAreaSvg, iconStyleLarge);
 export const ChartPieIcon = createIcon(ChartPieSvg, iconStyleLarge);
 export const ChartDoughnutIcon = createIcon(ChartDoughnutSvg, iconStyleLarge);

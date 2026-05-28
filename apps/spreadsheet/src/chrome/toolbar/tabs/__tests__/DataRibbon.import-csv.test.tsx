@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 const mockSetCells = jest.fn();
 const mockGetSheetById = jest.fn(() => ({ setCells: mockSetCells }));
 const mockWorkbook = { getSheetById: mockGetSheetById };
+const mockDispatch = jest.fn();
 let mockHostCommands:
   | {
       getOwner: jest.Mock;
@@ -50,7 +51,7 @@ jest.unstable_mockModule('../../../../hooks/data/use-grouping-actions', () => ({
 }));
 
 jest.unstable_mockModule('../../../../hooks/toolbar/use-action-dependencies', () => ({
-  useDispatch: () => jest.fn(),
+  useDispatch: () => mockDispatch,
 }));
 
 jest.unstable_mockModule('../../keytips', () => ({
@@ -105,6 +106,7 @@ jest.unstable_mockModule('../../primitives/ToolbarIcons', () => ({
   DataValidationIcon: () => null,
   FilterIcon: () => null,
   FlashFillIcon: () => null,
+  ForecastSheetIcon: () => null,
   GetDataIcon: () => null,
   GroupIcon: () => null,
   HideDetailIcon: () => null,
@@ -241,5 +243,18 @@ describe('DataRibbon CSV import', () => {
 
     expect(onImportCsv).toHaveBeenCalledWith(file);
     expect(mockSetCells).not.toHaveBeenCalled();
+  });
+
+  it('exposes Forecast Sheet as a visible enabled command that opens the forecast action', () => {
+    render(<DataRibbon />);
+
+    const forecastSheetButton = screen.getByRole('button', { name: 'Forecast Sheet' });
+
+    expect(forecastSheetButton).toBeVisible();
+    expect(forecastSheetButton).toBeEnabled();
+
+    fireEvent.click(forecastSheetButton);
+
+    expect(mockDispatch).toHaveBeenCalledWith('OPEN_FORECAST_SHEET_DIALOG');
   });
 });

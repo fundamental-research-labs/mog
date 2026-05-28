@@ -5,7 +5,7 @@
  * 1. Import data (Get Data button with dropdown)
  * 2. Sort & Filter (Sort, Filter, Clear, Reapply, Advanced)
  * 3. Data Tools (Text to Cols, Flash Fill, Remove Dups, Validation, Consolidate)
- * 4. Forecast (Scenarios stub)
+ * 4. Forecast
  * 5. Outline (Group, Ungroup, Show, Hide, Subtotal)
  *
  * Row/Column Grouping
@@ -52,6 +52,7 @@ import {
   DataValidationIcon,
   FilterIcon,
   FlashFillIcon,
+  ForecastSheetIcon,
   GetDataIcon,
   GroupIcon,
   HideDetailIcon,
@@ -654,13 +655,24 @@ export function DataRibbon({
         </div>
       </ToolbarGroup>
 
-      {/* 4. Forecast Group (Scenarios) */}
+      {/* 4. Forecast Group */}
       <ToolbarGroup
         label="Forecast"
         collapseConfig={FORECAST_COLLAPSE_CONFIG}
-        dropdownIcon={<SettingsIcon />}
+        dropdownIcon={<ForecastSheetIcon />}
       >
         <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">
+          <RibbonButton
+            id="data-forecast-sheet"
+            layout="vertical"
+            height="full"
+            width="narrow"
+            icon={<ForecastSheetIcon />}
+            label="Forecast Sheet"
+            onClick={() => dispatch('OPEN_FORECAST_SHEET_DIALOG')}
+            title="Forecast Sheet"
+            aria-label="Forecast Sheet"
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <RibbonButton
@@ -676,12 +688,6 @@ export function DataRibbon({
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                id="data-whatif-forecast-sheet"
-                onSelect={() => dispatch('OPEN_FORECAST_SHEET_DIALOG')}
-              >
-                Forecast Sheet...
-              </DropdownMenuItem>
               <DropdownMenuItem
                 id="data-whatif-goal-seek"
                 onSelect={() => dispatch('OPEN_GOAL_SEEK_DIALOG')}

@@ -100,11 +100,6 @@ pub struct WorkbookStylesheet {
     pub named_cell_styles: Vec<ooxml_types::styles::CellStyleDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub differential_formats: Vec<ooxml_types::styles::DxfDef>,
-    /// Stable workbook-level differential format registry. References stored
-    /// as `dxf_id` in CF, filters, sorts, and tables point at these stable IDs,
-    /// not at the transient OOXML `<dxfs>` array positions written on export.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub dxf_registry: Vec<DxfDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub table_styles: Vec<ooxml_types::styles::TableStyleDef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -128,13 +123,6 @@ impl WorkbookStylesheet {
         root_namespace_attrs: Vec<(String, String)>,
         ext_lst_xml: Option<Vec<u8>>,
     ) -> Self {
-        let dxf_registry = stylesheet
-            .dxfs
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(id, dxf)| DxfDef::from_ooxml(id as u32, dxf))
-            .collect();
         Self {
             number_formats: stylesheet.num_fmts,
             fonts: stylesheet.fonts,
@@ -144,8 +132,7 @@ impl WorkbookStylesheet {
             cell_style_xfs: stylesheet.cell_style_xfs,
             cell_xfs: stylesheet.cell_xfs,
             named_cell_styles: stylesheet.cell_styles,
-            differential_formats: Vec::new(),
-            dxf_registry,
+            differential_formats: stylesheet.dxfs,
             indexed_colors: stylesheet.colors,
             table_styles: stylesheet.table_styles,
             default_table_style: stylesheet.default_table_style,
@@ -164,12 +151,6 @@ impl WorkbookStylesheet {
             return self.stylesheet.clone();
         }
 
-        let dxfs = if self.differential_formats.is_empty() {
-            self.dxf_registry.iter().map(DxfDef::to_ooxml).collect()
-        } else {
-            self.differential_formats.clone()
-        };
-
         ooxml_types::styles::Stylesheet {
             num_fmts: self.number_formats.clone(),
             fonts: self.fonts.clone(),
@@ -179,7 +160,7 @@ impl WorkbookStylesheet {
             cell_style_xfs: self.cell_style_xfs.clone(),
             cell_xfs: self.cell_xfs.clone(),
             cell_styles: self.named_cell_styles.clone(),
-            dxfs,
+            dxfs: self.differential_formats.clone(),
             colors: self.indexed_colors.clone(),
             table_styles: self.table_styles.clone(),
             default_table_style: self.default_table_style.clone(),
@@ -213,7 +194,6 @@ impl WorkbookStylesheet {
             && self.cell_xfs.is_empty()
             && self.named_cell_styles.is_empty()
             && self.differential_formats.is_empty()
-            && self.dxf_registry.is_empty()
             && self.table_styles.is_empty()
             && self.indexed_colors.is_none()
             && self.default_table_style.is_none()
@@ -420,8 +400,8 @@ pub struct SheetData {
     pub sort_state: Option<SortState>,
     /// Known worksheet semantic containers whose full OOXML model is not yet
     /// decomposed into smaller runtime objects.
-    #[serde(default, skip_serializing_if = "WorksheetSemanticContainers::is_empty")]
-    pub worksheet_semantic_containers: WorksheetSemanticContainers,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub worksheet_semantic_containers: Vec<WorksheetSemanticContainer>,
     pub outline_groups: Vec<OutlineGroup>,
     /// Worksheet-level `<sheetPr>` attributes and child properties.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -430,55 +410,6 @@ pub struct SheetData {
     /// Controls summary row/column placement and outline symbol visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline_properties: Option<ooxml_types::worksheet::OutlineProperties>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorksheetSemanticXml {
-    pub raw_xml: String,
-}
-
-impl WorksheetSemanticXml {
-    pub fn new(raw_xml: String) -> Self {
-        Self { raw_xml }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorksheetSemanticContainers {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub custom_sheet_views: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ignored_errors: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sheet_calc_pr: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protected_ranges: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenarios: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data_consolidate: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub phonetic_pr: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub smart_tags: Option<WorksheetSemanticXml>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cell_watches: Option<WorksheetSemanticXml>,
-}
-
-impl WorksheetSemanticContainers {
-    pub fn is_empty(&self) -> bool {
-        self.custom_sheet_views.is_none()
-            && self.ignored_errors.is_none()
-            && self.sheet_calc_pr.is_none()
-            && self.protected_ranges.is_none()
-            && self.scenarios.is_none()
-            && self.data_consolidate.is_none()
-            && self.phonetic_pr.is_none()
-            && self.smart_tags.is_none()
-            && self.cell_watches.is_none()
-    }
 }
 
 /// Parser-owned classification for imported cells whose OOXML metadata affects

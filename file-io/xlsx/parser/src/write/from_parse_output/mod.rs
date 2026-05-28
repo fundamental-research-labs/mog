@@ -139,30 +139,14 @@ pub fn write_xlsx_from_parse_output(
     // by +1. When false (lossy palette path), a default is inserted at cellXfs[0]
     // so cell style_id values must be offset by +1.
     let has_style_references = output_references_style_ids(output);
-    let has_lossless_stylesheet = output.style_palette.is_empty()
-        && round_trip_ctx
-            .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-            .is_some();
+    let has_lossless_stylesheet = false;
     let style_palette_for_export = if has_style_references {
         output.style_palette.as_slice()
     } else {
         &[]
     };
 
-    let styles_writer = if let Some(ctx) = round_trip_ctx {
-        if has_lossless_stylesheet && let Some(ref stylesheet) = ctx.parsed_stylesheet {
-            build_styles_from_stylesheet(
-                stylesheet,
-                ctx.styles_ext_lst_xml.as_deref(),
-                &ctx.styles_namespace_attrs,
-                output,
-            )
-        } else {
-            build_styles(style_palette_for_export)
-        }
-    } else {
-        build_styles(style_palette_for_export)
-    };
+    let styles_writer = build_styles(style_palette_for_export);
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
     let mut shared_strings = sheet_parts::build_shared_strings(round_trip_ctx);
@@ -1741,7 +1725,7 @@ pub fn write_xlsx_from_parse_output(
     )
 }
 
-use styles::{build_styles, build_styles_from_stylesheet, output_references_style_ids};
+use styles::{build_styles, output_references_style_ids};
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');

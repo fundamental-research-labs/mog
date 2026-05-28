@@ -509,7 +509,7 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
         ..Default::default()
     };
 
-    let (sheet_data, sheet_rt) = convert_sheet(
+    let (sheet_data, _sheet_rt) = convert_sheet(
         &sheet,
         &[],
         &[],
@@ -539,7 +539,6 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
             },
         ]
     );
-    assert_eq!(sheet_rt.explicit_blank_cells, vec![(2, 0)]);
     assert_eq!((sheet_data.rows, sheet_data.cols), (1, 2));
 }
 

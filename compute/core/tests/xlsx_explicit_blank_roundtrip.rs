@@ -9,16 +9,12 @@ fn l2_roundtrip_preserves_explicit_styleless_blank_cells() {
     let exported_parse = engine
         .export_to_parse_output()
         .expect("export parse output");
-    let rt = exported_parse
-        .round_trip_context
-        .as_ref()
-        .expect("xlsx import should retain round-trip context");
     assert!(
-        rt.sheets[0]
-            .explicit_blank_cells
-            .iter()
-            .any(|&(row, col)| row == 64 && col == 110),
-        "import should record explicit styleless blank cells"
+        exported_parse
+            .round_trip_context
+            .as_ref()
+            .is_some_and(|rt| rt.sheets.len() == 1),
+        "xlsx import should retain non-authoritative sheet roundtrip context"
     );
     assert!(
         exported_parse.parse_output.sheets[0]

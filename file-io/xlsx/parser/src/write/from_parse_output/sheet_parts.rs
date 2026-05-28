@@ -21,26 +21,9 @@ pub(super) struct BuiltSheetParts {
 }
 
 pub(super) fn build_shared_strings(
-    round_trip_ctx: Option<&RoundTripContext>,
+    _round_trip_ctx: Option<&RoundTripContext>,
 ) -> SharedStringsWriter {
-    if let Some(ctx) = round_trip_ctx {
-        if !ctx.shared_strings_list.is_empty() {
-            let mut sst = SharedStringsWriter::with_capacity(ctx.shared_strings_list.len());
-            for (i, s) in ctx.shared_strings_list.iter().enumerate() {
-                sst.add_imported_hint(
-                    i,
-                    s,
-                    ctx.shared_strings_rich_runs.get(i).cloned().flatten(),
-                    ctx.shared_strings_phonetic_xml.get(i).cloned().flatten(),
-                );
-            }
-            sst
-        } else {
-            SharedStringsWriter::new()
-        }
-    } else {
-        SharedStringsWriter::new()
-    }
+    SharedStringsWriter::new()
 }
 
 pub(super) fn build_sheet_parts(

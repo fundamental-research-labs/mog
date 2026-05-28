@@ -1,6 +1,6 @@
 //! Sheet building: SheetData → SheetWriter.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use domain_types::{
     AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue, SheetData,
@@ -29,7 +29,7 @@ pub(super) fn build_sheet(
     sheet_data: &SheetData,
     shared_strings: &mut SharedStringsWriter,
     lossless_styles: bool,
-    sheet_rt: Option<&SheetRoundTripContext>,
+    _sheet_rt: Option<&SheetRoundTripContext>,
     data_table_body_positions: &HashSet<(u32, u32)>,
     data_table_regions: &[DataTableRegion],
     emit_cell_metadata_refs: bool,
@@ -306,19 +306,6 @@ pub(super) fn build_sheet(
     }
 
     // ── Cells ───────────────────────────────────────────────────────────
-    // Build lookup sets for per-cell roundtrip flags from SheetRoundTripContext.
-    let xml_space_value_set: HashSet<(u32, u32)> = sheet_rt
-        .map(|rt| rt.xml_space_value_cells.iter().copied().collect())
-        .unwrap_or_default();
-    let xml_space_formula_set: HashSet<(u32, u32)> = sheet_rt
-        .map(|rt| rt.xml_space_formula_cells.iter().copied().collect())
-        .unwrap_or_default();
-    let force_recalc_set: HashSet<(u32, u32)> = sheet_rt
-        .map(|rt| rt.force_recalc_cells.iter().copied().collect())
-        .unwrap_or_default();
-    let imported_cell_formulas: HashMap<(u32, u32), ooxml_types::worksheet::CellFormula> = sheet_rt
-        .map(|rt| rt.cell_formulas.iter().cloned().collect())
-        .unwrap_or_default();
     let data_table_master_formulas = data_table_master_formula_map(data_table_regions);
     let authored_style_at = |row: u32, col: u32| -> Option<u32> {
         sheet_data
@@ -365,9 +352,7 @@ pub(super) fn build_sheet(
             if canonical.style_id.is_none() {
                 canonical.style_id = authored_style_at(canonical.row, canonical.col);
             }
-            let imported_formula = imported_cell_formulas.get(&key);
-            canonical.cell_formula =
-                current_formula_metadata(&canonical, imported_formula).cloned();
+            canonical.cell_formula = current_formula_metadata(&canonical).cloned();
             if let Some(cell_formula) = data_table_master_formulas.get(&key) {
                 canonical.cell_formula = Some(cell_formula.clone());
                 if canonical.formula.is_none() {
@@ -381,18 +366,6 @@ pub(super) fn build_sheet(
                 emit_cell_metadata_refs,
             )
         };
-        let mut writer_cell = writer_cell;
-        if xml_space_value_set.contains(&key) {
-            writer_cell.preserve_space_value = true;
-        }
-        let formula_hints_match =
-            formula_round_trip_hints_match_current_cell(cell, imported_cell_formulas.get(&key));
-        if formula_hints_match && xml_space_formula_set.contains(&key) {
-            writer_cell.preserve_space_formula = true;
-        }
-        if formula_hints_match && force_recalc_set.contains(&key) {
-            writer_cell.force_recalc = true;
-        }
         writer.add_cell(writer_cell);
     }
     for run in &sheet_data.authored_style_runs {
@@ -716,58 +689,10 @@ fn data_table_formula_text(cell_formula: &ooxml_types::worksheet::CellFormula) -
     format!("TABLE({row_arg},{col_arg})")
 }
 
-fn current_formula_metadata<'a>(
-    cell: &'a DomainCellData,
-    imported_formula: Option<&'a ooxml_types::worksheet::CellFormula>,
-) -> Option<&'a ooxml_types::worksheet::CellFormula> {
-    if let Some(formula) = cell
-        .cell_formula
+fn current_formula_metadata(cell: &DomainCellData) -> Option<&ooxml_types::worksheet::CellFormula> {
+    cell.cell_formula
         .as_ref()
         .filter(|formula| current_formula_metadata_matches_current_cell(cell, formula))
-    {
-        return Some(formula);
-    }
-
-    imported_formula.filter(|formula| imported_formula_metadata_matches_current_cell(cell, formula))
-}
-
-fn formula_round_trip_hints_match_current_cell(
-    cell: &DomainCellData,
-    imported_formula: Option<&ooxml_types::worksheet::CellFormula>,
-) -> bool {
-    if cell.formula.is_none() {
-        return false;
-    }
-
-    if let Some(formula) = cell.cell_formula.as_ref() {
-        return current_formula_metadata_matches_current_cell(cell, formula);
-    }
-
-    if let Some(formula) = imported_formula {
-        return imported_formula_metadata_matches_current_cell(cell, formula);
-    }
-
-    true
-}
-
-fn imported_formula_metadata_matches_current_cell(
-    cell: &DomainCellData,
-    formula: &ooxml_types::worksheet::CellFormula,
-) -> bool {
-    use ooxml_types::worksheet::CellFormulaType;
-
-    if !formula_metadata_matches_current_cell(cell, formula) {
-        return false;
-    }
-
-    match formula.t {
-        CellFormulaType::Shared | CellFormulaType::Array => formula
-            .r#ref
-            .as_deref()
-            .is_some_and(|r| single_cell_ref_matches(r, cell.row, cell.col)),
-        CellFormulaType::DataTable => false,
-        _ => true,
-    }
 }
 
 fn current_formula_metadata_matches_current_cell(

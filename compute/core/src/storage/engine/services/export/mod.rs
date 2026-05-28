@@ -189,77 +189,9 @@ fn export_single_sheet(
     let name = queries::get_sheet_name(stores, sheet_id)?;
 
     // --- Cells ---
-    let mut cells = export_cells_for_sheet(stores, mirror, round_trip_context, sheet_id, palette);
+    let cells = export_cells_for_sheet(stores, mirror, round_trip_context, sheet_id, palette);
     let authored_style_runs =
         export_authored_style_runs_for_sheet(stores, mirror, round_trip_context, sheet_id, palette);
-
-    // Restore OOXML cell formula metadata
-    if let Some(rt_ctx) = round_trip_context
-        && let Some(sheet_rt) = rt_ctx.sheets.get(sheet_idx)
-        && !sheet_rt.cell_formulas.is_empty()
-    {
-        let cf_map: std::collections::HashMap<(u32, u32), _> = sheet_rt
-            .cell_formulas
-            .iter()
-            .map(|((r, c), cf)| ((*r, *c), cf))
-            .collect();
-        for cell in &mut cells {
-            if cell.formula.is_some()
-                && let Some(cf) = cf_map.get(&(cell.row, cell.col))
-            {
-                cell.cell_formula = Some((*cf).clone());
-            }
-        }
-    }
-
-    // Replay explicit style-less blank cells from the imported OOXML. These are
-    // intentionally not allocated in Yrs, but the writer can round-trip them as
-    // empty `<c r="..."/>` nodes when the source workbook authored them.
-    if let Some(rt_ctx) = round_trip_context
-        && let Some(sheet_rt) = rt_ctx.sheets.get(sheet_idx)
-        && !sheet_rt.explicit_blank_cells.is_empty()
-    {
-        let mut occupied: std::collections::HashSet<(u32, u32)> =
-            cells.iter().map(|c| (c.row, c.col)).collect();
-        for &(row, col) in &sheet_rt.explicit_blank_cells {
-            if occupied.insert((row, col)) {
-                cells.push(domain_types::CellData {
-                    row,
-                    col,
-                    value: value_types::CellValue::Null,
-                    formula: None,
-                    array_ref: None,
-                    style_id: None,
-                    cell_formula: None,
-                    cm: false,
-                    formula_result_type: None,
-                    has_empty_cached_value: false,
-                    vm: None,
-                    original_sst_index: None,
-                    original_value: None,
-                    projection_role: domain_types::ImportedCellProjectionRole::Normal,
-                });
-            }
-        }
-        cells.sort_by_key(|c| (c.row, c.col));
-    }
-
-    // Replay imported cells that the L2 storage path intentionally skipped
-    // (currently parser-proven dynamic-array spill targets). If a user edit or
-    // recalculation produced a real cell at the same position, that cell wins.
-    if let Some(rt_ctx) = round_trip_context
-        && let Some(sheet_rt) = rt_ctx.sheets.get(sheet_idx)
-        && !sheet_rt.skipped_storage_cells.is_empty()
-    {
-        let mut occupied: std::collections::HashSet<(u32, u32)> =
-            cells.iter().map(|c| (c.row, c.col)).collect();
-        for cell in &sheet_rt.skipped_storage_cells {
-            if occupied.insert((cell.row, cell.col)) {
-                cells.push(cell.clone());
-            }
-        }
-        cells.sort_by_key(|c| (c.row, c.col));
-    }
 
     // --- Merges ---
     let merges_raw = match stores.grid_indexes.get(sheet_id) {

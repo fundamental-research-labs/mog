@@ -765,27 +765,6 @@ fn convert_sheet(
     let mut authored_style_runs = sheet.authored_style_runs.clone();
     authored_style_runs.extend(coalesce_style_only_points(&authored_style_points));
     normalize_authored_style_runs(&mut authored_style_runs);
-    let mut explicit_blank_set: HashSet<(u32, u32)> =
-        sheet.explicit_blank_cells.iter().copied().collect();
-    explicit_blank_set.extend(
-        cells
-            .iter()
-            .filter(|c| {
-                c.value.is_null()
-                    && c.formula.is_none()
-                    && c.style_id.is_none()
-                    && c.cell_formula.is_none()
-                    && !c.cm
-                    && c.formula_result_type.is_none()
-                    && c.vm.is_none()
-                    && c.original_sst_index.is_none()
-                    && c.original_value.as_ref().is_none_or(|v| v.is_empty())
-            })
-            .map(|c| (c.row, c.col)),
-    );
-    let mut explicit_blank_cells: Vec<(u32, u32)> = explicit_blank_set.into_iter().collect();
-    explicit_blank_cells.sort_unstable();
-
     // --- Dimensions ---
     let (rows, cols) = compute_sheet_extent(sheet);
 
@@ -1168,15 +1147,6 @@ fn convert_sheet(
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.
     let hf_images = convert_hf_images(sheet);
 
-    let skipped_storage_cells = cells
-        .iter()
-        .filter(|cell| {
-            cell.projection_role
-                == domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
-        })
-        .cloned()
-        .collect();
-
     // --- Build SheetData ---
     let sheet_data = SheetData {
         name: sheet.name.clone(),
@@ -1290,35 +1260,6 @@ fn convert_sheet(
         has_empty_ext_lst: sheet.has_empty_ext_lst,
         ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
-        cell_formulas: sheet
-            .cells
-            .iter()
-            .filter_map(|c| {
-                c.cell_formula
-                    .as_ref()
-                    .map(|cf| ((c.row, c.col), cf.clone()))
-            })
-            .collect(),
-        xml_space_value_cells: sheet
-            .cells
-            .iter()
-            .filter(|c| c.preserve_space_value)
-            .map(|c| (c.row, c.col))
-            .collect(),
-        explicit_blank_cells,
-        skipped_storage_cells,
-        xml_space_formula_cells: sheet
-            .cells
-            .iter()
-            .filter(|c| c.preserve_space_formula)
-            .map(|c| (c.row, c.col))
-            .collect(),
-        force_recalc_cells: sheet
-            .cells
-            .iter()
-            .filter(|c| c.force_recalc)
-            .map(|c| (c.row, c.col))
-            .collect(),
         custom_properties_xml: sheet.custom_properties_xml.clone(),
         sheet_preserved_elements: Vec::new(),
         // Collect drawing anchor passthroughs: twoCellAnchors with content-level

@@ -4,10 +4,8 @@ use domain_types::{
     BlobPart, NamedRange, OpaquePackageOwner, OpaquePackageOwnership, OpaquePackagePart,
     OpaquePackageRelationship, OpaquePackageSubgraph, OpaqueRelationshipTarget,
     OpcRelationship as DtOpcRelationship, ParseDiagnostics, ParseError as DtParseError,
-    ParseStats as DtParseStats, PivotCacheDefinitionPackage, PivotCacheSourceKind,
-    PivotOrphanPackagePart, PivotPackageContentType, PivotPackageOwnership, PivotPackageRoundTrip,
-    PivotTablePackage, PivotWorkbookCacheEntry, RoundTripContext, SheetRoundTripContext,
-    ThemeColor, ThemeColorSource, ThemeData,
+    ParseStats as DtParseStats, RoundTripContext, SheetRoundTripContext, ThemeColor,
+    ThemeColorSource, ThemeData,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -157,6 +155,12 @@ pub(super) fn convert_theme(result: &FullParseResult) -> Option<ThemeData> {
         major_font,
         minor_font,
         name,
+        color_scheme: result.theme_color_scheme.clone(),
+        font_scheme: result.theme_font_scheme.clone(),
+        format_scheme: result.theme_format_scheme.clone(),
+        object_defaults_xml: result.theme_object_defaults_xml.clone(),
+        extra_clr_scheme_lst_xml: result.theme_extra_clr_scheme_lst_xml.clone(),
+        ext_lst_xml: result.theme_ext_lst_xml.clone(),
     })
 }
 
@@ -172,46 +176,6 @@ fn content_type_part_name(path: &str) -> String {
     format!("/{}", normalize_part_path(path))
 }
 
-fn is_pivot_package_path(path: &str) -> bool {
-    let path = normalize_part_path(path);
-    path.starts_with("xl/pivotTables/") || path.starts_with("xl/pivotCache/")
-}
-
-fn pivot_blob<'a>(blobs: &'a [(String, Vec<u8>)], path: &str) -> Option<&'a Vec<u8>> {
-    let normalized = normalize_part_path(path);
-    blobs
-        .iter()
-        .find(|(blob_path, _)| normalize_part_path(blob_path) == normalized)
-        .map(|(_, data)| data)
-}
-
-fn content_type_for_path(result: &FullParseResult, path: &str) -> Option<String> {
-    let part_name = content_type_part_name(path);
-    result
-        .content_type_overrides
-        .iter()
-        .find(|(name, _)| *name == part_name)
-        .map(|(_, content_type)| content_type.clone())
-}
-
-fn cache_definition_rels_path(definition_path: &str) -> String {
-    let cache_dir = definition_path
-        .rsplit_once('/')
-        .map(|(dir, _)| dir)
-        .unwrap_or("xl/pivotCache");
-    let cache_filename = definition_path.rsplit('/').next().unwrap_or("");
-    format!("{}/_rels/{}.rels", cache_dir, cache_filename)
-}
-
-fn pivot_table_rels_path(table_path: &str) -> String {
-    let table_dir = table_path
-        .rsplit_once('/')
-        .map(|(dir, _)| dir)
-        .unwrap_or("xl/pivotTables");
-    let table_filename = table_path.rsplit('/').next().unwrap_or("");
-    format!("{}/_rels/{}.rels", table_dir, table_filename)
-}
-
 fn relationship_type_is(rel_type: &str, expected: OoxmlRelationshipType) -> bool {
     OoxmlRelationshipType::from_uri(rel_type) == expected
 }
@@ -220,218 +184,6 @@ fn resolve_internal_rel(owner_part: Option<&str>, target: &str) -> Option<String
     resolve_relationship_target(owner_part, target)
         .ok()
         .map(|path| normalize_part_path(&path))
-}
-
-fn to_dt_rels(rels_xml: &[u8]) -> Vec<DtOpcRelationship> {
-    crate::domain::workbook::read::parse_all_rels(rels_xml)
-        .into_iter()
-        .map(|r| DtOpcRelationship {
-            id: r.id,
-            rel_type: r.rel_type,
-            target: r.target,
-            target_mode: r.target_mode,
-        })
-        .collect()
-}
-
-fn pivot_source_kind(kind: ooxml_types::pivot::PivotSourceType) -> PivotCacheSourceKind {
-    match kind {
-        ooxml_types::pivot::PivotSourceType::Worksheet => PivotCacheSourceKind::Worksheet,
-        ooxml_types::pivot::PivotSourceType::External => PivotCacheSourceKind::External,
-        ooxml_types::pivot::PivotSourceType::Consolidation => PivotCacheSourceKind::Consolidation,
-        ooxml_types::pivot::PivotSourceType::Scenario => PivotCacheSourceKind::Scenario,
-    }
-}
-
-fn build_pivot_package_round_trip(result: &FullParseResult) -> PivotPackageRoundTrip {
-    let pivot_blobs: Vec<(String, Vec<u8>)> = result
-        .extensions
-        .as_ref()
-        .map(|ext| {
-            ext.binary_passthrough
-                .entries()
-                .iter()
-                .filter(|(path, _)| is_pivot_package_path(path))
-                .cloned()
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if pivot_blobs.is_empty()
-        && result.pivot_cache_paths.is_empty()
-        && result.workbook_relationships.iter().all(|rel| {
-            !relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition)
-        })
-    {
-        return PivotPackageRoundTrip::default();
-    }
-
-    let mut claimed_paths: HashSet<String> = HashSet::new();
-    let mut workbook_cache_entries = Vec::new();
-    let mut cache_definitions = Vec::new();
-
-    for (order, (cache_id, definition_path, records_path)) in
-        result.pivot_cache_paths.iter().enumerate()
-    {
-        let definition_path = normalize_part_path(definition_path);
-        let workbook_rel = result.workbook_relationships.iter().find(|rel| {
-            relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheDefinition)
-                && resolve_internal_rel(Some("xl/workbook.xml"), &rel.target).as_deref()
-                    == Some(definition_path.as_str())
-        });
-
-        if let Some(rel) = workbook_rel {
-            workbook_cache_entries.push(PivotWorkbookCacheEntry {
-                cache_id: *cache_id,
-                relationship_id: rel.id.clone(),
-                relationship_target: rel.target.clone(),
-                definition_path: definition_path.clone(),
-                order,
-                ownership: PivotPackageOwnership::CleanImported,
-            });
-        }
-
-        claimed_paths.insert(definition_path.clone());
-
-        let definition_rels_path = cache_definition_rels_path(&definition_path);
-        let raw_relationships = pivot_blob(&pivot_blobs, &definition_rels_path)
-            .map(|bytes| {
-                claimed_paths.insert(definition_rels_path.clone());
-                to_dt_rels(bytes)
-            })
-            .unwrap_or_default();
-
-        let records_relationship = raw_relationships.iter().find(|rel| {
-            relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotCacheRecords)
-        });
-        let records_relationship_id = records_relationship.map(|rel| rel.id.clone());
-        let records_relationship_target = records_relationship.map(|rel| rel.target.clone());
-        let records_path = records_path
-            .as_ref()
-            .map(|path| normalize_part_path(path))
-            .or_else(|| {
-                records_relationship
-                    .and_then(|rel| resolve_internal_rel(Some(&definition_path), &rel.target))
-            });
-        if let Some(path) = &records_path {
-            claimed_paths.insert(path.clone());
-        }
-
-        if let Some(parsed_cache) = result.pivot_caches.get(cache_id) {
-            let raw_definition_xml = parsed_cache
-                .raw_definition_xml
-                .clone()
-                .or_else(|| pivot_blob(&pivot_blobs, &definition_path).cloned())
-                .unwrap_or_default();
-            let raw_records_xml = parsed_cache.raw_records_xml.clone().or_else(|| {
-                records_path
-                    .as_ref()
-                    .and_then(|path| pivot_blob(&pivot_blobs, path).cloned())
-            });
-
-            cache_definitions.push(PivotCacheDefinitionPackage {
-                cache_id: *cache_id,
-                definition_path,
-                definition_rels_path: if raw_relationships.is_empty() {
-                    None
-                } else {
-                    Some(definition_rels_path)
-                },
-                source_kind: pivot_source_kind(parsed_cache.definition.cache_source.r#type),
-                raw_definition_xml,
-                raw_relationships,
-                records_relationship_id,
-                records_relationship_target,
-                records_path,
-                raw_records_xml,
-                ownership: PivotPackageOwnership::CleanImported,
-            });
-        }
-    }
-
-    let mut pivot_tables = Vec::new();
-    let mut table_order = 0usize;
-    for (sheet_index, sheet) in result.sheets.iter().enumerate() {
-        for rel in sheet
-            .sheet_opc_rels
-            .iter()
-            .filter(|rel| relationship_type_is(&rel.rel_type, OoxmlRelationshipType::PivotTable))
-        {
-            let owner_part = format!("xl/worksheets/sheet{}.xml", sheet_index + 1);
-            let Some(table_path) = resolve_internal_rel(Some(&owner_part), &rel.target) else {
-                continue;
-            };
-            let Some(raw_table_xml) = pivot_blob(&pivot_blobs, &table_path).cloned() else {
-                continue;
-            };
-            claimed_paths.insert(table_path.clone());
-
-            let parsed_table = crate::domain::pivot::read::parse_pivot_table(&raw_table_xml);
-            let table_rels_path = pivot_table_rels_path(&table_path);
-            let raw_relationships = pivot_blob(&pivot_blobs, &table_rels_path)
-                .map(|bytes| {
-                    claimed_paths.insert(table_rels_path.clone());
-                    to_dt_rels(bytes)
-                })
-                .unwrap_or_default();
-
-            pivot_tables.push(PivotTablePackage {
-                sheet_index,
-                sheet_name: sheet.name.clone(),
-                sheet_relationship_id: rel.id.clone(),
-                sheet_relationship_target: rel.target.clone(),
-                table_path,
-                table_rels_path: if raw_relationships.is_empty() {
-                    None
-                } else {
-                    Some(table_rels_path)
-                },
-                pivot_name: if parsed_table.name.is_empty() {
-                    None
-                } else {
-                    Some(parsed_table.name)
-                },
-                raw_table_xml,
-                raw_relationships,
-                referenced_cache_id: parsed_table.cache_id,
-                order: table_order,
-                ownership: PivotPackageOwnership::CleanImported,
-            });
-            table_order += 1;
-        }
-    }
-
-    let content_type_overrides: Vec<PivotPackageContentType> = result
-        .content_type_overrides
-        .iter()
-        .filter(|(part_name, _)| is_pivot_package_path(part_name))
-        .map(|(part_name, content_type)| PivotPackageContentType {
-            part_name: part_name.clone(),
-            content_type: content_type.clone(),
-            ownership: PivotPackageOwnership::CleanImported,
-        })
-        .collect();
-
-    let orphan_parts = pivot_blobs
-        .iter()
-        .filter(|(path, _)| !claimed_paths.contains(&normalize_part_path(path)))
-        .map(|(path, data)| PivotOrphanPackagePart {
-            part: BlobPart {
-                path: path.clone(),
-                data: data.clone(),
-            },
-            content_type: content_type_for_path(result, path),
-            ownership: PivotPackageOwnership::CleanImported,
-        })
-        .collect();
-
-    PivotPackageRoundTrip {
-        workbook_cache_entries,
-        cache_definitions,
-        pivot_tables,
-        content_type_overrides,
-        orphan_parts,
-    }
 }
 
 fn build_opaque_package_subgraphs(
@@ -1221,7 +973,6 @@ pub(super) fn build_round_trip_context(
             })
             .collect(),
         sheet_workbook_r_ids: result.sheet_workbook_r_ids.clone(),
-        parsed_stylesheet: result.parsed_stylesheet.clone(),
         styles_ext_lst_xml: result.styles_ext_lst_xml.clone(),
         styles_namespace_attrs: result
             .extensions
@@ -1241,9 +992,6 @@ pub(super) fn build_round_trip_context(
             .raw_shared_strings_xml
             .as_ref()
             .and_then(|xml| parse_sst_count(xml)),
-        shared_strings_list: result.shared_strings.clone(),
-        shared_strings_rich_runs: result.shared_strings_rich_runs.clone(),
-        shared_strings_phonetic_xml: result.shared_strings_phonetic_xml.clone(),
         raw_shared_strings_xml: result.raw_shared_strings_xml.clone(),
         raw_doc_props_core_xml: result.raw_doc_props_core_xml.clone(),
         raw_doc_props_app_xml: result.raw_doc_props_app_xml.clone(),
@@ -1254,11 +1002,6 @@ pub(super) fn build_round_trip_context(
         web_extension_parts,
         opaque_package_subgraphs,
         binary_blobs,
-        // Pivots are modeled through ParseOutput.pivot_tables/pivot_caches and
-        // compute workbook pivot storage. New imports must not emit a pivot
-        // roundtrip package sidecar; the field remains deserialize-only for
-        // legacy documents.
-        pivot_package: PivotPackageRoundTrip::default(),
         extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead
 
         // Workbook-level namespace + preserved element preservation
@@ -1282,15 +1025,6 @@ pub(super) fn build_round_trip_context(
             .map(|ext| ext.workbook_preserved.to_position_pairs())
             .unwrap_or_default(),
 
-        // Theme preservation — pass through the full parsed theme components
-        // so the writer can reconstruct theme1.xml losslessly.
-        theme_name: result.theme_name.clone(),
-        theme_color_scheme: result.theme_color_scheme.clone(),
-        theme_font_scheme: result.theme_font_scheme.clone(),
-        theme_format_scheme: result.theme_format_scheme.clone(),
-        theme_object_defaults_xml: result.theme_object_defaults_xml.clone(),
-        theme_extra_clr_scheme_lst_xml: result.theme_extra_clr_scheme_lst_xml.clone(),
-        theme_ext_lst_xml: result.theme_ext_lst_xml.clone(),
         doc_metadata_label_info: result.raw_doc_metadata_label_info.clone(),
         skipped_named_ranges: vec![],
         original_named_ranges_order: vec![],

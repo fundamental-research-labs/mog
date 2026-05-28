@@ -216,7 +216,6 @@ fn imported_original_sst_count_does_not_override_generated_counts() {
     }]);
     let ctx = domain_types::RoundTripContext {
         original_sst_count: Some(99),
-        shared_strings_list: vec!["old".to_string()],
         raw_shared_strings_xml: Some(
             br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="99" uniqueCount="1"><si><t>old</t></si></sst>"#
                 .to_vec(),
@@ -245,7 +244,6 @@ fn imported_unused_shared_strings_do_not_force_sst_part_rel_or_content_type() {
     }]);
     let ctx = domain_types::RoundTripContext {
         original_sst_count: Some(3),
-        shared_strings_list: vec!["stale".to_string()],
         raw_shared_strings_xml: Some(
             br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="1"><si><t>stale</t></si></sst>"#
                 .to_vec(),
@@ -277,46 +275,33 @@ fn imported_unused_shared_strings_do_not_force_sst_part_rel_or_content_type() {
 }
 
 #[test]
-fn unchanged_imported_rich_text_hint_is_preserved_per_cell() {
+fn imported_rich_text_hint_is_not_preserved_from_roundtrip_context() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         cells: vec![make_text_cell_with_original_sst(0, 0, "Rich", 0)],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        shared_strings_list: vec!["Rich".to_string()],
-        shared_strings_rich_runs: vec![Some(vec![rich_text_run("Rich")])],
-        shared_strings_phonetic_xml: vec![Some(
-            b"<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>".to_vec(),
-        )],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
 
-    assert!(shared_strings.contains("<rPr><b/>"));
-    assert!(shared_strings.contains("<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>"));
+    assert!(shared_strings.contains("<t>Rich</t>"));
+    assert!(!shared_strings.contains("<rPr><b/>"));
+    assert!(!shared_strings.contains("<rPh"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
-fn edited_imported_rich_text_cell_drops_stale_hint() {
+fn edited_imported_rich_text_cell_has_no_stale_hint() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         cells: vec![make_text_cell_with_original_sst(0, 0, "Edited", 0)],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        shared_strings_list: vec!["Rich".to_string()],
-        shared_strings_rich_runs: vec![Some(vec![rich_text_run("Rich")])],
-        shared_strings_phonetic_xml: vec![Some(
-            b"<rPh sb=\"0\" eb=\"4\"><t>phonetic</t></rPh>".to_vec(),
-        )],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");

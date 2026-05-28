@@ -3,8 +3,6 @@
 //! Field ownership and deprecation policy is recorded in
 //! `round_trip_field_inventory.md` next to this module.
 
-use ooxml_types::styles::Stylesheet;
-use ooxml_types::themes::{ColorScheme, FontScheme, FormatScheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -27,16 +25,6 @@ use std::collections::HashMap;
 #[serde(rename_all = "camelCase")]
 pub struct RoundTripContext {
     pub sheets: Vec<SheetRoundTripContext>,
-
-    /// Full parsed stylesheet for lossless style reconstruction.
-    /// Contains all OOXML style components (fonts, fills, borders, cellXfs,
-    /// cellStyleXfs, cellStyles, dxfs, colors, tableStyles, numFmts) with
-    /// original theme/indexed color references preserved.
-    /// When present, the writer uses this directly instead of the lossy
-    /// DocumentFormat palette.
-    /// The `x14ac:knownFonts="1"` flag lives on `Stylesheet.known_fonts`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parsed_stylesheet: Option<Stylesheet>,
 
     /// Raw XML of `<extLst>...</extLst>` from `xl/styles.xml` for round-trip fidelity.
     /// Extension lists contain vendor-specific data that Stylesheet doesn't model.
@@ -92,26 +80,6 @@ pub struct RoundTripContext {
     /// may not override the count implied by generated sharedStrings.xml.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_sst_count: Option<usize>,
-
-    /// Parsed shared strings list (index-aligned with the raw SST XML).
-    ///
-    /// AUDIT WARNING: shared strings are cell data, so this may only be used as
-    /// an index hint for cells that still prove they reference the same text.
-    /// It must not make the imported SST authoritative.
-    #[serde(default)]
-    pub shared_strings_list: Vec<String>,
-
-    /// Rich text runs for SST entries with formatting.
-    /// Index-aligned with `shared_strings_list`. `None` = plain text, `Some` = rich text runs.
-    /// Used to preserve rich text formatting during round-trip.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub shared_strings_rich_runs: Vec<Option<Vec<crate::domain::comment::RichTextRun>>>,
-
-    /// Raw phonetic XML (`<rPh>...</rPh>` + `<phoneticPr .../>`) per SST entry.
-    /// Index-aligned with `shared_strings_list`. `None` = no phonetic data.
-    /// Used to preserve Japanese/CJK phonetic annotations during round-trip.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub shared_strings_phonetic_xml: Vec<Option<Vec<u8>>>,
 
     /// AUDIT WARNING: sharedStrings.xml is generated from modeled cells and
     /// must not be replayed verbatim once cells can change.
@@ -186,13 +154,6 @@ pub struct RoundTripContext {
     /// instead of blanket binary passthrough.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binary_blobs: Vec<BlobPart>,
-    /// Deprecated compatibility-only input for legacy snapshots.
-    ///
-    /// Pivots are modeled features. Fresh imports must lower pivot state into
-    /// domain pivot storage and regenerate package parts from modeled state,
-    /// rather than replaying clean imported pivot package bytes.
-    #[serde(default, skip_serializing_if = "PivotPackageRoundTrip::is_empty")]
-    pub pivot_package: PivotPackageRoundTrip,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extensions: Option<ExtensionPreservation>,
 
@@ -219,30 +180,6 @@ pub struct RoundTripContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub original_named_ranges_order: Vec<crate::parse_output::NamedRange>,
 
-    // Theme preservation for lossless round-tripping.
-    // When present, the writer uses these instead of the lossy ThemeData reconstruction.
-    /// Original theme name (e.g., "Office Theme 2007 - 2010"). Localized names
-    /// must survive round-trip without being clobbered by defaults.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme_name: Option<String>,
-    /// Full DrawingML color scheme (preserves sysClr/srgbClr variants, transforms).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme_color_scheme: Option<ColorScheme>,
-    /// Full font scheme with script-specific font mappings (Jpan, Hang, Hans, etc.).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme_font_scheme: Option<FontScheme>,
-    /// Full format scheme (fill, line, and effect style lists).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme_format_scheme: Option<FormatScheme>,
-    /// Raw inner XML of `<a:objectDefaults>` (inner content only, no wrapper tags).
-    #[serde(default, with = "option_bytes")]
-    pub theme_object_defaults_xml: Option<Vec<u8>>,
-    /// Raw inner XML of `<a:extraClrSchemeLst>` (inner content only).
-    #[serde(default, with = "option_bytes")]
-    pub theme_extra_clr_scheme_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of `<a:extLst>` (full element including tags).
-    #[serde(default, with = "option_bytes")]
-    pub theme_ext_lst_xml: Option<Vec<u8>>,
     /// Compatibility input only. `docMetadata/LabelInfo.xml` is unsupported
     /// classification-label package data and must not be replayed as a raw
     /// standalone sidecar outside an explicit clean opaque subgraph.
@@ -329,40 +266,9 @@ pub struct SheetRoundTripContext {
     /// other non-standard namespace attrs for round-trip fidelity.
     #[serde(default)]
     pub preserved_namespace_attrs: Vec<(String, String)>,
-    /// Preserved OOXML cell formula metadata (shared, array, dataTable) for round-trip.
-    /// Each entry is ((row, col), CellFormula). Stored here because Yrs doesn't track
-    /// shared formula grouping — it expands all formulas to individual A1 text.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub cell_formulas: Vec<((u32, u32), ooxml_types::worksheet::CellFormula)>,
     /// Raw `<customProperties>...</customProperties>` element from the worksheet.
     /// These are worksheet-level custom property references (with r:id links to binary parts).
     pub custom_properties_xml: Option<String>,
-    /// Cells where the `<v>` element had `xml:space="preserve"`.
-    /// Stored as (row, col) pairs for round-trip fidelity.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub xml_space_value_cells: Vec<(u32, u32)>,
-    /// Explicit blank `<c r="..."/>` cells from the source worksheet.
-    ///
-    /// The production Yrs store intentionally does not allocate persistent cells
-    /// for style-less blanks, but OOXML authors can include explicit blank cell
-    /// elements for row span/fidelity reasons. Preserve their positions here so
-    /// L2 export can replay them without making sparse Yrs storage dense.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub explicit_blank_cells: Vec<(u32, u32)>,
-    /// Imported cells intentionally not materialized into editable storage.
-    ///
-    /// Dynamic-array spill targets are parser-proven projection outputs, not
-    /// user-editable source cells. L2 import may omit them from Yrs storage, but
-    /// export must still replay the original cached `<c>` element until a later
-    /// edit or recalculation produces a real cell at the same position.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skipped_storage_cells: Vec<crate::parse_output::CellData>,
-    /// Cells where the `<f>` element had `xml:space="preserve"`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub xml_space_formula_cells: Vec<(u32, u32)>,
-    /// Cells with `ca="1"` (force recalc / volatile formula flag).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub force_recalc_cells: Vec<(u32, u32)>,
     /// Preserved unknown XML elements from the worksheet as raw XML strings.
     /// Each entry is (position_key, raw_xml) — same format as `workbook_preserved_elements`.
     /// Captures elements like `<sheetPr>` with `<tabColor>` that the parser doesn't model.
@@ -494,138 +400,6 @@ pub struct ImportedDrawingPart {
     pub data: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rels: Option<BlobPart>,
-}
-
-/// Typed package sidecar for pivot table/cache round-trip preservation.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotPackageRoundTrip {
-    /// Original workbook `<pivotCaches>` entries in document order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub workbook_cache_entries: Vec<PivotWorkbookCacheEntry>,
-    /// Cache definition packages keyed by cache id/path.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub cache_definitions: Vec<PivotCacheDefinitionPackage>,
-    /// Sheet-owned pivot table packages.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pivot_tables: Vec<PivotTablePackage>,
-    /// Exact content type overrides for pivot package parts.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub content_type_overrides: Vec<PivotPackageContentType>,
-    /// Pivot package blobs not claimed by a cache/table graph edge.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub orphan_parts: Vec<PivotOrphanPackagePart>,
-}
-
-impl PivotPackageRoundTrip {
-    pub fn is_empty(&self) -> bool {
-        self.workbook_cache_entries.is_empty()
-            && self.cache_definitions.is_empty()
-            && self.pivot_tables.is_empty()
-            && self.content_type_overrides.is_empty()
-            && self.orphan_parts.is_empty()
-    }
-}
-
-/// Ownership state for a pivot package component.
-///
-/// State transitions:
-/// - API-created pivots are `Generated`.
-/// - Imported pivots start as `CleanImported` and stay there through open/save.
-/// - Edits to an imported pivot table layout/style/filter make the table package
-///   at least `DirtyImported`; cache refresh makes the cache dirty/generated.
-/// - Deletion marks the exact imported table package `Deleted`; cache deletion is
-///   valid only when no remaining table references the cache.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PivotPackageOwnership {
-    #[default]
-    CleanImported,
-    DirtyImported,
-    Generated,
-    Deleted,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PivotCacheSourceKind {
-    #[default]
-    Unknown,
-    Worksheet,
-    External,
-    Consolidation,
-    Scenario,
-}
-
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotWorkbookCacheEntry {
-    pub cache_id: u32,
-    pub relationship_id: String,
-    pub relationship_target: String,
-    pub definition_path: String,
-    pub order: usize,
-    #[serde(default)]
-    pub ownership: PivotPackageOwnership,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotCacheDefinitionPackage {
-    pub cache_id: u32,
-    pub definition_path: String,
-    pub definition_rels_path: Option<String>,
-    #[serde(default)]
-    pub source_kind: PivotCacheSourceKind,
-    #[serde(with = "bytes_serde")]
-    pub raw_definition_xml: Vec<u8>,
-    #[serde(default)]
-    pub raw_relationships: Vec<OpcRelationship>,
-    pub records_relationship_id: Option<String>,
-    pub records_relationship_target: Option<String>,
-    pub records_path: Option<String>,
-    #[serde(default, with = "option_bytes")]
-    pub raw_records_xml: Option<Vec<u8>>,
-    #[serde(default)]
-    pub ownership: PivotPackageOwnership,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotTablePackage {
-    pub sheet_index: usize,
-    pub sheet_name: String,
-    pub sheet_relationship_id: String,
-    pub sheet_relationship_target: String,
-    pub table_path: String,
-    pub table_rels_path: Option<String>,
-    pub pivot_name: Option<String>,
-    #[serde(with = "bytes_serde")]
-    pub raw_table_xml: Vec<u8>,
-    #[serde(default)]
-    pub raw_relationships: Vec<OpcRelationship>,
-    pub referenced_cache_id: u32,
-    pub order: usize,
-    #[serde(default)]
-    pub ownership: PivotPackageOwnership,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotPackageContentType {
-    pub part_name: String,
-    pub content_type: String,
-    #[serde(default)]
-    pub ownership: PivotPackageOwnership,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotOrphanPackagePart {
-    pub part: BlobPart,
-    pub content_type: Option<String>,
-    #[serde(default)]
-    pub ownership: PivotPackageOwnership,
 }
 
 /// VML drawing part with optional relationships file.

@@ -22,7 +22,6 @@ sidecar; it is not semantic authority.
 | Field | Disposition | Destination / owner | Yrs | Writer entrypoint | Package graph path | Test owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | `sheets` | persisted typed metadata | `SheetRoundTripContext` per worksheet | round_trip | sheet feature writers | per-sheet modeled registrations | domain serde tests |
-| `parsed_stylesheet` | transient parse-output sidecar | parsed OOXML style sidecar | ParseOutput | styles writer | styles part registration | style writer tests |
 | `styles_ext_lst_xml` | persisted typed metadata | style extension metadata | round_trip | styles writer | styles part registration | style writer tests |
 | `styles_namespace_attrs` | persisted typed metadata | style root lexical metadata | round_trip | styles writer | styles part registration | style writer tests |
 | `content_type_defaults` | deprecated compatibility only | `OpaquePackagePart.default_extension` when lowered | none | ignored unless explicitly lowered | clean opaque subgraph registration only | stale package tests |
@@ -31,9 +30,6 @@ sidecar; it is not semantic authority.
 | `workbook_relationships` | deprecated compatibility only | modeled workbook graph or opaque owner rel | none | ignored unless explicitly lowered | clean opaque subgraph registration only | stale package tests |
 | `sheet_workbook_r_ids` | deprecated compatibility only | relationship ID hint after generated graph registration | none | ignored as package authority | graph allocates and validates IDs | stale package tests |
 | `original_sst_count` | deprecated compatibility only | generated shared strings count | none | ignored as authority | sharedStrings generated from cells | shared string tests |
-| `shared_strings_list` | transient parse-output sidecar | SST index hint for imported cells | ParseOutput | ignored as authority | sharedStrings generated from cells | shared string tests |
-| `shared_strings_rich_runs` | persisted typed metadata | cell-owned rich text metadata | round_trip | shared string writer for matching cells | sharedStrings generated from cells | rich SST tests |
-| `shared_strings_phonetic_xml` | persisted typed metadata | cell-owned phonetic metadata | round_trip | shared string writer for matching cells | sharedStrings generated from cells | phonetic SST tests |
 | `raw_shared_strings_xml` | deprecated compatibility only | generated shared strings XML | none | ignored as authority | sharedStrings generated from cells | stale sharedStrings tests |
 | `raw_doc_props_core_xml` | deprecated compatibility only | `ParseOutput.properties` | domain | document property writer | docProps registration from properties | doc property tests |
 | `raw_doc_props_app_xml` | deprecated compatibility only | unsupported app props | none | ignored unless modeled later | none | doc property tests |
@@ -50,13 +46,6 @@ sidecar; it is not semantic authority.
 | `workbook_preserved_elements` | persisted typed metadata | workbook unknown element metadata | round_trip | workbook writer after modeled filtering | workbook XML | unknown element tests |
 | `skipped_named_ranges` | deprecated compatibility only | named-range domain storage | domain | ignored as authority | workbook XML from named ranges | named range tests |
 | `original_named_ranges_order` | deprecated compatibility only | named-range domain ordering | domain | ignored as authority | workbook XML from named ranges | named range tests |
-| `theme_name` | typed modeled state | `ThemeData` / theme sidecar | domain | theme writer | theme part registration | theme tests |
-| `theme_color_scheme` | typed modeled state | `ThemeData` / full theme state | domain | theme writer | theme part registration | theme tests |
-| `theme_font_scheme` | typed modeled state | `ThemeData` / full theme state | domain | theme writer | theme part registration | theme tests |
-| `theme_format_scheme` | typed modeled state | full theme state | round_trip | theme writer | theme part registration | theme tests |
-| `theme_object_defaults_xml` | persisted typed metadata | theme lexical metadata | round_trip | theme writer | theme part registration | theme tests |
-| `theme_extra_clr_scheme_lst_xml` | persisted typed metadata | theme lexical metadata | round_trip | theme writer | theme part registration | theme tests |
-| `theme_ext_lst_xml` | persisted typed metadata | theme extension metadata | round_trip | theme writer | theme part registration | theme tests |
 | `doc_metadata_label_info` | deprecated compatibility only | explicit opaque subgraph if later preserved | none | ignored | none unless opaque subgraph | stale docMetadata tests |
 
 ## SheetRoundTripContext
@@ -83,13 +72,7 @@ sidecar; it is not semantic authority.
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |
 | `ChartSpec.rt.auxiliary_files` | persisted chart-owned sidecar | chart style/color parts for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
 | `ChartSpec.rt.chart_rels_bytes` | persisted chart-owned sidecar | chart sidecar relationships for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
-| `cell_formulas` | persisted typed metadata | cell formula metadata until modeled per cell | round_trip | sheet writer for matching formulas | worksheet XML | formula metadata tests |
 | `custom_properties_xml` | transient parse-output sidecar | worksheet custom property refs until modeled | ParseOutput | feature writer with live refs | feature-owned relationship registration | custom property tests |
-| `xml_space_value_cells` | persisted typed metadata | cell lexical metadata | round_trip | sheet writer for matching cells | worksheet XML | cell lexical tests |
-| `explicit_blank_cells` | persisted typed metadata | sparse blank-cell lexical metadata | round_trip | sheet writer | worksheet XML | blank cell tests |
-| `skipped_storage_cells` | transient parse-output sidecar | dynamic-array spill cached cells | ParseOutput | sheet writer until recalculated/edited | worksheet XML | dynamic array tests |
-| `xml_space_formula_cells` | persisted typed metadata | formula lexical metadata | round_trip | sheet writer for matching formulas | worksheet XML | formula lexical tests |
-| `force_recalc_cells` | persisted typed metadata | formula recalc metadata | round_trip | sheet writer for matching formulas | worksheet XML | formula flag tests |
 | `sheet_preserved_elements` | persisted typed metadata | worksheet unknown elements | round_trip | sheet writer after modeled filtering | worksheet XML | unknown element tests |
 | `drawing_anchor_passthroughs` | persisted typed metadata | drawing anchor lexical metadata | round_trip | drawing writer | drawing part registration | drawing tests |
 | `imported_drawing` | persisted opaque sidecar | clean imported drawing part | round_trip | drawing writer | drawing part and rel registration | drawing package tests |

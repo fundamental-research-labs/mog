@@ -205,22 +205,17 @@ fn format_range_style_id_at(
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
-    round_trip_context: Option<&RoundTripContext>,
+    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<CellData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_cells_for_sheet");
     // When a lossless stylesheet is available, cell style_ids reference
     // the original cellXfs indices directly (stored during hydration as "s").
-    let has_lossless_stylesheet = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .is_some();
+    let has_lossless_stylesheet = false;
     // Original cellXfs count — new palette entries are appended after these,
     // so mutated cells get style_id = original_count + palette_idx.
-    let original_cellxfs_count = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .map(|ss| ss.cell_xfs.len() as u32)
-        .unwrap_or(0);
+    let original_cellxfs_count = 0;
 
     // Batch-read ALL cell properties and raw formulas in a single Yrs
     // transaction, avoiding duplicate transaction setup overhead (O2+O3).
@@ -427,7 +422,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
-    round_trip_context: Option<&RoundTripContext>,
+    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<AuthoredStyleRun> {
@@ -435,13 +430,8 @@ pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
         return Vec::new();
     };
 
-    let has_lossless_stylesheet = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .is_some();
-    let original_cellxfs_count = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .map(|ss| ss.cell_xfs.len() as u32)
-        .unwrap_or(0);
+    let has_lossless_stylesheet = false;
+    let original_cellxfs_count = 0;
     let imported_style_ids = batch_read_range_format_style_ids(stores, sheet_id);
 
     let mut runs = Vec::new();
@@ -695,19 +685,14 @@ fn explicit_blank_cell(row: u32, col: u32) -> CellData {
 /// thousands of redundant Yrs transactions.
 pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     stores: &EngineStores,
-    round_trip_context: Option<&RoundTripContext>,
+    _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
     _max_row: u32,
     _max_col: u32,
     palette: &impl PaletteOps,
 ) -> (Vec<RowStyleEntry>, Vec<ColStyleEntry>) {
-    let has_lossless_stylesheet = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .is_some();
-    let original_cellxfs_count = round_trip_context
-        .and_then(|ctx| ctx.parsed_stylesheet.as_ref())
-        .map(|ss| ss.cell_xfs.len() as u32)
-        .unwrap_or(0);
+    let has_lossless_stylesheet = false;
+    let original_cellxfs_count = 0;
 
     let grid_index = stores.grid_indexes.get(sheet_id);
 
@@ -852,7 +837,6 @@ mod tests {
                 br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1"><si><t></t></si></sst>"#
                     .to_vec(),
             ),
-            shared_strings_list: vec![String::new()],
             original_sst_count: Some(1),
             ..Default::default()
         };
@@ -921,39 +905,6 @@ mod tests {
         }
     }
 
-    fn parsed_stylesheet_with_cell_xfs(count: usize) -> ooxml_types::styles::Stylesheet {
-        let cell_xfs = (0..count)
-            .map(|idx| {
-                if idx == 0 {
-                    r#"<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>"#
-                        .to_string()
-                } else {
-                    format!(
-                        r#"<xf numFmtId="0" fontId="{idx}" fillId="0" borderId="0" xfId="0" applyFont="1"/>"#
-                    )
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        let fonts = (0..count)
-            .map(|idx| format!(r#"<font><sz val="11"/><name val="Font{idx}"/></font>"#))
-            .collect::<Vec<_>>()
-            .join("");
-        let xml = format!(
-            r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-                <fonts count="{count}">{fonts}</fonts>
-                <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-                <borders count="1"><border/></borders>
-                <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-                <cellXfs count="{count}">{cell_xfs}</cellXfs>
-                <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-                <dxfs count="0"/>
-                <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
-            </styleSheet>"#
-        );
-        xlsx_parser::domain::styles::read::parse_styles(xml.as_bytes())
-    }
-
     #[test]
     fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
         let output = authored_style_run_output();
@@ -1008,7 +959,7 @@ mod tests {
     }
 
     #[test]
-    fn mutated_row_and_col_formats_rebase_after_imported_cellxfs() {
+    fn mutated_row_and_col_formats_use_authored_palette_ids() {
         let output = domain_types::ParseOutput {
             sheets: vec![domain_types::SheetData {
                 name: "Sheet1".to_string(),
@@ -1024,12 +975,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let round_trip_context = domain_types::RoundTripContext {
-            parsed_stylesheet: Some(parsed_stylesheet_with_cell_xfs(3)),
-            ..Default::default()
-        };
-        let (mut engine, sheet_id) =
-            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let (mut engine, sheet_id) = engine_from_parse_output(&output);
 
         engine
             .set_row_format(
@@ -1055,8 +1001,8 @@ mod tests {
 
         let exported = engine.build_parse_output_from_yrs();
         assert_eq!(exported.style_palette.len(), 2);
-        assert_eq!(exported.sheets[0].row_styles[0].style_id, 3);
-        assert_eq!(exported.sheets[0].col_styles[0].style_id, 4);
+        assert_eq!(exported.sheets[0].row_styles[0].style_id, 0);
+        assert_eq!(exported.sheets[0].col_styles[0].style_id, 1);
     }
 
     #[test]
@@ -1151,7 +1097,7 @@ mod tests {
     }
 
     #[test]
-    fn skipped_spill_target_replays_from_roundtrip_sidecar() {
+    fn skipped_spill_target_is_not_replayed_from_roundtrip_sidecar() {
         let source = domain_types::CellData {
             row: 0,
             col: 0,
@@ -1180,16 +1126,8 @@ mod tests {
             }],
             ..Default::default()
         };
-        let round_trip_context = domain_types::RoundTripContext {
-            sheets: vec![domain_types::SheetRoundTripContext {
-                skipped_storage_cells: vec![spill],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
 
-        let (engine, sheet_id) =
-            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let (engine, sheet_id) = engine_from_parse_output(&output);
         let grid = engine
             .stores
             .grid_indexes
@@ -1205,15 +1143,10 @@ mod tests {
         let exported = engine.build_parse_output_from_yrs();
         let cells = &exported.sheets[0].cells;
         assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
-        let replayed = cells
-            .iter()
-            .find(|cell| (cell.row, cell.col) == (0, 1))
-            .expect("skipped spill target should replay during export");
-        assert_eq!(
-            replayed.projection_role,
-            domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+        assert!(
+            !cells.iter().any(|cell| (cell.row, cell.col) == (0, 1)),
+            "spill target sidecars are no longer replayed through roundtrip context"
         );
-        assert_eq!(replayed.original_value.as_deref(), Some("2"));
     }
 
     #[test]
@@ -1256,26 +1189,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let round_trip_context = domain_types::RoundTripContext {
-            sheets: vec![domain_types::SheetRoundTripContext {
-                cell_formulas: vec![(
-                    (0, 0),
-                    ooxml_types::worksheet::CellFormula {
-                        t: ooxml_types::worksheet::CellFormulaType::Shared,
-                        si: Some(7),
-                        r#ref: Some("A1:A2".to_string()),
-                        text: "SUM(A2:A10)".to_string(),
-                        ..Default::default()
-                    },
-                )],
-                xml_space_formula_cells: vec![(0, 0)],
-                force_recalc_cells: vec![(0, 0)],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let (mut engine, sheet_id) =
-            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let (mut engine, sheet_id) = engine_from_parse_output(&output);
         let cell_id = engine
             .stores
             .grid_indexes
@@ -1333,25 +1247,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let round_trip_context = domain_types::RoundTripContext {
-            sheets: vec![domain_types::SheetRoundTripContext {
-                cell_formulas: vec![(
-                    (0, 0),
-                    ooxml_types::worksheet::CellFormula {
-                        t: ooxml_types::worksheet::CellFormulaType::Array,
-                        r#ref: Some("A1:A2".to_string()),
-                        text: "SUM(A2:A10)".to_string(),
-                        aca: true,
-                        ..Default::default()
-                    },
-                )],
-                force_recalc_cells: vec![(0, 0)],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let (mut engine, sheet_id) =
-            engine_from_parse_output_with_roundtrip(&output, Some(round_trip_context));
+        let (mut engine, sheet_id) = engine_from_parse_output(&output);
         let cell_id = engine
             .stores
             .grid_indexes

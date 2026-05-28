@@ -130,7 +130,13 @@ fn bridge_source_files() -> Vec<String> {
         format!("{}/compute/core/src/storage/engine/formatting.rs", base),
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
         format!("{}/compute/core/src/storage/engine/features.rs", base),
-        format!("{}/compute/core/src/storage/engine/objects.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/comments.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/charts.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/floating.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/groups.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/z_order.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/hyperlinks.rs", base),
+        format!("{}/compute/core/src/storage/engine/objects/pivots.rs", base),
         format!(
             "{}/compute/core/src/storage/engine/viewport/registry.rs",
             base

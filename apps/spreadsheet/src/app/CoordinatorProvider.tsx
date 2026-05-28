@@ -21,11 +21,13 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'r
 import type { ActionType } from '@mog-sdk/contracts/actions';
 import { objectSelectors } from '../selectors';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
+import { toA1 } from '@mog/spreadsheet-utils/a1';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
 import type { EditorDependencies } from '../coordinator/types';
 import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
+import { CircularReferenceDialog, useCircularReferenceDialog } from '../dialogs/formulas';
 import {
   CoordinatorProvider as BaseCoordinatorProvider,
   useCoordinator,
@@ -41,6 +43,7 @@ import {
   useWorkbook,
 } from '../infra/context';
 import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordination';
+import { hasDirectSelfReference } from '../systems/grid-editing/coordination/direct-self-reference';
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
 import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
@@ -541,6 +544,13 @@ export function SpreadsheetCoordinatorProvider({
   // Consume the unified Workbook from DocumentProvider (created during initialization).
   // Workbook is now created once in DocumentProvider, not here.
   const workbook = useWorkbook();
+  const circularReferenceDialog = useCircularReferenceDialog();
+  const {
+    state: circularReferenceDialogState,
+    showDialog: showCircularReferenceDialog,
+    handleEnableIterative,
+    handleCancel: handleCircularReferenceCancel,
+  } = circularReferenceDialog;
 
   // Create editor dependencies for commit coordination and schema lookup
   // These enable the editor to commit values and resolve editor types from schemas
@@ -612,6 +622,25 @@ export function SpreadsheetCoordinatorProvider({
           enforcement,
         };
       },
+      validateCircularReference: async (sheetId, row, col, formula) => {
+        if (!formula.trimStart().startsWith('=')) {
+          return null;
+        }
+
+        if (await workbook.getIterativeCalculation()) {
+          return null;
+        }
+
+        const sheet = workbook.getSheetById(sheetId);
+        if (!hasDirectSelfReference({ formula, row, col, sheetName: sheet.name })) {
+          return null;
+        }
+
+        return {
+          cellAddress: toA1(row, col),
+          formula,
+        };
+      },
       // Validate authored formula text against the Rust parser before the
       // commit reaches the mutation path. The mutation path intentionally still
       // normalizes formulas for import/programmatic writes; interactive commits
@@ -633,6 +662,27 @@ export function SpreadsheetCoordinatorProvider({
       },
       onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, errorPosition) => {
         showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, errorPosition);
+      },
+      onCircularReferenceWarning: (cellAddress, formula, onEnableIterative, onCancel) => {
+        showCircularReferenceDialog(
+          cellAddress,
+          formula,
+          () => {
+            void workbook
+              .setIterativeCalculation(true)
+              .then(() => {
+                onEnableIterative();
+              })
+              .catch((error) => {
+                console.error(
+                  '[SpreadsheetCoordinatorProvider] Failed to enable iterative calculation',
+                  error,
+                );
+                onCancel();
+              });
+          },
+          onCancel,
+        );
       },
       // Enter a CSE (Ctrl+Shift+Enter) array formula on the selected
       // range. Routes through the Worksheet API to Rust
@@ -657,48 +707,62 @@ export function SpreadsheetCoordinatorProvider({
         );
       },
     }),
-    [workbook, showFormulaError, showValidationError, showValidationWarning],
+    [
+      workbook,
+      showCircularReferenceDialog,
+      showFormulaError,
+      showValidationError,
+      showValidationWarning,
+    ],
   );
 
   return (
-    <BaseCoordinatorProvider
-      initialSheetId={activeSheetId}
-      platform={platformIdentity.os}
-      onMetric={onMetric}
-      uiStoreApi={uiStoreApi}
-      editorDependencies={editorDependencies}
-      enableKeyboard={enableKeyboard}
-      onUIAction={onUIAction}
-      // Explicit clipboard wiring - same pattern as other features
-      clipboardDependencies={{
-        getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
-        // Cut-paste overwrite confirmation: open the dialog with pending data.
-        // The Confirm/Cancel handlers (CONFIRM_PASTE_OVERWRITE / CANCEL_PASTE_OVERWRITE)
-        // close the dialog and either re-fire paste with skipOverwriteCheck=true
-        // or clear the clipboard.
-        onCutOverwriteConfirm: (pendingData) => {
-          uiStoreApi.getState().openPasteOverwriteConfirmDialog({
-            targetCell: pendingData.targetCell,
-            sheetId: pendingData.sheetId,
-          });
-        },
-        onProtectionError: (message) => {
-          uiStoreApi.getState().showProtectionAlert(message);
-        },
-      }}
-      workbook={workbook}
-      readOnly={readOnly}
-    >
-      <KeyboardCaptureSetup workbook={workbook}>
-        <UndoSelectionCoordinatorSetup>
-          <RangeSelectionCoordinatorSetup>
-            <PaneNavigationSetup>
-              <CollabPresenceBridge>{children}</CollabPresenceBridge>
-            </PaneNavigationSetup>
-          </RangeSelectionCoordinatorSetup>
-        </UndoSelectionCoordinatorSetup>
-      </KeyboardCaptureSetup>
-    </BaseCoordinatorProvider>
+    <>
+      <BaseCoordinatorProvider
+        initialSheetId={activeSheetId}
+        platform={platformIdentity.os}
+        onMetric={onMetric}
+        uiStoreApi={uiStoreApi}
+        editorDependencies={editorDependencies}
+        enableKeyboard={enableKeyboard}
+        onUIAction={onUIAction}
+        // Explicit clipboard wiring - same pattern as other features
+        clipboardDependencies={{
+          getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
+          // Cut-paste overwrite confirmation: open the dialog with pending data.
+          // The Confirm/Cancel handlers (CONFIRM_PASTE_OVERWRITE / CANCEL_PASTE_OVERWRITE)
+          // close the dialog and either re-fire paste with skipOverwriteCheck=true
+          // or clear the clipboard.
+          onCutOverwriteConfirm: (pendingData) => {
+            uiStoreApi.getState().openPasteOverwriteConfirmDialog({
+              targetCell: pendingData.targetCell,
+              sheetId: pendingData.sheetId,
+            });
+          },
+          onProtectionError: (message) => {
+            uiStoreApi.getState().showProtectionAlert(message);
+          },
+        }}
+        workbook={workbook}
+        readOnly={readOnly}
+      >
+        <KeyboardCaptureSetup workbook={workbook}>
+          <UndoSelectionCoordinatorSetup>
+            <RangeSelectionCoordinatorSetup>
+              <PaneNavigationSetup>
+                <CollabPresenceBridge>{children}</CollabPresenceBridge>
+              </PaneNavigationSetup>
+            </RangeSelectionCoordinatorSetup>
+          </UndoSelectionCoordinatorSetup>
+        </KeyboardCaptureSetup>
+      </BaseCoordinatorProvider>
+      <CircularReferenceDialog
+        state={circularReferenceDialogState}
+        onEnableIterative={handleEnableIterative}
+        onCancel={handleCircularReferenceCancel}
+        iterativeSettings={{ maxIterations: 100, maxChange: 0.001 }}
+      />
+    </>
   );
 }
 

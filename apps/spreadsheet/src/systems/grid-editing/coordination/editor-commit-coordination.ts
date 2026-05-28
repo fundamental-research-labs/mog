@@ -61,6 +61,27 @@ export type ValidateCellValueCallback = (
   value: string,
 ) => Promise<EditorValidationResult | null>;
 
+/**
+ * Direct circular-reference validation result for an interactive formula commit.
+ */
+export interface CircularReferenceValidationResult {
+  /** Display address of the cell being edited (for dialog display). */
+  cellAddress: string;
+  /** Authored formula text that would create the direct self-reference. */
+  formula: string;
+}
+
+/**
+ * Callback to validate whether a formula directly references the edited cell
+ * while iterative calculation is disabled.
+ */
+export type ValidateCircularReferenceCallback = (
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  formula: string,
+) => Promise<CircularReferenceValidationResult | null>;
+
 const SIGNED_NUMERIC_LITERAL_RE = /^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?%?$/;
 
 /**
@@ -76,6 +97,10 @@ function shouldValidateFormulaSyntax(value: string): boolean {
   const firstChar = trimmed.charAt(0);
   if (firstChar !== '=' && firstChar !== '+' && firstChar !== '-') return false;
   return !SIGNED_NUMERIC_LITERAL_RE.test(trimmed);
+}
+
+function shouldValidateCircularReference(value: string): boolean {
+  return value.trimStart().startsWith('=');
 }
 
 /**
@@ -118,6 +143,11 @@ export interface EditorCommitCoordinationConfig {
    * If not provided, validation is skipped (auto-success).
    */
   validateCellValue?: ValidateCellValueCallback;
+  /**
+   * Optional callback to detect direct circular references before commit.
+   * Runs after formula syntax validation and before data validation.
+   */
+  validateCircularReference?: ValidateCircularReferenceCallback;
   /**
    * Optional callback for strict enforcement - called when validation fails
    * with 'strict' enforcement (blocks entry).
@@ -176,6 +206,17 @@ export interface EditorCommitCoordinationConfig {
     errorPosition?: number,
   ) => void;
   /**
+   * Optional callback for direct circular-reference warnings.
+   * Enable proceeds with commit after the host enables iterative calculation;
+   * cancel abandons the edit without mutating workbook state.
+   */
+  onCircularReferenceWarning?: (
+    cellAddress: string,
+    formula: string,
+    onEnableIterative: () => void,
+    onCancel: () => void,
+  ) => void;
+  /**
    * Optional callback to validate formula syntax.
    * Returns null if valid, or error message/object if invalid.
    * If not provided, formula validation is skipped.
@@ -220,10 +261,12 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
     editorActor,
     selectionActor,
     validateCellValue,
+    validateCircularReference,
     onValidationError,
     onValidationWarning,
     onValidationInformation,
     onFormulaError,
+    onCircularReferenceWarning,
     validateFormulaSyntax,
   } = config;
   let previousState: EditorState | null = null;
@@ -323,6 +366,32 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
                 // G.2: Pass error position to dialog for potential UI use
                 errorPosition,
               );
+            }
+            return;
+          }
+        }
+
+        if (shouldValidateCircularReference(value) && validateCircularReference) {
+          const circularReferenceResult = await validateCircularReference(
+            toSheetId(sheetId),
+            editingCell.row,
+            editingCell.col,
+            value,
+          );
+
+          if (circularReferenceResult) {
+            if (onCircularReferenceWarning) {
+              onCircularReferenceWarning(
+                circularReferenceResult.cellAddress,
+                circularReferenceResult.formula,
+                () => editorActor.send({ type: 'VALIDATION_SUCCESS' }),
+                () => editorActor.send({ type: 'CANCEL' }),
+              );
+            } else {
+              editorActor.send({
+                type: 'VALIDATION_ERROR',
+                message: `Circular reference detected in cell ${circularReferenceResult.cellAddress}`,
+              });
             }
             return;
           }

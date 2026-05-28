@@ -1556,10 +1556,12 @@ export class GridEditingSystem implements IGridEditingSystem {
       editorActor: this.editorActor,
       selectionActor: this.selectionActor,
       validateCellValue: editorDeps?.validateCellValue,
+      validateCircularReference: editorDeps?.validateCircularReference,
       onValidationError: editorDeps?.onValidationError,
       onValidationWarning: editorDeps?.onValidationWarning,
       onValidationInformation: editorDeps?.onValidationInformation,
       onFormulaError: editorDeps?.onFormulaError,
+      onCircularReferenceWarning: editorDeps?.onCircularReferenceWarning,
       validateFormulaSyntax: editorDeps?.validateFormulaSyntax,
     });
 

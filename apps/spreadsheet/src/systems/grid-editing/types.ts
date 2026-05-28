@@ -778,6 +778,15 @@ export interface EditorDependencies {
     col: number,
     value: string,
   ) => Promise<import('./coordination/editor-commit-coordination').EditorValidationResult | null>;
+  /** Validate direct circular references before the formula reaches the mutation path. */
+  validateCircularReference?: (
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    formula: string,
+  ) => Promise<
+    import('./coordination/editor-commit-coordination').CircularReferenceValidationResult | null
+  >;
   /**
    * Show validation error dialog for strict enforcement.
    * Called when a value fails validation with enforcement='strict'.
@@ -823,6 +832,16 @@ export interface EditorDependencies {
     onAcceptAsText: () => void,
     /** G.2: Optional error position for cursor placement (0-based character index) */
     errorPosition?: number,
+  ) => void;
+  /**
+   * Show direct circular-reference warning dialog. Enable proceeds after the
+   * host enables iterative calculation; cancel discards the edit.
+   */
+  onCircularReferenceWarning?: (
+    cellAddress: string,
+    formula: string,
+    onEnableIterative: () => void,
+    onCancel: () => void,
   ) => void;
   /**
    * Validate formula syntax.

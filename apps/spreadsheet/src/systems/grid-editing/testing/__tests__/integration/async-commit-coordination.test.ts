@@ -20,6 +20,7 @@ import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
 import { GridEditingSystem } from '../../../grid-editing-system';
 import type { EditorDependencies } from '../../../types';
+import { hasDirectSelfReference } from '../../../coordination/direct-self-reference';
 import { createEditableTestWorkbook } from '../../mock-workbook';
 
 // =============================================================================
@@ -272,6 +273,162 @@ describe('commitCellValue invoke awaits bridge call', () => {
     cleanup();
   });
 
+  it.each(['=A1', '=$A$1', '=SUM(A1)', '=A1:A1', '=Sheet1!A1', "='Sheet1'!A1"])(
+    'blocks direct self-reference %s until iterative calculation is enabled',
+    async (value) => {
+      const setCellValue = jest.fn();
+      let enableIterative!: () => void;
+      let cancelEdit!: () => void;
+      const onCircularReferenceWarning = jest.fn(
+        (
+          _cellAddress: string,
+          _formula: string,
+          onEnableIterative: () => void,
+          onCancel: () => void,
+        ) => {
+          enableIterative = onEnableIterative;
+          cancelEdit = onCancel;
+        },
+      );
+      const validateCircularReference = jest.fn(
+        async (_sheetId: string, row: number, col: number, formula: string) =>
+          hasDirectSelfReference({ formula, row, col, sheetName: 'Sheet1' })
+            ? { cellAddress: 'A1', formula }
+            : null,
+      );
+
+      const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
+        setCellValue,
+        {
+          validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+          validateCircularReference,
+          onCircularReferenceWarning,
+        },
+      );
+
+      const cell = system.access.accessors.selection.getActiveCell();
+      system.startEditing(cell, sheetId, value);
+      system.commitEdit('none');
+
+      await flushMicrotasks();
+
+      expect(validateCircularReference).toHaveBeenCalledWith(sheetId, 0, 0, value);
+      expect(onCircularReferenceWarning).toHaveBeenCalledWith(
+        'A1',
+        value,
+        expect.any(Function),
+        expect.any(Function),
+      );
+      expect(editorActor.getSnapshot().matches('validating')).toBe(true);
+      expect(setCellValue).not.toHaveBeenCalled();
+
+      expect(cancelEdit).toEqual(expect.any(Function));
+      enableIterative();
+      await flushMicrotasks();
+
+      expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+      expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, value);
+
+      cleanup();
+    },
+  );
+
+  it('cancels a direct self-reference warning without writing the formula', async () => {
+    const setCellValue = jest.fn();
+    let cancelEdit!: () => void;
+    const onCircularReferenceWarning = jest.fn(
+      (
+        _cellAddress: string,
+        _formula: string,
+        _onEnableIterative: () => void,
+        onCancel: () => void,
+      ) => {
+        cancelEdit = onCancel;
+      },
+    );
+
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
+      setCellValue,
+      {
+        validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+        validateCircularReference: jest
+          .fn()
+          .mockResolvedValue({ cellAddress: 'A1', formula: '=A1' }),
+        onCircularReferenceWarning,
+      },
+    );
+
+    const cell = system.access.accessors.selection.getActiveCell();
+    system.startEditing(cell, sheetId, '=A1');
+    system.commitEdit('none');
+
+    await flushMicrotasks();
+
+    expect(editorActor.getSnapshot().matches('validating')).toBe(true);
+    expect(setCellValue).not.toHaveBeenCalled();
+
+    cancelEdit();
+    await flushMicrotasks();
+
+    expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+    expect(setCellValue).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it('commits direct self-reference formulas when circular validation allows them', async () => {
+    const setCellValue = jest.fn();
+    const onCircularReferenceWarning = jest.fn();
+    const validateCircularReference = jest.fn().mockResolvedValue(null);
+
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
+      setCellValue,
+      {
+        validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+        validateCircularReference,
+        onCircularReferenceWarning,
+      },
+    );
+
+    const cell = system.access.accessors.selection.getActiveCell();
+    system.startEditing(cell, sheetId, '=A1');
+    system.commitEdit('none');
+
+    await flushMicrotasks();
+
+    expect(validateCircularReference).toHaveBeenCalledWith(sheetId, 0, 0, '=A1');
+    expect(onCircularReferenceWarning).not.toHaveBeenCalled();
+    expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+    expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, '=A1');
+
+    cleanup();
+  });
+
+  it('does not run circular detection when formula syntax validation fails', async () => {
+    const validateCircularReference = jest
+      .fn()
+      .mockResolvedValue({ cellAddress: 'A1', formula: '=' });
+    const onFormulaError = jest.fn();
+
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(jest.fn(), {
+      validateFormulaSyntax: jest.fn().mockResolvedValue('formula error'),
+      validateCircularReference,
+      onFormulaError,
+    });
+
+    const cell = system.access.accessors.selection.getActiveCell();
+    system.startEditing(cell, sheetId, '=');
+    system.commitEdit('none');
+
+    await flushMicrotasks();
+
+    expect(validateCircularReference).not.toHaveBeenCalled();
+    expect(onFormulaError).toHaveBeenCalled();
+    expect(editorActor.getSnapshot().matches('error')).toBe(true);
+
+    cleanup();
+  });
+
   it('does not get stuck when no editorDeps are provided', async () => {
     const testSheet = makeSheetId('test-sheet');
     const system = new GridEditingSystem({
@@ -297,4 +454,21 @@ describe('commitCellValue invoke awaits bridge call', () => {
 
     system.dispose();
   });
+});
+
+describe('hasDirectSelfReference', () => {
+  it.each(['=B1', '=Sheet2!A1', "='Other Sheet'!A1", '="A1"', '=Table1[A1]'])(
+    'does not flag non-direct or non-same-sheet reference %s',
+    (formula) => {
+      expect(hasDirectSelfReference({ formula, row: 0, col: 0, sheetName: 'Sheet1' })).toBe(false);
+    },
+  );
+
+  it.each(['=A1', '=$A$1', '=SUM(A1)', '=A1:B2', '=Sheet1!A1', "='Sheet 1'!A1"])(
+    'flags same-sheet direct reference %s',
+    (formula) => {
+      const sheetName = formula.includes('Sheet 1') ? 'Sheet 1' : 'Sheet1';
+      expect(hasDirectSelfReference({ formula, row: 0, col: 0, sheetName })).toBe(true);
+    },
+  );
 });

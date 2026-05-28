@@ -192,9 +192,9 @@ fn test_write_ole_with_link() {
 #[test]
 fn test_register_content_types() {
     use crate::domain::content_types::write::ContentTypesManager;
-    use crate::roundtrip::binary_passthrough::BinaryPassthrough;
+    use crate::infra::imported_parts::ImportedPackageParts;
 
-    let mut pt = BinaryPassthrough::new();
+    let mut pt = ImportedPackageParts::new();
     pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![1, 2, 3]);
     pt.record("xl/media/image1.emf".to_string(), vec![4, 5, 6]);
 

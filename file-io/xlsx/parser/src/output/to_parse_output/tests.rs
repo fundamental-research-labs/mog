@@ -916,6 +916,7 @@ fn threading_result(
         theme_extra_clr_scheme_lst_xml: None,
         theme_ext_lst_xml: None,
         styles_ext_lst_xml: None,
+        styles_root_namespace_attrs: Vec::new(),
         parsed_stylesheet: None,
         doc_props_core: None,
         doc_props_app: None,

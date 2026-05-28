@@ -216,23 +216,9 @@ pub fn full_parse_result_to_parse_output(
 
     // 9. Build ParseOutput
     let workbook_stylesheet = result.parsed_stylesheet.clone().map(|stylesheet| {
-        let root_namespace_attrs = result
-            .extensions
-            .as_ref()
-            .map(|ext| {
-                ext.styles_namespaces
-                    .all()
-                    .iter()
-                    .map(|decl| {
-                        let prefix = decl.prefix.clone().unwrap_or_default();
-                        (prefix, decl.uri.clone())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
         domain_types::WorkbookStylesheet::from_stylesheet(
             stylesheet,
-            root_namespace_attrs,
+            result.styles_root_namespace_attrs.clone(),
             result.styles_ext_lst_xml.clone(),
         )
     });

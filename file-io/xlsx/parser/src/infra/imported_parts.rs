@@ -1,9 +1,7 @@
-//! Binary passthrough for opaque ZIP entry roundtrip.
+//! Imported opaque ZIP entry collection.
 //!
-//! This module provides a mechanism for preserving binary entries from the source
-//! ZIP archive during XLSX roundtrip. Unlike the [`PreservedElements`] system which
-//! handles XML fragments, `BinaryPassthrough` handles raw binary blobs that should
-//! be copied verbatim from the source archive to the output archive.
+//! This module provides a mechanism for collecting binary entries from the source
+//! ZIP archive so import conversion can attach bytes to explicit modeled owners.
 //!
 //! # Use Cases
 //!
@@ -15,8 +13,7 @@
 //! # Architecture
 //!
 //! During import, binary entries are eagerly extracted from the source ZIP into
-//! memory. During export, they are written back to the output ZIP via
-//! [`BinaryPassthrough::write_all()`].
+//! memory. Export paths should consume these bytes through current modeled owners.
 //!
 //! This is deliberately separate from the XML preservation system because:
 //! 1. Binary data cannot be manipulated as XML fragments
@@ -26,9 +23,9 @@
 //! # Example
 //!
 //! ```ignore
-//! use xlsx_parser::roundtrip::binary_passthrough::BinaryPassthrough;
+//! use xlsx_parser::imported_parts::ImportedPackageParts;
 //!
-//! let mut passthrough = BinaryPassthrough::new();
+//! let mut passthrough = ImportedPackageParts::new();
 //!
 //! // During import: record binary entries from source ZIP
 //! passthrough.record("xl/embeddings/oleObject1.bin".to_string(), ole_bytes);
@@ -43,20 +40,20 @@
 use crate::write::zip_writer::ZipWriter;
 
 // =============================================================================
-// BinaryPassthrough
+// ImportedPackageParts
 // =============================================================================
 
-/// Stores binary entries from the source ZIP for opaque roundtrip.
+/// Stores binary entries from the source ZIP for import conversion.
 ///
 /// Used for OLE binary blobs, preview images, and other non-XML parts
-/// that must be preserved verbatim during XLSX roundtrip.
+/// that must be attached to current modeled owners during XLSX import.
 #[derive(Debug, Clone, Default)]
-pub struct BinaryPassthrough {
+pub struct ImportedPackageParts {
     /// ZIP path -> raw bytes pairs, stored in insertion order.
     entries: Vec<(String, Vec<u8>)>,
 }
 
-impl BinaryPassthrough {
+impl ImportedPackageParts {
     /// Create a new empty binary passthrough store.
     pub fn new() -> Self {
         Self {
@@ -127,10 +124,10 @@ impl BinaryPassthrough {
         self.entries.iter().map(|(_, d)| d.len()).sum()
     }
 
-    /// Merge another BinaryPassthrough into this one.
+    /// Merge another ImportedPackageParts into this one.
     ///
     /// Entries from `other` are appended, skipping any paths already present.
-    pub fn merge(&mut self, other: BinaryPassthrough) {
+    pub fn merge(&mut self, other: ImportedPackageParts) {
         for (path, data) in other.entries {
             self.record(path, data);
         }
@@ -163,9 +160,9 @@ impl BinaryPassthrough {
 /// `data_path` / `preview_image_path` fields are resolved:
 ///
 /// ```ignore
-/// use xlsx_parser::roundtrip::binary_passthrough::BinaryPassthrough;
+/// use xlsx_parser::imported_parts::ImportedPackageParts;
 ///
-/// let mut passthrough = BinaryPassthrough::new();
+/// let mut passthrough = ImportedPackageParts::new();
 /// for ole in &ole_objects {
 ///     if let Some(ref path) = ole.data_path {
 ///         passthrough.record_from_archive(&archive, path);
@@ -175,7 +172,7 @@ impl BinaryPassthrough {
 ///     }
 /// }
 /// ```
-impl BinaryPassthrough {
+impl ImportedPackageParts {
     /// Record a binary entry by reading it from an `XlsxArchive`.
     ///
     /// If the path does not exist in the archive, this is a no-op.
@@ -265,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_new_is_empty() {
-        let pt = BinaryPassthrough::new();
+        let pt = ImportedPackageParts::new();
         assert!(pt.is_empty());
         assert_eq!(pt.len(), 0);
         assert_eq!(pt.total_bytes(), 0);
@@ -273,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_record_and_contains() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![1, 2, 3]);
 
         assert!(!pt.is_empty());
@@ -284,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_record_deduplicates() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![1, 2, 3]);
         pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![4, 5, 6]);
 
@@ -298,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("path/a.bin".to_string(), vec![10, 20]);
         pt.record("path/b.bin".to_string(), vec![30, 40]);
 
@@ -309,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_paths() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![1]);
         pt.record("xl/media/image1.emf".to_string(), vec![2]);
 
@@ -321,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_total_bytes() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("a.bin".to_string(), vec![1, 2, 3]);
         pt.record("b.bin".to_string(), vec![4, 5]);
 
@@ -330,10 +327,10 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut pt1 = BinaryPassthrough::new();
+        let mut pt1 = ImportedPackageParts::new();
         pt1.record("a.bin".to_string(), vec![1]);
 
-        let mut pt2 = BinaryPassthrough::new();
+        let mut pt2 = ImportedPackageParts::new();
         pt2.record("b.bin".to_string(), vec![2]);
         pt2.record("a.bin".to_string(), vec![3]); // duplicate of pt1
 
@@ -348,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_take() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("a.bin".to_string(), vec![1, 2, 3]);
         pt.record("b.bin".to_string(), vec![4, 5, 6]);
 
@@ -359,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("a.bin".to_string(), vec![1]);
         pt.clear();
         assert!(pt.is_empty());
@@ -389,7 +386,7 @@ mod tests {
 
     #[test]
     fn test_entries() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("a.bin".to_string(), vec![1]);
         pt.record("b.bin".to_string(), vec![2]);
 
@@ -401,13 +398,13 @@ mod tests {
 
     #[test]
     fn test_default_trait() {
-        let pt = BinaryPassthrough::default();
+        let pt = ImportedPackageParts::default();
         assert!(pt.is_empty());
     }
 
     #[test]
     fn test_write_all() {
-        let mut pt = BinaryPassthrough::new();
+        let mut pt = ImportedPackageParts::new();
         pt.record("xl/embeddings/oleObject1.bin".to_string(), vec![0xDE, 0xAD]);
         pt.record("xl/media/image1.emf".to_string(), vec![0xBE, 0xEF]);
 

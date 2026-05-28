@@ -163,10 +163,6 @@ fn update_links_to_xml(update_links: UpdateLinks) -> &'static str {
     }
 }
 
-fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
-    crate::roundtrip::preserved_xml_policy::raw_xml_contains_element(raw_xml, local_name)
-}
-
 // ============================================================================
 // WorkbookWriter
 // ============================================================================
@@ -201,9 +197,7 @@ pub struct WorkbookWriter {
     /// Workbook relationship ids for `<externalReferences>` in formula ordinal order.
     external_reference_r_ids: Vec<String>,
     /// Tier 2: Captured namespace declarations for round-trip fidelity
-    preserved_namespaces: Option<crate::roundtrip::namespaces::NamespaceMap>,
-    /// Tier 2: Captured unknown child elements for round-trip fidelity
-    preserved_elements: Option<crate::roundtrip::unknown_elements::PreservedElements>,
+    root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
 }
 
 impl WorkbookWriter {
@@ -379,46 +373,13 @@ impl WorkbookWriter {
         self.sheets.len()
     }
 
-    /// Set preserved namespace declarations for round-trip fidelity.
-    pub fn set_preserved_namespaces(
+    /// Set root namespace declarations for round-trip fidelity.
+    pub fn set_root_namespaces(
         &mut self,
-        ns: crate::roundtrip::namespaces::NamespaceMap,
+        ns: crate::infra::xml_namespaces::NamespaceMap,
     ) -> &mut Self {
-        self.preserved_namespaces = Some(ns);
+        self.root_namespaces = Some(ns);
         self
-    }
-
-    /// Set preserved unknown elements for round-trip fidelity.
-    pub fn set_preserved_elements(
-        &mut self,
-        elements: crate::roundtrip::unknown_elements::PreservedElements,
-    ) -> &mut Self {
-        self.preserved_elements = Some(elements);
-        self
-    }
-
-    fn should_skip_preserved_element(&self, raw_xml: &str) -> bool {
-        if crate::roundtrip::preserved_xml_policy::raw_xml_contains_dropped_workbook_semantic_child(
-            raw_xml,
-        ) {
-            return true;
-        }
-
-        [
-            "fileVersion",
-            "fileSharing",
-            "workbookPr",
-            "bookViews",
-            "sheets",
-            "workbookProtection",
-            "externalReferences",
-            "definedNames",
-            "calcPr",
-            "pivotCaches",
-            "webPublishing",
-        ]
-        .iter()
-        .any(|name| raw_xml_contains_element(raw_xml, name))
     }
 
     /// Generate workbook.xml content
@@ -434,8 +395,8 @@ impl WorkbookWriter {
             .attr("xmlns:r", RELATIONSHIPS_NS);
 
         // Tier 2: Emit captured extension namespace declarations
-        // Build mc:Ignorable from preserved namespaces
-        if let Some(ref ns) = self.preserved_namespaces {
+        // Build mc:Ignorable from root namespaces
+        if let Some(ref ns) = self.root_namespaces {
             use crate::write::mc_builder::McIgnorableBuilder;
 
             let mut mc_builder = McIgnorableBuilder::new();
@@ -465,78 +426,16 @@ impl WorkbookWriter {
 
         w.end_attrs();
 
-        // Tier 2: Emit preserved elements with position First
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_first("workbook") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
         self.write_file_version(&mut w);
-
-        // Emit preserved elements after fileVersion (e.g., workbookPr if preserved)
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "fileVersion") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
 
         self.write_file_sharing(&mut w);
         self.write_workbook_properties(&mut w);
 
-        // Emit preserved elements after workbookPr (e.g., mc:AlternateContent, xr:revisionPtr)
-        // These appear before <bookViews> in Excel's canonical order:
-        // fileVersion → fileSharing → workbookPr → alternateContent → bookViews → sheets → …
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "workbookPr") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
-        // Emit any explicitly BeforeElement("bookViews") elements
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_before("workbook", "bookViews") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
         // <bookViews>
         self.write_book_views(&mut w);
 
-        // Emit preserved elements after bookViews
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "bookViews") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
         // <sheets>
         self.write_sheets(&mut w);
-
-        // Emit preserved elements after sheets
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "sheets") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
 
         // <workbookProtection> (between sheets and definedNames per OOXML spec)
         if let Some(ref prot) = self.workbook_protection {
@@ -551,28 +450,8 @@ impl WorkbookWriter {
         // <definedNames>
         self.write_defined_names(&mut w);
 
-        // Emit preserved elements after definedNames
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "definedNames") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
         // <calcPr>
         self.write_calc_settings(&mut w);
-
-        // Emit preserved elements after calcPr
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "calcPr") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
 
         // <pivotCaches>
         if let Some(ref pivot_caches) = self.pivot_caches_xml {
@@ -587,26 +466,6 @@ impl WorkbookWriter {
                 w.raw_str(ext);
             }
             w.end_element("extLst");
-        }
-
-        // Emit preserved elements after pivotCaches
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("workbook", "pivotCaches") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
-        }
-
-        // Tier 2: Emit preserved elements with position Last
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_last("workbook") {
-                if self.should_skip_preserved_element(&elem.raw_xml) {
-                    continue;
-                }
-                w.raw_str(&elem.raw_xml);
-            }
         }
 
         // Close </workbook>
@@ -1484,40 +1343,4 @@ mod tests {
         assert!(settings.force_full_calc);
     }
 
-    #[test]
-    fn stale_preserved_workbook_semantic_children_are_not_replayed() {
-        let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
-        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
-            preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
-                "workbook",
-                format!("<{child}/>"),
-                crate::roundtrip::unknown_elements::PreservedPosition::Last,
-            ));
-        }
-
-        let mut writer = WorkbookWriter::new();
-        writer.add_sheet("Sheet1", "rId1");
-        writer.set_preserved_elements(preserved);
-
-        let xml = String::from_utf8(writer.to_xml()).unwrap();
-        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
-            assert!(
-                !xml.contains(&format!("<{child}")),
-                "stale preserved {child} was replayed: {xml}"
-            );
-        }
-    }
-
-    #[test]
-    fn empty_preserved_workbook_context_matches_context_stripped_export() {
-        let mut plain = WorkbookWriter::new();
-        plain.add_sheet("Sheet1", "rId1");
-
-        let mut with_empty_preserved = WorkbookWriter::new();
-        with_empty_preserved.add_sheet("Sheet1", "rId1");
-        with_empty_preserved
-            .set_preserved_elements(crate::roundtrip::unknown_elements::PreservedElements::new());
-
-        assert_eq!(plain.to_xml(), with_empty_preserved.to_xml());
-    }
 }

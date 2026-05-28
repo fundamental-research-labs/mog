@@ -209,69 +209,6 @@ fn test_merge_range_to_ref() {
     assert_eq!(merge.to_ref(), "A1:D3");
 }
 
-#[test]
-fn stale_preserved_worksheet_semantic_children_are_not_replayed() {
-    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
-    for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
-        preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
-            "worksheet",
-            format!("<{child}/>"),
-            crate::roundtrip::unknown_elements::PreservedPosition::AfterElement(
-                "sheetData".to_string(),
-            ),
-        ));
-    }
-
-    let mut writer = SheetWriter::new();
-    writer.set_preserved_elements(preserved);
-    writer.set_number(0, 0, 1.0);
-
-    let xml = String::from_utf8(writer.to_xml()).unwrap();
-    for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
-        if *child == "dimension" {
-            continue;
-        }
-        assert!(
-            !xml.contains(&format!("<{child}")),
-            "stale preserved {child} was replayed: {xml}"
-        );
-    }
-}
-
-#[test]
-fn preserved_worksheet_ext_lst_replays_unknown_extension_only() {
-    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
-    preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
-        "worksheet",
-        r#"<extLst><ext uri="{unknown}"><x:future/></ext><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}"><x14:sparklineGroups/></ext><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations/></ext><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}"><x14:id>{id}</x14:id></ext></extLst>"#,
-        crate::roundtrip::unknown_elements::PreservedPosition::Last,
-    ));
-
-    let mut writer = SheetWriter::new();
-    writer.set_preserved_elements(preserved);
-    writer.set_number(0, 0, 1.0);
-
-    let xml = String::from_utf8(writer.to_xml()).unwrap();
-    assert!(xml.contains("{unknown}"));
-    assert!(xml.contains("<x:future/>"));
-    assert!(!xml.contains("sparklineGroups"));
-    assert!(!xml.contains("dataValidations"));
-    assert!(!xml.contains("B025F937"));
-}
-
-#[test]
-fn empty_preserved_context_matches_context_stripped_export() {
-    let mut plain = SheetWriter::new();
-    plain.set_number(0, 0, 1.0);
-
-    let mut with_empty_preserved = SheetWriter::new();
-    with_empty_preserved.set_number(0, 0, 1.0);
-    with_empty_preserved
-        .set_preserved_elements(crate::roundtrip::unknown_elements::PreservedElements::new());
-
-    assert_eq!(plain.to_xml(), with_empty_preserved.to_xml());
-}
-
 // -------------------------------------------------------------------------
 // Frozen pane tests
 // -------------------------------------------------------------------------
@@ -336,26 +273,6 @@ fn test_explicit_dimension() {
 
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(xml.contains("<dimension ref=\"A1:J10\"/>"));
-}
-
-#[test]
-fn test_preserved_dimension_cannot_override_computed_dimension() {
-    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
-    preserved.add(PreservedXml::after(
-        "worksheet",
-        r#"<dimension ref="A1:XFD1048576"/>"#,
-        "dimension",
-    ));
-
-    let mut writer = SheetWriter::new();
-    writer.set_preserved_elements(preserved);
-    writer.set_number(0, 0, 1.0);
-    writer.set_number(5, 3, 2.0);
-
-    let xml = String::from_utf8(writer.to_xml()).unwrap();
-    assert!(xml.contains("<dimension ref=\"A1:D6\"/>"));
-    assert!(!xml.contains("A1:XFD1048576"));
-    assert_eq!(xml.matches("<dimension ").count(), 1);
 }
 
 // -------------------------------------------------------------------------
@@ -857,10 +774,10 @@ fn test_xr_uid_parse_and_write_roundtrip() {
 }
 
 #[test]
-fn test_preserved_namespaces_mc_ignorable_roundtrip() {
+fn test_root_namespaces_mc_ignorable_roundtrip() {
     // Simulate round-trip of a sheet that has mc:Ignorable="x14ac xr xr2 xr3"
     // but where the Tier 1 domain fields (dyDescent, uid) might or might not be present.
-    use crate::roundtrip::namespaces::NamespaceMap;
+    use crate::infra::xml_namespaces::NamespaceMap;
 
     let mut ns = NamespaceMap::new();
     ns.capture_from_element(
@@ -870,7 +787,7 @@ fn test_preserved_namespaces_mc_ignorable_roundtrip() {
     // Case 1: has_descent=true, has_uid=true (common case)
     {
         let mut writer = SheetWriter::new();
-        writer.set_preserved_namespaces(ns.clone());
+        writer.set_root_namespaces(ns.clone());
         writer.set_uid("{TEST-UID}".to_string());
         let mut fmt = SheetFormatPr::default();
         fmt.default_row_height = 14.4;
@@ -889,10 +806,10 @@ fn test_preserved_namespaces_mc_ignorable_roundtrip() {
         );
     }
 
-    // Case 2: has_descent=false, has_uid=false (edge case — preserved namespaces have extension prefixes but no domain data uses them)
+    // Case 2: has_descent=false, has_uid=false (edge case — root namespaces have extension prefixes but no domain data uses them)
     {
         let mut writer = SheetWriter::new();
-        writer.set_preserved_namespaces(ns.clone());
+        writer.set_root_namespaces(ns.clone());
         // No uid, no descent
 
         let output = String::from_utf8(writer.to_xml()).unwrap();
@@ -907,7 +824,7 @@ fn test_preserved_namespaces_mc_ignorable_roundtrip() {
         );
     }
 
-    // Case 3: preserved namespaces exist but DON'T have mc — should not inject mc:Ignorable
+    // Case 3: root namespaces exist but DON'T have mc — should not inject mc:Ignorable
     {
         let mut ns_no_mc = NamespaceMap::new();
         ns_no_mc.capture_from_element(
@@ -915,7 +832,7 @@ fn test_preserved_namespaces_mc_ignorable_roundtrip() {
             );
 
         let mut writer = SheetWriter::new();
-        writer.set_preserved_namespaces(ns_no_mc);
+        writer.set_root_namespaces(ns_no_mc);
         let mut fmt = SheetFormatPr::default();
         fmt.default_row_height = 14.4;
         fmt.default_row_descent = Some(0.3);

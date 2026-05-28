@@ -1,7 +1,7 @@
-//! Namespace preservation for XLSX round-trip fidelity.
+//! Namespace declaration helpers for XLSX XML readers and writers.
 //!
 //! This module provides data structures and utilities for preserving XML namespace
-//! declarations during round-trips. XLSX files use many namespaces:
+//! declarations. XLSX files use many namespaces:
 //!
 //! - Main SpreadsheetML (`xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"`)
 //! - Extensions (`x14`, `x15`, etc.)
@@ -17,7 +17,7 @@
 //!
 //! During writing:
 //! - Standard namespaces are emitted with correct URIs
-//! - Custom namespaces are re-emitted for round-trip fidelity
+//! - Feature-owned namespace metadata can be re-emitted where required
 //! - Namespace prefixes are preserved
 //!
 //! # Example

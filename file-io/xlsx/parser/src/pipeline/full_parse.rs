@@ -63,9 +63,8 @@ use crate::zip::{XlsxArchive, ZipError};
 use super::doc_props::{parse_doc_props_app, parse_doc_props_core, parse_doc_props_custom};
 use super::metadata::parse_metadata;
 
-use crate::roundtrip::namespaces::NamespaceMap;
-use crate::roundtrip::preservation::ExtensionPreservation;
-use crate::roundtrip::unknown_elements::PreservedElements;
+use crate::infra::xml_namespaces::NamespaceMap;
+use crate::pipeline::import_extensions::ImportExtensionParts;
 
 mod helpers;
 pub(crate) use helpers::extract_attr_value;
@@ -162,6 +161,14 @@ fn collect_imported_binary_parts(
     }
     parts.sort_by(|a, b| a.path.cmp(&b.path));
     parts
+}
+
+fn namespace_attrs_from_map(namespaces: &NamespaceMap) -> Vec<(String, String)> {
+    namespaces
+        .all()
+        .iter()
+        .map(|decl| (decl.prefix.clone().unwrap_or_default(), decl.uri.clone()))
+        .collect()
 }
 
 fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
@@ -338,12 +345,12 @@ fn parse_xlsx_full_native_impl(
         .map_err(|e| format!("Failed to read xl/workbook.xml: {}", e))?;
     let sheet_infos = workbook::parse_workbook(&workbook_xml);
 
-    // Tier 2: Capture workbook namespace declarations and preserved elements
+    // Capture workbook namespace declarations used by explicit namespace-owned export paths.
     let workbook_namespaces = capture_namespaces_from_xml(&workbook_xml);
-    let workbook_preserved = capture_workbook_preserved_elements(&workbook_xml);
 
-    // Tier 2: Capture styles namespace declarations
+    // Capture stylesheet-owned namespace declarations.
     let styles_namespaces = capture_namespaces_from_xml(&styles_xml);
+    let styles_root_namespace_attrs = namespace_attrs_from_map(&styles_namespaces);
 
     // Capture styles extLst as opaque XML for round-trip fidelity
     let styles_ext_lst_xml = capture_ext_lst_raw(&styles_xml);
@@ -443,9 +450,8 @@ fn parse_xlsx_full_native_impl(
     let mut aux_zip_connectors_acc: f64 = 0.0;
     let mut aux_zip_rels_vml_acc: f64 = 0.0;
 
-    // Tier 2: Per-sheet extension data (populated by both parallel and sequential paths)
+    // Per-sheet namespace data populated by both parallel and sequential paths.
     let mut sheet_ext_namespaces: Vec<NamespaceMap> = Vec::new();
-    let mut sheet_ext_preserved: Vec<PreservedElements> = Vec::new();
 
     // --- Parallel path: when `parallel` feature is enabled and profiling is off ---
     #[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
@@ -623,7 +629,6 @@ fn parse_xlsx_full_native_impl(
         sorted.sort_by_key(|r| r.sheet.index);
         let mut sheets = Vec::with_capacity(sorted.len());
         let mut par_sheet_namespaces = Vec::with_capacity(sorted.len());
-        let mut par_sheet_preserved = Vec::with_capacity(sorted.len());
         for r in sorted {
             let mut s = r.sheet;
             s.sheet_id = sheet_infos.get(s.index).map(|si| si.sheet_id);
@@ -633,10 +638,8 @@ fn parse_xlsx_full_native_impl(
                 .unwrap_or_default();
             sheets.push(s);
             par_sheet_namespaces.push(r.namespaces);
-            par_sheet_preserved.push(r.preserved);
         }
         sheet_ext_namespaces = par_sheet_namespaces;
-        sheet_ext_preserved = par_sheet_preserved;
         sheets
     } else {
         // Fall through to sequential path when profiling is enabled
@@ -676,7 +679,6 @@ fn parse_xlsx_full_native_impl(
             &mut aux_zip_connectors_acc,
             &mut aux_zip_rels_vml_acc,
             &mut sheet_ext_namespaces,
-            &mut sheet_ext_preserved,
         )?
     };
 
@@ -718,7 +720,6 @@ fn parse_xlsx_full_native_impl(
         &mut aux_zip_connectors_acc,
         &mut aux_zip_rels_vml_acc,
         &mut sheet_ext_namespaces,
-        &mut sheet_ext_preserved,
     )?;
 
     if ctx.should_stop() {
@@ -772,7 +773,6 @@ fn parse_xlsx_full_native_impl(
 
             sheets.push(empty_sheet);
             sheet_ext_namespaces.push(Default::default());
-            sheet_ext_preserved.push(Default::default());
         }
     }
 
@@ -924,7 +924,7 @@ fn parse_xlsx_full_native_impl(
     }
 
     // Collect web extension parts (xl/webextensions/) for round-trip fidelity.
-    // These are stored as raw bytes in BinaryPassthrough so they are written back verbatim.
+    // These are stored as raw bytes in ImportedPackageParts so they are written back verbatim.
     let web_extension_parts =
         crate::domain::web_extensions::read::parse_web_extensions(&archive).map(|(_, parts)| parts);
     ensure_no_archive_safety_error(&archive)?;
@@ -999,6 +999,7 @@ fn parse_xlsx_full_native_impl(
         theme_extra_clr_scheme_lst_xml,
         theme_ext_lst_xml,
         styles_ext_lst_xml,
+        styles_root_namespace_attrs,
         parsed_stylesheet: Some(styles),
         doc_props_core,
         doc_props_app,
@@ -1028,18 +1029,16 @@ fn parse_xlsx_full_native_impl(
         file_sharing,
         web_publishing,
         extensions: {
-            let mut binary_passthrough =
-                crate::roundtrip::binary_passthrough::BinaryPassthrough::new();
+            let mut imported_parts =
+                crate::infra::imported_parts::ImportedPackageParts::new();
             if let Some(parts) = web_extension_parts {
                 for (path, data) in parts.parts {
-                    binary_passthrough.record(path, data);
+                    imported_parts.record(path, data);
                 }
             }
-            // Capture printer settings, feature property bags, and embedded media
-            // for round-trip fidelity. Media files (images) are binary blobs
-            // referenced by drawing relationships — the domain model captures the
-            // structural references (Drawing → Picture → blip_fill.embed_id),
-            // but the binary content must be preserved verbatim.
+            // Capture remaining opaque package bytes still owned by older
+            // feature-specific conversion paths. Floating-object media and OLE
+            // bytes are captured above as typed imported owner inputs.
             for entry in archive.entries() {
                 if entry.name.starts_with("xl/printerSettings/")
                     || entry.name.starts_with("xl/featurePropertyBag/")
@@ -1056,17 +1055,14 @@ fn parse_xlsx_full_native_impl(
                     || entry.name.starts_with("docProps/thumbnail.")
                 {
                     if let Ok(data) = archive.read_file(&entry.name) {
-                        binary_passthrough.record(entry.name.clone(), data);
+                        imported_parts.record(entry.name.clone(), data);
                     }
                 }
             }
-            let ext = ExtensionPreservation {
+            let ext = ImportExtensionParts {
                 workbook_namespaces,
-                workbook_preserved,
                 sheet_namespaces: sheet_ext_namespaces,
-                sheet_preserved: sheet_ext_preserved,
-                styles_namespaces,
-                binary_passthrough,
+                imported_parts,
             };
             if ext.is_empty() { None } else { Some(ext) }
         },
@@ -1131,7 +1127,6 @@ struct SheetProcessResult {
     sheet: FullParsedSheet,
     cell_count: usize,
     namespaces: NamespaceMap,
-    preserved: PreservedElements,
 }
 
 /// Process a single sheet's XML into a FullParsedSheet. Used by the parallel path.
@@ -1269,7 +1264,6 @@ fn process_sheet_core(
     let post_sd = find_post_sheet_data_region(worksheet_xml);
 
     // Tier 2: Capture preserved (unknown) child elements from pre and post sheetData regions
-    let sheet_preserved = capture_sheet_preserved_elements(worksheet_xml, pre_sd, post_sd);
 
     let merges = parse_merge_cells(post_sd);
     ensure_count_limit("merge", merges.len(), MAX_MERGES)?;
@@ -1470,7 +1464,6 @@ fn process_sheet_core(
         sheet,
         cell_count,
         namespaces: sheet_namespaces,
-        preserved: sheet_preserved,
     })
 }
 
@@ -1557,7 +1550,6 @@ fn parse_sheets_sequential(
     aux_zip_rels_vml_acc: &mut f64,
     // Tier 2: Per-sheet extension data outputs
     ext_namespaces_out: &mut Vec<NamespaceMap>,
-    ext_preserved_out: &mut Vec<PreservedElements>,
 ) -> Result<Vec<FullParsedSheet>, String> {
     let mut sheets: Vec<FullParsedSheet> = Vec::with_capacity(sheet_count);
 
@@ -1698,9 +1690,6 @@ fn parse_sheets_sequential(
         // Extract full <extLst>...</extLst> from post-sheetData for round-trip passthrough
         let _ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
 
-        // Tier 2: Capture preserved (unknown) child elements
-        let seq_sheet_preserved =
-            capture_sheet_preserved_elements(&worksheet_xml, pre_sd_early, post_sd);
 
         let aux_t0 = tick(timings);
         let merges = parse_merge_cells(post_sd);
@@ -2029,7 +2018,6 @@ fn parse_sheets_sequential(
 
         // Tier 2: Store per-sheet extension data
         ext_namespaces_out.push(seq_sheet_ns);
-        ext_preserved_out.push(seq_sheet_preserved);
     }
 
     Ok(sheets)

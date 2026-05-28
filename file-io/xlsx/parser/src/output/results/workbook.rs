@@ -583,6 +583,10 @@ pub struct FullParseResult {
     /// Raw XML of <extLst>...</extLst> from xl/styles.xml for round-trip fidelity
     #[serde(skip)]
     pub styles_ext_lst_xml: Option<Vec<u8>>,
+    /// Namespace declarations from the `<styleSheet>` root element, owned by
+    /// the parsed stylesheet contract instead of generic extension context.
+    #[serde(skip)]
+    pub styles_root_namespace_attrs: Vec<(String, String)>,
     /// Full parsed OOXML stylesheet for lossless style round-tripping.
     /// Preserves theme/indexed color references, cellStyleXfs, dxfs, etc.
     #[serde(skip)]
@@ -645,7 +649,7 @@ pub struct FullParseResult {
     /// Tier 2 extension preservation: captured namespace declarations, unknown elements,
     /// and binary passthrough entries for round-trip fidelity. Internal only — not sent to TypeScript.
     #[serde(skip)]
-    pub extensions: Option<crate::roundtrip::preservation::ExtensionPreservation>,
+    pub extensions: Option<crate::pipeline::import_extensions::ImportExtensionParts>,
     /// Raw bytes of `xl/metadata.xml` for verbatim round-trip passthrough.
     /// Avoids namespace rewriting issues (e.g., `xda` vs `xlrd`).
     #[serde(skip)]

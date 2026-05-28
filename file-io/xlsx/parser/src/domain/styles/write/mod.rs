@@ -54,4 +54,4 @@ pub use super::types::{
     TableStyleType, UnderlineStyle, VerticalAlign, VerticalAlignRun,
 };
 
-pub use writer::StylesWriter;
+pub use writer::{StyleRootNamespaces, StylesWriter};

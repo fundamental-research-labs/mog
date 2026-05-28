@@ -40,9 +40,46 @@ use crate::write::xml_writer::XmlWriter;
 
 /// Spreadsheet ML namespace
 const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const X14AC_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac";
 
 /// First ID for custom number formats (built-in formats use 0-163)
 const CUSTOM_NUM_FMT_START_ID: u32 = 164;
+
+const MC_IGNORABLE_STYLE_PREFIXES: &[&str] = &[
+    "x14ac", "xr", "xr2", "xr3", "xr6", "xr9", "xr10", "x15", "x15ac", "x16r2",
+];
+
+#[derive(Debug, Clone, Default)]
+pub struct StyleRootNamespaces {
+    attrs: Vec<(String, String)>,
+}
+
+impl StyleRootNamespaces {
+    pub fn from_attrs(attrs: Vec<(String, String)>) -> Self {
+        Self { attrs }
+    }
+
+    fn has_prefix(&self, prefix: &str) -> bool {
+        self.attrs
+            .iter()
+            .any(|(attr_prefix, _)| attr_prefix == prefix)
+    }
+
+    fn ignorable_prefixes(&self) -> impl Iterator<Item = &str> {
+        self.attrs
+            .iter()
+            .map(|(prefix, _)| prefix.as_str())
+            .filter(|prefix| MC_IGNORABLE_STYLE_PREFIXES.contains(prefix))
+    }
+
+    fn prefixed_attrs(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.attrs
+            .iter()
+            .filter(|(prefix, _)| !prefix.is_empty())
+            .map(|(prefix, uri)| (prefix.as_str(), uri.as_str()))
+    }
+}
 
 // =============================================================================
 // StylesWriter
@@ -84,8 +121,8 @@ pub struct StylesWriter {
     /// When true, the writer also adds `xmlns:x14ac`, `xmlns:mc`, and
     /// `mc:Ignorable="x14ac"` on the `<styleSheet>` root element.
     pub known_fonts: bool,
-    /// Tier 2: Captured namespace declarations for round-trip fidelity
-    pub preserved_namespaces: Option<crate::roundtrip::namespaces::NamespaceMap>,
+    /// Stylesheet-owned namespace declarations from the `<styleSheet>` root.
+    pub root_namespaces: StyleRootNamespaces,
     /// Raw XML of <extLst>...</extLst> for round-trip fidelity (opaque passthrough)
     pub ext_lst_raw: Option<Vec<u8>>,
 }
@@ -117,7 +154,7 @@ impl StylesWriter {
             default_table_style: None,
             default_pivot_style: None,
             known_fonts: false,
-            preserved_namespaces: None,
+            root_namespaces: StyleRootNamespaces::default(),
             ext_lst_raw: None,
         }
     }
@@ -356,15 +393,15 @@ impl StylesWriter {
 
         w.write_declaration();
 
-        // Build mc:Ignorable from Tier 1 + Tier 2 prefixes (before opening element, so we can
+        // Build mc:Ignorable from typed style prefixes before opening the root, so we can
         // emit xmlns:mc right after xmlns — matching Excel's namespace declaration ordering)
         use crate::write::mc_builder::McIgnorableBuilder;
         let mut mc_builder = McIgnorableBuilder::new();
         if self.known_fonts {
             mc_builder.add("x14ac");
         }
-        if let Some(ref ns) = self.preserved_namespaces {
-            mc_builder.add_from_namespace_map(ns);
+        for prefix in self.root_namespaces.ignorable_prefixes() {
+            mc_builder.add(prefix);
         }
 
         // <styleSheet>
@@ -372,65 +409,43 @@ impl StylesWriter {
 
         // Build mc:Ignorable value and emit xmlns:mc + mc:Ignorable together
         let ignorable_value = mc_builder.build();
-        let preserved_has_mc = self
-            .preserved_namespaces
-            .as_ref()
-            .map_or(false, |ns| ns.has_prefix("mc"));
+        let root_has_mc = self.root_namespaces.has_prefix("mc");
 
-        // Determine if preserved_namespaces already covers x14ac (to avoid duplicate declaration)
-        let preserved_has_x14ac = self
-            .preserved_namespaces
-            .as_ref()
-            .map_or(false, |ns| ns.has_prefix("x14ac"));
+        // Determine if root namespace attrs already cover x14ac (to avoid duplicate declaration)
+        let root_has_x14ac = self.root_namespaces.has_prefix("x14ac");
 
-        // In fresh-write mode (no preserved namespaces), emit xmlns:mc
+        // In fresh-write mode (no root namespace attrs), emit xmlns:mc
         // mc:Ignorable is deferred to after all namespace declarations (matching Excel's ordering)
-        if !mc_builder.is_empty() && !preserved_has_mc {
-            w.attr(
-                "xmlns:mc",
-                "http://schemas.openxmlformats.org/markup-compatibility/2006",
-            );
+        if !mc_builder.is_empty() && !root_has_mc {
+            w.attr("xmlns:mc", MC_NS);
         }
 
         // Tier 1: Emit x14ac namespace for knownFonts
-        // Only emit via Tier 1 if not already covered by preserved_namespaces
-        if self.known_fonts && !preserved_has_x14ac {
-            w.attr(
-                "xmlns:x14ac",
-                "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac",
-            );
+        // Only emit via Tier 1 if not already covered by root namespace attrs
+        if self.known_fonts && !root_has_x14ac {
+            w.attr("xmlns:x14ac", X14AC_NS);
         }
 
-        // Tier 2: Emit captured extension namespace declarations
-        if let Some(ref ns) = self.preserved_namespaces {
-            for decl in ns.all() {
-                if let Some(ref prefix) = decl.prefix {
-                    if prefix == "mc" {
-                        // Emit xmlns:mc + mc:Ignorable at the preserved position
-                        if !mc_builder.is_empty() {
-                            w.attr(
-                                "xmlns:mc",
-                                "http://schemas.openxmlformats.org/markup-compatibility/2006",
-                            );
-                            if let Some(ref ignorable) = ignorable_value {
-                                w.attr("mc:Ignorable", ignorable);
-                            }
-                        }
-                        continue;
+        for (prefix, uri) in self.root_namespaces.prefixed_attrs() {
+            if prefix == "mc" {
+                // Emit xmlns:mc + mc:Ignorable at the source-owned namespace position.
+                w.attr("xmlns:mc", uri);
+                if !mc_builder.is_empty() {
+                    if let Some(ref ignorable) = ignorable_value {
+                        w.attr("mc:Ignorable", ignorable);
                     }
-                    // Skip x14ac if emitted via Tier 1
-                    if prefix == "x14ac" && self.known_fonts && !preserved_has_x14ac {
-                        continue;
-                    }
-                    // Skip default namespace (already emitted as xmlns)
-                    w.attr(&format!("xmlns:{}", prefix), &decl.uri);
                 }
+                continue;
             }
+            // Skip x14ac if emitted via Tier 1
+            if prefix == "x14ac" && self.known_fonts && !root_has_x14ac {
+                continue;
+            }
+            w.attr(&format!("xmlns:{}", prefix), uri);
         }
 
-        // Emit mc:Ignorable at end only in fresh-write mode (no preserved namespaces).
-        // In round-trip mode, mc:Ignorable was emitted inline with xmlns:mc above.
-        if !preserved_has_mc {
+        // Emit mc:Ignorable at end only when xmlns:mc was not owned by root namespace attrs.
+        if !root_has_mc {
             if let Some(ref ignorable) = ignorable_value {
                 w.attr("mc:Ignorable", ignorable);
             }

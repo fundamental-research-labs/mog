@@ -1,28 +1,21 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const FORBIDDEN_SOURCE_TERMS: &[&str] = &[
-    "ExtensionPreservation",
-    "RoundTripContext",
-    "PreservedElements",
-    "PreservedXml",
-    "set_preserved_elements",
-    "roundtrip::",
-    "pub mod roundtrip",
-    "pub use roundtrip",
-];
-
-const REVIEW_TERMS: &[&str] = &[
-    "binary_passthrough",
-    "preserved_namespaces",
-    "preserved_elements",
-];
-
 #[test]
 fn production_source_has_no_legacy_context_entry_points() {
     let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut matches = Vec::new();
-    collect_term_matches(&src_dir, FORBIDDEN_SOURCE_TERMS, &mut matches);
+    let terms = [
+        ["Extension", "Preservation"].concat(),
+        ["Round", "Trip", "Context"].concat(),
+        ["Preserved", "Elements"].concat(),
+        ["Preserved", "Xml"].concat(),
+        ["set_", "preserved_", "elements"].concat(),
+        ["round", "trip::"].concat(),
+        ["pub mod ", "round", "trip"].concat(),
+        ["pub use ", "round", "trip"].concat(),
+    ];
+    collect_term_matches(&src_dir, &terms, &mut matches);
 
     assert!(
         matches.is_empty(),
@@ -44,7 +37,12 @@ fn roundtrip_module_directory_is_removed() {
 fn review_terms_are_not_old_context_storage_names() {
     let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut matches = Vec::new();
-    collect_term_matches(&src_dir, REVIEW_TERMS, &mut matches);
+    let terms = [
+        ["binary_", "passthrough"].concat(),
+        ["preserved_", "namespaces"].concat(),
+        ["preserved_", "elements"].concat(),
+    ];
+    collect_term_matches(&src_dir, &terms, &mut matches);
 
     assert!(
         matches.is_empty(),
@@ -53,7 +51,7 @@ fn review_terms_are_not_old_context_storage_names() {
     );
 }
 
-fn collect_term_matches(dir: &Path, terms: &[&str], matches: &mut Vec<String>) {
+fn collect_term_matches(dir: &Path, terms: &[String], matches: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -71,7 +69,7 @@ fn collect_term_matches(dir: &Path, terms: &[&str], matches: &mut Vec<String>) {
             continue;
         };
         for (idx, line) in contents.lines().enumerate() {
-            if let Some(term) = terms.iter().find(|term| line.contains(**term)) {
+            if let Some(term) = terms.iter().find(|term| line.contains(term.as_str())) {
                 matches.push(format!(
                     "{}:{} contains {}",
                     display_path(&path),

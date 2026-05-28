@@ -328,12 +328,12 @@ impl DrawingWriter {
         let needs_mc = has_slicers || has_chart_ex;
 
         // Start root element with namespaces.
-        // If we have preserved namespace attrs from the original file, use those
+        // If we have root namespace attrs from the original file, use those
         // to maintain round-trip fidelity (preserving prefixes and order).
         w.start_element("xdr:wsDr");
 
         if !self.root_namespace_attrs.is_empty() {
-            // Emit preserved namespace declarations from the original file.
+            // Emit root namespace declarations from the original file.
             for (attr_name, attr_value) in &self.root_namespace_attrs {
                 w.attr(attr_name, attr_value);
             }

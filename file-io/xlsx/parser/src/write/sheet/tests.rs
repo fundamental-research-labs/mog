@@ -209,6 +209,67 @@ fn test_merge_range_to_ref() {
     assert_eq!(merge.to_ref(), "A1:D3");
 }
 
+
+#[test]
+fn stale_preserved_worksheet_semantic_children_are_not_replayed() {
+    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
+    for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
+        preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
+            "worksheet",
+            format!("<{child}/>"),
+            crate::roundtrip::unknown_elements::PreservedPosition::AfterElement(
+                "sheetData".to_string(),
+            ),
+        ));
+    }
+
+    let mut writer = SheetWriter::new();
+    writer.set_preserved_elements(preserved);
+    writer.set_number(0, 0, 1.0);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
+        assert!(
+            !xml.contains(&format!("<{child}")),
+            "stale preserved {child} was replayed: {xml}"
+        );
+    }
+}
+
+#[test]
+fn preserved_worksheet_ext_lst_replays_unknown_extension_only() {
+    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
+    preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
+        "worksheet",
+        r#"<extLst><ext uri="{unknown}"><x:future/></ext><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}"><x14:sparklineGroups/></ext><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations/></ext><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}"><x14:id>{id}</x14:id></ext></extLst>"#,
+        crate::roundtrip::unknown_elements::PreservedPosition::Last,
+    ));
+
+    let mut writer = SheetWriter::new();
+    writer.set_preserved_elements(preserved);
+    writer.set_number(0, 0, 1.0);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("{unknown}"));
+    assert!(xml.contains("<x:future/>"));
+    assert!(!xml.contains("sparklineGroups"));
+    assert!(!xml.contains("dataValidations"));
+    assert!(!xml.contains("B025F937"));
+}
+
+#[test]
+fn empty_preserved_context_matches_context_stripped_export() {
+    let mut plain = SheetWriter::new();
+    plain.set_number(0, 0, 1.0);
+
+    let mut with_empty_preserved = SheetWriter::new();
+    with_empty_preserved.set_number(0, 0, 1.0);
+    with_empty_preserved
+        .set_preserved_elements(crate::roundtrip::unknown_elements::PreservedElements::new());
+
+    assert_eq!(plain.to_xml(), with_empty_preserved.to_xml());
+}
+
 // -------------------------------------------------------------------------
 // Frozen pane tests
 // -------------------------------------------------------------------------

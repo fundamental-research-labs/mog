@@ -1444,4 +1444,42 @@ mod tests {
         // iterate flag should NOT be present
         assert!(!xml.contains("iterate=\"1\""));
     }
+
+    #[test]
+    fn stale_preserved_workbook_semantic_children_are_not_replayed() {
+        let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
+            preserved.add(crate::roundtrip::unknown_elements::PreservedXml::new(
+                "workbook",
+                format!("<{child}/>"),
+                crate::roundtrip::unknown_elements::PreservedPosition::Last,
+            ));
+        }
+
+        let mut writer = WorkbookWriter::new();
+        writer.add_sheet("Sheet1", "rId1");
+        writer.set_preserved_elements(preserved);
+
+        let xml = String::from_utf8(writer.to_xml()).unwrap();
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
+            assert!(
+                !xml.contains(&format!("<{child}")),
+                "stale preserved {child} was replayed: {xml}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_preserved_workbook_context_matches_context_stripped_export() {
+        let mut plain = WorkbookWriter::new();
+        plain.add_sheet("Sheet1", "rId1");
+
+        let mut with_empty_preserved = WorkbookWriter::new();
+        with_empty_preserved.add_sheet("Sheet1", "rId1");
+        with_empty_preserved
+            .set_preserved_elements(crate::roundtrip::unknown_elements::PreservedElements::new());
+
+        assert_eq!(plain.to_xml(), with_empty_preserved.to_xml());
+    }
+
 }

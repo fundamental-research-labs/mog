@@ -774,3 +774,61 @@ pub(super) fn capture_sheet_preserved_elements(
 
     preserved
 }
+
+
+#[cfg(test)]
+mod preserved_xml_allowlist_tests {
+    use super::*;
+
+    #[test]
+    fn workbook_capture_drops_known_semantic_children() {
+        let mut xml = String::from(r#"<workbook><workbookPr/><sheets/>"#);
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
+            xml.push_str(&format!(r#"<{child} marker="stale"/>"#));
+        }
+        xml.push_str(r#"<future:unknown marker="kept"/></workbook>"#);
+
+        let preserved = capture_workbook_preserved_elements(xml.as_bytes());
+        let raw: Vec<&str> = preserved
+            .get_for_parent("workbook")
+            .iter()
+            .map(|elem| elem.raw_xml.as_str())
+            .collect();
+
+        assert_eq!(raw.len(), 1);
+        assert!(raw[0].contains("future:unknown"));
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKBOOK_SEMANTIC_CHILDREN {
+            assert!(
+                !raw.iter().any(|entry| entry.contains(child)),
+                "{child} should not be captured as preserved workbook XML"
+            );
+        }
+    }
+
+    #[test]
+    fn worksheet_capture_drops_known_semantic_children() {
+        let mut xml = String::from(r#"<worksheet><dimension/><sheetData/>"#);
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
+            xml.push_str(&format!(r#"<{child} marker="stale"/>"#));
+        }
+        xml.push_str(r#"<future:unknown marker="kept"/></worksheet>"#);
+        let pre_sd = &xml.as_bytes()[..xml.find("<sheetData").unwrap()];
+        let post_sd = find_post_sheet_data_region(xml.as_bytes());
+
+        let preserved = capture_sheet_preserved_elements(xml.as_bytes(), pre_sd, post_sd);
+        let raw: Vec<&str> = preserved
+            .get_for_parent("worksheet")
+            .iter()
+            .map(|elem| elem.raw_xml.as_str())
+            .collect();
+
+        assert_eq!(raw.len(), 1);
+        assert!(raw[0].contains("future:unknown"));
+        for child in crate::roundtrip::preserved_xml_policy::DROPPED_WORKSHEET_SEMANTIC_CHILDREN {
+            assert!(
+                !raw.iter().any(|entry| entry.contains(child)),
+                "{child} should not be captured as preserved worksheet XML"
+            );
+        }
+    }
+}

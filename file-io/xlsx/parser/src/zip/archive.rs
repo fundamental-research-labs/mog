@@ -11,6 +11,8 @@ use super::constants::{MAX_RELATIONSHIP_PARTS, MIN_EOCD_SIZE};
 use super::entry::ZipEntry;
 use super::error::ZipError;
 
+const OLE_CFB_MAGIC: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
 mod paths;
 mod read;
 mod recovery;
@@ -26,6 +28,10 @@ mod tests;
 
 #[cfg(test)]
 use self::validation::count_relationship_elements;
+
+pub fn is_encrypted_office_package(data: &[u8]) -> bool {
+    data.starts_with(&OLE_CFB_MAGIC)
+}
 
 /// XLSX archive reader
 ///
@@ -56,6 +62,12 @@ impl<'a> XlsxArchive<'a> {
     /// * `Ok(XlsxArchive)` - Successfully parsed archive
     /// * `Err(ZipError)` - Invalid or corrupted archive
     pub fn new(data: &'a [u8]) -> Result<XlsxArchive<'a>, ZipError> {
+        if is_encrypted_office_package(data) {
+            return Err(ZipError::UnsupportedFeature(
+                "Encrypted XLSX files are not supported".to_string(),
+            ));
+        }
+
         if data.len() < MIN_EOCD_SIZE {
             return Err(ZipError::UnexpectedEof);
         }

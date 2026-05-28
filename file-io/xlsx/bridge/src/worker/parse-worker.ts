@@ -303,7 +303,6 @@ async function executeParse(
       skip_data_validation: options.skipDataValidation,
       skip_conditional_formatting: options.skipConditionalFormatting,
       sheet_filter: options.sheetFilter,
-      password: options.password,
       values_only: options.valuesOnly,
     });
 

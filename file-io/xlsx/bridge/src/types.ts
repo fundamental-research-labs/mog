@@ -2339,9 +2339,6 @@ export interface FullParseOptions {
   /** Only parse specific sheets (by name) */
   sheetFilter?: string[];
 
-  /** Password for encrypted workbooks */
-  password?: string;
-
   /** Parse cell values only (no formulas, styles) */
   valuesOnly?: boolean;
 }

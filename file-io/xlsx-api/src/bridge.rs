@@ -10,6 +10,8 @@ use crate::{BridgeLazyParseResult, BridgeLazyParseResultWithErrors, XlsxBridgeEr
 use bridge_core as bridge;
 use xlsx_parser::infra::error::ParseMode;
 
+const ENCRYPTED_XLSX_UNSUPPORTED: &str = "Encrypted XLSX files are not supported";
+
 /// Zero-sized bridge type for XLSX parser stateless functions.
 pub struct XlsxParser;
 
@@ -27,6 +29,15 @@ impl XlsxParser {
                 sheet_count: 0,
                 sheet_names: Vec::new(),
                 error_message: "Empty XLSX data".to_string(),
+            });
+        }
+
+        if xlsx_parser::zip::is_encrypted_office_package(xlsx_data) {
+            return Ok(BridgeLazyParseResult {
+                ok: false,
+                sheet_count: 0,
+                sheet_names: Vec::new(),
+                error_message: ENCRYPTED_XLSX_UNSUPPORTED.to_string(),
             });
         }
 
@@ -86,6 +97,19 @@ impl XlsxParser {
                 error_count: 0,
                 mode,
                 error_message: "Empty XLSX data".to_string(),
+                errors_json: "[]".to_string(),
+            });
+        }
+
+        if xlsx_parser::zip::is_encrypted_office_package(xlsx_data) {
+            return Ok(BridgeLazyParseResultWithErrors {
+                ok: false,
+                sheet_count: 0,
+                sheet_names: Vec::new(),
+                warning_count: 0,
+                error_count: 0,
+                mode,
+                error_message: ENCRYPTED_XLSX_UNSUPPORTED.to_string(),
                 errors_json: "[]".to_string(),
             });
         }

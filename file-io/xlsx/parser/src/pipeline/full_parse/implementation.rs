@@ -229,6 +229,10 @@ pub(super) fn parse_xlsx_full_native_impl(
         return Err("Empty XLSX data".to_string());
     }
 
+    if crate::zip::is_encrypted_office_package(xlsx_data) {
+        return Err("Encrypted XLSX files are not supported".to_string());
+    }
+
     // Verify ZIP signature
     if xlsx_data.len() < 4 || &xlsx_data[0..4] != b"PK\x03\x04" {
         return Err("Invalid XLSX file: not a valid ZIP archive".to_string());

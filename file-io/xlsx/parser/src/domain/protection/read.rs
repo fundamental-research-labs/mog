@@ -98,41 +98,54 @@ impl SheetProtectionParse for SheetProtection {
         protection.salt_value = parse_string_attr(element, b"saltValue=\"");
         protection.spin_count = parse_u32_attr(element, b"spinCount=\"");
 
-        // Parse main protection flag
-        protection.sheet = parse_bool_attr_opt(element, b"sheet=\"").unwrap_or(false);
-
-        // Parse object protection flags
-        protection.objects = parse_bool_attr_opt(element, b"objects=\"").unwrap_or(false);
-        protection.scenarios = parse_bool_attr_opt(element, b"scenarios=\"").unwrap_or(false);
-
-        // Parse formatting protection flags
-        protection.format_cells = parse_bool_attr_opt(element, b"formatCells=\"").unwrap_or(false);
-        protection.format_columns =
-            parse_bool_attr_opt(element, b"formatColumns=\"").unwrap_or(false);
-        protection.format_rows = parse_bool_attr_opt(element, b"formatRows=\"").unwrap_or(false);
-
-        // Parse insert protection flags
-        protection.insert_columns =
-            parse_bool_attr_opt(element, b"insertColumns=\"").unwrap_or(false);
-        protection.insert_rows = parse_bool_attr_opt(element, b"insertRows=\"").unwrap_or(false);
-        protection.insert_hyperlinks =
-            parse_bool_attr_opt(element, b"insertHyperlinks=\"").unwrap_or(false);
-
-        // Parse delete protection flags
-        protection.delete_columns =
-            parse_bool_attr_opt(element, b"deleteColumns=\"").unwrap_or(false);
-        protection.delete_rows = parse_bool_attr_opt(element, b"deleteRows=\"").unwrap_or(false);
-
-        // Parse data operation protection flags
-        protection.sort = parse_bool_attr_opt(element, b"sort=\"").unwrap_or(false);
-        protection.auto_filter = parse_bool_attr_opt(element, b"autoFilter=\"").unwrap_or(false);
-        protection.pivot_tables = parse_bool_attr_opt(element, b"pivotTables=\"").unwrap_or(false);
-
-        // Parse selection protection flags
-        protection.select_locked_cells =
-            parse_bool_attr_opt(element, b"selectLockedCells=\"").unwrap_or(false);
-        protection.select_unlocked_cells =
-            parse_bool_attr_opt(element, b"selectUnlockedCells=\"").unwrap_or(false);
+        if let Some(value) = parse_bool_attr_opt(element, b"sheet=\"") {
+            protection.sheet = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"objects=\"") {
+            protection.objects = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"scenarios=\"") {
+            protection.scenarios = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"formatCells=\"") {
+            protection.format_cells = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"formatColumns=\"") {
+            protection.format_columns = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"formatRows=\"") {
+            protection.format_rows = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"insertColumns=\"") {
+            protection.insert_columns = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"insertRows=\"") {
+            protection.insert_rows = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"insertHyperlinks=\"") {
+            protection.insert_hyperlinks = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"deleteColumns=\"") {
+            protection.delete_columns = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"deleteRows=\"") {
+            protection.delete_rows = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"sort=\"") {
+            protection.sort = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"autoFilter=\"") {
+            protection.auto_filter = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"pivotTables=\"") {
+            protection.pivot_tables = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"selectLockedCells=\"") {
+            protection.select_locked_cells = value;
+        }
+        if let Some(value) = parse_bool_attr_opt(element, b"selectUnlockedCells=\"") {
+            protection.select_unlocked_cells = value;
+        }
 
         Some(protection)
     }
@@ -166,6 +179,10 @@ impl WorkbookProtectionParse for WorkbookProtection {
         // Parse legacy password attributes
         protection.workbook_password = parse_string_attr(element, b"workbookPassword=\"");
         protection.revisions_password = parse_string_attr(element, b"revisionsPassword=\"");
+        protection.workbook_password_character_set =
+            parse_string_attr(element, b"workbookPasswordCharacterSet=\"");
+        protection.revisions_password_character_set =
+            parse_string_attr(element, b"revisionsPasswordCharacterSet=\"");
 
         // Parse modern workbook password attributes
         protection.workbook_algorithm_name = parse_bytes_attr(element, b"workbookAlgorithmName=\"")

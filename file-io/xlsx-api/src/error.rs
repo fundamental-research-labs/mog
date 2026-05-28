@@ -93,7 +93,9 @@ impl From<xlsx_parser::zip::ZipError> for XlsxApiError {
 /// Convert a parser string error (from `parse_xlsx_full_native`) into an `XlsxApiError`.
 /// The parser returns `Result<_, String>`, so we map common patterns to structured variants.
 pub(crate) fn from_parse_string_error(msg: String) -> XlsxApiError {
-    if msg.contains("not a valid ZIP") || msg.contains("Empty XLSX") {
+    if msg.contains("Encrypted XLSX files are not supported") {
+        XlsxApiError::UnsupportedFeature(msg)
+    } else if msg.contains("not a valid ZIP") || msg.contains("Empty XLSX") {
         XlsxApiError::InvalidArchive(msg)
     } else if msg.contains("Failed to open XLSX archive") {
         XlsxApiError::CorruptedArchive(msg)

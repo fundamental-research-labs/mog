@@ -66,7 +66,7 @@ pub(crate) mod constants {
 }
 
 // Re-export public types
-pub use archive::XlsxArchive;
+pub use archive::{XlsxArchive, is_encrypted_office_package};
 pub use decompress::decompress_deflate;
 pub use entry::{CompressedEntry, ZipEntry};
 pub use error::ZipError;

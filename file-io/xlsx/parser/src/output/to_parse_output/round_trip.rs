@@ -896,11 +896,6 @@ pub(super) fn build_round_trip_context(
 
     RoundTripContext {
         sheets: sheet_contexts,
-        content_type_defaults: Vec::new(),
-        content_type_overrides: Vec::new(),
-        root_relationships: Vec::new(),
-        workbook_relationships: Vec::new(),
-        sheet_workbook_r_ids: Vec::new(),
         styles_ext_lst_xml: result.styles_ext_lst_xml.clone(),
         styles_namespace_attrs: result
             .extensions
@@ -916,18 +911,7 @@ pub(super) fn build_round_trip_context(
                     .collect()
             })
             .unwrap_or_default(),
-        original_sst_count: None,
-        raw_shared_strings_xml: None,
-        raw_doc_props_core_xml: None,
-        raw_doc_props_app_xml: None,
-        raw_doc_props_custom_xml: None,
-        raw_metadata_xml: None,
-        raw_persons_xml: None,
-        custom_xml_parts: Vec::new(),
-        web_extension_parts: Vec::new(),
         opaque_package_subgraphs,
-        binary_blobs: Vec::new(),
-        extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead
 
         // Workbook-level namespace + preserved element preservation
         workbook_namespace_attrs: result
@@ -949,10 +933,6 @@ pub(super) fn build_round_trip_context(
             .as_ref()
             .map(|ext| ext.workbook_preserved.to_position_pairs())
             .unwrap_or_default(),
-
-        doc_metadata_label_info: None,
-        skipped_named_ranges: vec![],
-        original_named_ranges_order: vec![],
     }
 }
 

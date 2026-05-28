@@ -37,125 +37,9 @@ pub struct RoundTripContext {
     #[serde(default)]
     pub styles_namespace_attrs: Vec<(String, String)>,
 
-    /// Deprecated compatibility-only input for legacy snapshots.
-    ///
-    /// Broad package content-type defaults must not be package authority. New
-    /// export paths derive content types from modeled parts plus explicit clean
-    /// `opaque_package_subgraphs`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub content_type_defaults: Vec<(String, String)>,
-    /// Deprecated compatibility-only input for legacy snapshots.
-    ///
-    /// Broad package content-type overrides must not be package authority. New
-    /// export paths derive content types from modeled parts plus explicit clean
-    /// `opaque_package_subgraphs`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub content_type_overrides: Vec<(String, String)>,
-    /// Deprecated compatibility-only input for legacy snapshots.
-    ///
-    /// Root relationships must not be replayed as package authority. New export
-    /// paths derive relationships from modeled parts plus explicit clean
-    /// `opaque_package_subgraphs`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub root_relationships: Vec<OpcRelationship>,
-    /// Deprecated compatibility-only input for legacy snapshots.
-    ///
-    /// Workbook relationships must not be replayed as package authority. New
-    /// export paths derive relationships from modeled parts plus explicit clean
-    /// `opaque_package_subgraphs`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub workbook_relationships: Vec<OpcRelationship>,
-
-    /// Original relationship IDs per sheet from workbook.xml, in document order.
-    ///
-    /// Non-authoritative hint only. Sheet relationships for modeled worksheets
-    /// must be generated from the exported workbook graph.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sheet_workbook_r_ids: Vec<String>,
-
-    // Workbook-level preserved blobs
-    /// Original `count` attribute from the `<sst>` element in the parsed XLSX.
-    ///
-    /// AUDIT WARNING: shared strings are part of the modeled cell graph. This
-    /// may not override the count implied by generated sharedStrings.xml.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub original_sst_count: Option<usize>,
-
-    /// AUDIT WARNING: sharedStrings.xml is generated from modeled cells and
-    /// must not be replayed verbatim once cells can change.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_shared_strings_xml: Option<Vec<u8>>,
-    /// Compatibility input only. Document properties are modeled through
-    /// `ParseOutput.properties` and must be regenerated from that state.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_doc_props_core_xml: Option<Vec<u8>>,
-    /// Compatibility input only. Unsupported extended properties are dropped
-    /// unless they are promoted to modeled document property state.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_doc_props_app_xml: Option<Vec<u8>>,
-    /// Compatibility input only. Modeled custom properties live on
-    /// `DocumentProperties.typed_custom` with `DocumentProperties.custom` kept
-    /// as a legacy string projection.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_doc_props_custom_xml: Option<Vec<u8>>,
-    /// Compatibility input only. Raw `xl/metadata.xml` may seed export only
-    /// while current modeled cells still reference cell/value metadata (`cm`
-    /// or `vm`); stale metadata must not force package parts by itself.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_metadata_xml: Option<Vec<u8>>,
-    /// Compatibility input only. Person identity export is modeled through
-    /// `ParseOutput.persons`; stale raw person.xml must not be replayed when
-    /// modeled persons are absent.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub raw_persons_xml: Option<Vec<u8>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub custom_xml_parts: Vec<BlobPart>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub web_extension_parts: Vec<BlobPart>,
     /// Explicit clean opaque package subgraphs that may be emitted verbatim.
-    ///
-    /// Legacy raw fields such as `custom_xml_parts`, `web_extension_parts`, and
-    /// `binary_blobs` are compatibility inputs only. Exporters should preserve
-    /// opaque package data through these typed records once import can prove a
-    /// closed clean subgraph.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub opaque_package_subgraphs: Vec<OpaquePackageSubgraph>,
-    /// General-purpose binary blob passthrough for ZIP entries not modeled
-    /// in the domain (printerSettings, vbaProject, richData, featurePropertyBag,
-    /// customProperty, media, timelines, timelineCaches,
-    /// queryTables, connections, volatileDependencies, thumbnails, etc.).
-    ///
-    /// Deprecated compatibility-only input. New exporters must use typed
-    /// feature sidecars or explicit clean `OpaquePackageSubgraph` records
-    /// instead of blanket binary passthrough.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub binary_blobs: Vec<BlobPart>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<ExtensionPreservation>,
 
     /// Namespace declarations from the `<workbook>` root element.
     /// Each entry is (prefix, uri). Used to reconstruct `mc:Ignorable` and
@@ -168,27 +52,6 @@ pub struct RoundTripContext {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_preserved_elements: Vec<(String, String)>,
 
-    /// Compatibility input only. Hidden and opaque defined names are modeled in
-    /// workbook named-range storage with `raw_refers_to` when needed; exporters
-    /// must not merge this list back into workbook XML.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skipped_named_ranges: Vec<crate::parse_output::NamedRange>,
-
-    /// Compatibility input only. Modeled named ranges carry their own order in
-    /// workbook named-range storage; exporters must not use this list as an
-    /// authority to resurrect deleted or unsupported names.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub original_named_ranges_order: Vec<crate::parse_output::NamedRange>,
-
-    /// Compatibility input only. `docMetadata/LabelInfo.xml` is unsupported
-    /// classification-label package data and must not be replayed as a raw
-    /// standalone sidecar outside an explicit clean opaque subgraph.
-    #[serde(
-        default,
-        with = "option_bytes",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub doc_metadata_label_info: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -430,14 +293,6 @@ pub struct OpcRelationship {
 
 // WorkbookView has moved to domain::workbook (strongly-typed, with From<BookView>).
 
-/// Extension list preservation for forward compatibility.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExtensionPreservation {
-    pub namespaces: Vec<(String, String)>,
-    pub elements: Vec<String>,
-}
-
 // Helper modules for Vec<u8> serialization as base64
 mod bytes_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -469,46 +324,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deprecated_package_authority_fields_deserialize_from_legacy_snapshot() {
-        let ctx: RoundTripContext = serde_json::from_str(
-            r#"{
-                "sheets": [{
-                    "sheetOpcRels": [{
-                        "id": "rIdSheetLegacy",
-                        "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
-                        "target": "../drawings/drawing99.xml",
-                        "targetMode": null
-                    }]
-                }],
-                "contentTypeDefaults": [["bin", "application/octet-stream"]],
-                "contentTypeOverrides": [["/xl/legacy.xml", "application/vnd.legacy+xml"]],
-                "rootRelationships": [{
-                    "id": "rIdRootLegacy",
-                    "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
-                    "target": "xl/workbook.xml",
-                    "targetMode": null
-                }],
-                "workbookRelationships": [{
-                    "id": "rIdWorkbookLegacy",
-                    "relType": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
-                    "target": "worksheets/sheet99.xml",
-                    "targetMode": null
-                }],
-                "sheetWorkbookRIds": ["rIdWorkbookLegacy"]
-            }"#,
-        )
-        .unwrap();
-
-        assert_eq!(ctx.content_type_defaults.len(), 1);
-        assert_eq!(ctx.content_type_overrides.len(), 1);
-        assert_eq!(ctx.root_relationships[0].id, "rIdRootLegacy");
-        assert_eq!(ctx.workbook_relationships[0].id, "rIdWorkbookLegacy");
-        assert_eq!(ctx.sheet_workbook_r_ids, ["rIdWorkbookLegacy"]);
-        assert_eq!(ctx.sheets[0].sheet_opc_rels[0].id, "rIdSheetLegacy");
-    }
-
-    #[test]
-    fn empty_deprecated_package_authority_fields_are_not_serialized() {
+    fn empty_round_trip_context_omits_optional_fields() {
         let json = serde_json::to_value(RoundTripContext {
             sheets: vec![SheetRoundTripContext::default()],
             ..Default::default()
@@ -516,25 +332,8 @@ mod tests {
         .unwrap();
 
         let object = json.as_object().unwrap();
-        assert!(!object.contains_key("contentTypeDefaults"));
-        assert!(!object.contains_key("contentTypeOverrides"));
-        assert!(!object.contains_key("rootRelationships"));
-        assert!(!object.contains_key("workbookRelationships"));
-        assert!(!object.contains_key("sheetWorkbookRIds"));
-        assert!(!object.contains_key("rawSharedStringsXml"));
-        assert!(!object.contains_key("rawDocPropsCoreXml"));
-        assert!(!object.contains_key("rawDocPropsAppXml"));
-        assert!(!object.contains_key("rawDocPropsCustomXml"));
-        assert!(!object.contains_key("rawMetadataXml"));
-        assert!(!object.contains_key("rawPersonsXml"));
-        assert!(!object.contains_key("externalLinks"));
-        assert!(!object.contains_key("customXmlParts"));
-        assert!(!object.contains_key("webExtensionParts"));
-        assert!(!object.contains_key("binaryBlobs"));
-        assert!(!object.contains_key("extensions"));
         assert!(!object.contains_key("workbookNamespaceAttrs"));
         assert!(!object.contains_key("workbookPreservedElements"));
-        assert!(!object.contains_key("docMetadataLabelInfo"));
         let sheet = object["sheets"].as_array().unwrap()[0].as_object().unwrap();
         assert!(!sheet.contains_key("sheetOpcRels"));
     }

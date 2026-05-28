@@ -1,10 +1,24 @@
 //! Data-range to series synthesis for reconstructed charts.
 
-use domain_types::chart::ChartSeriesData;
+use domain_types::chart::{ChartSeriesData, ChartSpec};
+
+pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
+    if !spec.series.is_empty() {
+        return spec.series.clone();
+    }
+
+    spec.data_range
+        .as_deref()
+        .and_then(synthesize_series_from_data_range)
+        .unwrap_or_default()
+}
 
 pub(super) fn synthesize_series_from_data_range(data_range: &str) -> Option<Vec<ChartSeriesData>> {
     let parsed = ParsedA1Range::parse(data_range)?;
     if parsed.start_row > parsed.end_row || parsed.start_col > parsed.end_col {
+        return None;
+    }
+    if parsed.start_row == parsed.end_row && parsed.start_col == parsed.end_col {
         return None;
     }
 

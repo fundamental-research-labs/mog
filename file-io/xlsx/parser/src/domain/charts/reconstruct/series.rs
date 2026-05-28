@@ -1,4 +1,18 @@
-use super::*;
+use domain_types::chart::{
+    ChartSeriesData, ChartType as DomainChartType, ErrorBarData, PointFormatData, TrendlineData,
+    TrendlineLabelData,
+};
+use ooxml_types::charts::{
+    self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
+    ErrorValueType, Marker, MarkerStyle, NumDataSource, NumFmt, NumRef, SeriesTextSource, StrRef,
+    Trendline, TrendlineLabel, TrendlineType,
+};
+use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
+
+use super::{
+    elements::{build_chart_text_rich, build_data_labels},
+    formatting::{build_outline, build_shape_properties, build_text_body},
+};
 
 // =============================================================================
 // Series

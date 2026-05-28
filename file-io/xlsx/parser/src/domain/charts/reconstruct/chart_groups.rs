@@ -1,11 +1,19 @@
-use super::*;
+use domain_types::{
+    chart::{ChartSpec, ChartSubType, ChartType as DomainChartType},
+    ChartDefinition,
+};
+use ooxml_types::charts::{
+    self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,
+};
+
+use super::{elements::build_data_labels, ranges::series_for_export, series::build_series};
 
 // =============================================================================
 // Chart Groups
 // =============================================================================
 
 pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
-    if let Some(domain_types::ChartDefinition::Chart(chart_space)) = spec.definition.as_ref() {
+    if let Some(ChartDefinition::Chart(chart_space)) = spec.definition.as_ref() {
         if !chart_space.chart.plot_area.chart_groups.is_empty() {
             return chart_space
                 .chart
@@ -71,17 +79,6 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         ax_id,
         raw_chart_type_attr: None,
     }]
-}
-
-pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
-    if !spec.series.is_empty() {
-        return spec.series.clone();
-    }
-
-    spec.data_range
-        .as_deref()
-        .and_then(ranges::synthesize_series_from_data_range)
-        .unwrap_or_default()
 }
 
 pub(super) fn domain_to_ooxml_chart_type(

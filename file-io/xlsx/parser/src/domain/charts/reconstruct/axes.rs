@@ -1,11 +1,24 @@
-use super::*;
+use domain_types::{
+    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
+};
+use ooxml_types::charts::{
+    self, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween, LabelAlignment, NumFmt,
+    Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
+};
+use ooxml_types::drawings::ShapeProperties;
+
+use super::{
+    elements::{build_chart_text_rich, build_title_element},
+    formatting::{build_outline, build_shape_properties, build_text_body},
+};
 
 // =============================================================================
 // Axes
 // =============================================================================
 
 pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
-    if let (Some(domain_types::ChartDefinition::Chart(chart_space)), Some(axes_data)) =
+    if let (Some(ChartDefinition::Chart(chart_space)), Some(axes_data)) =
         (spec.definition.as_ref(), spec.axes.as_ref())
     {
         let axes_ordered: Vec<_> = chart_space

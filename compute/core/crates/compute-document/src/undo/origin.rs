@@ -35,7 +35,7 @@ pub const ORIGIN_REMOTE: &[u8] = b"remote";
 /// belongs to engine setup, not the user."
 pub const ORIGIN_BOOTSTRAP: &[u8] = b"bootstrap";
 
-pub(super) fn include_tracked_origins(manager: &mut UndoManager<()>) {
+pub(in crate::undo) fn include_tracked_origins(manager: &mut UndoManager<()>) {
     manager.include_origin(Origin::from(ORIGIN_USER_EDIT));
     manager.include_origin(Origin::from(ORIGIN_STRUCTURAL));
 }

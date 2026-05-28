@@ -3,7 +3,7 @@ use yrs::sync::Clock;
 
 /// Capture timeout in milliseconds. Must match `Options.capture_timeout_millis`
 /// so the yrs merge logic behaves consistently with our clock increments.
-pub(super) const MERGE_TIMEOUT: u64 = 1_000_000;
+pub(in crate::undo) const MERGE_TIMEOUT: u64 = 1_000_000;
 
 /// A virtual clock that controls whether consecutive yrs transactions merge
 /// into a single undo step or remain separate.
@@ -15,24 +15,24 @@ pub(super) const MERGE_TIMEOUT: u64 = 1_000_000;
 /// In **batch mode** (`enter_batch()`), each call to `now()` increments by
 /// just 1, keeping the gap well within the capture timeout so all
 /// transactions merge into a single undo step.
-pub(super) struct UndoClock {
+pub(in crate::undo) struct UndoClock {
     counter: AtomicU64,
     in_batch: AtomicBool,
 }
 
 impl UndoClock {
-    pub(super) fn new() -> Self {
+    pub(in crate::undo) fn new() -> Self {
         Self {
             counter: AtomicU64::new(0),
             in_batch: AtomicBool::new(false),
         }
     }
 
-    pub(super) fn enter_batch(&self) {
+    pub(in crate::undo) fn enter_batch(&self) {
         self.in_batch.store(true, Ordering::Relaxed);
     }
 
-    pub(super) fn exit_batch(&self) {
+    pub(in crate::undo) fn exit_batch(&self) {
         self.in_batch.store(false, Ordering::Relaxed);
     }
 }

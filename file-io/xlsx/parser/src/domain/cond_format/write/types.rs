@@ -343,6 +343,7 @@ impl From<&CfValueObject> for ot::Cfvo {
             cfvo_type: v.value_type,
             val: v.value.clone(),
             gte: true,
+            ext_lst_xml: None,
         }
     }
 }
@@ -390,6 +391,7 @@ impl From<&IconSetRule> for ot::IconSet {
             icon_set: r.icon_set,
             show_value: r.show_value,
             percent: true,
+            percent_attr_present: false,
             reverse: r.reverse,
             cfvo: r.thresholds.iter().map(ot::Cfvo::from).collect(),
             custom: false,

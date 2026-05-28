@@ -45,6 +45,21 @@ pub(super) fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
         .or_else(|| point.ooxml_value.clone())
 }
 
+fn write_cfvo_from_color_point(w: &mut XmlWriter, point: &CFColorPoint) {
+    w.start_element("cfvo")
+        .attr("type", point.value.cfvo_type().to_ooxml());
+    if let Some(val) = cfvo_ooxml_value(point) {
+        w.attr("val", &val);
+    }
+    if let Some(ext_lst_xml) = &point.ext_lst_xml {
+        w.end_attrs();
+        w.raw_str(ext_lst_xml);
+        w.end_element("cfvo");
+    } else {
+        w.self_close();
+    }
+}
+
 /// Build `<conditionalFormatting>` XML string from domain `ConditionalFormat` list.
 pub fn cf_xml_from_domain(cfs: &[ConditionalFormat]) -> String {
     let mut w = XmlWriter::new();
@@ -262,21 +277,11 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.end_attrs();
             w.start_element("colorScale").end_attrs();
 
-            // Collect points in order: min, [mid], max
-            let mut points = vec![&color_scale.min_point];
-            if let Some(ref mid) = color_scale.mid_point {
-                points.push(mid);
-            }
-            points.push(&color_scale.max_point);
+            let points = color_scale.ordered_points();
 
             // Write cfvo elements first, then color elements (OOXML order).
             for pt in &points {
-                w.start_element("cfvo")
-                    .attr("type", pt.value.cfvo_type().to_ooxml());
-                if let Some(val) = cfvo_ooxml_value(pt) {
-                    w.attr("val", &val);
-                }
-                w.self_close();
+                write_cfvo_from_color_point(w, pt);
             }
             for pt in &points {
                 write_cf_color_point_color(w, pt);
@@ -330,20 +335,8 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
                 w.attr("axisPosition", axis_position.to_ooxml());
             }
             w.end_attrs();
-            // min cfvo
-            w.start_element("cfvo")
-                .attr("type", data_bar.min_point.value.cfvo_type().to_ooxml());
-            if let Some(val) = cfvo_ooxml_value(&data_bar.min_point) {
-                w.attr("val", &val);
-            }
-            w.self_close();
-            // max cfvo
-            w.start_element("cfvo")
-                .attr("type", data_bar.max_point.value.cfvo_type().to_ooxml());
-            if let Some(val) = cfvo_ooxml_value(&data_bar.max_point) {
-                w.attr("val", &val);
-            }
-            w.self_close();
+            write_cfvo_from_color_point(w, &data_bar.min_point);
+            write_cfvo_from_color_point(w, &data_bar.max_point);
             // color
             w.start_element("color")
                 .attr("rgb", &hex_to_argb(&data_bar.positive_color))
@@ -353,6 +346,9 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             }
             if let Some(ref color) = data_bar.negative_color {
                 write_data_bar_color_element(w, "negativeFillColor", color);
+            }
+            if let Some(ref color) = data_bar.negative_border_color {
+                write_data_bar_color_element(w, "negativeBorderColor", color);
             }
             if let Some(ref color) = data_bar.axis_color {
                 write_data_bar_color_element(w, "axisColor", color);
@@ -397,6 +393,9 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             if icon_set.show_icon_only == Some(true) {
                 w.attr("showValue", "0");
             }
+            if let Some(percent) = icon_set.percent {
+                w.attr("percent", if percent { "1" } else { "0" });
+            }
             w.end_attrs();
             for threshold in &icon_set.thresholds {
                 w.start_element("cfvo")
@@ -407,7 +406,13 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
                 if !threshold.gte {
                     w.attr("gte", "0");
                 }
-                w.self_close();
+                if let Some(ext_lst_xml) = &threshold.ext_lst_xml {
+                    w.end_attrs();
+                    w.raw_str(ext_lst_xml);
+                    w.end_element("cfvo");
+                } else {
+                    w.self_close();
+                }
             }
             w.end_element("iconSet");
         }

@@ -345,6 +345,7 @@ pub(crate) fn convert_cf_rule(
                     color_tint: None,
                     color_indexed: None,
                     color_auto: None,
+                    ext_lst_xml: None,
                 });
                 let max_point = points.last().cloned().unwrap_or_else(|| CFColorPoint {
                     value: domain_types::CFValueRef::Max,
@@ -354,6 +355,7 @@ pub(crate) fn convert_cf_rule(
                     color_tint: None,
                     color_indexed: None,
                     color_auto: None,
+                    ext_lst_xml: None,
                 });
                 let mid_point = if points.len() == 3 {
                     Some(points[1].clone())
@@ -361,12 +363,14 @@ pub(crate) fn convert_cf_rule(
                     None
                 };
                 CFColorScale {
+                    points,
                     min_point,
                     mid_point,
                     max_point,
                 }
             } else {
                 CFColorScale {
+                    points: Vec::new(),
                     min_point: CFColorPoint {
                         value: domain_types::CFValueRef::Min,
                         ooxml_value: None,
@@ -375,6 +379,7 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: None,
                     },
                     mid_point: None,
                     max_point: CFColorPoint {
@@ -385,6 +390,7 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: None,
                     },
                 }
             };
@@ -411,6 +417,7 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: min_cfvo.and_then(|c| c.ext_lst_xml.clone()),
                     },
                     max_point: CFColorPoint {
                         value: domain_types::CFValueRef::from_ooxml(
@@ -423,12 +430,14 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: max_cfvo.and_then(|c| c.ext_lst_xml.clone()),
                     },
                     min_length: db.min_length_attr_present.then_some(db.min_length),
                     max_length: db.max_length_attr_present.then_some(db.max_length),
                     positive_color: cf_color_to_rgb(&db.color),
                     show_value: db.show_value_attr_present.then_some(db.show_value),
                     border_color: db.border_color.as_ref().map(cf_color_to_rgb),
+                    negative_border_color: db.negative_border_color.as_ref().map(cf_color_to_rgb),
                     negative_color: db.negative_fill_color.as_ref().map(cf_color_to_rgb),
                     axis_color: db.axis_color.as_ref().map(cf_color_to_rgb),
                     direction: db.direction_attr_present.then_some(db.direction),
@@ -453,6 +462,7 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: None,
                     },
                     max_point: CFColorPoint {
                         value: domain_types::CFValueRef::Max,
@@ -462,12 +472,14 @@ pub(crate) fn convert_cf_rule(
                         color_tint: None,
                         color_indexed: None,
                         color_auto: None,
+                        ext_lst_xml: None,
                     },
                     min_length: None,
                     max_length: None,
                     positive_color: String::new(),
                     negative_color: None,
                     border_color: None,
+                    negative_border_color: None,
                     show_border: None,
                     gradient: None,
                     direction: None,
@@ -492,6 +504,7 @@ pub(crate) fn convert_cf_rule(
                     icon_set_name: is.icon_set,
                     reverse_order: if is.reverse { Some(true) } else { None },
                     show_icon_only: if !is.show_value { Some(true) } else { None },
+                    percent: is.percent_attr_present.then_some(is.percent),
                     thresholds: is
                         .cfvo
                         .iter()
@@ -499,6 +512,7 @@ pub(crate) fn convert_cf_rule(
                             value_type: cfvo.cfvo_type,
                             value: cfvo.val.clone(),
                             gte: cfvo.gte,
+                            ext_lst_xml: cfvo.ext_lst_xml.clone(),
                         })
                         .collect(),
                     custom_icons: is
@@ -517,6 +531,7 @@ pub(crate) fn convert_cf_rule(
                     icon_set_name: ooxml_types::cond_format::IconSetType::ThreeTrafficLights1,
                     reverse_order: None,
                     show_icon_only: None,
+                    percent: None,
                     thresholds: Vec::new(),
                     custom_icons: Vec::new(),
                 }
@@ -646,5 +661,6 @@ fn cf_color_point(
         color_tint: color.tint,
         color_indexed: color.indexed,
         color_auto: if color.auto { Some(true) } else { None },
+        ext_lst_xml: cfvo.ext_lst_xml.clone(),
     }
 }

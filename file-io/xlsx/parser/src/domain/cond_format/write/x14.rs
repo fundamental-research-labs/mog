@@ -59,20 +59,33 @@ pub fn x14_conditional_formatting_ext_xml_from_domain(cfs: &[ConditionalFormat])
 
 fn rule_needs_x14(rule: &CFRule) -> bool {
     match rule {
-        CFRule::DataBar { data_bar, .. } => data_bar.ext_id.is_some(),
-        CFRule::IconSet { icon_set, .. } => !icon_set.custom_icons.is_empty(),
+        CFRule::DataBar { data_bar, .. } => {
+            data_bar.ext_id.is_some()
+                || data_bar.negative_border_color.is_some()
+                || data_bar.negative_color.is_some()
+                || data_bar.border_color.is_some()
+                || data_bar.axis_color.is_some()
+                || data_bar.min_point.ext_lst_xml.is_some()
+                || data_bar.max_point.ext_lst_xml.is_some()
+        }
+        CFRule::IconSet { icon_set, .. } => {
+            !icon_set.custom_icons.is_empty()
+                || icon_set.percent.is_some()
+                || icon_set
+                    .thresholds
+                    .iter()
+                    .any(|threshold| threshold.ext_lst_xml.is_some())
+        }
         CFRule::ColorScale { color_scale, .. } => color_scale_uses_x14_cfvo(color_scale),
         _ => false,
     }
 }
 
 fn color_scale_uses_x14_cfvo(color_scale: &CFColorScale) -> bool {
-    color_point_uses_x14(&color_scale.min_point.value)
-        || color_scale
-            .mid_point
-            .as_ref()
-            .is_some_and(|point| color_point_uses_x14(&point.value))
-        || color_point_uses_x14(&color_scale.max_point.value)
+    color_scale
+        .ordered_points()
+        .iter()
+        .any(|point| color_point_uses_x14(&point.value) || point.ext_lst_xml.is_some())
 }
 
 fn color_point_uses_x14(value: &CFValueRef) -> bool {
@@ -129,18 +142,9 @@ fn write_x14_rule(w: &mut XmlWriter, rule: &CFRule) {
 
 fn write_x14_color_scale(w: &mut XmlWriter, color_scale: &CFColorScale) {
     w.start_element("x14:colorScale").end_attrs();
-    let mut points = vec![&color_scale.min_point];
-    if let Some(mid) = &color_scale.mid_point {
-        points.push(mid);
-    }
-    points.push(&color_scale.max_point);
+    let points = color_scale.ordered_points();
     for point in &points {
-        w.start_element("x14:cfvo")
-            .attr("type", point.value.cfvo_type().to_ooxml());
-        if let Some(val) = cfvo_ooxml_value(point) {
-            w.attr("val", &val);
-        }
-        w.self_close();
+        write_x14_cfvo(w, point);
     }
     for point in &points {
         write_x14_color_point(w, point);
@@ -211,6 +215,9 @@ fn write_x14_data_bar(w: &mut XmlWriter, data_bar: &CFDataBar) {
     if let Some(color) = &data_bar.negative_color {
         write_x14_color(w, "x14:negativeFillColor", color);
     }
+    if let Some(color) = &data_bar.negative_border_color {
+        write_x14_color(w, "x14:negativeBorderColor", color);
+    }
     if let Some(color) = &data_bar.axis_color {
         write_x14_color(w, "x14:axisColor", color);
     }
@@ -223,7 +230,13 @@ fn write_x14_cfvo(w: &mut XmlWriter, point: &domain_types::CFColorPoint) {
     if let Some(val) = cfvo_ooxml_value(point) {
         w.attr("val", &val);
     }
-    w.self_close();
+    if let Some(ext_lst_xml) = &point.ext_lst_xml {
+        w.end_attrs();
+        w.raw_str(ext_lst_xml);
+        w.end_element("x14:cfvo");
+    } else {
+        w.self_close();
+    }
 }
 
 fn write_x14_color(w: &mut XmlWriter, element: &str, color: &str) {
@@ -241,6 +254,9 @@ fn write_x14_icon_set(w: &mut XmlWriter, icon_set: &CFIconSet) {
     if icon_set.reverse_order == Some(true) {
         w.attr("reverse", "1");
     }
+    if let Some(percent) = icon_set.percent {
+        w.attr("percent", if percent { "1" } else { "0" });
+    }
     if !icon_set.custom_icons.is_empty() {
         w.attr("custom", "1");
     }
@@ -254,7 +270,13 @@ fn write_x14_icon_set(w: &mut XmlWriter, icon_set: &CFIconSet) {
         if !threshold.gte {
             w.attr("gte", "0");
         }
-        w.self_close();
+        if let Some(ext_lst_xml) = &threshold.ext_lst_xml {
+            w.end_attrs();
+            w.raw_str(ext_lst_xml);
+            w.end_element("x14:cfvo");
+        } else {
+            w.self_close();
+        }
     }
     for icon in &icon_set.custom_icons {
         write_x14_cf_icon(w, icon.as_ref());

@@ -94,6 +94,7 @@ pub struct CFIconThresholdWire {
 pub struct CFIconSetWire {
     pub icon_set_name: CFIconSetName,
     pub thresholds: Vec<CFIconThresholdWire>,
+    pub percent: Option<bool>,
     #[serde(default)]
     pub reverse_order: bool,
     #[serde(default)]

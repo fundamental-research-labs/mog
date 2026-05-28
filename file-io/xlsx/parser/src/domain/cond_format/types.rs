@@ -125,6 +125,9 @@ pub fn parse_cfvo(xml: &[u8]) -> Cfvo {
         }
     }
 
+    cfvo.ext_lst_xml =
+        crate::infra::xml::extract_direct_child_element_xml(xml, b"cfvo", b"extLst");
+
     cfvo
 }
 

@@ -38,6 +38,9 @@ pub struct Cfvo {
     /// When false, the threshold is exclusive (greater-than only).
     #[serde(default = "default_true")]
     pub gte: bool,
+    /// Direct child `<extLst>` payload owned by this threshold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 impl Default for Cfvo {
@@ -46,6 +49,7 @@ impl Default for Cfvo {
             cfvo_type: CfvoType::default(),
             val: None,
             gte: true,
+            ext_lst_xml: None,
         }
     }
 }

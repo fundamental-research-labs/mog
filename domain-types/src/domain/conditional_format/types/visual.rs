@@ -30,16 +30,38 @@ pub struct CFColorPoint {
     /// Automatic color flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_auto: Option<bool>,
+    /// Direct child `<extLst>` payload owned by the threshold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
-/// Color scale configuration (2 or 3 colors).
+/// Color scale configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CFColorScale {
+    /// Ordered OOXML stop list. When populated, this is authoritative and may
+    /// contain more than the legacy two/three public stops.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<CFColorPoint>,
     pub min_point: CFColorPoint,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mid_point: Option<CFColorPoint>,
     pub max_point: CFColorPoint,
+}
+
+impl CFColorScale {
+    pub fn ordered_points(&self) -> Vec<&CFColorPoint> {
+        if self.points.len() >= 2 {
+            self.points.iter().collect()
+        } else {
+            let mut points = vec![&self.min_point];
+            if let Some(mid) = &self.mid_point {
+                points.push(mid);
+            }
+            points.push(&self.max_point);
+            points
+        }
+    }
 }
 
 /// Data bar configuration.
@@ -57,6 +79,8 @@ pub struct CFDataBar {
     pub negative_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negative_border_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_border: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -89,6 +113,8 @@ pub struct CFIconSet {
     pub reverse_order: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_icon_only: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub percent: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thresholds: Vec<CFIconThreshold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -104,6 +130,8 @@ pub struct CFIconThreshold {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
     pub gte: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 /// A custom icon override within an icon set.

@@ -544,6 +544,7 @@ export interface CFIconThresholdWire {
 export interface CFIconSetWire {
   iconSetName: CfIconSetName;
   thresholds: CFIconThresholdWire[];
+  percent?: boolean;
   reverseOrder?: boolean;
   showIconOnly?: boolean;
 }

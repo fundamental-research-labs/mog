@@ -36,6 +36,7 @@ pub(crate) fn cp(value_type: ooxml_types::cond_format::CfvoType, color: &str) ->
         color_tint: None,
         color_indexed: None,
         color_auto: None,
+        ext_lst_xml: None,
     }
 }
 
@@ -67,6 +68,7 @@ pub(crate) fn cp_val(
         color_tint: None,
         color_indexed: None,
         color_auto: None,
+        ext_lst_xml: None,
     }
 }
 
@@ -83,6 +85,7 @@ fn db_preset(id: &str, name: &str, color: &str, neg: &str, gradient: bool) -> CF
             positive_color: color.to_string(),
             negative_color: Some(neg.to_string()),
             border_color: None,
+            negative_border_color: None,
             show_border: None,
             gradient: Some(gradient),
             direction: None,
@@ -165,6 +168,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-green-yellow-red".into(),
             name: "Green - Yellow - Red".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#63BE7B"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFEB84")),
                 max_point: cp(CfvoType::Max, "#F8696B"),
@@ -174,6 +178,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-red-yellow-green".into(),
             name: "Red - Yellow - Green".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#F8696B"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFEB84")),
                 max_point: cp(CfvoType::Max, "#63BE7B"),
@@ -183,6 +188,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-green-white-red".into(),
             name: "Green - White - Red".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#63BE7B"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFFFFF")),
                 max_point: cp(CfvoType::Max, "#F8696B"),
@@ -192,6 +198,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-red-white-green".into(),
             name: "Red - White - Green".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#F8696B"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFFFFF")),
                 max_point: cp(CfvoType::Max, "#63BE7B"),
@@ -201,6 +208,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-blue-white-red".into(),
             name: "Blue - White - Red".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#5A8AC6"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFFFFF")),
                 max_point: cp(CfvoType::Max, "#F8696B"),
@@ -210,6 +218,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-red-white-blue".into(),
             name: "Red - White - Blue".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#F8696B"),
                 mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFFFFF")),
                 max_point: cp(CfvoType::Max, "#5A8AC6"),
@@ -219,6 +228,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-white-blue".into(),
             name: "White - Blue".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#FFFFFF"),
                 mid_point: None,
                 max_point: cp(CfvoType::Max, "#5A8AC6"),
@@ -228,6 +238,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-white-red".into(),
             name: "White - Red".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#FFFFFF"),
                 mid_point: None,
                 max_point: cp(CfvoType::Max, "#F8696B"),
@@ -237,6 +248,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-white-green".into(),
             name: "White - Green".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#FFFFFF"),
                 mid_point: None,
                 max_point: cp(CfvoType::Max, "#63BE7B"),
@@ -246,6 +258,7 @@ pub fn color_scale_presets() -> Vec<CFColorScalePreset> {
             id: "colorscale-yellow-green".into(),
             name: "Yellow - Green".into(),
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: cp(CfvoType::Min, "#FFEB84"),
                 mid_point: None,
                 max_point: cp(CfvoType::Max, "#63BE7B"),
@@ -262,6 +275,7 @@ fn icon_preset(kind: ooxml_types::cond_format::IconSetType, display_name: &str) 
             icon_set_name: kind,
             reverse_order: Some(false),
             show_icon_only: Some(false),
+            percent: None,
             thresholds: vec![],
             custom_icons: vec![],
         },

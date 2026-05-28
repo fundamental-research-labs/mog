@@ -188,6 +188,9 @@ pub struct IconSet {
     /// Whether CFVO values are percentages (default true).
     #[serde(default = "default_true")]
     pub percent: bool,
+    /// Whether `percent` was explicitly present in source XML.
+    #[serde(default)]
+    pub percent_attr_present: bool,
     /// Reverse icon order (default false).
     #[serde(default)]
     pub reverse: bool,
@@ -209,6 +212,7 @@ impl Default for IconSet {
             icon_set: IconSetType::default(),
             show_value: true,
             percent: true,
+            percent_attr_present: false,
             reverse: false,
             cfvo: Vec::new(),
             custom: false,

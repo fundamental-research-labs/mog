@@ -228,6 +228,7 @@ pub fn parse_icon_set(xml: &[u8]) -> IconSet {
 
     // Parse percent
     if let Some(p_pos) = find_attr_simd(xml, b"percent=\"", 0) {
+        icon_set.percent_attr_present = true;
         let value_start = p_pos + 9;
         if let Some((start, end)) = extract_quoted_value(xml, value_start) {
             let val = &xml[start..end];

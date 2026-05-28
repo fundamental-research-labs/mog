@@ -91,10 +91,14 @@ export interface CFColorPoint {
   colorIndexed?: number;
   /** Automatic color flag. */
   colorAuto?: boolean;
+  /** OOXML threshold extension payload. */
+  extLstXml?: string;
 }
 
-/** Color scale configuration (2 or 3 colors). */
+/** Color scale configuration. */
 export interface CFColorScale {
+  /** Ordered OOXML color-scale stops; authoritative when present. */
+  points?: CFColorPoint[];
   minPoint: CFColorPoint;
   midPoint?: CFColorPoint;
   maxPoint: CFColorPoint;
@@ -131,6 +135,8 @@ export interface CFIconThreshold {
   value?: number | string;
   /** When true the threshold comparison is >=, when false it is >. */
   gte: boolean;
+  /** OOXML threshold extension payload. */
+  extLstXml?: string;
   /** Custom icon override — use an icon from a different set for this threshold. */
   customIcon?: { iconSet: CFIconSetName; iconIndex: number };
 }
@@ -147,6 +153,8 @@ export interface CFIconSet {
   thresholds?: CFIconThreshold[];
   reverseOrder?: boolean;
   showIconOnly?: boolean;
+  /** Explicit OOXML iconSet percent attribute. */
+  percent?: boolean;
   /** Per-threshold custom icon overrides (null entries use default icons). */
   customIcons?: (CFCustomIcon | null)[];
 }

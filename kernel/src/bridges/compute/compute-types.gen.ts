@@ -310,9 +310,11 @@ export interface CFColorPoint {
   colorTint?: number;
   colorIndexed?: number;
   colorAuto?: boolean;
+  extLstXml?: string;
 }
 
 export interface CFColorScale {
+  points?: CFColorPoint[];
   minPoint: CFColorPoint;
   midPoint?: CFColorPoint;
   maxPoint: CFColorPoint;
@@ -337,6 +339,7 @@ export interface CFDataBar {
   positiveColor: string;
   negativeColor?: string;
   borderColor?: string;
+  negativeBorderColor?: string;
   showBorder?: boolean;
   gradient?: boolean;
   direction?: string;
@@ -362,6 +365,7 @@ export interface CFIconSet {
   iconSetName: string;
   reverseOrder?: boolean;
   showIconOnly?: boolean;
+  percent?: boolean;
   thresholds?: CFIconThreshold[];
   customIcons?: (CFCustomIcon | null)[];
 }
@@ -378,6 +382,7 @@ export interface CFIconThreshold {
   type: string;
   value?: string;
   gte: boolean;
+  extLstXml?: string;
 }
 
 export type CFIconThresholdOperator = "greaterThanOrEqual" | "greaterThan";

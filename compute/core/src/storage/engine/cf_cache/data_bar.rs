@@ -45,7 +45,7 @@ pub(super) fn convert_data_bar_to_wire(db: &cf::CFDataBar) -> CFDataBarWire {
         positive_color,
         negative_color: db.negative_color.clone(),
         border_color: db.border_color.clone(),
-        negative_border_color: None, // Domain type doesn't carry this field
+        negative_border_color: db.negative_border_color.clone(),
         show_border: db.show_border.unwrap_or(false),
         gradient: db.gradient.unwrap_or(true),
         direction,

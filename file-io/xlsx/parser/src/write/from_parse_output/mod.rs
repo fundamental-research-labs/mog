@@ -27,6 +27,7 @@ mod rich_data;
 mod sheet_builder;
 mod sheet_cells;
 mod sheet_columns;
+mod sheet_ext_merge;
 mod sheet_formulas;
 mod sheet_outlines;
 mod sheet_parts;

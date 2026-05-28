@@ -44,6 +44,37 @@ pub(super) fn append_dropped_import_diagnostics(
     {
         dropped.push("raw VML drawing sidecars");
     }
+    if result.raw_doc_metadata_label_info.is_some() {
+        dropped.push("document label metadata package part");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| !sheet.comments_root_namespace_attrs.is_empty())
+    {
+        dropped.push("comments root namespace declarations");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| !sheet.table_xml_passthroughs.is_empty())
+    {
+        dropped.push("table XML passthrough package parts");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| sheet.header_footer_xml.is_some())
+    {
+        dropped.push("worksheet header/footer XML");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| sheet.worksheet_controls_xml.is_some())
+    {
+        dropped.push("worksheet controls XML sidecar");
+    }
     if result
         .sheets
         .iter()

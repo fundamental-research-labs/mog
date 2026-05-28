@@ -23,6 +23,13 @@ import {
 
 import { Icon, Input } from '@mog/shell';
 
+const MAX_SHEET_NAME_LENGTH = 31;
+const INVALID_SHEET_NAME_CHARS = /[\\/?*\[\]:]/;
+
+function isStaticSheetNameValid(name: string): boolean {
+  return name.length <= MAX_SHEET_NAME_LENGTH && !INVALID_SHEET_NAME_CHARS.test(name);
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -171,6 +178,12 @@ export function Tab({
   const handleRenameSubmit = useCallback(async () => {
     const trimmed = editValue.trim();
     if (trimmed && trimmed !== name) {
+      if (!isStaticSheetNameValid(trimmed)) {
+        setEditValue(name);
+        setIsEditing(false);
+        onEditingEnd?.();
+        return;
+      }
       const ok = await onRename(trimmed);
       if (!ok) return;
     }

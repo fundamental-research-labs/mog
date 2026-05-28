@@ -11,7 +11,7 @@ use compute_document::workbook_metadata::{
     read_imported_external_cache_records, read_workbook_link_records,
 };
 use domain_types::{
-    NamedRange, PersonInfo,
+    CellFormat, DocumentFormat, NamedRange, PersonInfo,
     domain::external_link::ExternalLink,
     domain::theme::ThemeData,
     domain::workbook::{
@@ -254,6 +254,29 @@ pub(super) fn export_workbook_stylesheet(
         }),
         _ => None,
     }
+}
+
+pub(super) fn export_workbook_style_palette(stores: &EngineStores) -> Vec<DocumentFormat> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let palette_map = match workbook.get(&txn, KEY_STYLE_PALETTE) {
+        Some(Out::YMap(map)) => map,
+        _ => return Vec::new(),
+    };
+
+    let mut values = Vec::new();
+    for index in 0..palette_map.len(&txn) {
+        let Some(Out::Any(Any::String(json))) = palette_map.get(&txn, &*index.to_string()) else {
+            continue;
+        };
+        let Ok(cell_format) = serde_json::from_str::<CellFormat>(&json) else {
+            continue;
+        };
+        values.push(DocumentFormat::from(&cell_format));
+    }
+    values
 }
 
 fn read_style_registry_vec<T: for<'de> serde::Deserialize<'de>>(

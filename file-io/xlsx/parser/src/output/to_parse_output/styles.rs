@@ -145,6 +145,8 @@ pub(super) fn convert_xf_to_input(xf: &CellXfOutput) -> CellXfInput {
         apply_protection: xf.apply_protection,
         alignment: xf.alignment.as_ref().map(convert_alignment_to_input),
         protection: xf.protection.as_ref().map(convert_protection_to_input),
+        quote_prefix: xf.quote_prefix,
+        pivot_button: xf.pivot_button,
     }
 }
 

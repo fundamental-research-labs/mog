@@ -448,6 +448,10 @@ pub struct CellXfOutput {
     pub apply_protection: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protection: Option<CellProtectionOutput>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub quote_prefix: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub pivot_button: bool,
 }
 
 impl From<&CellXfDef> for CellXfOutput {
@@ -482,6 +486,8 @@ impl From<&CellXfDef> for CellXfOutput {
                 locked: p.locked.unwrap_or(true),
                 hidden: p.hidden.unwrap_or(false),
             }),
+            quote_prefix: xf.quote_prefix,
+            pivot_button: xf.pivot_button,
         }
     }
 }

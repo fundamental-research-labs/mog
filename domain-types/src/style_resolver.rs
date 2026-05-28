@@ -62,6 +62,8 @@ pub struct CellXfInput {
     pub apply_protection: Option<bool>,
     pub alignment: Option<AlignmentInput>,
     pub protection: Option<ProtectionInput>,
+    pub quote_prefix: bool,
+    pub pivot_button: bool,
 }
 
 /// Font record.
@@ -585,6 +587,13 @@ fn resolve_xf_direct(xf: &CellXfInput, input: &StyleInput) -> DocumentFormat {
         fmt.protection = Some(pf);
     }
 
+    if xf.quote_prefix {
+        fmt.quote_prefix = Some(true);
+    }
+    if xf.pivot_button {
+        fmt.pivot_button = Some(true);
+    }
+
     fmt
 }
 
@@ -660,6 +669,8 @@ fn resolve_single_xf(xf: &CellXfInput, input: &StyleInput) -> Option<DocumentFor
         } else {
             base.protection
         },
+        quote_prefix: direct.quote_prefix.or(base.quote_prefix),
+        pivot_button: direct.pivot_button.or(base.pivot_button),
     };
 
     if fmt == DocumentFormat::default() {

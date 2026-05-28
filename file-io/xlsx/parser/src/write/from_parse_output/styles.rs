@@ -50,8 +50,8 @@ pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
             apply_border: if has_border { Some(true) } else { None },
             apply_alignment: if has_alignment { Some(true) } else { None },
             apply_protection: if has_protection { Some(true) } else { None },
-            pivot_button: false,
-            quote_prefix: false,
+            pivot_button: doc_fmt.pivot_button.unwrap_or(false),
+            quote_prefix: doc_fmt.quote_prefix.unwrap_or(false),
             ext_lst: None,
         };
 
@@ -67,24 +67,48 @@ pub(super) fn apply_workbook_stylesheet(
     include_cell_xfs: bool,
 ) {
     let stylesheet = workbook_stylesheet.to_stylesheet();
+    writer.num_fmts = stylesheet.num_fmts.clone();
+    if !stylesheet.fonts.is_empty() {
+        writer.fonts = stylesheet.fonts.clone();
+    }
+    if !stylesheet.fills.is_empty() {
+        writer.fills = stylesheet.fills.clone();
+    }
+    if !stylesheet.borders.is_empty() {
+        writer.borders = stylesheet.borders.clone();
+    }
+    if !stylesheet.cell_style_xfs.is_empty() {
+        writer.cell_style_xfs = stylesheet.cell_style_xfs.clone();
+    }
+    if !stylesheet.cell_styles.is_empty() {
+        writer.cell_styles = stylesheet.cell_styles.clone();
+    }
+    writer.dxfs = stylesheet.dxfs.clone();
+    writer.colors = stylesheet.colors.clone();
+    writer.table_styles = stylesheet.table_styles.clone();
+    writer.default_table_style = stylesheet.default_table_style.clone();
+    writer.default_pivot_style = stylesheet.default_pivot_style.clone();
+    writer.known_fonts = stylesheet.known_fonts;
+    writer.ext_lst_raw = workbook_stylesheet.ext_lst_xml.clone();
+
     if include_cell_xfs {
-        writer.num_fmts = stylesheet.num_fmts.clone();
-        if !stylesheet.fonts.is_empty() {
-            writer.fonts = stylesheet.fonts.clone();
+        if writer.cell_xfs.is_empty() {
+            writer.cell_xfs.push(CellXfDef {
+                num_fmt_id: Some(0),
+                font_id: Some(0),
+                fill_id: Some(0),
+                border_id: Some(0),
+                xf_id: Some(0),
+                ..Default::default()
+            });
         }
-        if !stylesheet.fills.is_empty() {
-            writer.fills = stylesheet.fills.clone();
+        for (source_idx, xf) in stylesheet.cell_xfs.iter().cloned().enumerate() {
+            let target_idx = source_idx + 1;
+            if target_idx < writer.cell_xfs.len() {
+                writer.cell_xfs[target_idx] = xf;
+            }
         }
-        if !stylesheet.borders.is_empty() {
-            writer.borders = stylesheet.borders.clone();
-        }
-        if !stylesheet.cell_style_xfs.is_empty() {
-            writer.cell_style_xfs = stylesheet.cell_style_xfs.clone();
-        }
-        if !stylesheet.cell_styles.is_empty() {
-            writer.cell_styles = stylesheet.cell_styles.clone();
-        }
-        writer.cell_xfs.clear();
+    } else if writer.cell_xfs.is_empty() {
         writer.cell_xfs.push(CellXfDef {
             num_fmt_id: Some(0),
             font_id: Some(0),
@@ -93,15 +117,7 @@ pub(super) fn apply_workbook_stylesheet(
             xf_id: Some(0),
             ..Default::default()
         });
-        writer.cell_xfs.extend(stylesheet.cell_xfs.iter().cloned());
-        writer.dxfs = stylesheet.dxfs.clone();
-        writer.colors = stylesheet.colors.clone();
-        writer.table_styles = stylesheet.table_styles.clone();
-        writer.default_table_style = stylesheet.default_table_style.clone();
-        writer.default_pivot_style = stylesheet.default_pivot_style.clone();
     }
-    writer.known_fonts = stylesheet.known_fonts;
-    writer.ext_lst_raw = workbook_stylesheet.ext_lst_xml.clone();
 
     if !workbook_stylesheet.root_namespace_attrs.is_empty() {
         let mut ns = crate::roundtrip::namespaces::NamespaceMap::new();

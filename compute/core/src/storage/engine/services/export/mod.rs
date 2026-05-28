@@ -64,8 +64,8 @@ use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_document_properties, export_external_links,
     export_file_sharing, export_file_version, export_shared_string_hints,
-    export_workbook_named_ranges, export_workbook_properties, export_workbook_stylesheet,
-    export_workbook_table_styles, export_workbook_views,
+    export_workbook_named_ranges, export_workbook_properties, export_workbook_style_palette,
+    export_workbook_stylesheet, export_workbook_table_styles, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -141,9 +141,14 @@ struct SharedPalette {
 
 #[cfg(feature = "native")]
 impl SharedPalette {
-    fn new() -> Self {
+    fn from_vec(existing: Vec<DocumentFormat>) -> Self {
+        let index = existing
+            .iter()
+            .enumerate()
+            .map(|(i, fmt)| (fmt.clone(), i as u32))
+            .collect();
         Self {
-            inner: parking_lot::Mutex::new((Vec::new(), rustc_hash::FxHashMap::default())),
+            inner: parking_lot::Mutex::new((existing, index)),
         }
     }
 
@@ -817,7 +822,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     #[cfg(feature = "native")]
     let (output_sheets, style_palette) = {
         use rayon::prelude::*;
-        let palette = SharedPalette::new();
+        let palette = SharedPalette::from_vec(export_workbook_style_palette(stores));
         let sheets: Vec<SheetData> = sheet_ids
             .par_iter()
             .enumerate()
@@ -830,7 +835,8 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
 
     #[cfg(not(feature = "native"))]
     let (output_sheets, style_palette) = {
-        let palette = LocalPalette::new();
+        let mut seeded_palette = export_workbook_style_palette(stores);
+        let palette = LocalPalette::from_vec(&mut seeded_palette);
         let sheets: Vec<SheetData> = sheet_ids
             .iter()
             .enumerate()

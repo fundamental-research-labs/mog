@@ -21,6 +21,10 @@ pub struct DocumentFormat {
     pub alignment: Option<AlignmentFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protection: Option<ProtectionFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quote_prefix: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pivot_button: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -286,6 +290,8 @@ impl std::hash::Hash for DocumentFormat {
         self.number_format.hash(state);
         self.alignment.hash(state);
         self.protection.hash(state);
+        self.quote_prefix.hash(state);
+        self.pivot_button.hash(state);
     }
 }
 
@@ -482,6 +488,7 @@ impl From<&DocumentFormat> for CellFormat {
             // Protection
             locked: prot.and_then(|p| p.locked),
             hidden: prot.and_then(|p| p.hidden),
+            quote_prefix: doc.quote_prefix,
 
             ..Default::default()
         }
@@ -620,6 +627,8 @@ impl From<&CellFormat> for DocumentFormat {
             number_format: cf.number_format.clone(),
             alignment,
             protection,
+            quote_prefix: cf.quote_prefix,
+            pivot_button: None,
         }
     }
 }
@@ -637,6 +646,8 @@ mod tests {
         assert_eq!(fmt.number_format, None);
         assert_eq!(fmt.alignment, None);
         assert_eq!(fmt.protection, None);
+        assert_eq!(fmt.quote_prefix, None);
+        assert_eq!(fmt.pivot_button, None);
     }
 
     #[test]
@@ -675,6 +686,7 @@ mod tests {
                 locked: Some(true),
                 hidden: Some(false),
             }),
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&fmt).unwrap();

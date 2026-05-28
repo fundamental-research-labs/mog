@@ -418,6 +418,7 @@ pub(super) fn build_sheet_parts(
             comments: comments_data,
             threaded_comments,
             tables: table_xmls,
+            source_tables: sheet_data.tables.clone(),
             has_external_hyperlinks,
             has_charts,
             has_chart_ex,

@@ -168,6 +168,12 @@ pub(super) fn write_zip_package(
         }
     }
 
+    if !output.connections.is_empty() {
+        let xml =
+            crate::domain::connections::write_connections_xml(&output.connections.connections);
+        add_registered_part(package_graph, &mut zip, "xl/connections.xml", xml)?;
+    }
+
     // Pre-generate all sheet XMLs (parallel when the "parallel" feature is enabled).
     #[cfg(feature = "parallel")]
     let sheet_xmls: Vec<Vec<u8>> = {
@@ -360,12 +366,6 @@ pub(super) fn write_zip_package(
         }
     }
 
-    // Table XML files
-    {
-        let mut table_global = 0usize;
-        for extras in sheet_extras {
-            for table_xml in &extras.tables {
-                table_global += 1;
     let mut written_ole_parts = std::collections::BTreeSet::new();
     let mut vml_paths_with_preview_rels = std::collections::BTreeSet::new();
     for (idx, extras) in sheet_extras.iter().enumerate() {
@@ -411,12 +411,42 @@ pub(super) fn write_zip_package(
         }
     }
 
+    // Table XML files
+    {
+        let mut table_global = 0usize;
+        let mut query_table_global = 0usize;
+        for extras in sheet_extras {
+            for (local_idx, table_xml) in extras.tables.iter().enumerate() {
+                table_global += 1;
                 add_registered_part(
                     package_graph,
                     &mut zip,
                     &format!("xl/tables/table{}.xml", table_global),
                     table_xml.clone(),
                 )?;
+                let owner = crate::write::package_graph::PackageOwner::Part {
+                    path: format!("xl/tables/table{}.xml", table_global),
+                };
+                let table_rels = package_graph.relationship_manager_for_owner(&owner);
+                if !table_rels.is_empty() {
+                    zip.add_file(
+                        &format!("xl/tables/_rels/table{}.xml.rels", table_global),
+                        table_rels.to_xml(),
+                    );
+                }
+                if let Some(query_table) = extras
+                    .source_tables
+                    .get(local_idx)
+                    .and_then(|table| table.query_table.as_ref())
+                {
+                    query_table_global += 1;
+                    add_registered_part(
+                        package_graph,
+                        &mut zip,
+                        &format!("xl/queryTables/queryTable{}.xml", query_table_global),
+                        crate::domain::connections::write_query_table_xml(query_table),
+                    )?;
+                }
             }
         }
     }

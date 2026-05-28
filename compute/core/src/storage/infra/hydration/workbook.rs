@@ -181,6 +181,22 @@ pub(super) fn hydrate_workbook_tables(
     }
 }
 
+pub(super) fn hydrate_workbook_connections(
+    workbook: &MapRef,
+    connections: &domain_types::domain::connections::WorkbookConnectionSet,
+    txn: &mut yrs::TransactionMut,
+) {
+    if connections.is_empty() {
+        return;
+    }
+    let Some(json) = serde_json::to_string(connections).ok() else {
+        return;
+    };
+    let map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_CONNECTIONS);
+    map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
+}
+
 pub(super) fn hydrate_workbook_table_styles(
     workbook: &MapRef,
     table_styles: &[ooxml_types::styles::TableStyleDef],

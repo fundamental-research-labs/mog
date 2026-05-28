@@ -268,6 +268,7 @@ pub fn full_parse_result_to_parse_output(
         file_sharing: result.file_sharing.clone(),
         web_publishing: result.web_publishing.clone(),
         external_links: result.external_links.clone(),
+        connections: result.connections.clone(),
         persons,
     };
     populate_dxf_registry_owners(&mut parse_output);

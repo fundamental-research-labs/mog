@@ -70,6 +70,10 @@ pub struct TableSpec {
     /// Auto-filter column definitions (filter criteria applied to columns).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filter_columns: Vec<FilterColumnSpec>,
+    /// Query table owned by this table part, when the table is backed by an
+    /// external workbook connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_table: Option<super::connections::QueryTable>,
 }
 
 /// Sort state for a table (for round-trip fidelity).
@@ -152,6 +156,7 @@ impl Default for TableSpec {
             xr_uid: None,
             sort_state: None,
             filter_columns: Vec::new(),
+            query_table: None,
         }
     }
 }

@@ -70,6 +70,9 @@ pub struct ParseOutput {
     /// Workbook external-link definitions that should be emitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_links: Vec<ExternalLink>,
+    /// Workbook external data connections from `xl/connections.xml`.
+    #[serde(default, skip_serializing_if = "WorkbookConnectionSet::is_empty")]
+    pub connections: WorkbookConnectionSet,
     /// Person identity list for threaded comments.
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

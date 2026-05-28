@@ -862,6 +862,21 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let (custom_table_styles, default_table_style, default_pivot_style) =
         export_workbook_table_styles(stores);
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
+    let mut connections = workbook::export_workbook_connections(stores);
+    let referenced_connection_ids: std::collections::BTreeSet<u32> = output_sheets
+        .iter()
+        .flat_map(|sheet| sheet.tables.iter())
+        .filter_map(|table| {
+            table
+                .query_table
+                .as_ref()
+                .and_then(|query_table| query_table.connection_id)
+                .or(table.connection_id)
+        })
+        .collect();
+    connections
+        .connections
+        .retain(|connection| referenced_connection_ids.contains(&connection.id));
 
     ParseOutput {
         sheets: output_sheets,
@@ -888,6 +903,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         file_sharing: export_file_sharing(stores),
         web_publishing: workbook::export_workbook_web_publishing(stores),
         external_links: export_external_links(stores),
+        connections,
         persons: export_workbook_threaded_comment_persons(stores),
     }
 }

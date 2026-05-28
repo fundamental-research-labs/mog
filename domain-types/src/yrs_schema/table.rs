@@ -54,6 +54,7 @@ pub const KEY_INSERT_ROW_SHIFT: &str = "insertRowShift";
 pub const KEY_PUBLISHED: &str = "published";
 pub const KEY_OOXML_COLUMNS: &str = "ooxmlColumns";
 pub const KEY_OOXML_META: &str = "ooxmlMeta";
+pub const KEY_QUERY_TABLE: &str = "queryTable";
 
 /// Write a TableSpec to Y.Map prelim entries.
 pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
@@ -160,6 +161,11 @@ pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
         && let Ok(json) = serde_json::to_string(&table.filter_columns)
     {
         entries.push(("filterColumns", Any::String(Arc::from(json.as_str()))));
+    }
+    if let Some(ref query_table) = table.query_table
+        && let Ok(json) = serde_json::to_string(query_table)
+    {
+        entries.push((KEY_QUERY_TABLE, Any::String(Arc::from(json.as_str()))));
     }
 
     entries
@@ -283,6 +289,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
         filter_columns: read_string(map, txn, "filterColumns")
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
+        query_table: read_string(map, txn, KEY_QUERY_TABLE)
+            .and_then(|s| serde_json::from_str(&s).ok()),
     })
 }
 

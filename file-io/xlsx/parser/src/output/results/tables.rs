@@ -164,6 +164,10 @@ pub struct ParsedTable {
     /// Auto-filter column definitions (active filter criteria).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filter_columns: Vec<domain_types::FilterColumnSpec>,
+    /// Table-owned query table definition, when this table is backed by an
+    /// external workbook connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_table: Option<domain_types::domain::connections::QueryTable>,
 }
 
 /// Sort state for a table (simplified representation for round-trip).

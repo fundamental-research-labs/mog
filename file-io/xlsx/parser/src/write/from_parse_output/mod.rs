@@ -1147,6 +1147,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         )?;
         external_links::register_owned_relationships(&mut package_graph_builder, part_name, link);
     }
+    if !output.connections.is_empty() {
+        crate::write::package_graph::register_workbook_connections(&mut package_graph_builder)?;
+    }
     for entry in &pivot_data.pivot_cache_entries {
         crate::write::package_graph::register_generated_pivot_cache(
             &mut package_graph_builder,
@@ -1471,6 +1474,21 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             *global_idx,
             None,
         )?;
+    }
+    let mut query_table_global_idx = 0usize;
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        let tables_before: usize = sheet_extras[..sheet_idx].iter().map(|e| e.tables.len()).sum();
+        for (table_idx, table) in extras.source_tables.iter().enumerate() {
+            if let Some(query_table) = &table.query_table {
+                query_table_global_idx += 1;
+                crate::write::package_graph::register_table_query_table(
+                    &mut package_graph_builder,
+                    tables_before + table_idx + 1,
+                    query_table_global_idx,
+                    query_table.relationship_id.as_deref(),
+                )?;
+            }
+        }
     }
     for (sheet_idx, global_idx) in &worksheet_slicer_relationships {
         crate::write::package_graph::register_worksheet_slicer(

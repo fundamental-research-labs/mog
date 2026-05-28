@@ -194,6 +194,27 @@ pub(super) fn export_shared_string_hints(
     serde_json::from_str::<Vec<domain_types::SharedStringHint>>(&json_str).unwrap_or_default()
 }
 
+pub(super) fn export_workbook_connections(
+    stores: &EngineStores,
+) -> domain_types::domain::connections::WorkbookConnectionSet {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let connections_map = match workbook.get(&txn, KEY_WORKBOOK_CONNECTIONS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Default::default(),
+    };
+
+    let json_str = match connections_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return Default::default(),
+    };
+
+    serde_json::from_str::<domain_types::domain::connections::WorkbookConnectionSet>(&json_str)
+        .unwrap_or_default()
+}
+
 pub(super) fn export_workbook_stylesheet(
     stores: &EngineStores,
 ) -> Option<domain_types::WorkbookStylesheet> {

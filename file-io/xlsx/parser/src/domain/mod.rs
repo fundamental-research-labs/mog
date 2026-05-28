@@ -9,6 +9,7 @@ pub mod cells;
 pub mod charts;
 pub mod comments;
 pub mod cond_format;
+pub mod connections;
 pub mod content_types;
 pub mod controls;
 pub mod drawings;

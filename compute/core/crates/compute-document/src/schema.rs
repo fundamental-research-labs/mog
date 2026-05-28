@@ -90,6 +90,7 @@ pub const KEY_SHARED_STRING_HINTS: &str = "sharedStringHints";
 pub const KEY_WORKBOOK_SETTINGS: &str = "workbookSettings";
 pub const KEY_WORKBOOK_IDENTITY: &str = "workbookIdentity";
 pub const KEY_WORKBOOK_LINKS: &str = "workbookLinks";
+pub const KEY_WORKBOOK_CONNECTIONS: &str = "workbookConnections";
 pub const KEY_IMPORTED_EXTERNAL_CACHE: &str = "importedExternalCache";
 pub const KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE: &str = "importedExternalUsageProvenance";
 pub const KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS: &str = "importedExternalPackageArtifacts";

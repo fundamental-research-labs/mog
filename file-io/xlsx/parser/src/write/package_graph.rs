@@ -47,6 +47,14 @@ const CT_SLICER_CACHE: &str = "application/vnd.ms-excel.slicerCache+xml";
 const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relationships/slicer";
 const REL_SLICER_CACHE: &str =
     "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
+const REL_CONNECTIONS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections";
+const REL_QUERY_TABLE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable";
+const CT_CONNECTIONS: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml";
+const CT_QUERY_TABLE: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
@@ -613,6 +621,38 @@ pub fn register_worksheet_table(
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         },
         relationship_type: REL_TABLE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_workbook_connections(graph: &mut PackageGraphBuilder) -> Result<(), WriteError> {
+    graph.register_part(modeled_part("xl/connections.xml", CT_CONNECTIONS))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: REL_CONNECTIONS.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "xl/connections.xml".to_string(),
+        },
+        identity_hint: None,
+    });
+    Ok(())
+}
+
+pub fn register_table_query_table(
+    graph: &mut PackageGraphBuilder,
+    table_global_idx: usize,
+    query_table_global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/queryTables/queryTable{query_table_global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_QUERY_TABLE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: format!("xl/tables/table{table_global_idx}.xml"),
+        },
+        relationship_type: REL_QUERY_TABLE.to_string(),
         target: PackageRelationshipTarget::InternalPart { path },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
@@ -1526,6 +1566,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
             relationship_type: REL_EXTERNAL_LINK,
         });
     }
+    if path == "xl/connections.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: REL_CONNECTIONS,
+        });
+    }
     if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
         return Some(RequiredRelationship {
             rels_path: Some(workbook_rels.to_string()),
@@ -1574,6 +1620,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
             relationship_type: REL_IMAGE,
         });
     }
+    if path.starts_with("xl/queryTables/queryTable") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: REL_QUERY_TABLE,
+        });
+    }
     if path.starts_with("xl/pivotCache/pivotCacheRecords") && path.ends_with(".xml") {
         let idx = path
             .trim_start_matches("xl/pivotCache/pivotCacheRecords")
@@ -1610,6 +1662,10 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_METADATA)
     } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
         Some(CT_TABLE)
+    } else if path == "xl/connections.xml" {
+        Some(CT_CONNECTIONS)
+    } else if path.starts_with("xl/queryTables/queryTable") && path.ends_with(".xml") {
+        Some(CT_QUERY_TABLE)
     } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
         Some(CT_SLICER)
     } else if path.starts_with("xl/slicerCaches/slicerCache") && path.ends_with(".xml") {

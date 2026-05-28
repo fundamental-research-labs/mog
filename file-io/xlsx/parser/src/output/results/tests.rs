@@ -273,6 +273,7 @@ fn test_parsed_table_serialization() {
         insert_row_shift: false,
         published: false,
         filter_columns: vec![],
+        query_table: None,
         sort_state: None,
         xr_uid: None,
     };

@@ -65,6 +65,7 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
             published: t.published,
             xr_uid: t.xr_uid.clone(),
             filter_columns: t.filter_columns.clone(),
+            query_table: t.query_table.clone(),
             sort_state: t.sort_state.as_ref().map(|ss| {
                 domain_types::domain::table::TableSortState {
                     ref_range: ss.ref_range.clone(),

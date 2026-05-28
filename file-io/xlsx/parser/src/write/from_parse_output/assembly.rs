@@ -10,6 +10,8 @@ pub(super) struct SheetExtras {
     pub(super) threaded_comments: Option<Vec<u8>>,
     /// Table XML bytes, one per table. Index is local to this sheet.
     pub(super) tables: Vec<Vec<u8>>,
+    /// Source table specs corresponding to `tables`.
+    pub(super) source_tables: Vec<domain_types::TableSpec>,
     /// Whether this sheet has external hyperlinks (needs rels).
     pub(super) has_external_hyperlinks: bool,
     /// Whether this sheet has standard charts that need drawing.

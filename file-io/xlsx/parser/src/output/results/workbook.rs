@@ -636,6 +636,9 @@ pub struct FullParseResult {
     /// Parsed external link definitions for domain-based round-tripping.
     #[serde(skip)]
     pub external_links: Vec<domain_types::domain::external_link::ExternalLink>,
+    /// Parsed workbook data connections from `xl/connections.xml`.
+    #[serde(skip)]
+    pub connections: domain_types::domain::connections::WorkbookConnectionSet,
     /// Raw `customXml/` parts for verbatim round-trip passthrough.
     /// Stores all `customXml/item*.xml`, `customXml/itemProps*.xml`, and
     /// `customXml/_rels/item*.xml.rels` entries keyed by their ZIP path.

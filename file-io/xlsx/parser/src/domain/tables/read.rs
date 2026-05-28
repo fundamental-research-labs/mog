@@ -64,7 +64,19 @@ pub fn parse_tables_for_sheet(
             }
 
             if let Some(table) = tables::Table::parse(&table_xml) {
-                if let Some(parsed) = convert_table_to_parsed(&table) {
+                if let Some(mut parsed) = convert_table_to_parsed(&table) {
+                    parsed.query_table =
+                        crate::domain::connections::query_table_relationship_for_table(
+                            archive,
+                            table_rel_path,
+                        )
+                        .and_then(|(relationship_id, path)| {
+                            crate::domain::connections::parse_query_table_for_path(
+                                archive,
+                                &path,
+                                Some(relationship_id),
+                            )
+                        });
                     tables_vec.push(parsed);
                 }
             }
@@ -248,6 +260,7 @@ fn convert_table_to_parsed(table: &tables::Table) -> Option<ParsedTable> {
         xr_uid: table.xr_uid.clone(),
         sort_state: convert_table_sort_state(table),
         filter_columns: convert_filter_columns(table),
+        query_table: None,
     })
 }
 

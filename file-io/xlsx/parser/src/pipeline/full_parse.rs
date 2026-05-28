@@ -933,6 +933,7 @@ fn parse_xlsx_full_native_impl(
         .ok()
         .map(|xml| crate::domain::calc::parse_calc_chain(&xml).len())
         .unwrap_or(0);
+    let connections = crate::domain::connections::parse_connections(&archive);
 
     // Build result
     let result = FullParseResult {
@@ -987,6 +988,7 @@ fn parse_xlsx_full_native_impl(
         raw_metadata_xml,
         raw_doc_metadata_label_info,
         external_links,
+        connections,
         custom_xml_parts,
         raw_persons_xml,
         raw_threaded_comments,
@@ -1014,8 +1016,6 @@ fn parse_xlsx_full_native_impl(
                     || entry.name.starts_with("xl/media/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
-                    || entry.name.starts_with("xl/connections.xml")
-                    || entry.name.starts_with("xl/queryTables/")
                     || entry.name.starts_with("xl/timelineCaches/")
                     || entry.name.starts_with("xl/timelines/")
                     // Pivots and slicers are modeled features. Do not capture

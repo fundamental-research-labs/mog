@@ -304,6 +304,9 @@ fn validated_ymd_to_serial(year: i32, month: u32, day: u32) -> Option<f64> {
     if !(1..=12).contains(&month) || day < 1 || !(1900..=9999).contains(&year) {
         return None;
     }
+    if year == 1900 && month == 2 && day == 29 {
+        return Some(60.0);
+    }
     // SAFETY: month is validated to be 1..=12 above
     let max_day = days_in_month(year, month as i32).unwrap() as u32;
     if day > max_day {

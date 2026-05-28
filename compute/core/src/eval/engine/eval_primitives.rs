@@ -1357,6 +1357,21 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
 
             // === End SMALL/LARGE/RANK ===
 
+            "AREAS" => {
+                if args.len() != 1 {
+                    return Ok(CellValue::Error(CellError::Value, None));
+                }
+                let count = match &args[0] {
+                    ASTNode::Union { ranges } => ranges.len(),
+                    ASTNode::Paren(inner) => match inner.as_ref() {
+                        ASTNode::Union { ranges } => ranges.len(),
+                        _ => 1,
+                    },
+                    _ => 1,
+                };
+                Ok(CellValue::number(count as f64))
+            }
+
             // -- SUMPRODUCT: vectorized special dispatch (avoids intermediate arrays) --
             "SUMPRODUCT" => self.eval_sumproduct(args).await,
 

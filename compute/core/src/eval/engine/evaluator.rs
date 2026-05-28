@@ -485,9 +485,16 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 Some("External workbook provider not configured".into()),
             ))),
 
-            ASTNode::BinaryOp { op, left, right } => Ok(EvalValue::Cell(
-                self.eval_left_deep_binary_chain(*op, left, right).await?,
-            )),
+            ASTNode::BinaryOp { op, left, right } => {
+                if matches!(op, compute_parser::BinOp::Intersect) {
+                    return Ok(EvalValue::Cell(
+                        self.eval_reference_intersection(left, right).await?,
+                    ));
+                }
+                Ok(EvalValue::Cell(
+                    self.eval_left_deep_binary_chain(*op, left, right).await?,
+                ))
+            }
 
             ASTNode::UnaryOp { op, operand } => {
                 // Excel `@` implicit-intersection: pick the row-aligned (column
@@ -708,6 +715,59 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
 
         Ok(acc)
+    }
+
+    async fn eval_reference_intersection(
+        &mut self,
+        left: &ASTNode,
+        right: &ASTNode,
+    ) -> Result<CellValue, ComputeError> {
+        let left_area = match self.eval_node_as_area(left).await {
+            Ok(area) => area,
+            Err(ComputeError::Eval { .. }) => return Ok(CellValue::Error(CellError::Value, None)),
+            Err(e) => return Err(e),
+        };
+        let right_area = match self.eval_node_as_area(right).await {
+            Ok(area) => area,
+            Err(ComputeError::Eval { .. }) => return Ok(CellValue::Error(CellError::Value, None)),
+            Err(e) => return Err(e),
+        };
+        let (left_sheet, left_start_row, left_start_col, left_end_row, left_end_col) = left_area;
+        let (right_sheet, right_start_row, right_start_col, right_end_row, right_end_col) =
+            right_area;
+        if left_sheet != right_sheet {
+            return Ok(CellValue::Error(CellError::Null, None));
+        }
+
+        let start_row = left_start_row.max(right_start_row);
+        let start_col = left_start_col.max(right_start_col);
+        let end_row = left_end_row.min(right_end_row);
+        let end_col = left_end_col.min(right_end_col);
+        if start_row > end_row || start_col > end_col {
+            return Ok(CellValue::Error(CellError::Null, None));
+        }
+
+        let start_ref = CellRef::Positional {
+            sheet: left_sheet,
+            row: start_row,
+            col: start_col,
+        };
+        let end_ref = CellRef::Positional {
+            sheet: left_sheet,
+            row: end_row,
+            col: end_col,
+        };
+        if start_row == end_row && start_col == end_col {
+            return Ok(self.data.get_cell_value_by_ref(&start_ref).await);
+        }
+        match self
+            .data
+            .get_range_values(&start_ref, &end_ref, &RangeType::CellRange)
+            .await
+        {
+            Ok(array) => Ok(CellValue::Array(array)),
+            Err(e) => Ok(CellValue::Error(e, None)),
+        }
     }
 
     // -----------------------------------------------------------------------

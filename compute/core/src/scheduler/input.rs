@@ -15,7 +15,7 @@
 
 use compute_formats::FormatType;
 use compute_parser::FormulaSource;
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 use crate::storage::cells::values::{ParsedValue, parse_input_value};
 
@@ -72,6 +72,9 @@ impl CellWrite {
         // Formula short-circuit (only reached when target != Text).
         if s.starts_with('=') {
             return Self::Formula(FormulaSource::parse(s));
+        }
+        if let Some(error) = CellError::parse_error_str(s.trim()) {
+            return Self::Value(CellValue::Error(error, None));
         }
         // No apostrophe handling here: `from_user_string` does not strip
         // leading `'` today and continues not to. The force-text editor path

@@ -148,6 +148,21 @@ impl YrsComputeEngine {
                 continue;
             }
 
+            let Some(formula) = self.mirror.get_formula(&cell_id) else {
+                continue;
+            };
+            match formula_result_format_intent(&formula.template) {
+                FormulaResultFormatIntent::Apply(format) => {
+                    to_apply.push((*sheet_id, *row, *col, format.to_string()));
+                    continue;
+                }
+                FormulaResultFormatIntent::Numeric | FormulaResultFormatIntent::NonInheriting => {
+                    continue;
+                }
+                FormulaResultFormatIntent::InheritReference
+                | FormulaResultFormatIntent::Unknown => {}
+            }
+
             let mut visited = HashSet::new();
             visited.insert(cell_id);
             let Some(number_format) =
@@ -285,6 +300,59 @@ impl YrsComputeEngine {
 
 fn is_non_general_number_format(format: &str) -> bool {
     compute_formats::detect_format_type(format) != compute_formats::FormatType::General
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FormulaResultFormatIntent {
+    Apply(&'static str),
+    Numeric,
+    NonInheriting,
+    InheritReference,
+    Unknown,
+}
+
+fn formula_result_format_intent(template: &str) -> FormulaResultFormatIntent {
+    let trimmed = template.trim();
+    if trimmed.starts_with('{') {
+        return FormulaResultFormatIntent::InheritReference;
+    }
+    let Some(root) = formula_root_name(trimmed) else {
+        return FormulaResultFormatIntent::Unknown;
+    };
+    match root.as_str() {
+        "DATE" | "DATEVALUE" | "EDATE" | "EOMONTH" | "NOW" | "TODAY" => {
+            FormulaResultFormatIntent::Apply("m/d/yyyy")
+        }
+        "TIME" | "TIMEVALUE" => FormulaResultFormatIntent::Apply("h:mm"),
+        "NETWORKDAYS" | "NETWORKDAYS.INTL" | "DAYS" | "DATEDIF" | "COUNT" | "COUNTA"
+        | "COUNTBLANK" | "COUNTIF" | "COUNTIFS" | "SUM" | "SUMIF" | "SUMIFS" | "AVERAGE"
+        | "AVERAGEIF" | "AVERAGEIFS" | "MIN" | "MAX" | "MEDIAN" | "MODE" | "MODE.SNGL"
+        | "MODE.MULT" | "STDEV" | "STDEV.S" | "STDEV.P" | "VAR" | "VAR.S" | "VAR.P" => {
+            FormulaResultFormatIntent::Numeric
+        }
+        "TEXT" | "TEXTJOIN" | "CONCAT" | "CONCATENATE" | "LEFT" | "RIGHT" | "MID"
+        | "TEXTBEFORE" | "TEXTAFTER" | "TEXTSPLIT" => FormulaResultFormatIntent::NonInheriting,
+        _ => FormulaResultFormatIntent::Unknown,
+    }
+}
+
+fn formula_root_name(template: &str) -> Option<String> {
+    let mut end = 0;
+    for (idx, ch) in template.char_indices() {
+        if ch.is_ascii_alphabetic() || ch == '.' || ch == '_' {
+            end = idx + ch.len_utf8();
+            continue;
+        }
+        break;
+    }
+    if end == 0 || !template[end..].trim_start().starts_with('(') {
+        return None;
+    }
+    let mut root = template[..end].to_ascii_uppercase();
+    if let Some(stripped) = root.strip_prefix("_XLFN.") {
+        root = stripped.to_string();
+    }
+    Some(root)
 }
 
 pub(in crate::storage::engine) fn is_formula_parse_input(input: &mutation::CellInput) -> bool {

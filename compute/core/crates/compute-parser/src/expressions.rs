@@ -513,8 +513,12 @@ fn parse_arg_list(input: &mut &str, state: &ParseState) -> ModalResult<Vec<ASTNo
 /// formulas like `SUM(SUM(SUM(...)))` because both `try_parse_function_call`
 /// and the postfix call-expression path would attempt to parse the same argument list.
 #[inline]
-pub const fn is_callable(node: &ASTNode) -> bool {
-    matches!(node, ASTNode::Paren(_) | ASTNode::CallExpression { .. })
+pub fn is_callable(node: &ASTNode) -> bool {
+    match node {
+        ASTNode::Paren(_) | ASTNode::CallExpression { .. } => true,
+        ASTNode::Function { name, .. } => name.eq_ignore_ascii_case("LAMBDA"),
+        _ => false,
+    }
 }
 
 /// Check if an AST node could be a range endpoint for the infix `:` operator.

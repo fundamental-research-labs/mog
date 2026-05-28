@@ -121,6 +121,9 @@ impl PureFunction for FnTextBefore {
                 i += 1;
             }
         }
+        if match_end != 0 {
+            positions.push(text_chars.len());
+        }
 
         if positions.is_empty() {
             return if_not_found;
@@ -261,6 +264,9 @@ impl PureFunction for FnTextAfter {
                 i += 1;
             }
         }
+        if match_end != 0 {
+            positions.push(text_chars.len());
+        }
 
         if positions.is_empty() {
             return if_not_found;
@@ -281,7 +287,11 @@ impl PureFunction for FnTextAfter {
             return if_not_found;
         }
 
-        let after_pos = positions[target_index] + delim_chars.len();
+        let after_pos = if positions[target_index] == text_chars.len() {
+            text_chars.len()
+        } else {
+            positions[target_index] + delim_chars.len()
+        };
         let result: String = text_chars[after_pos..].iter().collect();
         CellValue::Text(result.into())
     }
@@ -289,8 +299,8 @@ impl PureFunction for FnTextAfter {
 
 pub(crate) struct FnTextSplit;
 impl PureFunction for FnTextSplit {
-    fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
+    fn is_scalar_arg(&self, index: usize) -> bool {
+        !matches!(index, 1 | 2)
     }
     fn name(&self) -> &'static str {
         "TEXTSPLIT"

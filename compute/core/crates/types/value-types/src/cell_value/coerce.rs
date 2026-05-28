@@ -107,9 +107,8 @@ impl CellValue {
                 }
             }
             CellValue::Error(e, _) => Err(*e),
-            CellValue::Array(_) => Err(CellError::Value),
+            CellValue::Array(_) | CellValue::Image(_) => Err(CellError::Value),
             CellValue::Control(c) => Ok(if c.value { 1.0 } else { 0.0 }),
-            CellValue::Image(_) => Err(CellError::Value),
         }
     }
 
@@ -163,9 +162,8 @@ impl CellValue {
                 }
             }
             CellValue::Error(e, _) => Err(*e),
-            CellValue::Array(_) => Err(CellError::Value),
+            CellValue::Array(_) | CellValue::Image(_) => Err(CellError::Value),
             CellValue::Control(c) => Ok(c.value),
-            CellValue::Image(_) => Err(CellError::Value),
         }
     }
 }

@@ -41,6 +41,11 @@ impl HeaderFooterSection {
             if ch == '&' {
                 if let Some(&next_ch) = chars.peek() {
                     match next_ch {
+                        '&' => {
+                            current_text.push('&');
+                            current_text.push('&');
+                            chars.next();
+                        }
                         'L' | 'l' => {
                             if !current_text.is_empty() {
                                 current_section.push_str(&current_text);

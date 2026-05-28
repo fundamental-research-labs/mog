@@ -54,6 +54,8 @@ fn rich_note_comment_round_trips_through_real_yrs_map() {
 
     assert_eq!(
         original,
-        roundtrip_map(comment::to_yrs_prelim(&original), comment::from_yrs_map)
+        roundtrip_map(comment::to_yrs_prelim(&original), |map, txn| {
+            comment::from_yrs_map(map, txn)
+        })
     );
 }

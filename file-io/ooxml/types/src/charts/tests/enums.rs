@@ -1,7 +1,5 @@
 use crate::charts::*;
 
-use super::assert_roundtrip;
-
 #[test]
 fn chart_type_default() {
     assert_eq!(ChartType::default(), ChartType::Unknown);

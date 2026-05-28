@@ -700,7 +700,9 @@
         let rule = CfRuleX14 {
             rule_type: CfRuleType::DataBar,
             priority: 1,
+            dxf_id: None,
             id: "{00000000-0000-0000-0000-000000000001}".to_string(),
+            color_scale: None,
             data_bar: Some(DataBar {
                 gradient: false,
                 direction: DataBarDirection::LeftToRight,

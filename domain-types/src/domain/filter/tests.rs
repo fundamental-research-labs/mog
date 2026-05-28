@@ -4,6 +4,7 @@ use value_types::CellValue;
 
 use super::*;
 use super::range_ref::{col_index_to_letters, col_letters_to_index, parse_range_ref};
+use super::runtime::FilterState;
 
 #[test]
 fn column_filter_values_roundtrip() {

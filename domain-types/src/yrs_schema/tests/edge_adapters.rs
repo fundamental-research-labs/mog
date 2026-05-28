@@ -25,7 +25,7 @@ fn runtime_filter_sort_state_round_trips_and_defaults_unknown_tokens() {
         original,
         roundtrip_map(
             filter_sort_state::to_yrs_prelim(&original),
-            filter_sort_state::from_yrs_map,
+            |map, txn| filter_sort_state::from_yrs_map(map, txn),
         )
     );
 
@@ -83,7 +83,9 @@ fn auto_filter_smoke_round_trips_active_adapter() {
 
     assert_eq!(
         original,
-        roundtrip_map(auto_filter::to_yrs_prelim(&original), auto_filter::from_yrs_map)
+        roundtrip_map(auto_filter::to_yrs_prelim(&original), |map, txn| {
+            auto_filter::from_yrs_map(map, txn)
+        })
     );
 }
 
@@ -102,7 +104,7 @@ fn pivot_cache_records_round_trip_json_rows() {
         original,
         roundtrip_string_map_value(
             pivot_cache_records::to_yrs_prelim(&original),
-            pivot_cache_records::from_yrs_map,
+            |map, txn| pivot_cache_records::from_yrs_map(map, txn),
         )
     );
 }
@@ -119,7 +121,7 @@ fn pivot_cache_records_ignores_malformed_entries() {
                 Any::String(Arc::from(serde_json::to_string(&valid_rows).unwrap())),
             ),
         ],
-        pivot_cache_records::from_yrs_map,
+        |map, txn| pivot_cache_records::from_yrs_map(map, txn),
     );
 
     assert_eq!(restored.len(), 1);
@@ -172,6 +174,8 @@ fn slicer_round_trips_table_binding_style_position_and_selection() {
 
     assert_eq!(
         original,
-        roundtrip_map(slicer::to_yrs_prelim(&original), slicer::from_yrs_map)
+        roundtrip_map(slicer::to_yrs_prelim(&original), |map, txn| {
+            slicer::from_yrs_map(map, txn)
+        })
     );
 }

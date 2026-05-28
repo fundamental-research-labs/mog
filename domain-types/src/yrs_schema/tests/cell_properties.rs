@@ -35,7 +35,7 @@ fn cell_properties_hydrates_format_and_metadata_from_one_flat_map() {
         original,
         roundtrip_map(
             cell_properties::to_yrs_prelim(&original),
-            cell_properties::from_yrs_map,
+            |map, txn| cell_properties::from_yrs_map(map, txn),
         )
     );
 }
@@ -54,7 +54,7 @@ fn column_and_range_schema_round_trip_through_real_yrs_maps() {
         column,
         roundtrip_map(
             column_schema::column_to_yrs_prelim(&column),
-            column_schema::column_from_yrs_map,
+            |map, txn| column_schema::column_from_yrs_map(map, txn),
         )
     );
 
@@ -81,7 +81,7 @@ fn column_and_range_schema_round_trip_through_real_yrs_maps() {
         range,
         roundtrip_map(
             column_schema::range_to_yrs_prelim(&range),
-            column_schema::range_from_yrs_map,
+            |map, txn| column_schema::range_from_yrs_map(map, txn),
         )
     );
 }

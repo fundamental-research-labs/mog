@@ -37,6 +37,8 @@ fn rich_print_settings_round_trip_through_real_yrs_map() {
             first_footer: None,
             different_odd_even: true,
             different_first: true,
+            scale_with_doc: Some(true),
+            align_with_margins: Some(true),
         }),
         black_and_white: true,
         draft: true,
@@ -86,6 +88,8 @@ fn rich_print_settings_round_trip_through_real_yrs_map() {
 
     assert_eq!(
         original,
-        roundtrip_map(print::to_yrs_prelim(&original), print::from_yrs_map)
+        roundtrip_map(print::to_yrs_prelim(&original), |map, txn| {
+            print::from_yrs_map(map, txn)
+        })
     );
 }

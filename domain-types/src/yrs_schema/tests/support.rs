@@ -2,7 +2,7 @@ use yrs::{Any, Doc, Map, MapPrelim, Transact};
 
 pub fn roundtrip_map<T>(
     entries: Vec<(&str, Any)>,
-    from_fn: impl FnOnce(&yrs::MapRef, &yrs::Transaction<'_>) -> Option<T>,
+    from_fn: impl for<'a> FnOnce(&yrs::MapRef, &yrs::Transaction<'a>) -> Option<T>,
 ) -> T {
     let doc = Doc::new();
     let root = doc.get_or_insert_map("test");
@@ -23,7 +23,7 @@ pub fn roundtrip_map<T>(
 
 pub fn roundtrip_map_value<T>(
     entries: Vec<(&str, Any)>,
-    from_fn: impl FnOnce(&yrs::MapRef, &yrs::Transaction<'_>) -> T,
+    from_fn: impl for<'a> FnOnce(&yrs::MapRef, &yrs::Transaction<'a>) -> T,
 ) -> T {
     let doc = Doc::new();
     let root = doc.get_or_insert_map("test");
@@ -44,7 +44,7 @@ pub fn roundtrip_map_value<T>(
 
 pub fn roundtrip_string_map_value<T>(
     entries: Vec<(String, Any)>,
-    from_fn: impl FnOnce(&yrs::MapRef, &yrs::Transaction<'_>) -> T,
+    from_fn: impl for<'a> FnOnce(&yrs::MapRef, &yrs::Transaction<'a>) -> T,
 ) -> T {
     let doc = Doc::new();
     let root = doc.get_or_insert_map("test");

@@ -72,3 +72,4 @@ impl Rem for FiniteF64 {
     fn rem(self, rhs: Self) -> Option<Self> {
         self.checked_rem(rhs)
     }
+}

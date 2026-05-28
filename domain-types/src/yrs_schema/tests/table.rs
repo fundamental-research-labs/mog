@@ -29,7 +29,9 @@ fn table_spec_round_trips_ooxml_metadata() {
 
     assert_eq!(
         original,
-        roundtrip_map(table::to_yrs_prelim(&original), table::from_yrs_map)
+        roundtrip_map(table::to_yrs_prelim(&original), |map, txn| {
+            table::from_yrs_map(map, txn)
+        })
     );
 }
 
@@ -65,7 +67,7 @@ fn canonical_table_round_trips_runtime_entrypoint() {
         original,
         roundtrip_map(
             table::to_yrs_prelim_from_table(&original),
-            table::from_yrs_map_to_table,
+            |map, txn| table::from_yrs_map_to_table(map, txn),
         )
     );
 }

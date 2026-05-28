@@ -134,6 +134,7 @@ pub fn extract_cell_value_fast<'a>(xml: &'a [u8], shared_strings: &'a [&'a str])
     }
 
     (VALUE_TYPE_NONE, b"")
+}
 
 /// Extract formula value, scanning forward from the `<f` position.
 ///
@@ -280,5 +281,3 @@ pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> O
         Some(out)
     }
 }
-
-/// Extract an attribute value from an XML element

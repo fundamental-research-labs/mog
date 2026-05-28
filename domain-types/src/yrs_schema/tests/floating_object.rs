@@ -34,7 +34,7 @@ fn shape_envelope_round_trips_through_unified_floating_object_adapter() {
 
     let restored = roundtrip_string_map_value(
         floating_object::to_yrs_prelim(&original),
-        floating_object::from_yrs_map,
+        |map, txn| floating_object::from_yrs_map(map, txn),
     )
     .expect("floating object should hydrate");
 

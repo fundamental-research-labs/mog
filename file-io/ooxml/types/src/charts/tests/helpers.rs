@@ -10,5 +10,3 @@ macro_rules! assert_roundtrip {
         )+
     };
 }
-
-pub(super) use assert_roundtrip;

@@ -26,7 +26,9 @@ fn assert_rule_round_trip(rule: ValidationRule) {
     let spec = base_spec(rule);
     assert_eq!(
         spec,
-        roundtrip_map(validation::to_yrs_prelim(&spec), validation::from_yrs_map)
+        roundtrip_map(validation::to_yrs_prelim(&spec), |map, txn| {
+            validation::from_yrs_map(map, txn)
+        })
     );
 }
 

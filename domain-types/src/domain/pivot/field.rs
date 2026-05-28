@@ -82,10 +82,9 @@ impl AsRef<str> for FieldId {
 /// and position in the source range.
 ///
 /// The trailing fields (`num_fmt_id`, `base_field`, `base_item`, `show_all`,
-/// `subtotal_top`, `default_subtotal`, `subtotals`, `items`) are OOXML round-trip
-/// attributes. They were folded from the now-deleted `PivotOoxmlPreserved` sidecar
-/// onto their natural home (typed OOXML preservation refactor). The compute engine ignores them;
-/// they exist so the XLSX writer can reconstruct pivotTable{N}.xml losslessly.
+/// `subtotal_top`, `default_subtotal`, `subtotals`, `items`) are modeled OOXML
+/// attributes. The compute engine ignores them; they exist so the XLSX writer
+/// can reconstruct pivotTable{N}.xml from typed state.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotField {
@@ -100,16 +99,16 @@ pub struct PivotField {
     pub source_column: u32,
     /// Detected data type based on scanning source values.
     pub data_type: DetectedDataType,
-    /// Number format ID for this field's data (OOXML round-trip).
+    /// Number format ID for this field's data (OOXML).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_fmt_id: Option<u32>,
-    /// Base field index for show-values-as calculations (OOXML round-trip).
+    /// Base field index for show-values-as calculations (OOXML).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_field: Option<i32>,
-    /// Base item index for show-values-as calculations (OOXML round-trip).
+    /// Base item index for show-values-as calculations (OOXML).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_item: Option<u32>,
-    /// Whether to show all items, including empty (OOXML round-trip).
+    /// Whether to show all items, including empty (OOXML).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_all: Option<bool>,
     /// Subtotal position (above or below group). `None` = OOXML default (true).
@@ -118,11 +117,11 @@ pub struct PivotField {
     /// Default subtotal visibility. `None` = OOXML default (true for axis fields).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_subtotal: Option<bool>,
-    /// Explicit subtotal functions (OOXML round-trip).
+    /// Explicit subtotal functions (OOXML).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub subtotals: Vec<PivotFieldFunction>,
     /// Field items — shared item indices, subtotal markers, hidden state
-    /// (OOXML round-trip).
+    /// (OOXML).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<PivotFieldItem>,
 }

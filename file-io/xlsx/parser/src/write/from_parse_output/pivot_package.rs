@@ -3,8 +3,7 @@ use crate::write::pivot_writer::PivotWriteData;
 use crate::write::relationships::RelationshipManager;
 
 // Writer-facing pivot package helpers. Pivots are generated from modeled
-// `ParseOutput` state; imported pivot package XML is not replayed from
-// round-trip context.
+// `ParseOutput` state.
 
 pub(super) fn add_sheet_relationships(
     rels: &mut RelationshipManager,

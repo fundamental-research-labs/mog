@@ -5,7 +5,6 @@ use crate::domain::pivot::parse::table_fields::{
     parse_data_fields, parse_field_refs, parse_page_fields, parse_pivot_fields,
 };
 use crate::domain::pivot::reader::elements::{child_slice, first_element_span, opening_tag};
-use crate::domain::pivot::reader::raw::raw_element;
 use crate::infra::xml::{
     parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
 };
@@ -16,8 +15,6 @@ pub fn parse_pivot_table(xml: &[u8]) -> PivotTable {
     let Some(root) = first_element_span(xml, b"pivotTableDefinition", 0) else {
         return pivot;
     };
-
-    pivot.raw_xml = raw_element(xml, b"pivotTableDefinition");
 
     let element = &xml[root.start..root.tag_end];
     pivot.name = parse_string_attr(element, b"name=\"").unwrap_or_default();

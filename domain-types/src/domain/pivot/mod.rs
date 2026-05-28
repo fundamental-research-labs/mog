@@ -1,7 +1,7 @@
 //! Pivot table domain types.
 //!
 //! Submodules:
-//! - `ooxml`: OOXML round-trip preservation types (PivotTableDef, etc.)
+//! - `ooxml`: OOXML pivot types (PivotTableDef, etc.)
 //! - `field`: FieldId, PivotField
 //! - `placement`: PivotFieldPlacement and related types
 //! - `placement_flat`: PivotFieldPlacementFlat (flat serde form)

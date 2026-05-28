@@ -2,7 +2,6 @@
 
 use crate::domain::pivot::model::{CacheField, CacheSourceType, PivotCache};
 use crate::domain::pivot::parse::shared_items::parse_shared_items;
-use crate::domain::pivot::reader::raw::raw_element;
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr, parse_i32_attr, parse_string_attr, parse_u32_attr};
 
@@ -13,8 +12,6 @@ pub fn parse_pivot_cache_definition(xml: &[u8]) -> PivotCache {
         Some(pos) => pos,
         None => return cache,
     };
-
-    cache.raw_definition_xml = raw_element(xml, b"pivotCacheDefinition");
 
     if let Some(end) = find_gt_simd(xml, cache_start) {
         let element = &xml[cache_start..end + 1];

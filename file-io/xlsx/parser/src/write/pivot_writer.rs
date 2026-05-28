@@ -9,8 +9,7 @@
 //! relationship-ID string at an ASCII-only delimiter. Char-boundary
 //! by construction. File-scope allow documented here.
 //!
-//! Typed OOXML preservation: C: OOXML round-trip attributes live directly on
-//! `PivotTableConfig` / `PivotField` — no `PivotOoxmlPreserved` sidecar.
+//! Typed OOXML data lives directly on `PivotTableConfig` / `PivotField`.
 
 #![allow(clippy::string_slice)]
 
@@ -62,9 +61,8 @@ enum CacheIdentity {
 /// Build all pivot table and cache XML from `ParseOutput`.
 ///
 /// Each `ParsedPivotTable` contains a `PivotTableConfig` (unified compute +
-/// OOXML round-trip config; typed OOXML preservation). The writer reconstructs the OOXML
-/// `PivotTableDef` from the config, and regenerates pivot caches from source
-/// range cell data.
+/// OOXML config). The writer reconstructs the OOXML `PivotTableDef` from the
+/// config, and regenerates pivot caches from source range cell data.
 pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
     if output.pivot_tables.is_empty() {
         return PivotWriteData {
@@ -313,7 +311,7 @@ fn read_source_header_names(
     names
 }
 
-/// Convert a `ParsedPivotTable` into the legacy `PivotTableDef` that the writer expects.
+/// Convert a `ParsedPivotTable` into the `PivotTableDef` that the writer expects.
 ///
 /// This bridges the gap until the writer is updated to consume `PivotTableConfig` directly
 ///. For now, we reconstruct the OOXML-oriented definition.
@@ -326,7 +324,7 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
         Err(_) => return domain_types::PivotTableDef::default(),
     };
 
-    // Build PivotFieldDef for each field
+    // Build PivotFieldDef for each field.
     let fields: Vec<PivotFieldDef> = config
         .fields
         .iter()
@@ -361,8 +359,7 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
                 })
                 .unwrap_or((true, true));
 
-            // Read OOXML round-trip attributes directly off the field
-            // (typed OOXML preservation: formerly on `PivotOoxmlPreserved.field_settings`).
+            // Read OOXML attributes directly off the field.
             PivotFieldDef {
                 name: Some(field.name.clone()),
                 axis,
@@ -436,7 +433,7 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
         .collect();
 
     // Build data_fields — source num_fmt_id / base_field / base_item from the
-    // field itself (typed OOXML preservation: these live on PivotField directly).
+    // field itself.
     let data_fields: Vec<PivotDataFieldDef> = engine_config
         .value_placements()
         .iter()
@@ -476,8 +473,8 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
         .and_then(|l| l.data_caption.clone())
         .unwrap_or_else(|| "Values".to_string());
 
-    // OOXML location — prefer the round-tripped attributes on the config,
-    // fall back to derived values for API-created pivots (typed OOXML preservation).
+    // OOXML location: prefer modeled attributes on the config, fall back to
+    // derived values for API-created pivots.
     let start_row = config.output_location.row;
     let start_col = config.output_location.col;
     let num_row_fields = row_fields.len() as u32;
@@ -515,7 +512,7 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
         show_last_column: true,
     });
 
-    // Use OOXML row/col items folded onto the config (typed OOXML preservation).
+    // Use OOXML row/col items from the config.
     let row_items = config.row_items.clone();
     let col_items = config.col_items.clone();
 

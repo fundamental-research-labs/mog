@@ -10,33 +10,7 @@ fn pivot_package_generation_filters_stale_original_parts_and_rels() {
         "Pivot",
         Some(11),
     )]);
-    let mut ctx = domain_types::RoundTripContext {
-        sheets: vec![
-            domain_types::SheetRoundTripContext::default(),
-            domain_types::SheetRoundTripContext::default(),
-        ],
-        ..Default::default()
-    };
-    ctx.sheets[1].sheet_opc_rels = vec![
-        domain_types::OpcRelationship {
-            id: "rId1".to_string(),
-            rel_type: REL_HYPERLINK.to_string(),
-            target: "https://example.com".to_string(),
-            target_mode: Some("External".to_string()),
-        },
-        domain_types::OpcRelationship {
-            id: "rId7".to_string(),
-            rel_type: REL_PIVOT_TABLE.to_string(),
-            target: "../pivotTables/pivotTable7.xml".to_string(),
-            target_mode: None,
-        },
-    ];
-    ctx.sheets[1].sheet_preserved_elements = vec![(
-        "worksheet\0after\0sheetData\0pivotTableDefinition".to_string(),
-        r#"<pivotTableDefinition r:id="rId7"/>"#.to_string(),
-    )];
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
     let workbook_rels =
@@ -77,7 +51,7 @@ fn pivot_package_generation_filters_stale_original_parts_and_rels() {
 }
 
 #[test]
-fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
+fn skipped_generated_pivot_does_not_emit_stale_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",
         "PivotTable1",
@@ -86,21 +60,7 @@ fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
         "Missing Pivot Sheet",
         Some(11),
     )]);
-    let mut ctx = domain_types::RoundTripContext {
-        sheets: vec![
-            domain_types::SheetRoundTripContext::default(),
-            domain_types::SheetRoundTripContext::default(),
-        ],
-        ..Default::default()
-    };
-    ctx.sheets[1].sheet_opc_rels = vec![domain_types::OpcRelationship {
-        id: "rId7".to_string(),
-        rel_type: REL_PIVOT_TABLE.to_string(),
-        target: "../pivotTables/pivotTable7.xml".to_string(),
-        target_mode: None,
-    }];
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
@@ -121,7 +81,7 @@ fn skipped_generated_pivot_does_not_replay_legacy_pivot_package_metadata() {
 }
 
 #[test]
-fn preserved_pivot_marker_without_modeled_pivot_is_not_replayed() {
+fn worksheet_pivot_marker_without_modeled_pivot_is_not_emitted() {
     for position in ["after", "before"] {
         let output = make_parse_output(vec![
             SheetData {
@@ -133,25 +93,7 @@ fn preserved_pivot_marker_without_modeled_pivot_is_not_replayed() {
                 ..Default::default()
             },
         ]);
-        let mut ctx = domain_types::RoundTripContext {
-            sheets: vec![
-                domain_types::SheetRoundTripContext::default(),
-                domain_types::SheetRoundTripContext::default(),
-            ],
-            ..Default::default()
-        };
-        ctx.sheets[1].sheet_opc_rels = vec![domain_types::OpcRelationship {
-            id: "rId7".to_string(),
-            rel_type: REL_PIVOT_TABLE.to_string(),
-            target: "../pivotTables/pivotTable7.xml".to_string(),
-            target_mode: None,
-        }];
-        ctx.sheets[1].sheet_preserved_elements = vec![(
-            format!("worksheet\0{position}\0sheetData\0pivotTableDefinition"),
-            r#"<pivotTableDefinition r:id="rId7"/>"#.to_string(),
-        )];
-
-        let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+        let bytes = write_xlsx_from_parse_output(&output).unwrap();
         let archive = crate::XlsxArchive::new(&bytes).unwrap();
         let sheet_xml =
             String::from_utf8(archive.read_file("xl/worksheets/sheet2.xml").unwrap()).unwrap();
@@ -183,7 +125,7 @@ fn missing_pivot_cache_ids_are_grouped_by_source_contract() {
         ),
     ]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
     let pivot_table_1 =
@@ -238,7 +180,7 @@ fn pivot_cache_records_xml_uses_typed_records_when_source_matches() {
         ],
     );
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let records_xml = String::from_utf8(
         archive
@@ -276,7 +218,7 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
         ],
     );
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
     let records_xml = String::from_utf8(
         archive

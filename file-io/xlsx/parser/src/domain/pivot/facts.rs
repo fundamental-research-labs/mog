@@ -2,7 +2,7 @@
 //!
 //! Facts are deterministic fingerprints of the semantic pivot surface. They are
 //! intentionally smaller than the raw read model so parser, writer, and
-//! round-trip tests can assert behavior without comparing incidental XML shape.
+//! read/write tests can assert behavior without comparing incidental XML shape.
 
 use crate::domain::pivot::model::{
     CacheRecordValue, PivotCache, PivotField, PivotItem, PivotTable, SharedItem,
@@ -29,7 +29,6 @@ pub struct PivotTableFacts {
     pub data_fields: Vec<DataFieldFacts>,
     pub pivot_fields: Vec<PivotFieldFacts>,
     pub style_name: Option<String>,
-    pub raw_xml_present: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,8 +83,6 @@ pub struct PivotCacheFacts {
     pub records: Vec<Vec<String>>,
     pub record_count: Option<u32>,
     pub refresh_on_load: bool,
-    pub raw_definition_xml_present: bool,
-    pub raw_records_xml_present: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,7 +145,6 @@ pub fn extract_pivot_table_facts(table: &PivotTable) -> PivotTableFacts {
             .style_info
             .as_ref()
             .and_then(|style| style.name.clone()),
-        raw_xml_present: table.raw_xml.is_some(),
     }
 }
 
@@ -181,8 +177,6 @@ pub fn extract_pivot_cache_facts(cache: &PivotCache) -> PivotCacheFacts {
             .collect(),
         record_count: cache.record_count,
         refresh_on_load: cache.refresh_on_load,
-        raw_definition_xml_present: cache.raw_definition_xml.is_some(),
-        raw_records_xml_present: cache.raw_records_xml.is_some(),
     }
 }
 
@@ -263,7 +257,6 @@ mod tests {
         assert_eq!(facts.data_fields[0].name.as_deref(), Some("Sum of Sales"));
         assert_eq!(facts.pivot_fields[0].axis.as_deref(), Some("Row"));
         assert!(facts.pivot_fields[0].items[1].hidden);
-        assert!(facts.raw_xml_present);
     }
 
     #[test]
@@ -294,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn cache_facts_track_raw_presence_and_shared_items() {
+    fn cache_facts_track_source_and_shared_items() {
         let cache = parse_pivot_cache_definition(
             br#"<pivotCacheDefinition recordCount="2" refreshOnLoad="1">
                 <cacheSource type="worksheet"><worksheetSource ref="A1:B3" sheet="Data"/></cacheSource>
@@ -311,6 +304,5 @@ mod tests {
         assert_eq!(facts.source_sheet.as_deref(), Some("Data"));
         assert_eq!(facts.field_names, vec!["Region"]);
         assert_eq!(facts.fields[0].shared_items, vec!["s:West", "s:East"]);
-        assert!(facts.raw_definition_xml_present);
     }
 }

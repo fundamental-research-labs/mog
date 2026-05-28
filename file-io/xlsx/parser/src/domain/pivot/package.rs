@@ -110,23 +110,18 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
         };
 
         let definition = pivot_cache_to_ooxml(&cache_xml);
-        let raw_definition_xml = Some(cache_xml);
         let records = resolve_cache_records_link(archive, &def_path);
 
         let mut cache_records = ooxml_types::pivot::PivotCacheRecords::default();
-        let mut raw_records_xml = None;
         if let Some(ref rp) = records.records_path {
             if let Ok(records_xml) = archive.read_file(rp) {
                 cache_records = pivot_cache_records_to_ooxml(&records_xml);
-                raw_records_xml = Some(records_xml);
             }
         }
 
         let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
             definition,
             records: cache_records,
-            raw_definition_xml,
-            raw_records_xml,
         };
         let link = PivotCachePackageLink {
             cache_id,
@@ -426,8 +421,16 @@ mod tests {
                 source: PivotCacheRecordsPathSource::Relationship,
             }
         );
-        assert!(discovery.caches[&4].raw_definition_xml.is_some());
-        assert!(discovery.caches[&4].raw_records_xml.is_some());
+        assert_eq!(
+            discovery.caches[&4]
+                .definition
+                .cache_source
+                .worksheet_source
+                .as_ref()
+                .and_then(|source| source.sheet.as_deref()),
+            Some("Data")
+        );
+        assert_eq!(discovery.caches[&4].records.records.len(), 1);
         assert_eq!(
             discovery.cache_paths(),
             vec![(

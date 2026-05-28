@@ -178,7 +178,7 @@ pub struct PivotStyleDef {
 }
 
 /// Pivot cache source metadata — tells the writer where to read data from.
-/// The actual cache data is regenerated at export time, not preserved.
+/// The actual cache data is regenerated at export time.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotCacheSourceDef {
@@ -197,18 +197,16 @@ pub struct PivotCacheSourceDef {
     pub shared_items: Vec<Vec<value_types::CellValue>>,
 }
 
-/// A parsed pivot table: unified compute + OOXML round-trip config.
+/// A parsed pivot table: unified compute + OOXML config.
 ///
 /// This is the unit stored in `ParseOutput.pivot_tables` and Yrs sheet-level storage.
 /// The compute engine reads only compute-relevant fields of `config`; the XLSX
-/// writer reads both compute and OOXML-round-trip fields off the same config
-/// (typed OOXML preservation refactor: the former `PivotOoxmlPreserved` sidecar was folded onto
-/// `PivotTableConfig` / `PivotField`).
+/// writer reads both compute and OOXML fields off the same config.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedPivotTable {
     /// Unified pivot table configuration (fields, placements, filters, layout,
-    /// style, and OOXML round-trip attributes).
+    /// style, and OOXML attributes).
     pub config: super::config::PivotTableConfig,
     /// Initial expansion state built from OOXML `sd` (show_details) attributes.
     ///

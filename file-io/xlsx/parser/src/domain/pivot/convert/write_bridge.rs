@@ -59,10 +59,6 @@ pub const PIVOT_TABLE_FIELD_DISPOSITIONS: &[FieldDispositionEntry] = &[
         disposition: FieldDisposition::Emitted,
     },
     FieldDispositionEntry {
-        field: "raw_xml",
-        disposition: FieldDisposition::FactsOnly,
-    },
-    FieldDispositionEntry {
         field: "grand_total_caption",
         disposition: FieldDisposition::Emitted,
     },
@@ -137,14 +133,6 @@ pub const PIVOT_CACHE_FIELD_DISPOSITIONS: &[FieldDispositionEntry] = &[
         field: "refresh_on_load",
         disposition: FieldDisposition::Emitted,
     },
-    FieldDispositionEntry {
-        field: "raw_definition_xml",
-        disposition: FieldDisposition::FactsOnly,
-    },
-    FieldDispositionEntry {
-        field: "raw_records_xml",
-        disposition: FieldDisposition::FactsOnly,
-    },
 ];
 
 pub fn pivot_table_field_dispositions() -> &'static [FieldDispositionEntry] {
@@ -172,7 +160,6 @@ mod tests {
             "page_fields",
             "pivot_fields",
             "style_info",
-            "raw_xml",
             "grand_total_caption",
             "row_header_caption",
             "col_header_caption",
@@ -201,8 +188,6 @@ mod tests {
             "records",
             "record_count",
             "refresh_on_load",
-            "raw_definition_xml",
-            "raw_records_xml",
         ];
         for field in cache_fields {
             assert!(

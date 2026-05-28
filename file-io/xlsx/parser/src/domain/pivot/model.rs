@@ -23,8 +23,6 @@ pub struct PivotTable {
     pub pivot_fields: Vec<PivotField>,
     /// Style information
     pub style_info: Option<PivotStyleInfo>,
-    /// Raw XML of the entire pivotTableDefinition element for parser facts/audits only.
-    pub raw_xml: Option<Vec<u8>>,
     /// Custom label for grand total rows/columns (OOXML `grandTotalCaption`).
     pub grand_total_caption: Option<String>,
     /// Custom label for the row header area (OOXML `rowHeaderCaption`).
@@ -60,7 +58,6 @@ impl Default for PivotTable {
             page_fields: Vec::new(),
             pivot_fields: Vec::new(),
             style_info: None,
-            raw_xml: None,
             grand_total_caption: None,
             row_header_caption: None,
             col_header_caption: None,
@@ -305,10 +302,6 @@ pub struct PivotCache {
     pub record_count: Option<u32>,
     /// Whether the cache is refreshed on load
     pub refresh_on_load: bool,
-    /// Raw XML of the entire pivotCacheDefinition file for opaque passthrough.
-    pub raw_definition_xml: Option<Vec<u8>>,
-    /// Raw XML of the pivotCacheRecords file for opaque passthrough.
-    pub raw_records_xml: Option<Vec<u8>>,
 }
 
 /// Source types for pivot cache

@@ -1,4 +1,4 @@
-//! OOXML sidecar conversion boundary for pivot parser models.
+//! OOXML conversion boundary for pivot parser models.
 
 use crate::domain::pivot::model::{CacheField, CacheRecordValue, CacheSourceType, SharedItem};
 use crate::domain::pivot::parse::{parse_pivot_cache_definition, parse_pivot_cache_records};

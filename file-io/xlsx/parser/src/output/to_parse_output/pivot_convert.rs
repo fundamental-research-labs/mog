@@ -2,8 +2,7 @@
 //!
 //! Bypasses the intermediate `PivotSpec` / `PivotTableDef` types by converting directly
 //! from the XLSX parser's `PivotTable` + `PivotCache` (from `domain/pivot/read.rs`) into
-//! `pivot_types::PivotTableConfig` (typed OOXML preservation: OOXML round-trip attributes live directly
-//! on `PivotTableConfig` / `PivotField`, no separate sidecar).
+//! `pivot_types::PivotTableConfig`.
 //!
 //! This module ports the logic from `compute-api/src/pure/pivot_convert.rs` so the
 //! parser can produce the final compute-ready types in a single step.
@@ -25,8 +24,8 @@ use pivot_types::{
 use value_types::CellValue;
 
 /// Convert parser-internal pivot types directly to the compute-ready
-/// `ParsedPivotTable`, bypassing `PivotSpec`. OOXML round-trip attributes
-/// live on `PivotTableConfig` / `PivotField` (typed OOXML preservation).
+/// `ParsedPivotTable`, bypassing `PivotSpec`. OOXML attributes live on
+/// `PivotTableConfig` / `PivotField`.
 ///
 /// Returns `None` for unsupported configurations (e.g., missing cache data).
 pub(crate) fn parsed_pivot_to_config(
@@ -37,11 +36,10 @@ pub(crate) fn parsed_pivot_to_config(
 ) -> Option<ParsedPivotTable> {
     // -- Fields from cache --
     //
-    // OOXML round-trip attributes (num_fmt_id, base_field, base_item, show_all,
-    // subtotal_top, default_subtotal, subtotals, items) are folded onto each
-    // `PivotField` directly (typed OOXML preservation: former `PivotFieldOoxmlSettings` sidecar
-    // is gone). `data_field_info` is looked up at the `pivot.data_fields` level
-    // to source num_fmt_id/base_field/base_item.
+    // OOXML attributes (num_fmt_id, base_field, base_item, show_all,
+    // subtotal_top, default_subtotal, subtotals, items) are modeled on each
+    // `PivotField`. `data_field_info` is looked up at the `pivot.data_fields`
+    // level to source num_fmt_id/base_field/base_item.
     let fields: Vec<PivotField> = cache
         .fields
         .iter()
@@ -263,7 +261,7 @@ pub(crate) fn parsed_pivot_to_config(
         (None, None, None)
     };
 
-    // -- Build PivotTableConfig (unified compute + OOXML round-trip) --
+    // -- Build PivotTableConfig (unified compute + OOXML) --
     let config = PivotTableConfig {
         schema_version: PIVOT_CONFIG_SCHEMA_VERSION,
         id,
@@ -974,10 +972,8 @@ mod tests {
     // mWzMdU: sd="0" must produce a PivotExpansionState
     // ========================================================================
     // mWzMdU corpus file: pivot field items have sd="0" on collapsed items.
-    // The parser preserves show_details in OOXML sidecar but never builds a
-    // PivotExpansionState. Without expansion state, the compute engine expands
-    // all items, showing Product Family detail rows where only Business Unit
-    // subtotals should appear.
+    // Without expansion state, the compute engine expands all items, showing
+    // Product Family detail rows where only Business Unit subtotals should appear.
     //
     // This end-to-end test builds a ParsedPivotTable from the converter, then
     // feeds it to the compute engine (simulating the full XLSX import path).
@@ -1073,8 +1069,7 @@ mod tests {
         let parsed = parsed_pivot_to_config(&pivot, &cache, "Sheet1", &records)
             .expect("should produce ParsedPivotTable");
 
-        // Verify sd="0" is preserved on PivotField.items (typed OOXML preservation: folded from
-        // the former PivotOoxmlPreserved.field_settings sidecar).
+        // Verify sd="0" is modeled on PivotField.items.
         assert!(
             !parsed.config.fields[0].items[1].show_details,
             "Sales item should have show_details=false"

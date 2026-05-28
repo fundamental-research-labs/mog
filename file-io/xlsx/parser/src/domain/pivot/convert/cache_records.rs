@@ -109,8 +109,6 @@ mod tests {
                 }],
                 ..Default::default()
             },
-            raw_definition_xml: None,
-            raw_records_xml: None,
         };
 
         let records = resolve_cache_records(Some(&parsed_cache));

@@ -303,7 +303,7 @@ pub struct PivotTableConfig {
     /// Controls whether custom formatting is preserved on refresh.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preserve_formatting: Option<bool>,
-    /// Pivot cache ID this table reads from (OOXML round-trip).
+    /// Pivot cache ID this table reads from (OOXML).
     ///
     /// `cache_id` is a cache concept — it identifies the `<pivotCache>` entry
     /// in workbook.xml that holds source data for this pivot. Keyed by u32 in

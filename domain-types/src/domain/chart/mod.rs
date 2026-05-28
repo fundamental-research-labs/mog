@@ -317,7 +317,7 @@ impl SeriesOrientation {
 }
 
 /// Structured round-trip data for OOXML features not yet API-exposed.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartRoundTripData {
     // Chart-group reconstruction

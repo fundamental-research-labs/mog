@@ -343,7 +343,7 @@ fn test_textbox_roundtrip() {
 
 #[test]
 fn test_chart_roundtrip() {
-    use crate::domain::chart::{ChartSubType, ChartType, SeriesOrientation};
+    use crate::domain::chart::{ChartRoundTripData, ChartSubType, ChartType, SeriesOrientation};
     use crate::domain::conditional_format::CellIdRange;
 
     let obj = FloatingObject {
@@ -457,7 +457,19 @@ fn test_chart_roundtrip() {
             floor_format: None,
             side_wall_format: None,
             back_wall_format: None,
-            rt: None,
+            rt: Some(ChartRoundTripData {
+                auxiliary_files: vec![(
+                    "xl/charts/style9.xml".to_string(),
+                    br#"<c:style xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"/>"#
+                        .to_vec(),
+                )],
+                chart_rels_bytes: Some((
+                    "xl/charts/_rels/chart9.xml.rels".to_string(),
+                    br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"#
+                        .to_vec(),
+                )),
+                ..Default::default()
+            }),
             source_table_id: Some("table-1".to_string()),
             table_data_columns: None,
             table_category_column: None,
@@ -491,6 +503,12 @@ fn test_chart_roundtrip() {
         assert_eq!(c.source_table_id.as_deref(), Some("table-1"));
         assert_eq!(c.width_cells, Some(8.0));
         assert_eq!(c.height_cells, Some(15.0));
+        let rt = c.rt.as_ref().expect("chart round-trip data");
+        assert_eq!(rt.auxiliary_files.len(), 1);
+        assert_eq!(
+            rt.chart_rels_bytes.as_ref().map(|(path, _)| path.as_str()),
+            Some("xl/charts/_rels/chart9.xml.rels")
+        );
         assert!(c.series.is_some());
     } else {
         panic!("Expected Chart variant");

@@ -37,12 +37,11 @@ use std::collections::HashSet;
 use base64::Engine as _;
 use domain_types::{
     AuthoredStyleRun,
-    // Round-trip types
     BlobPart,
+    // Round-trip types
     CalculationProperties,
     // Parse output types
     CellData,
-    ChartAuxiliaryData,
     ColDimension,
     ColStyleEntry,
     // Domain types
@@ -1299,41 +1298,6 @@ fn convert_sheet(
         has_empty_ext_lst: sheet.has_empty_ext_lst,
         ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
-        chart_auxiliary_data: sheet
-            .parsed_charts
-            .iter()
-            .map(|chart| ChartAuxiliaryData {
-                auxiliary_files: chart
-                    .auxiliary_files
-                    .iter()
-                    .map(|(path, data)| BlobPart {
-                        path: path.clone(),
-                        data: data.clone(),
-                    })
-                    .collect(),
-                chart_rels: chart
-                    .chart_rels_bytes
-                    .as_ref()
-                    .map(|(_, data)| data.clone()),
-                original_path: chart.original_path.clone(),
-            })
-            .collect(),
-        chart_ex_auxiliary_data: sheet
-            .parsed_chart_ex
-            .iter()
-            .map(|cx| ChartAuxiliaryData {
-                auxiliary_files: cx
-                    .auxiliary_files
-                    .iter()
-                    .map(|(path, data)| BlobPart {
-                        path: path.clone(),
-                        data: data.clone(),
-                    })
-                    .collect(),
-                chart_rels: cx.chart_rels_bytes.as_ref().map(|(_, data)| data.clone()),
-                original_path: Some(cx.original_path.clone()),
-            })
-            .collect(),
         cell_formulas: sheet
             .cells
             .iter()

@@ -13,9 +13,8 @@ fn generated_chart_does_not_inherit_stale_auxiliary_parts_by_local_index() {
         charts: vec![make_chart(ChartType::Column, "Data!A1:B2")],
         ..Default::default()
     }]);
-    let ctx = chart_auxiliary_roundtrip_context();
 
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
@@ -346,7 +345,10 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
     );
-    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let imported_chart = with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    );
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -358,9 +360,8 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
         charts: vec![imported_chart],
         ..Default::default()
     }]);
-    let ctx = chart_auxiliary_roundtrip_context();
 
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
@@ -383,15 +384,20 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
 }
 
 #[test]
-fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
+fn reconstructed_imported_chart_replays_stored_auxiliary_parts() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
-    imported_chart.title = None;
-    imported_chart.data_range = None;
+    imported_chart.title = Some("Modeled Revenue".to_string());
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace::default(),
+    ));
     imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
     );
-    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let imported_chart = with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    );
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -403,14 +409,55 @@ fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
         charts: vec![imported_chart],
         ..Default::default()
     }]);
-    let mut ctx = chart_auxiliary_roundtrip_context();
-    ctx.sheets[0].chart_auxiliary_data[0].chart_rels = Some(
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart9.xml").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart9.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(chart_xml.contains("Modeled Revenue"));
+    assert!(!chart_xml.contains("Stale Revenue"));
+    assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    imported_chart.preserved_chart_xml = Some(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
+            .to_string(),
+    );
+    let mut imported_chart = with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    );
+    imported_chart.rt.as_mut().unwrap().chart_rels_bytes = Some((
+        "xl/charts/_rels/chart9.xml.rels".to_string(),
         r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://example.com/notChartStyle" Target="style9.xml"/></Relationships>"#
             .as_bytes()
             .to_vec(),
-    );
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
@@ -431,7 +478,20 @@ fn imported_chart_auxiliary_part_requires_chart_auxiliary_path() {
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
     );
-    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let mut imported_chart = with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    );
+    imported_chart.rt.as_mut().unwrap().auxiliary_files = vec![(
+        "xl/worksheets/style9.xml".to_string(),
+        b"<c:styleSheet/>".to_vec(),
+    )];
+    imported_chart.rt.as_mut().unwrap().chart_rels_bytes = Some((
+        "xl/charts/_rels/chart9.xml.rels".to_string(),
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="../worksheets/style9.xml"/></Relationships>"#
+            .as_bytes()
+            .to_vec(),
+    ));
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -443,18 +503,7 @@ fn imported_chart_auxiliary_part_requires_chart_auxiliary_path() {
         charts: vec![imported_chart],
         ..Default::default()
     }]);
-    let mut ctx = chart_auxiliary_roundtrip_context();
-    ctx.sheets[0].chart_auxiliary_data[0].auxiliary_files = vec![domain_types::BlobPart {
-        path: "xl/worksheets/style9.xml".to_string(),
-        data: b"<c:styleSheet/>".to_vec(),
-    }];
-    ctx.sheets[0].chart_auxiliary_data[0].chart_rels = Some(
-        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="../worksheets/style9.xml"/></Relationships>"#
-            .as_bytes()
-            .to_vec(),
-    );
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
@@ -475,7 +524,10 @@ fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
             .to_string(),
     );
-    let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
+    let imported_chart = with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    );
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -487,9 +539,7 @@ fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_
         charts: vec![imported_chart],
         ..Default::default()
     }]);
-    let ctx = chart_auxiliary_roundtrip_context_with_charts(&[5, 9]);
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();

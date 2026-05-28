@@ -355,16 +355,6 @@ pub struct SheetRoundTripContext {
     /// other non-standard namespace attrs for round-trip fidelity.
     #[serde(default)]
     pub preserved_namespace_attrs: Vec<(String, String)>,
-    /// Compatibility input only. Per-chart auxiliary data (style XML, colors
-    /// XML, .rels) may seed export only when the current chart object still
-    /// carries imported chart identity; local index alone must not replay stale
-    /// aux subgraphs after chart replacement.
-    #[serde(default)]
-    pub chart_auxiliary_data: Vec<ChartAuxiliaryData>,
-    /// Compatibility input only. Same contract as `chart_auxiliary_data`, for
-    /// modern ChartEx parts.
-    #[serde(default)]
-    pub chart_ex_auxiliary_data: Vec<ChartAuxiliaryData>,
     /// Preserved OOXML cell formula metadata (shared, array, dataTable) for round-trip.
     /// Each entry is ((row, col), CellFormula). Stored here because Yrs doesn't track
     /// shared formula grouping — it expands all formulas to individual A1 text.
@@ -453,21 +443,6 @@ pub struct SheetRoundTripContext {
     /// The attribute is optional per OOXML spec; this preserves the original choice.
     #[serde(default)]
     pub merge_cells_has_count: bool,
-}
-
-/// Auxiliary files for a single chart needed for round-trip fidelity.
-/// Stores the chart's .rels file, style XML, colors XML, and original path.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartAuxiliaryData {
-    /// Auxiliary files (style XML, colors XML, etc.) — path + bytes.
-    #[serde(default)]
-    pub auxiliary_files: Vec<BlobPart>,
-    /// Raw bytes of the chart's .rels file.
-    #[serde(default, with = "option_bytes")]
-    pub chart_rels: Option<Vec<u8>>,
-    /// Original ZIP path (e.g., "xl/charts/chart2.xml") for preserving numbering.
-    pub original_path: Option<String>,
 }
 
 /// A named binary blob part (path + bytes).

@@ -577,7 +577,11 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 floor_format: None,
                 side_wall_format: None,
                 back_wall_format: None,
-                rt: None,
+                rt: Some(domain_types::chart::ChartRoundTripData {
+                    auxiliary_files: cx.auxiliary_files.clone(),
+                    chart_rels_bytes: cx.chart_rels_bytes.clone(),
+                    ..Default::default()
+                }),
                 chart_frame: None,
                 is_chart_ex: true,
                 cnv_pr_name: None,

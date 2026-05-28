@@ -330,7 +330,6 @@ pub(super) fn build_sheet_parts(
         // We zip chart_specs with chart_entries later, so only increment the
         // global counter AFTER successful deserialization to keep them aligned.
         let mut chart_entries_for_sheet: Vec<ChartEntry> = Vec::new();
-        let sheet_rt_for_charts = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
         for (source_idx, chart_spec) in sheet_data.charts.iter().enumerate() {
             if chart_spec.is_chart_ex {
                 continue; // handled by ChartEx pipeline below
@@ -353,13 +352,13 @@ pub(super) fn build_sheet_parts(
                     _ => continue, // not a standard chart
                 }
             };
-            // Preserve original chart number from round-trip context when available.
+            // Preserve original chart number from the imported chart object when available.
             // E.g., if original was "xl/charts/chart2.xml", extract 2 instead of using
             // the sequential counter (which would produce chart1.xml).
             let original_idx = chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
-                    chart_auxiliary::standard_chart_auxiliary_data(sheet_rt_for_charts, chart_spec)
-                        .and_then(chart_auxiliary::standard_chart_number)
+                    chart_auxiliary::chart_auxiliary_data(chart_spec)
+                        .and_then(|aux| chart_auxiliary::standard_chart_number(&aux))
                 })
                 .flatten();
             let idx = if let Some(orig) = original_idx {
@@ -394,11 +393,11 @@ pub(super) fn build_sheet_parts(
                 Some(domain_types::ChartDefinition::ChartEx(cs)) => cs,
                 _ => continue, // not a chartEx
             };
-            // Preserve original chartEx number from round-trip context when available.
+            // Preserve original chartEx number from the imported chart object when available.
             let original_idx = chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
-                    chart_auxiliary::chart_ex_auxiliary_data(sheet_rt_for_charts, chart_spec)
-                        .and_then(chart_auxiliary::chart_ex_number)
+                    chart_auxiliary::chart_auxiliary_data(chart_spec)
+                        .and_then(|aux| chart_auxiliary::chart_ex_number(&aux))
                 })
                 .flatten();
             let idx = if let Some(orig) = original_idx {

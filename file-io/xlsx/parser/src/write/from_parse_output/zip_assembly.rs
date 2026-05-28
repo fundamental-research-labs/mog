@@ -15,7 +15,7 @@ use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_zip_package(
     output: &ParseOutput,
-    round_trip_ctx: Option<&RoundTripContext>,
+    _round_trip_ctx: Option<&RoundTripContext>,
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     sheet_writers: Vec<SheetWriter>,
@@ -393,8 +393,6 @@ pub(super) fn write_zip_package(
     // Chart XML files + auxiliary files (style, colors, .rels)
     {
         for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
-            let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-
             for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
                 add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
@@ -403,22 +401,16 @@ pub(super) fn write_zip_package(
                 // when the current chart still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
                 if chart_allows_auxiliary_replay(chart_spec)
-                    && let Some(aux) =
-                        chart_auxiliary::standard_chart_auxiliary_data(sheet_rt, chart_spec)
+                    && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =
-                        chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
+                        chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
                     // Write auxiliary files (style, colors XML) preserving their original paths.
-                    for aux_file in &aux.auxiliary_files {
-                        if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
+                    for (path, data) in aux.auxiliary_files {
+                        if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                             continue;
                         }
-                        add_registered_part(
-                            package_graph,
-                            &mut zip,
-                            &aux_file.path,
-                            aux_file.data.clone(),
-                        )?;
+                        add_registered_part(package_graph, &mut zip, path, data.clone())?;
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
@@ -435,8 +427,6 @@ pub(super) fn write_zip_package(
     // ChartEx XML files + auxiliary files (style, colors, .rels)
     {
         for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
-            let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-
             for entry in chart_ex_entries {
                 let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
                 add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
@@ -445,21 +435,15 @@ pub(super) fn write_zip_package(
                 // still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
                 if chart_allows_auxiliary_replay(chart_spec)
-                    && let Some(aux) =
-                        chart_auxiliary::chart_ex_auxiliary_data(sheet_rt, chart_spec)
+                    && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =
-                        chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
-                    for aux_file in &aux.auxiliary_files {
-                        if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
+                        chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+                    for (path, data) in aux.auxiliary_files {
+                        if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                             continue;
                         }
-                        add_registered_part(
-                            package_graph,
-                            &mut zip,
-                            &aux_file.path,
-                            aux_file.data.clone(),
-                        )?;
+                        add_registered_part(package_graph, &mut zip, path, data.clone())?;
                     }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(

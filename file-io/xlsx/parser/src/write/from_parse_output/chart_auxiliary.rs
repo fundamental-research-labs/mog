@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use domain_types::{ChartAuxiliaryData, ChartSpec, SheetRoundTripContext};
+use domain_types::ChartSpec;
 
 use crate::infra::opc::opc_target_to_zip_path;
 
@@ -8,34 +8,31 @@ const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relation
 const REL_CHART_COLOR_STYLE: &str =
     "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
 
-pub(super) fn standard_chart_auxiliary_data<'a>(
-    sheet_rt: Option<&'a SheetRoundTripContext>,
-    chart_spec: &ChartSpec,
-) -> Option<&'a ChartAuxiliaryData> {
-    chart_auxiliary_data_by_identity(
-        sheet_rt.and_then(|rt| (!rt.chart_auxiliary_data.is_empty()).then_some(rt)),
-        chart_spec,
-        |rt| rt.chart_auxiliary_data.as_slice(),
-    )
+pub(super) struct ChartAuxiliaryDataRef<'a> {
+    pub(super) auxiliary_files: &'a [(String, Vec<u8>)],
+    pub(super) chart_rels: &'a [u8],
+    pub(super) original_path: String,
 }
 
-pub(super) fn chart_ex_auxiliary_data<'a>(
-    sheet_rt: Option<&'a SheetRoundTripContext>,
-    chart_spec: &ChartSpec,
-) -> Option<&'a ChartAuxiliaryData> {
-    chart_auxiliary_data_by_identity(
-        sheet_rt.and_then(|rt| (!rt.chart_ex_auxiliary_data.is_empty()).then_some(rt)),
-        chart_spec,
-        |rt| rt.chart_ex_auxiliary_data.as_slice(),
-    )
+pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxiliaryDataRef<'_>> {
+    let rt = chart_spec.rt.as_ref()?;
+    let (_, chart_rels) = rt.chart_rels_bytes.as_ref()?;
+    if rt.auxiliary_files.is_empty() {
+        return None;
+    }
+    Some(ChartAuxiliaryDataRef {
+        auxiliary_files: rt.auxiliary_files.as_slice(),
+        chart_rels: chart_rels.as_slice(),
+        original_path: chart_identity_path(chart_spec)?,
+    })
 }
 
-pub(super) fn standard_chart_number(aux: &ChartAuxiliaryData) -> Option<usize> {
-    original_chart_number(aux, "chart")
+pub(super) fn standard_chart_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
+    original_chart_number(&aux.original_path, "chart")
 }
 
-pub(super) fn chart_ex_number(aux: &ChartAuxiliaryData) -> Option<usize> {
-    original_chart_number(aux, "chartEx")
+pub(super) fn chart_ex_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
+    original_chart_number(&aux.original_path, "chartEx")
 }
 
 pub(super) fn chart_frame_identity_matches_path(chart_spec: &ChartSpec, chart_path: &str) -> bool {
@@ -43,18 +40,15 @@ pub(super) fn chart_frame_identity_matches_path(chart_spec: &ChartSpec, chart_pa
 }
 
 pub(super) fn supported_auxiliary_file_paths(
-    aux: &ChartAuxiliaryData,
+    aux: &ChartAuxiliaryDataRef<'_>,
     chart_path: &str,
 ) -> BTreeSet<String> {
-    let Some(rels_data) = aux.chart_rels.as_ref() else {
-        return BTreeSet::new();
-    };
     let relationship_targets: BTreeSet<_> =
-        supported_auxiliary_relationship_targets(chart_path, rels_data).collect();
+        supported_auxiliary_relationship_targets(chart_path, aux.chart_rels).collect();
 
     aux.auxiliary_files
         .iter()
-        .map(|aux_file| normalize_path(&aux_file.path))
+        .map(|(path, _)| normalize_path(path))
         .filter(|path| relationship_targets.contains(path))
         .collect()
 }
@@ -85,17 +79,6 @@ pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &
     }
 }
 
-fn chart_auxiliary_data_by_identity<'a>(
-    sheet_rt: Option<&'a SheetRoundTripContext>,
-    chart_spec: &ChartSpec,
-    auxiliary_data: impl Fn(&'a SheetRoundTripContext) -> &'a [ChartAuxiliaryData],
-) -> Option<&'a ChartAuxiliaryData> {
-    let identity_path = chart_identity_path(chart_spec)?;
-    auxiliary_data(sheet_rt?).iter().find(|aux| {
-        aux.original_path.as_deref().map(normalize_path).as_deref() == Some(&identity_path)
-    })
-}
-
 fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {
     let target = chart_spec
         .chart_frame
@@ -108,8 +91,7 @@ fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {
     )))
 }
 
-fn original_chart_number(aux: &ChartAuxiliaryData, prefix: &str) -> Option<usize> {
-    let path = aux.original_path.as_deref()?;
+fn original_chart_number(path: &str, prefix: &str) -> Option<usize> {
     let fname = path.rsplit('/').next()?;
     let num_str = fname.strip_prefix(prefix)?.strip_suffix(".xml")?;
     num_str.parse::<usize>().ok()

@@ -87,8 +87,8 @@ sidecar; it is not semantic authority.
 | `has_empty_ext_lst` | deprecated compatibility only | no durable owner | none | filtered worksheet writer | worksheet XML only | extLst tests |
 | `ext_lst_xml` | transient parse-output sidecar | unknown worksheet extensions | ParseOutput | worksheet writer after modeled filtering | worksheet XML only | extension tests |
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |
-| `chart_auxiliary_data` | persisted opaque sidecar | chart auxiliary subgraph while owner is clean | round_trip | chart writer | chart aux registrations | chart tests |
-| `chart_ex_auxiliary_data` | persisted opaque sidecar | ChartEx auxiliary subgraph while owner is clean | round_trip | chart writer | ChartEx aux registrations | ChartEx tests |
+| `ChartSpec.rt.auxiliary_files` | persisted chart-owned sidecar | chart style/color parts for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
+| `ChartSpec.rt.chart_rels_bytes` | persisted chart-owned sidecar | chart sidecar relationships for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |
 | `cell_formulas` | persisted typed metadata | cell formula metadata until modeled per cell | round_trip | sheet writer for matching formulas | worksheet XML | formula metadata tests |
 | `custom_properties_xml` | transient parse-output sidecar | worksheet custom property refs until modeled | ParseOutput | feature writer with live refs | feature-owned relationship registration | custom property tests |
 | `xml_space_value_cells` | persisted typed metadata | cell lexical metadata | round_trip | sheet writer for matching cells | worksheet XML | cell lexical tests |

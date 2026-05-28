@@ -163,51 +163,26 @@ fn pivot_package_output(pivots: Vec<pivot_types::PivotTableConfig>) -> ParseOutp
     output
 }
 
-fn chart_auxiliary_data(chart_num: usize) -> domain_types::ChartAuxiliaryData {
-    domain_types::ChartAuxiliaryData {
+fn chart_auxiliary_round_trip_data(chart_num: usize) -> domain_types::chart::ChartRoundTripData {
+    domain_types::chart::ChartRoundTripData {
         auxiliary_files: vec![
-            domain_types::BlobPart {
-                path: format!("xl/charts/style{chart_num}.xml"),
-                data: b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
+            (
+                format!("xl/charts/style{chart_num}.xml"),
+                b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
                     .to_vec(),
-            },
-            domain_types::BlobPart {
-                path: format!("xl/charts/vendor{chart_num}.xml"),
-                data: b"<vendor:chartSidecar/>".to_vec(),
-            },
+            ),
+            (
+                format!("xl/charts/vendor{chart_num}.xml"),
+                b"<vendor:chartSidecar/>".to_vec(),
+            ),
         ],
-        chart_rels: Some(
+        chart_rels_bytes: Some((
+            format!("xl/charts/_rels/chart{chart_num}.xml.rels"),
             format!(
                 r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style{chart_num}.xml"/><Relationship Id="rId10" Type="http://example.com/vendorChartSidecar" Target="vendor{chart_num}.xml"/></Relationships>"#
             )
             .into_bytes(),
-        ),
-        original_path: Some(format!("xl/charts/chart{chart_num}.xml")),
-    }
-}
-
-fn chart_auxiliary_roundtrip_context() -> domain_types::RoundTripContext {
-    domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            chart_auxiliary_data: vec![chart_auxiliary_data(9)],
-            ..Default::default()
-        }],
-        ..Default::default()
-    }
-}
-
-fn chart_auxiliary_roundtrip_context_with_charts(
-    chart_nums: &[usize],
-) -> domain_types::RoundTripContext {
-    domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            chart_auxiliary_data: chart_nums
-                .iter()
-                .copied()
-                .map(chart_auxiliary_data)
-                .collect(),
-            ..Default::default()
-        }],
+        )),
         ..Default::default()
     }
 }
@@ -220,6 +195,11 @@ fn with_chart_identity(mut chart: ChartSpec, target: &str) -> ChartSpec {
             ..Default::default()
         },
     );
+    chart
+}
+
+fn with_chart_auxiliary(mut chart: ChartSpec, chart_num: usize) -> ChartSpec {
+    chart.rt = Some(chart_auxiliary_round_trip_data(chart_num));
     chart
 }
 

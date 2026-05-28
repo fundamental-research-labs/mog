@@ -113,12 +113,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
 }
 
 fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
-    !should_reconstruct_chart_space(chart_spec)
-        && (chart_spec.preserved_chart_xml.is_some()
-            || chart_spec
-                .rt
-                .as_ref()
-                .is_some_and(|rt| !rt.auxiliary_files.is_empty() || rt.chart_rels_bytes.is_some()))
+    chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
 }
 
 fn comments_have_imported_identity(sheet_data: &domain_types::SheetData) -> bool {
@@ -1095,50 +1090,43 @@ pub fn write_xlsx_from_parse_output(
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
             if chart_allows_auxiliary_replay(chart_spec)
-                && let Some(aux) = chart_auxiliary::standard_chart_auxiliary_data(
-                    round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)),
-                    chart_spec,
-                )
+                && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
-                    chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
-                for aux_file in &aux.auxiliary_files {
-                    if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
+                    chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+                for (path, _) in aux.auxiliary_files {
+                    if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;
                     }
                     if registered_chart_auxiliary_parts
-                        .insert(aux_file.path.trim_start_matches('/').to_string())
+                        .insert(path.trim_start_matches('/').to_string())
                     {
                         crate::write::package_graph::register_chart_auxiliary_part(
                             &mut package_graph_builder,
-                            &aux_file.path,
+                            path,
                         )?;
                     }
                 }
-                if let Some(rels_data) = &aux.chart_rels {
-                    for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
-                        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
-                            Some(&chart_path),
-                            &rel.target,
-                        )
-                        .ok()
-                        .map(|target| target.trim_start_matches('/').to_string()) else {
-                            continue;
-                        };
-                        if chart_auxiliary::is_supported_auxiliary_relationship(
-                            &rel.rel_type,
-                            &target_path,
-                        ) && auxiliary_paths.contains(&target_path)
-                        {
-                            chart_auxiliary_relationships.push(
-                                ChartAuxiliaryRelationshipGraphEntry {
-                                    chart_path: chart_path.clone(),
-                                    rel_type: rel.rel_type,
-                                    target_path,
-                                    relationship_id_hint: rel.id,
-                                },
-                            );
-                        }
+                for rel in crate::domain::workbook::read::parse_all_rels(aux.chart_rels) {
+                    let Some(target_path) = crate::infra::opc::resolve_relationship_target(
+                        Some(&chart_path),
+                        &rel.target,
+                    )
+                    .ok()
+                    .map(|target| target.trim_start_matches('/').to_string()) else {
+                        continue;
+                    };
+                    if chart_auxiliary::is_supported_auxiliary_relationship(
+                        &rel.rel_type,
+                        &target_path,
+                    ) && auxiliary_paths.contains(&target_path)
+                    {
+                        chart_auxiliary_relationships.push(ChartAuxiliaryRelationshipGraphEntry {
+                            chart_path: chart_path.clone(),
+                            rel_type: rel.rel_type,
+                            target_path,
+                            relationship_id_hint: rel.id,
+                        });
                     }
                 }
             }
@@ -1153,50 +1141,43 @@ pub fn write_xlsx_from_parse_output(
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
             if chart_allows_auxiliary_replay(chart_spec)
-                && let Some(aux) = chart_auxiliary::chart_ex_auxiliary_data(
-                    round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx)),
-                    chart_spec,
-                )
+                && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
-                    chart_auxiliary::supported_auxiliary_file_paths(aux, &chart_path);
-                for aux_file in &aux.auxiliary_files {
-                    if !auxiliary_paths.contains(aux_file.path.trim_start_matches('/')) {
+                    chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+                for (path, _) in aux.auxiliary_files {
+                    if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;
                     }
                     if registered_chart_auxiliary_parts
-                        .insert(aux_file.path.trim_start_matches('/').to_string())
+                        .insert(path.trim_start_matches('/').to_string())
                     {
                         crate::write::package_graph::register_chart_auxiliary_part(
                             &mut package_graph_builder,
-                            &aux_file.path,
+                            path,
                         )?;
                     }
                 }
-                if let Some(rels_data) = &aux.chart_rels {
-                    for rel in crate::domain::workbook::read::parse_all_rels(rels_data) {
-                        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
-                            Some(&chart_path),
-                            &rel.target,
-                        )
-                        .ok()
-                        .map(|target| target.trim_start_matches('/').to_string()) else {
-                            continue;
-                        };
-                        if chart_auxiliary::is_supported_auxiliary_relationship(
-                            &rel.rel_type,
-                            &target_path,
-                        ) && auxiliary_paths.contains(&target_path)
-                        {
-                            chart_auxiliary_relationships.push(
-                                ChartAuxiliaryRelationshipGraphEntry {
-                                    chart_path: chart_path.clone(),
-                                    rel_type: rel.rel_type,
-                                    target_path,
-                                    relationship_id_hint: rel.id,
-                                },
-                            );
-                        }
+                for rel in crate::domain::workbook::read::parse_all_rels(aux.chart_rels) {
+                    let Some(target_path) = crate::infra::opc::resolve_relationship_target(
+                        Some(&chart_path),
+                        &rel.target,
+                    )
+                    .ok()
+                    .map(|target| target.trim_start_matches('/').to_string()) else {
+                        continue;
+                    };
+                    if chart_auxiliary::is_supported_auxiliary_relationship(
+                        &rel.rel_type,
+                        &target_path,
+                    ) && auxiliary_paths.contains(&target_path)
+                    {
+                        chart_auxiliary_relationships.push(ChartAuxiliaryRelationshipGraphEntry {
+                            chart_path: chart_path.clone(),
+                            rel_type: rel.rel_type,
+                            target_path,
+                            relationship_id_hint: rel.id,
+                        });
                     }
                 }
             }

@@ -10,6 +10,7 @@ use crate::output::results::{
     FullParsedSheet, HyperlinkOutput, ParseStats, ProtectionOutput, SmartArtPartsOutput,
     StylesOutput,
 };
+use crate::infra::opc::REL_THREADED_COMMENT;
 use domain_types::ImportedCellProjectionRole;
 use domain_types::domain::comment::{CommentContentType, CommentType, RichTextRun};
 use domain_types::domain::drawings::{DrawingContent, GroupShapeData};
@@ -714,7 +715,7 @@ fn relationship_backed_threaded_comment_upgrades_legacy_sentinel_and_adds_reply(
     let parsed_sheet = FullParsedSheet {
         sheet_opc_rels: vec![ooxml_types::shared::OpcRelationship {
             id: "rIdThreadedComments".to_string(),
-            rel_type: REL_TYPE_THREADED_COMMENT.to_string(),
+            rel_type: REL_THREADED_COMMENT.to_string(),
             target: "../threadedComments/threadedComment1.xml".to_string(),
             target_mode: None,
         }],
@@ -799,7 +800,7 @@ fn threaded_merge_preserves_mixed_legacy_comment_order() {
     let parsed_sheet = FullParsedSheet {
         sheet_opc_rels: vec![ooxml_types::shared::OpcRelationship {
             id: "rIdThreadedComments".to_string(),
-            rel_type: REL_TYPE_THREADED_COMMENT.to_string(),
+            rel_type: REL_THREADED_COMMENT.to_string(),
             target: "../threadedComments/threadedComment1.xml".to_string(),
             target_mode: None,
         }],

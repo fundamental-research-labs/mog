@@ -1,7 +1,7 @@
 //! XML parser for the worksheet-level `<autoFilter>` element.
 //!
 //! Typed OOXML preservation: replaces `extract_auto_filter_xml` (raw-string
-//! passthrough on `SheetRoundTripContext.auto_filter_xml`) with a typed
+//! passthrough on raw XML sidecars
 //! parser that targets [`domain_types::AutoFilter`] directly.
 //!
 //! The tables-level parser at `crate::domain::tables::filter::AutoFilter`

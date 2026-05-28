@@ -9,7 +9,7 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
     ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};

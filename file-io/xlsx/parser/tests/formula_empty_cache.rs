@@ -22,7 +22,7 @@ fn writer_regenerates_explicit_empty_formula_cached_value() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).expect("write XLSX");
+    let bytes = write_xlsx_from_parse_output(&output).expect("write XLSX");
     let archive = XlsxArchive::new(&bytes).expect("XLSX archive");
     let sheet_xml = String::from_utf8(
         archive

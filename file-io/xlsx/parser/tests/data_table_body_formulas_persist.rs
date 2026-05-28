@@ -92,8 +92,7 @@ fn find_cell<'a>(
 #[test]
 fn data_table_master_carries_synthesized_formula() {
     let bytes = build_data_table_xlsx();
-    let (output, _rt, _diag) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (output, _diag) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
     let sheet = &output.sheets[0];
 
     let master = find_cell(&sheet.cells, 1, 1).expect("B2 should be present");
@@ -116,8 +115,7 @@ fn data_table_body_cells_carry_synthesized_formula() {
     // type isn't `CELL_TYPE_VAL_FORMULA` — i.e., whenever the cell lacked an
     // `<f>` element. Body cells are exactly that case.
     let bytes = build_data_table_xlsx();
-    let (output, _rt, _diag) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (output, _diag) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
     let sheet = &output.sheets[0];
 
     let body_positions = [(1u32, 2u32, "C2"), (2, 1, "B3"), (2, 2, "C3")];
@@ -143,8 +141,7 @@ fn data_table_region_metadata_present() {
     // Sanity check: the `data_table_regions` top-level field on ParseOutput
     // is populated for the master at B2:C3.
     let bytes = build_data_table_xlsx();
-    let (output, _rt, _diag) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (output, _diag) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
     assert_eq!(
         output.data_table_regions.len(),
         1,
@@ -167,18 +164,17 @@ fn data_table_writer_suppresses_body_cell_formulas() {
     use xlsx_parser::write::write_xlsx_from_parse_output;
 
     let bytes = build_data_table_xlsx();
-    let (output, _rt, _diag) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (output, _diag) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
 
     // Re-serialize without round-trip context so we observe the writer's
     // behavior on the data-model-only path.
     let written =
-        write_xlsx_from_parse_output(&output, None).expect("write_xlsx_from_parse_output");
+        write_xlsx_from_parse_output(&output).expect("write_xlsx_from_parse_output");
 
     // Round-trip back: parser output should be byte-equivalent in content
     // (same body-cell formulas surfaced), and the master should still carry
     // its data-table cell_formula.
-    let (round_tripped, _rt2, _diag2) = parse_xlsx_to_output(&written).expect("parse round 2");
+    let (round_tripped, _diag2) = parse_xlsx_to_output(&written).expect("parse round 2");
     let sheet = &round_tripped.sheets[0];
 
     // Body cells still surface the synthesized formula (the read boundary

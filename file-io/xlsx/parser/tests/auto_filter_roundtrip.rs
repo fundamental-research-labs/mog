@@ -1,7 +1,7 @@
 //! End-to-end round-trip tests for the worksheet-level `<autoFilter>`.
 //!
 //! Typed OOXML preservation: inventory row 5.2 replaced the raw-XML sidecar
-//! (`SheetRoundTripContext.auto_filter_xml`) with a typed
+//! (raw XML sidecars
 //! `SheetData.auto_filter: Option<domain_types::AutoFilter>` field and made
 //! the typed representation lossless over CT_AutoFilter (filter-column
 //! choice group including `colorFilter` with real `dxfId`, `iconFilter`,
@@ -34,8 +34,8 @@ fn make_sheet_with_autofilter(af: AutoFilter) -> ParseOutput {
 
 fn round_trip(af: AutoFilter) -> AutoFilter {
     let po = make_sheet_with_autofilter(af);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     rt.sheets[0]
         .auto_filter
         .clone()

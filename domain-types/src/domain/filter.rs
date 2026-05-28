@@ -28,7 +28,7 @@ use value_types::CellValue;
 /// OOXML `<autoFilter>` element (CT_AutoFilter, §18.3.1.2).
 ///
 /// Typed OOXML preservation extended this to be lossless over
-/// CT_AutoFilter so that `SheetRoundTripContext.auto_filter_xml` — the
+/// CT_AutoFilter so that raw XML sidecars
 /// raw-XML sidecar that the writer used to fall back to — could be deleted.
 /// All sub-structures below expose the closed-XSD attributes explicitly;
 /// remaining per-element `extLst` tails are carried in a typed
@@ -310,7 +310,7 @@ pub struct OoxmlFilterCondition {
 /// OOXML `<sortState>` element (CT_SortState, §18.3.1.92).
 ///
 /// Typed OOXML preservation retyped this from a raw-XML sidecar on
-/// `SheetRoundTripContext.sort_state_xml` into a first-class domain field so
+/// sort state into a first-class domain field so
 /// the writer no longer silently drops sort state when the blob is absent.
 ///
 /// The `<sortState>` element is a closed XSD: every attribute and child is

@@ -1,7 +1,7 @@
 //! End-to-end round-trip tests for worksheet-level `<dataValidations>`.
 //!
 //! Typed OOXML preservation: inventory row 5.5 replaced the prior raw-XML sidecar
-//! (`SheetRoundTripContext.data_validations_xml`) with full-coverage typed
+//! raw worksheet XML sidecars with full-coverage typed
 //! fields: `SheetData.data_validations` carries `Vec<ValidationSpec>`, and
 //! `SheetData.{data_validations_disable_prompts,_x_window,_y_window}` carry
 //! the container attributes. `ValidationSpec` itself grew an `ime_mode`
@@ -84,10 +84,10 @@ fn data_validations_typed_field_round_trips_losslessly() {
     ];
 
     let po = make_sheet_with_validations(original.clone(), false, None, None);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
     assert_eq!(&bytes[0..2], b"PK");
 
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let dvs = &rt.sheets[0].data_validations;
     assert_eq!(dvs.len(), original.len());
     assert_eq!(dvs[0], original[0]);
@@ -117,8 +117,8 @@ fn data_validations_container_attrs_round_trip() {
     }];
 
     let po = make_sheet_with_validations(original, true, Some(250), Some(400));
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let sheet = &rt.sheets[0];
 
     assert!(
@@ -162,14 +162,14 @@ fn data_validations_declared_count_round_trips_when_imported() {
     let mut po = make_sheet_with_validations(original, false, None, None);
     po.sheets[0].data_validations_declared_count = Some(2);
 
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
     let archive = XlsxArchive::new(&bytes).expect("xlsx archive");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
     assert!(sheet_xml.contains("<dataValidations count=\"2\">"));
     assert_eq!(sheet_xml.matches("<dataValidation ").count(), 1);
 
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     assert_eq!(rt.sheets[0].data_validations_declared_count, Some(2));
     assert_eq!(rt.sheets[0].data_validations.len(), 1);
 }
@@ -199,8 +199,8 @@ fn data_validations_ime_mode_round_trips() {
     }];
 
     let po = make_sheet_with_validations(original.clone(), false, None, None);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let dv = &rt.sheets[0].data_validations[0];
     assert_eq!(
         dv.ime_mode,
@@ -214,7 +214,7 @@ fn data_validations_empty_produces_no_sidecar() {
     // Without validations, the worksheet must not emit a <dataValidations>
     // element at all (writer must not produce an empty container).
     let po = make_sheet_with_validations(Vec::new(), false, None, None);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     assert!(rt.sheets[0].data_validations.is_empty());
 }

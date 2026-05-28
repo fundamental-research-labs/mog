@@ -1,7 +1,7 @@
 //! End-to-end round-trip tests for worksheet-level `<sortState>`.
 //!
 //! Typed OOXML preservation: inventory row 5.3 replaced the prior raw-XML sidecar
-//! (`SheetRoundTripContext.sort_state_xml`) with a typed field
+//! (sort state) with a typed field
 //! (`SheetData.sort_state`). Before the typing, the writer would silently
 //! drop worksheet-level sort state on any path where the blob was absent —
 //! most notably the Yrs hydration path. These tests lock the correctness
@@ -63,10 +63,10 @@ fn sort_state_typed_field_round_trips_losslessly() {
     };
 
     let po = make_sheet_with_sort_state(original.clone());
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
     assert_eq!(&bytes[0..2], b"PK");
 
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let ss = rt.sheets[0]
         .sort_state
         .as_ref()
@@ -89,8 +89,8 @@ fn sort_state_element_local_namespace_round_trips() {
     );
 
     let po = make_sheet_with_sort_state(parsed);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let ss = rt.sheets[0]
         .sort_state
         .as_ref()
@@ -112,8 +112,8 @@ fn sort_state_minimal_round_trips() {
     };
 
     let po = make_sheet_with_sort_state(original.clone());
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let ss = rt.sheets[0]
         .sort_state
         .as_ref()
@@ -140,8 +140,8 @@ fn sort_state_icon_condition_round_trips() {
     };
 
     let po = make_sheet_with_sort_state(original.clone());
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let ss = rt.sheets[0].sort_state.as_ref().expect("sort_state");
     assert_eq!(ss.conditions.len(), 1);
     assert_eq!(ss.conditions[0].sort_by, SortConditionBy::Icon);

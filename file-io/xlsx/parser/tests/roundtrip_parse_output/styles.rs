@@ -9,7 +9,7 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
     ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
@@ -94,18 +94,18 @@ fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
     }];
 
     let imported_bytes =
-        write_xlsx_from_parse_output(&imported, None).expect("initial export should succeed");
+        write_xlsx_from_parse_output(&imported).expect("initial export should succeed");
     let imported_archive =
         XlsxArchive::new(&imported_bytes).expect("initial XLSX should be readable");
     let imported_styles =
         String::from_utf8(imported_archive.read_file("xl/styles.xml").unwrap()).unwrap();
     assert!(imported_styles.contains("StaleFont"));
 
-    let (mut output, round_trip_ctx, _diagnostics) =
+    let (mut output, _diagnostics) =
         parse_xlsx_to_output(&imported_bytes).expect("initial XLSX should parse");
     output.sheets[0].cells.clear();
 
-    let exported = write_xlsx_from_parse_output(&output, Some(&round_trip_ctx))
+    let exported = write_xlsx_from_parse_output(&output)
         .expect("mutated export should succeed");
     let archive = XlsxArchive::new(&exported).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();

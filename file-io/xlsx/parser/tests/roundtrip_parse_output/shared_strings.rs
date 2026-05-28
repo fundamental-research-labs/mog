@@ -9,7 +9,7 @@ use xlsx_parser::zip::XlsxArchive;
 #[test]
 fn imported_shared_string_edit_regenerates_sst_and_package_graph() {
     let imported = super::fixtures::create_xlsx_with_shared_strings(&["original"], &[((0, 0), 0)]);
-    let (mut output, round_trip_ctx, _diagnostics) =
+    let (mut output, _diagnostics) =
         parse_xlsx_to_output(&imported).expect("fixture should parse");
     let cell = output.sheets[0]
         .cells
@@ -18,7 +18,7 @@ fn imported_shared_string_edit_regenerates_sst_and_package_graph() {
         .expect("A1 should parse from shared strings");
     cell.value = CellValue::Text(Arc::from("edited"));
 
-    let exported = write_xlsx_from_parse_output(&output, Some(&round_trip_ctx))
+    let exported = write_xlsx_from_parse_output(&output)
         .expect("export should succeed");
     let archive = XlsxArchive::new(&exported).expect("exported XLSX should be readable");
     let shared_strings =

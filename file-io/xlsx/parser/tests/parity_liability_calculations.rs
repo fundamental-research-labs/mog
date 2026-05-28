@@ -23,7 +23,7 @@ use xlsx_parser::write::write_xlsx_from_parse_output;
 
 /// Round-trip a ParseOutput through XLSX write -> parse -> convert.
 fn roundtrip(original: &ParseOutput) -> ParseOutput {
-    let bytes = write_xlsx_from_parse_output(original, None)
+    let bytes = write_xlsx_from_parse_output(original)
         .expect("write_xlsx_from_parse_output should succeed");
 
     assert!(
@@ -33,8 +33,7 @@ fn roundtrip(original: &ParseOutput) -> ParseOutput {
     );
     assert_eq!(&bytes[0..2], b"PK", "Output is not a valid ZIP archive");
 
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
     rt
 }
 
@@ -89,7 +88,7 @@ fn parse_wide_merge_empty_subcells() {
     )
     .expect("fixture file wide-merge-empty-subcells.xlsx should exist");
 
-    let (parsed, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse should succeed");
+    let (parsed, _diag) = parse_xlsx_to_output(&bytes).expect("parse should succeed");
 
     let sheet = &parsed.sheets[0];
 
@@ -145,7 +144,7 @@ fn parse_spacer_content_dimensions() {
     )
     .expect("fixture file spacer-content-dimensions.xlsx should exist");
 
-    let (parsed, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse should succeed");
+    let (parsed, _diag) = parse_xlsx_to_output(&bytes).expect("parse should succeed");
 
     let sheet = &parsed.sheets[0];
     let dims = &sheet.dimensions;

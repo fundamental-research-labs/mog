@@ -10,7 +10,7 @@ use domain_types::{
     CalculationProperties, CellData, ColDimension, Comment, CommentType, ConditionalFormat,
     DocumentCustomProperty, DocumentCustomPropertyValue, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput, RefMode,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
     ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
@@ -134,15 +134,7 @@ fn calculation_properties_regenerate_workbook_xml_from_modeled_state() {
         has_explicit_iterate_count: true,
         has_explicit_iterate_delta: true,
     };
-    let ctx = RoundTripContext {
-        workbook_preserved_elements: vec![(
-            "workbook\0after\0definedNames\0calcPr".to_string(),
-            r#"<calcPr calcId="999999" calcMode="auto" iterate="0"/>"#.to_string(),
-        )],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
 

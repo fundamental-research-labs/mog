@@ -6,7 +6,7 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
     ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
@@ -20,7 +20,7 @@ use xlsx_parser::write::write_xlsx_from_parse_output;
 /// Returns the round-tripped ParseOutput for further assertions.
 pub(super) fn roundtrip(original: &ParseOutput) -> ParseOutput {
     // Step 1: Write XLSX bytes from ParseOutput
-    let bytes = write_xlsx_from_parse_output(original, None)
+    let bytes = write_xlsx_from_parse_output(original)
         .expect("write_xlsx_from_parse_output should succeed");
 
     // Sanity: output should be a valid ZIP (starts with PK)
@@ -32,8 +32,7 @@ pub(super) fn roundtrip(original: &ParseOutput) -> ParseOutput {
     assert_eq!(&bytes[0..2], b"PK", "Output is not a valid ZIP archive");
 
     // Step 2: Parse the XLSX bytes back into ParseOutput
-    let (round_tripped, _rt_ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (round_tripped, _diagnostics) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
 
     round_tripped
 }

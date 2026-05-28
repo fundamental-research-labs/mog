@@ -1,7 +1,7 @@
 //! End-to-end round-trip tests for worksheet-level `<conditionalFormatting>`.
 //!
 //! Typed OOXML preservation: inventory row 5.4 deleted the raw-XML sidecar
-//! (`SheetRoundTripContext.conditional_formatting_xml`); the writer now
+//! raw worksheet XML sidecars; the writer now
 //! always reconstructs `<conditionalFormatting>` from the typed
 //! `SheetData.conditional_formats` list. These tests lock the typed
 //! reconstruction for the rule variants that already had lossless
@@ -52,10 +52,10 @@ fn cf_cell_value_rule_round_trips() {
     };
 
     let po = make_sheet_with_cf(cf);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
     assert_eq!(&bytes[0..2], b"PK");
 
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     let cfs = &rt.sheets[0].conditional_formats;
     assert_eq!(
         cfs.len(),
@@ -92,8 +92,8 @@ fn cf_formula_dxf_fill_round_trips() {
     };
 
     let po = make_sheet_with_cf(cf);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
 
     match &rt.sheets[0].conditional_formats[0].rules[0] {
         CFRule::Formula { style, .. } => {
@@ -140,8 +140,8 @@ fn cf_color_scale_rule_round_trips_with_typed_value_refs() {
     };
 
     let po = make_sheet_with_cf(cf);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
 
     let cfs = &rt.sheets[0].conditional_formats;
     assert_eq!(cfs.len(), 1);
@@ -201,8 +201,8 @@ fn cf_icon_set_rule_round_trips() {
     };
 
     let po = make_sheet_with_cf(cf);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
 
     let cfs = &rt.sheets[0].conditional_formats;
     match &cfs[0].rules[0] {
@@ -257,8 +257,8 @@ fn cf_data_bar_rule_round_trips_with_typed_value_refs() {
     };
 
     let po = make_sheet_with_cf(cf);
-    let bytes = write_xlsx_from_parse_output(&po, None).expect("write");
-    let (rt, _ctx, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
 
     let cfs = &rt.sheets[0].conditional_formats;
     match &cfs[0].rules[0] {

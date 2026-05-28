@@ -337,7 +337,7 @@ impl PreservedElements {
     }
 
     /// Serialize preserved elements to (position_key, raw_xml) pairs for storage
-    /// in the RoundTripContext. The position_key encodes the parent path and position
+    /// in parse diagnostics. The position_key encodes the parent path and position
     /// as a string that can be deserialized back into a `PreservedXml`.
     ///
     /// Format: "parent_path\0position_type\0position_arg\0tag_name"
@@ -368,7 +368,7 @@ impl PreservedElements {
         pairs
     }
 
-    /// Deserialize from (position_key, raw_xml) pairs stored in the RoundTripContext.
+    /// Deserialize from (position_key, raw_xml) pairs.
     pub fn from_position_pairs(pairs: &[(String, String)]) -> Self {
         let mut result = Self::new();
         for (pos_key, raw_xml) in pairs {

@@ -10,7 +10,7 @@ use domain_types::{
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
     OutlineGroup, PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings,
-    RoundTripContext, RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec,
+    RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec,
     TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
@@ -74,12 +74,7 @@ fn merge_cells_count_attribute_is_canonical_not_roundtrip_context() {
     }];
     output.sheets[0].rows = 1;
     output.sheets[0].cols = 3;
-    let ctx = RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext::default()],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -88,8 +83,7 @@ fn merge_cells_count_attribute_is_canonical_not_roundtrip_context() {
     assert!(sheet_xml.contains(r#"<mergeCell ref="A1:C1"/>"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
     assert_eq!(rt.sheets[0].merges, output.sheets[0].merges);
 }
 
@@ -99,18 +93,7 @@ fn stale_merge_context_does_not_create_deleted_modeled_merges() {
         "Merges",
         vec![cell(0, 0, CellValue::Text(Arc::from("Unmerged")))],
     );
-    let ctx = RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            sheet_preserved_elements: vec![(
-                "worksheet\0after\0sheetData\0mergeCells".to_string(),
-                r#"<mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>"#.to_string(),
-            )],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -119,8 +102,7 @@ fn stale_merge_context_does_not_create_deleted_modeled_merges() {
     assert!(!sheet_xml.contains("A1:C1"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
     assert!(rt.sheets[0].merges.is_empty());
 }
 
@@ -137,7 +119,7 @@ fn outline_properties_roundtrip_from_modeled_state() {
         show_outline_symbols: false,
     });
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -149,8 +131,7 @@ fn outline_properties_roundtrip_from_modeled_state() {
     assert!(sheet_xml.contains(r#"showOutlineSymbols="0""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
     assert_eq!(
         rt.sheets[0].outline_properties,
         output.sheets[0].outline_properties
@@ -163,18 +144,7 @@ fn stale_sheet_pr_context_does_not_create_deleted_outline_properties() {
         "Outline",
         vec![cell(0, 0, CellValue::Text(Arc::from("Ungrouped")))],
     );
-    let ctx = RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            sheet_preserved_elements: vec![(
-                "worksheet\0first\0sheetPr".to_string(),
-                r#"<sheetPr><outlinePr applyStyles="1" summaryBelow="0"/></sheetPr>"#.to_string(),
-            )],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -183,8 +153,7 @@ fn stale_sheet_pr_context_does_not_create_deleted_outline_properties() {
     assert!(!sheet_xml.contains("<outlinePr"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
     assert!(rt.sheets[0].outline_properties.is_none());
 }
 
@@ -396,7 +365,7 @@ fn regenerated_row_layout_flags_come_from_modeled_state() {
         collapsed_on_member: false,
     }];
 
-    let bytes = write_xlsx_from_parse_output(&output, None).expect("export should succeed");
+    let bytes = write_xlsx_from_parse_output(&output).expect("export should succeed");
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -420,8 +389,7 @@ fn regenerated_row_layout_flags_come_from_modeled_state() {
     assert!(collapsed_sentinel_row.contains(r#"collapsed="1""#));
 
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
-    let (rt, _ctx, _diagnostics) =
-        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
     assert!(
         rt.sheets[0]
             .dimensions

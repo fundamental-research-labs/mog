@@ -367,8 +367,12 @@ pub(super) const WORKBOOK_KNOWN_CHILDREN: &[&[u8]] = &[
     b"pivotCaches",
     b"calcPr",
     b"workbookProtection",
-    // fileRecoveryPr: not parsed/written — let preserved elements handle it
     b"webPublishing",
+    b"fileRecoveryPr",
+    b"smartTagPr",
+    b"smartTagTypes",
+    b"webPublishItems",
+    b"extLst",
 ];
 
 /// Check if a tag name (possibly namespaced) matches any known child.
@@ -380,6 +384,9 @@ pub(super) fn is_known_workbook_child(tag_name: &[u8]) -> bool {
         tag_name
     };
     WORKBOOK_KNOWN_CHILDREN.contains(&local)
+        || std::str::from_utf8(local).is_ok_and(
+            crate::roundtrip::preserved_xml_policy::is_dropped_workbook_semantic_child,
+        )
 }
 
 /// Capture preserved (unknown) child elements from workbook.xml.
@@ -512,17 +519,23 @@ pub(super) const SHEET_KNOWN_POST_SD: &[&[u8]] = &[
     b"colBreaks",
     b"drawing",
     b"legacyDrawing",
-    b"legacyDrawingHF", // Written explicitly by SheetWriter from RoundTripContext
+    b"legacyDrawingHF", // Written explicitly by SheetWriter from modeled header/footer images
     // tableParts — intentionally NOT listed so it's captured by PreservedElements
     // and written back via the Tier 2 preservation system.
     b"picture",
     b"oleObjects",
     b"controls",
-    // b"extLst" — intentionally NOT listed so it's captured by PreservedElements
-    // and written back via the Tier 2 preservation system at Position::Last.
-    // For L2 (Yrs path), ext_lst_xml on SheetRoundTripContext handles it.
-    // phoneticPr, ignoredErrors, sheetCalcPr, protectedRanges, scenarios,
-    // customSheetViews: not parsed/written — let preserved elements handle them
+    b"extLst",
+    b"customSheetViews",
+    b"ignoredErrors",
+    b"sheetCalcPr",
+    b"protectedRanges",
+    b"scenarios",
+    b"dataConsolidate",
+    b"phoneticPr",
+    b"smartTags",
+    b"cellWatches",
+    b"webPublishItems",
 ];
 
 /// Check if a tag name matches any in a known-children list.
@@ -533,6 +546,9 @@ pub(super) fn is_known_child(tag_name: &[u8], known_list: &[&[u8]]) -> bool {
         tag_name
     };
     known_list.contains(&local)
+        || std::str::from_utf8(local).is_ok_and(
+            crate::roundtrip::preserved_xml_policy::is_dropped_worksheet_semantic_child,
+        )
 }
 
 /// Capture preserved elements from a region of worksheet XML.

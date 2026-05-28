@@ -191,7 +191,7 @@ fn _dtg_tag(d: DateTimeGrouping) -> &'static str {
 /// `<autoFilter>`) into an OOXML XML fragment.
 ///
 /// Typed OOXML preservation: worksheet-level sort was previously
-/// round-tripped via a raw-XML sidecar on `SheetRoundTripContext`. Writer now
+/// round-tripped via a raw worksheet XML sidecar. Writer now
 /// reconstructs from the typed `SheetData.sort_state`.
 pub fn write_sort_state_xml(sort: &domain_types::SortState) -> String {
     let mut w = XmlWriter::new();

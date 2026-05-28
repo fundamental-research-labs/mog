@@ -32,6 +32,7 @@ import type {
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
 import type { ChartLayoutSnapshot } from '@mog-sdk/contracts/bridges';
+import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
   axisConfigToWire,
   dataLabelConfigToWire,
@@ -217,6 +218,26 @@ function deriveSeriesFormatForRead(series: SeriesConfig): SeriesConfig {
     result.lineWidth = series.format.line.width;
   }
   return result;
+}
+
+/**
+ * Public chart read APIs expose parseable A1 refs, while internal chart
+ * storage/export preserves imported OOXML-style refs with absolute markers.
+ */
+function normalizeChartA1RefForRead(ref: string | undefined): string | undefined {
+  if (!ref) return ref;
+  const parsed = parseCellRange(ref);
+  if (!parsed) return ref;
+  return parsed.sheetName ? rangeToA1(parsed, true, parsed.sheetName) : rangeToA1(parsed);
+}
+
+function normalizeSeriesRefsForRead(series: SeriesConfig): SeriesConfig {
+  return {
+    ...series,
+    values: normalizeChartA1RefForRead(series.values),
+    categories: normalizeChartA1RefForRead(series.categories),
+    bubbleSize: normalizeChartA1RefForRead(series.bubbleSize),
+  };
 }
 
 /**
@@ -662,7 +683,9 @@ function serializedChartToChart(chart: ChartFloatingObject): Chart {
   const axis = axisConfig ? (deriveAxisFieldsForRead(axisConfig) as typeof axisConfig) : undefined;
 
   // Group D: Series format backward compatibility on read
-  const series = seriesConfigs?.map(deriveSeriesFormatForRead);
+  const series = seriesConfigs?.map((s) =>
+    normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s)),
+  );
 
   // Group K: Legend entry visible ↔ delete reconciliation on read
   const legend = legendConfig
@@ -674,9 +697,9 @@ function serializedChartToChart(chart: ChartFloatingObject): Chart {
     sheetId: chart.sheetId ?? '',
     type: reportedType as Chart['type'],
     subType: chart.subType as Chart['subType'],
-    dataRange: chart.dataRange ?? '',
-    seriesRange: chart.seriesRange,
-    categoryRange: chart.categoryRange,
+    dataRange: normalizeChartA1RefForRead(chart.dataRange) ?? '',
+    seriesRange: normalizeChartA1RefForRead(chart.seriesRange),
+    categoryRange: normalizeChartA1RefForRead(chart.categoryRange),
     seriesOrientation: chart.seriesOrientation as Chart['seriesOrientation'],
     anchorRow: anchor.anchorRow,
     anchorCol: anchor.anchorCol,

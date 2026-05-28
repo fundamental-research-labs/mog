@@ -62,7 +62,6 @@ use domain_types::{
     TrailingColRange,
 };
 use formula_types::{CellRef, RangeType};
-use ooxml_types::doc_props::CustomPropertyValue;
 
 // Parser-internal imports (no re-export indirection)
 use crate::output::results::{FullParseResult, FullParsedSheet};
@@ -74,22 +73,6 @@ fn env_flag_default_true(name: &str) -> bool {
             !matches!(normalized.as_str(), "0" | "false" | "no" | "off")
         })
         .unwrap_or(true)
-}
-
-fn custom_property_value_to_domain(
-    value: &CustomPropertyValue,
-) -> domain_types::DocumentCustomPropertyValue {
-    match value {
-        CustomPropertyValue::Lpwstr(value) => {
-            domain_types::DocumentCustomPropertyValue::Lpwstr(value.clone())
-        }
-        CustomPropertyValue::I4(value) => domain_types::DocumentCustomPropertyValue::I4(*value),
-        CustomPropertyValue::R8(value) => domain_types::DocumentCustomPropertyValue::R8(*value),
-        CustomPropertyValue::Bool(value) => domain_types::DocumentCustomPropertyValue::Bool(*value),
-        CustomPropertyValue::Filetime(value) => {
-            domain_types::DocumentCustomPropertyValue::Filetime(value.clone())
-        }
-    }
 }
 
 // =============================================================================
@@ -157,26 +140,26 @@ pub fn full_parse_result_to_parse_output(
                 .doc_props_custom
                 .as_ref()
                 .map(|custom| {
-                    custom
-                        .properties
-                        .iter()
-                        .map(|prop| domain_types::DocumentCustomProperty {
-                            name: prop.name.clone(),
-                            value: custom_property_value_to_domain(&prop.value),
-                        })
-                        .collect()
+                    custom.clone()
                 })
                 .unwrap_or_default();
             domain_types::DocumentProperties {
                 title: core.and_then(|core| core.title.clone()),
                 creator: core.and_then(|core| core.creator.clone()),
                 description: core.and_then(|core| core.description.clone()),
+                identifier: core.and_then(|core| core.identifier.clone()),
+                language: core.and_then(|core| core.language.clone()),
                 subject: core.and_then(|core| core.subject.clone()),
                 created: core.and_then(|core| core.created.clone()),
                 modified: core.and_then(|core| core.modified.clone()),
                 last_modified_by: core.and_then(|core| core.last_modified_by.clone()),
                 category: core.and_then(|core| core.category.clone()),
                 keywords: core.and_then(|core| core.keywords.clone()),
+                content_status: core.and_then(|core| core.content_status.clone()),
+                content_type: core.and_then(|core| core.content_type.clone()),
+                last_printed: core.and_then(|core| core.last_printed.clone()),
+                revision: core.and_then(|core| core.revision.clone()),
+                version: core.and_then(|core| core.version.clone()),
                 custom: typed_custom
                     .iter()
                     .map(|prop| (prop.name.clone(), prop.value.as_legacy_string()))

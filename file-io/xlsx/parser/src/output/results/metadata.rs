@@ -1,19 +1,19 @@
 use super::*;
 
 /// Core document properties from `docProps/core.xml`.
-pub type DocPropsCore = ooxml_types::doc_props::CoreProperties;
+pub type DocPropsCore = domain_types::DocumentProperties;
 
 /// Extended (app) document properties from `docProps/app.xml`.
-pub type DocPropsApp = ooxml_types::doc_props::ExtendedProperties;
+pub type DocPropsApp = domain_types::ExtendedDocumentProperties;
 
 /// Custom document properties from `docProps/custom.xml`.
-pub type DocPropsCustom = ooxml_types::doc_props::CustomProperties;
+pub type DocPropsCustom = Vec<domain_types::DocumentCustomProperty>;
 
 /// A single custom property from `docProps/custom.xml`.
-pub type CustomProperty = ooxml_types::doc_props::CustomProperty;
+pub type CustomProperty = domain_types::DocumentCustomProperty;
 
 /// Value types for custom document properties.
-pub type CustomPropertyValue = ooxml_types::doc_props::CustomPropertyValue;
+pub type CustomPropertyValue = domain_types::DocumentCustomPropertyValue;
 
 // =============================================================================
 // Metadata types (xl/metadata.xml)

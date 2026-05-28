@@ -7,9 +7,10 @@
 
 #![allow(clippy::string_slice)]
 
-use ooxml_types::doc_props::{
-    CoreProperties as DocPropsCore, CustomProperties as DocPropsCustom, CustomProperty,
-    CustomPropertyValue, ExtendedProperties as DocPropsApp, HeadingPair,
+use domain_types::{
+    DocumentCustomProperty as CustomProperty, DocumentCustomPropertyValue as CustomPropertyValue,
+    DocumentCustomPropertyVector, DocumentProperties as DocPropsCore,
+    ExtendedDocumentProperties as DocPropsApp, HeadingPair,
 };
 
 use crate::pipeline::full_parse::extract_attr_value;
@@ -48,25 +49,31 @@ fn parse_bool_text(xml: &[u8], open_tag: &str, close_tag: &str) -> Option<bool> 
     extract_xml_text(xml, open_tag, close_tag).map(|s| s == "true" || s == "1")
 }
 
+fn parse_u32_text(xml: &[u8], open_tag: &str, close_tag: &str) -> Option<u32> {
+    extract_xml_text(xml, open_tag, close_tag).and_then(|s| s.parse::<u32>().ok())
+}
+
 /// Parse `docProps/core.xml` into a `DocPropsCore`.
 pub(crate) fn parse_doc_props_core(xml: &[u8]) -> DocPropsCore {
     DocPropsCore {
-        creator: extract_xml_text(xml, "<dc:creator", "</dc:creator>"),
-        last_modified_by: extract_xml_text(xml, "<cp:lastModifiedBy", "</cp:lastModifiedBy>"),
-        created: extract_xml_text(xml, "<dcterms:created", "</dcterms:created>"),
-        modified: extract_xml_text(xml, "<dcterms:modified", "</dcterms:modified>"),
         title: extract_xml_text(xml, "<dc:title", "</dc:title>"),
-        subject: extract_xml_text(xml, "<dc:subject", "</dc:subject>"),
+        creator: extract_xml_text(xml, "<dc:creator", "</dc:creator>"),
         description: extract_xml_text(xml, "<dc:description", "</dc:description>"),
-        keywords: extract_xml_text(xml, "<cp:keywords", "</cp:keywords>"),
-        category: extract_xml_text(xml, "<cp:category", "</cp:category>"),
-        last_printed: extract_xml_text(xml, "<cp:lastPrinted", "</cp:lastPrinted>"),
         identifier: extract_xml_text(xml, "<dc:identifier", "</dc:identifier>"),
         language: extract_xml_text(xml, "<dc:language", "</dc:language>"),
+        subject: extract_xml_text(xml, "<dc:subject", "</dc:subject>"),
+        created: extract_xml_text(xml, "<dcterms:created", "</dcterms:created>"),
+        modified: extract_xml_text(xml, "<dcterms:modified", "</dcterms:modified>"),
+        last_modified_by: extract_xml_text(xml, "<cp:lastModifiedBy", "</cp:lastModifiedBy>"),
+        category: extract_xml_text(xml, "<cp:category", "</cp:category>"),
+        keywords: extract_xml_text(xml, "<cp:keywords", "</cp:keywords>"),
         content_status: extract_xml_text(xml, "<cp:contentStatus", "</cp:contentStatus>"),
         content_type: extract_xml_text(xml, "<cp:contentType", "</cp:contentType>"),
+        last_printed: extract_xml_text(xml, "<cp:lastPrinted", "</cp:lastPrinted>"),
         revision: extract_xml_text(xml, "<cp:revision", "</cp:revision>"),
         version: extract_xml_text(xml, "<cp:version", "</cp:version>"),
+        typed_custom: Vec::new(),
+        custom: Vec::new(),
     }
 }
 
@@ -81,6 +88,19 @@ pub(crate) fn parse_doc_props_app(xml: &[u8]) -> DocPropsApp {
     let manager = extract_xml_text(xml, "<Manager", "</Manager>");
     let template = extract_xml_text(xml, "<Template", "</Template>");
     let hyperlink_base = extract_xml_text(xml, "<HyperlinkBase", "</HyperlinkBase>");
+    let pages = parse_u32_text(xml, "<Pages", "</Pages>");
+    let words = parse_u32_text(xml, "<Words", "</Words>");
+    let characters = parse_u32_text(xml, "<Characters", "</Characters>");
+    let presentation_format = extract_xml_text(xml, "<PresentationFormat", "</PresentationFormat>");
+    let lines = parse_u32_text(xml, "<Lines", "</Lines>");
+    let paragraphs = parse_u32_text(xml, "<Paragraphs", "</Paragraphs>");
+    let slides = parse_u32_text(xml, "<Slides", "</Slides>");
+    let notes = parse_u32_text(xml, "<Notes", "</Notes>");
+    let hidden_slides = parse_u32_text(xml, "<HiddenSlides", "</HiddenSlides>");
+    let mm_clips = parse_u32_text(xml, "<MMClips", "</MMClips>");
+    let characters_with_spaces =
+        parse_u32_text(xml, "<CharactersWithSpaces", "</CharactersWithSpaces>");
+    let dig_sig = extract_xml_text(xml, "<DigSig", "</DigSig>");
     let scale_crop = parse_bool_text(xml, "<ScaleCrop", "</ScaleCrop>");
     let links_up_to_date = parse_bool_text(xml, "<LinksUpToDate", "</LinksUpToDate>");
     let shared_doc = parse_bool_text(xml, "<SharedDoc", "</SharedDoc>");
@@ -109,6 +129,7 @@ pub(crate) fn parse_doc_props_app(xml: &[u8]) -> DocPropsApp {
             }
         }
     }
+    let hlinks = parse_vector_lpstr(xml, "<HLinks>", "</HLinks>");
 
     DocPropsApp {
         total_time,
@@ -119,13 +140,53 @@ pub(crate) fn parse_doc_props_app(xml: &[u8]) -> DocPropsApp {
         manager,
         template,
         hyperlink_base,
+        pages,
+        words,
+        characters,
+        presentation_format,
+        lines,
+        paragraphs,
+        slides,
+        notes,
+        hidden_slides,
+        mm_clips,
+        characters_with_spaces,
+        dig_sig,
         scale_crop,
         links_up_to_date,
         shared_doc,
         hyperlinks_changed,
         heading_pairs,
         titles_of_parts,
+        hlinks,
     }
+}
+
+fn parse_vector_lpstr(xml: &[u8], open_tag: &str, close_tag: &str) -> Vec<String> {
+    let xml_str = match std::str::from_utf8(xml) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let Some(section_start) = xml_str.find(open_tag) else {
+        return Vec::new();
+    };
+    let Some(section_end) = xml_str[section_start..].find(close_tag) else {
+        return Vec::new();
+    };
+    let section = &xml_str[section_start..section_start + section_end];
+    let mut values = Vec::new();
+    let mut pos = 0;
+    while let Some(start) = section[pos..].find("<vt:lpstr>") {
+        let text_start = pos + start + "<vt:lpstr>".len();
+        if let Some(end) = section[text_start..].find("</vt:lpstr>") {
+            let value = &section[text_start..text_start + end];
+            values.push(crate::infra::xml::decode_xml_entities_string(value));
+            pos = text_start + end;
+        } else {
+            break;
+        }
+    }
+    values
 }
 
 /// Parse `<HeadingPairs>` into a `Vec<HeadingPair>`.
@@ -209,11 +270,11 @@ fn extract_variant_i4(block: &str) -> Option<u32> {
     block[text_start..text_start + end].parse::<u32>().ok()
 }
 
-/// Parse `docProps/custom.xml` into a `DocPropsCustom`.
-pub(crate) fn parse_doc_props_custom(xml: &[u8]) -> DocPropsCustom {
+/// Parse `docProps/custom.xml` into typed custom properties.
+pub(crate) fn parse_doc_props_custom(xml: &[u8]) -> Vec<CustomProperty> {
     let xml_str = match std::str::from_utf8(xml) {
         Ok(s) => s,
-        Err(_) => return DocPropsCustom::default(),
+        Err(_) => return Vec::new(),
     };
 
     let mut properties = Vec::new();
@@ -256,9 +317,11 @@ pub(crate) fn parse_doc_props_custom(xml: &[u8]) -> DocPropsCustom {
 
         if let Some(value) = value {
             properties.push(CustomProperty {
-                fmtid,
-                pid,
+                fmtid: Some(fmtid),
+                pid: Some(pid),
                 name,
+                link_target: extract_attr_value(open_tag, "linkTarget")
+                    .map(|s| crate::infra::xml::decode_xml_entities_string(&s)),
                 value,
             });
         }
@@ -266,7 +329,7 @@ pub(crate) fn parse_doc_props_custom(xml: &[u8]) -> DocPropsCustom {
         pos = abs_start + prop_end + "</property>".len();
     }
 
-    DocPropsCustom { properties }
+    properties
 }
 
 /// Parse the value child element of a custom property.
@@ -275,30 +338,153 @@ fn parse_custom_property_value(body: &str) -> Option<CustomPropertyValue> {
     let body = body.trim();
 
     // Try each vt: type
+    if body.contains("<vt:empty") {
+        return Some(CustomPropertyValue::Empty);
+    }
+    if body.contains("<vt:null") {
+        return Some(CustomPropertyValue::Null);
+    }
     if let Some(val) = extract_vt_text(body, "vt:lpwstr") {
         return Some(CustomPropertyValue::Lpwstr(
             crate::infra::xml::decode_xml_entities_string(&val),
         ));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:lpstr") {
+        return Some(CustomPropertyValue::Lpstr(
+            crate::infra::xml::decode_xml_entities_string(&val),
+        ));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:bstr") {
+        return Some(CustomPropertyValue::Bstr(
+            crate::infra::xml::decode_xml_entities_string(&val),
+        ));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:i1")
+        && let Ok(n) = val.parse::<i8>()
+    {
+        return Some(CustomPropertyValue::I1(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:i2")
+        && let Ok(n) = val.parse::<i16>()
+    {
+        return Some(CustomPropertyValue::I2(n));
     }
     if let Some(val) = extract_vt_text(body, "vt:i4") {
         if let Ok(n) = val.parse::<i32>() {
             return Some(CustomPropertyValue::I4(n));
         }
     }
+    if let Some(val) = extract_vt_text(body, "vt:i8")
+        && let Ok(n) = val.parse::<i64>()
+    {
+        return Some(CustomPropertyValue::I8(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:int")
+        && let Ok(n) = val.parse::<i32>()
+    {
+        return Some(CustomPropertyValue::Int(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:ui1")
+        && let Ok(n) = val.parse::<u8>()
+    {
+        return Some(CustomPropertyValue::Ui1(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:ui2")
+        && let Ok(n) = val.parse::<u16>()
+    {
+        return Some(CustomPropertyValue::Ui2(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:ui4")
+        && let Ok(n) = val.parse::<u32>()
+    {
+        return Some(CustomPropertyValue::Ui4(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:ui8")
+        && let Ok(n) = val.parse::<u64>()
+    {
+        return Some(CustomPropertyValue::Ui8(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:uint")
+        && let Ok(n) = val.parse::<u32>()
+    {
+        return Some(CustomPropertyValue::Uint(n));
+    }
+    if let Some(val) = extract_vt_text(body, "vt:r4")
+        && let Ok(n) = val.parse::<f32>()
+    {
+        return Some(CustomPropertyValue::R4(n));
+    }
     if let Some(val) = extract_vt_text(body, "vt:r8") {
         if let Ok(n) = val.parse::<f64>() {
             return Some(CustomPropertyValue::R8(n));
         }
     }
+    if let Some(val) = extract_vt_text(body, "vt:decimal") {
+        return Some(CustomPropertyValue::Decimal(val));
+    }
     if let Some(val) = extract_vt_text(body, "vt:bool") {
         let b = val == "true" || val == "1";
         return Some(CustomPropertyValue::Bool(b));
     }
+    if let Some(val) = extract_vt_text(body, "vt:date") {
+        return Some(CustomPropertyValue::Date(val));
+    }
     if let Some(val) = extract_vt_text(body, "vt:filetime") {
         return Some(CustomPropertyValue::Filetime(val));
     }
+    for (tag, ctor) in [
+        ("vt:cy", CustomPropertyValue::Cy as fn(String) -> CustomPropertyValue),
+        ("vt:error", CustomPropertyValue::Error),
+        ("vt:clsid", CustomPropertyValue::Clsid),
+        ("vt:blob", CustomPropertyValue::Blob),
+        ("vt:oblob", CustomPropertyValue::Oblob),
+        ("vt:stream", CustomPropertyValue::Stream),
+        ("vt:ostream", CustomPropertyValue::Ostream),
+        ("vt:storage", CustomPropertyValue::Storage),
+        ("vt:ostorage", CustomPropertyValue::Ostorage),
+        ("vt:vstream", CustomPropertyValue::Vstream),
+    ] {
+        if let Some(val) = extract_vt_text(body, tag) {
+            return Some(ctor(crate::infra::xml::decode_xml_entities_string(&val)));
+        }
+    }
+    if let Some(vector) = parse_vt_vector(body) {
+        return Some(CustomPropertyValue::Vector(vector));
+    }
 
     None
+}
+
+fn parse_vt_vector(body: &str) -> Option<DocumentCustomPropertyVector> {
+    let start = body.find("<vt:vector")?;
+    let after_open = &body[start..];
+    let open_end = after_open.find('>')?;
+    let open_tag = &after_open[..open_end];
+    let close = "</vt:vector>";
+    let content = &after_open[open_end + 1..];
+    let end = content.find(close)?;
+    let content = &content[..end];
+    let base_type = extract_attr_value(open_tag, "baseType").unwrap_or_default();
+    let tag = format!("vt:{base_type}");
+    let mut values = Vec::new();
+    let mut pos = 0;
+    while let Some(child_start) = content[pos..].find(&format!("<{tag}")) {
+        let abs = pos + child_start;
+        let child = &content[abs..];
+        let Some(child_open_end) = child.find('>') else {
+            break;
+        };
+        let close_tag = format!("</{tag}>");
+        let Some(child_end) = child[child_open_end + 1..].find(&close_tag) else {
+            break;
+        };
+        let child_xml = &child[..child_open_end + 1 + child_end + close_tag.len()];
+        if let Some(value) = parse_custom_property_value(child_xml) {
+            values.push(value);
+        }
+        pos = abs + child_open_end + 1 + child_end + close_tag.len();
+    }
+    Some(DocumentCustomPropertyVector { base_type, values })
 }
 
 /// Extract text content from a `<tag>text</tag>` element.

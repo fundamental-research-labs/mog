@@ -7,22 +7,18 @@ pub(super) struct DocPropsXml {
 }
 
 pub(super) fn build_doc_props_xml(output: &ParseOutput) -> DocPropsXml {
-    let Some(properties) = output.properties.as_ref() else {
-        return DocPropsXml {
-            core: None,
-            app: None,
-            custom: None,
-        };
-    };
-
     DocPropsXml {
-        core: Some(crate::domain::metadata::write::write_core_props_xml(
-            properties,
-        )),
+        core: output
+            .properties
+            .as_ref()
+            .map(crate::domain::metadata::write::write_core_props_xml),
         app: Some(crate::domain::metadata::write::write_app_props_xml(
             output.extended_properties.as_ref(),
-        )),
-        custom: (!properties.custom.is_empty() || !properties.typed_custom.is_empty())
-            .then(|| crate::domain::metadata::write::write_custom_props_xml(properties)),
+        ))
+        .filter(|_| output.extended_properties.is_some() || output.properties.is_some()),
+        custom: output.properties.as_ref().and_then(|properties| {
+            (!properties.custom.is_empty() || !properties.typed_custom.is_empty())
+                .then(|| crate::domain::metadata::write::write_custom_props_xml(properties))
+        }),
     }
 }

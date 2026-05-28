@@ -359,7 +359,7 @@ pub(super) fn hydrate_workbook_metadata(
     workbook: &MapRef,
     workbook_properties: &Option<domain_types::domain::workbook::WorkbookProperties>,
     document_properties: &Option<domain_types::DocumentProperties>,
-    extended_properties: &Option<ooxml_types::doc_props::ExtendedProperties>,
+    extended_properties: &Option<domain_types::ExtendedDocumentProperties>,
     xlsx_metadata: &Option<domain_types::WorkbookMetadata>,
     file_version: &Option<domain_types::domain::workbook::FileVersion>,
     file_sharing: &Option<domain_types::domain::workbook::FileSharing>,

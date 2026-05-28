@@ -52,7 +52,7 @@ pub struct ParseOutput {
     pub theme: Option<ThemeData>,
     pub properties: Option<DocumentProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extended_properties: Option<ooxml_types::doc_props::ExtendedProperties>,
+    pub extended_properties: Option<crate::properties::ExtendedDocumentProperties>,
     pub protection: Option<WorkbookProtection>,
     pub calculation: CalculationProperties,
     #[serde(default, skip_serializing_if = "Option::is_none")]

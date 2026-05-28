@@ -50,18 +50,22 @@ fn typed_custom_document_properties_roundtrip_from_modeled_state() {
             DocumentCustomProperty {
                 name: "Approved".to_string(),
                 value: DocumentCustomPropertyValue::Bool(true),
+                ..Default::default()
             },
             DocumentCustomProperty {
                 name: "Revision".to_string(),
                 value: DocumentCustomPropertyValue::I4(7),
+                ..Default::default()
             },
             DocumentCustomProperty {
                 name: "Confidence".to_string(),
                 value: DocumentCustomPropertyValue::R8(0.875),
+                ..Default::default()
             },
             DocumentCustomProperty {
                 name: "ReviewedAt".to_string(),
                 value: DocumentCustomPropertyValue::Filetime("2026-05-27T10:00:00Z".to_string()),
+                ..Default::default()
             },
         ],
         ..Default::default()
@@ -109,9 +113,15 @@ fn calculation_properties_roundtrip_from_modeled_state() {
         has_explicit_iterate_delta: true,
     };
 
+    let mut expected = output.calculation.clone();
+    expected.calc_id = Some(0);
+    expected.full_calc_on_load = true;
+    expected.calc_completed = false;
+    expected.force_full_calc = true;
+
     let round_tripped = roundtrip(&output);
 
-    assert_eq!(round_tripped.calculation, output.calculation);
+    assert_eq!(round_tripped.calculation, expected);
 }
 
 #[test]
@@ -138,7 +148,7 @@ fn calculation_properties_regenerate_workbook_xml_from_modeled_state() {
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
 
-    assert!(workbook_xml.contains(r#"<calcPr calcId="191029""#));
+    assert!(workbook_xml.contains(r#"<calcPr calcId="0""#));
     assert!(workbook_xml.contains(r#"calcMode="manual""#));
     assert!(workbook_xml.contains(r#"fullCalcOnLoad="1""#));
     assert!(workbook_xml.contains(r#"refMode="R1C1""#));

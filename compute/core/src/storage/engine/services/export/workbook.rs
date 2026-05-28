@@ -360,7 +360,7 @@ pub(super) fn export_pivot_cache_records(
 
 pub(super) fn export_extended_document_properties(
     stores: &EngineStores,
-) -> Option<ooxml_types::doc_props::ExtendedProperties> {
+) -> Option<domain_types::ExtendedDocumentProperties> {
     let doc = stores.storage.doc();
     let txn = doc.transact();
     let workbook = stores.storage.workbook_map();
@@ -375,7 +375,7 @@ pub(super) fn export_extended_document_properties(
         _ => return None,
     };
 
-    serde_json::from_str::<ooxml_types::doc_props::ExtendedProperties>(&json_str).ok()
+    serde_json::from_str::<domain_types::ExtendedDocumentProperties>(&json_str).ok()
 }
 
 /// Export calculation settings from modeled workbook storage.

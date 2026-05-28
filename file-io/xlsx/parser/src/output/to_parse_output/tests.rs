@@ -899,6 +899,7 @@ fn threading_result(
         max_iterations: None,
         max_change: None,
         calc_pr_settings: None,
+        imported_calc_chain_entry_count: 0,
         pivot_caches: std::collections::HashMap::new(),
         slicer_caches: Vec::new(),
         theme_name: None,
@@ -927,6 +928,7 @@ fn threading_result(
         raw_metadata_xml: None,
         raw_doc_metadata_label_info: None,
         external_links: Vec::new(),
+        connections: Default::default(),
         custom_xml_parts: Vec::new(),
         raw_persons_xml,
         raw_threaded_comments,
@@ -941,36 +943,38 @@ fn threading_result(
 #[test]
 fn typed_custom_doc_props_populate_parse_output() {
     let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
-    result.doc_props_custom = Some(ooxml_types::doc_props::CustomProperties {
-        properties: vec![
-            ooxml_types::doc_props::CustomProperty {
-                fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string(),
-                pid: 2,
+    result.doc_props_custom = Some(vec![
+            domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(2),
                 name: "Approved".to_string(),
-                value: ooxml_types::doc_props::CustomPropertyValue::Bool(true),
+                link_target: None,
+                value: domain_types::DocumentCustomPropertyValue::Bool(true),
             },
-            ooxml_types::doc_props::CustomProperty {
-                fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string(),
-                pid: 3,
+            domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(3),
                 name: "Revision".to_string(),
-                value: ooxml_types::doc_props::CustomPropertyValue::I4(7),
+                link_target: None,
+                value: domain_types::DocumentCustomPropertyValue::I4(7),
             },
-            ooxml_types::doc_props::CustomProperty {
-                fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string(),
-                pid: 4,
+            domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(4),
                 name: "Confidence".to_string(),
-                value: ooxml_types::doc_props::CustomPropertyValue::R8(0.875),
+                link_target: None,
+                value: domain_types::DocumentCustomPropertyValue::R8(0.875),
             },
-            ooxml_types::doc_props::CustomProperty {
-                fmtid: "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string(),
-                pid: 5,
+            domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(5),
                 name: "ReviewedAt".to_string(),
-                value: ooxml_types::doc_props::CustomPropertyValue::Filetime(
+                link_target: None,
+                value: domain_types::DocumentCustomPropertyValue::Filetime(
                     "2026-05-27T10:00:00Z".to_string(),
                 ),
             },
-        ],
-    });
+        ]);
 
     let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
     let props = output
@@ -981,19 +985,31 @@ fn typed_custom_doc_props_populate_parse_output() {
         props.typed_custom,
         vec![
             domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(2),
                 name: "Approved".to_string(),
+                link_target: None,
                 value: domain_types::DocumentCustomPropertyValue::Bool(true),
             },
             domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(3),
                 name: "Revision".to_string(),
+                link_target: None,
                 value: domain_types::DocumentCustomPropertyValue::I4(7),
             },
             domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(4),
                 name: "Confidence".to_string(),
+                link_target: None,
                 value: domain_types::DocumentCustomPropertyValue::R8(0.875),
             },
             domain_types::DocumentCustomProperty {
+                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+                pid: Some(5),
                 name: "ReviewedAt".to_string(),
+                link_target: None,
                 value: domain_types::DocumentCustomPropertyValue::Filetime(
                     "2026-05-27T10:00:00Z".to_string(),
                 ),

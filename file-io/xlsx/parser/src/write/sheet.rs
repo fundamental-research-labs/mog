@@ -24,27 +24,25 @@
 //! ```
 
 use super::xml_writer::XmlWriter;
-use crate::domain::print::write::{PrintWriter, format_f64};
-use crate::domain::worksheet::write::{
-    write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_properties,
-    write_sheet_views,
-};
-use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers, WorksheetSemanticXml};
+use crate::domain::print::write::PrintWriter;
+use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers};
 pub use ooxml_types::worksheet::{
     ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
     SheetViewType,
 };
 use std::collections::BTreeMap;
 
-/// XML namespace for SpreadsheetML
-const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-/// XML namespace for relationships
-const RELATIONSHIPS_NS: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-
+mod body;
+mod cell;
 mod data;
+mod hyperlinks;
+mod raw_sections;
+mod relationships;
+mod root;
+mod sheet_data;
 
-use data::authored_style_cells_for_row;
+#[cfg(test)]
+use cell::format_number;
 pub use data::{CellData, CellValue, RowDef, SheetFormatPr};
 
 // ============================================================================
@@ -61,62 +59,62 @@ pub use data::{CellData, CellValue, RowDef, SheetFormatPr};
 #[derive(Debug, Clone)]
 pub struct SheetWriter {
     /// Sheet dimension (startRow, startCol, endRow, endCol), all 0-indexed
-    dimension: Option<(u32, u32, u32, u32)>,
+    pub(super) dimension: Option<(u32, u32, u32, u32)>,
     /// Column definitions
-    cols: Vec<ColWidth>,
+    pub(super) cols: Vec<ColWidth>,
     /// Row data: row index -> (RowDef, cells)
-    rows: BTreeMap<u32, (RowDef, Vec<CellData>)>,
+    pub(super) rows: BTreeMap<u32, (RowDef, Vec<CellData>)>,
     /// Authored style-only blank cell coverage.
-    authored_style_runs: Vec<AuthoredStyleRun>,
+    pub(super) authored_style_runs: Vec<AuthoredStyleRun>,
     /// Merge ranges
-    merges: Vec<MergeRange>,
+    pub(super) merges: Vec<MergeRange>,
     /// Sheet view settings (one or more `<sheetView>` elements)
-    sheet_views: Vec<SheetView>,
+    pub(super) sheet_views: Vec<SheetView>,
     /// Modeled worksheet properties emitted as `<sheetPr>`.
-    sheet_properties: Option<SheetProperties>,
+    pub(super) sheet_properties: Option<SheetProperties>,
     /// Print settings (margins, page setup, header/footer, print options, breaks)
-    print_writer: Option<PrintWriter>,
+    pub(super) print_writer: Option<PrintWriter>,
     /// Sheet format properties (default row height, column width)
-    sheet_format_pr: SheetFormatPr,
+    pub(super) sheet_format_pr: SheetFormatPr,
     /// Stable sheet identity for co-authoring (xr:uid on <worksheet> root)
-    uid: Option<String>,
+    pub(super) uid: Option<String>,
     /// Tier 2: Captured namespace declarations for round-trip fidelity
-    root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
+    pub(super) root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
     /// Raw autoFilter XML for verbatim round-trip passthrough.
-    auto_filter_xml: Option<String>,
+    pub(super) auto_filter_xml: Option<String>,
     /// Typed worksheet semantic containers emitted from SheetData, not preserved XML.
-    worksheet_semantic_containers: WorksheetSemanticContainers,
+    pub(super) worksheet_semantic_containers: WorksheetSemanticContainers,
     /// Raw sortState XML for verbatim round-trip passthrough.
-    sort_state_xml: Option<String>,
+    pub(super) sort_state_xml: Option<String>,
     /// Raw conditionalFormatting XML for verbatim round-trip passthrough.
-    conditional_formatting_xml: Option<String>,
+    pub(super) conditional_formatting_xml: Option<String>,
     /// Raw dataValidations XML for verbatim round-trip passthrough.
-    data_validations_xml: Option<String>,
+    pub(super) data_validations_xml: Option<String>,
     /// Raw customProperties XML for verbatim round-trip passthrough.
-    custom_properties_xml: Option<String>,
+    pub(super) custom_properties_xml: Option<String>,
     /// Relationship ID for `<legacyDrawing r:id="..."/>` element.
     /// Links to the VML drawing part for comments, form controls, etc.
-    legacy_drawing_r_id: Option<String>,
+    pub(super) legacy_drawing_r_id: Option<String>,
     /// Relationship ID for `<legacyDrawingHF r:id="..."/>` element.
     /// Links to the VML drawing part for header/footer images.
-    legacy_drawing_hf_r_id: Option<String>,
+    pub(super) legacy_drawing_hf_r_id: Option<String>,
     /// Relationship ID for `<drawing r:id="..."/>` element.
     /// Links to the DrawingML drawing part.
-    drawing_r_id: Option<String>,
+    pub(super) drawing_r_id: Option<String>,
     /// Hyperlinks for round-trip fidelity.
-    hyperlinks: Vec<crate::output::results::HyperlinkOutput>,
+    pub(super) hyperlinks: Vec<crate::output::results::HyperlinkOutput>,
     /// Raw sheetProtection XML for verbatim passthrough.
-    sheet_protection_xml: Option<String>,
+    pub(super) sheet_protection_xml: Option<String>,
     /// Raw mc:AlternateContent controls XML for form controls.
-    controls_xml: Option<String>,
+    pub(super) controls_xml: Option<String>,
     /// Modeled worksheet `<oleObjects>` XML.
-    ole_objects_xml: Option<String>,
+    pub(super) ole_objects_xml: Option<String>,
     /// Raw tableParts XML for verbatim passthrough.
-    table_parts_xml: Option<String>,
+    pub(super) table_parts_xml: Option<String>,
     /// Relationship IDs for generated worksheet pivot table references.
-    pivot_table_r_ids: Vec<String>,
+    pub(super) pivot_table_r_ids: Vec<String>,
     /// Raw extLst XML for sparklines and other extensions.
-    ext_lst_xml: Option<String>,
+    pub(super) ext_lst_xml: Option<String>,
 }
 
 impl Default for SheetWriter {
@@ -804,844 +802,11 @@ impl SheetWriter {
     /// Generate worksheet XML.
     pub fn to_xml(&self) -> Vec<u8> {
         let mut w = XmlWriter::new();
-
-        // XML declaration
         w.write_declaration();
-
-        // Check which Tier 1 extension namespaces are needed
-        let has_descent = self.sheet_format_pr.default_row_descent.is_some()
-            || self.rows.values().any(|(rd, _)| rd.descent.is_some());
-        let has_uid = self.uid.is_some()
-            || self
-                .data_validations_xml
-                .as_ref()
-                .map_or(false, |xml| xml.contains("xr:uid"))
-            || self
-                .ext_lst_xml
-                .as_ref()
-                .map_or(false, |xml| xml.contains("xr:uid"));
-
-        // Build mc:Ignorable from Tier 1 + Tier 2 prefixes.
-        // When root namespaces exist, let add_from_namespace_map control the order
-        // so that the mc:Ignorable value matches the original document order.
-        // Only add Tier 1 prefixes first in fresh-write mode (no root namespaces).
-        use crate::write::mc_builder::McIgnorableBuilder;
-        let mut mc_builder = McIgnorableBuilder::new();
-        if self.root_namespaces.is_none() {
-            if has_descent {
-                mc_builder.add("x14ac");
-            }
-            if has_uid {
-                mc_builder.add("xr");
-            }
-        }
-        if let Some(ref ns) = self.root_namespaces {
-            mc_builder.add_from_namespace_map(ns);
-            // Add Tier 1 prefixes that aren't in root namespaces (edge case)
-            if has_descent {
-                mc_builder.add("x14ac");
-            }
-            if has_uid {
-                mc_builder.add("xr");
-            }
-        }
-
-        // Worksheet root element with namespaces
-        w.start_element("worksheet")
-            .attr("xmlns", SPREADSHEET_NS)
-            .attr("xmlns:r", RELATIONSHIPS_NS);
-
-        // Check which Tier 1 namespaces are already covered by root_namespaces.
-        // When root_namespaces contains x14ac or xr, we emit them via Tier 2
-        // in their original document order rather than Tier 1, preserving namespace ordering.
-        let preserved_has_x14ac = self
-            .root_namespaces
-            .as_ref()
-            .map_or(false, |ns| ns.has_prefix("x14ac"));
-        let preserved_has_xr = self
-            .root_namespaces
-            .as_ref()
-            .map_or(false, |ns| ns.has_prefix("xr"));
-        // When root_namespaces contains "mc", defer xmlns:mc + mc:Ignorable to the
-        // root namespace loop so the original attribute order is reproduced exactly.
-        // Otherwise emit them immediately after xmlns:r (the default/fresh-write path).
-        let preserved_has_mc = self
-            .root_namespaces
-            .as_ref()
-            .map_or(false, |ns| ns.has_prefix("mc"));
-
-        let mc_uri = "http://schemas.openxmlformats.org/markup-compatibility/2006";
-        let ignorable_value = mc_builder.build();
-
-        // Fresh-write mode (no root namespaces): emit xmlns:mc
-        // when extension prefixes are present, since we're generating new XML.
-        // Round-trip mode (root namespaces exist): only emit mc if the original had it
-        // — if the original didn't have xmlns:mc, we shouldn't inject it.
-        // Note: mc:Ignorable is deferred to after all namespace declarations (matching Excel's ordering).
-        let is_fresh_write = self.root_namespaces.is_none();
-        if !mc_builder.is_empty() && !preserved_has_mc && is_fresh_write {
-            w.attr("xmlns:mc", mc_uri);
-        }
-
-        // Emit Tier 1 namespace declarations (only when not already in root_namespaces)
-        if has_descent && !preserved_has_x14ac {
-            w.attr(
-                "xmlns:x14ac",
-                "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac",
-            );
-        }
-        if has_uid && !preserved_has_xr {
-            w.attr(
-                "xmlns:xr",
-                "http://schemas.microsoft.com/office/spreadsheetml/2014/revision",
-            );
-        }
-
-        // Tier 2: Emit captured extension namespace declarations (skip already-emitted ones).
-        // When root_namespaces contains "mc", emit xmlns:mc + mc:Ignorable at the position
-        // where "mc" appears in the original document order.
-        if let Some(ref ns) = self.root_namespaces {
-            for decl in ns.all() {
-                if let Some(ref prefix) = decl.prefix {
-                    if prefix == "r" {
-                        // Already emitted above — skip
-                        continue;
-                    }
-                    if prefix == "mc" {
-                        // Emit xmlns:mc + mc:Ignorable at the preserved position
-                        // (matching Excel's ordering: mc:Ignorable immediately after xmlns:mc)
-                        if !mc_builder.is_empty() {
-                            w.attr("xmlns:mc", mc_uri);
-                            if let Some(ref ignorable) = ignorable_value {
-                                w.attr("mc:Ignorable", ignorable);
-                            }
-                        }
-                        continue;
-                    }
-                    // Skip Tier 1 namespaces that were already emitted above
-                    if (prefix == "x14ac" && has_descent && !preserved_has_x14ac)
-                        || (prefix == "xr" && has_uid && !preserved_has_xr)
-                    {
-                        continue;
-                    }
-                    // Skip default namespace (already emitted as xmlns=...)
-                    w.attr(&format!("xmlns:{}", prefix), &decl.uri);
-                }
-            }
-        }
-
-        if let Some(ref uid) = self.uid {
-            w.attr("xr:uid", uid);
-        }
-
-        // Emit mc:Ignorable at end only in fresh-write mode (no root namespaces).
-        // In round-trip mode, mc:Ignorable was already emitted inline with xmlns:mc above.
-        if is_fresh_write {
-            if let Some(ref ignorable) = ignorable_value {
-                w.attr("mc:Ignorable", ignorable);
-            }
-        }
-
-        w.end_attrs();
-
-        write_sheet_properties(&mut w, self.sheet_properties.as_ref());
-
-        // Write dimension
-        self.write_dimension(&mut w);
-
-        // Write sheet views
-        self.write_sheet_views(&mut w);
-
-        // Write sheet format properties
-        self.write_sheet_format_pr(&mut w);
-
-        // Write column definitions
-        self.write_cols(&mut w);
-
-        // Write sheet data (rows and cells)
-        self.write_sheet_data(&mut w);
-
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.sheet_calc_pr);
-        if let Some(ref sp) = self.sheet_protection_xml {
-            w.raw_str(sp);
-        }
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.protected_ranges);
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.scenarios);
-
-        // Write autoFilter (OOXML order: after sheetData, before sortState)
-        if let Some(ref af) = self.auto_filter_xml {
-            w.raw_str(af);
-        }
-
-        // Write sortState (OOXML order: after autoFilter, before mergeCells)
-        if let Some(ref ss) = self.sort_state_xml {
-            w.raw_str(ss);
-        }
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.data_consolidate);
-        self.write_semantic_container(
-            &mut w,
-            &self.worksheet_semantic_containers.custom_sheet_views,
-        );
-
-        // Write merge cells
-        self.write_merge_cells(&mut w);
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.phonetic_pr);
-
-        // Write conditionalFormatting (OOXML order: after mergeCells/phoneticPr, before dataValidations)
-        if let Some(ref cf) = self.conditional_formatting_xml {
-            w.raw_str(cf);
-        }
-
-        // Write dataValidations (OOXML order: after conditionalFormatting, before hyperlinks)
-        if let Some(ref dv) = self.data_validations_xml {
-            w.raw_str(dv);
-        }
-
-        // Write hyperlinks (OOXML order: after dataValidations, before printOptions)
-        if !self.hyperlinks.is_empty() {
-            w.start_element("hyperlinks").end_attrs();
-            for hl in &self.hyperlinks {
-                let el = w.start_element("hyperlink").attr("ref", &hl.cell_ref);
-                if let Some(r_id) = &hl.r_id {
-                    el.attr("r:id", r_id);
-                }
-                if !hl.location.is_empty() {
-                    el.attr("location", &hl.location);
-                }
-                if !hl.display.is_empty() {
-                    el.attr("display", &hl.display);
-                }
-                if !hl.tooltip.is_empty() {
-                    el.attr("tooltip", &hl.tooltip);
-                }
-                if let Some(uid) = &hl.uid {
-                    el.attr("xr:uid", uid);
-                }
-                el.self_close();
-            }
-            w.end_element("hyperlinks");
-        }
-
-        // Write print settings (printOptions, pageMargins, pageSetup, headerFooter, breaks)
-        // These must appear after mergeCells in OOXML element order.
-        if let Some(ref pw) = self.print_writer {
-            pw.write_to(&mut w);
-        }
-
-        // Write customProperties (OOXML order: after colBreaks, before drawing)
-        if let Some(ref cp) = self.custom_properties_xml {
-            w.raw_str(cp);
-        }
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.cell_watches);
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.ignored_errors);
-        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.smart_tags);
-
-        // Write <drawing r:id="..."/> (OOXML order: after colBreaks, before legacyDrawing)
-        if let Some(ref r_id) = self.drawing_r_id {
-            w.start_element("drawing").attr("r:id", r_id).self_close();
-        }
-
-        // Write <legacyDrawing r:id="..."/> (OOXML order: after drawing, before legacyDrawingHF)
-        if let Some(ref r_id) = self.legacy_drawing_r_id {
-            w.start_element("legacyDrawing")
-                .attr("r:id", r_id)
-                .self_close();
-        }
-
-        // Write <legacyDrawingHF r:id="..."/> (OOXML order: after legacyDrawing, before ignoredErrors)
-        if let Some(ref r_id) = self.legacy_drawing_hf_r_id {
-            w.start_element("legacyDrawingHF")
-                .attr("r:id", r_id)
-                .self_close();
-        }
-
-        // Write OLE worksheet references from modeled floating-object state.
-        if let Some(ref ole_objects) = self.ole_objects_xml {
-            w.raw_str(ole_objects);
-        }
-
-        // Write controls mc:AlternateContent (OOXML order: after legacyDrawingHF, before tableParts)
-        if let Some(ref ctrl) = self.controls_xml {
-            w.raw_str(ctrl);
-        }
-
-        // Write tableParts (OOXML order: after legacyDrawing, before extLst)
-        if let Some(ref tp) = self.table_parts_xml {
-            w.raw_str(tp);
-        }
-
-        // Write generated pivot table references. The sheet relationship file
-        // resolves each r:id to a pivotTable part; the worksheet XML marker is
-        // the structured ownership contract for Excel-compatible consumers.
-        for r_id in &self.pivot_table_r_ids {
-            w.start_element("pivotTableDefinition")
-                .attr("r:id", r_id)
-                .self_close();
-        }
-
-        // Write extLst (OOXML order: after tableParts, last child of worksheet)
-        if let Some(ref ext) = self.ext_lst_xml {
-            w.raw_str(ext);
-        }
-
-        // Close worksheet
-        w.end_element("worksheet");
-
+        root::write_worksheet_start(&mut w, self);
+        body::write_worksheet_body(&mut w, self);
+        root::write_worksheet_end(&mut w);
         w.finish()
-    }
-
-    /// Calculate dimension from data if not explicitly set.
-    fn calculate_dimension(&self) -> Option<(u32, u32, u32, u32)> {
-        if let Some(dim) = self.dimension {
-            return Some(dim);
-        }
-
-        // Calculate from row/cell data
-        let mut min_row = u32::MAX;
-        let mut max_row = 0u32;
-        let mut min_col = u32::MAX;
-        let mut max_col = 0u32;
-
-        for (&row_idx, (_, cells)) in &self.rows {
-            if !cells.is_empty() {
-                min_row = min_row.min(row_idx);
-                max_row = max_row.max(row_idx);
-
-                for cell in cells {
-                    min_col = min_col.min(cell.col);
-                    max_col = max_col.max(cell.col);
-                }
-            }
-        }
-
-        if min_row <= max_row && min_col <= max_col {
-            Some((min_row, min_col, max_row, max_col))
-        } else {
-            None
-        }
-    }
-
-    fn write_semantic_container(
-        &self,
-        w: &mut XmlWriter,
-        container: &Option<WorksheetSemanticXml>,
-    ) {
-        if let Some(container) = container
-            && !container.raw_xml.is_empty()
-        {
-            w.raw_str(&container.raw_xml);
-        }
-    }
-
-    fn write_sheet_format_pr(&self, w: &mut XmlWriter) {
-        write_sheet_format_pr(w, &self.sheet_format_pr);
-    }
-
-    fn write_dimension(&self, w: &mut XmlWriter) {
-        write_dimensions(w, self.calculate_dimension());
-    }
-
-    fn write_sheet_views(&self, w: &mut XmlWriter) {
-        write_sheet_views(w, &self.sheet_views);
-    }
-
-    fn write_cols(&self, w: &mut XmlWriter) {
-        write_cols(w, &self.cols);
-    }
-
-    fn write_sheet_data(&self, w: &mut XmlWriter) {
-        w.start_element("sheetData").end_attrs();
-
-        let mut runs: Vec<&AuthoredStyleRun> = self.authored_style_runs.iter().collect();
-        runs.sort_by_key(|run| {
-            (
-                run.start_row,
-                run.start_col,
-                run.end_row,
-                run.end_col,
-                run.style_id,
-            )
-        });
-
-        let mut row_iter = self.rows.iter().peekable();
-        let mut run_idx = 0usize;
-        let mut active_runs: Vec<&AuthoredStyleRun> = Vec::new();
-        let mut current_row = match (row_iter.peek(), runs.first()) {
-            (Some((row, _)), Some(run)) => (**row).min(run.start_row),
-            (Some((row, _)), None) => **row,
-            (None, Some(run)) => run.start_row,
-            (None, None) => {
-                w.end_element("sheetData");
-                return;
-            }
-        };
-
-        loop {
-            while run_idx < runs.len() && runs[run_idx].start_row <= current_row {
-                active_runs.push(runs[run_idx]);
-                run_idx += 1;
-            }
-            active_runs.retain(|run| run.end_row >= current_row);
-
-            let row_entry = if row_iter.peek().is_some_and(|(row, _)| **row == current_row) {
-                row_iter.next().map(|(_, entry)| entry)
-            } else {
-                None
-            };
-            let empty_row;
-            let (row_def, cells) = match row_entry {
-                Some((row_def, cells)) => (row_def, cells.as_slice()),
-                None => {
-                    empty_row = RowDef::default();
-                    (&empty_row, &[][..])
-                }
-            };
-            self.write_row(w, current_row, row_def, cells, &active_runs);
-
-            let next_data_row = row_iter.peek().map(|(row, _)| **row);
-            let next_run_row = runs.get(run_idx).map(|run| run.start_row);
-            let next_active_row = if active_runs.is_empty() {
-                None
-            } else {
-                Some(current_row.saturating_add(1))
-            };
-            let next_row = [next_data_row, next_run_row, next_active_row]
-                .into_iter()
-                .flatten()
-                .min();
-            let Some(next_row) = next_row else {
-                break;
-            };
-            if next_row <= current_row {
-                break;
-            }
-            current_row = next_row;
-        }
-
-        w.end_element("sheetData");
-    }
-
-    fn write_row(
-        &self,
-        w: &mut XmlWriter,
-        row_idx: u32,
-        row_def: &RowDef,
-        cells: &[CellData],
-        authored_style_runs: &[&AuthoredStyleRun],
-    ) {
-        let mut authored_style_cells =
-            authored_style_cells_for_row(row_idx, cells, authored_style_runs);
-        // Skip empty rows with no special properties
-        if cells.is_empty()
-            && authored_style_cells.is_empty()
-            && row_def.height.is_none()
-            && row_def.hidden.is_none()
-            && row_def.style.is_none()
-            && !row_def.custom_format
-            && row_def.outline_level.is_none()
-            && row_def.descent.is_none()
-            && row_def.collapsed.is_none()
-            && !row_def.thick_top
-            && !row_def.thick_bot
-            && row_def.spans.is_none()
-            && !row_def.bare_empty
-        {
-            return;
-        }
-
-        w.start_element("row").attr_num("r", row_idx + 1); // 1-indexed
-
-        // Only write spans if preserved from original XML — don't auto-compute
-        if let Some(ref spans) = row_def.spans {
-            w.attr("spans", spans);
-        }
-
-        if let Some(style) = row_def.style {
-            w.attr_num("s", style);
-        }
-        if row_def.custom_format || row_def.style.is_some() {
-            w.attr("customFormat", "1");
-        }
-        if let Some(height) = row_def.height {
-            if let Some(ref hs) = row_def.height_str {
-                w.attr("ht", hs);
-            } else {
-                w.attr("ht", &format_f64(height));
-            }
-        }
-        match row_def.hidden {
-            Some(true) => {
-                w.attr("hidden", "1");
-            }
-            Some(false) => {
-                w.attr("hidden", "0");
-            }
-            None => {}
-        }
-        if row_def.custom_height {
-            w.attr("customHeight", "1");
-        }
-        if let Some(level) = row_def.outline_level {
-            w.attr_num("outlineLevel", level);
-        }
-        match row_def.collapsed {
-            Some(true) => {
-                w.attr("collapsed", "1");
-            }
-            Some(false) => {
-                w.attr("collapsed", "0");
-            }
-            None => {}
-        }
-        if row_def.thick_top {
-            w.attr("thickTop", "1");
-        }
-        if row_def.thick_bot {
-            w.attr("thickBot", "1");
-        }
-        if let Some(descent) = row_def.descent {
-            w.attr("x14ac:dyDescent", &format_f64(descent));
-        }
-
-        if cells.is_empty() && authored_style_cells.is_empty() {
-            w.self_close();
-        } else {
-            w.end_attrs();
-
-            let mut row_cells: Vec<CellData> = cells.to_vec();
-            row_cells.append(&mut authored_style_cells);
-            row_cells.sort_by_key(|c| c.col);
-
-            for cell in &row_cells {
-                self.write_cell(w, cell);
-            }
-
-            w.end_element("row");
-        }
-    }
-
-    fn write_cell(&self, w: &mut XmlWriter, cell: &CellData) {
-        let cell_ref = to_a1(cell.row, cell.col);
-
-        w.start_element("c");
-
-        // Write cm before r to match Excel's attribute ordering
-        if cell.cm {
-            w.attr("cm", "1");
-        }
-
-        w.attr("r", &cell_ref);
-
-        // Write style index
-        if let Some(style) = cell.style_index {
-            w.attr_num("s", style);
-        }
-
-        // Write type attribute based on value
-        match &cell.value {
-            CellValue::Empty => {
-                // Empty cells normally don't need a type, but if the original XML
-                // had an explicit type (e.g., t="s" on a valueless cell), preserve it.
-                if let Some(ref t) = cell.explicit_type {
-                    w.attr("t", t);
-                }
-            }
-            CellValue::Number(_) => {
-                // Numbers use default type (no t attribute needed)
-            }
-            CellValue::String(_) => {
-                w.attr("t", "s");
-            }
-            CellValue::InlineString(_) => {
-                w.attr("t", "inlineStr");
-            }
-            CellValue::FormulaString(_) => {
-                w.attr("t", "str");
-            }
-            CellValue::Boolean(_) => {
-                w.attr("t", "b");
-            }
-            CellValue::Error(..) => {
-                w.attr("t", "e");
-            }
-            CellValue::Formula { cached_value, .. } => {
-                // Formula type depends on cached value
-                if let Some(cached) = cached_value {
-                    match cached.as_ref() {
-                        CellValue::String(_) => {
-                            // Cached value is an SST index: write t="s" to preserve
-                            // the original cell's shared-string cached value (non-standard
-                            // but used by some Excel versions for formula cells).
-                            w.attr("t", "s");
-                        }
-                        CellValue::InlineString(_) | CellValue::FormulaString(_) => {
-                            w.attr("t", "str");
-                        }
-                        CellValue::Boolean(_) => {
-                            w.attr("t", "b");
-                        }
-                        CellValue::Error(..) => {
-                            w.attr("t", "e");
-                        }
-                        _ => {} // Numbers don't need type
-                    }
-                } else if let Some(ref hint) = cell.formula_type_hint {
-                    // No cached value, but the original XML had an explicit type
-                    w.attr("t", hint);
-                }
-            }
-        }
-
-        // Write vm (value metadata index) after type — matches Excel attribute ordering
-        if let Some(vm_val) = cell.vm {
-            w.attr_num("vm", vm_val);
-        }
-
-        // For cells with no children (empty value), emit self-closing tag: <c r="A1" s="3"/>
-        if matches!(&cell.value, CellValue::Empty) {
-            w.self_close();
-            return;
-        }
-
-        w.end_attrs();
-
-        // Write value content
-        match &cell.value {
-            CellValue::Empty => {
-                unreachable!("Empty cells handled above with self_close()");
-            }
-            CellValue::Number(n) => {
-                // Use the original string representation when available to
-                // preserve exact numeric precision from the source file.
-                let formatted = match &cell.original_value {
-                    Some(orig) => orig.clone(),
-                    None => format_number(*n),
-                };
-                w.element_with_text("v", &formatted);
-            }
-            CellValue::String(idx) => {
-                w.element_with_text("v", &idx.to_string());
-            }
-            CellValue::InlineString(s) => {
-                w.start_element("is").end_attrs();
-                let needs_preserve = s.starts_with(' ')
-                    || s.ends_with(' ')
-                    || s.starts_with('\t')
-                    || s.ends_with('\t')
-                    || s.contains('\n');
-                if needs_preserve {
-                    w.start_element("t")
-                        .attr("xml:space", "preserve")
-                        .end_attrs()
-                        .text_xstring(s)
-                        .end_element("t");
-                } else {
-                    w.start_element("t")
-                        .end_attrs()
-                        .text_xstring(s)
-                        .end_element("t");
-                }
-                w.end_element("is");
-            }
-            CellValue::FormulaString(s) => {
-                // t="str" uses plain <v> element, not <is><t>
-                if cell.preserve_space_value {
-                    w.start_element("v")
-                        .attr("xml:space", "preserve")
-                        .end_attrs()
-                        .text_xstring(s)
-                        .end_element("v");
-                } else if s.is_empty() {
-                    w.start_element("v").self_close();
-                } else {
-                    w.start_element("v")
-                        .end_attrs()
-                        .text_xstring(s)
-                        .end_element("v");
-                }
-            }
-            CellValue::Boolean(b) => {
-                w.element_with_text("v", if *b { "1" } else { "0" });
-            }
-            CellValue::Error(e) => {
-                w.element_with_text("v", e);
-            }
-            CellValue::Formula {
-                formula,
-                cached_value,
-                cell_formula,
-            } => {
-                use ooxml_types::worksheet::CellFormulaType;
-                let ca = cell.force_recalc;
-                let psf = cell.preserve_space_formula;
-
-                match cell_formula {
-                    Some(cf) if cf.t == CellFormulaType::Shared && cf.si.is_some() => {
-                        let si = cf.si.unwrap();
-                        if let Some(ref ref_range) = cf.r#ref {
-                            // Master cell: <f t="shared" si="N" ref="...">formula</f>
-                            let b = w
-                                .start_element("f")
-                                .attr("t", "shared")
-                                .attr("si", &si.to_string())
-                                .attr("ref", ref_range);
-                            if ca {
-                                b.attr("ca", "1");
-                            }
-                            if psf {
-                                b.attr("xml:space", "preserve");
-                            }
-                            b.end_attrs();
-                            w.text(&cf.text);
-                            w.end_element("f");
-                        } else {
-                            // Reference cell: <f t="shared" si="N"/> (self-closing, no formula text)
-                            if ca {
-                                w.empty_element(
-                                    "f",
-                                    &[("t", "shared"), ("si", &si.to_string()), ("ca", "1")],
-                                );
-                            } else {
-                                w.empty_element("f", &[("t", "shared"), ("si", &si.to_string())]);
-                            }
-                        }
-                    }
-                    Some(cf) if cf.t == CellFormulaType::Array => {
-                        // Array formula: <f ref="..." t="array">formula</f>
-                        if let Some(ref ref_range) = cf.r#ref {
-                            let b = w
-                                .start_element("f")
-                                .attr("ref", ref_range)
-                                .attr("t", "array");
-                            if cf.aca {
-                                b.attr("aca", "1");
-                            }
-                            if ca {
-                                b.attr("ca", "1");
-                            }
-                            if psf {
-                                b.attr("xml:space", "preserve");
-                            }
-                            b.end_attrs();
-                            w.text(&cf.text);
-                            w.end_element("f");
-                        } else {
-                            let b = w.start_element("f");
-                            if ca {
-                                b.attr("ca", "1");
-                            }
-                            if psf {
-                                b.attr("xml:space", "preserve");
-                            }
-                            b.end_attrs();
-                            w.text(formula);
-                            w.end_element("f");
-                        }
-                    }
-                    Some(cf) if cf.t == CellFormulaType::DataTable => {
-                        // Data table formula: <f t="dataTable" ref="..." dt2D="1" dtr="1" r1="..." r2="..."/>
-                        let b = w.start_element("f").attr("t", "dataTable");
-                        if let Some(ref ref_range) = cf.r#ref {
-                            b.attr("ref", ref_range);
-                        }
-                        if cf.dt2d {
-                            b.attr("dt2D", "1");
-                        }
-                        if cf.dtr {
-                            b.attr("dtr", "1");
-                        }
-                        if cf.del1 {
-                            b.attr("del1", "1");
-                        }
-                        if cf.del2 {
-                            b.attr("del2", "1");
-                        }
-                        if cf.aca {
-                            b.attr("aca", "1");
-                        }
-                        if let Some(ref r1) = cf.r1 {
-                            b.attr("r1", r1);
-                        }
-                        if let Some(ref r2) = cf.r2 {
-                            b.attr("r2", r2);
-                        }
-                        if cf.bx {
-                            b.attr("bx", "1");
-                        }
-                        if ca || cf.ca {
-                            b.attr("ca", "1");
-                        }
-                        // Data table <f> elements are self-closing in OOXML.
-                        b.self_close();
-                    }
-                    _ => {
-                        // Normal formula: <f>formula</f> or <f ca="1">formula</f>
-                        if ca || psf {
-                            let b = w.start_element("f");
-                            if ca {
-                                b.attr("ca", "1");
-                            }
-                            if psf {
-                                b.attr("xml:space", "preserve");
-                            }
-                            b.end_attrs();
-                            w.text(formula);
-                            w.end_element("f");
-                        } else {
-                            w.element_with_text("f", formula);
-                        }
-                    }
-                }
-                // Cached value writing
-                if let Some(cached) = cached_value {
-                    let psv = cell.preserve_space_value;
-                    match cached.as_ref() {
-                        CellValue::Number(n) => {
-                            let formatted = match &cell.original_value {
-                                Some(orig) => orig.clone(),
-                                None => format_number(*n),
-                            };
-                            w.element_with_text("v", &formatted);
-                        }
-                        CellValue::String(idx) => {
-                            w.element_with_text("v", &idx.to_string());
-                        }
-                        CellValue::Boolean(b) => {
-                            w.element_with_text("v", if *b { "1" } else { "0" });
-                        }
-                        CellValue::Error(e) => {
-                            w.element_with_text("v", e);
-                        }
-                        CellValue::InlineString(s) | CellValue::FormulaString(s) => {
-                            // Emit xml:space="preserve" on <v> when the original had it.
-                            // This preserves round-trip fidelity for formula-string cached
-                            // values that contain leading/trailing whitespace.
-                            if psv {
-                                w.start_element("v")
-                                    .attr("xml:space", "preserve")
-                                    .end_attrs()
-                                    .text_xstring(s)
-                                    .end_element("v");
-                            } else if s.is_empty() {
-                                w.start_element("v").self_close();
-                            } else {
-                                w.start_element("v")
-                                    .end_attrs()
-                                    .text_xstring(s)
-                                    .end_element("v");
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        w.end_element("c");
-    }
-
-    fn write_merge_cells(&self, w: &mut XmlWriter) {
-        write_merge_cells(w, &self.merges);
     }
 }
 
@@ -1650,25 +815,6 @@ impl SheetWriter {
 // ============================================================================
 
 pub use crate::infra::a1::{col_to_letter, to_a1};
-
-/// Format a number for XLSX output.
-///
-/// Removes unnecessary trailing zeros and handles integers cleanly.
-fn format_number(n: f64) -> String {
-    if n.fract() == 0.0 && n.abs() < 1e15 {
-        // Integer that can be represented exactly
-        format!("{:.0}", n)
-    } else {
-        // Use full precision but trim trailing zeros
-        let s = format!("{}", n);
-        // Remove trailing zeros after decimal point
-        if s.contains('.') {
-            s.trim_end_matches('0').trim_end_matches('.').to_string()
-        } else {
-            s
-        }
-    }
-}
 
 // ============================================================================
 // Unit Tests

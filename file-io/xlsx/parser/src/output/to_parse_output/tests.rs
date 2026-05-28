@@ -851,7 +851,6 @@ fn threading_result(
         max_change: None,
         calc_pr_settings: None,
         pivot_caches: std::collections::HashMap::new(),
-        pivot_cache_paths: Vec::new(),
         slicer_caches: Vec::new(),
         theme_name: None,
         theme_color_scheme: None,

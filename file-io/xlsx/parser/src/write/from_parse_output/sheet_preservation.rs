@@ -99,34 +99,17 @@ pub(super) fn apply_visible_row_hints_for_export(
 }
 
 pub(super) fn standalone_ext_lst_for_export<'a>(
-    sheet_data: &SheetData,
-    sheet_rt: &'a SheetRoundTripContext,
+    _sheet_data: &SheetData,
+    _sheet_rt: &'a SheetRoundTripContext,
 ) -> Option<&'a String> {
-    sheet_rt
-        .ext_lst_xml
-        .as_ref()
-        .filter(|xml| raw_worksheet_ext_lst_is_compatible(sheet_data, xml))
+    None
 }
 
 pub(super) fn empty_ext_lst_for_export(
-    sheet_data: &SheetData,
-    sheet_rt: &SheetRoundTripContext,
+    _sheet_data: &SheetData,
+    _sheet_rt: &SheetRoundTripContext,
 ) -> bool {
-    if !sheet_rt.has_empty_ext_lst || sheet_has_modeled_ext_lst_owner(sheet_data) {
-        return false;
-    }
-
-    if sheet_rt
-        .ext_lst_xml
-        .as_ref()
-        .is_some_and(|xml| !raw_worksheet_ext_lst_is_compatible(sheet_data, xml))
-    {
-        return false;
-    }
-
-    !sheet_rt.sheet_preserved_elements.iter().any(|(_, xml)| {
-        xml.contains("<extLst") && !raw_worksheet_ext_lst_is_compatible(sheet_data, xml)
-    })
+    false
 }
 
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {

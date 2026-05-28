@@ -13,7 +13,6 @@ use crate::infra::opc::{
 pub type PivotCacheMap =
     std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>;
 pub type PivotCachePathList = Vec<(u32, String, Option<String>)>;
-pub type ParsedPivotCaches = (PivotCacheMap, PivotCachePathList);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PivotCacheRecordsPathSource {
@@ -155,10 +154,8 @@ pub struct PivotCachePathEntry {
 }
 
 /// Parse all pivot caches from the workbook package.
-pub fn parse_all_pivot_caches(archive: &crate::zip::XlsxArchive) -> ParsedPivotCaches {
-    let discovery = parse_pivot_cache_packages(archive);
-    let cache_paths = discovery.cache_paths();
-    (discovery.caches, cache_paths)
+pub fn parse_all_pivot_caches(archive: &crate::zip::XlsxArchive) -> PivotCacheMap {
+    parse_pivot_cache_packages(archive).caches
 }
 
 pub fn parse_pivot_tables_for_sheet_v2(

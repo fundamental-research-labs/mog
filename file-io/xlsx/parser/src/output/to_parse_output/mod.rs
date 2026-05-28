@@ -50,7 +50,6 @@ use domain_types::{
     Hyperlink,
     HyperlinkTargetKind,
     MergeRegion,
-    OpcRelationship as DtOpcRelationship,
     // Diagnostics types
     ParseDiagnostics,
     ParseOutput,
@@ -1198,16 +1197,7 @@ fn convert_sheet(
 
     // --- Build SheetRoundTripContext ---
     let sheet_rt = SheetRoundTripContext {
-        sheet_opc_rels: sheet
-            .sheet_opc_rels
-            .iter()
-            .map(|r| DtOpcRelationship {
-                id: r.id.clone(),
-                rel_type: r.rel_type.clone(),
-                target: r.target.clone(),
-                target_mode: r.target_mode.clone(),
-            })
-            .collect(),
+        sheet_opc_rels: Vec::new(),
         raw_vml_drawings: sheet
             .raw_vml_drawings
             .iter()
@@ -1257,10 +1247,10 @@ fn convert_sheet(
             .map(|rh| rh.row)
             .collect(),
         original_dimension: sheet.original_dimension.clone(),
-        has_empty_ext_lst: sheet.has_empty_ext_lst,
-        ext_lst_xml: sheet.ext_lst_xml.clone(),
+        has_empty_ext_lst: false,
+        ext_lst_xml: None,
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
-        custom_properties_xml: sheet.custom_properties_xml.clone(),
+        custom_properties_xml: None,
         sheet_preserved_elements: Vec::new(),
         // Collect drawing anchor passthroughs: twoCellAnchors with content-level
         // mc:AlternateContent (e.g., ChartEx wrapped in mc:AlternateContent).

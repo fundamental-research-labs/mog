@@ -23,7 +23,7 @@ pub struct PivotTable {
     pub pivot_fields: Vec<PivotField>,
     /// Style information
     pub style_info: Option<PivotStyleInfo>,
-    /// Raw XML of the entire pivotTableDefinition element for opaque passthrough.
+    /// Raw XML of the entire pivotTableDefinition element for parser facts/audits only.
     pub raw_xml: Option<Vec<u8>>,
     /// Custom label for grand total rows/columns (OOXML `grandTotalCaption`).
     pub grand_total_caption: Option<String>,

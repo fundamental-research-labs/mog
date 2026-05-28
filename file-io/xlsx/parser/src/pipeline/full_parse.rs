@@ -331,7 +331,7 @@ fn parse_xlsx_full_native_impl(
     let file_sharing = crate::domain::workbook::read::parse_file_sharing(&workbook_xml);
 
     // Parse all pivot cache definitions (workbook-level, needed before per-sheet pivot tables)
-    let (pivot_caches, pivot_cache_paths) = parse_all_pivot_caches(&archive);
+    let pivot_caches = parse_all_pivot_caches(&archive);
 
     // Parse all slicer cache definitions (workbook-level)
     let slicer_caches = parse_all_slicer_caches(&archive);
@@ -905,7 +905,6 @@ fn parse_xlsx_full_native_impl(
             .then_some(calc_settings.iterate_delta),
         calc_pr_settings: Some(calc_settings),
         pivot_caches,
-        pivot_cache_paths,
         slicer_caches,
         theme_name,
         theme_color_scheme,

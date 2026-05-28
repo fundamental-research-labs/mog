@@ -2,52 +2,16 @@
 
 use domain_types::{
     BlobPart, NamedRange, OpaquePackageOwner, OpaquePackageOwnership, OpaquePackagePart,
-    OpaquePackageRelationship, OpaquePackageSubgraph, OpaqueRelationshipTarget,
-    OpcRelationship as DtOpcRelationship, ParseDiagnostics, ParseError as DtParseError,
-    ParseStats as DtParseStats, RoundTripContext, SheetRoundTripContext, ThemeColor,
-    ThemeColorSource, ThemeData,
+    OpaquePackageRelationship, OpaquePackageSubgraph, OpaqueRelationshipTarget, ParseDiagnostics,
+    ParseError as DtParseError, ParseStats as DtParseStats, RoundTripContext,
+    SheetRoundTripContext, ThemeColor, ThemeColorSource, ThemeData,
 };
 use std::collections::{HashMap, HashSet};
 
-use crate::infra::opc::{REL_VML_DRAWING, resolve_relationship_target};
+use crate::infra::opc::REL_VML_DRAWING;
 use crate::output::results::FullParseResult;
 
 use super::normalize_rgb_color;
-
-// =============================================================================
-// SST helpers
-// =============================================================================
-
-/// Parse the `count` attribute from the `<sst>` element in raw SST XML.
-fn parse_sst_count(xml: &[u8]) -> Option<usize> {
-    // Find <sst element
-    let sst_pos = xml.windows(4).position(|w| w == b"<sst")?;
-    let sst_end_offset = xml[sst_pos..].iter().position(|&b| b == b'>')?;
-    let sst_tag = &xml[sst_pos..sst_pos + sst_end_offset];
-
-    // Find count=" (but not uniqueCount=")
-    // We need to match ` count="` or the start of tag `count="`
-    let mut search_pos = 0;
-    loop {
-        let attr_name = b"count=\"";
-        let offset = sst_tag[search_pos..]
-            .windows(attr_name.len())
-            .position(|w| w == attr_name)?;
-        let abs_pos = search_pos + offset;
-        // Make sure it's not "uniqueCount" — check the character before
-        if abs_pos == 0 || !sst_tag[abs_pos - 1].is_ascii_alphanumeric() {
-            let value_start = abs_pos + attr_name.len();
-            let value_end = value_start + sst_tag[value_start..].iter().position(|&b| b == b'"')?;
-            let value_str = std::str::from_utf8(&sst_tag[value_start..value_end]).ok()?;
-            return value_str.parse().ok();
-        }
-        search_pos = abs_pos + 1;
-    }
-}
-
-// =============================================================================
-// Chart .rels conversion
-// =============================================================================
 
 // =============================================================================
 // Named ranges
@@ -167,10 +131,6 @@ pub(super) fn convert_theme(result: &FullParseResult) -> Option<ThemeData> {
 // =============================================================================
 // Round-trip context
 // =============================================================================
-
-fn normalize_part_path(path: &str) -> String {
-    path.trim_start_matches('/').to_string()
-}
 
 fn build_opaque_package_subgraphs(
     custom_xml_parts: &[BlobPart],
@@ -936,29 +896,11 @@ pub(super) fn build_round_trip_context(
 
     RoundTripContext {
         sheets: sheet_contexts,
-        content_type_defaults: result.content_type_defaults.clone(),
-        content_type_overrides: result.content_type_overrides.clone(),
-        root_relationships: result
-            .root_relationships
-            .iter()
-            .map(|r| DtOpcRelationship {
-                id: r.id.clone(),
-                rel_type: r.rel_type.clone(),
-                target: r.target.clone(),
-                target_mode: r.target_mode.clone(),
-            })
-            .collect(),
-        workbook_relationships: result
-            .workbook_relationships
-            .iter()
-            .map(|r| DtOpcRelationship {
-                id: r.id.clone(),
-                rel_type: r.rel_type.clone(),
-                target: r.target.clone(),
-                target_mode: r.target_mode.clone(),
-            })
-            .collect(),
-        sheet_workbook_r_ids: result.sheet_workbook_r_ids.clone(),
+        content_type_defaults: Vec::new(),
+        content_type_overrides: Vec::new(),
+        root_relationships: Vec::new(),
+        workbook_relationships: Vec::new(),
+        sheet_workbook_r_ids: Vec::new(),
         styles_ext_lst_xml: result.styles_ext_lst_xml.clone(),
         styles_namespace_attrs: result
             .extensions
@@ -974,20 +916,17 @@ pub(super) fn build_round_trip_context(
                     .collect()
             })
             .unwrap_or_default(),
-        original_sst_count: result
-            .raw_shared_strings_xml
-            .as_ref()
-            .and_then(|xml| parse_sst_count(xml)),
-        raw_shared_strings_xml: result.raw_shared_strings_xml.clone(),
-        raw_doc_props_core_xml: result.raw_doc_props_core_xml.clone(),
-        raw_doc_props_app_xml: result.raw_doc_props_app_xml.clone(),
-        raw_doc_props_custom_xml: result.raw_doc_props_custom_xml.clone(),
-        raw_metadata_xml: result.raw_metadata_xml.clone(),
-        raw_persons_xml: result.raw_persons_xml.clone(),
-        custom_xml_parts,
-        web_extension_parts,
+        original_sst_count: None,
+        raw_shared_strings_xml: None,
+        raw_doc_props_core_xml: None,
+        raw_doc_props_app_xml: None,
+        raw_doc_props_custom_xml: None,
+        raw_metadata_xml: None,
+        raw_persons_xml: None,
+        custom_xml_parts: Vec::new(),
+        web_extension_parts: Vec::new(),
         opaque_package_subgraphs,
-        binary_blobs,
+        binary_blobs: Vec::new(),
         extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead
 
         // Workbook-level namespace + preserved element preservation
@@ -1011,7 +950,7 @@ pub(super) fn build_round_trip_context(
             .map(|ext| ext.workbook_preserved.to_position_pairs())
             .unwrap_or_default(),
 
-        doc_metadata_label_info: result.raw_doc_metadata_label_info.clone(),
+        doc_metadata_label_info: None,
         skipped_named_ranges: vec![],
         original_named_ranges_order: vec![],
     }

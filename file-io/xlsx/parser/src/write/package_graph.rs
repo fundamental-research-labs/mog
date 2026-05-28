@@ -1162,38 +1162,6 @@ pub fn register_generated_pivot_table_cache_relationship(
     });
 }
 
-pub fn register_preserved_worksheet_pivot_table(
-    graph: &mut PackageGraphBuilder,
-    sheet_idx: usize,
-    relationship_target: &str,
-    relationship_id_hint: &str,
-) -> Result<(), WriteError> {
-    graph.add_relationship(PackageRelationship {
-        owner: worksheet_owner(sheet_idx),
-        relationship_type: REL_PIVOT_TABLE.to_string(),
-        target: PackageRelationshipTarget::InternalPart {
-            path: normalize_worksheet_child_target(sheet_idx, relationship_target)?,
-        },
-        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
-    });
-    Ok(())
-}
-
-pub fn register_preserved_workbook_pivot_cache(
-    graph: &mut PackageGraphBuilder,
-    relationship_target: &str,
-    relationship_id_hint: &str,
-) {
-    graph.add_relationship(PackageRelationship {
-        owner: PackageOwner::Workbook,
-        relationship_type: REL_PIVOT_CACHE.to_string(),
-        target: PackageRelationshipTarget::InternalPart {
-            path: normalize_workbook_child_target(relationship_target),
-        },
-        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
-    });
-}
-
 fn worksheet_owner(sheet_idx: usize) -> PackageOwner {
     PackageOwner::Worksheet {
         index: sheet_idx,
@@ -1210,94 +1178,28 @@ fn normalize_external_link_part_path(part_name: &str) -> String {
     }
 }
 
-fn normalize_worksheet_child_target(sheet_idx: usize, target: &str) -> Result<String, WriteError> {
-    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
-    crate::infra::opc::resolve_relationship_target(Some(&owner_path), target)
-        .map(|path| normalize_part_path(&path))
-        .map_err(|err| {
-            WriteError::PackageIntegrity(format!(
-                "invalid worksheet relationship target for sheet {}: {} ({:?})",
-                sheet_idx + 1,
-                target,
-                err
-            ))
-        })
-}
-
-fn normalize_workbook_child_target(target: &str) -> String {
-    let trimmed = normalize_part_path(target);
-    if trimmed.starts_with("xl/") {
-        trimmed
-    } else {
-        format!("xl/{trimmed}")
-    }
-}
-
 fn root_relationship_hint(
-    round_trip_ctx: Option<&RoundTripContext>,
-    relationship_type: &str,
-    target: &str,
+    _round_trip_ctx: Option<&RoundTripContext>,
+    _relationship_type: &str,
+    _target: &str,
 ) -> Option<RelationshipIdentityHint> {
-    round_trip_ctx
-        .and_then(|ctx| {
-            ctx.root_relationships.iter().find(|rel| {
-                rel.rel_type == relationship_type
-                    && rel.target_mode.is_none()
-                    && relationship_target_matches(None, &rel.target, target)
-            })
-        })
-        .map(|rel| RelationshipIdentityHint::new(&rel.id))
+    None
 }
 
 fn workbook_relationship_hint(
-    round_trip_ctx: Option<&RoundTripContext>,
-    relationship_type: &str,
-    target: &str,
+    _round_trip_ctx: Option<&RoundTripContext>,
+    _relationship_type: &str,
+    _target: &str,
 ) -> Option<RelationshipIdentityHint> {
-    round_trip_ctx
-        .and_then(|ctx| {
-            ctx.workbook_relationships.iter().find(|rel| {
-                rel.rel_type == relationship_type
-                    && rel.target_mode.is_none()
-                    && relationship_target_matches(Some("xl/workbook.xml"), &rel.target, target)
-            })
-        })
-        .map(|rel| RelationshipIdentityHint::new(&rel.id))
+    None
 }
 
 fn sheet_relationship_hint(
-    round_trip_ctx: Option<&RoundTripContext>,
-    sheet_count: usize,
-    sheet_idx: usize,
+    _round_trip_ctx: Option<&RoundTripContext>,
+    _sheet_count: usize,
+    _sheet_idx: usize,
 ) -> Option<RelationshipIdentityHint> {
-    round_trip_ctx
-        .filter(|ctx| ctx.sheet_workbook_r_ids.len() == sheet_count)
-        .and_then(|ctx| {
-            let r_id = ctx.sheet_workbook_r_ids.get(sheet_idx)?;
-            let generated_target = format!("worksheets/sheet{}.xml", sheet_idx + 1);
-            ctx.workbook_relationships.iter().find(|rel| {
-                rel.id == *r_id
-                    && rel.rel_type == REL_WORKSHEET
-                    && rel.target_mode.is_none()
-                    && relationship_target_matches(
-                        Some("xl/workbook.xml"),
-                        &rel.target,
-                        &generated_target,
-                    )
-            })
-        })
-        .map(|rel| RelationshipIdentityHint::new(&rel.id))
-}
-
-fn relationship_target_matches(owner_path: Option<&str>, original: &str, generated: &str) -> bool {
-    original == generated
-        || normalize_relationship_target(owner_path, original)
-            == normalize_relationship_target(owner_path, generated)
-}
-
-fn normalize_relationship_target(owner_path: Option<&str>, target: &str) -> Option<String> {
-    let part = target.split_once('#').map_or(target, |(part, _)| part);
-    crate::infra::opc::resolve_relationship_target(owner_path, part).ok()
+    None
 }
 
 fn allocate_relationship_id(

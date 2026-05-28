@@ -1,5 +1,5 @@
 //! Pivot types — wrapper types that combine ooxml_types spec structs with
-//! parser-specific data (raw XML passthrough, archive paths).
+//! parser-specific facts.
 
 use ooxml_types::pivot::{PivotCacheDefinition, PivotCacheRecords};
 
@@ -10,8 +10,8 @@ pub struct ParsedPivotCache {
     pub definition: PivotCacheDefinition,
     /// Cache records (CT_PivotCacheRecords).
     pub records: PivotCacheRecords,
-    /// Raw XML bytes of the pivotCacheDefinition file.
+    /// Raw XML bytes of the pivotCacheDefinition file for parser facts/audits only.
     pub raw_definition_xml: Option<Vec<u8>>,
-    /// Raw XML bytes of the pivotCacheRecords file.
+    /// Raw XML bytes of the pivotCacheRecords file for parser facts/audits only.
     pub raw_records_xml: Option<Vec<u8>>,
 }

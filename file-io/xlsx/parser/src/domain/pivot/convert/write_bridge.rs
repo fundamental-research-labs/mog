@@ -7,7 +7,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldDisposition {
     Emitted,
-    RawPreserved,
     FactsOnly,
     Unsupported,
 }
@@ -61,7 +60,7 @@ pub const PIVOT_TABLE_FIELD_DISPOSITIONS: &[FieldDispositionEntry] = &[
     },
     FieldDispositionEntry {
         field: "raw_xml",
-        disposition: FieldDisposition::RawPreserved,
+        disposition: FieldDisposition::FactsOnly,
     },
     FieldDispositionEntry {
         field: "grand_total_caption",
@@ -140,11 +139,11 @@ pub const PIVOT_CACHE_FIELD_DISPOSITIONS: &[FieldDispositionEntry] = &[
     },
     FieldDispositionEntry {
         field: "raw_definition_xml",
-        disposition: FieldDisposition::RawPreserved,
+        disposition: FieldDisposition::FactsOnly,
     },
     FieldDispositionEntry {
         field: "raw_records_xml",
-        disposition: FieldDisposition::RawPreserved,
+        disposition: FieldDisposition::FactsOnly,
     },
 ];
 

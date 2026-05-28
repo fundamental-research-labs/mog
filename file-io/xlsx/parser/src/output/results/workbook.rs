@@ -513,10 +513,6 @@ pub struct FullParseResult {
     /// Not serialized to TypeScript/WASM (internal round-trip data only).
     #[serde(skip)]
     pub pivot_caches: std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
-    /// Original archive paths for pivot caches: (cache_id, definition_path, records_path).
-    /// Used for path-faithful writing in from_parse_output.rs.
-    #[serde(skip)]
-    pub pivot_cache_paths: Vec<(u32, String, Option<String>)>,
     /// Slicer cache definitions (workbook-level, shared across sheets)
     pub slicer_caches: Vec<ooxml_types::slicers::SlicerCacheDef>,
     /// Parsed theme name (e.g., "Office Theme")

@@ -3,6 +3,7 @@
 //! Split into focused submodules for navigability.
 
 mod helpers;
+mod sync_helpers;
 mod test_advanced_filter;
 mod test_binary_patches;
 mod test_bootstrap_hydration;
@@ -28,7 +29,10 @@ mod test_slicers;
 mod test_sort_filter;
 mod test_sparklines;
 mod test_structural_viewport;
-mod test_sync;
+mod test_sync_bootstrap;
+mod test_sync_mutation_results;
+mod test_sync_protocol;
+mod test_sync_provider_replay;
 mod test_undo_observer_translation;
 mod test_undo_redo_atomic_ops;
 mod test_undo_redo_bulk_position;

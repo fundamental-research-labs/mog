@@ -440,8 +440,7 @@ fn export_single_sheet(
         sheet_id,
         stores.grid_indexes.get(sheet_id),
     );
-    let sheet_dimensions =
-        export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
+    let sheet_dimensions = export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
 
     // --- Comments ---
     let raw_comments = get_all_comments(stores, sheet_id);
@@ -555,13 +554,8 @@ fn export_single_sheet(
         .max(max_materialized_row_for_styles);
 
     // --- Row/Col styles ---
-    let (row_styles, col_styles) = export_row_col_styles_for_sheet(
-        stores,
-        sheet_id,
-        style_max_row,
-        max_col,
-        palette,
-    );
+    let (row_styles, col_styles) =
+        export_row_col_styles_for_sheet(stores, sheet_id, style_max_row, max_col, palette);
 
     // --- Sparklines ---
     let sparklines = export_sparklines_for_sheet(stores, sheet_id);
@@ -668,7 +662,13 @@ fn export_single_sheet(
                         _ => None,
                     })
                     .unwrap_or_default();
-                (osi, vis, uid, sheet_properties, worksheet_semantic_containers)
+                (
+                    osi,
+                    vis,
+                    uid,
+                    sheet_properties,
+                    worksheet_semantic_containers,
+                )
             }
             None => (
                 None,

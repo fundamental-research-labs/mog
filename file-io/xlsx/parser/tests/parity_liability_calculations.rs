@@ -33,7 +33,8 @@ fn roundtrip(original: &ParseOutput) -> ParseOutput {
     );
     assert_eq!(&bytes[0..2], b"PK", "Output is not a valid ZIP archive");
 
-    let (rt, _diagnostics) = parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
+    let (rt, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("parse_xlsx_to_output should succeed");
     rt
 }
 

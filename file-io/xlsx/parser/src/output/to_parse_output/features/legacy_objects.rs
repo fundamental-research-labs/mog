@@ -154,18 +154,22 @@ pub(crate) fn convert_ole_objects(
                 });
             // Build typed ooxml props for round-trip
             let embedding = o.data_path.as_ref().and_then(|path| {
-                binary_parts.get(path).map(|bytes| OleObjectPackageIdentity {
-                    path: path.clone(),
-                    relationship_id: o.r_id.clone(),
-                    bytes: bytes.clone(),
-                })
+                binary_parts
+                    .get(path)
+                    .map(|bytes| OleObjectPackageIdentity {
+                        path: path.clone(),
+                        relationship_id: o.r_id.clone(),
+                        bytes: bytes.clone(),
+                    })
             });
             let preview = o.preview_image_path.as_ref().and_then(|path| {
-                binary_parts.get(path).map(|bytes| OleObjectPreviewIdentity {
-                    path: path.clone(),
-                    relationship_id: o.preview_image_rel_id.clone(),
-                    bytes: bytes.clone(),
-                })
+                binary_parts
+                    .get(path)
+                    .map(|bytes| OleObjectPreviewIdentity {
+                        path: path.clone(),
+                        relationship_id: o.preview_image_rel_id.clone(),
+                        bytes: bytes.clone(),
+                    })
             });
             let ooxml = OleObjectOoxmlProps {
                 shape_id: o.shape_id,

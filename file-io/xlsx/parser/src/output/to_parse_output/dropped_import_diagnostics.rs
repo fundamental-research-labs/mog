@@ -44,7 +44,11 @@ pub(super) fn append_dropped_import_diagnostics(
     {
         dropped.push("raw VML drawing sidecars");
     }
-    if result.sheets.iter().any(|sheet| sheet.ext_lst_xml.is_some()) {
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| sheet.ext_lst_xml.is_some())
+    {
         dropped.push("worksheet extension-list XML");
     }
     if result

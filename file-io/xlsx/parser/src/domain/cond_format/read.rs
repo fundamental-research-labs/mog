@@ -17,12 +17,7 @@ use ooxml_types::cond_format::{
 ///
 /// # Arguments
 /// * `xml` - The worksheet XML bytes
-pub fn parse_conditional_formats(
-    xml: &[u8],
-) -> (
-    Vec<CfSummary>,
-    Vec<ConditionalFormatting>,
-) {
+pub fn parse_conditional_formats(xml: &[u8]) -> (Vec<CfSummary>, Vec<ConditionalFormatting>) {
     let mut summaries = Vec::new();
     let mut full = Vec::new();
     let mut pos = 0;

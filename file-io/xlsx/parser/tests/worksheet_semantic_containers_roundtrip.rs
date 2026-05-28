@@ -95,6 +95,9 @@ fn typed_deletion_removes_containers_from_export() {
         "smartTags",
         "cellWatches",
     ] {
-        assert!(!xml.contains(tag), "deleted typed <{tag}> leaked into export");
+        assert!(
+            !xml.contains(tag),
+            "deleted typed <{tag}> leaked into export"
+        );
     }
 }

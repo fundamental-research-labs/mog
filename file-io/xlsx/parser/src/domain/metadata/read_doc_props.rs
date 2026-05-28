@@ -433,7 +433,10 @@ fn parse_custom_property_value(body: &str) -> Option<CustomPropertyValue> {
         return Some(CustomPropertyValue::Filetime(val));
     }
     for (tag, ctor) in [
-        ("vt:cy", CustomPropertyValue::Cy as fn(String) -> CustomPropertyValue),
+        (
+            "vt:cy",
+            CustomPropertyValue::Cy as fn(String) -> CustomPropertyValue,
+        ),
         ("vt:error", CustomPropertyValue::Error),
         ("vt:clsid", CustomPropertyValue::Clsid),
         ("vt:blob", CustomPropertyValue::Blob),

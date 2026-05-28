@@ -1035,7 +1035,10 @@ fn convert_cell_with_metadata_refs(
     }
 }
 
-fn current_rich_string(cell: &DomainCellData, text: &str) -> Option<domain_types::RichSharedString> {
+fn current_rich_string(
+    cell: &DomainCellData,
+    text: &str,
+) -> Option<domain_types::RichSharedString> {
     let rich = cell.rich_string.as_ref()?;
     (rich.plain_text == text).then(|| rich.clone())
 }

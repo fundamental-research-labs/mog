@@ -19,9 +19,10 @@ use domain_types::domain::floating_object::{
 };
 
 use crate::domain::drawings::write::{
-    AbsoluteAnchor, CellAnchor, ClientData, Connection, ConnectorProps, DrawingAnchor, DrawingLocking,
-    DrawingObject, EditAs, Extent, GroupShapeProps, ImageProps, OneCellAnchor, PresetGeometry,
-    Position, ShapePreset, ShapeProps, SmartArtWriteData, TextBox, Transform2D, TwoCellAnchor,
+    AbsoluteAnchor, CellAnchor, ClientData, Connection, ConnectorProps, DrawingAnchor,
+    DrawingLocking, DrawingObject, EditAs, Extent, GroupShapeProps, ImageProps, OneCellAnchor,
+    Position, PresetGeometry, ShapePreset, ShapeProps, SmartArtWriteData, TextBox, Transform2D,
+    TwoCellAnchor,
 };
 
 // =============================================================================

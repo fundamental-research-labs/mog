@@ -221,12 +221,24 @@ fn hydrate_dxf_registry(
         return;
     }
 
-    let map: MapRef = workbook.insert(txn, KEY_DXF_REGISTRY, MapPrelim::from([] as [(&str, Any); 0]));
-    map.insert(txn, KEY_STYLE_REGISTRY_COUNT, Any::Number(registry.len() as f64));
+    let map: MapRef = workbook.insert(
+        txn,
+        KEY_DXF_REGISTRY,
+        MapPrelim::from([] as [(&str, Any); 0]),
+    );
+    map.insert(
+        txn,
+        KEY_STYLE_REGISTRY_COUNT,
+        Any::Number(registry.len() as f64),
+    );
     for entry in registry {
         let json =
             serde_json::to_string(entry).expect("DXF registry entry serialization should not fail");
-        map.insert(txn, &*entry.id.to_string(), Any::String(Arc::from(json.as_str())));
+        map.insert(
+            txn,
+            &*entry.id.to_string(),
+            Any::String(Arc::from(json.as_str())),
+        );
     }
 }
 
@@ -241,7 +253,11 @@ fn hydrate_style_registry_vec<T: serde::Serialize>(
     }
 
     let map: MapRef = parent.insert(txn, key, MapPrelim::from([] as [(&str, Any); 0]));
-    map.insert(txn, KEY_STYLE_REGISTRY_COUNT, Any::Number(values.len() as f64));
+    map.insert(
+        txn,
+        KEY_STYLE_REGISTRY_COUNT,
+        Any::Number(values.len() as f64),
+    );
     for (index, value) in values.iter().enumerate() {
         let json = serde_json::to_string(value)
             .expect("style registry entry serialization should not fail");

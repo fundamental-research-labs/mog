@@ -182,7 +182,8 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
     };
 
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
-    if let Some(domain_types::ChartDefinition::Chart(chart_space)) = imported_chart.definition.as_mut()
+    if let Some(domain_types::ChartDefinition::Chart(chart_space)) =
+        imported_chart.definition.as_mut()
     {
         chart_space.extensions = vec![clean_chart_space_extension, stale_chart_space_extension];
         chart_space.chart.extensions = vec![clean_chart_extension, stale_chart_extension];

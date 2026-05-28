@@ -502,7 +502,10 @@ fn test_chart_roundtrip() {
         let ooxml = c.ooxml.as_ref().expect("chart OOXML data");
         assert_eq!(ooxml.chart_auxiliary_files.len(), 1);
         assert_eq!(
-            ooxml.chart_auxiliary_files.first().map(|(path, _)| path.as_str()),
+            ooxml
+                .chart_auxiliary_files
+                .first()
+                .map(|(path, _)| path.as_str()),
             Some("xl/charts/style9.xml")
         );
         assert!(c.series.is_some());

@@ -384,9 +384,8 @@ pub(super) fn is_known_workbook_child(tag_name: &[u8]) -> bool {
         tag_name
     };
     WORKBOOK_KNOWN_CHILDREN.contains(&local)
-        || std::str::from_utf8(local).is_ok_and(
-            crate::roundtrip::preserved_xml_policy::is_dropped_workbook_semantic_child,
-        )
+        || std::str::from_utf8(local)
+            .is_ok_and(crate::roundtrip::preserved_xml_policy::is_dropped_workbook_semantic_child)
 }
 
 /// Capture preserved (unknown) child elements from workbook.xml.
@@ -546,9 +545,8 @@ pub(super) fn is_known_child(tag_name: &[u8], known_list: &[&[u8]]) -> bool {
         tag_name
     };
     known_list.contains(&local)
-        || std::str::from_utf8(local).is_ok_and(
-            crate::roundtrip::preserved_xml_policy::is_dropped_worksheet_semantic_child,
-        )
+        || std::str::from_utf8(local)
+            .is_ok_and(crate::roundtrip::preserved_xml_policy::is_dropped_worksheet_semantic_child)
 }
 
 /// Capture preserved elements from a region of worksheet XML.

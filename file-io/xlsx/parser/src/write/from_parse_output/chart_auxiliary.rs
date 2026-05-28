@@ -92,20 +92,17 @@ pub(super) fn supported_auxiliary_relationship_targets<'a>(
     chart_path: &'a str,
     relationships: &'a [ChartRelationshipData],
 ) -> impl Iterator<Item = String> + 'a {
-    relationships
-        .iter()
-        .filter_map(move |rel| {
-            if rel.target_mode.as_deref() == Some("External") {
-                return None;
-            }
-            let rel_type = rel.relationship_type.as_deref()?;
-            let target = rel.target.as_deref()?;
-            let target_path =
-                crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
-                    .ok()?;
-            let target_path = normalize_path(&target_path);
-            is_supported_auxiliary_relationship(rel_type, &target_path).then_some(target_path)
-        })
+    relationships.iter().filter_map(move |rel| {
+        if rel.target_mode.as_deref() == Some("External") {
+            return None;
+        }
+        let rel_type = rel.relationship_type.as_deref()?;
+        let target = rel.target.as_deref()?;
+        let target_path =
+            crate::infra::opc::resolve_relationship_target(Some(chart_path), target).ok()?;
+        let target_path = normalize_path(&target_path);
+        is_supported_auxiliary_relationship(rel_type, &target_path).then_some(target_path)
+    })
 }
 
 pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &str) -> bool {
@@ -131,7 +128,10 @@ fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {
 
 pub(super) fn chart_external_data_relationship<'a>(
     chart_spec: &'a ChartSpec,
-) -> Option<(&'a ooxml_types::charts::ExternalData, &'a ChartRelationshipData)> {
+) -> Option<(
+    &'a ooxml_types::charts::ExternalData,
+    &'a ChartRelationshipData,
+)> {
     let external_data = match chart_spec.definition.as_ref()? {
         ChartDefinition::Chart(chart_space) => chart_space.external_data.as_ref()?,
         ChartDefinition::ChartEx(_) => return None,

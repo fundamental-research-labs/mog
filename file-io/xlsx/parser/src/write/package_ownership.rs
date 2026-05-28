@@ -366,7 +366,10 @@ mod tests {
                 "xl/externalLinks/externalLink1.xml",
                 PackageFeatureOwner::ExternalLinks,
             ),
-            ("docProps/custom.xml", PackageFeatureOwner::DocumentProperties),
+            (
+                "docProps/custom.xml",
+                PackageFeatureOwner::DocumentProperties,
+            ),
         ] {
             assert_eq!(modeled_owner_for_part(path), Some(owner));
             assert!(modeled_feature_part_must_not_be_opaque(path));
@@ -375,7 +378,10 @@ mod tests {
 
     #[test]
     fn unknown_owner_clusters_can_remain_opaque_candidates() {
-        assert_eq!(modeled_owner_for_part("xl/vendorExtensions/vendor1.xml"), None);
+        assert_eq!(
+            modeled_owner_for_part("xl/vendorExtensions/vendor1.xml"),
+            None
+        );
         assert!(!modeled_feature_part_must_not_be_opaque(
             "xl/vendorExtensions/vendor1.xml"
         ));

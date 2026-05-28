@@ -111,7 +111,7 @@ mod tests {
             chart_relationships: Vec::new(),
             chart_auxiliary_files: Vec::new(),
             chart_auxiliary_parts: Vec::new(),
-        is_chart_ex: false,
+            is_chart_ex: false,
             cnv_pr_name: None,
             cnv_pr_id: None,
             cnv_pr_descr: None,

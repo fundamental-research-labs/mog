@@ -85,9 +85,8 @@ pub fn parse_max_sheets(
     xlsx_data: &[u8],
     max_sheets: usize,
 ) -> Result<ParsedWorkbook, XlsxApiError> {
-    let (output, diagnostics) =
-        xlsx_parser::parse_xlsx_to_output_max_sheets(xlsx_data, max_sheets)
-            .map_err(from_parse_string_error)?;
+    let (output, diagnostics) = xlsx_parser::parse_xlsx_to_output_max_sheets(xlsx_data, max_sheets)
+        .map_err(from_parse_string_error)?;
 
     Ok(ParsedWorkbook {
         output,

@@ -10,8 +10,8 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput,
-    PersonInfo, RowDimension, SheetData, SheetDimensions, TableColumnSpec,
-    TableSpec, TotalsFunction, ValidationOperator, ValidationRule, ValidationSpec,
+    PersonInfo, RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    TotalsFunction, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
@@ -462,8 +462,8 @@ fn threaded_comment_export_registers_comment_and_person_package_graph() {
         ..Default::default()
     }];
 
-    let bytes = write_xlsx_from_parse_output(&output)
-        .expect("threaded comment export should succeed");
+    let bytes =
+        write_xlsx_from_parse_output(&output).expect("threaded comment export should succeed");
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_rels = String::from_utf8(
         archive
@@ -533,8 +533,8 @@ fn threaded_comment_export_preserves_imported_part_path_not_relationship_id() {
         comment_type: CommentType::ThreadedComment,
         ..Default::default()
     }];
-    let bytes = write_xlsx_from_parse_output(&output)
-        .expect("threaded comment export should succeed");
+    let bytes =
+        write_xlsx_from_parse_output(&output).expect("threaded comment export should succeed");
     let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_rels = String::from_utf8(
         archive

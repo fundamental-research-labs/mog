@@ -181,11 +181,7 @@ fn write_modeled_app_props_xml(props: &domain_types::ExtendedDocumentProperties)
     u32_opt(&mut w, "HiddenSlides", props.hidden_slides);
     u32_opt(&mut w, "MMClips", props.mm_clips);
     bool_opt(&mut w, "LinksUpToDate", props.links_up_to_date);
-    u32_opt(
-        &mut w,
-        "CharactersWithSpaces",
-        props.characters_with_spaces,
-    );
+    u32_opt(&mut w, "CharactersWithSpaces", props.characters_with_spaces);
     bool_opt(&mut w, "SharedDoc", props.shared_doc);
     bool_opt(&mut w, "HyperlinksChanged", props.hyperlinks_changed);
     text_opt(&mut w, "HyperlinkBase", props.hyperlink_base.as_deref());
@@ -313,10 +309,14 @@ fn write_custom_property_value(
 ) {
     match value {
         domain_types::DocumentCustomPropertyValue::Empty => {
-            w.start_element("vt:empty").end_attrs().end_element("vt:empty");
+            w.start_element("vt:empty")
+                .end_attrs()
+                .end_element("vt:empty");
         }
         domain_types::DocumentCustomPropertyValue::Null => {
-            w.start_element("vt:null").end_attrs().end_element("vt:null");
+            w.start_element("vt:null")
+                .end_attrs()
+                .end_element("vt:null");
         }
         domain_types::DocumentCustomPropertyValue::Lpwstr(value) => {
             write_custom_property_text(w, "vt:lpwstr", value);
@@ -375,16 +375,36 @@ fn write_custom_property_value(
         domain_types::DocumentCustomPropertyValue::Filetime(value) => {
             write_custom_property_text(w, "vt:filetime", value);
         }
-        domain_types::DocumentCustomPropertyValue::Cy(value) => write_custom_property_text(w, "vt:cy", value),
-        domain_types::DocumentCustomPropertyValue::Error(value) => write_custom_property_text(w, "vt:error", value),
-        domain_types::DocumentCustomPropertyValue::Clsid(value) => write_custom_property_text(w, "vt:clsid", value),
-        domain_types::DocumentCustomPropertyValue::Blob(value) => write_custom_property_text(w, "vt:blob", value),
-        domain_types::DocumentCustomPropertyValue::Oblob(value) => write_custom_property_text(w, "vt:oblob", value),
-        domain_types::DocumentCustomPropertyValue::Stream(value) => write_custom_property_text(w, "vt:stream", value),
-        domain_types::DocumentCustomPropertyValue::Ostream(value) => write_custom_property_text(w, "vt:ostream", value),
-        domain_types::DocumentCustomPropertyValue::Storage(value) => write_custom_property_text(w, "vt:storage", value),
-        domain_types::DocumentCustomPropertyValue::Ostorage(value) => write_custom_property_text(w, "vt:ostorage", value),
-        domain_types::DocumentCustomPropertyValue::Vstream(value) => write_custom_property_text(w, "vt:vstream", value),
+        domain_types::DocumentCustomPropertyValue::Cy(value) => {
+            write_custom_property_text(w, "vt:cy", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Error(value) => {
+            write_custom_property_text(w, "vt:error", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Clsid(value) => {
+            write_custom_property_text(w, "vt:clsid", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Blob(value) => {
+            write_custom_property_text(w, "vt:blob", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Oblob(value) => {
+            write_custom_property_text(w, "vt:oblob", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Stream(value) => {
+            write_custom_property_text(w, "vt:stream", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Ostream(value) => {
+            write_custom_property_text(w, "vt:ostream", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Storage(value) => {
+            write_custom_property_text(w, "vt:storage", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Ostorage(value) => {
+            write_custom_property_text(w, "vt:ostorage", value)
+        }
+        domain_types::DocumentCustomPropertyValue::Vstream(value) => {
+            write_custom_property_text(w, "vt:vstream", value)
+        }
         domain_types::DocumentCustomPropertyValue::Vector(vector) => {
             w.start_element("vt:vector")
                 .attr_num("size", vector.values.len())

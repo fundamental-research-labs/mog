@@ -16,7 +16,8 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         lang: imported.and_then(|chart_space| chart_space.lang.clone()),
         rounded_corners: spec.rounded_corners,
         style: spec.style,
-        style_alternate_content: imported.and_then(|chart_space| chart_space.style_alternate_content.clone()),
+        style_alternate_content: imported
+            .and_then(|chart_space| chart_space.style_alternate_content.clone()),
         style_after_chart: imported
             .map(|chart_space| chart_space.style_after_chart)
             .unwrap_or(false),
@@ -25,15 +26,25 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         chart: build_chart(spec),
         sp_pr: spec.chart_format.as_ref().and_then(build_shape_properties),
         tx_pr: spec.chart_format.as_ref().and_then(build_text_body),
-        external_data: spec.definition.as_ref().and_then(|definition| match definition {
-            domain_types::ChartDefinition::Chart(chart_space) => chart_space.external_data.clone(),
-            domain_types::ChartDefinition::ChartEx(_) => None,
-        }),
+        external_data: spec
+            .definition
+            .as_ref()
+            .and_then(|definition| match definition {
+                domain_types::ChartDefinition::Chart(chart_space) => {
+                    chart_space.external_data.clone()
+                }
+                domain_types::ChartDefinition::ChartEx(_) => None,
+            }),
         pivot_source: imported.and_then(|chart_space| chart_space.pivot_source.clone()),
-        user_shapes: spec.definition.as_ref().and_then(|definition| match definition {
-            domain_types::ChartDefinition::Chart(chart_space) => chart_space.user_shapes.clone(),
-            domain_types::ChartDefinition::ChartEx(_) => None,
-        }),
+        user_shapes: spec
+            .definition
+            .as_ref()
+            .and_then(|definition| match definition {
+                domain_types::ChartDefinition::Chart(chart_space) => {
+                    chart_space.user_shapes.clone()
+                }
+                domain_types::ChartDefinition::ChartEx(_) => None,
+            }),
         print_settings: imported.and_then(|chart_space| chart_space.print_settings.clone()),
         extensions: imported
             .map(|chart_space| clean_chart_extensions(&chart_space.extensions))
@@ -82,7 +93,9 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
 
 pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
     let imported_plot_area = match spec.definition.as_ref() {
-        Some(domain_types::ChartDefinition::Chart(chart_space)) => Some(&chart_space.chart.plot_area),
+        Some(domain_types::ChartDefinition::Chart(chart_space)) => {
+            Some(&chart_space.chart.plot_area)
+        }
         _ => None,
     };
 

@@ -1,12 +1,8 @@
-use domain_types::domain::drawings::{
-    OleAnchorPoint, OleObjectAnchor, OleObjectProperties,
-};
+use domain_types::domain::drawings::{OleAnchorPoint, OleObjectAnchor, OleObjectProperties};
 use domain_types::domain::floating_object::{
     AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectData, OleObjectOoxmlProps,
 };
-use ooxml_types::ole::{
-    CellAnchorPoint, DvAspect, ObjectAnchor, ObjectProperties, OleUpdate,
-};
+use ooxml_types::ole::{CellAnchorPoint, DvAspect, ObjectAnchor, ObjectProperties, OleUpdate};
 
 use crate::domain::controls::types::{AnchorSource, ControlAnchor, OleObject};
 use crate::write::OleWriter;
@@ -62,11 +58,15 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         shape_id,
     );
     ole.data_path = Some(embedding.path.clone());
-    ole.r_id = embedding.relationship_id.clone().or_else(|| ooxml.r_id.clone());
+    ole.r_id = embedding
+        .relationship_id
+        .clone()
+        .or_else(|| ooxml.r_id.clone());
     ole.link_path = ooxml.link.clone();
-    ole.name = ooxml.name.clone().or_else(|| {
-        (!obj.common.name.is_empty()).then(|| obj.common.name.clone())
-    });
+    ole.name = ooxml
+        .name
+        .clone()
+        .or_else(|| (!obj.common.name.is_empty()).then(|| obj.common.name.clone()));
     ole.anchor = object_anchor_from_floating_object(obj, ooxml);
     ole.dv_aspect = DvAspect::from_ooxml(first_non_empty(&data.dv_aspect, &ooxml.dv_aspect));
     ole.ole_update = OleUpdate::from_ooxml(&ooxml.ole_update);
@@ -87,7 +87,10 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         object: ole,
         embedding_path: embedding.path.clone(),
         embedding_bytes: embedding.bytes.clone(),
-        embedding_relationship_id_hint: embedding.relationship_id.clone().or_else(|| ooxml.r_id.clone()),
+        embedding_relationship_id_hint: embedding
+            .relationship_id
+            .clone()
+            .or_else(|| ooxml.r_id.clone()),
         preview_path: ooxml.preview.as_ref().map(|preview| preview.path.clone()),
         preview_bytes: ooxml.preview.as_ref().map(|preview| preview.bytes.clone()),
         preview_relationship_id_hint: ooxml
@@ -146,8 +149,12 @@ fn control_anchor_from_ole_anchor(anchor: &OleObjectAnchor) -> ControlAnchor {
 }
 
 fn control_anchor_from_floating_anchor(anchor: &FloatingObjectAnchor) -> ControlAnchor {
-    let to_col = anchor.end_col.unwrap_or_else(|| anchor.anchor_col.saturating_add(1));
-    let to_row = anchor.end_row.unwrap_or_else(|| anchor.anchor_row.saturating_add(1));
+    let to_col = anchor
+        .end_col
+        .unwrap_or_else(|| anchor.anchor_col.saturating_add(1));
+    let to_row = anchor
+        .end_row
+        .unwrap_or_else(|| anchor.anchor_row.saturating_add(1));
     ControlAnchor {
         from_col: anchor.anchor_col,
         from_row: anchor.anchor_row,

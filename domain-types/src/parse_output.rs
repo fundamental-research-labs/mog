@@ -161,8 +161,7 @@ impl WorkbookStylesheet {
 
     #[must_use]
     pub fn to_stylesheet(&self) -> ooxml_types::styles::Stylesheet {
-        if self.is_registry_empty()
-            && self.stylesheet != ooxml_types::styles::Stylesheet::default()
+        if self.is_registry_empty() && self.stylesheet != ooxml_types::styles::Stylesheet::default()
         {
             return self.stylesheet.clone();
         }
@@ -193,8 +192,7 @@ impl WorkbookStylesheet {
 
     #[must_use]
     pub fn normalized(&self) -> Self {
-        if self.is_registry_empty()
-            && self.stylesheet != ooxml_types::styles::Stylesheet::default()
+        if self.is_registry_empty() && self.stylesheet != ooxml_types::styles::Stylesheet::default()
         {
             return Self::from_stylesheet(
                 self.stylesheet.clone(),

@@ -74,7 +74,10 @@ fn modeled_feature_package_subgraphs_require_typed_owner_state() {
         "docProps/custom.xml",
         "docMetadata/LabelInfo.xml",
     ] {
-        assert!(!archive.contains(absent_part), "{absent_part} must require typed owner state");
+        assert!(
+            !archive.contains(absent_part),
+            "{absent_part} must require typed owner state"
+        );
         assert!(
             !content_types.contains(absent_part),
             "{absent_part} content type must require typed owner state"

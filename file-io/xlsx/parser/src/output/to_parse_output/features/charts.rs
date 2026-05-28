@@ -87,7 +87,8 @@ fn chart_auxiliary_parts(
     relationships: &[domain_types::chart::ChartRelationshipData],
     files: &[(String, Vec<u8>)],
 ) -> Vec<domain_types::chart::ChartAuxiliaryPart> {
-    const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
+    const REL_CHART_STYLE: &str =
+        "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
     const REL_CHART_COLOR_STYLE: &str =
         "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
     const REL_CHART_USER_SHAPES: &str =

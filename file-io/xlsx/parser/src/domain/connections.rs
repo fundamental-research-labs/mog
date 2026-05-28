@@ -180,7 +180,11 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
         attr_bool(&mut xml, "keepAlive", c.keep_alive);
         attr_bool(&mut xml, "new", c.new_connection);
         attr_opt(&mut xml, "odcFile", c.odc_file.as_deref());
-        attr_bool(&mut xml, "onlyUseConnectionFile", c.only_use_connection_file);
+        attr_bool(
+            &mut xml,
+            "onlyUseConnectionFile",
+            c.only_use_connection_file,
+        );
         attr_u32(&mut xml, "reconnectionMethod", c.reconnection_method);
         attr_bool(&mut xml, "refreshOnLoad", c.refresh_on_load);
         attr_bool(&mut xml, "savePassword", c.save_password);
@@ -196,7 +200,11 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
         if let Some(olap) = &c.olap_pr {
             xml.push_str("<olapPr");
             attr_bool(&mut xml, "local", olap.local);
-            attr_opt(&mut xml, "localConnection", olap.local_connection.as_deref());
+            attr_opt(
+                &mut xml,
+                "localConnection",
+                olap.local_connection.as_deref(),
+            );
             attr_bool(&mut xml, "localRefresh", olap.local_refresh);
             attr_bool(&mut xml, "sendLocale", olap.send_locale);
             attr_u32(&mut xml, "rowDrillCount", olap.row_drill_count);
@@ -248,10 +256,22 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
     attr_opt(&mut xml, "name", query_table.name.as_deref());
     attr_u32(&mut xml, "connectionId", query_table.connection_id);
     attr_u32(&mut xml, "autoFormatId", query_table.auto_format_id);
-    attr_bool(&mut xml, "applyNumberFormats", query_table.apply_number_formats);
-    attr_bool(&mut xml, "applyBorderFormats", query_table.apply_border_formats);
+    attr_bool(
+        &mut xml,
+        "applyNumberFormats",
+        query_table.apply_number_formats,
+    );
+    attr_bool(
+        &mut xml,
+        "applyBorderFormats",
+        query_table.apply_border_formats,
+    );
     attr_bool(&mut xml, "applyFontFormats", query_table.apply_font_formats);
-    attr_bool(&mut xml, "applyPatternFormats", query_table.apply_pattern_formats);
+    attr_bool(
+        &mut xml,
+        "applyPatternFormats",
+        query_table.apply_pattern_formats,
+    );
     attr_bool(
         &mut xml,
         "applyAlignmentFormats",
@@ -263,12 +283,28 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
         query_table.apply_width_height_formats,
     );
     attr_bool(&mut xml, "refreshOnLoad", query_table.refresh_on_load);
-    attr_opt(&mut xml, "refreshStyle", query_table.grow_shrink_type.as_deref());
+    attr_opt(
+        &mut xml,
+        "refreshStyle",
+        query_table.grow_shrink_type.as_deref(),
+    );
     attr_bool(&mut xml, "fillFormulas", query_table.fill_formulas);
-    attr_bool(&mut xml, "removeDataOnSave", query_table.remove_data_on_save);
+    attr_bool(
+        &mut xml,
+        "removeDataOnSave",
+        query_table.remove_data_on_save,
+    );
     attr_bool(&mut xml, "disableEdit", query_table.disable_edit);
-    attr_bool(&mut xml, "preserveFormatting", query_table.preserve_formatting);
-    attr_bool(&mut xml, "adjustColumnWidth", query_table.adjust_column_width);
+    attr_bool(
+        &mut xml,
+        "preserveFormatting",
+        query_table.preserve_formatting,
+    );
+    attr_bool(
+        &mut xml,
+        "adjustColumnWidth",
+        query_table.adjust_column_width,
+    );
     attr_bool(&mut xml, "intermediate", query_table.intermediate);
     attr_bool(
         &mut xml,
@@ -280,7 +316,11 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
     }
     attr_bool(&mut xml, "rowNumbers", query_table.row_numbers);
     attr_bool(&mut xml, "disableRefresh", query_table.disable_refresh);
-    attr_bool(&mut xml, "backgroundRefresh", query_table.background_refresh);
+    attr_bool(
+        &mut xml,
+        "backgroundRefresh",
+        query_table.background_refresh,
+    );
     attr_bool(
         &mut xml,
         "firstBackgroundRefresh",

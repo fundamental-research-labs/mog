@@ -26,7 +26,10 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
 
     let mut id_to_export_id = HashMap::<u32, u32>::new();
     let mut dxfs = Vec::new();
-    for entry in registry.iter().filter(|entry| reachable.contains(&entry.id)) {
+    for entry in registry
+        .iter()
+        .filter(|entry| reachable.contains(&entry.id))
+    {
         id_to_export_id.insert(entry.id, dxfs.len() as u32);
         dxfs.push(entry.to_ooxml());
     }

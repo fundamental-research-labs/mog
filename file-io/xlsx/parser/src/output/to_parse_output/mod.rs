@@ -26,8 +26,8 @@ mod styles;
 mod workbook_metadata;
 use crate::infra::opc::resolve_relationship_target;
 use cells::*;
-use features::*;
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
+use features::*;
 use styles::*;
 use workbook_metadata::*;
 
@@ -142,9 +142,7 @@ pub fn full_parse_result_to_parse_output(
             let typed_custom: Vec<_> = result
                 .doc_props_custom
                 .as_ref()
-                .map(|custom| {
-                    custom.clone()
-                })
+                .map(|custom| custom.clone())
                 .unwrap_or_default();
             domain_types::DocumentProperties {
                 title: core.and_then(|core| core.title.clone()),
@@ -360,13 +358,14 @@ fn populate_dxf_registry_owners(output: &mut ParseOutput) {
                 ("totalsRowBorderDxfId", table.totals_row_border_dxf_id),
             ] {
                 if let Some(dxf_id) = dxf_id {
-                    owners_by_id.entry(dxf_id).or_default().push(
-                        domain_types::DxfOwner::Table {
+                    owners_by_id
+                        .entry(dxf_id)
+                        .or_default()
+                        .push(domain_types::DxfOwner::Table {
                             sheet_index,
                             table_name: table.name.clone(),
                             field: field.to_string(),
-                        },
-                    );
+                        });
                 }
             }
             for column in &table.columns {
@@ -421,12 +420,13 @@ fn populate_dxf_registry_owners(output: &mut ParseOutput) {
     for style in &output.custom_table_styles {
         for (element_index, element) in style.elements.iter().enumerate() {
             if let Some(dxf_id) = element.dxf_id {
-                owners_by_id.entry(dxf_id).or_default().push(
-                    domain_types::DxfOwner::TableStyle {
+                owners_by_id
+                    .entry(dxf_id)
+                    .or_default()
+                    .push(domain_types::DxfOwner::TableStyle {
                         style_name: style.name.clone(),
                         element_index: element_index as u32,
-                    },
-                );
+                    });
             }
         }
     }

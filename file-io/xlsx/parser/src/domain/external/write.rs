@@ -5,8 +5,7 @@
 //! - `xl/externalLinks/_rels/externalLinkN.xml.rels` — relationship file with target URLs
 
 use domain_types::domain::external_link::{
-    CachedValue, DdeItem, DdeValueType, ExternalCacheValue, ExternalLink, ExternalLinkType,
-    OleItem,
+    CachedValue, DdeItem, DdeValueType, ExternalCacheValue, ExternalLink, ExternalLinkType, OleItem,
 };
 
 /// Content type for external link parts.
@@ -755,7 +754,9 @@ mod tests {
 
         assert!(xml_str.contains("<ddeLink ddeService=\"Excel\" ddeTopic=\"[Book1.xlsx]Sheet1\">"));
         assert!(xml_str.contains("<ddeItem name=\"R1C1\" advise=\"1\">"));
-        assert!(xml_str.contains("<values rows=\"1\" cols=\"1\"><value t=\"str\" val=\"cached\"/>"));
+        assert!(
+            xml_str.contains("<values rows=\"1\" cols=\"1\"><value t=\"str\" val=\"cached\"/>")
+        );
     }
 
     #[test]

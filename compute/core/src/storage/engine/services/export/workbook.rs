@@ -233,11 +233,7 @@ pub(super) fn export_workbook_stylesheet(
             fonts: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_FONTS),
             fills: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_FILLS),
             borders: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_BORDERS),
-            cell_style_xfs: read_style_registry_vec(
-                &txn,
-                &map,
-                KEY_STYLE_REGISTRY_CELL_STYLE_XFS,
-            ),
+            cell_style_xfs: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_CELL_STYLE_XFS),
             cell_xfs: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_CELL_XFS),
             named_cell_styles: read_style_registry_vec(
                 &txn,

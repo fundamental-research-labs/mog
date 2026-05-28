@@ -192,8 +192,7 @@ pub(super) fn hydrate_workbook_connections(
     let Some(json) = serde_json::to_string(connections).ok() else {
         return;
     };
-    let map =
-        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_CONNECTIONS);
+    let map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_CONNECTIONS);
     map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
 }
 

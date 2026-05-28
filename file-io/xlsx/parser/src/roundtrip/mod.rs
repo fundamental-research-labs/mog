@@ -6,8 +6,8 @@
 pub mod attr_order;
 pub mod binary_passthrough;
 pub mod namespaces;
-pub mod preserved_xml_policy;
 pub mod preservation;
+pub mod preserved_xml_policy;
 pub mod unknown_elements;
 
 // Structural XML diff for typed reconstruction parity gates.

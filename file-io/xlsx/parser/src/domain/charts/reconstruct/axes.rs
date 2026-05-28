@@ -5,10 +5,8 @@ use super::*;
 // =============================================================================
 
 pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
-    if let (
-        Some(domain_types::ChartDefinition::Chart(chart_space)),
-        Some(axes_data),
-    ) = (spec.definition.as_ref(), spec.axes.as_ref())
+    if let (Some(domain_types::ChartDefinition::Chart(chart_space)), Some(axes_data)) =
+        (spec.definition.as_ref(), spec.axes.as_ref())
     {
         let axes_ordered: Vec<_> = chart_space
             .chart

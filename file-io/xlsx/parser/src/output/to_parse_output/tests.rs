@@ -950,37 +950,37 @@ fn threading_result(
 fn typed_custom_doc_props_populate_parse_output() {
     let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
     result.doc_props_custom = Some(vec![
-            domain_types::DocumentCustomProperty {
-                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
-                pid: Some(2),
-                name: "Approved".to_string(),
-                link_target: None,
-                value: domain_types::DocumentCustomPropertyValue::Bool(true),
-            },
-            domain_types::DocumentCustomProperty {
-                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
-                pid: Some(3),
-                name: "Revision".to_string(),
-                link_target: None,
-                value: domain_types::DocumentCustomPropertyValue::I4(7),
-            },
-            domain_types::DocumentCustomProperty {
-                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
-                pid: Some(4),
-                name: "Confidence".to_string(),
-                link_target: None,
-                value: domain_types::DocumentCustomPropertyValue::R8(0.875),
-            },
-            domain_types::DocumentCustomProperty {
-                fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
-                pid: Some(5),
-                name: "ReviewedAt".to_string(),
-                link_target: None,
-                value: domain_types::DocumentCustomPropertyValue::Filetime(
-                    "2026-05-27T10:00:00Z".to_string(),
-                ),
-            },
-        ]);
+        domain_types::DocumentCustomProperty {
+            fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+            pid: Some(2),
+            name: "Approved".to_string(),
+            link_target: None,
+            value: domain_types::DocumentCustomPropertyValue::Bool(true),
+        },
+        domain_types::DocumentCustomProperty {
+            fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+            pid: Some(3),
+            name: "Revision".to_string(),
+            link_target: None,
+            value: domain_types::DocumentCustomPropertyValue::I4(7),
+        },
+        domain_types::DocumentCustomProperty {
+            fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+            pid: Some(4),
+            name: "Confidence".to_string(),
+            link_target: None,
+            value: domain_types::DocumentCustomPropertyValue::R8(0.875),
+        },
+        domain_types::DocumentCustomProperty {
+            fmtid: Some("{D5CDD505-2E9C-101B-9397-08002B2CF9AE}".to_string()),
+            pid: Some(5),
+            name: "ReviewedAt".to_string(),
+            link_target: None,
+            value: domain_types::DocumentCustomPropertyValue::Filetime(
+                "2026-05-27T10:00:00Z".to_string(),
+            ),
+        },
+    ]);
 
     let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
     let props = output

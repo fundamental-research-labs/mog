@@ -2,8 +2,7 @@
 
 use crate::domain::pivot::model::{PivotLocation, PivotStyleInfo, PivotTable};
 use crate::domain::pivot::parse::table_fields::{
-    parse_data_fields, parse_field_refs, parse_page_fields, parse_pivot_fields,
-    parse_row_col_items,
+    parse_data_fields, parse_field_refs, parse_page_fields, parse_pivot_fields, parse_row_col_items,
 };
 use crate::domain::pivot::reader::elements::{child_slice, first_element_span, opening_tag};
 use crate::infra::xml::{

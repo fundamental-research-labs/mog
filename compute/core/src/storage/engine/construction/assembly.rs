@@ -134,14 +134,7 @@ pub(in crate::storage::engine) fn assemble_engine(
     let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(
         storage.doc().client_id(),
     ));
-    assemble_engine_inner(
-        storage,
-        mirror,
-        compute,
-        snapshot,
-        grid_id_alloc,
-        id_alloc,
-    )
+    assemble_engine_inner(storage, mirror, compute, snapshot, grid_id_alloc, id_alloc)
 }
 
 /// Like `assemble_engine` but with custom ID allocators (for collaborative mode).
@@ -153,14 +146,7 @@ pub(in crate::storage::engine) fn assemble_engine_with_alloc(
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
 ) -> Result<YrsComputeEngine, ComputeError> {
-    assemble_engine_inner(
-        storage,
-        mirror,
-        compute,
-        snapshot,
-        grid_id_alloc,
-        id_alloc,
-    )
+    assemble_engine_inner(storage, mirror, compute, snapshot, grid_id_alloc, id_alloc)
 }
 
 fn assemble_engine_inner(

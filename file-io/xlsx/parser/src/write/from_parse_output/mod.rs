@@ -45,16 +45,17 @@ use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_OLE_OBJECT, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE,
-    REL_SLICER, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_HYPERLINK, REL_OLE_OBJECT, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SLICER, REL_TABLE,
+    REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 use assembly::{
     ChartAuxiliaryRelationshipGraphEntry, ChartEntry, ChartExEntry, DrawingRelationshipGraphEntry,
     VmlPreviewRelationshipGraphEntry, WorksheetCommentsGraphEntry,
-    WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry, WorksheetFormControlVmlGraphEntry,
-    WorksheetHeaderFooterVmlGraphEntry, WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry,
-    WorksheetOleVmlGraphEntry, WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
+    WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
+    WorksheetFormControlVmlGraphEntry, WorksheetHeaderFooterVmlGraphEntry,
+    WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry, WorksheetOleVmlGraphEntry,
+    WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
 
 fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -208,9 +209,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     };
 
     let mut styles_writer = build_styles(style_palette_for_export);
-    if has_style_references
-        && let Some(workbook_stylesheet) = &output.workbook_stylesheet
-    {
+    if has_style_references && let Some(workbook_stylesheet) = &output.workbook_stylesheet {
         apply_workbook_stylesheet(
             &mut styles_writer,
             workbook_stylesheet,
@@ -314,7 +313,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let has_chart_ex = extras.has_chart_ex;
         let has_floating_objects = extras.has_floating_objects;
         let has_slicer_anchors = !sheet_data.slicer_anchors.is_empty();
-        let needs_drawing = has_charts || has_chart_ex || has_floating_objects || has_slicer_anchors;
+        let needs_drawing =
+            has_charts || has_chart_ex || has_floating_objects || has_slicer_anchors;
 
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
@@ -517,9 +517,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     embedding_path: ole.embedding_path.clone(),
                     target,
                     relationship_id_hint: Some(
-                        ole.embedding_relationship_id_hint
-                            .clone()
-                            .unwrap_or(r_id),
+                        ole.embedding_relationship_id_hint.clone().unwrap_or(r_id),
                     ),
                 });
             }
@@ -1088,13 +1086,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
         // Printer settings relationship.
         if has_printer_settings {
-            if let Some(entry) = sheet_data.print_settings.as_ref().and_then(|ps| {
-                printer_settings::relationship_for_export(
-                    sheet_idx,
-                    sheet_num,
-                    ps,
-                )
-            }) {
+            if let Some(entry) = sheet_data
+                .print_settings
+                .as_ref()
+                .and_then(|ps| printer_settings::relationship_for_export(sheet_idx, sheet_num, ps))
+            {
                 worksheet_printer_settings_relationships.push(entry);
             }
         }
@@ -1314,18 +1310,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     else {
                         continue;
                     };
-                    let Some(target_path) = crate::infra::opc::resolve_relationship_target(
-                        Some(&chart_path),
-                        target,
-                    )
-                    .ok()
-                    .map(|target| target.trim_start_matches('/').to_string()) else {
+                    let Some(target_path) =
+                        crate::infra::opc::resolve_relationship_target(Some(&chart_path), target)
+                            .ok()
+                            .map(|target| target.trim_start_matches('/').to_string())
+                    else {
                         continue;
                     };
-                    if chart_auxiliary::is_supported_auxiliary_relationship(
-                        rel_type,
-                        &target_path,
-                    ) && auxiliary_paths.contains(&target_path)
+                    if chart_auxiliary::is_supported_auxiliary_relationship(rel_type, &target_path)
+                        && auxiliary_paths.contains(&target_path)
                     {
                         chart_auxiliary_relationships.push(ChartAuxiliaryRelationshipGraphEntry {
                             chart_path: chart_path.clone(),
@@ -1375,18 +1368,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     else {
                         continue;
                     };
-                    let Some(target_path) = crate::infra::opc::resolve_relationship_target(
-                        Some(&chart_path),
-                        target,
-                    )
-                    .ok()
-                    .map(|target| target.trim_start_matches('/').to_string()) else {
+                    let Some(target_path) =
+                        crate::infra::opc::resolve_relationship_target(Some(&chart_path), target)
+                            .ok()
+                            .map(|target| target.trim_start_matches('/').to_string())
+                    else {
                         continue;
                     };
-                    if chart_auxiliary::is_supported_auxiliary_relationship(
-                        rel_type,
-                        &target_path,
-                    ) && auxiliary_paths.contains(&target_path)
+                    if chart_auxiliary::is_supported_auxiliary_relationship(rel_type, &target_path)
+                        && auxiliary_paths.contains(&target_path)
                     {
                         chart_auxiliary_relationships.push(ChartAuxiliaryRelationshipGraphEntry {
                             chart_path: chart_path.clone(),
@@ -1479,7 +1469,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     }
     let mut query_table_global_idx = 0usize;
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
-        let tables_before: usize = sheet_extras[..sheet_idx].iter().map(|e| e.tables.len()).sum();
+        let tables_before: usize = sheet_extras[..sheet_idx]
+            .iter()
+            .map(|e| e.tables.len())
+            .sum();
         for (table_idx, table) in extras.source_tables.iter().enumerate() {
             if let Some(query_table) = &table.query_table {
                 query_table_global_idx += 1;

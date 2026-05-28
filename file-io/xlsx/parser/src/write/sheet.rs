@@ -1052,10 +1052,7 @@ impl SheetWriter {
         if let Some(ref sp) = self.sheet_protection_xml {
             w.raw_str(sp);
         }
-        self.write_semantic_container(
-            &mut w,
-            &self.worksheet_semantic_containers.protected_ranges,
-        );
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.protected_ranges);
         self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.scenarios);
 
         // Write autoFilter (OOXML order: after sheetData, before sortState)
@@ -1067,10 +1064,7 @@ impl SheetWriter {
         if let Some(ref ss) = self.sort_state_xml {
             w.raw_str(ss);
         }
-        self.write_semantic_container(
-            &mut w,
-            &self.worksheet_semantic_containers.data_consolidate,
-        );
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.data_consolidate);
         self.write_semantic_container(
             &mut w,
             &self.worksheet_semantic_containers.custom_sheet_views,
@@ -1315,7 +1309,11 @@ impl SheetWriter {
         }
     }
 
-    fn write_semantic_container(&self, w: &mut XmlWriter, container: &Option<WorksheetSemanticXml>) {
+    fn write_semantic_container(
+        &self,
+        w: &mut XmlWriter,
+        container: &Option<WorksheetSemanticXml>,
+    ) {
         if let Some(container) = container
             && !container.raw_xml.is_empty()
         {

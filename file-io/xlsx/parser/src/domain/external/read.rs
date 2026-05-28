@@ -605,8 +605,7 @@ fn parse_ole_link(xml: &[u8], start: usize, link_id: &str) -> ExternalLink {
     let (element, element_end) = start_tag_element(xml, start, xml.len());
 
     // Extract OLE program ID
-    let prog_id = parse_string_attr_quoted(element, b"progId")
-        .unwrap_or_default();
+    let prog_id = parse_string_attr_quoted(element, b"progId").unwrap_or_default();
     let r_id = parse_string_attr_quoted(element, b"r:id");
     let link_end = find_closing_tag(xml, b"oleLink", start).unwrap_or(xml.len());
     let items = parse_ole_items(xml, element_end, link_end);

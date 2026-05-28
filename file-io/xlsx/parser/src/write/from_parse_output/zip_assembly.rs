@@ -236,8 +236,11 @@ pub(super) fn write_zip_package(
                     base_shape_id,
                 );
                 let controls_writer = ControlsWriter::new(form_controls);
-                let preview_rel_ids =
-                    ole_preview_relationship_ids(package_graph, &comments_entry.vml_path, &sheet_extras[idx]);
+                let preview_rel_ids = ole_preview_relationship_ids(
+                    package_graph,
+                    &comments_entry.vml_path,
+                    &sheet_extras[idx],
+                );
                 let form_control_vml = controls_writer.write_vml_with_ole(
                     base_shape_id,
                     &sheet_extras[idx]
@@ -339,8 +342,11 @@ pub(super) fn write_zip_package(
                     .iter()
                     .map(|entry| entry.object.clone())
                     .collect::<Vec<_>>();
-                let vml_xml =
-                    controls_writer.write_vml_with_ole(base_shape_id, &ole_objects, &preview_rel_ids);
+                let vml_xml = controls_writer.write_vml_with_ole(
+                    base_shape_id,
+                    &ole_objects,
+                    &preview_rel_ids,
+                );
                 add_registered_part(package_graph, &mut zip, vml_path, vml_xml)?;
             }
         }
@@ -457,9 +463,8 @@ pub(super) fn write_zip_package(
         for sheet in &output.sheets {
             for slicer in &sheet.slicers {
                 slicer_global += 1;
-                let xml = crate::domain::slicers::write::write_slicer_part(std::slice::from_ref(
-                    slicer,
-                ));
+                let xml =
+                    crate::domain::slicers::write::write_slicer_part(std::slice::from_ref(slicer));
                 add_registered_part(
                     package_graph,
                     &mut zip,

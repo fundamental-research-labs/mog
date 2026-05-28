@@ -22,11 +22,11 @@ use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
 use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_stylesheet};
 use super::workbook::{
-    hydrate_shared_string_hints, hydrate_workbook_calculation, hydrate_workbook_metadata,
-    hydrate_workbook_named_ranges, hydrate_workbook_parsed_pivot_tables,
+    hydrate_shared_string_hints, hydrate_workbook_calculation, hydrate_workbook_connections,
+    hydrate_workbook_metadata, hydrate_workbook_named_ranges, hydrate_workbook_parsed_pivot_tables,
     hydrate_workbook_pivot_cache_records, hydrate_workbook_protection, hydrate_workbook_slicers,
-    hydrate_workbook_table_styles, hydrate_workbook_tables, hydrate_workbook_connections,
-    hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons, hydrate_workbook_views,
+    hydrate_workbook_table_styles, hydrate_workbook_tables, hydrate_workbook_theme,
+    hydrate_workbook_threaded_comment_persons, hydrate_workbook_views,
     hydrate_workbook_web_publishing,
 };
 use super::{HydrationIdMap, IdAllocator};

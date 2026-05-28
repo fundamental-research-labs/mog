@@ -10,8 +10,8 @@ use domain_types::{
     ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
     ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
     OutlineGroup, PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings,
-    RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec,
-    TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
+    RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
+    ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;

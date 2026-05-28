@@ -467,7 +467,9 @@ fn attr_string(xml: &[u8], name: &[u8]) -> Option<String> {
     needle.extend_from_slice(b"=\"");
     let start = find_bytes(xml, &needle, 0)? + needle.len();
     let end = xml[start..].iter().position(|&b| b == b'"')? + start;
-    std::str::from_utf8(&xml[start..end]).ok().map(str::to_owned)
+    std::str::from_utf8(&xml[start..end])
+        .ok()
+        .map(str::to_owned)
 }
 
 fn decode_xml_text(xml: &[u8]) -> Option<String> {

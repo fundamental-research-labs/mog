@@ -45,8 +45,7 @@ const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
 const CT_SLICER: &str = "application/vnd.ms-excel.slicer+xml";
 const CT_SLICER_CACHE: &str = "application/vnd.ms-excel.slicerCache+xml";
 const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relationships/slicer";
-const REL_SLICER_CACHE: &str =
-    "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
+const REL_SLICER_CACHE: &str = "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
 const REL_CONNECTIONS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections";
 const REL_QUERY_TABLE: &str =
@@ -250,7 +249,6 @@ impl ResolvedPackageGraph {
     pub fn contains_part(&self, path: &str) -> bool {
         self.parts.contains_key(&normalize_part_path(path))
     }
-
 }
 
 fn content_type_part_order(path: &str) -> u8 {

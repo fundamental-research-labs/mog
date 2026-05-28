@@ -129,13 +129,17 @@ impl YrsComputeEngine {
         self.write_xlsx_export_result(&result)
     }
 
-    fn write_xlsx_export_result(&self, result: &ExportParseResult) -> Result<Vec<u8>, ComputeError> {
+    fn write_xlsx_export_result(
+        &self,
+        result: &ExportParseResult,
+    ) -> Result<Vec<u8>, ComputeError> {
         let bytes = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("export", "export_to_xlsx_writer");
-            let bytes = xlsx_api::export_from_parse_output(&result.parse_output)
-            .map_err(|e| ComputeError::ExportError {
-                message: e.to_string(),
+            let bytes = xlsx_api::export_from_parse_output(&result.parse_output).map_err(|e| {
+                ComputeError::ExportError {
+                    message: e.to_string(),
+                }
             })?;
             profile.counter("sheets", result.parse_output.sheets.len() as u64);
             profile.counter(
@@ -169,10 +173,8 @@ impl YrsComputeEngine {
     pub fn build_parse_output_from_yrs(&self) -> ParseOutput {
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("export", "build_parse_output_from_yrs");
-        let parse_output = super::services::export::build_parse_output_from_yrs(
-            &self.stores,
-            &self.mirror,
-        );
+        let parse_output =
+            super::services::export::build_parse_output_from_yrs(&self.stores, &self.mirror);
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "cells",

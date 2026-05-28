@@ -248,8 +248,14 @@ mod tests {
 
     #[test]
     fn element_detection_matches_tag_local_name_only() {
-        assert!(raw_xml_contains_element("<x:ignoredErrors/>", "ignoredErrors"));
-        assert!(raw_xml_contains_element("<ignoredErrors/>", "ignoredErrors"));
+        assert!(raw_xml_contains_element(
+            "<x:ignoredErrors/>",
+            "ignoredErrors"
+        ));
+        assert!(raw_xml_contains_element(
+            "<ignoredErrors/>",
+            "ignoredErrors"
+        ));
         assert!(!raw_xml_contains_element(
             r#"<x:ext uri="ignoredErrors"/>"#,
             "ignoredErrors"

@@ -5,7 +5,10 @@ use domain_types::{ParseOutput, RichDataPart};
 use super::WriteError;
 
 pub(super) fn parts_for_export(output: &ParseOutput) -> Vec<RichDataPart> {
-    let Some(rich_data) = output.metadata.as_ref().and_then(|metadata| metadata.rich_data.as_ref())
+    let Some(rich_data) = output
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.rich_data.as_ref())
     else {
         return Vec::new();
     };

@@ -9,10 +9,9 @@ use super::floating_object::{
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
 use super::{
-    AnchorPosition, AxisData, ChartDataTableData, ChartDefinition, ChartFormatData,
-    ChartAuxiliaryPart, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
-    ChartView3DData,
-    DataLabelData, LegendData, ObjectSize,
+    AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
+    ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
+    ChartView3DData, DataLabelData, LegendData, ObjectSize,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, DescribeSchema)]
@@ -533,14 +532,14 @@ impl ChartSpec {
         };
 
         // Determine anchor mode from position fields
-        let anchor_mode = if self.position.absolute_x.is_some() && self.position.absolute_y.is_some()
-        {
-            AnchorMode::Absolute
-        } else if self.position.end_row.is_some() && self.position.end_col.is_some() {
-            AnchorMode::TwoCell
-        } else {
-            AnchorMode::OneCell
-        };
+        let anchor_mode =
+            if self.position.absolute_x.is_some() && self.position.absolute_y.is_some() {
+                AnchorMode::Absolute
+            } else if self.position.end_row.is_some() && self.position.end_col.is_some() {
+                AnchorMode::TwoCell
+            } else {
+                AnchorMode::OneCell
+            };
 
         let common = FloatingObjectCommon {
             id: format!("chart-import-{}", index),

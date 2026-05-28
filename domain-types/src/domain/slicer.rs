@@ -666,24 +666,22 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
         SlicerSource::Table {
             table_id,
             column_cell_id,
-        } => {
-            OoxmlSlicerCacheDef {
-                name: cache_name,
-                uid: stored.cache_uid.clone(),
-                source_name: column_cell_id.clone(),
-                pivot_tables: vec![],
-                tabular_data: None,
-                table_slicer_cache: Some(TableSlicerCache {
-                    table_id: table_id.parse::<u32>().unwrap_or(0),
-                    column: stored.table_column_index.unwrap_or(0),
-                    sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),
-                    custom_list_sort: stored.style.custom_list_sort,
-                    cross_filter: domain_cross_filter_to_ooxml(stored.style.cross_filter),
-                    ext_lst: None,
-                }),
-                ext_lst: stored.cache_ext_lst_xml.clone(),
-            }
-        }
+        } => OoxmlSlicerCacheDef {
+            name: cache_name,
+            uid: stored.cache_uid.clone(),
+            source_name: column_cell_id.clone(),
+            pivot_tables: vec![],
+            tabular_data: None,
+            table_slicer_cache: Some(TableSlicerCache {
+                table_id: table_id.parse::<u32>().unwrap_or(0),
+                column: stored.table_column_index.unwrap_or(0),
+                sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),
+                custom_list_sort: stored.style.custom_list_sort,
+                cross_filter: domain_cross_filter_to_ooxml(stored.style.cross_filter),
+                ext_lst: None,
+            }),
+            ext_lst: stored.cache_ext_lst_xml.clone(),
+        },
         SlicerSource::Pivot {
             pivot_id,
             field_name,

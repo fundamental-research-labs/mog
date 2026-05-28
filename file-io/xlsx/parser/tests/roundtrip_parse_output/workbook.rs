@@ -123,9 +123,6 @@ fn calculation_properties_roundtrip_from_modeled_state() {
 
     let mut expected = output.calculation.clone();
     expected.calc_id = Some(0);
-    expected.full_calc_on_load = true;
-    expected.calc_completed = false;
-    expected.force_full_calc = true;
 
     let round_tripped = roundtrip(&output);
 
@@ -170,6 +167,32 @@ fn calculation_properties_regenerate_workbook_xml_from_modeled_state() {
     assert!(workbook_xml.contains(r#"concurrentManualCount="2""#));
     assert!(workbook_xml.contains(r#"forceFullCalc="1""#));
     assert!(!workbook_xml.contains("999999"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn calculation_properties_do_not_force_recalc_flags_when_clean() {
+    let mut output = make_single_sheet("Sheet1", Vec::new());
+    output.calculation = CalculationProperties {
+        calc_id: Some(191029),
+        full_calc_on_load: false,
+        calc_completed: true,
+        force_full_calc: false,
+        has_explicit_iterate_count: true,
+        has_explicit_iterate_delta: true,
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"<calcPr calcId="0""#));
+    assert!(workbook_xml.contains(r#"iterateCount="100""#));
+    assert!(workbook_xml.contains(r#"iterateDelta="0.001""#));
+    assert!(!workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

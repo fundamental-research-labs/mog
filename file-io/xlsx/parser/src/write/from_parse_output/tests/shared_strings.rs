@@ -148,7 +148,7 @@ fn stale_calc_chain_round_trip_metadata_is_not_exported_without_calc_chain_part(
 }
 
 #[test]
-fn no_calc_chain_export_policy_forces_recalc_on_open() {
+fn no_calc_chain_export_policy_preserves_clean_calc_settings() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         cells: vec![make_formula_cell(
@@ -168,7 +168,7 @@ fn no_calc_chain_export_policy_forces_recalc_on_open() {
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert_recalc_on_open_calc_pr(&workbook_xml);
+    assert_clean_calc_pr(&workbook_xml);
     assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
@@ -207,7 +207,7 @@ fn imported_calc_chain_is_diagnosed_and_never_replayed() {
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert_recalc_on_open_calc_pr(&workbook_xml);
+    assert_clean_calc_pr(&workbook_xml);
     assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
@@ -243,12 +243,12 @@ fn assert_no_calc_chain_package_parts(
     assert!(!content_types.contains("/xl/calcChain.xml"));
 }
 
-fn assert_recalc_on_open_calc_pr(workbook_xml: &str) {
+fn assert_clean_calc_pr(workbook_xml: &str) {
     assert!(workbook_xml.contains(r#"<calcPr "#));
     assert!(workbook_xml.contains(r#"calcId="0""#));
-    assert!(workbook_xml.contains(r#"fullCalcOnLoad="1""#));
-    assert!(workbook_xml.contains(r#"calcCompleted="0""#));
-    assert!(workbook_xml.contains(r#"forceFullCalc="1""#));
+    assert!(!workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
 }
 
 fn inject_stale_calc_chain_part(bytes: &[u8]) -> Vec<u8> {

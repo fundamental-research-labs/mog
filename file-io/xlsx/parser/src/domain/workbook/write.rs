@@ -132,17 +132,13 @@ impl DefinedNameDef {
 /// Convert `domain_types::CalculationProperties` into an `ooxml_types::CalcPr` for the workbook writer.
 ///
 /// XLSX export policy: Mog never emits `xl/calcChain.xml`. Calc chains are an
-/// Excel engine cache and imported chains may be stale after any formula edit.
-/// Every exported workbook therefore advertises an invalidated calculation
-/// state so spreadsheet consumers rebuild their own chain and recalculate on
-/// open.
+/// Excel engine cache, not authoritative workbook state. Formula cached results
+/// are emitted from modeled cell values, while workbook calculation flags remain
+/// user/model-controlled settings.
 pub fn calc_settings_from_domain(calc_props: &domain_types::CalculationProperties) -> CalcSettings {
     let ooxml_calc_pr: ooxml_types::workbook::CalcPr = calc_props.clone().into();
     ooxml_types::workbook::CalcPr {
         calc_id: Some(0),
-        full_calc_on_load: true,
-        calc_completed: false,
-        force_full_calc: true,
         ..ooxml_calc_pr
     }
 }
@@ -1469,12 +1465,28 @@ mod tests {
     }
 
     #[test]
-    fn test_calc_settings_from_domain_invalidates_calc_chain_cache() {
+    fn test_calc_settings_from_domain_preserves_user_calc_flags() {
         let settings = calc_settings_from_domain(&domain_types::CalculationProperties {
             calc_id: Some(191029),
             full_calc_on_load: false,
             calc_completed: true,
             force_full_calc: false,
+            ..Default::default()
+        });
+
+        assert_eq!(settings.calc_id, Some(0));
+        assert!(!settings.full_calc_on_load);
+        assert!(settings.calc_completed);
+        assert!(!settings.force_full_calc);
+    }
+
+    #[test]
+    fn test_calc_settings_from_domain_preserves_explicit_recalc_flags() {
+        let settings = calc_settings_from_domain(&domain_types::CalculationProperties {
+            calc_id: Some(191029),
+            full_calc_on_load: true,
+            calc_completed: false,
+            force_full_calc: true,
             ..Default::default()
         });
 

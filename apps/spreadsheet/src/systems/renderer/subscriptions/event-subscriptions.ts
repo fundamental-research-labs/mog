@@ -37,6 +37,7 @@ import type { ConditionalFormatCache, Workbook } from '@mog-sdk/contracts/api';
 import type { CellRange as ContractCellRange } from '@mog-sdk/contracts/core';
 import type { FrozenPanes, GridRenderer, RenderContextConfig } from '@mog-sdk/contracts/rendering';
 import type { ISparklineManager as SparklineManager } from '@mog-sdk/contracts/sparklines';
+import type { PersistedViewportConfig } from '@mog-sdk/contracts/viewport-config';
 import { getTheme } from '../../../infra/styles/built-in-themes';
 
 // =============================================================================
@@ -81,6 +82,12 @@ export interface EventSubscriptionConfig {
    * Set frozen panes on the renderer.
    */
   setFrozenPanes: (panes: FrozenPanes) => void;
+
+  /**
+   * Set the active SheetView viewport topology.
+   * Split events are workbook state changes; SheetView owns the computed layout.
+   */
+  setViewportConfig: (config: PersistedViewportConfig) => void;
 
   /**
    * Callback when workbook settings change that affect selection machine.
@@ -223,7 +230,8 @@ export interface EventSubscriptionResult {
  * @returns Result with sparkline config API and cleanup
  */
 export function setupEventSubscriptions(config: EventSubscriptionConfig): EventSubscriptionResult {
-  const { workbook, getRenderer, updateRendererContext, setFrozenPanes } = config;
+  const { workbook, getRenderer, updateRendererContext, setFrozenPanes, setViewportConfig } =
+    config;
 
   // Cleanup registry (mirrors coordinator pattern)
   const cleanups = new Map<string, () => void>();
@@ -247,7 +255,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
     if (config.invalidateAll) {
       config.invalidateAll();
     } else {
-      doInvalidateAll();
+      getRenderer()?.invalidateAll();
     }
   };
 
@@ -279,6 +287,45 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
     }
   });
   cleanups.set('viewOptions', viewOptionsUnsub);
+
+  // ---------------------------------------------------------------------------
+  // SPLIT VIEW EVENTS
+  // ---------------------------------------------------------------------------
+  const applySplitConfig = (
+    sheetId: string,
+    viewportConfig: PersistedViewportConfig,
+  ): void => {
+    const currentSheetId = getCurrentSheetId();
+    if (currentSheetId && sheetId === currentSheetId) {
+      setViewportConfig(viewportConfig);
+      doInvalidateAll();
+    }
+  };
+
+  const splitCreatedUnsub = workbook.on('split:created', (event) => {
+    applySplitConfig(event.sheetId, {
+      type: 'split',
+      direction: event.config.direction,
+      horizontalPosition: event.config.horizontalPosition,
+      verticalPosition: event.config.verticalPosition,
+    });
+  });
+  cleanups.set('splitCreated', splitCreatedUnsub);
+
+  const splitPositionChangedUnsub = workbook.on('split:position-changed', (event) => {
+    applySplitConfig(event.sheetId, {
+      type: 'split',
+      direction: event.config.direction,
+      horizontalPosition: event.config.horizontalPosition,
+      verticalPosition: event.config.verticalPosition,
+    });
+  });
+  cleanups.set('splitPositionChanged', splitPositionChangedUnsub);
+
+  const splitRemovedUnsub = workbook.on('split:removed', (event) => {
+    applySplitConfig(event.sheetId, { type: 'single' });
+  });
+  cleanups.set('splitRemoved', splitRemovedUnsub);
 
   // ---------------------------------------------------------------------------
   // HIDDEN ROWS/COLUMNS EVENTS

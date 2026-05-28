@@ -35,6 +35,7 @@ function setupWithWorkbook(workbook: ReturnType<typeof createMockWorkbook>) {
     invalidateAll: jest.fn(),
     updateRendererContext: jest.fn(),
     setFrozenPanes: jest.fn(),
+    setViewportConfig: jest.fn(),
   });
 }
 

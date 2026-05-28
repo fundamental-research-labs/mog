@@ -5,7 +5,7 @@
  * Triggers recomputeViewportLayout() when layout-affecting state changes.
  *
  * ARCHITECTURE:
- * - Subscribes to Workbook events that affect layout (split, freeze, outline, headers)
+ * - Subscribes to Workbook events that affect layout (freeze, outline, headers)
  * - Subscribes to UIStore.activeSheetId for sheet switching
  * - Uses transition detection pattern to skip redundant recomputation
  * - Uses RAF batching to coalesce rapid changes
@@ -13,12 +13,11 @@
  * RESPONSIBILITIES:
  * 1. Subscribe to view:options-changed (toggle headings)
  * 2. Subscribe to filter:applied/cleared (affects scroll bounds)
- * 3. Subscribe to split:created/removed/position-changed
- * 4. Subscribe to group:created/deleted/collapsed (outline gutter)
- * 5. Subscribe to outline:level-changed
- * 6. Subscribe to row:height-changed, column:width-changed
- * 7. Subscribe to rows:hidden/unhidden, columns:hidden/unhidden
- * 8. Subscribe to UIStore.activeSheetId
+ * 3. Subscribe to group:created/deleted/collapsed (outline gutter)
+ * 4. Subscribe to outline:level-changed
+ * 5. Subscribe to row:height-changed, column:width-changed
+ * 6. Subscribe to rows:hidden/unhidden, columns:hidden/unhidden
+ * 7. Subscribe to UIStore.activeSheetId
  *
  * KEY PATTERNS:
  * - Coordinator owns side effects, UIStore is pure state (§4)
@@ -29,10 +28,7 @@
  */
 
 import type { Workbook } from '@mog-sdk/contracts/api';
-import type {
-  PersistedViewportConfig,
-  SplitViewportConfig,
-} from '@mog-sdk/contracts/viewport-config';
+import type { SplitViewportConfig } from '@mog-sdk/contracts/viewport-config';
 
 // =============================================================================
 // Types
@@ -57,9 +53,6 @@ export interface LayoutCoordinationConfig {
 
   /** Trigger viewport layout recomputation */
   recomputeLayout: () => void;
-
-  /** Update viewport config (for split view) */
-  updateViewportConfig: (config: PersistedViewportConfig) => void;
 
   /** Update header visibility on renderer context */
   updateHeaderVisibility: (show: { rows: boolean; cols: boolean }) => void;
@@ -140,7 +133,6 @@ function areSplitConfigsEqual(
  *
  * This function creates Workbook and UIStore subscriptions to:
  * - Trigger layout recomputation on view option changes
- * - Trigger layout recomputation on split view changes
  * - Trigger layout recomputation on outline gutter changes
  * - Trigger layout recomputation on dimension changes
  * - Handle sheet switching (with deduplication)
@@ -158,7 +150,6 @@ export function setupLayoutCoordination(
     subscribeToActiveSheetId,
     getCurrentSheetId,
     recomputeLayout,
-    updateViewportConfig,
     updateHeaderVisibility,
     syncOutlineGutter,
     getLayoutInputs,
@@ -260,52 +251,6 @@ export function setupLayoutCoordination(
     }
   });
   unsubscribers.push(unsubFilterCleared);
-
-  // ---------------------------------------------------------------------------
-  // Split View Events
-  // ---------------------------------------------------------------------------
-  const unsubSplitCreated = workbook.on('split:created', (event) => {
-    const currentSheetId = getCurrentSheetId();
-    if (currentSheetId && event.sheetId === currentSheetId) {
-      // Update viewport config to split view
-      updateViewportConfig({
-        type: 'split',
-        direction: event.config.direction,
-        horizontalPosition: event.config.horizontalPosition,
-        verticalPosition: event.config.verticalPosition,
-      });
-
-      // Layout recomputation is triggered by updateViewportConfig
-      // But we still schedule to ensure transition detection is up to date
-      scheduleImmediateRecompute();
-    }
-  });
-  unsubscribers.push(unsubSplitCreated);
-
-  const unsubSplitRemoved = workbook.on('split:removed', (event) => {
-    const currentSheetId = getCurrentSheetId();
-    if (currentSheetId && event.sheetId === currentSheetId) {
-      // Revert to single viewport
-      updateViewportConfig({ type: 'single' });
-      scheduleImmediateRecompute();
-    }
-  });
-  unsubscribers.push(unsubSplitRemoved);
-
-  const unsubSplitPositionChanged = workbook.on('split:position-changed', (event) => {
-    const currentSheetId = getCurrentSheetId();
-    if (currentSheetId && event.sheetId === currentSheetId) {
-      // Update split positions
-      updateViewportConfig({
-        type: 'split',
-        direction: event.config.direction,
-        horizontalPosition: event.config.horizontalPosition,
-        verticalPosition: event.config.verticalPosition,
-      });
-      scheduleImmediateRecompute();
-    }
-  });
-  unsubscribers.push(unsubSplitPositionChanged);
 
   // ---------------------------------------------------------------------------
   // Outline Gutter Events (Group Created/Deleted/Collapsed)

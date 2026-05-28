@@ -7,6 +7,7 @@
 import type { StateCreator } from 'zustand';
 
 import type { CFRuleType, ConditionalFormat } from '@mog-sdk/contracts/conditional-format';
+import type { SheetId } from '@mog-sdk/contracts/core';
 
 /**
  * Quick rule dialog types for highlight/top-bottom rules
@@ -38,6 +39,10 @@ export interface CFDialogState {
   mode: 'create' | 'edit';
   /** Format being edited (for edit mode) */
   editingFormat: ConditionalFormat | null;
+  /** Sheet that owns the format being edited */
+  sourceSheetId: SheetId | null;
+  /** Reopen the Rules Manager after the CF dialog closes */
+  returnToRulesManager: boolean;
   /** Selected rule type for new rules */
   selectedRuleType: CFRuleType;
   /** Quick rule dialog type (for small focused dialogs) */
@@ -46,9 +51,18 @@ export interface CFDialogState {
   rulesManagerOpen: boolean;
 }
 
+export interface OpenCFDialogOptions {
+  sheetId?: SheetId;
+  returnToRulesManager?: boolean;
+}
+
 export interface CFDialogSlice {
   cfDialog: CFDialogState;
-  openCFDialog: (mode?: 'create' | 'edit', format?: ConditionalFormat) => void;
+  openCFDialog: (
+    mode?: 'create' | 'edit',
+    format?: ConditionalFormat,
+    options?: OpenCFDialogOptions,
+  ) => void;
   closeCFDialog: () => void;
   setCFRuleType: (ruleType: CFRuleType) => void;
   openQuickRuleDialog: (type: QuickRuleDialogType) => void;
@@ -70,6 +84,8 @@ const initialState: CFDialogState = {
   isOpen: false,
   mode: 'create',
   editingFormat: null,
+  sourceSheetId: null,
+  returnToRulesManager: false,
   selectedRuleType: 'cellValue',
   quickRuleDialog: null,
   rulesManagerOpen: false,
@@ -78,12 +94,14 @@ const initialState: CFDialogState = {
 export const createCFDialogSlice: StateCreator<CFDialogSlice, [], [], CFDialogSlice> = (set) => ({
   cfDialog: initialState,
 
-  openCFDialog: (mode = 'create', format) => {
+  openCFDialog: (mode = 'create', format, options) => {
     set({
       cfDialog: {
         isOpen: true,
         mode,
         editingFormat: format ?? null,
+        sourceSheetId: options?.sheetId ?? null,
+        returnToRulesManager: options?.returnToRulesManager ?? false,
         selectedRuleType: format?.rules[0]?.type ?? 'cellValue',
         quickRuleDialog: null,
         rulesManagerOpen: false,
@@ -92,7 +110,12 @@ export const createCFDialogSlice: StateCreator<CFDialogSlice, [], [], CFDialogSl
   },
 
   closeCFDialog: () => {
-    set({ cfDialog: initialState });
+    set((s) => ({
+      cfDialog: {
+        ...initialState,
+        rulesManagerOpen: s.cfDialog.returnToRulesManager,
+      },
+    }));
   },
 
   setCFRuleType: (ruleType: CFRuleType) => {

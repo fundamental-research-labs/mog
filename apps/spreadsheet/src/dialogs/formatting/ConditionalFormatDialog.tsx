@@ -30,9 +30,12 @@ import type {
   CellRange,
   CFCellValueRule,
   CFColorScaleRule,
+  CFCustomIcon,
   CFDataBarRule,
   CFFormulaRule,
+  CFIconSet,
   CFIconSetRule,
+  CFIconThreshold,
   CFOperator,
   CFRule,
   CFRuleInput,
@@ -88,6 +91,72 @@ function rangeToString(range: CellRange): string {
   const startCol = String.fromCharCode(65 + range.startCol);
   const endCol = String.fromCharCode(65 + range.endCol);
   return `${startCol}${range.startRow + 1}:${endCol}${range.endRow + 1}`;
+}
+
+function toIconThreshold(threshold: IconSetFormState['thresholds'][number]): CFIconThreshold {
+  const iconThreshold: CFIconThreshold = {
+    type: threshold.type,
+    value: threshold.value,
+    gte: threshold.gte,
+  };
+
+  const customIcon = threshold.customIcon;
+  if (
+    customIcon &&
+    !customIcon.hideIcon &&
+    customIcon.customSetName &&
+    customIcon.customIconIndex !== undefined
+  ) {
+    iconThreshold.customIcon = {
+      iconSet: customIcon.customSetName,
+      iconIndex: customIcon.customIconIndex,
+    };
+  }
+
+  return iconThreshold;
+}
+
+function buildIconSet(iconSetState: IconSetFormState): CFIconSet {
+  const iconSet: CFIconSet = {
+    iconSetName: iconSetState.iconSetName,
+    reverseOrder: iconSetState.reverseOrder,
+    showIconOnly: iconSetState.showIconOnly,
+  };
+
+  if (iconSetState.useCustomThresholds) {
+    iconSet.thresholds = iconSetState.thresholds.map(toIconThreshold);
+  }
+
+  return iconSet;
+}
+
+function toIconSetFormThreshold(
+  threshold: CFIconThreshold,
+  customIcon: CFCustomIcon | null | undefined,
+): IconSetFormState['thresholds'][number] {
+  const parsedValue =
+    typeof threshold.value === 'number'
+      ? threshold.value
+      : parseFloat(String(threshold.value)) || 0;
+  const formThreshold: IconSetFormState['thresholds'][number] = {
+    type: threshold.type,
+    value: parsedValue,
+    gte: threshold.gte,
+  };
+
+  if (threshold.customIcon) {
+    formThreshold.customIcon = {
+      customSetName: threshold.customIcon.iconSet,
+      customIconIndex: threshold.customIcon.iconIndex,
+    };
+  } else if (customIcon) {
+    formThreshold.customIcon = {
+      customSetName: customIcon.iconSet,
+      customIconIndex: customIcon.iconId,
+    };
+  }
+
+  return formThreshold;
 }
 
 // =============================================================================
@@ -180,12 +249,9 @@ export function ConditionalFormatDialog() {
         }
         case 'iconSet': {
           const r = rule as CFIconSetRule;
-          // Convert CFIconThreshold[] to the form state format
-          const formThresholds = (r.iconSet.thresholds ?? []).map((t) => ({
-            type: t.type,
-            value: typeof t.value === 'number' ? t.value : parseFloat(String(t.value)) || 0,
-            gte: t.gte,
-          }));
+          const formThresholds = (r.iconSet.thresholds ?? []).map((t, index) =>
+            toIconSetFormThreshold(t, r.iconSet.customIcons?.[index]),
+          );
           setIconSetState({
             iconSetName: r.iconSet.iconSetName,
             reverseOrder: r.iconSet.reverseOrder ?? false,
@@ -230,7 +296,9 @@ export function ConditionalFormatDialog() {
 
   // Handle apply
   const handleApply = async () => {
-    const ws = wb.getSheetById(activeSheetId);
+    const targetSheetId =
+      cfDialog.mode === 'edit' ? (cfDialog.sourceSheetId ?? activeSheetId) : activeSheetId;
+    const ws = wb.getSheetById(targetSheetId);
 
     let ruleInput: CFRuleInput;
 
@@ -315,12 +383,7 @@ export function ConditionalFormatDialog() {
       case 'iconSet':
         ruleInput = {
           type: 'iconSet',
-          iconSet: {
-            iconSetName: iconSetState.iconSetName,
-            reverseOrder: iconSetState.reverseOrder,
-            showIconOnly: iconSetState.showIconOnly,
-            thresholds: iconSetState.useCustomThresholds ? iconSetState.thresholds : undefined,
-          },
+          iconSet: buildIconSet(iconSetState),
         } as Omit<CFIconSetRule, 'id' | 'priority'>;
         break;
 

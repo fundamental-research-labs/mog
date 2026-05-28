@@ -235,9 +235,9 @@ export function CFRulesManager() {
 
   // Handle edit rule
   const handleEdit = useCallback(
-    (format: ConditionalFormat) => {
+    (format: ConditionalFormat, sheetId: SheetId) => {
       closeRulesManager();
-      openCFDialog('edit', format);
+      openCFDialog('edit', format, { sheetId, returnToRulesManager: true });
     },
     [closeRulesManager, openCFDialog],
   );
@@ -411,7 +411,7 @@ export function CFRulesManager() {
                 isFirst={index === 0}
                 isLast={index === rulesWithFormats.length - 1}
                 onSelect={() => setSelectedFormatId(format.id)}
-                onEdit={() => handleEdit(format)}
+                onEdit={() => handleEdit(format, sheetId)}
                 onDelete={() => void handleDelete(format.id, rule.id, sheetId)}
                 onMoveUp={() => void handleMoveUp(format, rule.id, sheetId)}
                 onMoveDown={() => void handleMoveDown(format, rule.id, sheetId)}

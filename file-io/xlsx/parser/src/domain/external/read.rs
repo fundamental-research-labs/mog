@@ -530,8 +530,7 @@ fn parse_sheet_cells(
 /// Parse a cached value from cell content.
 ///
 /// Returns `(CachedValue, Option<String>)` where the second element is the raw
-/// numeric string for round-trip fidelity (only set for `Number` values whose
-/// Rust `f64::to_string()` differs from the original text).
+/// numeric string for round-trip fidelity.
 fn parse_cached_value(content: &[u8], cell_type: Option<&str>) -> (CachedValue, Option<String>) {
     if content.is_empty() {
         return (CachedValue::Empty, None);
@@ -557,21 +556,10 @@ fn parse_cached_value(content: &[u8], cell_type: Option<&str>) -> (CachedValue, 
         }
         Some("e") => (CachedValue::Error(content_str.into_owned()), None),
         _ => {
-            // Try to parse as number, preserving raw string for round-trip fidelity
+            // Try to parse as number, preserving the exact imported lexical token.
             let trimmed = content_str.trim();
             if let Ok(num) = trimmed.parse::<f64>() {
-                // Only store raw string if it differs from Rust's default formatting
-                let rust_repr = if num == (num as i64) as f64 {
-                    (num as i64).to_string()
-                } else {
-                    num.to_string()
-                };
-                let raw = if rust_repr != trimmed {
-                    Some(trimmed.to_string())
-                } else {
-                    None
-                };
-                (CachedValue::Number(num), raw)
+                (CachedValue::Number(num), Some(trimmed.to_string()))
             } else {
                 (CachedValue::String(content_str.into_owned()), None)
             }

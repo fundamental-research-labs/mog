@@ -335,10 +335,7 @@ export interface RenderContextCoordinationConfig {
    */
   getCellPositionForTrace?: (
     cellId: string,
-  ) =>
-    | { row: number; col: number; sheet: string }
-    | null
-    | Promise<{ row: number; col: number; sheet: string } | null>;
+  ) => { row: number; col: number; sheet: string } | null;
 
   // ===========================================================================
   // Paste Preview
@@ -676,7 +673,7 @@ export function setupRenderContextCoordination(
       maxColOutlineLevel: config.maxColOutlineLevel ?? 0,
       // Formula Auditing
       traceArrows: getTraceArrows?.() ?? [],
-      getCellPosition: getCellPositionForTrace as RenderContextConfig['getCellPosition'],
+      getCellPosition: getCellPositionForTrace,
       // Font Preview
       previewFont: getPreviewFont?.() ?? null,
       // Charts

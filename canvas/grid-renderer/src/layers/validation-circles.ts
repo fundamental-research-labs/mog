@@ -55,7 +55,7 @@ export class ValidationCirclesLayer extends BaseLayer {
     sheetData?: SheetDataSource,
   ) {
     super({
-      id: 'validation-circles',
+      id: 'validationCircles',
       zIndex: 125,
       renderMode: 'per-region',
       canvas: 0,

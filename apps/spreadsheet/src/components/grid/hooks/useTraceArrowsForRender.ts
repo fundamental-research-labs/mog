@@ -14,7 +14,7 @@
 
 import type { TraceArrow } from '@mog-sdk/contracts/trace-arrows';
 import type { SheetId } from '@mog-sdk/contracts/core';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore, useWorkbook } from '../../../infra/context';
 
 interface UseTraceArrowsForRenderOptions {
@@ -25,8 +25,10 @@ interface UseTraceArrowsForRenderReturn {
   /** Get trace arrows for the active sheet */
   getTraceArrows: () => TraceArrow[];
   /** Resolve CellId to position for rendering arrows */
-  getCellPosition: (cellId: string) => Promise<{ row: number; col: number; sheet: string } | null>;
+  getCellPosition: (cellId: string) => { row: number; col: number; sheet: string } | null;
 }
+
+type TraceCellPosition = { row: number; col: number; sheet: string };
 
 /**
  * Hook to provide trace arrows and position lookup for canvas rendering.
@@ -40,6 +42,8 @@ export function useTraceArrowsForRender(
 ): UseTraceArrowsForRenderReturn {
   const { activeSheetId } = options;
   const wb = useWorkbook();
+  const positionCacheRef = useRef<Map<string, TraceCellPosition>>(new Map());
+  const [positionVersion, setPositionVersion] = useState(0);
 
   // Get trace arrows for the active sheet from UIStore
   const traceArrowsBySheet = useUIStore((s) => s.traceArrows);
@@ -51,26 +55,61 @@ export function useTraceArrowsForRender(
     return traceArrowsBySheet[activeSheetId] ?? [];
   }, [traceArrowsBySheet, activeSheetId]);
 
+  useEffect(() => {
+    const arrows = traceArrowsBySheet[activeSheetId] ?? [];
+    const cellIds = Array.from(
+      new Set(arrows.flatMap((arrow) => [arrow.fromCellId, arrow.toCellId])),
+    );
+
+    if (cellIds.length === 0) {
+      if (positionCacheRef.current.size > 0) {
+        positionCacheRef.current = new Map();
+        setPositionVersion((version) => version + 1);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const ws = wb.getSheetById(activeSheetId);
+
+    void ws._internal
+      .batchGetCellPositions(cellIds)
+      .then((positions) => {
+        if (cancelled) return;
+
+        const nextCache = new Map<string, TraceCellPosition>();
+        for (const cellId of cellIds) {
+          const position = positions.get(cellId);
+          if (position) {
+            nextCache.set(cellId, {
+              row: position.row,
+              col: position.col,
+              sheet: activeSheetId,
+            });
+          }
+        }
+
+        positionCacheRef.current = nextCache;
+        setPositionVersion((version) => version + 1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        positionCacheRef.current = new Map();
+        setPositionVersion((version) => version + 1);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [traceArrowsBySheet, wb, activeSheetId]);
+
   /**
    * Resolve CellId to current position.
    * Used by TraceArrowsLayer to render arrows at correct cell locations.
    */
-  const getCellPosition = useCallback(
-    async (cellId: string): Promise<{ row: number; col: number; sheet: string } | null> => {
-      const ws = wb.getSheetById(activeSheetId);
-      const positions = await ws._internal.batchGetCellPositions([cellId]);
-      const position = positions.get(cellId);
-      if (!position) {
-        return null;
-      }
-      return {
-        row: position.row,
-        col: position.col,
-        sheet: activeSheetId,
-      };
-    },
-    [wb, activeSheetId],
-  );
+  const getCellPosition = useCallback((cellId: string): TraceCellPosition | null => {
+    return positionCacheRef.current.get(cellId) ?? null;
+  }, [positionVersion]);
 
   return {
     getTraceArrows,

@@ -187,12 +187,7 @@ export interface UseRenderContextConfigOptions {
   /** Get trace arrows for current sheet */
   getTraceArrows: () => TraceArrow[];
   /** Resolve CellId to position for rendering trace arrows */
-  getCellPositionForTrace: (
-    cellId: string,
-  ) =>
-    | { row: number; col: number; sheet: string }
-    | null
-    | Promise<{ row: number; col: number; sheet: string } | null>;
+  getCellPositionForTrace: (cellId: string) => { row: number; col: number; sheet: string } | null;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CHARTS
@@ -414,6 +409,16 @@ export function useRenderContextConfig(options: UseRenderContextConfigOptions): 
     options.getFloatingObjectBounds,
     options.getAllObjectBounds,
   ]);
+
+  // Push formula-auditing data directly to the renderer. Trace arrows are
+  // ephemeral UI-store state and do not necessarily coincide with actor state
+  // changes that drive the main render-context coordination path.
+  useEffect(() => {
+    coordinator.renderer.updateContext({
+      traceArrows: options.getTraceArrows(),
+      getCellPosition: (cellId: string) => optionsRef.current.getCellPositionForTrace(cellId),
+    });
+  }, [coordinator, options.getTraceArrows, options.getCellPositionForTrace]);
 
   // Push remote cursor updates directly to the renderer.
   // The main sendContextUpdate() only fires on actor state changes

@@ -59,6 +59,38 @@ interface BezierControlPoints {
   cp2: Point;
 }
 
+interface TraceCellPosition {
+  row: number;
+  col: number;
+  sheet: string;
+}
+
+function isTraceCellPosition(value: unknown): value is TraceCellPosition {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const maybePromise = value as { then?: unknown };
+  if (typeof maybePromise.then === 'function') {
+    return false;
+  }
+
+  const candidate = value as Partial<TraceCellPosition>;
+  return (
+    Number.isFinite(candidate.row) &&
+    Number.isFinite(candidate.col) &&
+    typeof candidate.sheet === 'string'
+  );
+}
+
+function fallbackTracePosition(position: TraceArrow['fromPosition']): TraceCellPosition {
+  return {
+    row: position.row,
+    col: position.col,
+    sheet: position.sheetId,
+  };
+}
+
 // =============================================================================
 // Trace Arrows Layer
 // =============================================================================
@@ -74,7 +106,7 @@ export class TraceArrowsLayer extends BaseLayer {
     config: TraceArrowsLayerConfig = {},
   ) {
     super({
-      id: 'trace-arrows',
+      id: 'traceArrows',
       zIndex: 250,
       renderMode: 'per-region',
       canvas: 0,
@@ -124,16 +156,12 @@ export class TraceArrowsLayer extends BaseLayer {
       const fromPosLookup = this.traceData.getCellPositionForTrace(arrow.fromCellId);
       const toPosLookup = this.traceData.getCellPositionForTrace(arrow.toCellId);
 
-      const fromPos = fromPosLookup ?? {
-        row: arrow.fromPosition.row,
-        col: arrow.fromPosition.col,
-        sheet: arrow.fromPosition.sheetId,
-      };
-      const toPos = toPosLookup ?? {
-        row: arrow.toPosition.row,
-        col: arrow.toPosition.col,
-        sheet: arrow.toPosition.sheetId,
-      };
+      const fromPos = isTraceCellPosition(fromPosLookup)
+        ? fromPosLookup
+        : fallbackTracePosition(arrow.fromPosition);
+      const toPos = isTraceCellPosition(toPosLookup)
+        ? toPosLookup
+        : fallbackTracePosition(arrow.toPosition);
 
       const fromOnSheet = fromPos.sheet === sheetId;
       const toOnSheet = toPos.sheet === sheetId;

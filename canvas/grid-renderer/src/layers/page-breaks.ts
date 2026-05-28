@@ -93,7 +93,7 @@ export class PageBreakLayer extends BaseLayer {
     config: PageBreakLayerConfig = {},
   ) {
     super({
-      id: 'page-breaks',
+      id: 'pageBreaks',
       zIndex: 150,
       renderMode: 'per-region',
       canvas: 0,

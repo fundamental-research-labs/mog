@@ -110,6 +110,15 @@ export interface BuildClipboardDataOptions {
   skipHidden?: boolean;
 }
 
+export interface SparseClipboardCellEntry {
+  row: number;
+  col: number;
+  cellData?: StoreCellData;
+  format?: CellFormat;
+  comments?: RelativeComment[];
+  hideFormula?: boolean;
+}
+
 // =============================================================================
 // Main Builder Function
 // =============================================================================
@@ -216,9 +225,116 @@ export function buildClipboardData(
   };
 }
 
+/**
+ * Build ClipboardData from already sparse absolute-position entries.
+ *
+ * Whole-row and whole-column copies must keep offsets relative to the original
+ * full-shape selection without enumerating the full sheet extent. This entry
+ * point shares the same cell conversion and metadata capture contract as the
+ * rectangular builder while letting the caller supply only populated cells.
+ */
+export function buildSparseClipboardData(
+  ranges: CellRange[],
+  sheetId: SheetId,
+  entries: SparseClipboardCellEntry[],
+  store: ClipboardStoreReader,
+  options: BuildClipboardDataOptions = {},
+): ClipboardData {
+  const cells: Record<string, ClipboardCellData> = {};
+  const { skipHidden = false } = options;
+  const firstRange = ranges[0];
+  if (!firstRange) {
+    return {
+      sourceRanges: ranges,
+      cells,
+      sourceSheetId: sheetId,
+      timestamp: Date.now(),
+    };
+  }
+
+  const origin = normalizeRange(firstRange);
+  const sortedEntries = [...entries].sort((a, b) => a.row - b.row || a.col - b.col);
+  const visibleRowOffsets = skipHidden
+    ? buildSparseVisibleOffsetMap(sortedEntries, sheetId, store, 'row')
+    : null;
+  const visibleColOffsets = skipHidden
+    ? buildSparseVisibleOffsetMap(sortedEntries, sheetId, store, 'col')
+    : null;
+
+  for (const entry of sortedEntries) {
+    if (!isCellInRanges(entry.row, entry.col, ranges)) continue;
+
+    const rowOffset = skipHidden ? visibleRowOffsets?.get(entry.row) : entry.row - origin.startRow;
+    const colOffset = skipHidden ? visibleColOffsets?.get(entry.col) : entry.col - origin.startCol;
+    if (rowOffset === undefined || colOffset === undefined) continue;
+
+    const clipboardCell = buildClipboardCellData(
+      entry.cellData,
+      entry.format,
+      entry.comments ?? captureCommentsForCell(sheetId, entry.row, entry.col, store),
+      entry.hideFormula,
+    );
+
+    if (hasContent(clipboardCell)) {
+      cells[`${rowOffset},${colOffset}`] = clipboardCell;
+    }
+  }
+
+  const merges = captureMergesInRanges(ranges, sheetId, store);
+  const validation = captureValidationInRanges(ranges, sheetId, store);
+  const conditionalFormatting = captureCFInRanges(ranges, sheetId, store);
+  const sourceColumnWidths = captureColumnWidths(ranges, sheetId, store, skipHidden);
+
+  return {
+    sourceRanges: ranges,
+    cells,
+    sourceSheetId: sheetId,
+    timestamp: Date.now(),
+    merges: merges.length > 0 ? merges : undefined,
+    validation: validation.length > 0 ? validation : undefined,
+    conditionalFormatting: conditionalFormatting.length > 0 ? conditionalFormatting : undefined,
+    sourceColumnWidths: sourceColumnWidths.some((w) => w !== undefined)
+      ? sourceColumnWidths
+      : undefined,
+  };
+}
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function isCellInRanges(row: number, col: number, ranges: CellRange[]): boolean {
+  return ranges.some((range) => {
+    const normalized = normalizeRange(range);
+    return (
+      row >= normalized.startRow &&
+      row <= normalized.endRow &&
+      col >= normalized.startCol &&
+      col <= normalized.endCol
+    );
+  });
+}
+
+function buildSparseVisibleOffsetMap(
+  entries: SparseClipboardCellEntry[],
+  sheetId: SheetId,
+  store: ClipboardStoreReader,
+  axis: 'row' | 'col',
+): Map<number, number> {
+  const result = new Map<number, number>();
+  let visibleIndex = 0;
+  const indices = new Set(entries.map((entry) => (axis === 'row' ? entry.row : entry.col)));
+  for (const index of [...indices].sort((a, b) => a - b)) {
+    const hidden =
+      axis === 'row' ? store.isRowHidden?.(sheetId, index) : store.isColHidden?.(sheetId, index);
+    if (hidden) continue;
+    if (!result.has(index)) {
+      result.set(index, visibleIndex);
+      visibleIndex++;
+    }
+  }
+  return result;
+}
 
 /**
  * Capture column widths for copied columns.

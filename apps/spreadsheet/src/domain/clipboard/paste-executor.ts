@@ -35,6 +35,7 @@ import {
   type CreateConditionalFormat,
 } from './conditional-format-paste';
 import { parseCellKey } from './clipboard-utils';
+import { isDenseCoreCopyUnsafeForSource } from './full-shape-ranges';
 
 // =============================================================================
 // Constants
@@ -867,7 +868,8 @@ export async function executePaste(
       coreCopyType !== null &&
       operation === 'none' &&
       !(options.skipHiddenRows && store.isRowHidden) &&
-      !options.skipCells;
+      !options.skipCells &&
+      !isDenseCoreCopyUnsafeForSource(data.sourceRanges);
 
     const valueUpdates: Array<{
       row: number;

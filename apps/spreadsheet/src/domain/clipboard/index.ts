@@ -24,6 +24,14 @@ export type {
 
 // Clipboard Utilities
 export { normalizeRange, parseCellKey } from './clipboard-utils';
+export {
+  hasFullShapeIntent,
+  isDenseCoreCopyUnsafeForSource,
+  isFullColumnRange,
+  isFullRowRange,
+  isFullShapeRange,
+  isMatchingFullShapePaste,
+} from './full-shape-ranges';
 
 // Cell Value Contract
 export {
@@ -44,7 +52,9 @@ export { cellsToHTML, cellsToTSV, htmlToCells, inferValue, tsvToCells } from './
 // Clipboard Data Builder
 export {
   buildClipboardData,
+  buildSparseClipboardData,
   getClipboardCellDisplayValue,
+  type SparseClipboardCellEntry,
   type ClipboardStoreReader,
 } from './clipboard-data-builder';
 

@@ -33,7 +33,15 @@ import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 // Cell/merge reads and row/col visibility migrated to Worksheet API.
 import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
 
-import { buildClipboardData, unifiedPaste, writeToSystemClipboard } from '../../domain/clipboard';
+import {
+  buildClipboardData,
+  buildSparseClipboardData,
+  getClipboardCellDisplayValue,
+  hasFullShapeIntent,
+  unifiedPaste,
+  writeToSystemClipboard,
+  type SparseClipboardCellEntry,
+} from '../../domain/clipboard';
 import { blobToDataUrl } from '../../utils/blob-to-data-url';
 
 import { pasteChartFromClipboard } from './chart-clipboard';
@@ -77,6 +85,10 @@ function isEditing(deps: ActionDependencies): boolean {
 async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ranges: CellRange[]) {
   // Worksheet API for cell/merge reads and visibility checks
   const ws = deps.workbook.getSheetById(sheetId);
+
+  if (hasFullShapeIntent(ranges)) {
+    return createSparseFullShapeCopyCutDeps(deps, sheetId, ranges);
+  }
 
   const usedRange = await ws.getUsedRange().catch(() => null);
   const allComments = await ws.comments.list().catch(() => []);
@@ -265,11 +277,153 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   };
 }
 
+async function createSparseFullShapeCopyCutDeps(
+  deps: ActionDependencies,
+  sheetId: SheetId,
+  ranges: CellRange[],
+) {
+  const ws = deps.workbook.getSheetById(sheetId);
+  const allComments = await ws.comments.list().catch(() => []);
+  const commentPositions = await ws._internal
+    .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
+    .catch(() => new Map<string, { row: number; col: number }>());
+
+  const commentsByCellId = new Map<string, typeof allComments>();
+  const cellIdByPosition = new Map<string, string>();
+  for (const comment of allComments) {
+    const position = commentPositions.get(comment.cellRef);
+    if (!position || !isCellInAnyRange(position.row, position.col, ranges)) continue;
+    cellIdByPosition.set(`${position.row},${position.col}`, comment.cellRef);
+    const existing = commentsByCellId.get(comment.cellRef);
+    if (existing) {
+      existing.push(comment);
+    } else {
+      commentsByCellId.set(comment.cellRef, [comment]);
+    }
+  }
+
+  const identifiedCells = (
+    await Promise.all(
+      ranges.map((range) =>
+        ws.getRangeWithIdentity(range.startRow, range.startCol, range.endRow, range.endCol),
+      ),
+    )
+  ).flat();
+
+  const entriesByPosition = new Map<string, SparseClipboardCellEntry>();
+  for (const cell of identifiedCells) {
+    const key = `${cell.row},${cell.col}`;
+    entriesByPosition.set(key, {
+      row: cell.row,
+      col: cell.col,
+      cellData: {
+        raw: cell.value ?? undefined,
+        computed: cell.value ?? undefined,
+        formula: cell.formulaText,
+      },
+    });
+  }
+
+  for (const position of commentPositions.values()) {
+    if (!isCellInAnyRange(position.row, position.col, ranges)) continue;
+    const key = `${position.row},${position.col}`;
+    if (!entriesByPosition.has(key)) {
+      entriesByPosition.set(key, {
+        row: position.row,
+        col: position.col,
+      });
+    }
+  }
+
+  const sparseEntries = Array.from(entriesByPosition.values());
+  const formatEntries = await Promise.all(
+    sparseEntries.map((entry) =>
+      ws.formats
+        .get(entry.row, entry.col)
+        .then((format) => [`${entry.row},${entry.col}`, format] as [string, unknown])
+        .catch(() => [`${entry.row},${entry.col}`, undefined] as [string, unknown]),
+    ),
+  );
+  const formatLookup = new Map<string, unknown>(formatEntries);
+  for (const entry of sparseEntries) {
+    entry.format = formatLookup.get(
+      `${entry.row},${entry.col}`,
+    ) as SparseClipboardCellEntry['format'];
+  }
+
+  const [allMerges, rangeSchemas, conditionalFormats] = await Promise.all([
+    ws.structure.getMergedRegions(),
+    ws._internal.getRangeSchemas().catch(() => []),
+    ws.conditionalFormats.list().catch(() => []),
+  ]);
+
+  const storeReader = {
+    getCellData: (_sid: string, row: number, col: number) =>
+      entriesByPosition.get(`${row},${col}`)?.cellData ?? undefined,
+    getCellFormat: (_sid: string, row: number, col: number) =>
+      (formatLookup.get(`${row},${col}`) as SparseClipboardCellEntry['format']) ?? undefined,
+    getMergedRegions: (_sid: string) =>
+      allMerges.map((m) => ({
+        startRow: m.startRow,
+        startCol: m.startCol,
+        endRow: m.endRow,
+        endCol: m.endCol,
+        rowSpan: m.endRow - m.startRow + 1,
+        colSpan: m.endCol - m.startCol + 1,
+      })),
+    getRangeSchemas: (_sid: string) => rangeSchemas,
+    getConditionalFormats: (_sid: string) => conditionalFormats,
+    getCellIdAt: (_sid: string, row: number, col: number) =>
+      cellIdByPosition.get(`${row},${col}`) ?? null,
+    getCommentsForCell: (_sid: string, cellId: string) => commentsByCellId.get(cellId) ?? [],
+  };
+
+  return {
+    commands: deps.commands.clipboard,
+    buildData: (clipRanges: CellRange[]): ClipboardData =>
+      buildSparseClipboardData(clipRanges, sheetId, sparseEntries, storeReader),
+    generateTSV: (clipRanges: CellRange[]): string => {
+      const data = buildSparseClipboardData(clipRanges, sheetId, sparseEntries, storeReader);
+      return sparseClipboardDataToTSV(data);
+    },
+    generateHTML: (clipRanges: CellRange[]): string => {
+      const data = buildSparseClipboardData(clipRanges, sheetId, sparseEntries, storeReader);
+      return sparseClipboardDataToHTML(data);
+    },
+  };
+}
+
 function isCellInAnyRange(row: number, col: number, ranges: CellRange[]): boolean {
   return ranges.some(
     (range) =>
       row >= range.startRow && row <= range.endRow && col >= range.startCol && col <= range.endCol,
   );
+}
+
+function sparseClipboardDataToTSV(data: ClipboardData): string {
+  const entries = Object.entries(data.cells).sort((a, b) => {
+    const [aRow, aCol] = a[0].split(',').map(Number);
+    const [bRow, bCol] = b[0].split(',').map(Number);
+    return aRow - bRow || aCol - bCol;
+  });
+  if (entries.length === 0) return ' ';
+
+  return entries.map(([, cell]) => getClipboardCellDisplayValue(cell)).join('\n');
+}
+
+function sparseClipboardDataToHTML(data: ClipboardData): string {
+  const tsv = sparseClipboardDataToTSV(data);
+  const rows = tsv.split('\n').map((value) => `<tr><td>${escapeHTML(value)}</td></tr>`);
+  return `<table>${rows.join('')}</table>`;
+}
+
+function escapeHTML(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function boundClipboardCaptureRange(
@@ -513,10 +667,6 @@ export const CUT: ActionHandler = (deps) => {
 
   return handled();
 };
-
-function hasFullShapeIntent(ranges: CellRange[]): boolean {
-  return ranges.some((range) => range.isFullColumn === true || range.isFullRow === true);
-}
 
 function emitClipboardSettlement(
   operation: 'copy' | 'cut',

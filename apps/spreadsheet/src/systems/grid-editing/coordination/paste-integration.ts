@@ -18,6 +18,7 @@ import {
   createDefaultPasteOptions,
   executePaste,
   getClipboardDimensions,
+  isMatchingFullShapePaste,
   type PasteStoreOperations,
 } from '../../../domain/clipboard';
 import type { clipboardMachine } from '../machines/clipboard-machine';
@@ -301,6 +302,7 @@ export function setupClipboardPasteIntegration(
         const isMultiCellSelection = targetRows > 1 || targetCols > 1;
         const sizesMatch =
           sourceSize.rows === targetSize.rows && sourceSize.cols === targetSize.cols;
+        const fullShapeIntentMatches = isMatchingFullShapePaste(data.sourceRanges, selectionRange);
 
         // Handle special cases that don't need warnings
         // 1. Single cell source - can fill any selection (tiling)
@@ -311,7 +313,11 @@ export function setupClipboardPasteIntegration(
 
         // Show warning only for true mismatches (not exact multiples or single-cell sources)
         const needsWarning =
-          isMultiCellSelection && !sizesMatch && !isSingleCellSource && !isExactMultiple;
+          isMultiCellSelection &&
+          !sizesMatch &&
+          !fullShapeIntentMatches &&
+          !isSingleCellSource &&
+          !isExactMultiple;
 
         if (needsWarning) {
           // Cancel the paste and show dialog

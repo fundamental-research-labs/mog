@@ -62,7 +62,7 @@ pub(crate) fn convert_print_settings(
     };
 
     let mut settings = PrintSettings {
-        paper_size: ps.paper_size.map(|p| p as u32),
+        paper_size: ps.paper_size,
         paper_width,
         paper_height,
         orientation,

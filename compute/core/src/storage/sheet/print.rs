@@ -23,6 +23,9 @@ use super::yrs_helpers::{
 // Page breaks
 // =========================================================================
 
+const MAX_COLUMN_INDEX: u32 = 16_383;
+const MAX_ROW_INDEX: u32 = 1_048_575;
+
 /// Get page breaks for a sheet.
 ///
 /// Reads canonical `rowBreaks`/`colBreaks` keys via `page_breaks_schema`.
@@ -44,7 +47,7 @@ pub(crate) fn add_horizontal_page_break(doc: &Doc, sheets: &MapRef, sheet_id: &S
     breaks.row_breaks.push(PageBreakEntry {
         id: row,
         min: 0,
-        max: 16383,
+        max: MAX_COLUMN_INDEX,
         manual: true,
         pt: false,
     });
@@ -96,7 +99,7 @@ pub(crate) fn add_vertical_page_break(doc: &Doc, sheets: &MapRef, sheet_id: &She
     breaks.col_breaks.push(PageBreakEntry {
         id: col,
         min: 0,
-        max: 16383,
+        max: MAX_ROW_INDEX,
         manual: true,
         pt: false,
     });

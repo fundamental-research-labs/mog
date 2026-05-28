@@ -40,7 +40,7 @@ pub struct HeaderFooterOutput {
 #[serde(rename_all = "camelCase")]
 pub struct PrintSettingsOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub paper_size: Option<u8>,
+    pub paper_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub paper_width: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -194,7 +194,7 @@ pub fn build_print_settings_output(
     let print_options = ps.print_options.as_ref();
 
     let settings = PrintSettingsOutput {
-        paper_size: page_setup.and_then(|p| p.paper_size.map(|ps| ps.as_u32() as u8)),
+        paper_size: page_setup.and_then(|p| p.paper_size.map(|ps| ps.as_u32())),
         paper_width: page_setup
             .and_then(|p| p.paper_width.as_ref().map(|v| v.to_ooxml().to_string())),
         paper_height: page_setup

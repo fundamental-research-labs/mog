@@ -154,22 +154,18 @@ pub(crate) fn convert_ole_objects(
                 });
             // Build typed ooxml props for round-trip
             let embedding = o.data_path.as_ref().and_then(|path| {
-                binary_parts
-                    .get(path)
-                    .map(|bytes| OleObjectPackageIdentity {
-                        path: path.clone(),
-                        relationship_id: o.r_id.clone(),
-                        bytes: bytes.clone(),
-                    })
+                resolve_binary_part(binary_parts, path).map(|bytes| OleObjectPackageIdentity {
+                    path: path.clone(),
+                    relationship_id: o.r_id.clone(),
+                    bytes,
+                })
             });
             let preview = o.preview_image_path.as_ref().and_then(|path| {
-                binary_parts
-                    .get(path)
-                    .map(|bytes| OleObjectPreviewIdentity {
-                        path: path.clone(),
-                        relationship_id: o.preview_image_rel_id.clone(),
-                        bytes: bytes.clone(),
-                    })
+                resolve_binary_part(binary_parts, path).map(|bytes| OleObjectPreviewIdentity {
+                    path: path.clone(),
+                    relationship_id: o.preview_image_rel_id.clone(),
+                    bytes,
+                })
             });
             let ooxml = OleObjectOoxmlProps {
                 shape_id: o.shape_id,
@@ -223,13 +219,76 @@ pub(crate) fn convert_ole_objects(
                     preview_image_src: o
                         .preview_image_path
                         .as_ref()
-                        .and_then(|path| media_data_urls.get(path).cloned()),
+                        .and_then(|path| resolve_media_data_url(media_data_urls, path)),
                     alt_text: None,
                     ooxml: Some(ooxml),
                 }),
             }
         })
         .collect()
+}
+
+fn resolve_binary_part(binary_parts: &HashMap<String, Vec<u8>>, target: &str) -> Option<Vec<u8>> {
+    if let Some(bytes) = binary_parts.get(target) {
+        return Some(bytes.clone());
+    }
+
+    let normalized = target.replace('\\', "/");
+    if let Some(bytes) = binary_parts.get(&normalized) {
+        return Some(bytes.clone());
+    }
+
+    if let Some(stripped) = normalized.strip_prefix("../") {
+        let workbook_relative = format!("xl/{stripped}");
+        if let Some(bytes) = binary_parts.get(&workbook_relative) {
+            return Some(bytes.clone());
+        }
+    }
+
+    if normalized.starts_with("media/") || normalized.starts_with("embeddings/") {
+        let workbook_relative = format!("xl/{normalized}");
+        if let Some(bytes) = binary_parts.get(&workbook_relative) {
+            return Some(bytes.clone());
+        }
+    }
+
+    normalized
+        .rsplit('/')
+        .next()
+        .and_then(|file_name| binary_parts.get(file_name).cloned())
+}
+
+fn resolve_media_data_url(
+    media_data_urls: &HashMap<String, String>,
+    target: &str,
+) -> Option<String> {
+    if let Some(data_url) = media_data_urls.get(target) {
+        return Some(data_url.clone());
+    }
+
+    let normalized = target.replace('\\', "/");
+    if let Some(data_url) = media_data_urls.get(&normalized) {
+        return Some(data_url.clone());
+    }
+
+    if let Some(stripped) = normalized.strip_prefix("../") {
+        let workbook_relative = format!("xl/{stripped}");
+        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
+            return Some(data_url.clone());
+        }
+    }
+
+    if normalized.starts_with("media/") {
+        let workbook_relative = format!("xl/{normalized}");
+        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
+            return Some(data_url.clone());
+        }
+    }
+
+    normalized
+        .rsplit('/')
+        .next()
+        .and_then(|file_name| media_data_urls.get(file_name).cloned())
 }
 
 // =============================================================================

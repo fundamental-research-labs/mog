@@ -51,8 +51,8 @@ use crate::output::results::{
 };
 use crate::output::results::{
     DefinedNameOutput, FullCellData, FullParseError, FullParseResult, FullParsedSheet,
-    HyperlinkOutput, ParseStats, ParseTimings, ProtectionOutput, RawVmlDrawing, SparklineSummary,
-    StylesOutput,
+    HyperlinkOutput, ImportedBinaryPart, ParseStats, ParseTimings, ProtectionOutput,
+    RawVmlDrawing, SparklineSummary, StylesOutput,
 };
 use crate::zip::constants::{
     MAX_CHARTS, MAX_MERGES, MAX_PIVOTS, MAX_SHARED_STRINGS, MAX_STYLES, MAX_TABLES,
@@ -138,6 +138,30 @@ fn content_type_for_part<'a>(
         .iter()
         .find(|(part_name, _)| part_name.trim_start_matches('/') == normalized)
         .map(|(_, content_type)| content_type.as_str())
+}
+
+fn collect_imported_binary_parts(
+    archive: &XlsxArchive<'_>,
+    path_prefix: &str,
+    content_type_overrides: &[(String, String)],
+) -> Vec<ImportedBinaryPart> {
+    let mut parts = Vec::new();
+    for entry in archive.entries() {
+        let path = entry.name.replace('\\', "/");
+        if !path.starts_with(path_prefix) {
+            continue;
+        }
+        if let Ok(bytes) = archive.read_file(&entry.name) {
+            parts.push(ImportedBinaryPart {
+                content_type: content_type_for_part(&path, content_type_overrides)
+                    .map(str::to_string),
+                path,
+                bytes,
+            });
+        }
+    }
+    parts.sort_by(|a, b| a.path.cmp(&b.path));
+    parts
 }
 
 fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
@@ -926,6 +950,10 @@ fn parse_xlsx_full_native_impl(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let imported_media_parts =
+        collect_imported_binary_parts(&archive, "xl/media/", &content_type_overrides);
+    let imported_ole_parts =
+        collect_imported_binary_parts(&archive, "xl/embeddings/", &content_type_overrides);
     let rich_data = collect_rich_data_parts(&archive, &content_type_overrides);
     ensure_no_archive_safety_error(&archive)?;
     let imported_calc_chain_entry_count = archive
@@ -985,6 +1013,8 @@ fn parse_xlsx_full_native_impl(
         root_relationships,
         workbook_relationships,
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),
+        imported_media_parts,
+        imported_ole_parts,
         raw_metadata_xml,
         raw_doc_metadata_label_info,
         external_links,
@@ -1013,7 +1043,6 @@ fn parse_xlsx_full_native_impl(
             for entry in archive.entries() {
                 if entry.name.starts_with("xl/printerSettings/")
                     || entry.name.starts_with("xl/featurePropertyBag/")
-                    || entry.name.starts_with("xl/media/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
                     || entry.name.starts_with("xl/timelineCaches/")

@@ -860,18 +860,14 @@ fn extend_sheet_data_extent(sheet: &mut SheetData) {
 fn build_media_data_url_map(result: &FullParseResult) -> HashMap<String, String> {
     let mut data_urls = HashMap::new();
 
-    let Some(extensions) = result.extensions.as_ref() else {
-        return data_urls;
-    };
-
-    for (path, data) in extensions.binary_passthrough.entries() {
-        let normalized = path.replace('\\', "/");
-        if !normalized.starts_with("xl/media/") {
-            continue;
-        }
-
-        let mime = image_mime_type_for_path(&normalized);
-        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+    for part in &result.imported_media_parts {
+        let normalized = part.path.replace('\\', "/");
+        let mime = part
+            .content_type
+            .as_deref()
+            .filter(|content_type| content_type.starts_with("image/"))
+            .unwrap_or_else(|| image_mime_type_for_path(&normalized));
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&part.bytes);
         let data_url = format!("data:{mime};base64,{encoded}");
 
         data_urls.insert(normalized.clone(), data_url.clone());
@@ -888,12 +884,11 @@ fn build_media_data_url_map(result: &FullParseResult) -> HashMap<String, String>
 fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
     let mut parts = HashMap::new();
 
-    let Some(extensions) = result.extensions.as_ref() else {
-        return parts;
-    };
-
-    for (path, data) in extensions.binary_passthrough.entries() {
-        parts.insert(path.replace('\\', "/"), data.clone());
+    for part in &result.imported_media_parts {
+        parts.insert(part.path.replace('\\', "/"), part.bytes.clone());
+    }
+    for part in &result.imported_ole_parts {
+        parts.insert(part.path.replace('\\', "/"), part.bytes.clone());
     }
 
     parts

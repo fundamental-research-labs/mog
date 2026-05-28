@@ -138,9 +138,9 @@ export function FileExplorer({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [activeFilePath, onDelete, isCollapsed]);
 
-  // Handler for creating new spreadsheet at project root
+  // Handler for creating a root spreadsheet or a no-project untitled workbook.
   const handleNewSpreadsheet = useCallback(() => {
-    if (projectPath && onNewSpreadsheet) {
+    if (onNewSpreadsheet) {
       void onNewSpreadsheet(projectPath);
     }
   }, [projectPath, onNewSpreadsheet]);

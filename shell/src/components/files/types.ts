@@ -62,8 +62,8 @@ export interface FileExplorerProps {
   onDelete?: (path: string) => Promise<void>;
   /** Called when "Duplicate" is selected from context menu (files only) */
   onDuplicate?: (path: string) => Promise<void>;
-  /** Called when "New Spreadsheet" is selected (folders only) */
-  onNewSpreadsheet?: (folderPath: string) => Promise<void>;
+  /** Called when "New Spreadsheet" is selected */
+  onNewSpreadsheet?: (folderPath: string | null) => Promise<void>;
   /** Called when "New Folder" button or context menu is selected */
   onNewFolder?: (parentPath: string) => Promise<void>;
   /** Called when "Reveal in Finder" is selected */

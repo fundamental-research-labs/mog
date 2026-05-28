@@ -118,8 +118,13 @@ export function useFileExplorerConfig(
 
   // New spreadsheet handler
   const handleNewSpreadsheet = useCallback(
-    async (folderPath: string) => {
+    async (folderPath: string | null) => {
       if (projectService) {
+        if (folderPath === null) {
+          await projectService.newFile();
+          return;
+        }
+
         const newPath = await projectService.createSpreadsheetInFolder(folderPath);
         // Auto-open the new file
         await projectService.openFile(newPath);

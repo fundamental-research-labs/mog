@@ -59,7 +59,7 @@ export interface FileExplorerConfig {
   /** Optional: Called when delete is requested */
   onDelete?: (path: string) => Promise<void>;
   /** Optional: Called when new file is requested */
-  onNewSpreadsheet?: (folderPath: string) => Promise<void>;
+  onNewSpreadsheet?: (folderPath: string | null) => Promise<void>;
   /** Optional: Called when new folder is requested */
   onNewFolder?: (parentPath: string) => Promise<void>;
   /** Optional: Called to reveal in system file manager */

@@ -31,6 +31,27 @@ export type {
   RibbonCollapseState,
 } from './collapse-types';
 
+export type {
+  RibbonVisibilityButtonKey,
+  RibbonVisibilityConfig,
+  RibbonVisibilityGroupKey,
+  RibbonVisibilityPath,
+  RibbonVisibilityProfileName,
+  RibbonVisibilityRootKey,
+  RibbonVisibilityTabKey,
+} from './visibility-config';
+
+export {
+  APP_EVAL_RIBBON_VISIBILITY_CONFIG,
+  PUBLIC_RIBBON_VISIBILITY_CONFIG,
+  RIBBON_VISIBILITY_PROFILES,
+  RIBBON_VISIBILITY_SCHEMA,
+  getRibbonVisibilityProfile,
+  isRibbonPathVisible,
+  mergeRibbonVisibilityConfig,
+  normalizeRibbonVisibilityKey,
+} from './visibility-config';
+
 // =============================================================================
 // Collapse Configurations (Pure Data)
 // =============================================================================

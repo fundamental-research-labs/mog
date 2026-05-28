@@ -59,6 +59,7 @@ import {
   NumberFormatIcon,
   PercentIcon,
 } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Helpers
@@ -247,34 +248,35 @@ export const NumberGroup = React.memo(function NumberGroup() {
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Number format dropdown */}
-        <div id="number-format" className="relative inline-flex">
-          {isIconsMode ? (
-            // Icons mode: Show icon-only button
-            <Tooltip title={`Format: ${formatDisplayName}`}>
-              <RibbonButton
-                layout="icon-only"
-                // This branch only renders when isIconsMode is true, so the
-                // testid is unconditionally correct here. The full-picker
-                // branch below has no testid to avoid harness ambiguity
-                // during responsive remounts.
-                data-testid="ribbon-dropdown-number-format"
-                icon={<NumberFormatIcon />}
-                onClick={() => setNumberFormatOpen(!numberFormatOpen)}
-                isOpen={numberFormatOpen}
-                hasDropdown
-                aria-label="Number format"
-                aria-expanded={numberFormatOpen}
-                aria-haspopup="listbox"
-              />
-            </Tooltip>
-          ) : (
-            // Full/Compact mode: Show dropdown with format name
-            <Tooltip title="Number Format">
-              <button
-                type="button"
-                data-testid="ribbon-dropdown-number-format"
-                onClick={() => setNumberFormatOpen(!numberFormatOpen)}
-                className={`
+        <RibbonVisibilityItem item="numberFormat">
+          <div id="number-format" className="relative inline-flex">
+            {isIconsMode ? (
+              // Icons mode: Show icon-only button
+              <Tooltip title={`Format: ${formatDisplayName}`}>
+                <RibbonButton
+                  layout="icon-only"
+                  // This branch only renders when isIconsMode is true, so the
+                  // testid is unconditionally correct here. The full-picker
+                  // branch below has no testid to avoid harness ambiguity
+                  // during responsive remounts.
+                  data-testid="ribbon-dropdown-number-format"
+                  icon={<NumberFormatIcon />}
+                  onClick={() => setNumberFormatOpen(!numberFormatOpen)}
+                  isOpen={numberFormatOpen}
+                  hasDropdown
+                  aria-label="Number format"
+                  aria-expanded={numberFormatOpen}
+                  aria-haspopup="listbox"
+                />
+              </Tooltip>
+            ) : (
+              // Full/Compact mode: Show dropdown with format name
+              <Tooltip title="Number Format">
+                <button
+                  type="button"
+                  data-testid="ribbon-dropdown-number-format"
+                  onClick={() => setNumberFormatOpen(!numberFormatOpen)}
+                  className={`
  h-7 px-2 ${isCompactMode ? 'min-w-[70px]' : 'min-w-[90px]'}
  flex items-center justify-between gap-1
  border rounded
@@ -287,32 +289,33 @@ export const NumberGroup = React.memo(function NumberGroup() {
      : 'bg-ss-surface border-ss-border hover:bg-ss-surface-hover'
  }
  `}
-                aria-label="Number format"
-                aria-expanded={numberFormatOpen}
-                aria-haspopup="listbox"
-              >
-                <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                  {formatDisplayName}
-                </span>
-                <DropdownArrowIcon />
-              </button>
-            </Tooltip>
-          )}
-          <RibbonDropdownPanel open={numberFormatOpen} onClose={() => setNumberFormatOpen(false)}>
-            <div data-testid="ribbon-dropdown-menu-number-format">
-              <NumberFormatPanel
-                currentFormat={numberFormat}
-                sampleValue={sampleValue}
-                recentFormats={recentNumberFormats}
-                onApply={(formatCode) => {
-                  dispatch('SET_NUMBER_FORMAT', { format: formatCode });
-                  setNumberFormatOpen(false);
-                }}
-                onClose={() => setNumberFormatOpen(false)}
-              />
-            </div>
-          </RibbonDropdownPanel>
-        </div>
+                  aria-label="Number format"
+                  aria-expanded={numberFormatOpen}
+                  aria-haspopup="listbox"
+                >
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                    {formatDisplayName}
+                  </span>
+                  <DropdownArrowIcon />
+                </button>
+              </Tooltip>
+            )}
+            <RibbonDropdownPanel open={numberFormatOpen} onClose={() => setNumberFormatOpen(false)}>
+              <div data-testid="ribbon-dropdown-menu-number-format">
+                <NumberFormatPanel
+                  currentFormat={numberFormat}
+                  sampleValue={sampleValue}
+                  recentFormats={recentNumberFormats}
+                  onApply={(formatCode) => {
+                    dispatch('SET_NUMBER_FORMAT', { format: formatCode });
+                    setNumberFormatOpen(false);
+                  }}
+                  onClose={() => setNumberFormatOpen(false)}
+                />
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+        </RibbonVisibilityItem>
 
         {/* Row 2: Quick format buttons */}
         <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">

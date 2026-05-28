@@ -177,6 +177,7 @@ export function ArrangeGroup() {
               title="Bring to Front - Move object to top of z-order"
               aria-label="Bring to Front"
               disabled={!hasSelection}
+              visibilityKey="bringToFront"
             />
             <RibbonButton
               layout="horizontal"
@@ -199,6 +200,7 @@ export function ArrangeGroup() {
               title="Send to Back - Move object to bottom of z-order"
               aria-label="Send to Back"
               disabled={!hasSelection}
+              visibilityKey="sendToBack"
             />
             <RibbonButton
               layout="horizontal"

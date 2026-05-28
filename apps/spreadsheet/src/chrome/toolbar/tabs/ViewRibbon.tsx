@@ -35,6 +35,7 @@ import {
   RibbonDropdownPanel,
 } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 import {
   FreezePanesIcon,
   GridlinesIcon,
@@ -645,97 +646,109 @@ export function ViewRibbon({
           }}
         >
           {/* Row 1: Ruler | Headings */}
-          <label
-            className="flex items-center gap-1 whitespace-nowrap cursor-pointer opacity-50 min-w-0"
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-            title="Ruler (coming soon)"
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-              <RulerIcon />
-            </span>
-            <Checkbox disabled />
-            <span className="text-ribbon-compact text-ss-text-secondary">Ruler</span>
-          </label>
-          <label
-            className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleHeadings ? 'opacity-50' : ''}`}
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-              <HeadingsIcon />
-            </span>
-            <Checkbox
-              checked={showHeadings}
-              onChange={() => onToggleHeadings?.()}
-              disabled={!onToggleHeadings}
-            />
-            <span className="text-ribbon-compact text-ss-text-secondary">Headings</span>
-          </label>
+          <RibbonVisibilityItem item="ruler">
+            <label
+              className="flex items-center gap-1 whitespace-nowrap cursor-pointer opacity-50 min-w-0"
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+              title="Ruler (coming soon)"
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                <RulerIcon />
+              </span>
+              <Checkbox disabled />
+              <span className="text-ribbon-compact text-ss-text-secondary">Ruler</span>
+            </label>
+          </RibbonVisibilityItem>
+          <RibbonVisibilityItem item="headings">
+            <label
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleHeadings ? 'opacity-50' : ''}`}
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                <HeadingsIcon />
+              </span>
+              <Checkbox
+                checked={showHeadings}
+                onChange={() => onToggleHeadings?.()}
+                disabled={!onToggleHeadings}
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">Headings</span>
+            </label>
+          </RibbonVisibilityItem>
 
           {/* Row 2: Gridlines | Formula Bar */}
-          <label
-            className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleGridlines ? 'opacity-50' : ''}`}
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-              <GridlinesIcon />
-            </span>
-            <Checkbox
-              checked={showGridlines}
-              onChange={() => onToggleGridlines?.()}
-              disabled={!onToggleGridlines}
-            />
-            <span className="text-ribbon-compact text-ss-text-secondary">Gridlines</span>
-          </label>
+          <RibbonVisibilityItem item="gridlines">
+            <label
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleGridlines ? 'opacity-50' : ''}`}
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                <GridlinesIcon />
+              </span>
+              <Checkbox
+                checked={showGridlines}
+                onChange={() => onToggleGridlines?.()}
+                disabled={!onToggleGridlines}
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">Gridlines</span>
+            </label>
+          </RibbonVisibilityItem>
           {/* Chrome-symmetry: Formula Bar reopen lives here. The label
  carries the contract testid + data-action; the Checkbox
  inherits the label click target so a single click toggles
  visibility regardless of which child was clicked. */}
-          <label
-            data-testid="panel-formula-bar-reopen"
-            data-action="open-panel-formula-bar"
-            className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleFormulaBar ? 'opacity-50' : ''}`}
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-              <FormulaBarIcon />
-            </span>
-            <Checkbox
-              checked={showFormulaBar}
-              onChange={() => onToggleFormulaBar?.()}
-              disabled={!onToggleFormulaBar}
-            />
-            <span className="text-ribbon-compact text-ss-text-secondary">Formula</span>
-          </label>
+          <RibbonVisibilityItem item="formulaBar">
+            <label
+              data-testid="panel-formula-bar-reopen"
+              data-action="open-panel-formula-bar"
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleFormulaBar ? 'opacity-50' : ''}`}
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                <FormulaBarIcon />
+              </span>
+              <Checkbox
+                checked={showFormulaBar}
+                onChange={() => onToggleFormulaBar?.()}
+                disabled={!onToggleFormulaBar}
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">Formula</span>
+            </label>
+          </RibbonVisibilityItem>
 
           {/* Row 3: H. Scrollbar | V. Scrollbar */}
-          <label
-            className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleHorizontalScrollbar ? 'opacity-50' : ''}`}
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-ribbon-compact">
-              ↔
-            </span>
-            <Checkbox
-              checked={showHorizontalScrollbar}
-              onChange={() => onToggleHorizontalScrollbar?.()}
-              disabled={!onToggleHorizontalScrollbar}
-            />
-            <span className="text-ribbon-compact text-ss-text-secondary">H-Scroll</span>
-          </label>
-          <label
-            className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleVerticalScrollbar ? 'opacity-50' : ''}`}
-            style={{ height: 'var(--ribbon-button-height-third)' }}
-          >
-            <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-ribbon-compact">
-              ↕
-            </span>
-            <Checkbox
-              checked={showVerticalScrollbar}
-              onChange={() => onToggleVerticalScrollbar?.()}
-              disabled={!onToggleVerticalScrollbar}
-            />
-            <span className="text-ribbon-compact text-ss-text-secondary">V-Scroll</span>
-          </label>
+          <RibbonVisibilityItem item="horizontalScrollbar">
+            <label
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleHorizontalScrollbar ? 'opacity-50' : ''}`}
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-ribbon-compact">
+                ↔
+              </span>
+              <Checkbox
+                checked={showHorizontalScrollbar}
+                onChange={() => onToggleHorizontalScrollbar?.()}
+                disabled={!onToggleHorizontalScrollbar}
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">H-Scroll</span>
+            </label>
+          </RibbonVisibilityItem>
+          <RibbonVisibilityItem item="verticalScrollbar">
+            <label
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleVerticalScrollbar ? 'opacity-50' : ''}`}
+              style={{ height: 'var(--ribbon-button-height-third)' }}
+            >
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-ribbon-compact">
+                ↕
+              </span>
+              <Checkbox
+                checked={showVerticalScrollbar}
+                onChange={() => onToggleVerticalScrollbar?.()}
+                disabled={!onToggleVerticalScrollbar}
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">V-Scroll</span>
+            </label>
+          </RibbonVisibilityItem>
         </div>
       </ToolbarGroup>
 
@@ -758,29 +771,31 @@ export function ViewRibbon({
           />
 
           {/* Zoom Dropdown */}
-          <select
-            value={currentZoom}
-            onChange={(e) => onZoomChange?.(parseFloat(e.target.value))}
-            disabled={!isZoomEnabled}
-            className={`
+          <RibbonVisibilityItem item="zoom">
+            <select
+              value={currentZoom}
+              onChange={(e) => onZoomChange?.(parseFloat(e.target.value))}
+              disabled={!isZoomEnabled}
+              className={`
  h-7 px-1 rounded border border-ss-border
  bg-ss-surface text-dropdown text-ss-text-secondary text-center
  outline-none w-[70px]
  ${isZoomEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}
  `}
-            title="Zoom Level"
-            aria-label="Zoom Level"
-          >
-            {ZOOM_PRESETS.map((preset) => (
-              <option key={preset} value={preset}>
-                {formatZoomPercent(preset)}
-              </option>
-            ))}
-            {/* Show current zoom if it's not a preset */}
-            {!ZOOM_PRESETS.includes(currentZoom as (typeof ZOOM_PRESETS)[number]) && (
-              <option value={currentZoom}>{formatZoomPercent(currentZoom)}</option>
-            )}
-          </select>
+              title="Zoom Level"
+              aria-label="Zoom Level"
+            >
+              {ZOOM_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {formatZoomPercent(preset)}
+                </option>
+              ))}
+              {/* Show current zoom if it's not a preset */}
+              {!ZOOM_PRESETS.includes(currentZoom as (typeof ZOOM_PRESETS)[number]) && (
+                <option value={currentZoom}>{formatZoomPercent(currentZoom)}</option>
+              )}
+            </select>
+          </RibbonVisibilityItem>
 
           {/* V2: 100% Quick Zoom Button */}
           <RibbonButton
@@ -791,6 +806,7 @@ export function ViewRibbon({
             onClick={() => onZoomChange?.(1.0)}
             isOpen={currentZoom === 1.0}
             title="Reset to 100%"
+            visibilityKey="oneHundredPercent"
           />
 
           {/* Zoom In Button */}
@@ -812,6 +828,7 @@ export function ViewRibbon({
             onClick={onZoomToSelection}
             title="Zoom to Selection - Fit selection in view"
             aria-label="Zoom to Selection"
+            visibilityKey="zoomToSelection"
           />
         </div>
       </ToolbarGroup>
@@ -943,6 +960,7 @@ export function ViewRibbon({
             title={effectiveIsSplit ? 'Remove Split' : 'Split - Divide the window into panes'}
             aria-label="Split"
             aria-pressed={effectiveIsSplit}
+            visibilityKey="split"
           />
 
           {/* Hide Button - Disabled stub */}
@@ -1008,6 +1026,7 @@ export function ViewRibbon({
               isOpen={isAppearanceOpen}
               onClick={() => setAppearanceOpen(!isAppearanceOpen)}
               title="Appearance mode"
+              visibilityKey="appearance"
               aria-label="Appearance mode"
               aria-expanded={isAppearanceOpen}
               aria-haspopup="menu"
@@ -1124,6 +1143,7 @@ function ViewRibbonPanelReopenGroup() {
           data-action="open-panel-formula-bar"
           title="Show formula bar"
           aria-label="Show formula bar"
+          visibilityKey="formulaBar"
         />
         <RibbonButton
           layout="vertical"
@@ -1136,6 +1156,7 @@ function ViewRibbonPanelReopenGroup() {
           data-action="open-panel-status-bar"
           title="Show status bar"
           aria-label="Show status bar"
+          visibilityKey="statusBar"
         />
         <RibbonButton
           layout="vertical"
@@ -1148,6 +1169,7 @@ function ViewRibbonPanelReopenGroup() {
           data-action="open-panel-side"
           title="Show side panel"
           aria-label="Show side panel"
+          visibilityKey="side"
         />
         <RibbonButton
           layout="vertical"
@@ -1160,6 +1182,7 @@ function ViewRibbonPanelReopenGroup() {
           data-action="open-panel-comments"
           title="Show comments"
           aria-label="Show comments"
+          visibilityKey="comments"
         />
         <RibbonButton
           layout="vertical"
@@ -1170,6 +1193,7 @@ function ViewRibbonPanelReopenGroup() {
           onClick={handleOpenFind}
           data-testid="panel-find-reopen"
           data-action="open-panel-find"
+          visibilityKey="find"
           title="Find (Ctrl+F)"
           aria-label="Find"
         />

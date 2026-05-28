@@ -12,6 +12,7 @@
  */
 
 import { jest } from '@jest/globals';
+import { PUBLIC_RIBBON_VISIBILITY_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { create } from 'zustand';
 
 import {
@@ -163,6 +164,33 @@ describe('ActiveRibbonTabSlice', () => {
       expect(visible).not.toContain('view');
       expect(visible).toContain('home');
       expect(visible).toContain('page');
+    });
+
+    it('filters base tabs with ribbonVisibility', () => {
+      const store = createTestStore();
+      store.getState().setRibbonGates(undefined, { pageLayout: false });
+      const visible = store.getState().visibleBaseTabs;
+      expect(visible).not.toContain('page');
+      expect(visible).toContain('home');
+    });
+
+    it('filters public-profile hidden tabs from the base tab list', () => {
+      const store = createTestStore();
+      store.getState().setRibbonGates(undefined, PUBLIC_RIBBON_VISIBILITY_CONFIG);
+      const visible = store.getState().visibleBaseTabs;
+      expect(visible).toContain('home');
+      expect(visible).toContain('insert');
+      expect(visible).toContain('formulas');
+      expect(visible).toContain('data');
+      expect(visible).not.toContain('page');
+      expect(visible).not.toContain('review');
+      expect(visible).not.toContain('view');
+    });
+
+    it('accepts pageLayout as a legacy gate alias for the Page Layout tab', () => {
+      const store = createTestStore();
+      store.getState().setRibbonGates({ pageLayout: false });
+      expect(store.getState().visibleBaseTabs).not.toContain('page');
     });
 
     it('treats undefined gates as visible for supported base tabs only', () => {

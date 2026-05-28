@@ -190,6 +190,7 @@ export function ChartTypeButton({
       }
       aria-label={`Insert ${category.label} Chart`}
       className={className}
+      visibilityKey={category.id}
     />
   );
 

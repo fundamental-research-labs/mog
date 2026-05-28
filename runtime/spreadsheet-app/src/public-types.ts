@@ -1,7 +1,16 @@
 import type { Workbook } from '@mog-sdk/contracts/api';
+import type { RibbonVisibilityConfig } from '@mog-sdk/contracts/ribbon';
 import type { CSSProperties, ReactNode } from 'react';
 
-export type CommandBarTabId = 'home' | 'insert' | 'draw' | 'formulas' | 'data' | 'review' | 'view';
+export type CommandBarTabId =
+  | 'home'
+  | 'insert'
+  | 'draw'
+  | 'page'
+  | 'formulas'
+  | 'data'
+  | 'review'
+  | 'view';
 
 export type HostCommandOwner = 'host' | 'mog' | 'disabled';
 export type SpreadsheetAppStatus = 'loading' | 'ready' | 'error' | 'recovering' | 'disposed';
@@ -469,6 +478,7 @@ export interface MogSpreadsheetCommandPolicy {
 export interface MogSpreadsheetFeaturePolicy {
   readonly commandBar?: boolean;
   readonly editing?: boolean;
+  readonly ribbonVisibility?: RibbonVisibilityConfig;
   readonly tabs?: Partial<Record<CommandBarTabId, boolean>>;
   readonly groups?: Record<string, boolean>;
   readonly capabilities?: Record<string, boolean>;

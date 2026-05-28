@@ -179,6 +179,7 @@ export function PageSetupGroup() {
       aria-label="Orientation"
       aria-expanded={isOrientationOpen}
       aria-haspopup="menu"
+      visibilityKey="orientation"
     />
   );
 

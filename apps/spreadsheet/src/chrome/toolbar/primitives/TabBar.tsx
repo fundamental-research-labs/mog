@@ -22,6 +22,7 @@ import { keyTipRegistry } from '../keytips';
 import { AvatarList } from '../../collab/AvatarList';
 import { CollaborateButton } from '../../collab/CollaborateButton';
 import { useCollabStore } from '../../collab/use-collab-store';
+import { RibbonVisibilityPathItem } from '../visibility/RibbonVisibilityContext';
 import { RibbonCollapseToggle } from './RibbonCollapseToggle';
 import { RibbonDisplayOptions } from './RibbonDisplayOptions';
 import {
@@ -454,7 +455,9 @@ function TabBarImpl<T extends string>({
         className="hidden min-[720px]:flex flex-shrink-0 items-center gap-[var(--tabbar-button-group-gap)] ml-auto"
       >
         {collabEnabled && remoteParticipants.size > 0 && (
-          <AvatarList participants={remoteParticipants} />
+          <RibbonVisibilityPathItem path={['collaboration', 'tabBar', 'avatars']}>
+            <AvatarList participants={remoteParticipants} />
+          </RibbonVisibilityPathItem>
         )}
         <CollaborateButton />
 

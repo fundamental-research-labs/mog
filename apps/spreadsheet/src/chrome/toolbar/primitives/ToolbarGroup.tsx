@@ -22,6 +22,11 @@ import React from 'react';
 import { Tooltip } from '@mog/shell';
 import type { GroupCollapseConfig, GroupRenderMode } from '@mog-sdk/contracts/ribbon';
 import { GroupRenderModeProvider, useRibbonCollapseLevel } from '../collapse';
+import {
+  RibbonVisibilityGroup,
+  RibbonVisibilityItem,
+  useRibbonGroupVisibility,
+} from '../visibility/RibbonVisibilityContext';
 import { CollapsedGroupDropdown } from './CollapsedGroupDropdown';
 
 // =============================================================================
@@ -97,6 +102,8 @@ export interface ToolbarGroupProps {
    * If not provided, children are rendered inside the dropdown.
    */
   dropdownContent?: ReactNode;
+  /** Optional typed ribbon visibility key. Defaults to a normalized label. */
+  visibilityKey?: string;
 }
 
 export const ToolbarGroup = React.memo(function ToolbarGroup({
@@ -108,13 +115,19 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   collapseConfig,
   dropdownIcon,
   dropdownContent,
+  visibilityKey,
 }: ToolbarGroupProps) {
+  const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
   // Get current collapse level from context (provided by TabbedToolbar)
   const { level } = useRibbonCollapseLevel();
 
   // Determine render mode from config + current collapse level
   // If no config provided, always render in 'full' mode
   const renderMode: GroupRenderMode = collapseConfig?.levels[level] ?? 'full';
+
+  if (!groupVisibility.visible) {
+    return null;
+  }
 
   // Hidden mode - don't render anything
   if (renderMode === 'hidden') {
@@ -124,9 +137,11 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   // Dropdown mode - render collapsed button with dropdown
   if (renderMode === 'dropdown') {
     return (
-      <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
-        {dropdownContent ?? children}
-      </CollapsedGroupDropdown>
+      <RibbonVisibilityGroup group={groupVisibility.groupKey}>
+        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+          {dropdownContent ?? children}
+        </CollapsedGroupDropdown>
+      </RibbonVisibilityGroup>
     );
   }
 
@@ -135,28 +150,30 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   const launchTitle = dialogLaunchTitle ?? `${label} Settings`;
 
   return (
-    <GroupRenderModeProvider value={renderMode}>
-      <div className="relative flex flex-col px-[var(--ribbon-group-padding-x)] group/toolbar-group">
-        {/* Content area - fixed height from design token */}
-        <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
-          {children}
-        </div>
-        {/* Label area - fixed height from design token */}
-        {/* Excel uses UPPERCASE group labels */}
-        {/* Position relative to allow dialog launcher positioning */}
-        <div
-          className="relative flex items-center justify-center h-[var(--ribbon-label-height)] text-ribbon-group leading-none text-ss-text-tertiary whitespace-nowrap uppercase"
-          style={{ letterSpacing: 'var(--ribbon-group-label-letter-spacing)' }}
-        >
-          {label}
-          {/* Dialog Launcher - Excel-style small arrow in bottom-right corner */}
-          {/* Only rendered when onDialogLaunch is provided */}
-          {onDialogLaunch && (
-            <Tooltip title={launchTitle}>
-              <button
-                type="button"
-                onClick={onDialogLaunch}
-                className="
+    <RibbonVisibilityGroup group={groupVisibility.groupKey}>
+      <GroupRenderModeProvider value={renderMode}>
+        <div className="relative flex flex-col px-[var(--ribbon-group-padding-x)] group/toolbar-group">
+          {/* Content area - fixed height from design token */}
+          <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
+            {children}
+          </div>
+          {/* Label area - fixed height from design token */}
+          {/* Excel uses UPPERCASE group labels */}
+          {/* Position relative to allow dialog launcher positioning */}
+          <div
+            className="relative flex items-center justify-center h-[var(--ribbon-label-height)] text-ribbon-group leading-none text-ss-text-tertiary whitespace-nowrap uppercase"
+            style={{ letterSpacing: 'var(--ribbon-group-label-letter-spacing)' }}
+          >
+            {label}
+            {/* Dialog Launcher - Excel-style small arrow in bottom-right corner */}
+            {/* Only rendered when onDialogLaunch is provided */}
+            {onDialogLaunch && (
+              <RibbonVisibilityItem item="dialogLauncher">
+                <Tooltip title={launchTitle}>
+                  <button
+                    type="button"
+                    onClick={onDialogLaunch}
+                    className="
  absolute right-0 bottom-0
  w-3 h-3
  flex items-center justify-center
@@ -169,25 +186,27 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
  rounded-ss-sm
  focus-visible:ring-1 focus-visible:ring-ss-primary focus-visible:opacity-100
  "
-                aria-label={launchTitle}
-              >
-                <DialogLauncherIcon />
-              </button>
-            </Tooltip>
+                    aria-label={launchTitle}
+                  >
+                    <DialogLauncherIcon />
+                  </button>
+                </Tooltip>
+              </RibbonVisibilityItem>
+            )}
+          </div>
+          {/* E2: Gradient fade separator - softer than solid border */}
+          {/* Extended fade region (10%-90%) for more visible separator while keeping soft edges */}
+          {!isLast && (
+            <div
+              className="absolute right-0 top-2 bottom-2 w-[var(--ribbon-group-separator-width)]"
+              style={{
+                background:
+                  'linear-gradient(to bottom, transparent 0%, var(--color-ss-border) 10%, var(--color-ss-border) 90%, transparent 100%)',
+              }}
+            />
           )}
         </div>
-        {/* E2: Gradient fade separator - softer than solid border */}
-        {/* Extended fade region (10%-90%) for more visible separator while keeping soft edges */}
-        {!isLast && (
-          <div
-            className="absolute right-0 top-2 bottom-2 w-[var(--ribbon-group-separator-width)]"
-            style={{
-              background:
-                'linear-gradient(to bottom, transparent 0%, var(--color-ss-border) 10%, var(--color-ss-border) 90%, transparent 100%)',
-            }}
-          />
-        )}
-      </div>
-    </GroupRenderModeProvider>
+      </GroupRenderModeProvider>
+    </RibbonVisibilityGroup>
   );
 });

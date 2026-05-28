@@ -429,6 +429,7 @@ export function ReviewRibbon() {
               disabled={!hasComments}
               title="Show/Hide Comment"
               aria-label="Show/Hide Comment"
+              visibilityKey="showHideComment"
             />
             <RibbonButton
               id="review-show-all-comments"
@@ -441,6 +442,7 @@ export function ReviewRibbon() {
               title={showAllComments ? 'Hide All Comments' : 'Show All Comments'}
               aria-label="Show All Comments"
               aria-pressed={showAllComments}
+              visibilityKey="showComments"
             />
           </div>
         </div>
@@ -464,6 +466,7 @@ export function ReviewRibbon() {
             onClick={handleProtectSheet}
             title={isProtected ? 'Unprotect Sheet' : 'Protect Sheet'}
             aria-label={isProtected ? 'Unprotect Sheet' : 'Protect Sheet'}
+            visibilityKey="protectSheet"
           />
           <RibbonButton
             id="review-protect-workbook"
@@ -487,6 +490,7 @@ export function ReviewRibbon() {
             disabled
             title="Always Open Read-Only (coming soon)"
             aria-label="Always Open Read-Only"
+            visibilityKey="alwaysOpenReadOnly"
           />
         </div>
       </ToolbarGroup>

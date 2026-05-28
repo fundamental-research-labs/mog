@@ -107,6 +107,7 @@ export function ThemeGallery({ className = '' }: ThemeGalleryProps) {
       aria-label="Themes"
       aria-expanded={isOpen}
       aria-haspopup="menu"
+      visibilityKey="themes"
     />
   );
 

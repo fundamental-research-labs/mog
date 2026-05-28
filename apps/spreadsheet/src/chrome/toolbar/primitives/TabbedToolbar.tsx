@@ -46,6 +46,7 @@ import { PageLayoutRibbon } from '../tabs/PageLayoutRibbon';
 import { ReviewRibbon } from '../tabs/ReviewRibbon';
 import { TableDesignRibbon } from '../tabs/TableDesignRibbon';
 import { ViewRibbon } from '../tabs/ViewRibbon';
+import { RibbonVisibilityTab } from '../visibility/RibbonVisibilityContext';
 import { AutoHideRibbonTrigger, useAutoHideRibbon } from './AutoHideRibbonTrigger';
 import { TabBar } from './TabBar';
 
@@ -472,97 +473,147 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
  `}
             >
               {/* HomeRibbon is now self-sufficient - no props needed */}
-              {activeTab === 'home' && <HomeRibbon />}
-
-              {/* InsertRibbon is now self-sufficient - no props needed */}
-              {activeTab === 'insert' && <InsertRibbon />}
-
-              {/* PageLayoutRibbon is now self-sufficient - no props needed. */}
-              {activeTab === 'page' && <PageLayoutRibbon />}
-
-              {activeTab === 'formulas' && <FormulasRibbon />}
-
-              {activeTab === 'data' && (
-                <DataRibbon
-                  onDataValidation={onDataValidation}
-                  onRemoveDuplicates={onRemoveDuplicates}
-                  onTextToColumns={onTextToColumns}
-                />
+              {activeTab === 'home' && (
+                <RibbonVisibilityTab tab="home">
+                  <HomeRibbon />
+                </RibbonVisibilityTab>
               )}
 
-              {activeTab === 'review' && <ReviewRibbon />}
+              {/* InsertRibbon is now self-sufficient - no props needed */}
+              {activeTab === 'insert' && (
+                <RibbonVisibilityTab tab="insert">
+                  <InsertRibbon />
+                </RibbonVisibilityTab>
+              )}
+
+              {/* PageLayoutRibbon is now self-sufficient - no props needed. */}
+              {activeTab === 'page' && (
+                <RibbonVisibilityTab tab="pageLayout">
+                  <PageLayoutRibbon />
+                </RibbonVisibilityTab>
+              )}
+
+              {activeTab === 'formulas' && (
+                <RibbonVisibilityTab tab="formulas">
+                  <FormulasRibbon />
+                </RibbonVisibilityTab>
+              )}
+
+              {activeTab === 'data' && (
+                <RibbonVisibilityTab tab="data">
+                  <DataRibbon
+                    onDataValidation={onDataValidation}
+                    onRemoveDuplicates={onRemoveDuplicates}
+                    onTextToColumns={onTextToColumns}
+                  />
+                </RibbonVisibilityTab>
+              )}
+
+              {activeTab === 'review' && (
+                <RibbonVisibilityTab tab="review">
+                  <ReviewRibbon />
+                </RibbonVisibilityTab>
+              )}
 
               {activeTab === 'view' && (
-                <ViewRibbon
-                  showGridlines={showGridlines}
-                  onToggleGridlines={onToggleGridlines}
-                  showHeadings={showHeadings}
-                  onToggleHeadings={onToggleHeadings}
-                  showFormulaBar={showFormulaBar}
-                  onToggleFormulaBar={onToggleFormulaBar}
-                  // Scrollbar visibility (Issue 7: View Options)
-                  showHorizontalScrollbar={showHorizontalScrollbar}
-                  onToggleHorizontalScrollbar={onToggleHorizontalScrollbar}
-                  showVerticalScrollbar={showVerticalScrollbar}
-                  onToggleVerticalScrollbar={onToggleVerticalScrollbar}
-                  currentZoom={currentZoom}
-                  onZoomIn={onZoomIn}
-                  onZoomOut={onZoomOut}
-                  onZoomChange={onZoomChange}
-                  onZoomToSelection={onZoomToSelection}
-                  hasSelection={hasSelection}
-                  frozenRows={frozenRows}
-                  frozenCols={frozenCols}
-                  onFreezePanes={onFreezePanes}
-                  onFreezeTopRow={onFreezeTopRow}
-                  onFreezeFirstColumn={onFreezeFirstColumn}
-                  onUnfreeze={onUnfreeze}
-                  onOpenSpreadSettings={onOpenSpreadSettings}
-                  onOpenSheetSettings={onOpenSheetSettings}
-                  pageBreakPreviewMode={pageBreakPreviewMode}
-                  onTogglePageBreakPreview={onTogglePageBreakPreview}
-                />
+                <RibbonVisibilityTab tab="view">
+                  <ViewRibbon
+                    showGridlines={showGridlines}
+                    onToggleGridlines={onToggleGridlines}
+                    showHeadings={showHeadings}
+                    onToggleHeadings={onToggleHeadings}
+                    showFormulaBar={showFormulaBar}
+                    onToggleFormulaBar={onToggleFormulaBar}
+                    // Scrollbar visibility (Issue 7: View Options)
+                    showHorizontalScrollbar={showHorizontalScrollbar}
+                    onToggleHorizontalScrollbar={onToggleHorizontalScrollbar}
+                    showVerticalScrollbar={showVerticalScrollbar}
+                    onToggleVerticalScrollbar={onToggleVerticalScrollbar}
+                    currentZoom={currentZoom}
+                    onZoomIn={onZoomIn}
+                    onZoomOut={onZoomOut}
+                    onZoomChange={onZoomChange}
+                    onZoomToSelection={onZoomToSelection}
+                    hasSelection={hasSelection}
+                    frozenRows={frozenRows}
+                    frozenCols={frozenCols}
+                    onFreezePanes={onFreezePanes}
+                    onFreezeTopRow={onFreezeTopRow}
+                    onFreezeFirstColumn={onFreezeFirstColumn}
+                    onUnfreeze={onUnfreeze}
+                    onOpenSpreadSettings={onOpenSpreadSettings}
+                    onOpenSheetSettings={onOpenSheetSettings}
+                    pageBreakPreviewMode={pageBreakPreviewMode}
+                    onTogglePageBreakPreview={onTogglePageBreakPreview}
+                  />
+                </RibbonVisibilityTab>
               )}
 
               {activeTab === 'table-design' && isInTable && (
-                <TableDesignRibbon
-                  tableName={tableName ?? null}
-                  stylePreset={tableStylePreset}
-                  showBandedRows={tableShowBandedRows}
-                  showBandedColumns={tableShowBandedColumns}
-                  showFirstColumnHighlight={tableShowFirstColumnHighlight}
-                  showLastColumnHighlight={tableShowLastColumnHighlight}
-                  hasHeaderRow={tableHasHeaderRow}
-                  hasTotalRow={tableHasTotalRow}
-                  showFilterButtons={tableShowFilterButtons}
-                  onRenameTable={onRenameTable ?? (() => {})}
-                  onSetStylePreset={onSetTableStylePreset ?? (() => {})}
-                  onToggleBandedRows={onToggleTableBandedRows ?? (() => {})}
-                  onToggleBandedColumns={onToggleTableBandedColumns ?? (() => {})}
-                  onToggleFirstColumnHighlight={onToggleTableFirstColumnHighlight ?? (() => {})}
-                  onToggleLastColumnHighlight={onToggleTableLastColumnHighlight ?? (() => {})}
-                  onToggleHeaderRow={onToggleTableHeaderRow ?? (() => {})}
-                  onToggleTotalRow={onToggleTableTotalRow ?? (() => {})}
-                  onToggleFilterButtons={onToggleTableFilterButtons ?? (() => {})}
-                  onDeleteTable={onDeleteTable ?? (() => {})}
-                  onConvertToRange={onConvertTableToRange ?? (() => {})}
-                />
+                <RibbonVisibilityTab tab="tableDesign">
+                  <TableDesignRibbon
+                    tableName={tableName ?? null}
+                    stylePreset={tableStylePreset}
+                    showBandedRows={tableShowBandedRows}
+                    showBandedColumns={tableShowBandedColumns}
+                    showFirstColumnHighlight={tableShowFirstColumnHighlight}
+                    showLastColumnHighlight={tableShowLastColumnHighlight}
+                    hasHeaderRow={tableHasHeaderRow}
+                    hasTotalRow={tableHasTotalRow}
+                    showFilterButtons={tableShowFilterButtons}
+                    onRenameTable={onRenameTable ?? (() => {})}
+                    onSetStylePreset={onSetTableStylePreset ?? (() => {})}
+                    onToggleBandedRows={onToggleTableBandedRows ?? (() => {})}
+                    onToggleBandedColumns={onToggleTableBandedColumns ?? (() => {})}
+                    onToggleFirstColumnHighlight={onToggleTableFirstColumnHighlight ?? (() => {})}
+                    onToggleLastColumnHighlight={onToggleTableLastColumnHighlight ?? (() => {})}
+                    onToggleHeaderRow={onToggleTableHeaderRow ?? (() => {})}
+                    onToggleTotalRow={onToggleTableTotalRow ?? (() => {})}
+                    onToggleFilterButtons={onToggleTableFilterButtons ?? (() => {})}
+                    onDeleteTable={onDeleteTable ?? (() => {})}
+                    onConvertToRange={onConvertTableToRange ?? (() => {})}
+                  />
+                </RibbonVisibilityTab>
               )}
 
-              {activeTab === 'chart-design' && <ChartToolsRibbon />}
+              {activeTab === 'chart-design' && (
+                <RibbonVisibilityTab tab="chartDesign">
+                  <ChartToolsRibbon />
+                </RibbonVisibilityTab>
+              )}
 
               {activeTab === 'chart-format' && <ChartFormatRibbon />}
 
-              {activeTab === 'picture-tools' && <PictureToolsRibbon />}
+              {activeTab === 'picture-tools' && (
+                <RibbonVisibilityTab tab="pictureTools">
+                  <PictureToolsRibbon />
+                </RibbonVisibilityTab>
+              )}
 
-              {activeTab === 'slicer-tools' && <SlicerToolsRibbon />}
+              {activeTab === 'slicer-tools' && (
+                <RibbonVisibilityTab tab="slicerTools">
+                  <SlicerToolsRibbon />
+                </RibbonVisibilityTab>
+              )}
 
-              {activeTab === 'sparkline-tools' && <SparklineToolsRibbon />}
+              {activeTab === 'sparkline-tools' && (
+                <RibbonVisibilityTab tab="sparklineTools">
+                  <SparklineToolsRibbon />
+                </RibbonVisibilityTab>
+              )}
 
               {/* Diagram contextual tabs */}
-              {activeTab === 'diagram-design' && <DiagramDesignTab />}
+              {activeTab === 'diagram-design' && (
+                <RibbonVisibilityTab tab="diagramDesign">
+                  <DiagramDesignTab />
+                </RibbonVisibilityTab>
+              )}
 
-              {activeTab === 'diagram-format' && <DiagramFormatTab />}
+              {activeTab === 'diagram-format' && (
+                <RibbonVisibilityTab tab="diagramFormat">
+                  <DiagramFormatTab />
+                </RibbonVisibilityTab>
+              )}
 
               {activeTab === 'pivot-analyze' && <PivotAnalyzeRibbon />}
 

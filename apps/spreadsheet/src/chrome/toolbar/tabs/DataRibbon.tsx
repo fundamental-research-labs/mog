@@ -592,6 +592,7 @@ export function DataRibbon({
             onClick={handleTextToColumns}
             title="Text to Columns"
             aria-label="Text to Columns"
+            visibilityKey="textToColumns"
           />
           <RibbonButton
             layout="vertical"
@@ -612,6 +613,7 @@ export function DataRibbon({
             onClick={handleRemoveDuplicates}
             title="Remove Duplicates"
             aria-label="Remove Duplicates"
+            visibilityKey="removeDuplicates"
           />
           <RibbonButton
             id="data-validation"
@@ -624,6 +626,7 @@ export function DataRibbon({
             disabled={!onDataValidation}
             title={onDataValidation ? 'Data Validation' : 'Data Validation (coming soon)'}
             aria-label="Data Validation"
+            visibilityKey="dataValidation"
           />
           <RibbonButton
             layout="vertical"
@@ -641,6 +644,7 @@ export function DataRibbon({
             aria-label={
               validationCirclesVisible ? 'Clear Validation Circles' : 'Circle Invalid Data'
             }
+            visibilityKey={validationCirclesVisible ? 'clearCircles' : 'circleInvalid'}
           />
           <RibbonButton
             layout="vertical"
@@ -683,9 +687,10 @@ export function DataRibbon({
                 icon={<SettingsIcon />}
                 label={PRODUCT_VOCABULARY.scenarios.label}
                 hasDropdown
-                title="Scenario tools (Alt+A, W)"
-                aria-label={PRODUCT_VOCABULARY.scenarios.label}
-              />
+            title="Scenario tools (Alt+A, W)"
+            aria-label={PRODUCT_VOCABULARY.scenarios.label}
+            visibilityKey="whatIfAnalysis"
+          />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
@@ -758,6 +763,7 @@ export function DataRibbon({
                 : 'Show Detail (no collapsed groups)'
             }
             aria-label="Show Detail"
+            visibilityKey="showDetail"
           />
           <RibbonButton
             id="data-hide-detail"
@@ -774,6 +780,7 @@ export function DataRibbon({
                 : 'Hide Detail (no expanded groups)'
             }
             aria-label="Hide Detail"
+            visibilityKey="hideDetail"
           />
           <RibbonButton
             id="data-subtotal"
@@ -785,6 +792,7 @@ export function DataRibbon({
             onClick={handleSubtotals}
             title="Subtotals - Create subtotals with grouping"
             aria-label="Subtotals"
+            visibilityKey="subtotals"
           />
         </div>
       </ToolbarGroup>

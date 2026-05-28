@@ -112,6 +112,10 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
+      if (!isKeyboardEventFromGrid(e)) {
+        return;
+      }
+
       // ========================================================================
       // Special Mode Handling (before KeyboardCoordinator)
       // ========================================================================
@@ -200,6 +204,18 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
   );
 
   return useMemo(() => ({ handleKeyDown }), [handleKeyDown]);
+}
+
+function isKeyboardEventFromGrid(e: React.KeyboardEvent<HTMLElement>): boolean {
+  const { currentTarget, target } = e;
+  const targetWindow = currentTarget.ownerDocument.defaultView;
+  const nodeCtor = targetWindow?.Node ?? (typeof Node === 'undefined' ? undefined : Node);
+
+  if (!nodeCtor || !(target instanceof nodeCtor)) {
+    return false;
+  }
+
+  return currentTarget.contains(target);
 }
 
 // =============================================================================

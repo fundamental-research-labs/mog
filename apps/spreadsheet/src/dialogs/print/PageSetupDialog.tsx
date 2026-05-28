@@ -705,6 +705,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
                   <span className="text-caption text-ss-text-secondary w-[50px]">Top</span>
                   <Input
                     type="number"
+                    aria-label="Top"
                     className="w-[60px] h-8 px-2 py-0 text-center"
                     value={margins.top}
                     onChange={(e) => handleMarginChange('top', e.target.value)}
@@ -716,6 +717,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
                   <span className="text-caption text-ss-text-secondary w-[50px]">Bottom</span>
                   <Input
                     type="number"
+                    aria-label="Bottom"
                     className="w-[60px] h-8 px-2 py-0 text-center"
                     value={margins.bottom}
                     onChange={(e) => handleMarginChange('bottom', e.target.value)}
@@ -727,6 +729,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
                   <span className="text-caption text-ss-text-secondary w-[50px]">Left</span>
                   <Input
                     type="number"
+                    aria-label="Left"
                     className="w-[60px] h-8 px-2 py-0 text-center"
                     value={margins.left}
                     onChange={(e) => handleMarginChange('left', e.target.value)}
@@ -738,6 +741,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
                   <span className="text-caption text-ss-text-secondary w-[50px]">Right</span>
                   <Input
                     type="number"
+                    aria-label="Right"
                     className="w-[60px] h-8 px-2 py-0 text-center"
                     value={margins.right}
                     onChange={(e) => handleMarginChange('right', e.target.value)}

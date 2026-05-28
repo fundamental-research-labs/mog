@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 import { SettingsDialog } from '../SettingsDialog';
 
-describe('SettingsDialog appearance settings', () => {
+describe('SettingsDialog', () => {
   it('defaults the appearance mode picker to Light when no mode is provided', async () => {
     const user = userEvent.setup();
 
@@ -32,5 +32,31 @@ describe('SettingsDialog appearance settings', () => {
     const themeGroup = screen.getByText('Theme').closest('section');
     expect(themeGroup).not.toBeNull();
     expect(within(themeGroup!).getByRole('radio', { name: 'System' })).toBeChecked();
+  });
+
+  it('renders About links as external anchors with stable public targets', async () => {
+    const user = userEvent.setup();
+
+    render(<SettingsDialog open onClose={jest.fn()} />);
+
+    await user.click(screen.getByRole('tab', { name: 'About' }));
+
+    expect(screen.getByRole('link', { name: 'Documentation' })).toHaveAttribute(
+      'href',
+      'https://github.com/fundamental-research-labs/mog/tree/main/docs',
+    );
+    expect(screen.getByRole('link', { name: 'GitHub Repository' })).toHaveAttribute(
+      'href',
+      'https://github.com/fundamental-research-labs/mog',
+    );
+    expect(screen.getByRole('link', { name: 'Report an Issue' })).toHaveAttribute(
+      'href',
+      'https://github.com/fundamental-research-labs/mog/issues/new',
+    );
+
+    for (const link of screen.getAllByRole('link')) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
   });
 });

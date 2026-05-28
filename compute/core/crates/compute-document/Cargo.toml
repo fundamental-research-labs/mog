@@ -17,6 +17,7 @@ formula-types = { path = "../types/formula-types" }
 value-types = { path = "../types/value-types" }
 cell-types = { path = "../types/cell-types" }
 workbook-types = { path = "../types/workbook-types" }
+domain-types = { path = "../../../../domain-types", default-features = false }
 # Policy types live in compute-security; SecurityStore (R2.1) is the
 # typed Yrs accessor that serializes AccessPolicy/PolicyId through this crate.
 compute-security = { path = "../compute-security" }

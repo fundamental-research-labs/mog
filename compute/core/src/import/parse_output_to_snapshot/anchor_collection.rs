@@ -28,6 +28,7 @@ pub(crate) fn collect_anchored_positions(
     }
 
     anchors_from_formulas(sheet_data, &mut anchored);
+    anchors_from_rich_strings(sheet_data, &mut anchored);
     anchors_from_hyperlinks(sheet_data, &mut anchored);
     anchors_from_merges(sheet_data, &mut anchored);
     anchors_from_array_formulas(sheet_data, &mut anchored);
@@ -59,6 +60,14 @@ pub(crate) fn collect_identity_required_anchors(
 fn anchors_from_formulas(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {
     for cell in &sheet_data.cells {
         if cell.formula.is_some() {
+            out.insert((cell.row, cell.col));
+        }
+    }
+}
+
+fn anchors_from_rich_strings(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {
+    for cell in &sheet_data.cells {
+        if cell.rich_string.is_some() {
             out.insert((cell.row, cell.col));
         }
     }

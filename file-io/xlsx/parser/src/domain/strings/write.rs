@@ -105,6 +105,8 @@ pub enum SharedStringValue {
     RichText(Vec<RichTextRun>),
     /// Rich text with full domain types (preserves family, charset, scheme, color variants)
     DomainRichText(Vec<DtRichTextRun>),
+    /// Cell-owned rich/phonetic shared string.
+    RichSharedString(domain_types::RichSharedString),
 }
 
 impl SharedStringValue {
@@ -116,6 +118,7 @@ impl SharedStringValue {
             SharedStringValue::DomainRichText(runs) => {
                 runs.iter().map(|r| r.text.as_str()).collect()
             }
+            SharedStringValue::RichSharedString(rich) => rich.plain_text.clone(),
         }
     }
 }
@@ -174,6 +177,7 @@ pub struct SharedStringsWriter {
     /// until a current cell proves it still references the same text.
     imported_hints: HashMap<usize, ImportedStringHint>,
     imported_hint_indices: HashMap<usize, usize>,
+    rich_index_map: HashMap<String, usize>,
 }
 
 impl SharedStringsWriter {
@@ -186,6 +190,7 @@ impl SharedStringsWriter {
             dup_indices: HashMap::new(),
             imported_hints: HashMap::new(),
             imported_hint_indices: HashMap::new(),
+            rich_index_map: HashMap::new(),
         }
     }
 
@@ -198,6 +203,7 @@ impl SharedStringsWriter {
             dup_indices: HashMap::new(),
             imported_hints: HashMap::new(),
             imported_hint_indices: HashMap::new(),
+            rich_index_map: HashMap::new(),
         }
     }
 
@@ -366,6 +372,26 @@ impl SharedStringsWriter {
         idx
     }
 
+    /// Add a cell-owned rich string, deduplicating structurally.
+    pub fn add_rich_shared_string(&mut self, rich: domain_types::RichSharedString) -> usize {
+        let key = serde_json::to_string(&rich)
+            .expect("rich shared-string state should be JSON-serializable");
+        if let Some(&idx) = self.rich_index_map.get(&key) {
+            self.entries[idx].count += 1;
+            return idx;
+        }
+
+        let idx = self.next_index;
+        self.entries.push(StringEntry {
+            value: SharedStringValue::RichSharedString(rich),
+            count: 1,
+            phonetic_xml: None,
+        });
+        self.rich_index_map.insert(key, idx);
+        self.next_index += 1;
+        idx
+    }
+
     /// Get the index of a plain string (if it exists).
     ///
     /// # Arguments
@@ -479,6 +505,16 @@ impl SharedStringsWriter {
                 for run in runs {
                     write_domain_rich_text_run(run, xml);
                 }
+            }
+            SharedStringValue::RichSharedString(rich) => {
+                if rich.runs.is_empty() {
+                    self.write_text_element(&rich.plain_text, xml);
+                } else {
+                    for run in &rich.runs {
+                        write_domain_rich_text_run(run, xml);
+                    }
+                }
+                write_rich_string_phonetics(rich, xml);
             }
         }
 
@@ -697,6 +733,43 @@ fn write_domain_rich_text_run(run: &DtRichTextRun, xml: &mut Vec<u8>) {
     escape_xml_content(&run.text, xml);
     xml.extend_from_slice(b"</t>");
     xml.extend_from_slice(b"</r>");
+}
+
+fn write_rich_string_phonetics(rich: &domain_types::RichSharedString, xml: &mut Vec<u8>) {
+    if let Some(raw) = &rich.phonetic_xml {
+        xml.extend_from_slice(raw);
+        return;
+    }
+
+    for run in &rich.phonetic_runs {
+        xml.extend_from_slice(b"<rPh sb=\"");
+        xml.extend_from_slice(run.start_index.to_string().as_bytes());
+        xml.extend_from_slice(b"\" eb=\"");
+        xml.extend_from_slice(run.end_index.to_string().as_bytes());
+        xml.extend_from_slice(b"\"><t>");
+        escape_xml_content(&run.text, xml);
+        xml.extend_from_slice(b"</t></rPh>");
+    }
+
+    if let Some(props) = &rich.phonetic_properties {
+        xml.extend_from_slice(b"<phoneticPr");
+        if let Some(font_id) = props.font_id {
+            xml.extend_from_slice(b" fontId=\"");
+            xml.extend_from_slice(font_id.to_string().as_bytes());
+            xml.extend_from_slice(b"\"");
+        }
+        if let Some(value) = &props.phonetic_type {
+            xml.extend_from_slice(b" type=\"");
+            escape_xml_attr(value, xml);
+            xml.extend_from_slice(b"\"");
+        }
+        if let Some(value) = &props.alignment {
+            xml.extend_from_slice(b" alignment=\"");
+            escape_xml_attr(value, xml);
+            xml.extend_from_slice(b"\"");
+        }
+        xml.extend_from_slice(b"/>");
+    }
 }
 
 // ============================================================================

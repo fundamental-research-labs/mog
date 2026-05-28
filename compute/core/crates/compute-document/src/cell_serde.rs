@@ -7,6 +7,8 @@ use std::sync::Arc;
 use value_types::CellValue;
 use yrs::{Any, Map, MapPrelim, MapRef, Out};
 
+const KEY_RICH_STRING: &str = "rt";
+
 /// Build a `MapPrelim` for a cell entry.
 pub fn build_cell_prelim(
     value: &CellValue,
@@ -48,6 +50,28 @@ pub fn clear_array_ref_on_yrs(cell_map: &MapRef, txn: &mut yrs::TransactionMut<'
 pub fn read_array_ref_from_yrs<T: yrs::ReadTxn>(cell_map: &MapRef, txn: &T) -> Option<String> {
     match cell_map.get(txn, KEY_ARRAY_REF) {
         Some(Out::Any(Any::String(s))) => Some(s.to_string()),
+        _ => None,
+    }
+}
+
+/// Write cell-owned rich shared-string state onto an existing yrs cell map.
+pub fn write_rich_string_to_yrs(
+    cell_map: &MapRef,
+    txn: &mut yrs::TransactionMut<'_>,
+    rich_string: &domain_types::RichSharedString,
+) {
+    let json = serde_json::to_string(rich_string)
+        .expect("rich shared-string state should be JSON-serializable");
+    cell_map.insert(txn, KEY_RICH_STRING, Any::String(Arc::from(json)));
+}
+
+/// Read cell-owned rich shared-string state from a yrs cell map.
+pub fn read_rich_string_from_yrs<T: yrs::ReadTxn>(
+    cell_map: &MapRef,
+    txn: &T,
+) -> Option<domain_types::RichSharedString> {
+    match cell_map.get(txn, KEY_RICH_STRING) {
+        Some(Out::Any(Any::String(json))) => serde_json::from_str(&json).ok(),
         _ => None,
     }
 }

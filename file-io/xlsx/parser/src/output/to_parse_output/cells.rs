@@ -152,6 +152,8 @@ pub(super) fn convert_cell_with_projection_role(
     convert_cell_with_projection_role_and_provenance(
         cell,
         shared_strings,
+        &[],
+        &[],
         projection_role,
         None,
         false,
@@ -162,6 +164,8 @@ pub(super) fn convert_cell_with_projection_role(
 pub(super) fn convert_cell_with_projection_role_and_provenance(
     cell: &FullCellData,
     shared_strings: &[String],
+    shared_strings_rich_runs: &[Option<Vec<domain_types::RichTextRun>>],
+    shared_strings_phonetic_xml: &[Option<Vec<u8>>],
     projection_role: ImportedCellProjectionRole,
     sst_compaction: Option<&SharedStringProvenanceCompaction>,
     compact_numeric_provenance: bool,
@@ -215,6 +219,12 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
         row: cell.row,
         col: cell.col,
         value,
+        rich_string: rich_string_for_cell(
+            cell,
+            shared_strings,
+            shared_strings_rich_runs,
+            shared_strings_phonetic_xml,
+        ),
         formula,
         array_ref: cell.array_ref.clone(),
         style_id: if cell.style_idx > 0 || cell.has_explicit_style {
@@ -243,6 +253,40 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
         },
         projection_role,
     }
+}
+
+fn rich_string_for_cell(
+    cell: &FullCellData,
+    shared_strings: &[String],
+    shared_strings_rich_runs: &[Option<Vec<domain_types::RichTextRun>>],
+    shared_strings_phonetic_xml: &[Option<Vec<u8>>],
+) -> Option<domain_types::RichSharedString> {
+    if cell.cell_type != CELL_TYPE_STRING {
+        return None;
+    }
+    let index = cell.sst_index? as usize;
+    let plain_text = shared_strings.get(index)?.clone();
+    let runs = shared_strings_rich_runs
+        .get(index)
+        .and_then(Clone::clone)
+        .unwrap_or_default();
+    let phonetic_xml = shared_strings_phonetic_xml
+        .get(index)
+        .and_then(Clone::clone);
+    if runs.is_empty() && phonetic_xml.is_none() {
+        return None;
+    }
+    let (phonetic_runs, phonetic_properties) = phonetic_xml
+        .as_deref()
+        .map(parse_phonetic_xml)
+        .unwrap_or_default();
+    Some(domain_types::RichSharedString {
+        plain_text,
+        runs,
+        phonetic_runs,
+        phonetic_properties,
+        phonetic_xml,
+    })
 }
 
 fn numeric_original_value_is_writer_canonical(value: Option<&str>) -> bool {
@@ -354,6 +398,115 @@ pub(super) fn parse_error_code(s: &str) -> CellError {
         "#CALC!" => CellError::Calc,
         _ => CellError::Value,
     }
+}
+
+fn parse_phonetic_xml(
+    xml: &[u8],
+) -> (
+    Vec<domain_types::PhoneticRun>,
+    Option<domain_types::PhoneticProperties>,
+) {
+    let mut runs = Vec::new();
+    let mut pos = 0;
+    while let Some(start) = find_bytes(xml, b"<rPh", pos) {
+        let Some(end_tag) = find_bytes(xml, b"</rPh>", start) else {
+            break;
+        };
+        let end = end_tag + b"</rPh>".len();
+        let region = &xml[start..end];
+        let text = find_t_content(region)
+            .map(|text| decode_xml_text(text).unwrap_or_default())
+            .unwrap_or_default();
+        runs.push(domain_types::PhoneticRun {
+            text,
+            start_index: attr_u32(region, b"sb").unwrap_or(0),
+            end_index: attr_u32(region, b"eb").unwrap_or(0),
+        });
+        pos = end;
+    }
+
+    let phonetic_properties = find_bytes(xml, b"<phoneticPr", 0).map(|start| {
+        let end = xml[start..]
+            .iter()
+            .position(|&b| b == b'>')
+            .map(|offset| start + offset + 1)
+            .unwrap_or(xml.len());
+        let region = &xml[start..end];
+        domain_types::PhoneticProperties {
+            font_id: attr_u32(region, b"fontId"),
+            phonetic_type: attr_string(region, b"type"),
+            alignment: attr_string(region, b"alignment"),
+        }
+    });
+
+    (runs, phonetic_properties)
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8], start: usize) -> Option<usize> {
+    haystack
+        .get(start..)?
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .map(|pos| pos + start)
+}
+
+fn find_t_content(xml: &[u8]) -> Option<&[u8]> {
+    let start = find_bytes(xml, b"<t", 0)?;
+    let content_start = xml[start..].iter().position(|&b| b == b'>')? + start + 1;
+    let content_end = find_bytes(xml, b"</t>", content_start)?;
+    Some(&xml[content_start..content_end])
+}
+
+fn attr_u32(xml: &[u8], name: &[u8]) -> Option<u32> {
+    attr_string(xml, name)?.parse().ok()
+}
+
+fn attr_string(xml: &[u8], name: &[u8]) -> Option<String> {
+    let mut needle = Vec::with_capacity(name.len() + 2);
+    needle.extend_from_slice(name);
+    needle.extend_from_slice(b"=\"");
+    let start = find_bytes(xml, &needle, 0)? + needle.len();
+    let end = xml[start..].iter().position(|&b| b == b'"')? + start;
+    std::str::from_utf8(&xml[start..end]).ok().map(str::to_owned)
+}
+
+fn decode_xml_text(xml: &[u8]) -> Option<String> {
+    let mut out = String::new();
+    let mut i = 0;
+    while i < xml.len() {
+        if xml[i] == b'&' {
+            if xml[i..].starts_with(b"&amp;") {
+                out.push('&');
+                i += 5;
+                continue;
+            }
+            if xml[i..].starts_with(b"&lt;") {
+                out.push('<');
+                i += 4;
+                continue;
+            }
+            if xml[i..].starts_with(b"&gt;") {
+                out.push('>');
+                i += 4;
+                continue;
+            }
+            if xml[i..].starts_with(b"&quot;") {
+                out.push('"');
+                i += 6;
+                continue;
+            }
+            if xml[i..].starts_with(b"&apos;") {
+                out.push('\'');
+                i += 6;
+                continue;
+            }
+        }
+        let s = std::str::from_utf8(&xml[i..]).ok()?;
+        let ch = s.chars().next()?;
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Some(out)
 }
 
 // =============================================================================

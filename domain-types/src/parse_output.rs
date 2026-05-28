@@ -217,6 +217,50 @@ pub struct SharedStringHint {
     pub phonetic_xml: Option<Vec<u8>>,
 }
 
+/// Cell-owned rich shared-string content.
+///
+/// The plain text projection remains the behavioral cell value. Rich runs and
+/// phonetic data are exported only when `plain_text` still matches the current
+/// text value, so ordinary text edits cannot replay stale SST formatting.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RichSharedString {
+    pub plain_text: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<RichTextRun>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phonetic_runs: Vec<PhoneticRun>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_properties: Option<PhoneticProperties>,
+    /// Source-compatible phonetic children for import compatibility.
+    ///
+    /// This is cell-owned state, not workbook-level preserved SST state. The
+    /// typed fields above are the domain contract; this raw fallback keeps
+    /// unsupported phonetic attributes from being discarded while the writer's
+    /// typed phonetic surface remains intentionally small.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_xml: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneticRun {
+    pub text: String,
+    pub start_index: u32,
+    pub end_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneticProperties {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<String>,
+}
+
 /// A named range definition (position-keyed, no CellIds).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -486,6 +530,9 @@ pub struct CellData {
     pub row: u32,
     pub col: u32,
     pub value: CellValue,
+    /// Rich/phonetic shared-string content owned by this cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich_string: Option<RichSharedString>,
     /// Formula in A1 notation (expanded text for all formula types).
     pub formula: Option<String>,
     /// Array formula master cell range.

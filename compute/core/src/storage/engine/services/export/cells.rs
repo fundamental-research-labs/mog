@@ -35,6 +35,7 @@ fn batch_read_props_array_refs_and_formula_metadata(
     FxHashMap<CellId, CellProperties>,
     FxHashMap<CellId, String>,
     FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
+    FxHashMap<CellId, domain_types::RichSharedString>,
 ) {
     let doc = stores.storage.doc();
     let txn = doc.transact();
@@ -76,6 +77,7 @@ fn batch_read_props_array_refs_and_formula_metadata(
     // --- Array formula refs + formula metadata ---
     let mut array_refs = FxHashMap::default();
     let mut formula_metadata = FxHashMap::default();
+    let mut rich_strings = FxHashMap::default();
     if let Some(cells_map) = crate::storage::infra::grid_helpers::get_cells_map(
         &txn,
         stores.storage.sheets(),
@@ -96,10 +98,15 @@ fn batch_read_props_array_refs_and_formula_metadata(
             if let Some(cell_formula) = read_formula_metadata_from_yrs(&cell_map, &txn) {
                 formula_metadata.insert(cell_id, cell_formula);
             }
+            if let Some(rich_string) =
+                compute_document::cell_serde::read_rich_string_from_yrs(&cell_map, &txn)
+            {
+                rich_strings.insert(cell_id, rich_string);
+            }
         }
     }
 
-    (all_props, array_refs, formula_metadata)
+    (all_props, array_refs, formula_metadata, rich_strings)
 }
 
 fn read_formula_metadata_from_yrs<T: yrs::ReadTxn>(
@@ -156,7 +163,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     // Batch-read all cell properties and formula metadata in a single Yrs
     // transaction, avoiding duplicate transaction setup overhead.
     // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
-    let (all_props, array_refs, formula_metadata) =
+    let (all_props, array_refs, formula_metadata, rich_strings) =
         batch_read_props_array_refs_and_formula_metadata(stores, sheet_id);
 
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
@@ -193,6 +200,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &all_props,
                 &array_refs,
                 &formula_metadata,
+                &rich_strings,
                 palette,
                 false,
             ) {
@@ -253,6 +261,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     &all_props,
                     &array_refs,
                     &formula_metadata,
+                    &rich_strings,
                     palette,
                     true,
                 );
@@ -370,6 +379,7 @@ fn build_cell_data_for_cell_id(
     all_props: &FxHashMap<CellId, CellProperties>,
     array_refs: &FxHashMap<CellId, String>,
     formula_metadata: &FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
+    rich_strings: &FxHashMap<CellId, domain_types::RichSharedString>,
     palette: &impl PaletteOps,
     preserve_blank: bool,
 ) -> Option<CellData> {
@@ -409,7 +419,8 @@ fn build_cell_data_for_cell_id(
         .and_then(|props| props.original_value.as_ref())
         .cloned();
 
-    let is_empty = value.is_null() && formula.is_none();
+    let rich_string = rich_strings.get(cell_id).cloned();
+    let is_empty = value.is_null() && formula.is_none() && rich_string.is_none();
     if is_empty
         && style_id.is_none()
         && !cm
@@ -442,6 +453,7 @@ fn build_cell_data_for_cell_id(
         row,
         col,
         value,
+        rich_string,
         formula: formula
             .as_deref()
             .map(|f| f.strip_prefix('=').unwrap_or(f).to_string()),
@@ -494,6 +506,7 @@ fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellData {
         row,
         col,
         value,
+        rich_string: None,
         formula: None,
         array_ref: None,
         style_id: None,
@@ -511,6 +524,7 @@ fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellData {
 fn is_plain_blank_cell(cell: &CellData) -> bool {
     cell.value.is_null()
         && cell.formula.is_none()
+        && cell.rich_string.is_none()
         && cell.style_id.is_none()
         && cell.cell_formula.is_none()
         && !cell.cm
@@ -527,6 +541,7 @@ fn is_plain_blank_cell(cell: &CellData) -> bool {
 fn is_imported_style_only_blank_cell(cell: &CellData) -> bool {
     cell.value.is_null()
         && cell.formula.is_none()
+        && cell.rich_string.is_none()
         && cell.style_id.is_some()
         && cell.cell_formula.is_none()
         && !cell.cm
@@ -842,6 +857,7 @@ mod tests {
         );
         let array_refs = FxHashMap::default();
         let formula_metadata = FxHashMap::default();
+        let rich_strings = FxHashMap::default();
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
         let (engine, _) =
@@ -857,6 +873,7 @@ mod tests {
             &props,
             &array_refs,
             &formula_metadata,
+            &rich_strings,
             &palette,
             false,
         );

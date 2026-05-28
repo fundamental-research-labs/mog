@@ -971,6 +971,9 @@ fn convert_cell_with_metadata_refs(
                 // We set explicit_type below after the match.
                 is_empty_string_cell = true;
                 CellValue::Empty
+            } else if let Some(rich) = current_rich_string(cell, s.as_ref()) {
+                let sst_idx = shared_strings.add_rich_shared_string(rich);
+                CellValue::String(sst_idx)
             } else {
                 // Use the original SST index when it still resolves to this text
                 // in the seeded SST. If the cell was edited after import, the
@@ -1030,6 +1033,11 @@ fn convert_cell_with_metadata_refs(
         },
         formula_type_hint,
     }
+}
+
+fn current_rich_string(cell: &DomainCellData, text: &str) -> Option<domain_types::RichSharedString> {
+    let rich = cell.rich_string.as_ref()?;
+    (rich.plain_text == text).then(|| rich.clone())
 }
 
 fn matching_authored_numeric_value(cell: &DomainCellData) -> Option<String> {

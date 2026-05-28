@@ -23,51 +23,30 @@ use crate::domain::styles::write::StylesWriter;
 pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     let mut writer = StylesWriter::with_defaults();
 
+    if let Some(default_fmt) = palette.first() {
+        apply_default_style(&mut writer, default_fmt);
+    }
+
     // The default style is already at cellXfs[0] from with_defaults().
     // Now add one cellXf per palette entry.
     for doc_fmt in palette {
-        let font_id = doc_fmt
-            .font
-            .as_ref()
-            .map(|f| writer.add_font(convert_font(f)))
-            .unwrap_or(0);
+        let components = add_style_components(&mut writer, doc_fmt);
 
-        let fill_id = doc_fmt
-            .fill
-            .as_ref()
-            .map(|f| writer.add_fill(convert_fill(f)))
-            .unwrap_or(0);
-
-        let border_id = doc_fmt
-            .border
-            .as_ref()
-            .map(|b| writer.add_border(convert_border(b)))
-            .unwrap_or(0);
-
-        let num_fmt_id = doc_fmt
-            .number_format
-            .as_ref()
-            .map(|nf| writer.add_num_fmt(nf))
-            .unwrap_or(0);
-
-        let alignment = doc_fmt.alignment.as_ref().map(convert_alignment);
-        let protection = doc_fmt.protection.as_ref().map(convert_protection);
-
-        let has_font = font_id != 0;
-        let has_fill = fill_id != 0;
-        let has_border = border_id != 0;
-        let has_num_fmt = num_fmt_id != 0;
-        let has_alignment = alignment.is_some();
-        let has_protection = protection.is_some();
+        let has_font = components.font_id != 0;
+        let has_fill = components.fill_id != 0;
+        let has_border = components.border_id != 0;
+        let has_num_fmt = components.num_fmt_id != 0;
+        let has_alignment = components.alignment.is_some();
+        let has_protection = components.protection.is_some();
 
         let xf = CellXfDef {
-            num_fmt_id: Some(num_fmt_id),
-            font_id: Some(font_id),
-            fill_id: Some(fill_id),
-            border_id: Some(border_id),
+            num_fmt_id: Some(components.num_fmt_id),
+            font_id: Some(components.font_id),
+            fill_id: Some(components.fill_id),
+            border_id: Some(components.border_id),
             xf_id: Some(0),
-            alignment,
-            protection,
+            alignment: components.alignment,
+            protection: components.protection,
             apply_number_format: if has_num_fmt { Some(true) } else { None },
             apply_font: if has_font { Some(true) } else { None },
             apply_fill: if has_fill { Some(true) } else { None },
@@ -83,6 +62,85 @@ pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     }
 
     writer
+}
+
+struct StyleComponentIds {
+    font_id: u32,
+    fill_id: u32,
+    border_id: u32,
+    num_fmt_id: u32,
+    alignment: Option<AlignmentDef>,
+    protection: Option<ProtectionDef>,
+}
+
+fn add_style_components(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> StyleComponentIds {
+    let font_id = doc_fmt
+        .font
+        .as_ref()
+        .map(|f| writer.add_font(convert_font(f)))
+        .unwrap_or(0);
+
+    let fill_id = doc_fmt
+        .fill
+        .as_ref()
+        .map(|f| writer.add_fill(convert_fill(f)))
+        .unwrap_or(0);
+
+    let border_id = doc_fmt
+        .border
+        .as_ref()
+        .map(|b| writer.add_border(convert_border(b)))
+        .unwrap_or(0);
+
+    let num_fmt_id = doc_fmt
+        .number_format
+        .as_ref()
+        .map(|nf| writer.add_num_fmt(nf))
+        .unwrap_or(0);
+
+    StyleComponentIds {
+        font_id,
+        fill_id,
+        border_id,
+        num_fmt_id,
+        alignment: doc_fmt.alignment.as_ref().map(convert_alignment),
+        protection: doc_fmt.protection.as_ref().map(convert_protection),
+    }
+}
+
+fn apply_default_style(writer: &mut StylesWriter, default_fmt: &DocumentFormat) {
+    let components = add_style_components(writer, default_fmt);
+
+    let style_xf = CellXfDef {
+        num_fmt_id: Some(components.num_fmt_id),
+        font_id: Some(components.font_id),
+        fill_id: Some(components.fill_id),
+        border_id: Some(components.border_id),
+        xf_id: None,
+        alignment: components.alignment.clone(),
+        protection: components.protection.clone(),
+        apply_number_format: None,
+        apply_font: None,
+        apply_fill: None,
+        apply_border: None,
+        apply_alignment: None,
+        apply_protection: None,
+        pivot_button: false,
+        quote_prefix: false,
+        ext_lst: None,
+    };
+
+    let cell_xf = CellXfDef {
+        xf_id: Some(0),
+        ..style_xf.clone()
+    };
+
+    if let Some(slot) = writer.cell_style_xfs.get_mut(0) {
+        *slot = style_xf;
+    }
+    if let Some(slot) = writer.cell_xfs.get_mut(0) {
+        *slot = cell_xf;
+    }
 }
 
 /// Whether the current modeled workbook references any style IDs.

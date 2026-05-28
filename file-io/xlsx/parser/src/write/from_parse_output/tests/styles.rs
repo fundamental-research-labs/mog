@@ -49,6 +49,30 @@ fn test_style_mapping_font() {
 }
 
 #[test]
+fn test_style_mapping_preserves_palette_zero_as_default_style() {
+    let palette = vec![DocumentFormat {
+        font: Some(FontFormat {
+            name: Some("Aptos Narrow".to_string()),
+            size: Some(12_000),
+            scheme: Some("minor".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }];
+
+    let writer = build_styles(&palette);
+
+    let default_font_id = writer.cell_style_xfs[0].font_id.unwrap() as usize;
+    assert_eq!(
+        writer.fonts[default_font_id].name.as_deref(),
+        Some("Aptos Narrow")
+    );
+    assert_eq!(writer.fonts[default_font_id].size, Some(12.0));
+    assert_eq!(writer.cell_xfs[0].font_id, Some(default_font_id as u32));
+    assert_eq!(writer.cell_xfs[1].font_id, Some(default_font_id as u32));
+}
+
+#[test]
 fn test_style_mapping_border() {
     let palette = vec![DocumentFormat {
         border: Some(BorderFormat {

@@ -40,6 +40,11 @@ name = "xlsx-gate"
 path = "src/bin/xlsx_gate.rs"
 required-features = ["cli"]
 
+[[test]]
+name = "corpus_tests"
+path = "tests/corpus_tests.rs"
+required-features = ["slow-tests"]
+
 [dependencies]
 # XML derive macros for declarative XML <-> Rust struct mapping
 xml-derive = { path = "xml-derive" }
@@ -120,6 +125,8 @@ native = ["memmap2", "flate2"]
 parallel = ["native", "rayon"]
 # Test corpus generator feature (native only, generates malformed test files)
 corpus-gen = []
+# Slow corpus-walk tests that should not run in default focused test commands.
+slow-tests = []
 
 [profile.release]
 # Maximum optimization level

@@ -3,20 +3,15 @@
  *
  * Contextual ribbon tab shown when a picture/image is selected.
  * Provides adjust, arrange, and size controls.
- *
- * NOTE: This is a stub implementation. Picture selection and management
- * is not yet implemented. This component will be fully functional when
- * the picture/image system is added.
- *
- * Groups:
- * - Adjust: Brightness, Contrast, Reset (stubs)
- * - Arrange: Bring Forward, Send Backward, Align
- * - Size: Width, Height inputs, Reset
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Checkbox, Input } from '@mog/shell';
+import type { PictureObject } from '@mog-sdk/contracts/floating-objects';
+import { useFloatingObject } from '../../../hooks/objects/use-floating-object';
+import { useObjectInteraction } from '../../../hooks/objects/use-object-interaction';
+import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import {
@@ -34,63 +29,106 @@ import type { ContextualTabProps } from './contextual-tab-registry';
 // Component
 // =============================================================================
 
-/**
- * PictureToolsRibbon - Contextual tab for picture/image editing.
- *
- * This is currently a stub implementation since the picture selection
- * system is not yet implemented. The UI is functional but actions
- * will have no effect until the picture system is added.
- */
 export function PictureToolsRibbon(_props: ContextualTabProps) {
-  // ==========================================================================
-  // Placeholder Handlers
-  // NOTE: These will be connected to actual picture operations when implemented
-  // ==========================================================================
+  const dispatch = useDispatch();
+  const objectInteraction = useObjectInteraction();
+  const selectedObjectId =
+    objectInteraction.selectedIds.length === 1 ? objectInteraction.selectedIds[0] : '';
+  const selectedObject = useFloatingObject(selectedObjectId);
+  const selectedPicture = selectedObject?.type === 'picture' ? selectedObject : undefined;
+  const selectedPictureId = selectedPicture?.id;
+  const hasSelectedPicture = Boolean(selectedPictureId);
+  const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
+
+  useEffect(() => {
+    setMaintainAspectRatio(selectedPicture?.lockAspectRatio ?? true);
+  }, [selectedPictureId, selectedPicture?.lockAspectRatio]);
+
+  const pictureSize = useMemo(() => getPictureSize(selectedPicture), [selectedPicture]);
+
+  const updatePicture = useCallback(
+    (updates: Partial<Pick<PictureObject, 'adjustments'>> & { width?: number; height?: number }) => {
+      if (!selectedPictureId) return;
+      dispatch('UPDATE_PICTURE', { objectId: selectedPictureId, updates });
+    },
+    [dispatch, selectedPictureId],
+  );
 
   const handleBrightnessChange = useCallback(() => {
-    // TODO: Implement brightness adjustment when picture system is ready
-    console.log('[PictureToolsRibbon] Brightness adjustment not yet implemented');
-  }, []);
+    if (!selectedPicture) return;
+    updatePicture({
+      adjustments: {
+        ...selectedPicture.adjustments,
+        brightness: clampAdjustment((selectedPicture.adjustments?.brightness ?? 0) + 10),
+      },
+    });
+  }, [selectedPicture, updatePicture]);
 
   const handleContrastChange = useCallback(() => {
-    // TODO: Implement contrast adjustment when picture system is ready
-    console.log('[PictureToolsRibbon] Contrast adjustment not yet implemented');
-  }, []);
+    if (!selectedPicture) return;
+    updatePicture({
+      adjustments: {
+        ...selectedPicture.adjustments,
+        contrast: clampAdjustment((selectedPicture.adjustments?.contrast ?? 0) + 10),
+      },
+    });
+  }, [selectedPicture, updatePicture]);
 
   const handleReset = useCallback(() => {
-    // TODO: Implement reset when picture system is ready
-    console.log('[PictureToolsRibbon] Reset not yet implemented');
-  }, []);
+    if (!selectedPictureId) return;
+    dispatch('RESET_PICTURE', { objectId: selectedPictureId });
+  }, [dispatch, selectedPictureId]);
 
   const handleBringToFront = useCallback(() => {
-    // TODO: Implement z-order when picture system is ready
-    console.log('[PictureToolsRibbon] Bring to front not yet implemented');
-  }, []);
+    if (!selectedPictureId) return;
+    dispatch('BRING_OBJECT_TO_FRONT', { objectId: selectedPictureId });
+  }, [dispatch, selectedPictureId]);
 
   const handleSendToBack = useCallback(() => {
-    // TODO: Implement z-order when picture system is ready
-    console.log('[PictureToolsRibbon] Send to back not yet implemented');
-  }, []);
+    if (!selectedPictureId) return;
+    dispatch('SEND_OBJECT_TO_BACK', { objectId: selectedPictureId });
+  }, [dispatch, selectedPictureId]);
 
   const handleBringForward = useCallback(() => {
-    // TODO: Implement z-order when picture system is ready
-    console.log('[PictureToolsRibbon] Bring forward not yet implemented');
-  }, []);
+    if (!selectedPictureId) return;
+    dispatch('BRING_OBJECT_FORWARD', { objectId: selectedPictureId });
+  }, [dispatch, selectedPictureId]);
 
   const handleSendBackward = useCallback(() => {
-    // TODO: Implement z-order when picture system is ready
-    console.log('[PictureToolsRibbon] Send backward not yet implemented');
-  }, []);
+    if (!selectedPictureId) return;
+    dispatch('SEND_OBJECT_BACKWARD', { objectId: selectedPictureId });
+  }, [dispatch, selectedPictureId]);
 
   const handleDelete = useCallback(() => {
-    // TODO: Implement delete when picture system is ready
-    console.log('[PictureToolsRibbon] Delete not yet implemented');
+    if (!selectedPictureId) return;
+    dispatch('DELETE_OBJECT');
+  }, [dispatch, selectedPictureId]);
+
+  const handleMaintainAspectRatioChange = useCallback((checked: boolean) => {
+    setMaintainAspectRatio(checked);
   }, []);
 
-  const handleMaintainAspectRatioChange = useCallback(() => {
-    // TODO: Implement aspect ratio lock when picture system is ready
-    console.log('[PictureToolsRibbon] Aspect ratio toggle not yet implemented');
-  }, []);
+  const updateSize = useCallback(
+    (field: 'width' | 'height', rawValue: string) => {
+      if (!selectedPicture || !pictureSize) return;
+      const nextValue = parsePositivePixelValue(rawValue);
+      if (nextValue == null) return;
+
+      if (!maintainAspectRatio) {
+        updatePicture({ [field]: nextValue });
+        return;
+      }
+
+      const ratio =
+        pictureSize.width > 0 && pictureSize.height > 0 ? pictureSize.height / pictureSize.width : 1;
+      updatePicture(
+        field === 'width'
+          ? { width: nextValue, height: Math.max(1, Math.round(nextValue * ratio)) }
+          : { width: Math.max(1, Math.round(nextValue / ratio)), height: nextValue },
+      );
+    },
+    [maintainAspectRatio, pictureSize, selectedPicture, updatePicture],
+  );
 
   return (
     <>
@@ -103,9 +141,9 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
             icon={<PictureIcon />}
             label="Brightness"
             onClick={handleBrightnessChange}
-            title="Adjust picture brightness"
+            title="Increase picture brightness"
             aria-label="Brightness"
-            disabled
+            disabled={!hasSelectedPicture}
           />
           <RibbonButton
             layout="horizontal"
@@ -113,9 +151,9 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
             icon={<PictureIcon />}
             label="Contrast"
             onClick={handleContrastChange}
-            title="Adjust picture contrast"
+            title="Increase picture contrast"
             aria-label="Contrast"
-            disabled
+            disabled={!hasSelectedPicture}
           />
         </div>
         <RibbonButton
@@ -126,7 +164,7 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
           onClick={handleReset}
           title="Reset picture to original settings"
           aria-label="Reset Picture"
-          disabled
+          disabled={!hasSelectedPicture}
         />
       </ToolbarGroup>
 
@@ -142,7 +180,7 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
               onClick={handleBringToFront}
               title="Bring picture to front (highest layer)"
               aria-label="Bring to Front"
-              disabled
+              disabled={!hasSelectedPicture}
             />
             <RibbonButton
               layout="horizontal"
@@ -152,7 +190,7 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
               onClick={handleSendToBack}
               title="Send picture to back (lowest layer)"
               aria-label="Send to Back"
-              disabled
+              disabled={!hasSelectedPicture}
             />
           </div>
           <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
@@ -164,7 +202,7 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
               onClick={handleBringForward}
               title="Bring picture forward one layer"
               aria-label="Bring Forward"
-              disabled
+              disabled={!hasSelectedPicture}
             />
             <RibbonButton
               layout="horizontal"
@@ -174,7 +212,7 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
               onClick={handleSendBackward}
               title="Send picture backward one layer"
               aria-label="Send Backward"
-              disabled
+              disabled={!hasSelectedPicture}
             />
           </div>
         </div>
@@ -186,31 +224,37 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
           <div className="flex items-center gap-1">
             <span className="text-ribbon text-ss-text-tertiary w-8">W:</span>
             <Input
-              type="text"
-              defaultValue="100"
+              type="number"
+              min={1}
+              value={pictureSize?.width ?? ''}
               className="w-14 px-1 py-0.5 text-ribbon"
               title="Picture width"
-              disabled
+              aria-label="Picture width"
+              onChange={(event) => updateSize('width', event.currentTarget.value)}
+              disabled={!hasSelectedPicture}
             />
             <span className="text-ribbon text-ss-text-tertiary">px</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-ribbon text-ss-text-tertiary w-8">H:</span>
             <Input
-              type="text"
-              defaultValue="100"
+              type="number"
+              min={1}
+              value={pictureSize?.height ?? ''}
               className="w-14 px-1 py-0.5 text-ribbon"
               title="Picture height"
-              disabled
+              aria-label="Picture height"
+              onChange={(event) => updateSize('height', event.currentTarget.value)}
+              disabled={!hasSelectedPicture}
             />
             <span className="text-ribbon text-ss-text-tertiary">px</span>
           </div>
           <Checkbox
-            checked={true}
+            checked={maintainAspectRatio}
             onChange={handleMaintainAspectRatioChange}
             label="Lock aspect ratio"
             className="text-ribbon"
-            disabled
+            disabled={!hasSelectedPicture}
           />
         </div>
       </ToolbarGroup>
@@ -225,9 +269,29 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
           onClick={handleDelete}
           title="Delete selected picture"
           aria-label="Delete Picture"
-          disabled
+          disabled={!hasSelectedPicture}
         />
       </ToolbarGroup>
     </>
   );
+}
+
+function getPictureSize(picture: PictureObject | undefined): { width: number; height: number } | null {
+  if (!picture) return null;
+  const width = picture.position.width ?? picture.originalWidth;
+  const height = picture.position.height ?? picture.originalHeight;
+  return {
+    width: Math.max(1, Math.round(width || 1)),
+    height: Math.max(1, Math.round(height || 1)),
+  };
+}
+
+function parsePositivePixelValue(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed);
+}
+
+function clampAdjustment(value: number): number {
+  return Math.max(-100, Math.min(100, value));
 }

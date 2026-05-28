@@ -282,6 +282,7 @@ pub fn full_parse_result_to_parse_output(
         connections: result.connections.clone(),
         persons,
     };
+    let _data_features = parse_output.workbook_data_features();
     populate_dxf_registry_owners(&mut parse_output);
 
     // 10. Build ParseDiagnostics

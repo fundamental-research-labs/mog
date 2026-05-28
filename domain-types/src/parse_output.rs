@@ -237,6 +237,81 @@ impl From<ooxml_types::shared::OpcRelationship> for PackageRelationshipHint {
     }
 }
 
+impl ParseOutput {
+    /// Build the Round 9 workbook data-feature aggregate from the compatibility
+    /// fields that still back parser, Yrs, and writer paths.
+    #[must_use]
+    pub fn workbook_data_features(&self) -> WorkbookDataFeatures {
+        WorkbookDataFeatures::from_compat_fields(
+            &self.sheets,
+            &self.connections,
+            &self.external_links,
+            &self.pivot_tables,
+            &self.pivot_cache_records,
+            &self.slicer_caches,
+            &self.metadata,
+            &self.data_table_regions,
+        )
+    }
+
+    /// Replace compatibility fields from a workbook data-feature aggregate.
+    ///
+    /// This is the migration bridge for callers that start from the aggregate
+    /// while existing production writers still consume legacy fields directly.
+    pub fn apply_workbook_data_features(&mut self, data_features: WorkbookDataFeatures) {
+        self.connections = data_features.connections;
+        self.external_links = data_features.external_links;
+        self.pivot_tables = data_features.pivot_tables;
+        self.pivot_cache_records = data_features
+            .pivot_caches
+            .into_iter()
+            .filter_map(|cache| (!cache.records.is_empty()).then_some((cache.cache_id, cache.records)))
+            .collect();
+        self.slicer_caches = data_features.slicer_caches;
+        self.metadata = data_features.metadata;
+        self.data_table_regions = data_features.what_if.data_table_regions;
+
+        for sheet in &mut self.sheets {
+            sheet.tables.clear();
+            sheet.slicers.clear();
+            sheet.slicer_anchors.clear();
+        }
+
+        for table in data_features.tables {
+            if let Some(sheet) = find_data_feature_sheet_mut(&mut self.sheets, &table.owner) {
+                sheet.tables.push(table.table);
+            }
+        }
+
+        for slicer in data_features.slicers {
+            if let Some(sheet) = find_data_feature_sheet_mut(&mut self.sheets, &slicer.owner) {
+                if let Some(anchor) = slicer.anchor {
+                    sheet.slicer_anchors.push(anchor);
+                }
+                sheet.slicers.push(slicer.slicer);
+            }
+        }
+    }
+}
+
+fn find_data_feature_sheet_mut<'a>(
+    sheets: &'a mut [SheetData],
+    owner: &SheetFeatureOwner,
+) -> Option<&'a mut SheetData> {
+    let index_matches = sheets
+        .get(owner.sheet_index as usize)
+        .is_some_and(|sheet| sheet.name == owner.sheet_name);
+    if index_matches {
+        return sheets.get_mut(owner.sheet_index as usize);
+    }
+
+    let sheet_id = owner.sheet_id?;
+    let index = sheets
+        .iter()
+        .position(|sheet| sheet.sheet_id == Some(sheet_id))?;
+    sheets.get_mut(index)
+}
+
 #[must_use]
 pub fn normalize_package_path(path: &str) -> String {
     path.trim_start_matches('/').replace('\\', "/")

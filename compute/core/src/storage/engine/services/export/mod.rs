@@ -890,23 +890,9 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let (custom_table_styles, default_table_style, default_pivot_style) =
         export_workbook_table_styles(stores);
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
-    let mut connections = workbook::export_workbook_connections(stores);
-    let referenced_connection_ids: std::collections::BTreeSet<u32> = output_sheets
-        .iter()
-        .flat_map(|sheet| sheet.tables.iter())
-        .filter_map(|table| {
-            table
-                .query_table
-                .as_ref()
-                .and_then(|query_table| query_table.connection_id)
-                .or(table.connection_id)
-        })
-        .collect();
-    connections
-        .connections
-        .retain(|connection| referenced_connection_ids.contains(&connection.id));
+    let connections = workbook::export_workbook_connections(stores);
 
-    ParseOutput {
+    let output = ParseOutput {
         sheets: output_sheets,
         workbook_sheet_inventory: Vec::new(),
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
@@ -936,7 +922,9 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         external_links: export_external_links(stores),
         connections,
         persons: export_workbook_threaded_comment_persons(stores),
-    }
+    };
+    let _data_features = output.workbook_data_features();
+    output
 }
 
 /// Helper: resolve a cell_id hex string to (row, col) via the compute mirror.

@@ -563,8 +563,10 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_reader: "domain::tables, domain::connections",
         private_parser_adapter: "table and connection parser structs",
         full_parse_result_field: "tables, connections",
-        parse_output_domain_owner: "SheetData tables and workbook data connections",
-        yrs_app_persistence_owner: "table state; connection/query persistence pending plan 05",
+        parse_output_domain_owner:
+            "WorkbookDataFeatures tables/connections/queryTables projection; compatibility fields SheetData.tables and ParseOutput.connections",
+        yrs_app_persistence_owner:
+            "table Yrs state plus workbookConnections registry; unreferenced connections survive export",
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "domain::tables::write; connection writer when modeled",
         package_feature_owner: Some(PackageFeatureOwner::ConnectionsAndQueryTables),
@@ -579,7 +581,8 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         semantic_references: &["table id/name", "connection id", "queryTable r:id"],
         user_visible_behavior: "table ranges, filters, and external data binding metadata",
-        fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 05",
+        fixture_coverage:
+            "WorkbookDataFeatures projection contract; L2 export no longer filters unreferenced connections",
     },
     OoxmlOwnershipRow {
         surface: "drawings, drawing references, charts, ChartEx, media, and chart auxiliaries",
@@ -780,8 +783,9 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_reader: "domain::pivot, domain::slicers, domain::metadata",
         private_parser_adapter: "pivot/cache/slicer/metadata parser structs",
         full_parse_result_field: "pivot_tables, slicers, metadata, rich_data",
-        parse_output_domain_owner: "SheetData pivots/slicers and workbook metadata/rich data",
-        yrs_app_persistence_owner: "pivot/slicer/metadata state where modeled",
+        parse_output_domain_owner:
+            "WorkbookDataFeatures pivot/slicer/timeline/metadata projection; compatibility fields ParseOutput.pivot_tables, pivot_cache_records, slicer_caches, metadata and SheetData.slicers",
+        yrs_app_persistence_owner: "pivot/slicer/metadata state where modeled; WorkbookDataFeatures projection rebuilt on export",
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "pivot/slicer/metadata writers",
         package_feature_owner: Some(PackageFeatureOwner::PivotTables),
@@ -797,7 +801,41 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         semantic_references: &["pivot cache id", "slicer cache id", "timeline cache id", "cm/vm index"],
         user_visible_behavior: "pivot output, slicers/timelines, rich data display and metadata bindings",
-        fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 05",
+        fixture_coverage: "WorkbookDataFeatures projection contract; feature gates still owned by plan 05 follow-up slices",
+    },
+    OoxmlOwnershipRow {
+        surface: "workbook external links and external-reference ordinal model",
+        package_part_patterns: &["xl/externalLinks/externalLink*.xml"],
+        ooxml_modules: &["external_links"],
+        canonical_type_status: CanonicalTypeStatus::NeedsCorrection,
+        classification: OoxmlOwnershipClassification::TypedViewOnly,
+        production_reader: "domain::external",
+        private_parser_adapter: "external link parser structs and workbook externalReference order",
+        full_parse_result_field: "external_links",
+        parse_output_domain_owner:
+            "WorkbookDataFeatures externalLinks projection; compatibility field ParseOutput.external_links",
+        yrs_app_persistence_owner:
+            "workbook links registry plus imported external cache records",
+        api_exposure: ApiExposureLevel::ReadOnly,
+        production_writer: "write::from_parse_output external_links writer",
+        package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ExternalCapable),
+        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        unsupported_diagnostic_policy:
+            "orphan external links and unsupported DDE/OLE refresh behaviors are diagnosed; stale opaque externalLink parts are rejected",
+        dirty_invalidation_triggers: &[
+            "external link add/update/delete",
+            "external link reorder",
+            "defined name/formula external reference mutation",
+        ],
+        semantic_references: &[
+            "Excel external reference ordinal",
+            "workbook externalReference r:id",
+            "externalLink owned path r:id",
+            "external cached sheet/name data",
+        ],
+        user_visible_behavior: "external workbook/DDE/OLE link metadata and formula ordinal bindings",
+        fixture_coverage: "WorkbookDataFeatures projection contract; workbook-link cache persistence owned by compute import/export",
     },
     OoxmlOwnershipRow {
         surface: "document properties, labels, custom XML payloads, XML maps, and custom XML bindings",

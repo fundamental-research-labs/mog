@@ -1,0 +1,355 @@
+use serde::{Deserialize, Serialize};
+use value_types::CellValue;
+
+use super::connections::{QueryTable, WorkbookConnectionSet};
+use super::external_link::ExternalLink;
+use super::pivot::ParsedPivotTable;
+use super::table::TableSpec;
+use crate::{DataTableRegion, SheetData, WorkbookMetadata};
+
+/// Workbook-owned aggregate for active OOXML data features.
+///
+/// Existing parser, Yrs, and writer compatibility fields still project out of
+/// this shape during Round 9 migration. New data-feature surfaces should attach
+/// here first, then add compatibility projections only where older call sites
+/// still require them.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookDataFeatures {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<WorkbookTableFeature>,
+    #[serde(default, skip_serializing_if = "WorkbookConnectionSet::is_empty")]
+    pub connections: WorkbookConnectionSet,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_tables: Vec<WorkbookQueryTableFeature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub xml_maps: Vec<WorkbookXmlMapFeature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_links: Vec<ExternalLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_caches: Vec<WorkbookPivotCacheFeature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_tables: Vec<ParsedPivotTable>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slicer_caches: Vec<ooxml_types::slicers::SlicerCacheDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slicers: Vec<WorkbookSlicerFeature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timeline_caches: Vec<ooxml_types::timelines::TimelineCacheDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timelines: Vec<WorkbookTimelineFeature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<WorkbookMetadata>,
+    #[serde(default, skip_serializing_if = "WorkbookWhatIfFeatures::is_empty")]
+    pub what_if: WorkbookWhatIfFeatures,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<DataFeatureDiagnostic>,
+}
+
+impl WorkbookDataFeatures {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.tables.is_empty()
+            && self.connections.is_empty()
+            && self.query_tables.is_empty()
+            && self.xml_maps.is_empty()
+            && self.external_links.is_empty()
+            && self.pivot_caches.is_empty()
+            && self.pivot_tables.is_empty()
+            && self.slicer_caches.is_empty()
+            && self.slicers.is_empty()
+            && self.timeline_caches.is_empty()
+            && self.timelines.is_empty()
+            && self.metadata.as_ref().is_none_or(WorkbookMetadata::is_empty)
+            && self.what_if.is_empty()
+            && self.unsupported.is_empty()
+    }
+
+    #[must_use]
+    pub fn from_compat_fields(
+        sheets: &[SheetData],
+        connections: &WorkbookConnectionSet,
+        external_links: &[ExternalLink],
+        pivot_tables: &[ParsedPivotTable],
+        pivot_cache_records: &std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
+        slicer_caches: &[ooxml_types::slicers::SlicerCacheDef],
+        metadata: &Option<WorkbookMetadata>,
+        data_table_regions: &[DataTableRegion],
+    ) -> Self {
+        let mut tables = Vec::new();
+        let mut query_tables = Vec::new();
+        let mut slicers = Vec::new();
+
+        for (sheet_index, sheet) in sheets.iter().enumerate() {
+            let sheet_owner = SheetFeatureOwner {
+                sheet_index: sheet_index as u32,
+                sheet_name: sheet.name.clone(),
+                sheet_id: sheet.sheet_id,
+            };
+
+            for table in &sheet.tables {
+                tables.push(WorkbookTableFeature {
+                    owner: sheet_owner.clone(),
+                    table: table.clone(),
+                });
+                if let Some(query_table) = &table.query_table {
+                    query_tables.push(WorkbookQueryTableFeature {
+                        owner: sheet_owner.clone(),
+                        table_id: table.id,
+                        table_name: table.name.clone(),
+                        query_table: query_table.clone(),
+                    });
+                }
+            }
+
+            for slicer in &sheet.slicers {
+                slicers.push(WorkbookSlicerFeature {
+                    owner: sheet_owner.clone(),
+                    slicer: slicer.clone(),
+                    anchor: sheet
+                        .slicer_anchors
+                        .iter()
+                        .find(|anchor| anchor.slicer_name == slicer.name)
+                        .cloned(),
+                });
+            }
+        }
+
+        let mut pivot_caches: Vec<_> = pivot_cache_records
+            .iter()
+            .map(|(cache_id, records)| WorkbookPivotCacheFeature {
+                cache_id: *cache_id,
+                records: records.clone(),
+                package: None,
+                unsupported: Vec::new(),
+            })
+            .collect();
+        pivot_caches.sort_by_key(|cache| cache.cache_id);
+
+        Self {
+            tables,
+            connections: connections.clone(),
+            query_tables,
+            xml_maps: Vec::new(),
+            external_links: external_links.to_vec(),
+            pivot_caches,
+            pivot_tables: pivot_tables.to_vec(),
+            slicer_caches: slicer_caches.to_vec(),
+            slicers,
+            timeline_caches: Vec::new(),
+            timelines: Vec::new(),
+            metadata: metadata.clone(),
+            what_if: WorkbookWhatIfFeatures {
+                data_table_regions: data_table_regions.to_vec(),
+                scenarios: Vec::new(),
+                data_consolidations: Vec::new(),
+            },
+            unsupported: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetFeatureOwner {
+    pub sheet_index: u32,
+    pub sheet_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_id: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookTableFeature {
+    pub owner: SheetFeatureOwner,
+    pub table: TableSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookQueryTableFeature {
+    pub owner: SheetFeatureOwner,
+    pub table_id: u32,
+    pub table_name: String,
+    pub query_table: QueryTable,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlMapFeature {
+    pub map_id: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mapped_cells: Vec<WorkbookXmlCellBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mapped_columns: Vec<WorkbookXmlTableColumnBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom_xml_parts: Vec<CustomXmlPayloadBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<DataFeatureDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlCellBinding {
+    pub owner: SheetFeatureOwner,
+    pub cell_ref: String,
+    pub xml_cell_pr: ooxml_types::xml_map::XmlCellPr,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlTableColumnBinding {
+    pub owner: SheetFeatureOwner,
+    pub table_id: u32,
+    pub table_name: String,
+    pub column_id: u32,
+    pub xml_column_pr: ooxml_types::xml_map::XmlColumnPr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomXmlPayloadBinding {
+    pub item_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_props_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookPivotCacheFeature {
+    pub cache_id: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub records: Vec<Vec<CellValue>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PivotCachePackageIdentity>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<DataFeatureDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotCachePackageIdentity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_relationship_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookSlicerFeature {
+    pub owner: SheetFeatureOwner,
+    pub slicer: ooxml_types::slicers::SlicerDef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<ooxml_types::slicers::SlicerAnchor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookTimelineFeature {
+    pub owner: SheetFeatureOwner,
+    pub timeline: ooxml_types::timelines::TimelineDef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<ooxml_types::timelines::TimelineAnchor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookWhatIfFeatures {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_table_regions: Vec<DataTableRegion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenarios: Vec<WorksheetScenarioFeature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_consolidations: Vec<WorksheetDataConsolidationFeature>,
+}
+
+impl WorkbookWhatIfFeatures {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.data_table_regions.is_empty()
+            && self.scenarios.is_empty()
+            && self.data_consolidations.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorksheetScenarioFeature {
+    pub owner: SheetFeatureOwner,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorksheetDataConsolidationFeature {
+    pub owner: SheetFeatureOwner,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataFeatureDiagnostic {
+    pub code: DataFeatureDiagnosticCode,
+    pub severity: DataFeatureDiagnosticSeverity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_feature_id: Option<String>,
+    pub export_behavior: DataFeatureExportBehavior,
+    pub summary: String,
+    #[serde(default)]
+    pub api_visible: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DataFeatureDiagnosticCode {
+    DroppedCalcChain,
+    UnsupportedVolatileDependencies,
+    UnsupportedTimeline,
+    UnsupportedDataModel,
+    UnsupportedCubeMetadata,
+    UnsupportedFeaturePropertyBag,
+    OrphanExternalLink,
+    BrokenQueryTableRelationship,
+    MissingConnectionId,
+    MissingPivotCache,
+    BrokenSlicerBinding,
+    BrokenTimelineBinding,
+    UnsupportedXmlMapBinding,
+    RichDataMetadataIndexMismatch,
+    UntypedActiveRichData,
+    StaleOpaquePartRejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DataFeatureDiagnosticSeverity {
+    Info,
+    #[default]
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DataFeatureExportBehavior {
+    PreservedFromTypedState,
+    RebuiltFromTypedState,
+    #[default]
+    DroppedWithDiagnostic,
+}

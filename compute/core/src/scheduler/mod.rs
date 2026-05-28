@@ -22,8 +22,8 @@
 //!
 //! | Path | Module | When | Why separate |
 //! |------|--------|------|--------------|
-//! | **Incremental topo** | `recalc.rs` (`topo_evaluate_pass`) | Small dirty set after edits | Computes fresh topo levels from dirty cells via `graph.subset_levels()` |
-//! | **Full topo** | `recalc.rs` (`topo_evaluate_pass_with_levels`) | Full recalc (load, structural change) | Accepts pre-computed global levels — avoids redundant topo sort |
+//! | **Incremental topo** | `recalc/` (`topo_evaluate_pass`) | Small dirty set after edits | Computes fresh topo levels from dirty cells via `graph.subset_levels()` |
+//! | **Full topo** | `recalc/` (`topo_evaluate_pass_with_levels`) | Full recalc (load, structural change) | Accepts pre-computed global levels — avoids redundant topo sort |
 //! | **Cycle recovery** | `cycles.rs` (`handle_cycles_and_recalc`) | Circular references detected | SCC analysis + special seeding (null→0.0) + optional iterative convergence |
 //! | **Data table prepass** | `data_table_prepass.rs` (`run_data_table_prepass`) | TABLE formulas present | Mutate-recalc-restore: overrides input cells per (row,col) combination, clears caches per write |
 //!

@@ -157,10 +157,6 @@ pub struct SheetRoundTripContext {
     /// Some XLSX files contain empty `<Relationships/>` rels files that must be preserved.
     #[serde(default)]
     pub has_drawing_rels_file: bool,
-    /// Whether the original `<mergeCells>` element had a `count` attribute.
-    /// The attribute is optional per OOXML spec; this preserves the original choice.
-    #[serde(default)]
-    pub merge_cells_has_count: bool,
 }
 
 /// A named binary blob part (path + bytes).

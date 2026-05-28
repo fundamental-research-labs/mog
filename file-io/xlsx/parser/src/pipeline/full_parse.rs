@@ -39,8 +39,8 @@ use crate::domain::validation::read::parse_data_validations;
 use crate::domain::workbook::read as workbook;
 use crate::domain::workbook::read::parse_calc_settings;
 use crate::domain::worksheet::read::{
-    merge_cells_has_count, parse_col_widths, parse_frozen_pane, parse_merge_cells,
-    parse_sheet_format_pr, parse_sheet_views,
+    parse_col_widths, parse_frozen_pane, parse_merge_cells, parse_sheet_format_pr,
+    parse_sheet_views,
 };
 use crate::infra::error::{ParseContext, ParseMode};
 use crate::infra::opc::opc_target_to_zip_path;
@@ -1188,7 +1188,6 @@ fn process_sheet_core(
 
     let merges = parse_merge_cells(post_sd);
     ensure_count_limit("merge", merges.len(), MAX_MERGES)?;
-    let mc_has_count = merge_cells_has_count(post_sd);
     let (conditional_formats, conditional_formatting_full) = parse_conditional_formats(post_sd);
     let (data_validations, dv_container_attrs) = parse_data_validations(post_sd);
     ensure_count_limit("data validation", data_validations.len(), MAX_VALIDATIONS)?;
@@ -1293,7 +1292,6 @@ fn process_sheet_core(
         authored_style_runs,
         explicit_blank_cells,
         merges,
-        merge_cells_has_count: mc_has_count,
         conditional_formats,
         conditional_formatting_full,
         data_validations,
@@ -1593,7 +1591,6 @@ fn parse_sheets_sequential(
         let aux_t0 = tick(timings);
         let merges = parse_merge_cells(post_sd);
         ensure_count_limit("merge", merges.len(), MAX_MERGES)?;
-        let mc_has_count = merge_cells_has_count(post_sd);
         let aux_t1 = tick(timings);
         let (conditional_formats, conditional_formatting_full) = parse_conditional_formats(post_sd);
         let aux_t2 = tick(timings);
@@ -1828,7 +1825,6 @@ fn parse_sheets_sequential(
             authored_style_runs,
             explicit_blank_cells,
             merges,
-            merge_cells_has_count: mc_has_count,
             conditional_formats,
             conditional_formatting_full,
             data_validations,

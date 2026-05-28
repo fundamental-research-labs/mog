@@ -151,10 +151,6 @@ pub struct FullParsedSheet {
     pub explicit_blank_cells: Vec<(u32, u32)>,
     /// Merge ranges
     pub merges: Vec<MergeRange>,
-    /// Whether the original `<mergeCells>` element had a `count` attribute.
-    /// Used for round-trip fidelity — the attribute is optional per OOXML spec.
-    #[serde(skip)]
-    pub merge_cells_has_count: bool,
     /// Conditional formatting rules (summary for JSON/WASM output)
     pub conditional_formats: Vec<CfSummary>,
     /// Full conditional formatting data for domain conversion (not serialized to JSON/WASM).

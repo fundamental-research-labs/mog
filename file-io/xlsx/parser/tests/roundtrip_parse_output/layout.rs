@@ -61,7 +61,7 @@ fn roundtrip_merge_regions() {
 }
 
 #[test]
-fn merge_cells_count_attribute_omission_follows_roundtrip_context() {
+fn merge_cells_count_attribute_is_canonical_not_roundtrip_context() {
     let mut output = make_single_sheet(
         "Merges",
         vec![cell(0, 0, CellValue::Text(Arc::from("Merged")))],
@@ -75,10 +75,7 @@ fn merge_cells_count_attribute_omission_follows_roundtrip_context() {
     output.sheets[0].rows = 1;
     output.sheets[0].cols = 3;
     let ctx = RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            merge_cells_has_count: false,
-            ..Default::default()
-        }],
+        sheets: vec![domain_types::SheetRoundTripContext::default()],
         ..Default::default()
     };
 
@@ -87,8 +84,7 @@ fn merge_cells_count_attribute_omission_follows_roundtrip_context() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(sheet_xml.contains("<mergeCells>"));
-    assert!(!sheet_xml.contains("<mergeCells count="));
+    assert!(sheet_xml.contains(r#"<mergeCells count="1">"#));
     assert!(sheet_xml.contains(r#"<mergeCell ref="A1:C1"/>"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 
@@ -105,7 +101,6 @@ fn stale_merge_context_does_not_create_deleted_modeled_merges() {
     );
     let ctx = RoundTripContext {
         sheets: vec![domain_types::SheetRoundTripContext {
-            merge_cells_has_count: true,
             sheet_preserved_elements: vec![(
                 "worksheet\0after\0sheetData\0mergeCells".to_string(),
                 r#"<mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>"#.to_string(),

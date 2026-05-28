@@ -264,18 +264,15 @@ pub fn write_cols(w: &mut XmlWriter, cols: &[ColWidth]) {
 
 /// Write the `<mergeCells>` element.  Does nothing if `merges` is empty.
 ///
-/// When `emit_count` is true the optional `count="N"` attribute is written;
-/// when false it is omitted. This preserves round-trip fidelity for files
-/// that originally lacked the attribute (it is optional per the OOXML spec).
-pub fn write_merge_cells(w: &mut XmlWriter, merges: &[MergeRange], emit_count: bool) {
+/// The writer always emits the optional `count="N"` attribute canonically
+/// instead of preserving imported lexical variance.
+pub fn write_merge_cells(w: &mut XmlWriter, merges: &[MergeRange]) {
     if merges.is_empty() {
         return;
     }
 
     w.start_element("mergeCells");
-    if emit_count {
-        w.attr("count", &merges.len().to_string());
-    }
+    w.attr("count", &merges.len().to_string());
     w.end_attrs();
 
     for merge in merges {

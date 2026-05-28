@@ -56,4 +56,3 @@ sidecar; it is not semantic authority.
 | `original_drawing_path` | persisted typed metadata | drawing identity hint | round_trip | drawing writer after owner match | graph resolves emitted path | drawing path tests |
 | `drawing_opc_rels` | persisted typed metadata | drawing relationship ID hints | round_trip | drawing writer after owner match | drawing rel registration | drawing rel tests |
 | `has_drawing_rels_file` | persisted typed metadata | drawing rels lexical/package metadata | round_trip | drawing writer when owner exists | drawing rels registration | drawing rel tests |
-| `merge_cells_has_count` | persisted typed metadata | merge-cells lexical metadata | round_trip | sheet writer | worksheet XML | merge tests |

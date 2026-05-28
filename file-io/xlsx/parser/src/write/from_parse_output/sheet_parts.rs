@@ -114,11 +114,6 @@ pub(super) fn build_sheet_parts(
             emit_cell_metadata_refs,
         );
 
-        // Preserve whether <mergeCells> had a count attribute
-        if let Some(srt) = sheet_rt {
-            sheet_writer.set_merge_cells_emit_count(srt.merge_cells_has_count);
-        }
-
         // ── Sheet UID (xr:uid on <worksheet> root) ───────────────────
         if let Some(ref uid) = sheet_data.uid {
             sheet_writer.set_uid(uid.clone());

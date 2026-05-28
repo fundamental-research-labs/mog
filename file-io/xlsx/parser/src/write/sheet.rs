@@ -66,8 +66,6 @@ pub struct SheetWriter {
     authored_style_runs: Vec<AuthoredStyleRun>,
     /// Merge ranges
     merges: Vec<MergeRange>,
-    /// Whether to emit the `count` attribute on `<mergeCells>` (round-trip fidelity).
-    merge_cells_emit_count: bool,
     /// Sheet view settings (one or more `<sheetView>` elements)
     sheet_views: Vec<SheetView>,
     /// Modeled worksheet properties emitted as `<sheetPr>`.
@@ -130,7 +128,6 @@ impl SheetWriter {
             rows: BTreeMap::new(),
             authored_style_runs: Vec::new(),
             merges: Vec::new(),
-            merge_cells_emit_count: true,
             sheet_views: vec![SheetView::default()],
             outline_properties: None,
             print_writer: None,
@@ -574,14 +571,6 @@ impl SheetWriter {
         self.merges.push(MergeRange::from_coords(
             start_row, start_col, end_row, end_col,
         ));
-        self
-    }
-
-    /// Set whether to emit the `count` attribute on `<mergeCells>`.
-    /// Default is `true`; set to `false` for round-trip fidelity when the
-    /// original file omitted the optional attribute.
-    pub fn set_merge_cells_emit_count(&mut self, emit: bool) -> &mut Self {
-        self.merge_cells_emit_count = emit;
         self
     }
 
@@ -1745,7 +1734,7 @@ impl SheetWriter {
     }
 
     fn write_merge_cells(&self, w: &mut XmlWriter) {
-        write_merge_cells(w, &self.merges, self.merge_cells_emit_count);
+        write_merge_cells(w, &self.merges);
     }
 }
 

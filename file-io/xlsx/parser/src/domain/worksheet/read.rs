@@ -58,23 +58,6 @@ pub fn parse_merge_cells(xml: &[u8]) -> Vec<MergeRange> {
     merges
 }
 
-/// Check whether the `<mergeCells>` element in the worksheet XML has a `count` attribute.
-///
-/// Returns `true` when `<mergeCells count="...">` is present, `false` when
-/// the attribute is absent or when there is no `<mergeCells>` element at all.
-/// The `count` attribute is optional per the OOXML spec; this flag is used for
-/// round-trip fidelity so the writer can conditionally emit it.
-pub fn merge_cells_has_count(xml: &[u8]) -> bool {
-    if let Some(section_start) = find_tag_simd(xml, b"mergeCells", 0) {
-        // Find the end of the opening <mergeCells ...> tag
-        if let Some(gt) = find_gt_simd(xml, section_start) {
-            let tag = &xml[section_start..=gt];
-            return find_attr_simd(tag, b"count=\"", 0).is_some();
-        }
-    }
-    false
-}
-
 // =============================================================================
 // Sheet Properties
 // =============================================================================

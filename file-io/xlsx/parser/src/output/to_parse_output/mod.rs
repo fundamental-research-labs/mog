@@ -1379,8 +1379,6 @@ fn convert_sheet(
             .as_ref()
             .map(|d| d.has_rels_file)
             .unwrap_or(false),
-        // Preserve whether the original <mergeCells> had a count attribute.
-        merge_cells_has_count: sheet.merge_cells_has_count,
     };
 
     (sheet_data, sheet_rt)

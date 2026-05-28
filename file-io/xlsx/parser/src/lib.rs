@@ -256,8 +256,8 @@ pub use domain::pivot::read::parse_all_pivot_caches;
 pub use domain::tables::read::parse_tables_for_sheet;
 pub use domain::validation::read::parse_data_validations;
 pub use domain::worksheet::read::{
-    merge_cells_has_count, parse_col_widths, parse_dimensions, parse_frozen_pane,
-    parse_merge_cells, parse_sheet_format_pr, parse_sheet_view, parse_sheet_views,
+    parse_col_widths, parse_dimensions, parse_frozen_pane, parse_merge_cells,
+    parse_sheet_format_pr, parse_sheet_view, parse_sheet_views,
 };
 
 // =============================================================================

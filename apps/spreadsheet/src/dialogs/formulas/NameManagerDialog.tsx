@@ -89,7 +89,13 @@ export function NameManagerDialog() {
   const [tablesData, setTablesData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [pendingMutation, setPendingMutation] = useState(false);
+  const pendingMutationRef = useRef(false);
   const refreshRequestId = useRef(0);
+
+  const setMutationPending = useCallback((pending: boolean) => {
+    pendingMutationRef.current = pending;
+    setPendingMutation(pending);
+  }, []);
 
   const refreshNames = useCallback(async () => {
     const requestId = ++refreshRequestId.current;
@@ -263,7 +269,7 @@ export function NameManagerDialog() {
 
   // Handle Delete button
   const handleDelete = useCallback(async () => {
-    if (!selectedNameData || selectedNameData.isTable || pendingMutation) return;
+    if (!selectedNameData || selectedNameData.isTable || pendingMutationRef.current) return;
 
     // Confirm deletion
     const confirmDelete = window.confirm(
@@ -271,7 +277,7 @@ export function NameManagerDialog() {
     );
     if (!confirmDelete) return;
 
-    setPendingMutation(true);
+    setMutationPending(true);
     try {
       await wb.names.remove(selectedNameData.name, selectedNameData.scopeKey);
       setSelectedName(null);
@@ -280,9 +286,9 @@ export function NameManagerDialog() {
       // Show error - in production would use a toast/alert
       console.error('Failed to delete name:', error);
     } finally {
-      setPendingMutation(false);
+      setMutationPending(false);
     }
-  }, [pendingMutation, refreshNames, selectedNameData, wb, setSelectedName]);
+  }, [refreshNames, selectedNameData, wb, setSelectedName, setMutationPending]);
 
   // Handle row selection
   const handleRowClick = useCallback(
@@ -296,32 +302,62 @@ export function NameManagerDialog() {
 
   // Handle inline refersTo editing
   const handleRefersToDoubleClick = useCallback((name: NameRowData) => {
-    if (name.isTable || pendingMutation) return; // Tables can't be edited
+    if (name.isTable || pendingMutationRef.current) return; // Tables can't be edited
     setEditingRefersTo(name.id);
     setEditedRefersTo(name.refersTo);
-  }, [pendingMutation]);
+  }, []);
 
   // Save inline refersTo edit via Workbook API
-  const handleRefersToSave = useCallback(async () => {
-    if (!editingRefersTo || pendingMutation) return;
+  const saveEditedRefersTo = useCallback(async (): Promise<boolean> => {
+    if (!editingRefersTo) return true;
+    if (pendingMutationRef.current) return false;
 
     const name = filteredNames.find((n) => n.id === editingRefersTo);
     if (!name || name.isTable) {
       setEditingRefersTo(null);
-      return;
+      return true;
     }
 
-    setPendingMutation(true);
+    if (editedRefersTo === name.refersTo) {
+      setEditingRefersTo(null);
+      return true;
+    }
+
+    setMutationPending(true);
     try {
       await wb.names.update(name.name, { reference: editedRefersTo }, name.scopeKey);
       await refreshNames();
       setEditingRefersTo(null);
+      return true;
     } catch (error) {
       console.error('Failed to update refersTo:', error);
+      return false;
     } finally {
-      setPendingMutation(false);
+      setMutationPending(false);
     }
-  }, [editingRefersTo, pendingMutation, filteredNames, wb, editedRefersTo, refreshNames]);
+  }, [editingRefersTo, filteredNames, wb, editedRefersTo, refreshNames, setMutationPending]);
+
+  const handleRefersToSave = useCallback(() => {
+    void saveEditedRefersTo();
+  }, [saveEditedRefersTo]);
+
+  const handleSelectedRefersToChange = useCallback(
+    (nextValue: string) => {
+      if (!selectedNameData || selectedNameData.isTable || pendingMutationRef.current) return;
+      setEditingRefersTo(selectedNameData.id);
+      setEditedRefersTo(nextValue);
+    },
+    [selectedNameData],
+  );
+
+  const handleClose = useCallback(async () => {
+    if (pendingMutationRef.current) return;
+
+    const saved = await saveEditedRefersTo();
+    if (saved) {
+      closeDialog();
+    }
+  }, [closeDialog, saveEditedRefersTo]);
 
   // Cancel inline edit
   const handleRefersToCancel = useCallback(() => {
@@ -345,14 +381,14 @@ export function NameManagerDialog() {
   return (
     <MinimizableDialog
       open={dialogState.isOpen}
-      onClose={closeDialog}
+      onClose={() => void handleClose()}
       dialogId="name-manager-dialog"
       title="Name Manager"
       width="xl"
     >
       {/* Stable test-id marker for app-eval scenarios polling "is the dialog mounted". */}
       <div data-testid="name-manager-dialog" hidden />
-      <DialogHeader onClose={closeDialog}>Name Manager</DialogHeader>
+      <DialogHeader onClose={() => void handleClose()}>Name Manager</DialogHeader>
 
       <DialogToolbar>
         <div className="flex items-center gap-2">
@@ -492,7 +528,7 @@ export function NameManagerDialog() {
                     ? editedRefersTo
                     : selectedNameData.refersTo
                 }
-                onChange={setEditedRefersTo}
+                onChange={handleSelectedRefersToChange}
                 onFocus={() => {
                   if (!selectedNameData.isTable) {
                     setEditingRefersTo(selectedNameData.id);
@@ -512,7 +548,7 @@ export function NameManagerDialog() {
       </DialogBody>
 
       <DialogFooter>
-        <Button variant="primary" onClick={closeDialog}>
+        <Button variant="primary" onClick={() => void handleClose()}>
           Close
         </Button>
       </DialogFooter>

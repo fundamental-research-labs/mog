@@ -135,6 +135,42 @@ function isMatchingNativeCellDoubleClick(
   );
 }
 
+function formatRangeSelection(
+  startCell: { row: number; col: number },
+  endCell: { row: number; col: number },
+): string {
+  const startRow = Math.min(startCell.row, endCell.row);
+  const endRow = Math.max(startCell.row, endCell.row);
+  const startCol = Math.min(startCell.col, endCell.col);
+  const endCol = Math.max(startCell.col, endCell.col);
+
+  const startA1 = toA1(startRow, startCol);
+  if (startRow === endRow && startCol === endCol) {
+    return startA1;
+  }
+
+  return `${startA1}:${toA1(endRow, endCol)}`;
+}
+
+function getRangeSelectionAnchor(currentRange: string): { row: number; col: number } | null {
+  const normalized = currentRange.trim().replace(/^=/, '');
+  if (
+    !normalized ||
+    normalized.includes(',') ||
+    normalized.includes('!') ||
+    normalized.split(':').length > 2
+  ) {
+    return null;
+  }
+
+  try {
+    const parsed = parseA1Range(normalized);
+    return { row: parsed.startRow, col: parsed.startCol };
+  } catch {
+    return null;
+  }
+}
+
 // =============================================================================
 // Table Hit Testing (inlined from domain module)
 // =============================================================================
@@ -632,15 +668,16 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         const rangeSelectionMode = uiStoreApi.getState().rangeSelectionMode;
         if (rangeSelectionMode.active && hit.type === 'cell') {
           const cell = { row: hit.row, col: hit.col };
+          const anchor =
+            e.shiftKey ? getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell : cell;
 
-          // Convert to A1 notation and update the range selection
-          const rangeString = toA1(cell.row, cell.col);
+          const rangeString = formatRangeSelection(anchor, cell);
           uiStoreApi.getState().updateRangeSelection(rangeString);
 
           // Set up drag tracking for range extension
           rangeSelectionDragRef.current = {
             isDragging: true,
-            startCell: cell,
+            startCell: anchor,
           };
 
           return; // Don't proceed to normal selection

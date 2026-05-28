@@ -90,8 +90,8 @@ function MinimizedDialogBar({ dialogId, title, range, onRestore }: MinimizedDial
         type="button"
         onClick={onRestore}
         className="p-1.5 rounded text-ss-text-secondary hover:bg-ss-surface-hover hover:text-ss-text transition-colors cursor-pointer"
-        aria-label="Restore dialog"
-        title="Restore dialog (Escape cancels selection, Enter completes range)"
+        aria-label="Expand dialog"
+        title="Expand dialog (Escape cancels selection, Enter completes range)"
       >
         <RestoreIcon />
       </button>

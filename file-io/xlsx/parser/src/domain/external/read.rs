@@ -1257,7 +1257,7 @@ mod tests {
     fn test_parse_cached_value_number() {
         let (value, raw) = parse_cached_value(b"42.5", None);
         assert_eq!(value, CachedValue::Number(42.5));
-        assert_eq!(raw, None);
+        assert_eq!(raw.as_deref(), Some("42.5"));
     }
 
     #[test]

@@ -52,7 +52,7 @@ fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32)
 }
 
 #[test]
-fn shared_string_rich_text_hint_is_preserved_from_parse_output() {
+fn shared_string_rich_text_hint_does_not_seed_export_identity() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -79,7 +79,7 @@ fn shared_string_rich_text_hint_is_preserved_from_parse_output() {
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
 
-    assert!(shared_strings.contains("<rPr><b/>"));
+    assert!(!shared_strings.contains("<rPr><b/>"));
     assert!(shared_strings.contains("<t>Rich</t>"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
@@ -144,12 +144,12 @@ fn shared_string_phonetic_hint_does_not_capture_plain_cells_with_same_text() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert_eq!(shared_strings.matches("<si>").count(), 2);
+    assert_eq!(shared_strings.matches("<si>").count(), 1);
     assert!(shared_strings.contains("count=\"2\""));
-    assert!(shared_strings.contains("uniqueCount=\"2\""));
-    assert_eq!(shared_strings.matches("<rPh").count(), 1);
+    assert!(shared_strings.contains("uniqueCount=\"1\""));
+    assert_eq!(shared_strings.matches("<rPh").count(), 0);
     assert!(sheet_xml.contains(r#"<c r="A1" t="s"><v>0</v></c>"#));
-    assert!(sheet_xml.contains(r#"<c r="A2" t="s"><v>1</v></c>"#));
+    assert!(sheet_xml.contains(r#"<c r="A2" t="s"><v>0</v></c>"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

@@ -112,42 +112,50 @@ pub(super) fn capture_namespaces_from_xml(xml: &[u8]) -> NamespaceMap {
 
 /// Capture the `<extLst>...</extLst>` block from XML as raw bytes for round-trip fidelity.
 pub(super) fn capture_ext_lst_raw(xml: &[u8]) -> Option<Vec<u8>> {
-    // We need the *stylesheet-level* <extLst>, which is the last one in the file.
-    // Earlier <extLst> elements live inside <xf> entries and are parsed separately.
-    use crate::infra::scanner::find_tag_simd;
-    let end_tag = b"</extLst>";
+    use crate::infra::scanner::{find_gt_simd, find_lt_simd, find_tag_simd};
 
-    // Find the last </extLst> by scanning forward and keeping the last match
-    let mut last_end = None;
-    let mut search_pos = 0;
-    while search_pos < xml.len() {
-        match xml[search_pos..]
-            .windows(end_tag.len())
-            .position(|w| w == end_tag)
-        {
-            Some(p) => {
-                last_end = Some(search_pos + p + end_tag.len());
-                search_pos = search_pos + p + end_tag.len();
-            }
-            None => break,
-        }
-    }
-    let end_pos = last_end?;
+    let root_start = find_tag_simd(xml, b"styleSheet", 0)?;
+    let (_, root_end) = extract_element_bounds(xml, root_start)?;
+    let root_open_end = find_gt_simd(xml, root_start)? + 1;
+    let root_content = &xml[root_open_end..root_end];
 
-    // Now find the matching opening <extLst> by searching backwards from end_pos
-    // for the last <extLst that starts before end_pos
-    let mut last_start = None;
     let mut pos = 0;
-    while let Some(s) = find_tag_simd(xml, b"extLst", pos) {
-        if s >= end_pos {
-            break;
+    while let Some(start) = find_lt_simd(root_content, pos) {
+        let name_start = start + 1;
+        if name_start >= root_content.len() {
+            return None;
         }
-        last_start = Some(s);
-        pos = s + 1;
-    }
-    let start = last_start?;
 
-    Some(xml[start..end_pos].to_vec())
+        if matches!(root_content[name_start], b'/' | b'!' | b'?') {
+            pos = find_gt_simd(root_content, name_start).map_or(root_content.len(), |p| p + 1);
+            continue;
+        }
+
+        let mut name_end = name_start;
+        while name_end < root_content.len()
+            && !matches!(
+                root_content[name_end],
+                b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/'
+            )
+        {
+            name_end += 1;
+        }
+
+        let name = &root_content[name_start..name_end];
+        let local_name = name
+            .iter()
+            .position(|&b| b == b':')
+            .map(|i| &name[i + 1..])
+            .unwrap_or(name);
+
+        let (_, end) = extract_element_bounds(root_content, start)?;
+        if local_name == b"extLst" {
+            return Some(root_content[start..end].to_vec());
+        }
+        pos = end;
+    }
+
+    None
 }
 
 /// Extract the raw `<extLst>...</extLst>` element from the worksheet
@@ -260,6 +268,35 @@ pub(super) fn extract_explicit_blank_cells(xml: &[u8]) -> Vec<(u32, u32)> {
     cells.sort_unstable();
     cells.dedup();
     cells
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_ext_lst_raw;
+
+    #[test]
+    fn stylesheet_ext_capture_ignores_nested_extensions() {
+        let xml = br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <cellXfs count="1"><xf><extLst><ext uri="xf"/></extLst></xf></cellXfs>
+            <cellStyles count="1"><cellStyle name="Normal" xfId="0"><extLst><ext uri="style"/></extLst></cellStyle></cellStyles>
+            <dxfs count="1"><dxf><extLst><ext uri="dxf"/></extLst></dxf></dxfs>
+        </styleSheet>"#;
+
+        assert_eq!(capture_ext_lst_raw(xml), None);
+    }
+
+    #[test]
+    fn stylesheet_ext_capture_returns_direct_root_child_only() {
+        let xml = br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <cellXfs count="1"><xf><extLst><ext uri="xf"/></extLst></xf></cellXfs>
+            <x:extLst xmlns:x="urn:test"><x:ext uri="root"/></x:extLst>
+        </styleSheet>"#;
+
+        assert_eq!(
+            capture_ext_lst_raw(xml).as_deref(),
+            Some(br#"<x:extLst xmlns:x="urn:test"><x:ext uri="root"/></x:extLst>"#.as_slice())
+        );
+    }
 }
 
 pub(super) fn has_attr(tag: &[u8], name: &[u8]) -> bool {

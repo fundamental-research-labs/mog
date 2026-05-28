@@ -1,4 +1,5 @@
-use crate::infra::scanner::{find_gt_simd, find_tag_simd};
+use crate::infra::scanner::{find_gt_simd, find_lt_simd, find_tag_simd};
+use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml::{
     parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
 };
@@ -55,4 +56,46 @@ pub(super) fn parse_optional_bool_element(xml: &[u8], tag: &[u8]) -> Option<bool
         b"val=\"",
         true,
     ))
+}
+
+/// Extract a direct child element by local name from an XML content slice.
+pub(super) fn extract_direct_child_element_xml(xml: &[u8], tag: &[u8]) -> Option<String> {
+    let mut pos = 0;
+
+    while let Some(start) = find_lt_simd(xml, pos) {
+        let name_start = start + 1;
+        if name_start >= xml.len() {
+            return None;
+        }
+
+        if matches!(xml[name_start], b'/' | b'!' | b'?') {
+            pos = find_gt_simd(xml, name_start).map_or(xml.len(), |p| p + 1);
+            continue;
+        }
+
+        let mut name_end = name_start;
+        while name_end < xml.len()
+            && !matches!(
+                xml[name_end],
+                b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/'
+            )
+        {
+            name_end += 1;
+        }
+
+        let name = &xml[name_start..name_end];
+        let local_name = name
+            .iter()
+            .position(|&b| b == b':')
+            .map(|i| &name[i + 1..])
+            .unwrap_or(name);
+
+        let (_, end) = extract_element_bounds(xml, start)?;
+        if local_name == tag {
+            return String::from_utf8(xml[start..end].to_vec()).ok();
+        }
+        pos = end;
+    }
+
+    None
 }

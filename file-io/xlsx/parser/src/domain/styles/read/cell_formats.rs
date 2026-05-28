@@ -2,6 +2,7 @@ use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 
 use super::super::types::*;
 use super::raw::{RawAlignment, RawCellStyle, RawCellXfAttrs, RawProtection};
+use super::support::extract_direct_child_element_xml;
 
 /// Parse the <cellXfs> section
 pub(super) fn parse_cell_xfs(out: &mut Vec<CellXfDef>, xml: &[u8]) {
@@ -100,12 +101,34 @@ pub(super) fn parse_cell_styles(xml: &[u8]) -> Vec<CellStyleDef> {
     let mut pos = 0;
 
     while let Some(start) = find_tag_simd(xml, b"cellStyle", pos) {
-        let end = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(xml.len());
+        let open_end = find_gt_simd(xml, start)
+            .map(|p| p + 1)
+            .unwrap_or(xml.len());
 
-        if let Some(raw) = RawCellStyle::xml_parse(&xml[start..end]) {
-            styles.push(raw.into());
+        if let Some(raw) = RawCellStyle::xml_parse(&xml[start..open_end]) {
+            let mut style: CellStyleDef = raw.into();
+
+            let is_self_closing = open_end >= 2 && xml[open_end - 2] == b'/';
+            if !is_self_closing {
+                let cell_style_end =
+                    find_closing_tag(xml, b"cellStyle", start).unwrap_or(xml.len());
+                let content = &xml[open_end..cell_style_end];
+                if let Some(raw_xml) = extract_direct_child_element_xml(content, b"extLst") {
+                    style.ext_lst = Some(ooxml_types::ExtensionList {
+                        raw_xml: Some(raw_xml),
+                    });
+                }
+                let close_end = find_gt_simd(xml, cell_style_end)
+                    .map(|p| p + 1)
+                    .unwrap_or(xml.len());
+                styles.push(style);
+                pos = close_end;
+                continue;
+            }
+
+            styles.push(style);
         }
-        pos = end;
+        pos = open_end;
     }
     styles
 }

@@ -1,6 +1,7 @@
 use crate::domain::styles::write::{
-    AlignmentDef, BorderDef, DxfDef, FontDef, HorizontalAlign, NumberFormatDef, ProtectionDef,
-    StylesWriter, UnderlineStyle, VerticalAlignRun,
+    AlignmentDef, BorderDef, DxfDef, FillDef, FontDef, GradientStop, GradientType,
+    HorizontalAlign, NumberFormatDef, ProtectionDef, StylesWriter, UnderlineStyle,
+    VerticalAlignRun,
 };
 
 use super::fixtures::{assert_contains_all, assert_in_order, solid_fill, thin_side, xml_string};
@@ -134,4 +135,68 @@ fn dxf_preserves_explicit_default_font_and_alignment_values() {
             "autoIndent=\"0\"",
         ],
     );
+}
+
+#[test]
+fn dxf_ext_lst_is_written_last_and_relationships_are_filtered() {
+    let mut writer = StylesWriter::with_defaults();
+    writer.dxfs = vec![
+        DxfDef {
+            protection: Some(ProtectionDef {
+                locked: Some(false),
+                hidden: None,
+            }),
+            ext_lst: Some(ooxml_types::ExtensionList {
+                raw_xml: Some("<extLst><ext uri=\"dxf\"/></extLst>".to_string()),
+            }),
+            ..Default::default()
+        },
+        DxfDef {
+            ext_lst: Some(ooxml_types::ExtensionList {
+                raw_xml: Some("<extLst><ext r:id=\"rId1\"/></extLst>".to_string()),
+            }),
+            ..Default::default()
+        },
+    ];
+
+    let xml = xml_string(&writer);
+    assert_in_order(
+        &xml,
+        &[
+            "<protection locked=\"0\"/>",
+            "<extLst><ext uri=\"dxf\"/></extLst>",
+            "</dxf>",
+        ],
+    );
+    assert!(!xml.contains("r:id=\"rId1\""));
+}
+
+#[test]
+fn dxf_gradient_fill_is_written_as_gradient_fill() {
+    let mut writer = StylesWriter::with_defaults();
+    writer.dxfs = vec![DxfDef {
+        fill: Some(FillDef::Gradient {
+            gradient_type: GradientType::Linear,
+            degree: Some(45.0),
+            stops: vec![
+                GradientStop {
+                    position: 0.0,
+                    color: super::fixtures::rgb("FF000000"),
+                },
+                GradientStop {
+                    position: 1.0,
+                    color: super::fixtures::rgb("FFFFFFFF"),
+                },
+            ],
+            left: None,
+            right: None,
+            top: None,
+            bottom: None,
+        }),
+        ..Default::default()
+    }];
+
+    let xml = xml_string(&writer);
+    assert_contains_all(&xml, &["<gradientFill", "degree=\"45\""]);
+    assert!(!xml.contains("<patternFill patternType=\"none\"/>"));
 }

@@ -1305,14 +1305,6 @@ export interface ParsedStyles {
   cellXfs: CellXf[];
   /** Named cell styles */
   cellStyles: NamedCellStyle[];
-  /** Differential formats */
-  dxfs: DifferentialFormat[];
-  /** Table styles */
-  tableStyles: ParsedTableStyle[];
-  /** Default table style name */
-  defaultTableStyle?: string;
-  /** Default pivot style name */
-  defaultPivotStyle?: string;
 }
 
 /**

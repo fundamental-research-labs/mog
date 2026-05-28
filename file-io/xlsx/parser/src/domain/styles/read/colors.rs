@@ -2,6 +2,7 @@ use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;
 
 use super::super::types::*;
+use super::support::parse_color;
 
 /// Parse the <colors> section
 pub(super) fn parse_colors(xml: &[u8]) -> ColorsDef {
@@ -40,8 +41,8 @@ pub(super) fn parse_colors(xml: &[u8]) -> ColorsDef {
                 .map(|p| p + 1)
                 .unwrap_or(mru_content.len());
             let tag = &mru_content[start..end];
-            if let Some(rgb) = parse_string_attr(tag, b"rgb=\"") {
-                colors.mru_colors.push(ColorDef::rgb(&rgb));
+            if let Some(color) = parse_color(tag) {
+                colors.mru_colors.push(color);
             }
             pos = end;
         }

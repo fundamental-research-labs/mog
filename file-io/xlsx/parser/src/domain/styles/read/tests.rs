@@ -425,6 +425,18 @@ fn test_parse_cell_styles_with_custom_builtin() {
 }
 
 #[test]
+fn test_parse_cell_styles_with_ext_lst() {
+    let xml = br#"<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"><extLst><ext uri="style"/></extLst></cellStyle></cellStyles>"#;
+    let result = parse_cell_styles(xml);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].effective_name(), "Normal");
+    assert_eq!(
+        result[0].ext_lst.as_ref().and_then(|e| e.raw_xml.as_deref()),
+        Some(r#"<extLst><ext uri="style"/></extLst>"#)
+    );
+}
+
+#[test]
 fn test_parse_dxfs_section() {
     let xml = b"<dxfs count=\"1\"><dxf><font><b/><color rgb=\"FFFF0000\"/></font></dxf></dxfs>";
     let result = parse_dxfs(xml);
@@ -434,6 +446,46 @@ fn test_parse_dxfs_section() {
     let font = dxf.font.as_ref().unwrap();
     assert_eq!(font.bold, Some(true));
     assert!(matches!(font.color, Some(ColorDef::Rgb { ref val, .. }) if val == "FFFF0000"));
+}
+
+#[test]
+fn test_parse_dxfs_with_ext_lst() {
+    let xml =
+        br#"<dxfs count="1"><dxf><font><b/></font><extLst><ext uri="dxf"/></extLst></dxf></dxfs>"#;
+    let result = parse_dxfs(xml);
+    assert_eq!(result.len(), 1);
+    assert_eq!(
+        result[0].ext_lst.as_ref().and_then(|e| e.raw_xml.as_deref()),
+        Some(r#"<extLst><ext uri="dxf"/></extLst>"#)
+    );
+}
+
+#[test]
+fn test_parse_dxfs_with_gradient_fill() {
+    let xml = br#"<dxfs count="1"><dxf><fill><gradientFill degree="45"><stop position="0"><color theme="1" tint="0.2"/></stop><stop position="1"><color rgb="FFFFFFFF"/></stop></gradientFill></fill></dxf></dxfs>"#;
+    let result = parse_dxfs(xml);
+    assert_eq!(result.len(), 1);
+    let fill = result[0].fill.as_ref().unwrap();
+    match fill {
+        FillDef::Gradient {
+            gradient_type,
+            degree,
+            stops,
+            ..
+        } => {
+            assert_eq!(*gradient_type, GradientType::Linear);
+            assert_eq!(*degree, Some(45.0));
+            assert_eq!(stops.len(), 2);
+            assert_eq!(
+                stops[0].color,
+                ColorDef::Theme {
+                    id: 1,
+                    tint: Some("0.2".to_string())
+                }
+            );
+        }
+        other => panic!("expected gradient fill, got {other:?}"),
+    }
 }
 
 #[test]
@@ -467,6 +519,32 @@ fn test_parse_colors_section() {
     assert_eq!(result.indexed_colors[1], "FFFFFFFF");
     assert_eq!(result.mru_colors.len(), 1);
     assert_eq!(result.mru_colors[0], ColorDef::rgb("FFFF0000"));
+}
+
+#[test]
+fn test_parse_mru_colors_full_ct_color_variants() {
+    let xml = br#"<colors><mruColors><color theme="2" tint="0.1"/><color indexed="64" tint="0.2"/><color auto="1" tint="0.3"/><color rgb="FFFF0000" tint="0.4"/></mruColors></colors>"#;
+    let result = parse_colors(xml);
+    assert_eq!(
+        result.mru_colors,
+        vec![
+            ColorDef::Theme {
+                id: 2,
+                tint: Some("0.1".to_string())
+            },
+            ColorDef::Indexed {
+                id: 64,
+                tint: Some("0.2".to_string())
+            },
+            ColorDef::Auto {
+                tint: Some("0.3".to_string())
+            },
+            ColorDef::Rgb {
+                val: "FFFF0000".to_string(),
+                tint: Some("0.4".to_string())
+            }
+        ]
+    );
 }
 
 #[test]

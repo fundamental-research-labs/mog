@@ -7,6 +7,7 @@ use super::{
     cell_formats::{parse_single_alignment, parse_single_protection},
     fills::parse_single_fill,
     fonts::parse_single_font,
+    support::extract_direct_child_element_xml,
 };
 
 /// Parse the <dxfs> section
@@ -86,6 +87,12 @@ pub(super) fn parse_dxfs(xml: &[u8]) -> Vec<DxfDef> {
         // Parse optional protection
         if find_tag_simd(dxf_content, b"protection", 0).is_some() {
             dxf.protection = Some(parse_single_protection(dxf_content));
+        }
+
+        if let Some(raw_xml) = extract_direct_child_element_xml(dxf_content, b"extLst") {
+            dxf.ext_lst = Some(ooxml_types::ExtensionList {
+                raw_xml: Some(raw_xml),
+            });
         }
 
         dxfs.push(dxf);

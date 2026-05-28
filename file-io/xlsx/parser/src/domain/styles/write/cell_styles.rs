@@ -42,7 +42,16 @@ pub(super) fn write_cell_styles(w: &mut XmlWriter, cell_styles: &[CellStyleDef])
             w.attr("xr:uid", uid);
         }
 
-        w.self_close();
+        let ext_xml = cs.ext_lst.as_ref().and_then(|e| e.raw_xml.as_ref());
+        if let Some(raw) = ext_xml
+            && !crate::infra::xml::raw_xml_contains_relationship_attr(raw)
+        {
+            w.end_attrs();
+            w.raw(raw.as_bytes());
+            w.end_element("cellStyle");
+        } else {
+            w.self_close();
+        }
     }
 
     w.end_element("cellStyles");

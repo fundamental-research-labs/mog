@@ -81,3 +81,41 @@ fn default_normal_cell_style_is_synthesized_when_empty() {
 
     assert!(xml.contains("<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>"));
 }
+
+#[test]
+fn cell_style_ext_lst_is_written_as_child_and_relationships_are_filtered() {
+    let mut writer = StylesWriter::with_defaults();
+    writer.cell_styles = vec![
+        CellStyleDef {
+            name: Some("Normal".to_string()),
+            xf_id: 0,
+            builtin_id: Some(0),
+            custom_builtin: None,
+            i_level: None,
+            hidden: None,
+            ext_lst: Some(ooxml_types::ExtensionList {
+                raw_xml: Some("<extLst><ext uri=\"style\"/></extLst>".to_string()),
+            }),
+            xr_uid: None,
+        },
+        CellStyleDef {
+            name: Some("Unsafe".to_string()),
+            xf_id: 1,
+            builtin_id: None,
+            custom_builtin: None,
+            i_level: None,
+            hidden: None,
+            ext_lst: Some(ooxml_types::ExtensionList {
+                raw_xml: Some("<extLst><ext r:id=\"rId1\"/></extLst>".to_string()),
+            }),
+            xr_uid: None,
+        },
+    ];
+
+    let xml = xml_string(&writer);
+    assert!(xml.contains(
+        "<cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"><extLst><ext uri=\"style\"/></extLst></cellStyle>"
+    ));
+    assert!(xml.contains("<cellStyle name=\"Unsafe\" xfId=\"1\"/>"));
+    assert!(!xml.contains("r:id=\"rId1\""));
+}

@@ -40,6 +40,12 @@ pub(super) fn write_dxfs(w: &mut XmlWriter, dxfs: &[DxfDef]) {
         if let Some(ref prot) = dxf.protection {
             write_protection(w, prot);
         }
+        if let Some(ref ext_lst) = dxf.ext_lst
+            && let Some(ref raw) = ext_lst.raw_xml
+            && !crate::infra::xml::raw_xml_contains_relationship_attr(raw)
+        {
+            w.raw(raw.as_bytes());
+        }
 
         w.end_element("dxf");
     }

@@ -28,6 +28,7 @@ pub mod mc_builder;
 
 pub mod drawing_writer_helpers;
 pub mod package_graph;
+pub mod package_ownership;
 pub mod pivot_writer;
 pub mod relationships;
 pub mod sheet;

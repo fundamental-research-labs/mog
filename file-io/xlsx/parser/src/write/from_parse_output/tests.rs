@@ -23,6 +23,7 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
 
 mod charts;
 mod data_tables;
+mod package_graph_ownership;
 mod pivot_package;
 mod smoke_and_formulas;
 mod sparklines;

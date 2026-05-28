@@ -1,6 +1,8 @@
 //! RangeOp evaluation (expr:expr) and whole-column reference tests.
 
 use super::*;
+use crate::mirror::CellMirror;
+use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
 // -----------------------------------------------------------------------
 // RangeOp evaluation (expr:expr range operator)
@@ -292,6 +294,121 @@ fn test_range_op_sum_of_index_range() {
     let node = func("SUM", vec![range_op]);
     let result = eval(&node, &ctx);
     assert_eq!(result, CellValue::number(60.0));
+}
+
+// -----------------------------------------------------------------------
+// Reference intersection operator
+// -----------------------------------------------------------------------
+
+fn intersection(left: ASTNode, right: ASTNode) -> ASTNode {
+    binop(compute_parser::BinOp::Intersect, left, right)
+}
+
+#[test]
+fn test_intersection_sum_overlapping_ranges() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let node = func(
+        "SUM",
+        vec![intersection(range(s, 0, 0, 1, 1), range(s, 0, 1, 2, 2))],
+    );
+    assert_eq!(eval(&node, &ctx), CellValue::number(12.0));
+}
+
+#[test]
+fn test_intersection_single_cell_returns_scalar() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let node = intersection(range(s, 0, 0, 1, 1), range(s, 1, 1, 2, 2));
+    assert_eq!(eval(&node, &ctx), CellValue::number(11.0));
+}
+
+#[test]
+fn test_intersection_no_overlap_returns_null_error() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let node = intersection(range(s, 0, 0, 1, 0), range(s, 0, 2, 1, 2));
+    assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Null, None));
+}
+
+#[test]
+fn test_nested_intersection_no_overlap_returns_null_error() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let nested = intersection(range(s, 0, 0, 1, 0), range(s, 0, 2, 1, 2));
+    let node = intersection(nested, range(s, 0, 0, 1, 2));
+    assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Null, None));
+}
+
+#[test]
+fn test_intersection_preserves_range_source_in_aggregate() {
+    let cells = vec![
+        CellData {
+            cell_id: cell_uuid(0, 0),
+            row: 0,
+            col: 0,
+            value: CellValue::Boolean(true),
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        },
+        CellData {
+            cell_id: cell_uuid(1, 0),
+            row: 1,
+            col: 0,
+            value: CellValue::Null,
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        },
+        CellData {
+            cell_id: cell_uuid(2, 0),
+            row: 2,
+            col: 0,
+            value: CellValue::number(5.0),
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        },
+    ];
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: TEST_SHEET_UUID.to_string(),
+            name: "Sheet1".to_string(),
+            rows: 10,
+            cols: 10,
+            cells,
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let mirror = CellMirror::from_snapshot(snapshot).unwrap();
+    let sheet = mirror.sheet_by_name("Sheet1").unwrap();
+    let ctx = make_ctx(&mirror, sheet);
+    let node = func(
+        "SUM",
+        vec![intersection(range(sheet, 0, 0, 2, 0), range(sheet, 0, 0, 2, 0))],
+    );
+    assert_eq!(eval(&node, &ctx), CellValue::number(5.0));
+}
+
+#[test]
+fn test_nested_intersection_inside_binary_expression() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let node = binop(
+        compute_parser::BinOp::Add,
+        intersection(range(s, 0, 0, 1, 1), range(s, 1, 1, 2, 2)),
+        ASTNode::Number(4.0),
+    );
+    assert_eq!(eval(&node, &ctx), CellValue::number(15.0));
 }
 
 // =======================================================================

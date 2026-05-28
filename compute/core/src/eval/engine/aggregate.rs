@@ -1,7 +1,7 @@
 //! Aggregation helpers — TaggedValue, flattening, and aggregate dispatch.
 
 use cell_types::SheetId;
-use compute_parser::ASTNode;
+use compute_parser::{ASTNode, BinOp};
 use compute_parser::RangeRef;
 use formula_types::CellRef;
 use value_types::{CellError, CellValue, ComputeError};
@@ -60,8 +60,9 @@ pub(in crate::eval) struct TaggedValue {
 // ---------------------------------------------------------------------------
 
 /// Returns the `ValueSource` for an AST node: `Range` for cell references,
-/// range references, structured references, and identifiers (named ranges);
-/// `Inline` for everything else (literals, function calls, etc.).
+/// range references, structured references, identifiers (named ranges), and
+/// reference intersections; `Inline` for everything else (literals, function
+/// calls, etc.).
 ///
 /// Named ranges (`Identifier`) are tagged as `Range` because Excel treats them
 /// as range references for aggregate semantics (e.g., booleans and blanks in
@@ -72,6 +73,10 @@ pub(in crate::eval) fn value_source_for_node(node: &ASTNode) -> ValueSource {
         | ASTNode::Range(..)
         | ASTNode::StructuredRef(_)
         | ASTNode::Identifier(_) => ValueSource::Range,
+        ASTNode::BinaryOp {
+            op: BinOp::Intersect,
+            ..
+        } => ValueSource::Range,
         ASTNode::SheetRef { inner, .. } | ASTNode::Paren(inner) => value_source_for_node(inner),
         _ => ValueSource::Inline,
     }

@@ -17,6 +17,8 @@ use compute_parser::{AstFold, CellRefNode, RangeRef};
 use formula_types::{CellRef, RangeType, ResolvedName};
 use value_types::{CellError, CellValue, ComputeError};
 
+pub(in crate::eval) type RefArea = (SheetId, u32, u32, u32, u32);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -703,6 +705,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         let mut leftmost = root_left;
 
         while let ASTNode::BinaryOp { op, left, right } = leftmost {
+            if matches!(op, compute_parser::BinOp::Intersect) {
+                break;
+            }
             self.tick()?;
             spine.push((*op, right));
             leftmost = left;
@@ -722,38 +727,31 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         left: &ASTNode,
         right: &ASTNode,
     ) -> Result<CellValue, ComputeError> {
-        let left_area = match self.eval_node_as_area(left).await {
-            Ok(area) => area,
+        let left_area = match self.eval_node_as_intersection_area(left).await {
+            Ok(Some(area)) => area,
+            Ok(None) => return Ok(CellValue::Error(CellError::Null, None)),
             Err(ComputeError::Eval { .. }) => return Ok(CellValue::Error(CellError::Value, None)),
             Err(e) => return Err(e),
         };
-        let right_area = match self.eval_node_as_area(right).await {
-            Ok(area) => area,
+        let right_area = match self.eval_node_as_intersection_area(right).await {
+            Ok(Some(area)) => area,
+            Ok(None) => return Ok(CellValue::Error(CellError::Null, None)),
             Err(ComputeError::Eval { .. }) => return Ok(CellValue::Error(CellError::Value, None)),
             Err(e) => return Err(e),
         };
-        let (left_sheet, left_start_row, left_start_col, left_end_row, left_end_col) = left_area;
-        let (right_sheet, right_start_row, right_start_col, right_end_row, right_end_col) =
-            right_area;
-        if left_sheet != right_sheet {
+        let Some((sheet, start_row, start_col, end_row, end_col)) =
+            Self::intersect_ref_areas(left_area, right_area)
+        else {
             return Ok(CellValue::Error(CellError::Null, None));
-        }
-
-        let start_row = left_start_row.max(right_start_row);
-        let start_col = left_start_col.max(right_start_col);
-        let end_row = left_end_row.min(right_end_row);
-        let end_col = left_end_col.min(right_end_col);
-        if start_row > end_row || start_col > end_col {
-            return Ok(CellValue::Error(CellError::Null, None));
-        }
+        };
 
         let start_ref = CellRef::Positional {
-            sheet: left_sheet,
+            sheet,
             row: start_row,
             col: start_col,
         };
         let end_ref = CellRef::Positional {
-            sheet: left_sheet,
+            sheet,
             row: end_row,
             col: end_col,
         };
@@ -890,17 +888,83 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     }
 
     /// Is this AST node a reference expression for which `eval_node_as_area`
-    /// returns a meaningful area? Includes literal cell/range refs and their
-    /// sheet-qualified or parenthesised wrappers.
+    /// returns a meaningful area? Includes literal cell/range refs, reference
+    /// intersections, and their sheet-qualified or parenthesised wrappers.
     fn is_referenceable_for_intersection(node: &ASTNode) -> bool {
         match node {
             ASTNode::CellReference(_) | ASTNode::Range(_) | ASTNode::RangeOp { .. } => true,
+            ASTNode::BinaryOp {
+                op: compute_parser::BinOp::Intersect,
+                left,
+                right,
+            } => {
+                Self::is_referenceable_for_intersection(left)
+                    && Self::is_referenceable_for_intersection(right)
+            }
             ASTNode::SheetRef { inner, .. } | ASTNode::UnresolvedSheetRef { inner, .. } => {
                 Self::is_referenceable_for_intersection(inner)
             }
             ASTNode::Paren(inner) => Self::is_referenceable_for_intersection(inner),
             _ => false,
         }
+    }
+
+    fn intersect_ref_areas(left: RefArea, right: RefArea) -> Option<RefArea> {
+        let (left_sheet, left_start_row, left_start_col, left_end_row, left_end_col) = left;
+        let (right_sheet, right_start_row, right_start_col, right_end_row, right_end_col) = right;
+        if left_sheet != right_sheet {
+            return None;
+        }
+
+        let start_row = left_start_row.max(right_start_row);
+        let start_col = left_start_col.max(right_start_col);
+        let end_row = left_end_row.min(right_end_row);
+        let end_col = left_end_col.min(right_end_col);
+        if start_row > end_row || start_col > end_col {
+            None
+        } else {
+            Some((left_sheet, start_row, start_col, end_row, end_col))
+        }
+    }
+
+    fn eval_node_as_intersection_area<'b>(
+        &'b mut self,
+        node: &'b ASTNode,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<RefArea>, ComputeError>> + 'b>,
+    > {
+        Box::pin(async move {
+            match node {
+                ASTNode::BinaryOp {
+                    op: compute_parser::BinOp::Intersect,
+                    left,
+                    right,
+                } => {
+                    let Some(left_area) = self.eval_node_as_intersection_area(left).await? else {
+                        return Ok(None);
+                    };
+                    let Some(right_area) = self.eval_node_as_intersection_area(right).await? else {
+                        return Ok(None);
+                    };
+                    Ok(Self::intersect_ref_areas(left_area, right_area))
+                }
+                ASTNode::SheetRef { inner, .. } | ASTNode::Paren(inner) => {
+                    self.eval_node_as_intersection_area(inner).await
+                }
+                ASTNode::UnresolvedSheetRef { sheet_name, inner } => {
+                    match self.meta.sheet_by_name(sheet_name) {
+                        Some(sheet_id) => {
+                            let resolved = Self::patch_sheet_id(inner, sheet_id);
+                            self.eval_node_as_intersection_area(&resolved).await
+                        }
+                        None => Err(ComputeError::Eval {
+                            message: format!("Intersection: unknown sheet '{}'", sheet_name),
+                        }),
+                    }
+                }
+                _ => self.eval_node_as_area(node).await.map(Some),
+            }
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -920,10 +984,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         &'b mut self,
         node: &'b ASTNode,
     ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<(SheetId, u32, u32, u32, u32), ComputeError>>
-                + 'b,
-        >,
+        Box<dyn std::future::Future<Output = Result<RefArea, ComputeError>> + 'b>,
     > {
         Box::pin(async move {
             self.tick()?;
@@ -936,7 +997,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     async fn eval_node_as_area_inner(
         &mut self,
         node: &ASTNode,
-    ) -> Result<(SheetId, u32, u32, u32, u32), ComputeError> {
+    ) -> Result<RefArea, ComputeError> {
         match node {
             ASTNode::CellReference(CellRefNode { reference, .. }) => {
                 let (sheet, row, col) =
@@ -983,6 +1044,17 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
 
             ASTNode::Paren(inner) => self.eval_node_as_area(inner).await,
+
+            ASTNode::BinaryOp {
+                op: compute_parser::BinOp::Intersect,
+                ..
+            } => {
+                self.eval_node_as_intersection_area(node).await?.ok_or_else(|| {
+                    ComputeError::Eval {
+                        message: "Intersection: referenced areas do not overlap".into(),
+                    }
+                })
+            }
 
             ASTNode::Function { name, args } => {
                 let upper = name.to_uppercase();

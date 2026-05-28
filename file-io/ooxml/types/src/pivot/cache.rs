@@ -4,9 +4,14 @@
 //! cache sources, cache fields, shared items, field groups, and
 //! OLAP hierarchy / group-level types.
 
-use super::{
-    PivotBoolean, PivotCacheString, PivotDateTime, PivotDiscretePr, PivotError, PivotMissing,
-    PivotNumber, PivotSourceType, PivotX, SharedItem,
+use super::enums::PivotSourceType;
+use super::grouping::PivotDiscretePr;
+use super::field::PivotDimensions;
+use super::layout::{PivotCalculatedItems, PivotCalculatedMembers};
+use super::primitives::{PivotX, TupleCache};
+use super::shared_items::{
+    PivotBoolean, PivotCacheString, PivotDateTime, PivotError, PivotMissing, PivotNumber,
+    SharedItem,
 };
 
 // ============================================================================
@@ -676,10 +681,10 @@ pub struct PivotCacheDefinition {
     pub cache_fields: PivotCacheFields,
     pub cache_hierarchies: Option<PivotCacheHierarchies>,
     pub kpis: Option<PivotKPIs>,
-    pub tuple_cache: Option<super::TupleCache>,
-    pub calculated_items: Option<crate::pivot::layout::PivotCalculatedItems>,
-    pub calculated_members: Option<crate::pivot::layout::PivotCalculatedMembers>,
-    pub dimensions: Option<crate::pivot::field::PivotDimensions>,
+    pub tuple_cache: Option<TupleCache>,
+    pub calculated_items: Option<PivotCalculatedItems>,
+    pub calculated_members: Option<PivotCalculatedMembers>,
+    pub dimensions: Option<PivotDimensions>,
     pub measure_groups: Option<MeasureGroups>,
     pub maps: Option<MeasureDimensionMaps>,
     pub ext_lst: Option<crate::ExtensionList>,
@@ -812,4 +817,152 @@ pub struct MeasureDimensionMaps {
 pub struct MeasureDimensionMap {
     pub measure_group: Option<u32>,
     pub dimension: Option<u32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pivot_cache_source_default() {
+        let src = PivotCacheSource::default();
+        assert_eq!(src.r#type, PivotSourceType::Worksheet);
+        assert_eq!(src.connection_id, Some(0));
+        assert!(src.worksheet_source.is_none());
+        assert!(src.consolidation.is_none());
+        assert!(src.ext_lst.is_none());
+    }
+
+    #[test]
+    fn pivot_cache_field_default() {
+        let f = PivotCacheField::default();
+        assert!(f.name.is_empty());
+        assert!(f.caption.is_none());
+        assert!(f.num_fmt_id.is_none());
+        assert!(f.formula.is_none());
+        assert_eq!(f.sql_type, Some(0));
+        assert_eq!(f.hierarchy, Some(0));
+        assert_eq!(f.level, Some(0));
+        assert!(f.database_field);
+        assert_eq!(f.unique_list, Some(true));
+        assert!(!f.member_property_field);
+        assert!(!f.server_field);
+        assert!(f.shared_items.is_none());
+        assert!(f.field_group.is_none());
+        assert!(f.ext_lst.is_none());
+    }
+
+    #[test]
+    fn pivot_cache_hierarchy_default() {
+        let h = PivotCacheHierarchy::default();
+        assert!(h.unique_name.is_empty());
+        assert!(h.caption.is_none());
+        assert!(!h.measure);
+        assert!(!h.set);
+        assert!(h.parent_set.is_none());
+        assert_eq!(h.icon_set, Some(0));
+        assert!(!h.attribute);
+        assert!(!h.time);
+        assert!(!h.key_attribute);
+        assert!(h.default_member_unique_name.is_none());
+        assert!(h.all_unique_name.is_none());
+        assert!(h.all_caption.is_none());
+        assert!(h.dimension_unique_name.is_none());
+        assert!(h.display_folder.is_none());
+        assert!(h.measure_group.is_none());
+        assert!(!h.measures);
+        assert_eq!(h.count, 0);
+        assert!(!h.one_field);
+        assert!(h.member_value_datatype.is_none());
+        assert!(h.unbalanced.is_none());
+        assert!(h.unbalanced_group.is_none());
+        assert!(!h.hidden);
+    }
+
+    #[test]
+    fn shared_items_default() {
+        let si = SharedItems::default();
+        assert!(si.contains_semi_mixed_types);
+        assert!(si.contains_non_date);
+        assert!(!si.contains_date);
+        assert!(si.contains_string);
+        assert!(!si.contains_blank);
+        assert!(!si.contains_mixed_types);
+        assert!(!si.contains_number);
+        assert!(!si.contains_integer);
+        assert!(si.min_value.is_none());
+        assert!(si.max_value.is_none());
+        assert!(si.min_date.is_none());
+        assert!(si.max_date.is_none());
+        assert!(si.count.is_none());
+        assert!(!si.long_text);
+        assert!(si.items.is_empty());
+        assert!(si.m.is_empty());
+        assert!(si.n.is_empty());
+        assert!(si.b.is_empty());
+        assert!(si.e.is_empty());
+        assert!(si.s.is_empty());
+        assert!(si.d.is_empty());
+    }
+
+    #[test]
+    fn cache_wrapper_types_default() {
+        let cf = PivotCacheFields::default();
+        assert!(cf.count.is_none());
+        assert!(cf.items.is_empty());
+
+        let ch = PivotCacheHierarchies::default();
+        assert!(ch.count.is_none());
+        assert!(ch.items.is_empty());
+
+        let gl = PivotGroupLevels::default();
+        assert!(gl.count.is_none());
+        assert!(gl.items.is_empty());
+
+        let gm = PivotGroupMembers::default();
+        assert!(gm.count.is_none());
+        assert!(gm.items.is_empty());
+
+        let g = PivotGroups::default();
+        assert!(g.count.is_none());
+        assert!(g.items.is_empty());
+
+        let fu = PivotFieldsUsage::default();
+        assert!(fu.count.is_none());
+        assert!(fu.items.is_empty());
+
+        let gi = PivotGroupItems::default();
+        assert!(gi.count.is_none());
+        assert!(gi.items.is_empty());
+        assert!(gi.m.is_empty());
+        assert!(gi.n.is_empty());
+        assert!(gi.b.is_empty());
+        assert!(gi.e.is_empty());
+        assert!(gi.s.is_empty());
+        assert!(gi.d.is_empty());
+    }
+
+    #[test]
+    fn pivot_consolidation_default() {
+        let c = PivotConsolidation::default();
+        assert!(c.auto_page);
+        assert!(c.pages.is_empty());
+        assert!(c.range_sets.is_empty());
+    }
+
+    #[test]
+    fn pivot_field_group_default() {
+        let fg = PivotFieldGroup::default();
+        assert!(fg.par.is_none());
+        assert!(fg.base.is_none());
+        assert!(fg.range_pr.is_none());
+        assert!(fg.discrete_pr.is_none());
+        assert!(fg.group_items.is_none());
+    }
+
+    #[test]
+    fn pivot_deleted_field_default() {
+        let df = PivotDeletedField::default();
+        assert!(df.name.is_empty());
+    }
 }

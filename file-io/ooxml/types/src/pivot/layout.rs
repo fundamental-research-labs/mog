@@ -793,3 +793,330 @@ pub struct PivotFilters {
     /// The pivot filter definitions.
     pub items: Vec<PivotFilter>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pivot_format_action_roundtrip() {
+        let variants = [
+            (PivotFormatAction::Blank, "blank"),
+            (PivotFormatAction::Formatting, "formatting"),
+            (PivotFormatAction::Drill, "drill"),
+            (PivotFormatAction::Formula, "formula"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(
+                PivotFormatAction::from_ooxml(s),
+                *variant,
+                "from_ooxml({s})"
+            );
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotFormatAction::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(
+            PivotFormatAction::from_ooxml("bogus"),
+            PivotFormatAction::Formatting
+        );
+    }
+
+    #[test]
+    fn pivot_area_default() {
+        let pa = PivotArea::default();
+        assert!(pa.field.is_none());
+        assert!(pa.r#type.is_none());
+        assert!(pa.data_only);
+        assert!(!pa.label_only);
+        assert!(!pa.grand_row);
+        assert!(!pa.grand_col);
+        assert!(!pa.cache_index);
+        assert!(pa.outline);
+        assert!(pa.offset.is_none());
+        assert!(!pa.collection_index);
+        assert!(pa.axis.is_none());
+        assert!(pa.field_position.is_none());
+        assert!(pa.references.is_empty());
+        assert!(pa.ext_lst.is_none());
+    }
+
+    #[test]
+    fn pivot_format_default() {
+        let f = PivotFormat::default();
+        assert_eq!(f.action, PivotFormatAction::Formatting);
+        assert!(f.dxf_id.is_none());
+        assert!(f.ext_lst.is_none());
+    }
+
+    #[test]
+    fn pivot_calculated_member_default() {
+        let cm = PivotCalculatedMember::default();
+        assert!(cm.name.is_empty());
+        assert!(cm.mdx.is_empty());
+        assert!(cm.member_name.is_none());
+        assert!(cm.hierarchy.is_none());
+        assert!(cm.parent.is_none());
+        assert_eq!(cm.solve_order, 0);
+        assert!(!cm.set);
+        assert!(cm.ext_lst.is_none());
+    }
+
+    #[test]
+    fn layout_wrapper_types_default() {
+        let pf = PivotFormats::default();
+        assert!(pf.count.is_none());
+        assert!(pf.items.is_empty());
+        assert!(pf.format.is_empty());
+
+        let ci = PivotCalculatedItems::default();
+        assert!(ci.count.is_none());
+        assert!(ci.items.is_empty());
+
+        let cm = PivotCalculatedMembers::default();
+        assert!(cm.count.is_none());
+        assert!(cm.items.is_empty());
+
+        let ccf = PivotChartFormats::default();
+        assert!(ccf.count.is_none());
+        assert!(ccf.items.is_empty());
+        assert!(ccf.chart_format.is_empty());
+
+        let pcf = PivotConditionalFormats::default();
+        assert!(pcf.count.is_none());
+        assert!(pcf.items.is_empty());
+        assert!(pcf.conditional_format.is_empty());
+    }
+
+    #[test]
+    fn pivot_chart_format_default() {
+        let cf = PivotChartFormat::default();
+        assert_eq!(cf.chart, 0);
+        assert_eq!(cf.format, 0);
+        assert!(!cf.series);
+    }
+
+    #[test]
+    fn pivot_conditional_format_default() {
+        let cf = PivotConditionalFormat::default();
+        assert_eq!(cf.scope, Some("selection".to_string()));
+        assert!(cf.r#type.is_none());
+        assert_eq!(cf.priority, 0);
+        assert!(cf.pivot_areas.is_empty());
+        assert!(cf.ext_lst.is_none());
+    }
+
+    #[test]
+    fn pivot_area_type_roundtrip() {
+        let variants = [
+            (PivotAreaType::None, "none"),
+            (PivotAreaType::Normal, "normal"),
+            (PivotAreaType::Data, "data"),
+            (PivotAreaType::All, "all"),
+            (PivotAreaType::Origin, "origin"),
+            (PivotAreaType::Button, "button"),
+            (PivotAreaType::TopEnd, "topEnd"),
+            (PivotAreaType::TopRight, "topRight"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(PivotAreaType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotAreaType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(PivotAreaType::from_ooxml("bogus"), PivotAreaType::None);
+        assert_eq!(PivotAreaType::default(), PivotAreaType::None);
+    }
+
+    #[test]
+    fn pivot_filter_type_roundtrip() {
+        let variants = [
+            (PivotFilterType::Unknown, "unknown"),
+            (PivotFilterType::Count, "count"),
+            (PivotFilterType::Percent, "percent"),
+            (PivotFilterType::Sum, "sum"),
+            (PivotFilterType::CaptionEqual, "captionEqual"),
+            (PivotFilterType::CaptionNotEqual, "captionNotEqual"),
+            (PivotFilterType::CaptionBeginsWith, "captionBeginsWith"),
+            (
+                PivotFilterType::CaptionNotBeginsWith,
+                "captionNotBeginsWith",
+            ),
+            (PivotFilterType::CaptionEndsWith, "captionEndsWith"),
+            (PivotFilterType::CaptionNotEndsWith, "captionNotEndsWith"),
+            (PivotFilterType::CaptionContains, "captionContains"),
+            (PivotFilterType::CaptionNotContains, "captionNotContains"),
+            (PivotFilterType::CaptionGreaterThan, "captionGreaterThan"),
+            (
+                PivotFilterType::CaptionGreaterThanOrEqual,
+                "captionGreaterThanOrEqual",
+            ),
+            (PivotFilterType::CaptionLessThan, "captionLessThan"),
+            (
+                PivotFilterType::CaptionLessThanOrEqual,
+                "captionLessThanOrEqual",
+            ),
+            (PivotFilterType::CaptionBetween, "captionBetween"),
+            (PivotFilterType::CaptionNotBetween, "captionNotBetween"),
+            (PivotFilterType::ValueEqual, "valueEqual"),
+            (PivotFilterType::ValueNotEqual, "valueNotEqual"),
+            (PivotFilterType::ValueGreaterThan, "valueGreaterThan"),
+            (
+                PivotFilterType::ValueGreaterThanOrEqual,
+                "valueGreaterThanOrEqual",
+            ),
+            (PivotFilterType::ValueLessThan, "valueLessThan"),
+            (
+                PivotFilterType::ValueLessThanOrEqual,
+                "valueLessThanOrEqual",
+            ),
+            (PivotFilterType::ValueBetween, "valueBetween"),
+            (PivotFilterType::ValueNotBetween, "valueNotBetween"),
+            (PivotFilterType::DateEqual, "dateEqual"),
+            (PivotFilterType::DateNotEqual, "dateNotEqual"),
+            (PivotFilterType::DateOlderThan, "dateOlderThan"),
+            (
+                PivotFilterType::DateOlderThanOrEqual,
+                "dateOlderThanOrEqual",
+            ),
+            (PivotFilterType::DateNewerThan, "dateNewerThan"),
+            (
+                PivotFilterType::DateNewerThanOrEqual,
+                "dateNewerThanOrEqual",
+            ),
+            (PivotFilterType::DateBetween, "dateBetween"),
+            (PivotFilterType::DateNotBetween, "dateNotBetween"),
+            (PivotFilterType::Tomorrow, "tomorrow"),
+            (PivotFilterType::Today, "today"),
+            (PivotFilterType::Yesterday, "yesterday"),
+            (PivotFilterType::ThisWeek, "thisWeek"),
+            (PivotFilterType::LastWeek, "lastWeek"),
+            (PivotFilterType::NextWeek, "nextWeek"),
+            (PivotFilterType::ThisMonth, "thisMonth"),
+            (PivotFilterType::LastMonth, "lastMonth"),
+            (PivotFilterType::NextMonth, "nextMonth"),
+            (PivotFilterType::ThisQuarter, "thisQuarter"),
+            (PivotFilterType::LastQuarter, "lastQuarter"),
+            (PivotFilterType::NextQuarter, "nextQuarter"),
+            (PivotFilterType::ThisYear, "thisYear"),
+            (PivotFilterType::LastYear, "lastYear"),
+            (PivotFilterType::NextYear, "nextYear"),
+            (PivotFilterType::YearToDate, "yearToDate"),
+            (PivotFilterType::Q1, "Q1"),
+            (PivotFilterType::Q2, "Q2"),
+            (PivotFilterType::Q3, "Q3"),
+            (PivotFilterType::Q4, "Q4"),
+            (PivotFilterType::M1, "M1"),
+            (PivotFilterType::M2, "M2"),
+            (PivotFilterType::M3, "M3"),
+            (PivotFilterType::M4, "M4"),
+            (PivotFilterType::M5, "M5"),
+            (PivotFilterType::M6, "M6"),
+            (PivotFilterType::M7, "M7"),
+            (PivotFilterType::M8, "M8"),
+            (PivotFilterType::M9, "M9"),
+            (PivotFilterType::M10, "M10"),
+            (PivotFilterType::M11, "M11"),
+            (PivotFilterType::M12, "M12"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(PivotFilterType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotFilterType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(
+            PivotFilterType::from_ooxml("bogus"),
+            PivotFilterType::Unknown
+        );
+        assert_eq!(PivotFilterType::default(), PivotFilterType::Unknown);
+    }
+
+    #[test]
+    fn pivot_scope_roundtrip() {
+        let variants = [
+            (PivotScope::Selection, "selection"),
+            (PivotScope::Data, "data"),
+            (PivotScope::Field, "field"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(PivotScope::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotScope::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(PivotScope::from_ooxml("bogus"), PivotScope::Selection);
+        assert_eq!(PivotScope::default(), PivotScope::Selection);
+    }
+
+    #[test]
+    fn pivot_sort_type_roundtrip() {
+        let variants = [
+            (PivotSortType::None, "none"),
+            (PivotSortType::Ascending, "ascending"),
+            (PivotSortType::Descending, "descending"),
+            (PivotSortType::AscendingAlpha, "ascendingAlpha"),
+            (PivotSortType::DescendingAlpha, "descendingAlpha"),
+            (PivotSortType::AscendingNatural, "ascendingNatural"),
+            (PivotSortType::DescendingNatural, "descendingNatural"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(PivotSortType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotSortType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(PivotSortType::from_ooxml("bogus"), PivotSortType::None);
+        assert_eq!(PivotSortType::default(), PivotSortType::None);
+    }
+
+    #[test]
+    fn pivot_axis_type_roundtrip() {
+        let variants = [
+            (PivotAxisType::None, "none"),
+            (PivotAxisType::All, "all"),
+            (PivotAxisType::Row, "axisRow"),
+            (PivotAxisType::Column, "axisCol"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(PivotAxisType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                PivotAxisType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(PivotAxisType::from_ooxml(""), PivotAxisType::None);
+        assert_eq!(PivotAxisType::from_ooxml("row"), PivotAxisType::Row);
+        assert_eq!(PivotAxisType::from_ooxml("column"), PivotAxisType::Column);
+        assert_eq!(PivotAxisType::from_bytes(b"row"), PivotAxisType::Row);
+        assert_eq!(
+            PivotAxisType::from_bytes(b"column"),
+            PivotAxisType::Column
+        );
+        assert_eq!(PivotAxisType::from_ooxml("bogus"), PivotAxisType::None);
+        assert_eq!(PivotAxisType::default(), PivotAxisType::None);
+    }
+}

@@ -3,7 +3,8 @@
 //! Covers `<pivotFields>`, row/column/page field references, data fields,
 //! hierarchies, and sort types used in pivot table definitions.
 
-use super::{DataConsolidateFunction, ShowDataAs};
+use super::enums::{DataConsolidateFunction, ShowDataAs};
+use super::layout::PivotArea;
 
 // ============================================================================
 // FieldSortType — ST_FieldSortType
@@ -273,7 +274,7 @@ pub struct PivotDimensions {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub struct PivotAutoSortScope {
     /// Pivot area defining the sort scope.
-    pub pivot_area: crate::pivot::layout::PivotArea,
+    pub pivot_area: PivotArea,
 }
 
 // ============================================================================
@@ -371,4 +372,97 @@ pub struct PivotRowHierarchiesUsage {
     /// Row hierarchy usage elements (`<rowHierarchyUsage>`).
     #[serde(rename = "rowHierarchyUsage")]
     pub row_hierarchy_usage: Vec<PivotHierarchyUsage>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pivot_data_field_default() {
+        let df = PivotDataField::default();
+        assert!(df.name.is_none());
+        assert_eq!(df.fld, 0);
+        assert_eq!(df.subtotal, DataConsolidateFunction::Sum);
+        assert_eq!(df.show_data_as, ShowDataAs::Normal);
+        assert_eq!(df.base_field, -1);
+        assert_eq!(df.base_item, 1_048_832);
+        assert!(df.num_fmt_id.is_none());
+        assert!(df.ext_lst.is_none());
+    }
+
+    #[test]
+    fn field_wrapper_types_default() {
+        let df = PivotDataFields::default();
+        assert!(df.count.is_none());
+        assert!(df.items.is_empty());
+        assert!(df.data_field.is_empty());
+
+        let colfields = PivotColFields::default();
+        assert!(colfields.count.is_none());
+        assert!(colfields.items.is_empty());
+
+        let chu = PivotColHierarchiesUsage::default();
+        assert!(chu.count.is_none());
+        assert!(chu.items.is_empty());
+        assert!(chu.col_hierarchy_usage.is_empty());
+
+        let pd = PivotDimensions::default();
+        assert!(pd.count.is_none());
+        assert!(pd.items.is_empty());
+    }
+
+    #[test]
+    fn field_sort_type_roundtrip() {
+        let variants = [
+            (FieldSortType::Manual, "manual"),
+            (FieldSortType::Ascending, "ascending"),
+            (FieldSortType::Descending, "descending"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(FieldSortType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                FieldSortType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(FieldSortType::from_ooxml("bogus"), FieldSortType::Manual);
+        assert_eq!(FieldSortType::default(), FieldSortType::Manual);
+    }
+
+    #[test]
+    fn item_type_roundtrip() {
+        let variants = [
+            (ItemType::Data, "data"),
+            (ItemType::Default, "default"),
+            (ItemType::Sum, "sum"),
+            (ItemType::CountA, "countA"),
+            (ItemType::Avg, "avg"),
+            (ItemType::Max, "max"),
+            (ItemType::Min, "min"),
+            (ItemType::Product, "product"),
+            (ItemType::Count, "count"),
+            (ItemType::StdDev, "stdDev"),
+            (ItemType::StdDevP, "stdDevP"),
+            (ItemType::Var, "var"),
+            (ItemType::VarP, "varP"),
+            (ItemType::Grand, "grand"),
+            (ItemType::Blank, "blank"),
+        ];
+        for (variant, s) in &variants {
+            assert_eq!(ItemType::from_ooxml(s), *variant, "from_ooxml({s})");
+            assert_eq!(variant.to_ooxml(), *s, "to_ooxml for {s}");
+            assert_eq!(
+                ItemType::from_bytes(s.as_bytes()),
+                *variant,
+                "from_bytes({s})"
+            );
+            assert_eq!(variant.as_str(), *s, "as_str for {s}");
+        }
+        assert_eq!(ItemType::from_ooxml("bogus"), ItemType::Data);
+        assert_eq!(ItemType::default(), ItemType::Data);
+    }
 }

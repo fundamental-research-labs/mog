@@ -1,5 +1,5 @@
-use super::super::*;
 use super::super::fixtures::*;
+use super::super::*;
 
 #[test]
 fn test_nan_not_match_greater_than() {

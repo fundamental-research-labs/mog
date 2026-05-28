@@ -56,7 +56,6 @@ fn test_simple_circular_ref_no_iterative() {
     );
 }
 
-
 /// A1 = =A1+1, iterative_calc = false.
 /// Should compute a finite numeric value and emit a circular diagnostic.
 #[test]
@@ -97,7 +96,6 @@ fn test_self_referencing_cell_no_iterative() {
         "Expected circular reference diagnostic for A1"
     );
 }
-
 
 /// A1 = =C1+1, B1 = =A1+1, C1 = =B1+1, iterative_calc = false.
 /// The three cells form a cycle. The demand-driven engine should detect it and
@@ -146,7 +144,6 @@ fn test_three_cell_cycle_no_iterative() {
         );
     }
 }
-
 
 /// A1 = =B1+1, B1 = =A1+1 (cycle), C1 = =A1*2 (depends on cycle).
 /// iterative_calc = false.
@@ -201,7 +198,6 @@ fn test_cycle_with_clean_dependents() {
     );
 }
 
-
 /// A1 = 10, B1 = =A1+1. No cycle -- just a chain. Verify B1 = 11.0.
 /// This confirms the cycle detector doesn't flag simple linear dependency chains.
 ///
@@ -240,7 +236,6 @@ fn test_no_false_positive_long_chain() {
     // B1 = 10+1 = 11
     assert_cell_number(&result, 0, 0, 1, 11.0);
 }
-
 
 /// A1 = =E1+1, B1 = =A1+1, C1 = =B1+1, D1 = =C1+1, E1 = =D1+1.
 /// iterative_calc = false.

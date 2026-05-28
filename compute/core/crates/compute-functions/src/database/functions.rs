@@ -261,7 +261,10 @@ impl PureFunction for FnDvar {
 
         let values = get_matching_values(&db, field_idx, &criteria);
         let nums = extract_matching_numbers(&values);
-        match sample_variance(&nums, "DVAR: need at least 2 numeric values for sample variance") {
+        match sample_variance(
+            &nums,
+            "DVAR: need at least 2 numeric values for sample variance",
+        ) {
             Ok(variance) => CellValue::number(variance),
             Err(e) => e,
         }

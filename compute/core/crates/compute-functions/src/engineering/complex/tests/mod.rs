@@ -1,6 +1,6 @@
-mod helpers;
-mod types;
-mod components;
 mod arithmetic;
+mod components;
+mod helpers;
 mod transcendental;
 mod trig;
+mod types;

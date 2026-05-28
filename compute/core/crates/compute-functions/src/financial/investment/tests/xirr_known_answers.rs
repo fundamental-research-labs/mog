@@ -1,7 +1,7 @@
 use crate::PureFunction;
 use value_types::CellValue;
 
-use super::{num, ymd, FnXirr};
+use super::{FnXirr, num, ymd};
 
 /// Excel benchmark: returns 0.373362535.
 #[test]

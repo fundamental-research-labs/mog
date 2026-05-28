@@ -174,9 +174,9 @@ fn cache_compaction() {
                 n.get()
             );
         }
-        other => panic!(
-            "{scenario}: SUM(A1:A5) at (row=0, col=2) should be Number(42), got {other:?}"
-        ),
+        other => {
+            panic!("{scenario}: SUM(A1:A5) at (row=0, col=2) should be Number(42), got {other:?}")
+        }
     }
 
     assert_eq!(col_data_value(&mirror, 0, 2), number(3.0));

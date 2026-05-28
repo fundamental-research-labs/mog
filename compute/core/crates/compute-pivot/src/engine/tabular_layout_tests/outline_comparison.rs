@@ -86,9 +86,17 @@ fn outline_with_subtotals() {
 
     let east_sub = subtotal_with_outer_header(&subtotal_rows, "East");
     assert!(east_sub.is_some(), "should find East subtotal");
-    assert_approx(&east_sub.unwrap().values[0], 3900.0, "outline East subtotal");
+    assert_approx(
+        &east_sub.unwrap().values[0],
+        3900.0,
+        "outline East subtotal",
+    );
 
     let west_sub = subtotal_with_outer_header(&subtotal_rows, "West");
     assert!(west_sub.is_some(), "should find West subtotal");
-    assert_approx(&west_sub.unwrap().values[0], 4600.0, "outline West subtotal");
+    assert_approx(
+        &west_sub.unwrap().values[0],
+        4600.0,
+        "outline West subtotal",
+    );
 }

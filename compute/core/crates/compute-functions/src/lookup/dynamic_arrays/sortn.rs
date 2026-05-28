@@ -1,7 +1,7 @@
 use value_types::{CellArray, CellError, CellValue};
 
-use super::common::{cell_value_cmp_sort, to_array};
 use super::super::helpers::cell_value_cmp;
+use super::common::{cell_value_cmp_sort, to_array};
 use crate::PureFunction;
 
 pub(super) struct FnSortN;

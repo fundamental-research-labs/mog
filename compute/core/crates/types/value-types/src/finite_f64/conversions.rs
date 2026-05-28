@@ -51,7 +51,6 @@ impl From<FiniteF64> for f64 {
     }
 }
 
-
 impl Default for FiniteF64 {
     /// Returns [`FiniteF64::ZERO`].
     #[inline]

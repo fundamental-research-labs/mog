@@ -1,5 +1,5 @@
-use super::*;
 use super::fixtures::*;
+use super::*;
 
 #[test]
 fn test_dynamic_above_average() {
@@ -74,7 +74,6 @@ fn test_dynamic_below_average_all_non_numeric() {
     let bitmap = evaluate_column_filter(&criteria, &data, None, now, None);
     assert_eq!(bitmap, vec![0, 0, 0]);
 }
-
 
 #[test]
 fn test_dynamic_above_average_single_value() {

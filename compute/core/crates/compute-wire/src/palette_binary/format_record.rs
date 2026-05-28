@@ -2,12 +2,12 @@
 
 use domain_types::{CellFormat, FontSize};
 
+use super::PaletteBinaryError;
 use super::layout::*;
 use super::nested::{read_borders, read_gradient_fill, write_borders, write_gradient_fill};
-use super::read::{read_string, Cursor};
+use super::read::{Cursor, read_string};
 use super::string_pool::StringPool;
 use super::write::{write_bool, write_i32, write_string, write_u32};
-use super::PaletteBinaryError;
 
 /// Build presence mask for a [`CellFormat`].
 pub(super) fn build_presence(fmt: &CellFormat) -> u32 {

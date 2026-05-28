@@ -1,5 +1,5 @@
-use super::*;
 use super::fixtures::*;
+use super::*;
 
 #[test]
 fn test_empty_column_data() {

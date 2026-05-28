@@ -1,9 +1,4 @@
-use super::support::{
-    assert_cell_bool,
-    build_snapshot,
-    print_recalc_diagnostics,
-    recalc_snapshot,
-};
+use super::support::{assert_cell_bool, build_snapshot, print_recalc_diagnostics, recalc_snapshot};
 use value_types::CellValue;
 
 /// `AND(TRUE, TRUE, TRUE)` should return TRUE.

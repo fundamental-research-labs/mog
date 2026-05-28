@@ -1,7 +1,7 @@
 use crate::PureFunction;
 use value_types::CellValue;
 
-use super::{num, ymd, FnXirr, FnXnpv};
+use super::{FnXirr, FnXnpv, num, ymd};
 
 /// Empty value cells with valid dates should be treated as zero cash flow.
 #[test]
@@ -144,8 +144,7 @@ fn xirr_text_date_coerced() {
 /// Numeric text in value position should be coerced (e.g. "1100" -> 1100.0).
 #[test]
 fn xirr_text_number_in_value_coerced() {
-    let vals_text =
-        CellValue::from_rows(vec![vec![num(-1000.0), CellValue::Text("1100".into())]]);
+    let vals_text = CellValue::from_rows(vec![vec![num(-1000.0), CellValue::Text("1100".into())]]);
     let vals_num = CellValue::from_rows(vec![vec![num(-1000.0), num(1100.0)]]);
     let dates = CellValue::from_rows(vec![vec![num(ymd(2023, 1, 1)), num(ymd(2024, 1, 1))]]);
     let r_text = FnXirr.call(&[vals_text, dates.clone()]);
@@ -208,8 +207,7 @@ fn xirr_unparseable_text_date_skipped() {
         num(ymd(2023, 7, 1)),
         num(ymd(2024, 1, 1)),
     ]]);
-    let vals_without_bad =
-        CellValue::from_rows(vec![vec![num(-1000.0), num(500.0), num(600.0)]]);
+    let vals_without_bad = CellValue::from_rows(vec![vec![num(-1000.0), num(500.0), num(600.0)]]);
     let r_bad = FnXirr.call(&[vals, dates_with_bad]);
     let r_clean = FnXirr.call(&[vals_without_bad, dates_without_bad]);
     match (&r_bad, &r_clean) {

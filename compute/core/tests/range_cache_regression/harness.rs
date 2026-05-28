@@ -1,5 +1,5 @@
-use compute_core::mirror::dense::{DenseBoolMask, DenseColumn};
 use compute_core::mirror::CellMirror;
+use compute_core::mirror::dense::{DenseBoolMask, DenseColumn};
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{RecalcResult, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -91,24 +91,14 @@ pub(crate) fn warm_dense_cache(mirror: &mut CellMirror, col: u32) {
     mirror.dense_cache_mut().store_dense(sid, col, dense, mask);
 }
 
-pub(crate) fn assert_col_version_bumped(
-    scenario: &str,
-    col: u32,
-    before: u64,
-    after: u64,
-) {
+pub(crate) fn assert_col_version_bumped(scenario: &str, col: u32, before: u64, after: u64) {
     assert!(
         after > before,
         "{scenario}: col_version for col {col} should bump: before={before}, after={after}"
     );
 }
 
-pub(crate) fn assert_col_version_unchanged(
-    scenario: &str,
-    col: u32,
-    before: u64,
-    after: u64,
-) {
+pub(crate) fn assert_col_version_unchanged(scenario: &str, col: u32, before: u64, after: u64) {
     assert_eq!(
         after, before,
         "{scenario}: col_version for col {col} should be unchanged: before={before}, after={after}"
@@ -193,9 +183,10 @@ pub(crate) fn assert_dense_value(
     expected: f64,
 ) {
     let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    let dense = mirror.dense_cache().get(&sid, col).unwrap_or_else(|| {
-        panic!("{scenario}: DenseColumnCache for col {col} should be present")
-    });
+    let dense = mirror
+        .dense_cache()
+        .get(&sid, col)
+        .unwrap_or_else(|| panic!("{scenario}: DenseColumnCache for col {col} should be present"));
     let observed = dense.values()[row];
     assert!(
         (observed - expected).abs() < 1e-6,

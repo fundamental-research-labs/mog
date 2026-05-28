@@ -13,8 +13,8 @@ pub use body::{
 };
 pub use bullets::{BulletColor, BulletProperties, BulletSize, BulletType};
 pub use enums::{
-    TextAlign, TextAnchor, TextFontAlignType, TextHorzOverflow, TextVertOverflow,
-    TextVerticalType, TextWrap,
+    TextAlign, TextAnchor, TextFontAlignType, TextHorzOverflow, TextVertOverflow, TextVerticalType,
+    TextWrap,
 };
 pub use extension::ExtensionList;
 pub use numbering::TextAutonumberType;

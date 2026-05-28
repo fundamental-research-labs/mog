@@ -1,11 +1,11 @@
 #[path = "gated_codegen/support.rs"]
 mod support;
 
-pub use support::{compute_security, compute_wire, value_types};
 pub use support::{
     AccessLevel, AccessTarget, CellAddr, CellRange, FakeDispatch, FakeEngine, PlainService,
     Principal, PrincipalPool, SheetAccessMatrix, SheetId, StubService, new_service,
 };
+pub use support::{compute_security, compute_wire, value_types};
 
 #[path = "gated_codegen/descriptors.rs"]
 mod descriptors;
@@ -51,7 +51,10 @@ fn gated_false_with_some_principal_still_passthrough() {
         .get_cell_value(SheetId(0), CellAddr { row: 0, col: 0 })
         .unwrap();
     assert_eq!(v, 42);
-    assert_eq!(svc.dispatch.engine().matrix_calls.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        svc.dispatch.engine().matrix_calls.load(Ordering::Relaxed),
+        0
+    );
 }
 
 #[test]

@@ -2,8 +2,8 @@ use value_types::{CellError, CellValue};
 
 use crate::PureFunction;
 
-use super::helpers::{criteria_age_30, err, num, sample_db, text};
 use super::super::functions::FnDget;
+use super::helpers::{criteria_age_30, err, num, sample_db, text};
 
 #[test]
 fn test_dget_single_match() {

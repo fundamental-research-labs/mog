@@ -3,19 +3,19 @@
 //! IMPOWER, IMPRODUCT, IMREAL, IMSEC, IMSECH, IMSIN, IMSINH, IMSQRT, IMSUB,
 //! IMSUM, IMTAN
 
-mod wrappers;
-mod types;
-mod components;
 mod arithmetic;
+mod components;
 mod transcendental;
 mod trig;
+mod types;
+mod wrappers;
 
 #[cfg(test)]
 mod tests;
 
 use self::arithmetic::{FnImDiv, FnImPower, FnImProduct, FnImSqrt, FnImSub, FnImSum};
 use self::components::{FnComplex, FnImAbs, FnImArgument, FnImConjugate, FnImReal, FnImaginary};
-use self::transcendental::{FnImExp, FnImLn, FnImLog10, FnImLog2};
+use self::transcendental::{FnImExp, FnImLn, FnImLog2, FnImLog10};
 use self::trig::{
     FnImCos, FnImCosh, FnImCot, FnImCsc, FnImCsch, FnImSec, FnImSech, FnImSin, FnImSinh, FnImTan,
 };

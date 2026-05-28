@@ -97,7 +97,6 @@ fn test_previous_next_at_depth_0() {
 
 // ---- find_sibling_by_value ----
 
-
 #[test]
 fn test_subtotal_at_depth() {
     let (rows, field_names) = build_two_level_rows();
@@ -190,12 +189,22 @@ fn test_is_flat_single_level() {
     let rows = vec![
         make_data_row(
             "east",
-            vec![make_header("east", CellValue::Text("East".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(100.0)],
         ),
         make_data_row(
             "west",
-            vec![make_header("west", CellValue::Text("West".into()), "region", 0)],
+            vec![make_header(
+                "west",
+                CellValue::Text("West".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(200.0)],
         ),
         make_grand_total_row(vec![CellValue::number(300.0)]),
@@ -207,4 +216,3 @@ fn test_is_flat_single_level() {
 }
 
 // ---- 3-level hierarchy (Region > State > City) ----
-

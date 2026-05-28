@@ -105,4 +105,3 @@ fn wildcard_match_chars(pattern: &[char], text: &[char]) -> bool {
         false
     }
 }
-

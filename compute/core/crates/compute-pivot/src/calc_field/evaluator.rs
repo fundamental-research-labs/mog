@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
-use super::ast::{CalcFieldExpr, CalcFieldOp};
 use super::MAX_DEPTH;
+use super::ast::{CalcFieldExpr, CalcFieldOp};
 
 /// Evaluate a calculated field expression given field values.
 ///

@@ -23,4 +23,3 @@ pub struct CustomColorList {
     /// Custom color entries
     pub cust_clr: Vec<CustomColor>,
 }
-

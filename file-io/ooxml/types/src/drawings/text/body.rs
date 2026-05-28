@@ -1,10 +1,10 @@
+use super::super::geometry::GeomGuide;
+use super::super::primitives::{Emu, StAngle, StCoordinate};
+use super::super::three_d::{Scene3D, Shape3D};
 use super::{
     ExtensionList, Paragraph, TextAnchor, TextHorzOverflow, TextListStyle, TextVertOverflow,
     TextVerticalType, TextWrap,
 };
-use super::super::geometry::GeomGuide;
-use super::super::primitives::{Emu, StAngle, StCoordinate};
-use super::super::three_d::{Scene3D, Shape3D};
 
 // =============================================================================
 // Text Body Types

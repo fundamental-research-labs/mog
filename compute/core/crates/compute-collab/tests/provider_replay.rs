@@ -1,9 +1,7 @@
 mod support;
 
 use compute_collab::{apply_update, encode_full_state};
-use support::{
-    realistic_bootstrap, root_maps_only_bootstrap, sheet_order_len, sheet_order_string,
-};
+use support::{realistic_bootstrap, root_maps_only_bootstrap, sheet_order_len, sheet_order_string};
 use yrs::{Array, Doc, Map, Transact};
 
 // These tests document the IndexedDB/provider replay bug class: local eager

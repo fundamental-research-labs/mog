@@ -71,7 +71,9 @@ pub fn workbook_snapshot(sheets: Vec<SheetSnapshot>) -> WorkbookSnapshot {
     }
 }
 
-pub fn init_core(snapshot: WorkbookSnapshot) -> (CellMirror, ComputeCore, compute_core::RecalcResult) {
+pub fn init_core(
+    snapshot: WorkbookSnapshot,
+) -> (CellMirror, ComputeCore, compute_core::RecalcResult) {
     let mut mirror = CellMirror::new();
     let mut core = ComputeCore::new();
     let result = core

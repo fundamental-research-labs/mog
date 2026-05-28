@@ -201,7 +201,10 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
 }
 
 /// Resolve border input to `BorderFormat`. Returns `None` if no visible borders.
-pub(super) fn resolve_border(border: &BorderInput, theme_colors: &[String]) -> Option<BorderFormat> {
+pub(super) fn resolve_border(
+    border: &BorderInput,
+    theme_colors: &[String],
+) -> Option<BorderFormat> {
     let left = resolve_border_side(border.left.as_ref(), theme_colors);
     let right = resolve_border_side(border.right.as_ref(), theme_colors);
     let top = resolve_border_side(border.top.as_ref(), theme_colors);

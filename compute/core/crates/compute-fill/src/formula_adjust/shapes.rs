@@ -1,7 +1,7 @@
 use formula_types::IdentityFormulaRef;
 
 use super::coords::shift_coord;
-use super::{RefPosition, MAX_COLS, MAX_ROWS};
+use super::{MAX_COLS, MAX_ROWS, RefPosition};
 use crate::types::AdjustedRef;
 
 /// Adjust a single formula ref, producing an [`AdjustedRef`].
@@ -47,10 +47,8 @@ pub(super) fn adjust_single_ref(
                 range_ref.start_col_absolute,
                 MAX_COLS,
             );
-            let end_row =
-                shift_coord(*end_row, row_delta, range_ref.end_row_absolute, MAX_ROWS);
-            let end_col =
-                shift_coord(*end_col, col_delta, range_ref.end_col_absolute, MAX_COLS);
+            let end_row = shift_coord(*end_row, row_delta, range_ref.end_row_absolute, MAX_ROWS);
+            let end_col = shift_coord(*end_col, col_delta, range_ref.end_col_absolute, MAX_COLS);
             AdjustedRef {
                 ref_index,
                 target_row: start_row.value,
@@ -80,8 +78,12 @@ pub(super) fn adjust_single_ref(
             IdentityFormulaRef::RowRange(row_range_ref),
             RefPosition::RowRange { start_row, end_row },
         ) => {
-            let start_row =
-                shift_coord(*start_row, row_delta, row_range_ref.start_absolute, MAX_ROWS);
+            let start_row = shift_coord(
+                *start_row,
+                row_delta,
+                row_range_ref.start_absolute,
+                MAX_ROWS,
+            );
             let end_row = shift_coord(*end_row, row_delta, row_range_ref.end_absolute, MAX_ROWS);
             AdjustedRef {
                 ref_index,
@@ -109,8 +111,12 @@ pub(super) fn adjust_single_ref(
             IdentityFormulaRef::ColRange(col_range_ref),
             RefPosition::ColRange { start_col, end_col },
         ) => {
-            let start_col =
-                shift_coord(*start_col, col_delta, col_range_ref.start_absolute, MAX_COLS);
+            let start_col = shift_coord(
+                *start_col,
+                col_delta,
+                col_range_ref.start_absolute,
+                MAX_COLS,
+            );
             let end_col = shift_coord(*end_col, col_delta, col_range_ref.end_absolute, MAX_COLS);
             AdjustedRef {
                 ref_index,

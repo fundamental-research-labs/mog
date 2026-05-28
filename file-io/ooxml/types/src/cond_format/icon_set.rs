@@ -1,4 +1,4 @@
-use super::{default_true, Cfvo};
+use super::{Cfvo, default_true};
 
 // ============================================================================
 // IconSetType - Icon set type for conditional formatting

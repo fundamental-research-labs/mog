@@ -150,11 +150,20 @@ fn test_isurl_non_text_and_arrays() {
 
 #[test]
 fn test_isurl_port_rules_and_bracketed_hosts() {
-    assert_eq!(FnIsUrl.call(&[text("https://example.com:443")]), bool_val(true));
-    assert_eq!(FnIsUrl.call(&[text("https://example.com:0")]), bool_val(false));
+    assert_eq!(
+        FnIsUrl.call(&[text("https://example.com:443")]),
+        bool_val(true)
+    );
+    assert_eq!(
+        FnIsUrl.call(&[text("https://example.com:0")]),
+        bool_val(false)
+    );
     assert_eq!(
         FnIsUrl.call(&[text("https://example.com:70000")]),
         bool_val(false)
     );
-    assert_eq!(FnIsUrl.call(&[text("https://[example.com]")]), bool_val(false));
+    assert_eq!(
+        FnIsUrl.call(&[text("https://[example.com]")]),
+        bool_val(false)
+    );
 }

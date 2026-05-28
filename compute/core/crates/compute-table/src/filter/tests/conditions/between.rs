@@ -1,5 +1,5 @@
-use super::super::*;
 use super::super::fixtures::*;
+use super::super::*;
 
 #[test]
 fn test_condition_between() {
@@ -119,7 +119,6 @@ fn test_between_with_strings() {
     ];
     assert_eq!(eval(&criteria, &data), vec![0, 1, 1, 1, 0]);
 }
-
 
 #[test]
 fn test_not_between_with_strings() {

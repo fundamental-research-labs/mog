@@ -3,7 +3,7 @@ use value_types::CellValue;
 use crate::types::{FillPattern, FillPatternType};
 
 use super::default_pattern;
-use super::values::{all_numbers, TOLERANCE};
+use super::values::{TOLERANCE, all_numbers};
 
 pub(crate) fn detect_linear_pattern(values: &[CellValue]) -> Option<FillPattern> {
     let nums = all_numbers(values)?;

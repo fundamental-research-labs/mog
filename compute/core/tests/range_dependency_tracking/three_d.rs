@@ -100,7 +100,6 @@ pub(crate) fn run_3d_case(variant: u8) -> Result<(), String> {
     assert_dependent_identity(&before, &after, &ctx)
 }
 
-
 pub(crate) fn class_ii_3d_family() {
     let mut s = Summary::new("3d");
     for v in 0..4 {

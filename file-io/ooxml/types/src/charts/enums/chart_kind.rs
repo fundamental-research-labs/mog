@@ -506,4 +506,3 @@ impl SizeRepresents {
         }
     }
 }
-

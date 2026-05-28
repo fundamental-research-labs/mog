@@ -1,5 +1,5 @@
+use super::super::{CellXfInput, FormatCache, StyleInput, resolve_style, resolve_styles};
 use super::make_input;
-use super::super::{resolve_style, resolve_styles, CellXfInput, FormatCache, StyleInput};
 
 #[test]
 fn default_style_resolves_normal_base() {

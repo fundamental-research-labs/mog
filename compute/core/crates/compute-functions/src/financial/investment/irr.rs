@@ -1,8 +1,8 @@
 use value_types::{CellError, CellValue};
 
 use super::super::helpers::num_or_err_msg;
-use crate::helpers::coercion::flatten_values;
 use crate::PureFunction;
+use crate::helpers::coercion::flatten_values;
 
 pub(super) struct FnIrr;
 

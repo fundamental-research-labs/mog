@@ -399,8 +399,7 @@ fn xlsx_import_table_slicer_conversion() {
         },
     };
 
-    let stored =
-        xlsx_import_to_stored_slicer(&slicer, Some(&cache), Some(&anchor), "sheet-hex-1");
+    let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), Some(&anchor), "sheet-hex-1");
     assert_eq!(stored.id, "slicer-Region");
     assert_eq!(stored.sheet_id, "sheet-hex-1");
     assert_eq!(stored.caption, "Region Filter");
@@ -812,8 +811,8 @@ fn style_tokens_and_named_style_wire_shape_are_stable() {
             json_token(SlicerStylePreset::Other2),
         ],
         [
-            "light1", "light2", "light3", "light4", "light5", "light6", "dark1",
-            "dark2", "dark3", "dark4", "dark5", "dark6", "other1", "other2"
+            "light1", "light2", "light3", "light4", "light5", "light6", "dark1", "dark2", "dark3",
+            "dark4", "dark5", "dark6", "other1", "other2"
         ]
     );
 

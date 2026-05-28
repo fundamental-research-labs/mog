@@ -1,4 +1,3 @@
-use super::ExtensionList;
 use super::super::color::DrawingColor;
 use super::super::effects::EffectProperties;
 use super::super::fill::DrawingFill;
@@ -7,6 +6,7 @@ use super::super::primitives::{
     StPercentage, StPitchFamily, StTextFontSize, StTextNonNegativePoint, StTextPoint,
 };
 use super::super::style::Hyperlink;
+use super::ExtensionList;
 
 /// Text run properties (ECMA-376 CT_TextCharacterProperties).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]

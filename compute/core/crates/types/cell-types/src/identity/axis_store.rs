@@ -451,7 +451,10 @@ mod tests {
         assert_eq!(store.len(), 3);
         store.delete_range(1, u32::MAX);
         assert_eq!(store.len(), 1);
-        assert_eq!(store.identity_at(SheetId::from_raw(1), 0), Some(RowId::from_raw(1)));
+        assert_eq!(
+            store.identity_at(SheetId::from_raw(1), 0),
+            Some(RowId::from_raw(1))
+        );
     }
 
     #[test]
@@ -463,7 +466,10 @@ mod tests {
         ]);
 
         store.move_range(10, 2, 0);
-        assert_eq!(store.identity_at(SheetId::from_raw(1), 0), Some(RowId::from_raw(1)));
+        assert_eq!(
+            store.identity_at(SheetId::from_raw(1), 0),
+            Some(RowId::from_raw(1))
+        );
         store.move_range(0, 2, u32::MAX);
         let ids: Vec<_> = store
             .identities_in(SheetId::from_raw(1), 0, 3)

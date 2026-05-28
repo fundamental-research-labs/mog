@@ -1,7 +1,9 @@
 use value_types::{CellError, CellValue};
 
+use super::super::components::{
+    FnComplex, FnImAbs, FnImArgument, FnImConjugate, FnImReal, FnImaginary,
+};
 use super::helpers::*;
-use super::super::components::{FnComplex, FnImAbs, FnImArgument, FnImConjugate, FnImReal, FnImaginary};
 use crate::PureFunction;
 
 #[test]

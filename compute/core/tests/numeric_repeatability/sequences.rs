@@ -1,7 +1,7 @@
 use compute_core::storage::engine::YrsComputeEngine;
 
 use crate::edit::{overwrite_number, read_number_at, sheet_id};
-use crate::runner::{FamilyResult, EDIT_DELTA};
+use crate::runner::{EDIT_DELTA, FamilyResult};
 use crate::topologies::{chain_snapshot, fanin_snapshot};
 
 /// 100 forward/inverse iterations on a chain with the 0.4 seed.

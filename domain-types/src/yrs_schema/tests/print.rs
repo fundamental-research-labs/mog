@@ -1,6 +1,6 @@
 use crate::domain::print::{
-    HeaderFooter, ImportedPrinterSettingsIdentity, PageMargins, PageSetupProperties,
-    PrinterSettingsPageSetupFingerprint, PrintSettings,
+    HeaderFooter, ImportedPrinterSettingsIdentity, PageMargins, PageSetupProperties, PrintSettings,
+    PrinterSettingsPageSetupFingerprint,
 };
 use crate::yrs_schema::print;
 

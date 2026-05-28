@@ -1,6 +1,4 @@
-use super::{
-    build_group_hierarchy, build_group_hierarchy_from_aggregated_tree, GroupHierarchy,
-};
+use super::{GroupHierarchy, build_group_hierarchy, build_group_hierarchy_from_aggregated_tree};
 use crate::types::PivotRow;
 use value_types::CellValue;
 
@@ -26,8 +24,7 @@ fn test_hierarchy_import_paths_remain_available() {
 
 #[test]
 fn source_shape_stays_modular() {
-    let suite_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/hierarchy/tests");
+    let suite_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/hierarchy/tests");
 
     let budgets = [
         (suite_dir.join("mod.rs"), 120usize),

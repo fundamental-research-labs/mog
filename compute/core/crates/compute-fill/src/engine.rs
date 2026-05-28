@@ -4,9 +4,9 @@
 //! Pure function — no mutation, no storage access. The caller provides all
 //! needed data via [`FillInput`].
 
-use crate::engine_emitter::{emit_target, EmissionState};
+use crate::engine_emitter::{EmissionState, emit_target};
 use crate::engine_lanes::build_lane_plans;
-use crate::engine_policy::{copy_pattern, FillPolicy};
+use crate::engine_policy::{FillPolicy, copy_pattern};
 use crate::engine_targets::{target_cells, target_merge_warning};
 use crate::types::*;
 

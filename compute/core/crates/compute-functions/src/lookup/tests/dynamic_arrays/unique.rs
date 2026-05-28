@@ -1,5 +1,5 @@
-use super::super::helpers::*;
 use super::super::super::dynamic_arrays::*;
+use super::super::helpers::*;
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 

@@ -1,5 +1,5 @@
-use super::super::*;
 use super::super::fixtures::*;
+use super::super::*;
 
 #[test]
 fn test_not_between_string_vs_number() {

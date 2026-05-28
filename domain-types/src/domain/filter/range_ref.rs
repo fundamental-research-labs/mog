@@ -54,7 +54,12 @@ pub(super) fn col_index_to_letters(mut col: u32) -> String {
 }
 
 /// Build an A1-style range ref from (start_row, start_col, end_row, end_col) 0-based.
-pub(super) fn build_range_ref(start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> String {
+pub(super) fn build_range_ref(
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> String {
     format!(
         "{}{}:{}{}",
         col_index_to_letters(start_col),

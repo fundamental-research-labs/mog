@@ -4,9 +4,9 @@
 //! in the series. Each pattern type has its own generation strategy.
 
 mod common;
-mod numeric;
-mod date;
 mod cyclic;
+mod date;
+mod numeric;
 mod textual;
 
 use value_types::CellValue;
@@ -77,9 +77,13 @@ pub fn generate_series_values(
             let step = pattern.step.unwrap_or(1.0) as i64;
             textual::generate_ordinal(source_values, count, step, direction_mult)
         }
-        FillPatternType::CustomList => {
-            cyclic::generate_custom_list(source_values, count, direction_mult, pattern, custom_lists)
-        }
+        FillPatternType::CustomList => cyclic::generate_custom_list(
+            source_values,
+            count,
+            direction_mult,
+            pattern,
+            custom_lists,
+        ),
     }
 }
 

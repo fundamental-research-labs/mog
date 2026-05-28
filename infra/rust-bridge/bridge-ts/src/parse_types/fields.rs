@@ -1,7 +1,7 @@
 use crate::parse_types::config::TypeGenConfig;
 use crate::parse_types::ident::strip_raw_prefix;
 use crate::parse_types::type_resolver::{resolve_type, unwrap_option_type};
-use crate::serde_attrs::{apply_rename_rule, is_optional_skip, SerdeFieldAttrs};
+use crate::serde_attrs::{SerdeFieldAttrs, apply_rename_rule, is_optional_skip};
 use crate::types::{TsField, TsType};
 
 pub(super) enum OptionalityPolicy {

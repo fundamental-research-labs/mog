@@ -50,7 +50,6 @@ fn test_benign_self_ref_if_eq_string_with_cached_value() {
     assert_cell_number(&result, 0, 0, 0, 0.0);
 }
 
-
 /// A1 contains =IF(A1="Yes",1,0) with no cached value (Null).
 /// iterative_calc = false.
 ///
@@ -90,7 +89,6 @@ fn test_benign_self_ref_if_eq_string_null_cached() {
     // Should evaluate to 0
     assert_cell_number(&result, 0, 0, 0, 0.0);
 }
-
 
 /// A1 = =IF(A1="Yes",1,0), B1 = =A1*2.
 /// iterative_calc = false.
@@ -136,7 +134,6 @@ fn test_benign_self_ref_with_dependent() {
     // B1 = A1*2 = 0*2 = 0
     assert_cell_number(&result, 0, 0, 1, 0.0);
 }
-
 
 /// Multiple cells with IF(X="Yes",1,0) pattern, all in the same column.
 /// Mirrors the real-world corpus pattern from the XLSX file.

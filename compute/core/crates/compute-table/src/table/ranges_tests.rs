@@ -1,6 +1,6 @@
-use super::*;
 use super::super::types::TableRange;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- Range Queries ----
 

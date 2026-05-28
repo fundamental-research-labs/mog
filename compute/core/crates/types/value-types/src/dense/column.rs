@@ -143,7 +143,9 @@ impl DenseColumn {
         }
         let start = u32::try_from(start).unwrap_or(u32::MAX);
         let end = u32::try_from(end.saturating_sub(1)).unwrap_or(u32::MAX);
-        let idx = self.errors.partition_point(|&(row_offset, _)| row_offset < start);
+        let idx = self
+            .errors
+            .partition_point(|&(row_offset, _)| row_offset < start);
         if idx < self.errors.len() && self.errors[idx].0 <= end {
             Some(self.errors[idx].1)
         } else {
@@ -159,8 +161,7 @@ impl DenseColumn {
             return (0, 0);
         }
         let start = (start_row.saturating_sub(self.start_row) as usize).min(self.values.len());
-        let end =
-            ((end_row.saturating_sub(self.start_row)) as usize + 1).min(self.values.len());
+        let end = ((end_row.saturating_sub(self.start_row)) as usize + 1).min(self.values.len());
         (start, end)
     }
 }

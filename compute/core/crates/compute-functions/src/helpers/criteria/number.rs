@@ -10,4 +10,3 @@ pub(super) fn try_parse_criteria_number(s: &str) -> Option<f64> {
         None
     }
 }
-

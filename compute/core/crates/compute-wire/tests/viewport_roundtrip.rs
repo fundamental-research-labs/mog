@@ -4,8 +4,8 @@ mod support;
 
 use compute_wire::constants::*;
 use compute_wire::flags::*;
-use compute_wire::types::*;
 use compute_wire::serialize_viewport_binary;
+use compute_wire::types::*;
 use domain_types::CellFormat;
 use support::fixtures::viewport_cell as cell;
 use support::layout::ViewportLayout;
@@ -260,7 +260,10 @@ fn viewport_roundtrip_comprehensive() {
         assert_eq!(read_f64(&buf, base + OFF_NUMBER_VALUE), 99.9);
     }
 
-    assert!(layout.string_pool_bytes > 0, "string pool should be non-empty");
+    assert!(
+        layout.string_pool_bytes > 0,
+        "string pool should be non-empty"
+    );
 
     {
         let m0 = layout.merges_start;
@@ -344,8 +347,16 @@ fn viewport_roundtrip_comprehensive() {
         assert_eq!(read_f64(&buf, layout.row_pos_start + 8), 20.0, "row_pos[1]");
 
         assert_eq!(read_f64(&buf, layout.col_pos_start), 0.0, "col_pos[0]");
-        assert_eq!(read_f64(&buf, layout.col_pos_start + 8), 100.0, "col_pos[1]");
-        assert_eq!(read_f64(&buf, layout.col_pos_start + 16), 164.25, "col_pos[2]");
+        assert_eq!(
+            read_f64(&buf, layout.col_pos_start + 8),
+            100.0,
+            "col_pos[1]"
+        );
+        assert_eq!(
+            read_f64(&buf, layout.col_pos_start + 16),
+            164.25,
+            "col_pos[2]"
+        );
     }
 }
 

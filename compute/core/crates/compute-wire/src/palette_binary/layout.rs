@@ -66,7 +66,6 @@ pub(super) const BIT_HIDDEN: u32 = 1 << 28;
 /// Palette header size: `u16` `start_index` + `u16` `format_count` + `u32` `string_pool_bytes`.
 pub(super) const PALETTE_HEADER_SIZE: usize = 8;
 
-
 // Gradient nested presence bits.
 pub(super) const GRADIENT_HAS_DEGREE: u8 = 1 << 0;
 pub(super) const GRADIENT_HAS_CENTER: u8 = 1 << 1;

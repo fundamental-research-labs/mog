@@ -1,5 +1,5 @@
-use super::*;
 use super::fixtures::*;
+use super::*;
 
 #[test]
 fn test_top_bottom_top_3() {

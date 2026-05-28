@@ -268,7 +268,10 @@ mod format_value_types {
         let checked = value_types::CellValue::Control(value_types::CellControl::checkbox(true));
         let unchecked = value_types::CellValue::Control(value_types::CellControl::checkbox(false));
         assert_eq!(format_value(&checked, "0.00", &locale_us()).text, "TRUE");
-        assert_eq!(format_value(&unchecked, "#,##0", &locale_us()).text, "FALSE");
+        assert_eq!(
+            format_value(&unchecked, "#,##0", &locale_us()).text,
+            "FALSE"
+        );
     }
 
     #[test]

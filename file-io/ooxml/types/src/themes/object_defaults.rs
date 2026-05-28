@@ -36,4 +36,3 @@ pub struct ObjectStyleDefaults {
     /// Extension list
     pub ext_lst: Option<ExtensionList>,
 }
-

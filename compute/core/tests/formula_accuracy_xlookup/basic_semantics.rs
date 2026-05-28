@@ -6,8 +6,7 @@ use value_types::CellValue;
 
 #[test]
 fn test_xlookup_exact_match_basic() {
-    let snapshot =
-        single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(20,A1:A3,B1:B3)")]);
+    let snapshot = single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(20,A1:A3,B1:B3)")]);
 
     let result = recalc_snapshot(snapshot);
 
@@ -23,8 +22,7 @@ fn test_xlookup_exact_match_basic() {
 
 #[test]
 fn test_xlookup_not_found_default_na() {
-    let snapshot =
-        single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(99,A1:A3,B1:B3)")]);
+    let snapshot = single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(99,A1:A3,B1:B3)")]);
 
     let result = recalc_snapshot(snapshot);
 
@@ -40,8 +38,7 @@ fn test_xlookup_not_found_default_na() {
 
 #[test]
 fn test_xlookup_not_found_with_fallback() {
-    let snapshot =
-        single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(99,A1:A3,B1:B3,0)")]);
+    let snapshot = single_sheet_lookup_snapshot(vec![(0, 2, "XLOOKUP(99,A1:A3,B1:B3,0)")]);
 
     let result = recalc_snapshot(snapshot);
 

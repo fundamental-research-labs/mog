@@ -5,8 +5,11 @@ use chrono::{NaiveDate, Weekday};
 
 #[test]
 fn test_ms_today() {
-    let result =
-        test_resolve_date_range_filter_for_rule(&DynamicFilterRule::Today, now_date(), Weekday::Sun);
+    let result = test_resolve_date_range_filter_for_rule(
+        &DynamicFilterRule::Today,
+        now_date(),
+        Weekday::Sun,
+    );
     let (start, end) = extract_range(&result.unwrap());
     assert_eq!(start, start_of_day_ms(2024, 6, 15));
     assert_eq!(end, end_of_day_ms(2024, 6, 15));

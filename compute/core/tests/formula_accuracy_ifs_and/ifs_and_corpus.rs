@@ -1,9 +1,4 @@
-use super::support::{
-    assert_cell_text,
-    build_snapshot,
-    print_recalc_diagnostics,
-    recalc_snapshot,
-};
+use super::support::{assert_cell_text, build_snapshot, print_recalc_diagnostics, recalc_snapshot};
 use value_types::CellValue;
 
 /// IFS formula on Sheet1 referencing cells on Sheet2:

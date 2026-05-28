@@ -7,21 +7,11 @@ fn test_find_sibling_by_value() {
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // From East/Gadget (row 1), find "Widget" at depth 1 -> East/Widget (row 0)
-    let found = hierarchy.find_sibling_by_value(
-        1,
-        1,
-        &rows,
-        &CellValue::Text("Widget".into()),
-    );
+    let found = hierarchy.find_sibling_by_value(1, 1, &rows, &CellValue::Text("Widget".into()));
     assert_eq!(found, Some(0));
 
     // From East/Widget (row 0), find "Gadget" at depth 1 -> East/Gadget (row 1)
-    let found = hierarchy.find_sibling_by_value(
-        0,
-        1,
-        &rows,
-        &CellValue::Text("Gadget".into()),
-    );
+    let found = hierarchy.find_sibling_by_value(0, 1, &rows, &CellValue::Text("Gadget".into()));
     assert_eq!(found, Some(1));
 }
 
@@ -31,12 +21,8 @@ fn test_find_sibling_by_value_not_found() {
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // From East/Widget (row 0), find "Nonexistent" at depth 1 -> None
-    let found = hierarchy.find_sibling_by_value(
-        0,
-        1,
-        &rows,
-        &CellValue::Text("Nonexistent".into()),
-    );
+    let found =
+        hierarchy.find_sibling_by_value(0, 1, &rows, &CellValue::Text("Nonexistent".into()));
     assert_eq!(found, None);
 }
 
@@ -47,12 +33,7 @@ fn test_find_sibling_by_value_scoped_to_parent() {
 
     // From West/Widget (row 3), find "Gadget" at depth 1 -> None
     // Gadget only exists under East, not under West.
-    let found = hierarchy.find_sibling_by_value(
-        3,
-        1,
-        &rows,
-        &CellValue::Text("Gadget".into()),
-    );
+    let found = hierarchy.find_sibling_by_value(3, 1, &rows, &CellValue::Text("Gadget".into()));
     assert_eq!(found, None);
 }
 
@@ -69,33 +50,29 @@ fn test_find_sibling_by_value_unicode_case_insensitive() {
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // Search from row 1 (Berlin) for "münchen" at depth 0.
-    let found = hierarchy.find_sibling_by_value(
-        1,
-        0,
-        &rows,
-        &CellValue::Text("münchen".into()),
+    let found = hierarchy.find_sibling_by_value(1, 0, &rows, &CellValue::Text("münchen".into()));
+    assert_eq!(
+        found,
+        Some(0),
+        "Unicode case-insensitive match should find MÜNCHEN"
     );
-    assert_eq!(found, Some(0), "Unicode case-insensitive match should find MÜNCHEN");
 }
 
 #[test]
 fn test_find_sibling_by_value_blank_unification() {
     // CellValue::Null should equal CellValue::Text("") under cell_value_eq
     // (blank unification), but NOT under PartialEq.
-    let (rows, field_names) = build_single_level_rows(vec![
-        CellValue::Null,
-        CellValue::Text("Something".into()),
-    ]);
+    let (rows, field_names) =
+        build_single_level_rows(vec![CellValue::Null, CellValue::Text("Something".into())]);
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // Search from row 1 for Text("") at depth 0 — should find the Null row.
-    let found = hierarchy.find_sibling_by_value(
-        1,
-        0,
-        &rows,
-        &CellValue::Text("".to_string()),
+    let found = hierarchy.find_sibling_by_value(1, 0, &rows, &CellValue::Text("".to_string()));
+    assert_eq!(
+        found,
+        Some(0),
+        "Blank unification: Null should match empty Text"
     );
-    assert_eq!(found, Some(0), "Blank unification: Null should match empty Text");
 }
 
 #[test]
@@ -109,11 +86,10 @@ fn test_find_sibling_by_value_epsilon_float() {
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // Search from row 1 for Number(1.0) at depth 0.
-    let found = hierarchy.find_sibling_by_value(
-        1,
-        0,
-        &rows,
-        &CellValue::number(1.0),
+    let found = hierarchy.find_sibling_by_value(1, 0, &rows, &CellValue::number(1.0));
+    assert_eq!(
+        found,
+        Some(0),
+        "Epsilon float: 1.0000000000001 should match 1.0"
     );
-    assert_eq!(found, Some(0), "Epsilon float: 1.0000000000001 should match 1.0");
 }

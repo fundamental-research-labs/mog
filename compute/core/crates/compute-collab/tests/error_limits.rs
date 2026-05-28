@@ -1,6 +1,6 @@
 mod support;
 
-use compute_collab::{apply_update, decode_state_vector, encode_diff, SyncError};
+use compute_collab::{SyncError, apply_update, decode_state_vector, encode_diff};
 use support::doc_with_text;
 use yrs::Doc;
 

@@ -10,9 +10,8 @@ use super::codec_helpers::{
     anchor_mode_to_str, option_sub_object, read_i64_aliased, read_sub_object, str_to_anchor_mode,
 };
 use super::keys::{
-    KEY_ABSOLUTE_X_EMU, KEY_ABSOLUTE_Y_EMU, KEY_ANCHOR_COL_OFFSET_EMU,
-    KEY_ANCHOR_ROW_OFFSET_EMU, KEY_END_COL_OFFSET_EMU, KEY_END_ROW_OFFSET_EMU, KEY_EXTENT_CX_EMU,
-    KEY_EXTENT_CY_EMU,
+    KEY_ABSOLUTE_X_EMU, KEY_ABSOLUTE_Y_EMU, KEY_ANCHOR_COL_OFFSET_EMU, KEY_ANCHOR_ROW_OFFSET_EMU,
+    KEY_END_COL_OFFSET_EMU, KEY_END_ROW_OFFSET_EMU, KEY_EXTENT_CX_EMU, KEY_EXTENT_CY_EMU,
 };
 
 pub(super) fn append_common_entries(entries: &mut Vec<(String, Any)>, obj: &FloatingObject) {

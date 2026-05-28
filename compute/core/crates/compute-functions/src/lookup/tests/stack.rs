@@ -106,8 +106,7 @@ fn test_torow() {
 #[test]
 fn test_wrapcols() {
     let f = FnWrapCols;
-    let vec =
-        CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0), num(4.0), num(5.0)]]);
+    let vec = CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0), num(4.0), num(5.0)]]);
     let result = f.call(&[vec, num(2.0), num(0.0)]);
     match result {
         CellValue::Array(arr) => {
@@ -123,8 +122,7 @@ fn test_wrapcols() {
 #[test]
 fn test_wraprows() {
     let f = FnWrapRows;
-    let vec =
-        CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0), num(4.0), num(5.0)]]);
+    let vec = CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0), num(4.0), num(5.0)]]);
     let result = f.call(&[vec, num(3.0), num(0.0)]);
     match result {
         CellValue::Array(arr) => {

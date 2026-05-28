@@ -7,9 +7,9 @@ pub mod engine;
 mod engine_emitter;
 mod engine_lanes;
 mod engine_policy;
+mod engine_targets;
 #[cfg(test)]
 mod engine_tests;
-mod engine_targets;
 pub mod flash_fill;
 pub mod formula_adjust;
 pub mod helpers;

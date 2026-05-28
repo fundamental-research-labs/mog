@@ -1,6 +1,6 @@
 use super::support::{
-    assert_error_value, assert_number_value, formula_cell, init_core, sheet_snapshot, val_cell,
-    workbook_snapshot, SHEET1_UUID,
+    SHEET1_UUID, assert_error_value, assert_number_value, formula_cell, init_core, sheet_snapshot,
+    val_cell, workbook_snapshot,
 };
 use value_types::{CellError, CellValue};
 
@@ -31,8 +31,24 @@ fn test_match_exact_basic() {
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 3, cells)]);
     let (mirror, _core, result) = init_core(snapshot);
 
-    assert_number_value(&mirror, &result, SHEET1_UUID, 0, 2, 2.0, "MATCH('Beta') should return 2");
-    assert_number_value(&mirror, &result, SHEET1_UUID, 1, 2, 3.0, "MATCH('Gamma') should return 3");
+    assert_number_value(
+        &mirror,
+        &result,
+        SHEET1_UUID,
+        0,
+        2,
+        2.0,
+        "MATCH('Beta') should return 2",
+    );
+    assert_number_value(
+        &mirror,
+        &result,
+        SHEET1_UUID,
+        1,
+        2,
+        3.0,
+        "MATCH('Gamma') should return 3",
+    );
     assert_error_value(
         &mirror,
         &result,
@@ -60,7 +76,15 @@ fn test_match_error_in_lookup_value() {
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 3, cells)]);
     let (mirror, _core, result) = init_core(snapshot);
 
-    assert_error_value(&mirror, &result, SHEET1_UUID, 0, 0, CellError::Div0, "A0 should be #DIV/0!");
+    assert_error_value(
+        &mirror,
+        &result,
+        SHEET1_UUID,
+        0,
+        0,
+        CellError::Div0,
+        "A0 should be #DIV/0!",
+    );
     assert_error_value(
         &mirror,
         &result,

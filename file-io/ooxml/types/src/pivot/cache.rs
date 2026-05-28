@@ -5,8 +5,8 @@
 //! OLAP hierarchy / group-level types.
 
 use super::enums::PivotSourceType;
-use super::grouping::PivotDiscretePr;
 use super::field::PivotDimensions;
+use super::grouping::PivotDiscretePr;
 use super::layout::{PivotCalculatedItems, PivotCalculatedMembers};
 use super::primitives::{PivotX, TupleCache};
 use super::shared_items::{

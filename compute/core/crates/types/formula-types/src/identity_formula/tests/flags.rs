@@ -1,6 +1,4 @@
-use crate::identity_formula::{
-    IdentityCellRef, IdentityFormula, IdentityFormulaRef,
-};
+use crate::identity_formula::{IdentityCellRef, IdentityFormula, IdentityFormulaRef};
 
 use super::helpers::cell;
 

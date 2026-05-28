@@ -18,7 +18,10 @@ fn url_coerces_as_string() {
 
 #[test]
 fn phone_coerces_as_string() {
-    assert_text_result(&coerce(&text("+1 555 0100"), SchemaType::Phone), "+1 555 0100");
+    assert_text_result(
+        &coerce(&text("+1 555 0100"), SchemaType::Phone),
+        "+1 555 0100",
+    );
 }
 
 #[test]
@@ -28,7 +31,10 @@ fn company_coerces_as_string() {
 
 #[test]
 fn person_coerces_as_string() {
-    assert_text_result(&coerce(&text("Ada Lovelace"), SchemaType::Person), "Ada Lovelace");
+    assert_text_result(
+        &coerce(&text("Ada Lovelace"), SchemaType::Person),
+        "Ada Lovelace",
+    );
 }
 
 #[test]
@@ -38,5 +44,8 @@ fn stock_coerces_as_string() {
 
 #[test]
 fn location_coerces_as_string() {
-    assert_text_result(&coerce(&text("San Francisco"), SchemaType::Location), "San Francisco");
+    assert_text_result(
+        &coerce(&text("San Francisco"), SchemaType::Location),
+        "San Francisco",
+    );
 }

@@ -9,9 +9,7 @@ mod point;
 mod range_pos;
 mod sheet_range;
 
-pub use a1::{
-    MAX_COLS, MAX_ROWS, ParsePosError, col_to_letter, col_to_letter_buf, letter_to_col,
-};
+pub use a1::{MAX_COLS, MAX_ROWS, ParsePosError, col_to_letter, col_to_letter_buf, letter_to_col};
 pub use point::{CellPos, SheetPos};
 pub use range_pos::RangePos;
 pub use sheet_range::SheetRange;

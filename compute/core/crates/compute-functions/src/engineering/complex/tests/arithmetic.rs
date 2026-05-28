@@ -1,8 +1,8 @@
 use value_types::{CellError, CellValue};
 
-use super::helpers::*;
 use super::super::arithmetic::{FnImDiv, FnImPower, FnImProduct, FnImSqrt, FnImSub, FnImSum};
 use super::super::types::parse_complex;
+use super::helpers::*;
 use crate::PureFunction;
 
 #[test]

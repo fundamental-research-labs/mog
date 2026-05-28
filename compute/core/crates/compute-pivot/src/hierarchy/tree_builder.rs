@@ -66,9 +66,7 @@ impl TreeBuildContext<'_> {
     fn walk(&mut self, nodes: &[AggregatedNode], ancestor_path: &[(String, String)]) {
         for node in nodes {
             let depth = node.depth;
-            let is_expanded = self
-                .expanded_set
-                .is_none_or(|set| set.contains(&node.key));
+            let is_expanded = self.expanded_set.is_none_or(|set| set.contains(&node.key));
 
             let mut path = ancestor_path.to_vec();
             let field_name = node.field_id.clone();
@@ -76,7 +74,8 @@ impl TreeBuildContext<'_> {
 
             let subtotal_key = format!("{}{}", node.key, crate::engine::SUBTOTAL_SUFFIX);
             if let Some(&row_idx) = self.subtotal_key_to_row_idx.get(&subtotal_key) {
-                self.subtotal_index.insert((depth, node.key.clone()), row_idx);
+                self.subtotal_index
+                    .insert((depth, node.key.clone()), row_idx);
                 if row_idx < self.row_group_paths.len() {
                     self.row_group_paths[row_idx].clone_from(&path);
                 }

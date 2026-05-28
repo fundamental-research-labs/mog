@@ -82,4 +82,3 @@ pub fn get_subtotal_formula(func: &TotalsFunction, column_name: &str) -> Option<
     let escaped = escape_column_name(column_name);
     Some(format!("=SUBTOTAL({},[{}])", func_num, escaped))
 }
-

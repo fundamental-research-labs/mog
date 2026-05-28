@@ -34,11 +34,12 @@ mod tests {
     #[test]
     fn public_presenter_import_paths_remain_usable() {
         let _ = pivot_config_to_query as fn(&ResolvedPivotConfig) -> RelationalQuery;
-        let _ = query_result_to_pivot as fn(
-            &QueryResult,
-            &ResolvedPivotConfig,
-            Option<&PivotExpansionState>,
-        ) -> PivotTableResult;
+        let _ = query_result_to_pivot
+            as fn(
+                &QueryResult,
+                &ResolvedPivotConfig,
+                Option<&PivotExpansionState>,
+            ) -> PivotTableResult;
         let _ = std::mem::size_of::<ExpansionKey>();
     }
 }

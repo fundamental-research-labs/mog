@@ -1,6 +1,6 @@
-use super::*;
 use super::super::types::TableRange;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- Table Creation ----
 
@@ -63,7 +63,6 @@ fn create_table_pads_column_names() {
     assert_eq!(t.columns[2].name, "Column3");
     assert_eq!(t.columns[3].name, "Column4");
 }
-
 
 // ---- create_table with separate id ----
 

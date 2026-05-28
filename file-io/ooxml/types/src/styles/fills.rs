@@ -1,4 +1,4 @@
-use super::colors::{colors_eq, ColorDef};
+use super::colors::{ColorDef, colors_eq};
 use super::enums::{GradientType, PatternType};
 
 // =============================================================================

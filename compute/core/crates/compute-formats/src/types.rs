@@ -34,19 +34,19 @@ pub(crate) enum Token {
     /// `[condition]` like `[>100]` -- conditional (parsed but advanced)
     Condition(String),
     // Date/time tokens
-    DateYear4,      // yyyy
-    DateYear2,      // yy
-    DateMonth2,     // mm (resolved later -- could be minute)
-    DateMonth1,     // m  (resolved later -- could be minute)
-    DateDay2,       // dd
-    DateDay1,       // d
-    DateHour2,      // hh
-    DateHour1,      // h
-    DateMinute2,    // mm (after resolution)
-    DateMinute1,    // m  (after resolution)
-    DateSecond2,    // ss
-    DateSecond1,    // s
-    AmPm(String),   // AM/PM, am/pm, A/P
+    DateYear4,     // yyyy
+    DateYear2,     // yy
+    DateMonth2,    // mm (resolved later -- could be minute)
+    DateMonth1,    // m  (resolved later -- could be minute)
+    DateDay2,      // dd
+    DateDay1,      // d
+    DateHour2,     // hh
+    DateHour1,     // h
+    DateMinute2,   // mm (after resolution)
+    DateMinute1,   // m  (after resolution)
+    DateSecond2,   // ss
+    DateSecond1,   // s
+    AmPm(String),  // AM/PM, am/pm, A/P
     FractionSlash, // fraction display ?/? or ?/N
     /// Literal denominator digits in fixed-denominator fraction formats, e.g. `4` in `# ?/4`.
     FractionDenominatorLiteral(String),

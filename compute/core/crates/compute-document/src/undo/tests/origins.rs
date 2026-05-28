@@ -66,13 +66,7 @@ fn structural_changes_are_undoable() {
     let (doc, map) = setup();
     let mut mgr = UndoRedoManager::new(&doc, &map);
 
-    insert_with_origin(
-        &doc,
-        &map,
-        ORIGIN_STRUCTURAL,
-        "sheet1:row_count",
-        "101",
-    );
+    insert_with_origin(&doc, &map, ORIGIN_STRUCTURAL, "sheet1:row_count", "101");
 
     assert!(mgr.can_undo(), "structural changes should be undoable");
     assert_eq!(mgr.undo_depth(), 1);

@@ -125,7 +125,10 @@ fn tagged_enum_variant_field_tags_decode_all_supported_shapes() {
     assert_contains(&code, "let name : String");
     assert_contains(&code, "and_then (| v | v . as_str ())");
     assert_contains(&code, "let index = :: serde_json :: from_value");
-    assert_contains(&code, "let payload : Vec < u8 > = :: serde_json :: from_value");
+    assert_contains(
+        &code,
+        "let payload : Vec < u8 > = :: serde_json :: from_value",
+    );
     assert_contains(&code, "let meta = :: serde_json :: from_value");
     assert_contains(&code, "cloned () . ok_or_else");
     assert_contains(&code, "BridgeParse :: bridge_parse (__s)");

@@ -18,7 +18,6 @@
 //! - Ignored in `Serialize`/`Deserialize` (only `val` crosses IPC boundaries)
 //! - Accessible via [`FiniteF64::lo()`] and [`FiniteF64::with_dd()`]
 
-
 mod conversions;
 mod math;
 mod operators;
@@ -239,7 +238,6 @@ impl FiniteF64 {
         #[cfg(feature = "dd-precision")]
         lo: 0.0,
     };
-
 }
 
 // ---------------------------------------------------------------------------

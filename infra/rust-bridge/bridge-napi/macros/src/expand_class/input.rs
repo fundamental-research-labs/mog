@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
-use syn::parse::{Parse, ParseStream};
 use syn::Token;
+use syn::parse::{Parse, ParseStream};
 
 /// Input for `__expand_class`: `__class_name = ClassName; <descriptor tokens>`.
 pub(super) struct ClassExpandInput {

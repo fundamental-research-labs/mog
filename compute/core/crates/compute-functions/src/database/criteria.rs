@@ -75,10 +75,7 @@ pub(super) fn preparse_criteria(db: &Database, criteria: &Criteria) -> PreParsed
 /// Check if a data row matches the pre-parsed criteria.
 /// Multiple criteria columns in a row = AND.
 /// Multiple criteria rows = OR.
-pub(super) fn row_matches_preparsed(
-    data_row: &[CellValue],
-    criteria: &PreParsedCriteria,
-) -> bool {
+pub(super) fn row_matches_preparsed(data_row: &[CellValue], criteria: &PreParsedCriteria) -> bool {
     if criteria.match_all {
         return true;
     }

@@ -80,7 +80,8 @@ pub fn normalize_cf_rule_input(rule: &mut serde_json::Value) {
                 "type".into(),
                 serde_json::Value::String("containsBlanks".into()),
             );
-            obj.entry("blanks").or_insert(serde_json::Value::Bool(false));
+            obj.entry("blanks")
+                .or_insert(serde_json::Value::Bool(false));
         }
         "containsBlanks" => {
             obj.entry("blanks").or_insert(serde_json::Value::Bool(true));
@@ -90,7 +91,8 @@ pub fn normalize_cf_rule_input(rule: &mut serde_json::Value) {
                 "type".into(),
                 serde_json::Value::String("containsErrors".into()),
             );
-            obj.entry("errors").or_insert(serde_json::Value::Bool(false));
+            obj.entry("errors")
+                .or_insert(serde_json::Value::Bool(false));
         }
         "containsErrors" => {
             obj.entry("errors").or_insert(serde_json::Value::Bool(true));

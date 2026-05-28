@@ -12,8 +12,7 @@ fn test_string_pool_roundtrip() {
     let cell0 = HEADER_SIZE;
     let d_off = u32::from_le_bytes(buf[cell0 + 8..cell0 + 12].try_into().unwrap()) as usize;
     let d_len = u16::from_le_bytes(buf[cell0 + 20..cell0 + 22].try_into().unwrap()) as usize;
-    let text =
-        std::str::from_utf8(&buf[pool_start + d_off..pool_start + d_off + d_len]).unwrap();
+    let text = std::str::from_utf8(&buf[pool_start + d_off..pool_start + d_off + d_len]).unwrap();
     assert_eq!(text, "42");
 
     // Verify string pool byte count

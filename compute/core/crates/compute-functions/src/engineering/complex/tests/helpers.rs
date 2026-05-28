@@ -33,7 +33,12 @@ pub(super) fn assert_num_approx(result: &CellValue, expected: f64, tol: f64) {
     );
 }
 
-pub(super) fn assert_complex_approx(result: &CellValue, expected_re: f64, expected_im: f64, tol: f64) {
+pub(super) fn assert_complex_approx(
+    result: &CellValue,
+    expected_re: f64,
+    expected_im: f64,
+    tol: f64,
+) {
     let s = extract_text(result);
     let (re, im, _) =
         parse_complex(&s).unwrap_or_else(|| panic!("failed to parse complex result: {s:?}"));

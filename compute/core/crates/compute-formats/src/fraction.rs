@@ -45,7 +45,10 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
 
     let fixed_denominator = section.tokens[slash_pos + 1..].first().and_then(|token| {
         if let Token::FractionDenominatorLiteral(value) = token {
-            value.parse::<u64>().ok().filter(|denominator| *denominator > 0)
+            value
+                .parse::<u64>()
+                .ok()
+                .filter(|denominator| *denominator > 0)
         } else {
             None
         }
@@ -79,7 +82,8 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
         .iter()
         .any(is_digit_placeholder);
 
-    let (best_num, best_denom, carry_fraction) = if let Some(fixed_denominator) = fixed_denominator {
+    let (best_num, best_denom, carry_fraction) = if let Some(fixed_denominator) = fixed_denominator
+    {
         if frac_part < 1e-12 {
             (0u64, fixed_denominator, false)
         } else {

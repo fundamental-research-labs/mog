@@ -1,9 +1,9 @@
 use value_types::{CellError, CellValue, KahanSum};
 
-use super::dated_cash_flows::collect_value_date_pairs;
 use super::super::helpers::{err_val, num_or_err_msg};
-use crate::helpers::coercion::flatten_values;
+use super::dated_cash_flows::collect_value_date_pairs;
 use crate::PureFunction;
+use crate::helpers::coercion::flatten_values;
 
 pub(super) struct FnXirr;
 

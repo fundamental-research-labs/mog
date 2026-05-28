@@ -1,7 +1,7 @@
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 
-use super::{err, num, FnIrr, FnMirr, FnNpv};
+use super::{FnIrr, FnMirr, FnNpv, err, num};
 
 #[test]
 fn npv_discounts_numeric_cash_flows_only() {
@@ -48,12 +48,7 @@ fn irr_requires_positive_and_negative_cash_flows() {
 
 #[test]
 fn mirr_uses_finance_and_reinvest_rates() {
-    let values = CellValue::from_rows(vec![vec![
-        num(-1000.0),
-        num(300.0),
-        num(400.0),
-        num(500.0),
-    ]]);
+    let values = CellValue::from_rows(vec![vec![num(-1000.0), num(300.0), num(400.0), num(500.0)]]);
 
     let result = FnMirr.call(&[values, num(0.1), num(0.12)]);
     match &result {
@@ -71,5 +66,8 @@ fn mirr_uses_finance_and_reinvest_rates() {
 fn mirr_requires_positive_and_negative_cash_flows() {
     let values = CellValue::from_rows(vec![vec![num(-100.0), num(-110.0)]]);
 
-    assert_eq!(FnMirr.call(&[values, num(0.1), num(0.12)]), err(CellError::Num));
+    assert_eq!(
+        FnMirr.call(&[values, num(0.1), num(0.12)]),
+        err(CellError::Num)
+    );
 }

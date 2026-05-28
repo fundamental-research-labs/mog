@@ -45,12 +45,7 @@ fn test_three_level_hierarchy() {
             "east\x00ny__SUBTOTAL__",
             vec![
                 make_header("east", CellValue::Text("East".into()), "region", 0),
-                make_header(
-                    "east\x00ny",
-                    CellValue::Text("NY Total".into()),
-                    "state",
-                    1,
-                ),
+                make_header("east\x00ny", CellValue::Text("NY Total".into()), "state", 1),
             ],
             1,
             vec![CellValue::number(600.0)],
@@ -75,12 +70,7 @@ fn test_three_level_hierarchy() {
             "east\x00ct__SUBTOTAL__",
             vec![
                 make_header("east", CellValue::Text("East".into()), "region", 0),
-                make_header(
-                    "east\x00ct",
-                    CellValue::Text("CT Total".into()),
-                    "state",
-                    1,
-                ),
+                make_header("east\x00ct", CellValue::Text("CT Total".into()), "state", 1),
             ],
             1,
             vec![CellValue::number(80.0)],
@@ -103,12 +93,7 @@ fn test_three_level_hierarchy() {
             vec![
                 make_header("west", CellValue::Text("West".into()), "region", 0),
                 make_header("west\x00ca", CellValue::Text("CA".into()), "state", 1),
-                make_header(
-                    "west\x00ca\x00la",
-                    CellValue::Text("LA".into()),
-                    "city",
-                    2,
-                ),
+                make_header("west\x00ca\x00la", CellValue::Text("LA".into()), "city", 2),
             ],
             vec![CellValue::number(400.0)],
         ),
@@ -117,12 +102,7 @@ fn test_three_level_hierarchy() {
             "west\x00ca__SUBTOTAL__",
             vec![
                 make_header("west", CellValue::Text("West".into()), "region", 0),
-                make_header(
-                    "west\x00ca",
-                    CellValue::Text("CA Total".into()),
-                    "state",
-                    1,
-                ),
+                make_header("west\x00ca", CellValue::Text("CA Total".into()), "state", 1),
             ],
             1,
             vec![CellValue::number(400.0)],
@@ -197,16 +177,12 @@ fn test_three_level_hierarchy() {
     // Verify subtotals
     // East/NY subtotal at depth 1 -> row 2
     assert_eq!(
-        hierarchy
-            .subtotal_index
-            .get(&(1, "east\x00ny".to_string())),
+        hierarchy.subtotal_index.get(&(1, "east\x00ny".to_string())),
         Some(&2)
     );
     // East/CT subtotal at depth 1 -> row 4
     assert_eq!(
-        hierarchy
-            .subtotal_index
-            .get(&(1, "east\x00ct".to_string())),
+        hierarchy.subtotal_index.get(&(1, "east\x00ct".to_string())),
         Some(&4)
     );
     // East subtotal at depth 0 -> row 5
@@ -216,9 +192,7 @@ fn test_three_level_hierarchy() {
     );
     // West/CA subtotal at depth 1 -> row 7
     assert_eq!(
-        hierarchy
-            .subtotal_index
-            .get(&(1, "west\x00ca".to_string())),
+        hierarchy.subtotal_index.get(&(1, "west\x00ca".to_string())),
         Some(&7)
     );
     // West subtotal at depth 0 -> row 8
@@ -263,22 +237,12 @@ fn test_three_level_hierarchy() {
     assert_eq!(hierarchy.next_sibling(3, 1), None); // Hartford is last under east
 
     // find_sibling_by_value at depth 2
-    let found = hierarchy.find_sibling_by_value(
-        1,
-        2,
-        &rows,
-        &CellValue::Text("NYC".into()),
-    );
+    let found = hierarchy.find_sibling_by_value(1, 2, &rows, &CellValue::Text("NYC".into()));
     assert_eq!(found, Some(0));
 
     // find_sibling_by_value should NOT find across parent groups
     // LA (row 6) looking for "NYC" at depth 2 -> None (different parent)
-    let found = hierarchy.find_sibling_by_value(
-        6,
-        2,
-        &rows,
-        &CellValue::Text("NYC".into()),
-    );
+    let found = hierarchy.find_sibling_by_value(6, 2, &rows, &CellValue::Text("NYC".into()));
     assert_eq!(found, None);
 
     // subtotal_at_depth

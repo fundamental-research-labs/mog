@@ -1,7 +1,6 @@
 use crate::identity_formula::{
-    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef,
-    IdentityFullColRef, IdentityFullRowRef, IdentityRangeRef, IdentityRectRangeRef,
-    IdentityRowRangeRef,
+    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef, IdentityFullColRef,
+    IdentityFullRowRef, IdentityRangeRef, IdentityRectRangeRef, IdentityRowRangeRef,
 };
 
 use super::helpers::{

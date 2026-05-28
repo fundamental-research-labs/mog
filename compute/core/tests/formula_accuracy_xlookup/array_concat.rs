@@ -1,6 +1,4 @@
-use crate::support::{
-    assert_array_or_first_text, assert_number, build_snapshot, recalc_snapshot,
-};
+use crate::support::{assert_array_or_first_text, assert_number, build_snapshot, recalc_snapshot};
 use value_types::CellValue;
 
 #[test]

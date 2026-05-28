@@ -3,8 +3,7 @@ use super::types::CultureInfo;
 
 /// Supported culture tags in registry return order.
 pub(super) const SUPPORTED_CULTURE_TAGS: [&str; 10] = [
-    "en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "pt-BR", "ja-JP", "zh-CN",
-    "ko-KR",
+    "en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "pt-BR", "ja-JP", "zh-CN", "ko-KR",
 ];
 
 /// Build a culture for a supported IETF culture tag.

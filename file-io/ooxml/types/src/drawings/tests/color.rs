@@ -32,7 +32,10 @@ fn scheme_color_contract() {
         assert_eq!(SchemeColor::from_ooxml(variant.to_ooxml()), Some(variant));
     }
 
-    assert_eq!(SchemeColor::from_ooxml("folHlink"), Some(SchemeColor::FolHlink));
+    assert_eq!(
+        SchemeColor::from_ooxml("folHlink"),
+        Some(SchemeColor::FolHlink)
+    );
     assert_eq!(SchemeColor::from_ooxml("phClr"), Some(SchemeColor::PhClr));
 
     for token in ["", "bogus", "DK1", " dk1"] {
@@ -141,7 +144,10 @@ fn color_transform_contract() {
     }
 
     for name in ["comp", "inv", "gray", "gamma", "invGamma"] {
-        assert_eq!(ColorTransform::from_ooxml(name, Some(777)).unwrap().val(), None);
+        assert_eq!(
+            ColorTransform::from_ooxml(name, Some(777)).unwrap().val(),
+            None
+        );
     }
     for name in ["", "bogus", "ALPHA", " alpha"] {
         assert_eq!(ColorTransform::from_ooxml(name, None), None);
@@ -182,8 +188,14 @@ fn all_system_colors() -> &'static [(SystemColorVal, &'static str)] {
         (SystemColorVal::InfoText, "infoText"),
         (SystemColorVal::InfoBk, "infoBk"),
         (SystemColorVal::HotLight, "hotLight"),
-        (SystemColorVal::GradientActiveCaption, "gradientActiveCaption"),
-        (SystemColorVal::GradientInactiveCaption, "gradientInactiveCaption"),
+        (
+            SystemColorVal::GradientActiveCaption,
+            "gradientActiveCaption",
+        ),
+        (
+            SystemColorVal::GradientInactiveCaption,
+            "gradientInactiveCaption",
+        ),
         (SystemColorVal::MenuHighlight, "menuHighlight"),
         (SystemColorVal::MenuBar, "menuBar"),
     ]
@@ -196,8 +208,14 @@ fn system_color_contract() {
         assert_eq!(SystemColorVal::from_ooxml(token), variant);
         assert_eq!(SystemColorVal::from_ooxml(variant.to_ooxml()), variant);
     }
-    assert_eq!(SystemColorVal::from_ooxml("3dDkShadow"), SystemColorVal::ThreeDDkShadow);
-    assert_eq!(SystemColorVal::from_ooxml("3dLight"), SystemColorVal::ThreeDLight);
+    assert_eq!(
+        SystemColorVal::from_ooxml("3dDkShadow"),
+        SystemColorVal::ThreeDDkShadow
+    );
+    assert_eq!(
+        SystemColorVal::from_ooxml("3dLight"),
+        SystemColorVal::ThreeDLight
+    );
     for token in ["", "bogus", "WINDOW", " window"] {
         assert_eq!(SystemColorVal::from_ooxml(token), SystemColorVal::Window);
     }
@@ -485,6 +503,7 @@ fn drawing_color_contract() {
             ColorTransform::Shade { val: 20000 },
         ],
     };
-    let round_trip: DrawingColor = serde_json::from_str(&serde_json::to_string(&ordered).unwrap()).unwrap();
+    let round_trip: DrawingColor =
+        serde_json::from_str(&serde_json::to_string(&ordered).unwrap()).unwrap();
     assert_eq!(round_trip, ordered);
 }

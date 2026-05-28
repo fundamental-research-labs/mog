@@ -1,5 +1,5 @@
-use super::*;
 use super::fixtures::*;
+use super::*;
 
 #[test]
 fn test_value_filter_include_specific() {
@@ -92,7 +92,6 @@ fn test_value_filter_nan_not_in_list() {
     let data = vec![cv_num(1.0), cv_nan(), cv_num(3.0)];
     assert_eq!(eval(&criteria, &data), vec![1, 0, 1]);
 }
-
 
 #[test]
 fn test_all_blanks_exclude() {

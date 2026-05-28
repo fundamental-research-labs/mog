@@ -7,8 +7,8 @@ use value_types::CellValue;
 
 use super::super::floating_object::{AnchorMode, FloatingObjectAnchor};
 use super::{
-    CrossFilterMode, PivotFieldArea, SlicerSortOrder, SlicerSource, SlicerStyle,
-    SlicerStylePreset, StoredSlicer,
+    CrossFilterMode, PivotFieldArea, SlicerSortOrder, SlicerSource, SlicerStyle, SlicerStylePreset,
+    StoredSlicer,
 };
 
 // ══════════════════════════════════════════════════════════════════

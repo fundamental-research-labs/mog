@@ -107,8 +107,7 @@ fn test_registry_no_lift_for_array_returning_functions() {
 fn test_text_array_lift_1000_elements() {
     let reg = FunctionRegistry::new();
     let n = 1000;
-    let numbers: Vec<Vec<CellValue>> =
-        (0..n).map(|i| vec![CellValue::number(i as f64)]).collect();
+    let numbers: Vec<Vec<CellValue>> = (0..n).map(|i| vec![CellValue::number(i as f64)]).collect();
     let arr = CellValue::from_rows(numbers);
     let format_arg = CellValue::Text("@".into());
 

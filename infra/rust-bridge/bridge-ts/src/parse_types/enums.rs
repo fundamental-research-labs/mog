@@ -1,8 +1,8 @@
 use crate::parse_types::config::TypeGenConfig;
-use crate::parse_types::fields::{lower_named_fields, FieldContext, OptionalityPolicy};
+use crate::parse_types::fields::{FieldContext, OptionalityPolicy, lower_named_fields};
 use crate::parse_types::ident::strip_raw_prefix;
 use crate::parse_types::type_resolver::{into_target_to_ts_type, resolve_type};
-use crate::serde_attrs::{apply_rename_rule, SerdeContainerAttrs, SerdeFieldAttrs};
+use crate::serde_attrs::{SerdeContainerAttrs, SerdeFieldAttrs, apply_rename_rule};
 use crate::types::{
     TagStyle, TsInterface, TsStringUnion, TsTaggedUnion, TsTaggedVariant, TsType, TsTypeDef,
 };

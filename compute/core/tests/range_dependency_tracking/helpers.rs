@@ -129,4 +129,3 @@ pub(crate) fn assert_dependent_identity(
         ))
     }
 }
-

@@ -1,5 +1,5 @@
-use super::super::char_code::{FnChar, FnCode};
 use super::super::super::test_helpers::{err, num, text};
+use super::super::char_code::{FnChar, FnCode};
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 

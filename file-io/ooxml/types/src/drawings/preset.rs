@@ -465,12 +465,10 @@ shape_presets! {
     TextBox => "textBox",
 }
 
-const READ_ALIASES: &[PresetEntry] = &[
-    PresetEntry {
-        preset: ShapePreset::FlowChartInputOutput,
-        token: "flowChartData",
-    },
-];
+const READ_ALIASES: &[PresetEntry] = &[PresetEntry {
+    preset: ShapePreset::FlowChartInputOutput,
+    token: "flowChartData",
+}];
 
 impl ShapePreset {
     /// Parse from an OOXML `prst` attribute value.

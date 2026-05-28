@@ -2,8 +2,8 @@ use value_types::CellValue;
 
 use crate::PureFunction;
 
-use super::helpers::{num, sample_db, text};
 use super::super::functions::FnDsum;
+use super::helpers::{num, sample_db, text};
 
 #[test]
 fn test_or_criteria() {

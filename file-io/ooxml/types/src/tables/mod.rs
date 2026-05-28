@@ -18,6 +18,7 @@ mod table;
 #[cfg(test)]
 mod tests;
 
+pub use crate::worksheet::filter::{SortCondition, SortState};
 pub use columns::{TableColumn, XmlColumnPr};
 pub use dynamic_filters::{DateTimeGrouping, DynamicFilterType};
 pub use enums::{SortBy, SortOrder, TableType, TotalsRowFunction};
@@ -28,4 +29,3 @@ pub use filters::{
 pub use formula::TableFormula;
 pub use styles::{TableStyleInfo, TableStyleType};
 pub use table::Table;
-pub use crate::worksheet::filter::{SortCondition, SortState};

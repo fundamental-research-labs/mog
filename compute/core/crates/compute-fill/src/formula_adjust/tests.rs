@@ -1,8 +1,8 @@
 use super::*;
 use cell_types::{CellId, ColId, RowId};
 use formula_types::{
-    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef,
-    IdentityFullColRef, IdentityFullRowRef, IdentityRangeRef, IdentityRowRangeRef,
+    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef, IdentityFullColRef,
+    IdentityFullRowRef, IdentityRangeRef, IdentityRowRangeRef,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────

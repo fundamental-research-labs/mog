@@ -24,8 +24,8 @@ pub(crate) fn classify_param_type(ty: &syn::Type, has_parse: bool) -> ParamTag {
             };
             match last_seg.ident.to_string().as_str() {
                 "String" => ParamTag::Str,
-                "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-                | "f32" | "f64" | "usize" | "isize" => ParamTag::Prim,
+                "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64" | "f32"
+                | "f64" | "usize" | "isize" => ParamTag::Prim,
                 "Vec" => {
                     let is_vec_u8 = match &last_seg.arguments {
                         syn::PathArguments::AngleBracketed(args) if args.args.len() == 1 => {

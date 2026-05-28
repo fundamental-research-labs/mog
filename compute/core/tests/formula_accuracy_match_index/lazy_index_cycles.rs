@@ -1,6 +1,6 @@
 use super::support::{
-    assert_no_recalc_errors, assert_number_value, formula_cell, init_core, sheet_snapshot,
-    val_cell, workbook_snapshot, SHEET1_UUID, SHEET2_UUID,
+    SHEET1_UUID, SHEET2_UUID, assert_no_recalc_errors, assert_number_value, formula_cell,
+    init_core, sheet_snapshot, val_cell, workbook_snapshot,
 };
 use value_types::CellValue;
 
@@ -77,7 +77,10 @@ fn test_cross_sheet_index_match_no_false_cycle() {
         200.0,
         "Core!C1: INDEX(Debt!A:C, MATCH('Principal',...), 2) should return 200, not #REF!",
     );
-    assert_no_recalc_errors(&result, "cross-sheet whole-column INDEX/MATCH should not report false cycles");
+    assert_no_recalc_errors(
+        &result,
+        "cross-sheet whole-column INDEX/MATCH should not report false cycles",
+    );
 }
 
 /// Test 14: Same-sheet INDEX with whole-column ref containing formulas.
@@ -118,5 +121,8 @@ fn test_same_sheet_index_whole_column_no_false_cycle() {
         60.0,
         "A3: =B1*2 should be 60 (B0=30, 30*2=60)",
     );
-    assert_no_recalc_errors(&result, "same-sheet whole-column INDEX should not report false cycles");
+    assert_no_recalc_errors(
+        &result,
+        "same-sheet whole-column INDEX should not report false cycles",
+    );
 }

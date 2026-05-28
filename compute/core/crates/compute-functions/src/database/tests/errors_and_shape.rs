@@ -1,9 +1,9 @@
 use value_types::{CellError, CellValue};
 
-use super::helpers::{criteria_age_30, err, num, sample_db, text};
 use super::super::collect::{extract_matching_numbers, get_matching_values};
 use super::super::functions::FnDsum;
 use super::super::model::{Criteria, Database};
+use super::helpers::{criteria_age_30, err, num, sample_db, text};
 use crate::PureFunction;
 
 #[test]
@@ -40,7 +40,10 @@ fn test_empty_database_range_is_invalid() {
 #[test]
 fn test_all_empty_header_database_range_is_invalid() {
     let f = FnDsum;
-    let db = CellValue::from_rows(vec![vec![CellValue::Null, text("")], vec![num(1.0), num(2.0)]]);
+    let db = CellValue::from_rows(vec![
+        vec![CellValue::Null, text("")],
+        vec![num(1.0), num(2.0)],
+    ]);
     let result = f.call(&[db, text("Score"), criteria_age_30()]);
     assert_eq!(result, err(CellError::Value));
 }
@@ -103,5 +106,8 @@ fn test_short_matching_row_can_be_returned_as_null_by_dget() {
         conditions: vec![vec![num(30.0)]],
     };
 
-    assert_eq!(get_matching_values(&db, 2, &criteria), vec![CellValue::Null]);
+    assert_eq!(
+        get_matching_values(&db, 2, &criteria),
+        vec![CellValue::Null]
+    );
 }

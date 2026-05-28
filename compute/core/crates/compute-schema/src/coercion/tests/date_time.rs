@@ -1,4 +1,7 @@
-use super::{CellValueResult, SchemaType, assert_err, assert_num_result, assert_text_result, coerce, num, text};
+use super::{
+    CellValueResult, SchemaType, assert_err, assert_num_result, assert_text_result, coerce, num,
+    text,
+};
 
 #[test]
 fn date_from_number() {

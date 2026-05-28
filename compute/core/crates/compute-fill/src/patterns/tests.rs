@@ -1,9 +1,9 @@
-use super::*;
 use super::values::TOLERANCE;
+use super::*;
 use crate::types::{DateUnit, TimeUnit};
 use std::sync::Arc;
-use value_types::date_serial::ymd_to_serial;
 use value_types::FiniteF64;
+use value_types::date_serial::ymd_to_serial;
 
 fn num(n: f64) -> CellValue {
     CellValue::Number(FiniteF64::new(n).unwrap())

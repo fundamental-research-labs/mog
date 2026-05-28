@@ -105,8 +105,14 @@ fn cache_sort_reorder() {
 
     warm_dense_cache(&mut mirror, 0);
     warm_dense_cache(&mut mirror, 1);
-    assert!(dense_cache_has(&mirror, 0), "{scenario}: col 0 dense should be warm");
-    assert!(dense_cache_has(&mirror, 1), "{scenario}: col 1 dense should be warm");
+    assert!(
+        dense_cache_has(&mirror, 0),
+        "{scenario}: col 0 dense should be warm"
+    );
+    assert!(
+        dense_cache_has(&mirror, 1),
+        "{scenario}: col 1 dense should be warm"
+    );
 
     let sid = mirror.sheet_by_name("sheet1").unwrap();
     let remap_updates: Vec<(cell_types::CellId, u32, u32)> = (0..5u32)

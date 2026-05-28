@@ -19,4 +19,3 @@ pub fn set_table_style(table: &Table, style_id: &str) -> Table {
     result.style = style_id.to_string();
     result
 }
-

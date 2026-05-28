@@ -13,8 +13,7 @@ mod result;
 mod sheet_workbook;
 
 pub use cell_grid::{
-    CommentChange, DimensionChange, MergeChange, PropertyChange, SparklineChange,
-    VisibilityChange,
+    CommentChange, DimensionChange, MergeChange, PropertyChange, SparklineChange, VisibilityChange,
 };
 pub use features::{
     CfChange, FilterChange, GroupingChange, NamedRangeChange, PivotTableChange, RangeChange,
@@ -30,7 +29,6 @@ pub use primitives::{
 };
 pub use result::MutationResult;
 pub use sheet_workbook::{
-    PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange,
-    ScrollPositionChange, SheetChange, SheetChangeField, SheetSettingsChange, SplitConfigChange,
-    WorkbookSettingsChange,
+    PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange, ScrollPositionChange,
+    SheetChange, SheetChangeField, SheetSettingsChange, SplitConfigChange, WorkbookSettingsChange,
 };

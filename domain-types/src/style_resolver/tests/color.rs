@@ -1,5 +1,5 @@
-use super::super::{ColorInput, StyleInput};
 use super::super::color::{apply_tint, normalize_rgb, resolve_color};
+use super::super::{ColorInput, StyleInput};
 
 #[test]
 fn theme_color_resolution_with_palette() {

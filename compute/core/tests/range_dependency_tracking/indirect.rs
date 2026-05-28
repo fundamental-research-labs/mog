@@ -130,7 +130,6 @@ pub(crate) fn run_indirect_arg_revert_case(variant: u8) -> Result<(), String> {
     )
 }
 
-
 pub(crate) fn class_ii_indirect_family() {
     let mut s = Summary::new("indirect");
 

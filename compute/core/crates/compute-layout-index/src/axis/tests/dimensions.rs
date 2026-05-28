@@ -1,4 +1,4 @@
-use super::{helpers::assert_position_dimension_invariant, AxisIndex, Pixels};
+use super::{AxisIndex, Pixels, helpers::assert_position_dimension_invariant};
 
 #[test]
 fn default_only() {

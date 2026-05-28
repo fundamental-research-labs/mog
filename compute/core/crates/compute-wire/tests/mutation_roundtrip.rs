@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use compute_wire::constants::*;
 use compute_wire::flags::*;
-use compute_wire::{serialize_mutation_result, CfColorOverrides};
+use compute_wire::{CfColorOverrides, serialize_mutation_result};
 use snapshot_types::{
     CellChange, CellErrorInfo, ProjectionCellData, ProjectionChange, RecalcResult,
 };
@@ -458,11 +458,17 @@ fn mutation_stride_alignment_smoke() {
     let p0 = layout.patch_base(0);
     assert_eq!(read_u32(&buf, p0), 10);
     assert_eq!(read_u32(&buf, p0 + 4), 20);
-    assert_eq!(read_f64(&buf, layout.patch_cell_base(0) + OFF_NUMBER_VALUE), 100.0);
+    assert_eq!(
+        read_f64(&buf, layout.patch_cell_base(0) + OFF_NUMBER_VALUE),
+        100.0
+    );
 
     // Patch 1
     let p1 = layout.patch_base(1);
     assert_eq!(read_u32(&buf, p1), 30);
     assert_eq!(read_u32(&buf, p1 + 4), 40);
-    assert_eq!(read_f64(&buf, layout.patch_cell_base(1) + OFF_NUMBER_VALUE), 200.0);
+    assert_eq!(
+        read_f64(&buf, layout.patch_cell_base(1) + OFF_NUMBER_VALUE),
+        200.0
+    );
 }

@@ -1,6 +1,6 @@
 use super::{
-    helpers::{assert_position_dimension_invariant, assert_total_size_is_sum},
     AxisIndex, Pixels,
+    helpers::{assert_position_dimension_invariant, assert_total_size_is_sum},
 };
 
 #[test]
@@ -103,7 +103,10 @@ fn fp_build_position_array_empty_range() {
 #[test]
 fn build_position_array_beyond_count_extrapolates() {
     let axis = AxisIndex::from_sparse(3, Pixels(20.0), vec![(1, Pixels(50.0))], vec![]);
-    assert_eq!(axis.build_position_array(2, 5), vec![70.0, 90.0, 110.0, 130.0]);
+    assert_eq!(
+        axis.build_position_array(2, 5),
+        vec![70.0, 90.0, 110.0, 130.0]
+    );
 }
 
 #[test]
@@ -159,6 +162,9 @@ fn zero_default_range_contracts() {
         vec![],
     );
     assert_eq!(axis.total_size(), Pixels(80.0));
-    assert_eq!(axis.build_dimension_array(0, 5), vec![0.0, 30.0, 0.0, 50.0, 0.0]);
+    assert_eq!(
+        axis.build_dimension_array(0, 5),
+        vec![0.0, 30.0, 0.0, 50.0, 0.0]
+    );
     assert_position_dimension_invariant(&axis, "zero_default_range_contracts");
 }

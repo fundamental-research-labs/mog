@@ -152,7 +152,12 @@ pub(crate) fn assert_fixed_point_number_or_preserved(
     }
 }
 
-pub(crate) fn has_circular_error(result: &RecalcResult, sheet_idx: u32, row: u32, col: u32) -> bool {
+pub(crate) fn has_circular_error(
+    result: &RecalcResult,
+    sheet_idx: u32,
+    row: u32,
+    col: u32,
+) -> bool {
     let target_cell_id = cell_uuid(sheet_idx, row, col);
     result
         .errors

@@ -1,7 +1,7 @@
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 
-use super::{num, ymd, FnXirr, FnXnpv};
+use super::{FnXirr, FnXnpv, num, ymd};
 
 /// Different guesses should converge to the same root.
 #[test]

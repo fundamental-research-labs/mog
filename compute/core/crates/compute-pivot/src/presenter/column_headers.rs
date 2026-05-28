@@ -167,7 +167,8 @@ mod tests {
 
     #[test]
     fn blank_column_group_values_render_as_blank_text() {
-        let headers = build_column_headers(&[node(CellValue::Null)], &[axis_placement()], &[], None);
+        let headers =
+            build_column_headers(&[node(CellValue::Null)], &[axis_placement()], &[], None);
 
         assert_eq!(
             headers[0].headers[0].value,

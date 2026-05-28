@@ -199,4 +199,3 @@ fn collect_named_from_api_basic() {
     assert!(names.contains("KvConfig"));
     assert!(!names.contains("unknown")); // filtered
 }
-

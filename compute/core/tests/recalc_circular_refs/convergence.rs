@@ -57,7 +57,6 @@ fn test_simple_circular_ref_with_iterative() {
     assert_cell_number(&result, 0, 0, 1, 0.0);
 }
 
-
 /// A1 = =A1*0.5+1, iterative_calc = true, max_iterations=100, max_change=0.001.
 /// Fixed-point iteration: x_{n+1} = 0.5*x_n + 1, converges to x = 2.0.
 /// Starting from seed 0: 0, 1, 1.5, 1.75, 1.875, ... -> 2.0.
@@ -111,7 +110,6 @@ fn test_iterative_convergence_dampening() {
         None => panic!("A1 not in changed_cells"),
     }
 }
-
 
 /// A1 = =B1+10, B1 = =A1+20, both with CellValue::Null (no cached value).
 /// iterative_calc = true.
@@ -176,7 +174,6 @@ fn test_new_cells_no_cached_value_seed_zero() {
     }
 }
 
-
 /// A1 = =A1*0.5+1 with iterative_calc enabled.
 /// Fixed point: x = 0.5*x + 1 → x = 2.0.
 /// With mirror seed of Null (treated as 0 in arithmetic):
@@ -222,7 +219,6 @@ fn test_parallel_convergence_loop_contractive() {
     }
 }
 
-
 /// A1 = =A1*0.5+1, iterative_calc = false.
 /// Same as Test 5 but with iterative_calc = false.
 /// With always-converge, should converge to 2.0 (fixed point of x = 0.5*x + 1).
@@ -266,7 +262,6 @@ fn test_contractive_no_iterative_flag() {
         "Expected circular reference diagnostic for A1"
     );
 }
-
 
 /// Verifies that circular reference diagnostics are emitted in result.errors
 /// even when the convergence loop successfully computes values.

@@ -180,7 +180,6 @@ pub(crate) fn run_fullcol_case(shape: AggregatorShape, extent: Extent) -> Result
     assert_dependent_identity(&before, &after, &ctx)
 }
 
-
 pub(crate) fn class_ii_fullcol_family() {
     let mut s = Summary::new("fullcol");
     for &shape in AggregatorShape::all() {

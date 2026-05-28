@@ -2,7 +2,7 @@ use crate::PureFunction;
 use value_types::CellError;
 use value_types::CellValue;
 
-use super::{err, num, ymd, FnXirr};
+use super::{FnXirr, err, num, ymd};
 
 #[test]
 fn xirr_error_all_positive() {

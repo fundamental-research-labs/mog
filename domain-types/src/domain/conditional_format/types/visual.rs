@@ -1,6 +1,4 @@
-use ooxml_types::cond_format::{
-    CfvoType, DataBarAxisPosition, DataBarDirection, IconSetType,
-};
+use ooxml_types::cond_format::{CfvoType, DataBarAxisPosition, DataBarDirection, IconSetType};
 use serde::{Deserialize, Serialize};
 
 use super::CFValueRef;

@@ -32,10 +32,9 @@ fn sheet_protection_round_trips_hashes_and_permissions() {
 
     assert_eq!(
         original,
-        roundtrip_map(
-            protection::sheet_to_yrs_prelim(&original),
-            |map, txn| protection::sheet_from_yrs_map(map, txn),
-        )
+        roundtrip_map(protection::sheet_to_yrs_prelim(&original), |map, txn| {
+            protection::sheet_from_yrs_map(map, txn)
+        },)
     );
 }
 
@@ -61,9 +60,8 @@ fn workbook_protection_round_trips_modern_and_legacy_metadata() {
 
     assert_eq!(
         original,
-        roundtrip_map(
-            protection::workbook_to_yrs_prelim(&original),
-            |map, txn| protection::workbook_from_yrs_map(map, txn),
-        )
+        roundtrip_map(protection::workbook_to_yrs_prelim(&original), |map, txn| {
+            protection::workbook_from_yrs_map(map, txn)
+        },)
     );
 }

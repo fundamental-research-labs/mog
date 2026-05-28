@@ -135,8 +135,7 @@ fn test_textsplit_case_insensitive() {
 #[test]
 fn test_textsplit_array_column_delimiters_case_insensitive() {
     let delimiters = CellValue::from_rows(vec![vec![text("x"), text("y")]]);
-    let result =
-        FnTextSplit.call(&[text("aXbYc"), delimiters, null(), bool_val(false), num(1.0)]);
+    let result = FnTextSplit.call(&[text("aXbYc"), delimiters, null(), bool_val(false), num(1.0)]);
     match &result {
         CellValue::Array(arr) => {
             assert_eq!(arr.rows(), 1);

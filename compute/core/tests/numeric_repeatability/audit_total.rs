@@ -6,7 +6,7 @@ use snapshot_types::WorkbookSnapshot;
 use std::time::Instant;
 
 use crate::edit::{op_inverse_pair, overwrite_number, read_number_at, sheet_id};
-use crate::runner::{FamilyResult, EDIT_DELTA};
+use crate::runner::{EDIT_DELTA, FamilyResult};
 use crate::seeds::seeds;
 use crate::topologies::{
     chain_snapshot, diamond_snapshot, fanin_snapshot, mixed_type_snapshot, mmult_like_snapshot,

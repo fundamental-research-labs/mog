@@ -1,5 +1,5 @@
-use super::*;
 use super::fixtures::*;
+use super::*;
 
 fn fmt_fill(hex: &str) -> CellFormat {
     CellFormat {

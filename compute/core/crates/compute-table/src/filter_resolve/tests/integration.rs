@@ -1,8 +1,8 @@
 use super::helpers::{cv_num, cv_text, start_of_day_ms};
 use crate::filter::evaluate_column_filter;
 use crate::types::{
-    ConditionFilter, DynamicFilter, DynamicFilterRule, FilterCriteria, FilterLogic,
-    FilterOperator, TableFilterCondition,
+    ConditionFilter, DynamicFilter, DynamicFilterRule, FilterCriteria, FilterLogic, FilterOperator,
+    TableFilterCondition,
 };
 use crate::visibility::compose_bitmaps;
 use chrono::{NaiveDate, Weekday};

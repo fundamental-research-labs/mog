@@ -18,9 +18,9 @@ fn normalize_and_parse(json: serde_json::Value) -> CFRule {
     serde_json::from_value::<CFRule>(v).expect("normalized JSON must deserialize to CFRule")
 }
 
-mod serde_roundtrip;
-mod wire_compat;
-mod token_parsing;
 mod normalization;
 mod public_rule_set;
 mod rule_api;
+mod serde_roundtrip;
+mod token_parsing;
+mod wire_compat;

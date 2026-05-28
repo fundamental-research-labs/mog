@@ -1,9 +1,4 @@
-use super::support::{
-    assert_cell_text,
-    build_snapshot,
-    print_recalc_diagnostics,
-    recalc_snapshot,
-};
+use super::support::{assert_cell_text, build_snapshot, print_recalc_diagnostics, recalc_snapshot};
 use value_types::CellValue;
 
 /// The XLSX corpus uses `_xlfn.IFS(...)`. The parser strips `_xlfn.` prefix,

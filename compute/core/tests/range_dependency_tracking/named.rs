@@ -87,7 +87,6 @@ pub(crate) fn run_named_case(variant: u8) -> Result<(), String> {
     )
 }
 
-
 pub(crate) fn class_ii_named_family() {
     let mut s = Summary::new("named");
     for v in 0..4 {

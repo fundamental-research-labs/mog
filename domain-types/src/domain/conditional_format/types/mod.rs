@@ -16,6 +16,4 @@ pub use normalize::{
 pub use rule::CFRule;
 pub use style::CFStyle;
 pub use value_ref::CFValueRef;
-pub use visual::{
-    CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar, CFIconSet, CFIconThreshold,
-};
+pub use visual::{CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar, CFIconSet, CFIconThreshold};

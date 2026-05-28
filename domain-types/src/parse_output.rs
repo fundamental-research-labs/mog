@@ -265,7 +265,9 @@ impl ParseOutput {
         self.pivot_cache_records = data_features
             .pivot_caches
             .into_iter()
-            .filter_map(|cache| (!cache.records.is_empty()).then_some((cache.cache_id, cache.records)))
+            .filter_map(|cache| {
+                (!cache.records.is_empty()).then_some((cache.cache_id, cache.records))
+            })
             .collect();
         self.slicer_caches = data_features.slicer_caches;
         self.metadata = data_features.metadata;

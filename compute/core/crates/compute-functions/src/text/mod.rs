@@ -259,7 +259,10 @@ mod source_shape_tests {
             ("manipulation.rs", include_str!("manipulation.rs")),
             ("modern/mod.rs", include_str!("modern/mod.rs")),
             ("modern/args.rs", include_str!("modern/args.rs")),
-            ("modern/before_after.rs", include_str!("modern/before_after.rs")),
+            (
+                "modern/before_after.rs",
+                include_str!("modern/before_after.rs"),
+            ),
             ("modern/delimiter.rs", include_str!("modern/delimiter.rs")),
             ("modern/split.rs", include_str!("modern/split.rs")),
             ("regex.rs", include_str!("regex.rs")),

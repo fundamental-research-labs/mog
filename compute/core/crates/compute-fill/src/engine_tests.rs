@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::engine::compute_fill;
-    use crate::types::*;
     use crate::formula_adjust::RefPosition;
+    use crate::types::*;
     use domain_types::CellFormat;
     use formula_types::IdentityFormula;
     use std::collections::BTreeSet;

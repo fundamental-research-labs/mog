@@ -7,7 +7,10 @@ use std::collections::HashMap;
 /// Resolve a numFmtId to its format code string.
 ///
 /// Checks built-in formats first (IDs 0-49), then custom formats from the input.
-pub(super) fn resolve_number_format(num_fmt_id: u32, custom_fmts: &HashMap<u32, String>) -> Option<String> {
+pub(super) fn resolve_number_format(
+    num_fmt_id: u32,
+    custom_fmts: &HashMap<u32, String>,
+) -> Option<String> {
     let builtin = match num_fmt_id {
         0 => Some("General"),
         1 => Some("0"),

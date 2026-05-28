@@ -1,7 +1,5 @@
 use super::super::*;
-use crate::ir::{
-    NapiAccess, NapiDescriptor, NapiMethod, NapiParam, NapiServiceMeta, ReturnInfo,
-};
+use crate::ir::{NapiAccess, NapiDescriptor, NapiMethod, NapiParam, NapiServiceMeta, ReturnInfo};
 
 pub(super) fn parse_descriptor(tokens: &str) -> syn::Result<NapiDescriptor> {
     syn::parse_str::<NapiDescriptor>(tokens)
@@ -147,7 +145,10 @@ pub(super) fn return_self_tuple(inner: &str) -> ReturnInfo {
 }
 
 pub(super) fn assert_contains(code: &str, needle: &str) {
-    assert!(code.contains(needle), "expected `{needle}` in output: {code}");
+    assert!(
+        code.contains(needle),
+        "expected `{needle}` in output: {code}"
+    );
 }
 
 pub(super) fn assert_not_contains(code: &str, needle: &str) {

@@ -1,5 +1,5 @@
-use crate::limits::{reject_oversized_state_vector, reject_oversized_update};
 use crate::SyncError;
+use crate::limits::{reject_oversized_state_vector, reject_oversized_update};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, Update};

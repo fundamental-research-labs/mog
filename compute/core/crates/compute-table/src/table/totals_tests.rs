@@ -1,7 +1,7 @@
-use super::*;
 use super::super::types::{TableRange, TotalsFunction};
 use super::test_fixtures::make_test_table;
 use super::totals::subtotal_function_number;
+use super::*;
 
 // ---- Toggle Totals Row ----
 
@@ -52,7 +52,6 @@ fn toggle_totals_row_with_end_row_zero() {
     assert_eq!(t2.range.end_row(), 0);
 }
 
-
 // ---- Totals Function ----
 
 #[test]
@@ -63,7 +62,6 @@ fn set_totals_function_basic() {
     // Other columns unchanged
     assert_eq!(t2.columns[0].totals_function, None);
 }
-
 
 // ---- Subtotal Formula Generation ----
 
@@ -101,7 +99,6 @@ fn get_subtotal_formula_custom_returns_none() {
     assert!(get_subtotal_formula(&TotalsFunction::Custom, "C").is_none());
 }
 
-
 // ---- Subtotal function number mapping ----
 
 #[test]
@@ -123,7 +120,6 @@ fn subtotal_function_number_all_mappings() {
     assert_eq!(subtotal_function_number(&TotalsFunction::Custom), None);
     assert_eq!(subtotal_function_number(&TotalsFunction::None), None);
 }
-
 
 // ---- toggle_totals_row overflow guard ----
 

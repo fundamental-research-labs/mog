@@ -2,10 +2,10 @@ use value_types::{CellError, CellValue};
 
 use crate::PureFunction;
 
+use super::super::functions::{FnDaverage, FnDsum};
 use super::helpers::{
     criteria_age_30, criteria_age_gt_25, criteria_all, err, num, sample_db, text,
 };
-use super::super::functions::{FnDaverage, FnDsum};
 
 #[test]
 fn test_dsum_basic() {

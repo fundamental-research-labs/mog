@@ -8,7 +8,12 @@ use value_types::CellValue;
 #[test]
 fn test_sumif_with_structured_ref_column() {
     let formulas = [
-        (6, 0, r#"SUMIF(Deals[Sponsor],"Alice",Deals[Amount])"#, 400.0),
+        (
+            6,
+            0,
+            r#"SUMIF(Deals[Sponsor],"Alice",Deals[Amount])"#,
+            400.0,
+        ),
         (7, 0, r#"COUNTIF(Deals[Sponsor],"Alice")"#, 2.0),
         (
             8,

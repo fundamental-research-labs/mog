@@ -35,4 +35,3 @@ pub struct EffectStyleItem {
     /// Optional 3D shape properties
     pub sp_3d: Option<Shape3D>,
 }
-

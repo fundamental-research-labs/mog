@@ -34,14 +34,18 @@ fn use_24_hour_derived_from_pattern() {
     assert!(get_culture("ja-JP").use_24_hour());
     assert!(!get_culture("ko-KR").use_24_hour());
 
-    assert!(!CultureInfo {
-        short_time_pattern: "HH:mm literal t".to_string(),
-        ..Default::default()
-    }
-    .use_24_hour());
-    assert!(CultureInfo {
-        short_time_pattern: "HH:mm T".to_string(),
-        ..Default::default()
-    }
-    .use_24_hour());
+    assert!(
+        !CultureInfo {
+            short_time_pattern: "HH:mm literal t".to_string(),
+            ..Default::default()
+        }
+        .use_24_hour()
+    );
+    assert!(
+        CultureInfo {
+            short_time_pattern: "HH:mm T".to_string(),
+            ..Default::default()
+        }
+        .use_24_hour()
+    );
 }

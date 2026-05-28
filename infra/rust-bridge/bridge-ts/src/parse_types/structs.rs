@@ -1,5 +1,5 @@
 use crate::parse_types::config::TypeGenConfig;
-use crate::parse_types::fields::{lower_named_fields, FieldContext, OptionalityPolicy};
+use crate::parse_types::fields::{FieldContext, OptionalityPolicy, lower_named_fields};
 use crate::parse_types::type_resolver::into_target_to_ts_type;
 use crate::serde_attrs::SerdeContainerAttrs;
 use crate::types::{TsInterface, TsTypeDef};

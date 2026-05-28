@@ -1,5 +1,5 @@
-use super::super::*;
 use super::super::fixtures::*;
+use super::super::*;
 
 #[test]
 fn test_condition_and_logic() {
@@ -58,7 +58,6 @@ fn test_is_blank_combined_or() {
     ];
     assert_eq!(eval(&criteria, &data), vec![1, 1, 0, 1, 1]);
 }
-
 
 #[test]
 fn test_condition_or_mixed_types() {

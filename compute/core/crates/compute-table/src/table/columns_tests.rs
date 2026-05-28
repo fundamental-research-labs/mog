@@ -1,6 +1,6 @@
-use super::*;
 use super::super::types::TableRange;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- Add Column ----
 
@@ -82,7 +82,6 @@ fn add_column_position_clamped() {
     let t2 = add_column(&t, "X", Some(999));
     assert_eq!(t2.columns.last().unwrap().name, "X");
 }
-
 
 // ---- Remove Column ----
 
@@ -166,7 +165,6 @@ fn table_with_nonzero_start_col() {
     }
 }
 
-
 // ---- Rename Column ----
 
 #[test]
@@ -196,7 +194,6 @@ fn rename_column_not_found() {
     let t2 = rename_column(&t, "nonexistent", "Whatever").unwrap();
     assert_eq!(t2.columns, t.columns); // unchanged
 }
-
 
 // ---- Immutability: original table is not modified ----
 

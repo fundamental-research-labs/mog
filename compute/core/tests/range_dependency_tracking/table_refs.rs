@@ -16,7 +16,6 @@ pub(crate) fn table_ref_case_names() -> &'static [&'static str] {
     ]
 }
 
-
 pub(crate) fn class_ii_table_refs_family_deferred() {
     let mut s = Summary::new("table_refs");
     for name in table_ref_case_names() {

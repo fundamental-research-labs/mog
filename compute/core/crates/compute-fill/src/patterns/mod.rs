@@ -30,9 +30,7 @@ use value_types::CellValue;
 
 use crate::types::{CustomList, FillPattern, FillPatternType, LocaleNames};
 
-pub(crate) use cyclic::{
-    detect_custom_list_pattern, detect_quarter_pattern, find_quarter_index,
-};
+pub(crate) use cyclic::{detect_custom_list_pattern, detect_quarter_pattern, find_quarter_index};
 pub(crate) use date_time::{detect_date_pattern, detect_time_pattern};
 pub(crate) use locale::{
     detect_month_pattern, detect_weekday_pattern, find_month_index, find_weekday_index,

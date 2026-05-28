@@ -23,7 +23,12 @@ fn test_single_data_row() {
     let rows = vec![
         make_data_row(
             "east",
-            vec![make_header("east", CellValue::Text("East".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(100.0)],
         ),
         make_grand_total_row(vec![CellValue::number(100.0)]),
@@ -60,12 +65,22 @@ fn test_flat_hierarchy_is_flat() {
     let rows = vec![
         make_data_row(
             "east",
-            vec![make_header("east", CellValue::Text("East".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(100.0)],
         ),
         make_data_row(
             "west",
-            vec![make_header("west", CellValue::Text("West".into()), "region", 0)],
+            vec![make_header(
+                "west",
+                CellValue::Text("West".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(200.0)],
         ),
         make_data_row(
@@ -107,11 +122,7 @@ fn test_flat_hierarchy_is_flat() {
 fn test_zero_field_names() {
     let field_names: Vec<String> = vec![];
     let rows = vec![
-        make_data_row(
-            "row0",
-            vec![],
-            vec![CellValue::number(100.0)],
-        ),
+        make_data_row("row0", vec![], vec![CellValue::number(100.0)]),
         make_grand_total_row(vec![CellValue::number(100.0)]),
     ];
 

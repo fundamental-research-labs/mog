@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use syn::parse::{Parse, ParseStream};
 use syn::Token;
+use syn::parse::{Parse, ParseStream};
 
 /// Input for `__generate_class`:
 /// `struct ClassName(path::to::InnerType); desc1, desc2, ...`

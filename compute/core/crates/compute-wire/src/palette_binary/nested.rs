@@ -1,15 +1,26 @@
 //! Nested gradient and border codecs for palette binary records.
 
-use domain_types::{CellBorderSide, CellBorders, GradientCenter, GradientFillFormat, GradientStopFormat};
+use domain_types::{
+    CellBorderSide, CellBorders, GradientCenter, GradientFillFormat, GradientStopFormat,
+};
 
-use super::layout::{BORDER_HAS_BOTTOM, BORDER_HAS_DIAGONAL, BORDER_HAS_DIAGONAL_DOWN, BORDER_HAS_DIAGONAL_UP, BORDER_HAS_HORIZONTAL, BORDER_HAS_LEFT, BORDER_HAS_OUTLINE, BORDER_HAS_RIGHT, BORDER_HAS_TOP, BORDER_HAS_VERTICAL, BORDER_SIDE_HAS_COLOR, BORDER_SIDE_HAS_STYLE, GRADIENT_HAS_CENTER, GRADIENT_HAS_DEGREE};
-use super::read::{read_string, Cursor};
+use super::PaletteBinaryError;
+use super::layout::{
+    BORDER_HAS_BOTTOM, BORDER_HAS_DIAGONAL, BORDER_HAS_DIAGONAL_DOWN, BORDER_HAS_DIAGONAL_UP,
+    BORDER_HAS_HORIZONTAL, BORDER_HAS_LEFT, BORDER_HAS_OUTLINE, BORDER_HAS_RIGHT, BORDER_HAS_TOP,
+    BORDER_HAS_VERTICAL, BORDER_SIDE_HAS_COLOR, BORDER_SIDE_HAS_STYLE, GRADIENT_HAS_CENTER,
+    GRADIENT_HAS_DEGREE,
+};
+use super::read::{Cursor, read_string};
 use super::string_pool::StringPool;
 use super::write::{write_bool, write_f64, write_string, write_u16};
-use super::PaletteBinaryError;
 
 /// Write a `GradientFillRecord`.
-pub(super) fn write_gradient_fill(buf: &mut Vec<u8>, gf: &GradientFillFormat, pool: &mut StringPool) {
+pub(super) fn write_gradient_fill(
+    buf: &mut Vec<u8>,
+    gf: &GradientFillFormat,
+    pool: &mut StringPool,
+) {
     // gradient_type — always present
     write_string(buf, &gf.gradient_type, pool);
 

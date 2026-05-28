@@ -1,11 +1,11 @@
 #[path = "gated_codegen/support.rs"]
 mod support;
 
-pub use support::{compute_security, compute_wire, value_types};
 pub use support::{
     AccessLevel, AccessTarget, CellAddr, CellRange, FakeDispatch, FakeEngine, PlainService,
     Principal, PrincipalPool, SheetAccessMatrix, SheetId, StubService, new_service,
 };
+pub use support::{compute_security, compute_wire, value_types};
 
 #[path = "gated_codegen/descriptors.rs"]
 mod descriptors;
@@ -75,7 +75,8 @@ fn needs_principal_signature_strips_trailing_param() {
 fn needs_principal_uses_active_principal_when_present() {
     let mut svc = new_service();
     let principal = Principal::named("agent:owner");
-    svc.active_principal.store(Arc::new(Some(principal.clone())));
+    svc.active_principal
+        .store(Arc::new(Some(principal.clone())));
 
     let pid = svc.add_policy(123).unwrap();
     assert_eq!(pid, 7);

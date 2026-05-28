@@ -23,10 +23,9 @@ fn runtime_filter_sort_state_round_trips_and_defaults_unknown_tokens() {
     };
     assert_eq!(
         original,
-        roundtrip_map(
-            filter_sort_state::to_yrs_prelim(&original),
-            |map, txn| filter_sort_state::from_yrs_map(map, txn),
-        )
+        roundtrip_map(filter_sort_state::to_yrs_prelim(&original), |map, txn| {
+            filter_sort_state::from_yrs_map(map, txn)
+        },)
     );
 
     let doc = Doc::new();
@@ -102,10 +101,9 @@ fn pivot_cache_records_round_trip_json_rows() {
 
     assert_eq!(
         original,
-        roundtrip_string_map_value(
-            pivot_cache_records::to_yrs_prelim(&original),
-            |map, txn| pivot_cache_records::from_yrs_map(map, txn),
-        )
+        roundtrip_string_map_value(pivot_cache_records::to_yrs_prelim(&original), |map, txn| {
+            pivot_cache_records::from_yrs_map(map, txn)
+        },)
     );
 }
 

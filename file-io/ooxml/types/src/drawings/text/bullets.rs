@@ -1,5 +1,5 @@
-use super::{TextAutonumberType, TextFont};
 use super::super::color::DrawingColor;
+use super::{TextAutonumberType, TextFont};
 
 // BulletProperties and sub-types
 // =============================================================================

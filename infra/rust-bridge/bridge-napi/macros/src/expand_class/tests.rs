@@ -1,6 +1,6 @@
 use quote::quote;
 
-use super::class_decl::{generate_class_impl, GenerateClassInput};
+use super::class_decl::{GenerateClassInput, generate_class_impl};
 use super::generate::expand_class;
 use crate::ir::{
     NapiAccess, NapiDescriptor, NapiMethod, NapiParam, NapiParamTag, NapiServiceMeta, ReturnInfo,

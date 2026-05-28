@@ -1,5 +1,5 @@
-use super::make_input;
 use super::super::FormatCache;
+use super::make_input;
 
 #[test]
 fn format_cache_deduplication() {

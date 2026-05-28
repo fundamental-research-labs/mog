@@ -10,10 +10,10 @@ mod histogram;
 mod rows;
 
 pub use config::{histogram_with_series_config, resolve_bin_params};
-pub use grid::{calculate_bins, find_bin_index, get_bin_boundaries, nice_step, BinParams};
+pub use grid::{BinParams, calculate_bins, find_bin_index, get_bin_boundaries, nice_step};
 pub use histogram::{
-    cumulative_histogram, histogram, histogram_from_data, normalized_histogram, CumulativeBin,
-    NormalizedBin,
+    CumulativeBin, NormalizedBin, cumulative_histogram, histogram, histogram_from_data,
+    normalized_histogram,
 };
 pub use rows::{apply_bin, apply_bin_spec};
 

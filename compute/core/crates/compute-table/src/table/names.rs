@@ -98,4 +98,3 @@ pub fn generate_table_name(existing_names: &[&str]) -> String {
         i += 1;
     }
 }
-

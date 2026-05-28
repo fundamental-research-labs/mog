@@ -1,5 +1,5 @@
-use super::super::*;
 use super::super::fixtures::*;
+use super::super::*;
 
 #[test]
 fn test_condition_equals() {

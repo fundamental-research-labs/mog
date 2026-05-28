@@ -2,8 +2,8 @@ use value_types::CellValue;
 
 use crate::PureFunction;
 
-use super::helpers::{criteria_age_30, num, sample_db, text};
 use super::super::functions::{FnDmax, FnDmin, FnDproduct};
+use super::helpers::{criteria_age_30, num, sample_db, text};
 
 #[test]
 fn test_dmax() {
@@ -35,7 +35,13 @@ fn test_extrema_and_product_return_zero_with_no_numeric_values() {
     ]);
     let crit = CellValue::from_rows(vec![vec![text("Group")], vec![text("A")]]);
 
-    assert_eq!(FnDmax.call(&[db.clone(), text("Name"), crit.clone()]), num(0.0));
-    assert_eq!(FnDmin.call(&[db.clone(), text("Name"), crit.clone()]), num(0.0));
+    assert_eq!(
+        FnDmax.call(&[db.clone(), text("Name"), crit.clone()]),
+        num(0.0)
+    );
+    assert_eq!(
+        FnDmin.call(&[db.clone(), text("Name"), crit.clone()]),
+        num(0.0)
+    );
     assert_eq!(FnDproduct.call(&[db, text("Name"), crit]), num(0.0));
 }

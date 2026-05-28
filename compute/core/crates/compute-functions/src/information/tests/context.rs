@@ -11,12 +11,18 @@ fn test_cell_type() {
     assert_eq!(FnCell.call(&[text("type"), text("label")]), text("l"));
     assert_eq!(FnCell.call(&[text("type"), num(1.0)]), text("v"));
     assert_eq!(FnCell.call(&[text("type"), bool_val(false)]), text("v"));
-    assert_eq!(FnCell.call(&[text("type"), err(CellError::Div0)]), text("v"));
+    assert_eq!(
+        FnCell.call(&[text("type"), err(CellError::Div0)]),
+        text("v")
+    );
 }
 
 #[test]
 fn test_cell_contents() {
-    assert_eq!(FnCell.call(&[text("contents"), text("value")]), text("value"));
+    assert_eq!(
+        FnCell.call(&[text("contents"), text("value")]),
+        text("value")
+    );
     assert_eq!(
         FnCell.call(&[text("contents"), err(CellError::Ref)]),
         err(CellError::Ref)
@@ -26,9 +32,15 @@ fn test_cell_contents() {
 
 #[test]
 fn test_cell_info_type_errors() {
-    assert_eq!(FnCell.call(&[err(CellError::Name), num(1.0)]), err(CellError::Name));
+    assert_eq!(
+        FnCell.call(&[err(CellError::Name), num(1.0)]),
+        err(CellError::Name)
+    );
     assert_eq!(FnCell.call(&[num(1.0), num(1.0)]), err(CellError::Value));
-    assert_eq!(FnCell.call(&[text("address"), num(1.0)]), err(CellError::Na));
+    assert_eq!(
+        FnCell.call(&[text("address"), num(1.0)]),
+        err(CellError::Na)
+    );
 }
 
 #[test]

@@ -4,7 +4,7 @@ use value_types::date_serial::serial_to_ymd;
 use crate::types::{DateUnit, FillPattern, FillPatternType, TimeUnit};
 
 use super::default_pattern;
-use super::values::{all_numbers, TOLERANCE};
+use super::values::{TOLERANCE, all_numbers};
 
 /// Excel valid date serial range: 1 .. 2_958_465 (1900-01-01 .. 9999-12-31).
 const MIN_DATE_SERIAL: f64 = 1.0;

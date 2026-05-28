@@ -4,9 +4,7 @@
 //! file now covers the shared namespace helper that remains part of current
 //! writer behavior.
 
-use xlsx_parser::{
-    NS_RELATIONSHIPS, NS_SPREADSHEET_ML, NS_X14, NamespaceMap, NamespaceWriter,
-};
+use xlsx_parser::{NS_RELATIONSHIPS, NS_SPREADSHEET_ML, NS_X14, NamespaceMap, NamespaceWriter};
 
 mod namespace_round_trip {
     use super::*;

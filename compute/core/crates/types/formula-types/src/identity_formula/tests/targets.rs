@@ -7,7 +7,7 @@ use crate::identity_formula::{
 };
 
 use super::helpers::{
-    cell, col, external_cell_ref, external_name_ref, external_range_ref, row, sheet, TestLookup,
+    TestLookup, cell, col, external_cell_ref, external_name_ref, external_range_ref, row, sheet,
 };
 
 fn display_body<T: ReferenceTarget>(target: &T, lookup: &TestLookup, style: RefStyle) -> String {

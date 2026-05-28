@@ -1112,10 +1112,7 @@ mod tests {
         assert_eq!(PivotAxisType::from_ooxml("row"), PivotAxisType::Row);
         assert_eq!(PivotAxisType::from_ooxml("column"), PivotAxisType::Column);
         assert_eq!(PivotAxisType::from_bytes(b"row"), PivotAxisType::Row);
-        assert_eq!(
-            PivotAxisType::from_bytes(b"column"),
-            PivotAxisType::Column
-        );
+        assert_eq!(PivotAxisType::from_bytes(b"column"), PivotAxisType::Column);
         assert_eq!(PivotAxisType::from_ooxml("bogus"), PivotAxisType::None);
         assert_eq!(PivotAxisType::default(), PivotAxisType::None);
     }

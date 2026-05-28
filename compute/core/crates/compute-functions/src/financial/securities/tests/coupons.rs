@@ -1,7 +1,5 @@
+use super::super::{FnCoupdaybs, FnCoupdays, FnCoupdaysnc, FnCoupncd, FnCoupnum, FnCouppcd};
 use super::{approx, num, ymd_to_serial};
-use super::super::{
-    FnCoupdaybs, FnCoupdays, FnCoupdaysnc, FnCoupncd, FnCoupnum, FnCouppcd,
-};
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 

@@ -15,9 +15,7 @@ use crate::resolved::{
     ResolvedAxisPlacement, ResolvedCalculatedField, ResolvedPivotConfig, ResolvedTopBottom,
     ResolvedValuePlacement,
 };
-use crate::types::{
-    AggregateFunction, DateGrouping, SortDirection, TopBottomBy, TopBottomType,
-};
+use crate::types::{AggregateFunction, DateGrouping, SortDirection, TopBottomBy, TopBottomType};
 
 /// Convert a `ResolvedPivotConfig` to a `RelationalQuery`.
 ///

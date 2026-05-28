@@ -1,5 +1,5 @@
-use super::*;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- Table Name Validation ----
 
@@ -51,7 +51,6 @@ fn validate_table_name_not_cell_reference() {
     assert!(validate_table_name("ABCD1").is_ok());
 }
 
-
 // ---- generate_table_name ----
 
 #[test]
@@ -77,5 +76,3 @@ fn generate_table_name_fills_gap() {
     let name = generate_table_name(&["Table1", "Table3"]);
     assert_eq!(name, "Table2");
 }
-
-

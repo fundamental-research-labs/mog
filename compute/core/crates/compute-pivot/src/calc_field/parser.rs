@@ -1,7 +1,7 @@
+use super::MAX_DEPTH;
 use super::ast::{CalcFieldExpr, CalcFieldOp};
 use super::error::CalcFieldParseError;
 use super::lexer::Token;
-use super::MAX_DEPTH;
 
 /// Parser state: wraps a token stream with a cursor.
 struct Parser {

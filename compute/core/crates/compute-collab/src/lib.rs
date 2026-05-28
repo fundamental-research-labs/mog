@@ -18,7 +18,7 @@ mod protocol;
 mod undo;
 
 pub use error::SyncError;
-pub use observe::{subscribe_update_v1, UpdateSubscriptionHandle};
+pub use observe::{UpdateSubscriptionHandle, subscribe_update_v1};
 pub use protocol::{
     apply_update, decode_state_vector, encode_diff, encode_full_state, encode_state_vector,
 };

@@ -12,8 +12,8 @@ mod ranges;
 mod totals;
 
 pub use columns::{add_column, remove_column, rename_column, resize_table};
-pub use create::{CreateTableOptions, create_table};
 pub(crate) use create::validate_range;
+pub use create::{CreateTableOptions, create_table};
 pub use lookup::{get_column_by_id, get_column_by_name};
 pub use names::{generate_table_name, validate_table_name};
 pub use options::{set_table_option, set_table_style};

@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::transforms::bin::{apply_bin, apply_bin_spec};
 use crate::types::{BinSpec, DataRow};
@@ -129,11 +129,7 @@ fn apply_bin_spec_basic() {
 
 #[test]
 fn apply_bin_spec_with_step() {
-    let data: Vec<DataRow> = vec![
-        make_row("x", 0.0),
-        make_row("x", 5.0),
-        make_row("x", 10.0),
-    ];
+    let data: Vec<DataRow> = vec![make_row("x", 0.0), make_row("x", 5.0), make_row("x", 10.0)];
     let spec = BinSpec {
         field: "x".to_string(),
         as_field: "bin".to_string(),

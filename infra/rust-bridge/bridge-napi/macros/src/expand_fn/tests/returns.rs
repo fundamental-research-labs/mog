@@ -2,7 +2,12 @@ use super::fixtures::*;
 
 #[test]
 fn serde_return_uses_serde_json() {
-    let desc = pure_method_desc("MyService", "get_stats", vec![], Some(return_serde("StoreStats")));
+    let desc = pure_method_desc(
+        "MyService",
+        "get_stats",
+        vec![],
+        Some(return_serde("StoreStats")),
+    );
     let code = code_for(&desc);
     assert_contains(&code, "serde_json :: to_string");
     assert_not_contains(&code, "serde_wasm_bindgen");

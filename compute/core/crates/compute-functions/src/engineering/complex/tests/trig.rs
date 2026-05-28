@@ -1,7 +1,9 @@
 use value_types::{CellError, CellValue};
 
+use super::super::trig::{
+    FnImCos, FnImCosh, FnImCot, FnImCsc, FnImCsch, FnImSec, FnImSech, FnImSin, FnImSinh, FnImTan,
+};
 use super::helpers::*;
-use super::super::trig::{FnImCos, FnImCosh, FnImCot, FnImCsc, FnImCsch, FnImSec, FnImSech, FnImSin, FnImSinh, FnImTan};
 use crate::PureFunction;
 
 #[test]

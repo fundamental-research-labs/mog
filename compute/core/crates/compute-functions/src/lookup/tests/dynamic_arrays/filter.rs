@@ -1,5 +1,5 @@
-use super::super::helpers::*;
 use super::super::super::dynamic_arrays::*;
+use super::super::helpers::*;
 use crate::PureFunction;
 use value_types::{CellError, CellValue};
 
@@ -56,8 +56,7 @@ fn test_filter_column_filter() {
         vec![num(1.0), num(2.0), num(3.0)],
         vec![num(4.0), num(5.0), num(6.0)],
     ]);
-    let include =
-        CellValue::from_rows(vec![vec![bool_val(true), bool_val(false), bool_val(true)]]);
+    let include = CellValue::from_rows(vec![vec![bool_val(true), bool_val(false), bool_val(true)]]);
     let result = f.call(&[arr, include]);
     match result {
         CellValue::Array(arr) => {

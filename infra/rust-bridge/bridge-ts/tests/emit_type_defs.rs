@@ -188,9 +188,8 @@ fn emit_type_defs_preamble() {
         ts.contains("// External types: ExternalThing"),
         "should list external (undefined) Named types"
     );
-assert!(ts.contains("export interface Foo {"));
+    assert!(ts.contains("export interface Foo {"));
 }
-
 
 #[test]
 fn emit_type_alias_string() {

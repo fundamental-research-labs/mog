@@ -71,7 +71,9 @@ pub(crate) fn emit_target(
         state.filled_cell_count += 1;
     }
 
-    if policy.include_formats && let Some(format) = &source_cell.format {
+    if policy.include_formats
+        && let Some(format) = &source_cell.format
+    {
         state.updates.push(FillUpdate::Format {
             row: target.row,
             col: target.col,

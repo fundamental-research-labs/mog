@@ -1,4 +1,4 @@
-use super::{default_true, CfColor, Cfvo};
+use super::{CfColor, Cfvo, default_true};
 
 // ============================================================================
 // DataBarDirection - Data bar direction (Excel 2010+)

@@ -115,7 +115,10 @@ fn explicit_false_apply_flags_preserve_base_style() {
 
     let fmt = &resolve_styles(&input)[1];
     assert_eq!(fmt.number_format.as_deref(), Some("0.000"));
-    assert_eq!(fmt.font.as_ref().and_then(|f| f.name.as_deref()), Some("Base"));
+    assert_eq!(
+        fmt.font.as_ref().and_then(|f| f.name.as_deref()),
+        Some("Base")
+    );
     assert_eq!(
         fmt.fill
             .as_ref()
@@ -130,9 +133,7 @@ fn explicit_false_apply_flags_preserve_base_style() {
         Some("thin")
     );
     assert_eq!(
-        fmt.alignment
-            .as_ref()
-            .and_then(|a| a.horizontal.as_deref()),
+        fmt.alignment.as_ref().and_then(|a| a.horizontal.as_deref()),
         Some("center")
     );
     assert_eq!(fmt.protection.as_ref().and_then(|p| p.hidden), Some(true));
@@ -208,7 +209,12 @@ fn absent_apply_flags_use_nonzero_and_presence_heuristics() {
             .and_then(|f| f.background_color.as_deref()),
         Some("#4472C4")
     );
-    assert!(fmt.border.as_ref().and_then(|b| b.bottom.as_ref()).is_some());
+    assert!(
+        fmt.border
+            .as_ref()
+            .and_then(|b| b.bottom.as_ref())
+            .is_some()
+    );
     assert_eq!(
         fmt.alignment.as_ref().and_then(|a| a.vertical.as_deref()),
         Some("middle")

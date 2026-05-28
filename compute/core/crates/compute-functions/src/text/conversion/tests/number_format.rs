@@ -1,5 +1,5 @@
-use super::super::number_format::{FnDollar, FnFixed, FnNumberValue};
 use super::super::super::test_helpers::{bool_val, err, num, text};
+use super::super::number_format::{FnDollar, FnFixed, FnNumberValue};
 use crate::PureFunction;
 use value_types::CellError;
 

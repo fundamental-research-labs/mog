@@ -227,4 +227,3 @@ pub fn resize_table(table: &Table, new_range: TableRange) -> Result<Table, Table
     result.columns = columns;
     Ok(result)
 }
-

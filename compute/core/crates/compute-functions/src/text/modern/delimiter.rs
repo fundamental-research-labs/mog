@@ -4,11 +4,7 @@ pub(super) struct DelimiterMatch {
     pub(super) len: usize,
 }
 
-pub(super) fn match_positions(
-    text: &str,
-    delimiter: &str,
-    match_mode: i32,
-) -> Vec<DelimiterMatch> {
+pub(super) fn match_positions(text: &str, delimiter: &str, match_mode: i32) -> Vec<DelimiterMatch> {
     let search_chars: Vec<char> = if match_mode == 1 {
         text.to_lowercase().chars().collect()
     } else {

@@ -1,11 +1,6 @@
 use super::support::{
-    assert_cell_bool,
-    assert_cell_error,
-    assert_cell_text,
-    build_snapshot,
-    find_changed_value,
-    print_recalc_diagnostics,
-    recalc_snapshot,
+    assert_cell_bool, assert_cell_error, assert_cell_text, build_snapshot, find_changed_value,
+    print_recalc_diagnostics, recalc_snapshot,
 };
 use value_types::CellValue;
 

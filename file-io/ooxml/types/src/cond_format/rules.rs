@@ -1,4 +1,4 @@
-use super::{default_true, CfOperator, CfRuleType, CfTimePeriod, ColorScale, DataBar, IconSet};
+use super::{CfOperator, CfRuleType, CfTimePeriod, ColorScale, DataBar, IconSet, default_true};
 
 // ============================================================================
 // CfRule and container types
@@ -172,4 +172,3 @@ pub struct ConditionalFormattingX14 {
 // ============================================================================
 // Tests
 // ============================================================================
-

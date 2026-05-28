@@ -23,9 +23,7 @@ pub(super) struct MethodAccessInfo {
 /// `manifest.gen.ts` — runtime semantics are unaffected). Unknown tokens are
 /// rejected (so typos surface at the bridge-core layer, not silently
 /// downstream).
-pub(super) fn parse_access_attr_args(
-    attr: &syn::Attribute,
-) -> syn::Result<(Option<String>, bool)> {
+pub(super) fn parse_access_attr_args(attr: &syn::Attribute) -> syn::Result<(Option<String>, bool)> {
     // Absence of a parenthesized arg list → no scope, no needs_principal.
     let meta_list = match &attr.meta {
         syn::Meta::List(list) => list,

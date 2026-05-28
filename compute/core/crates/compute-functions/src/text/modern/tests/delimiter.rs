@@ -1,4 +1,4 @@
-use super::super::delimiter::{match_positions, split_by_delimiters, DelimiterMatch};
+use super::super::delimiter::{DelimiterMatch, match_positions, split_by_delimiters};
 
 #[test]
 fn non_overlapping_positions_advance_by_delimiter_length() {
@@ -11,7 +11,10 @@ fn non_overlapping_positions_advance_by_delimiter_length() {
 #[test]
 fn split_uses_first_matching_delimiter_order() {
     let delimiters = vec!["--".to_string(), "-".to_string()];
-    assert_eq!(split_by_delimiters("a--b-c", &delimiters, 0), vec!["a", "b", "c"]);
+    assert_eq!(
+        split_by_delimiters("a--b-c", &delimiters, 0),
+        vec!["a", "b", "c"]
+    );
 }
 
 #[test]

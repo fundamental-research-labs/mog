@@ -6,8 +6,7 @@ use chrono::{NaiveDate, Weekday};
 #[test]
 fn test_compute_date_range_today() {
     let now = now_date();
-    let (start, end) =
-        compute_date_range(&DynamicFilterRule::Today, now, Weekday::Sun).unwrap();
+    let (start, end) = compute_date_range(&DynamicFilterRule::Today, now, Weekday::Sun).unwrap();
     assert_eq!(start, now);
     assert_eq!(end, now);
 }
@@ -29,8 +28,7 @@ fn test_compute_date_range_yesterday_and_tomorrow() {
 #[test]
 fn test_compute_date_range_this_week_sunday_start() {
     let now = now_date();
-    let (start, end) =
-        compute_date_range(&DynamicFilterRule::ThisWeek, now, Weekday::Sun).unwrap();
+    let (start, end) = compute_date_range(&DynamicFilterRule::ThisWeek, now, Weekday::Sun).unwrap();
     assert_eq!(start, NaiveDate::from_ymd_opt(2024, 6, 9).unwrap());
     assert_eq!(end, NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
 }
@@ -95,8 +93,7 @@ fn test_compute_date_range_quarter_variants() {
 #[test]
 fn test_compute_date_range_this_year() {
     let now = now_date();
-    let (start, end) =
-        compute_date_range(&DynamicFilterRule::ThisYear, now, Weekday::Sun).unwrap();
+    let (start, end) = compute_date_range(&DynamicFilterRule::ThisYear, now, Weekday::Sun).unwrap();
     assert_eq!(start, NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
     assert_eq!(end, NaiveDate::from_ymd_opt(2024, 12, 31).unwrap());
 }

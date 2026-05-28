@@ -1,7 +1,7 @@
 use crate::PureFunction;
 use value_types::CellValue;
 
-use super::{num, ymd, FnXirr};
+use super::{FnXirr, num, ymd};
 
 /// Near-total loss: invest -1000, receive +10 -> ~-99%.
 #[test]

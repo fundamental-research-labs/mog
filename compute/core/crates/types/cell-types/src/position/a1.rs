@@ -246,7 +246,10 @@ mod tests {
 
     #[test]
     fn parse_cell_ref_invalid_inputs() {
-        assert_eq!(parse_cell_ref("").unwrap_err().to_string(), "empty cell reference");
+        assert_eq!(
+            parse_cell_ref("").unwrap_err().to_string(),
+            "empty cell reference"
+        );
         assert_eq!(
             parse_cell_ref("123").unwrap_err().to_string(),
             "invalid column letters"

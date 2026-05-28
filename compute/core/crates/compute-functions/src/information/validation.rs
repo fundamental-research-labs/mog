@@ -1,6 +1,6 @@
 use compute_formats::{CultureInfo, parse_date_input};
-use value_types::date_serial;
 use value_types::CellValue;
+use value_types::date_serial;
 
 use crate::{FunctionRegistry, PureFunction};
 

@@ -130,5 +130,8 @@ fn service_method_signature_prepends_key_param() {
         ],
     );
     let code = code_for(&desc);
-    assert_contains(&code, "pub fn kv_store_get (store_id : String , key : String)");
+    assert_contains(
+        &code,
+        "pub fn kv_store_get (store_id : String , key : String)",
+    );
 }

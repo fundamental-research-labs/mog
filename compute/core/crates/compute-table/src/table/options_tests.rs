@@ -1,6 +1,6 @@
-use super::*;
 use super::super::types::TableBoolOption;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- Table Options ----
 
@@ -26,4 +26,3 @@ fn set_table_style_changes_style() {
     let t2 = set_table_style(&t, "TableStyleLight1");
     assert_eq!(t2.style, "TableStyleLight1");
 }
-

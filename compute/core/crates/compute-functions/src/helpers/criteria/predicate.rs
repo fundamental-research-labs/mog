@@ -195,4 +195,3 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
         }
     }
 }
-

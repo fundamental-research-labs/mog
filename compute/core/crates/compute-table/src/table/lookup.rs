@@ -17,4 +17,3 @@ pub fn get_column_by_name<'a>(table: &'a Table, name: &str) -> Option<&'a TableC
 pub fn get_column_by_id<'a>(table: &'a Table, id: &str) -> Option<&'a TableColumn> {
     table.columns.iter().find(|c| c.id == id)
 }
-

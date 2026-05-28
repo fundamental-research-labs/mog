@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::cell_grid::{
-    CommentChange, DimensionChange, MergeChange, PropertyChange, SparklineChange,
-    VisibilityChange,
+    CommentChange, DimensionChange, MergeChange, PropertyChange, SparklineChange, VisibilityChange,
 };
 use super::features::{
     CfChange, FilterChange, GroupingChange, NamedRangeChange, PivotTableChange, RangeChange,
@@ -14,9 +13,8 @@ use super::floating_objects::FloatingObjectChange;
 use super::policy_parse::{PolicyPreservedParseOutcome, PolicyPreservedParseSummary};
 use super::primitives::SheetLifecycleRuntimeHint;
 use super::sheet_workbook::{
-    PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange,
-    ScrollPositionChange, SheetChange, SheetSettingsChange, SplitConfigChange,
-    WorkbookSettingsChange,
+    PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange, ScrollPositionChange,
+    SheetChange, SheetSettingsChange, SplitConfigChange, WorkbookSettingsChange,
 };
 use crate::recalc::RecalcResult;
 use value_types::CellValue;
@@ -220,10 +218,10 @@ impl MutationResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::features::{SlicerChangeKind, SlicerSourceType};
     use super::super::primitives::{Axis, ChangeKind};
     use super::super::sheet_workbook::SheetChangeField;
+    use super::*;
     use crate::queries::CellPosition;
     use cell_types::SheetId;
     use value_types::CellValue;

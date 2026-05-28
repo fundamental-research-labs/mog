@@ -1,6 +1,6 @@
 use super::{
-    helpers::{assert_position_dimension_invariant, assert_total_size_is_sum},
     AxisIndex, Pixels,
+    helpers::{assert_position_dimension_invariant, assert_total_size_is_sum},
 };
 
 #[test]

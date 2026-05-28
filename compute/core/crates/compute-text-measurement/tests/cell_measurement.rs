@@ -1,6 +1,6 @@
 use compute_text_measurement::{
-    cell_measure, measure_cell_height, measure_cell_width, measure_line_height,
-    measure_rotated_cell, measure_text_width, FontDb,
+    FontDb, cell_measure, measure_cell_height, measure_cell_width, measure_line_height,
+    measure_rotated_cell, measure_text_width,
 };
 
 #[test]

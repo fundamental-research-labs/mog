@@ -1,6 +1,5 @@
 //! Descriptor IR for WASM macro expansion.
 
-
 #[derive(Debug)]
 pub(super) struct WasmDescriptor {
     pub type_name: String,

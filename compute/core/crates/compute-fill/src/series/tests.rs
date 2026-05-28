@@ -740,7 +740,6 @@ fn month_case_insensitive_match() {
     assert_eq!(texts, vec!["February", "March"]);
 }
 
-
 #[test]
 fn dispatcher_smoke_exercises_every_pattern_type() {
     let loc = locale();
@@ -751,44 +750,166 @@ fn dispatcher_smoke_exercises_every_pattern_type() {
 
     let mut linear = default_pattern(FillPatternType::Linear);
     linear.step = Some(1.0);
-    assert_eq!(extract_numbers(&generate_series_values(&linear, &[cv_num(1.0)], 1, 1, &loc, &[])), vec![2.0]);
+    assert_eq!(
+        extract_numbers(&generate_series_values(
+            &linear,
+            &[cv_num(1.0)],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec![2.0]
+    );
 
     let mut growth = default_pattern(FillPatternType::Growth);
     growth.multiplier = Some(2.0);
-    assert_eq!(extract_numbers(&generate_series_values(&growth, &[cv_num(2.0)], 1, 1, &loc, &[])), vec![4.0]);
+    assert_eq!(
+        extract_numbers(&generate_series_values(
+            &growth,
+            &[cv_num(2.0)],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec![4.0]
+    );
 
-    for unit in [DateUnit::Day, DateUnit::Weekday, DateUnit::Month, DateUnit::Year] {
+    for unit in [
+        DateUnit::Day,
+        DateUnit::Weekday,
+        DateUnit::Month,
+        DateUnit::Year,
+    ] {
         let mut date = default_pattern(FillPatternType::Date);
         date.date_unit = Some(unit);
         date.step = Some(1.0);
-        assert_eq!(generate_series_values(&date, &[cv_num(ymd_to_serial(2024, 1, 2))], 1, 1, &loc, &[]).len(), 1);
+        assert_eq!(
+            generate_series_values(&date, &[cv_num(ymd_to_serial(2024, 1, 2))], 1, 1, &loc, &[])
+                .len(),
+            1
+        );
     }
 
     let mut time = default_pattern(FillPatternType::Time);
     time.time_unit = Some(TimeUnit::Second);
     time.step = Some(30.0);
-    assert_eq!(generate_series_values(&time, &[cv_num(0.5)], 1, 1, &loc, &[]).len(), 1);
+    assert_eq!(
+        generate_series_values(&time, &[cv_num(0.5)], 1, 1, &loc, &[]).len(),
+        1
+    );
 
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::Weekday), &[cv_text("Monday")], 1, 1, &loc, &[])), vec!["Tuesday"]);
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::WeekdayShort), &[cv_text("Mon")], 1, 1, &loc, &[])), vec!["Tue"]);
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::Month), &[cv_text("January")], 1, 1, &loc, &[])), vec!["February"]);
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::MonthShort), &[cv_text("Jan")], 1, 1, &loc, &[])), vec!["Feb"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::Weekday),
+            &[cv_text("Monday")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["Tuesday"]
+    );
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::WeekdayShort),
+            &[cv_text("Mon")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["Tue"]
+    );
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::Month),
+            &[cv_text("January")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["February"]
+    );
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::MonthShort),
+            &[cv_text("Jan")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["Feb"]
+    );
 
     let mut quarter = default_pattern(FillPatternType::Quarter);
     quarter.start_index = Some(0);
-    assert_eq!(extract_texts(&generate_series_values(&quarter, &[cv_text("ignored")], 1, 1, &loc, &[])), vec!["Q2"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &quarter,
+            &[cv_text("ignored")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["Q2"]
+    );
 
     let mut text_num = default_pattern(FillPatternType::TextWithNumber);
     text_num.prefix = Some("Item".into());
-    assert_eq!(extract_texts(&generate_series_values(&text_num, &[cv_text("Item1")], 1, 1, &loc, &[])), vec!["Item2"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &text_num,
+            &[cv_text("Item1")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["Item2"]
+    );
 
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::Ordinal), &[cv_text("1st")], 1, 1, &loc, &[])), vec!["2nd"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::Ordinal),
+            &[cv_text("1st")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["2nd"]
+    );
 
     let mut custom = default_pattern(FillPatternType::CustomList);
     custom.list_id = Some("priority".into());
-    assert_eq!(extract_texts(&generate_series_values(&custom, &[cv_text("High")], 1, 1, &loc, &lists)), vec!["Medium"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &custom,
+            &[cv_text("High")],
+            1,
+            1,
+            &loc,
+            &lists
+        )),
+        vec!["Medium"]
+    );
 
-    assert_eq!(extract_texts(&generate_series_values(&default_pattern(FillPatternType::Copy), &[cv_text("x")], 1, 1, &loc, &[])), vec!["x"]);
+    assert_eq!(
+        extract_texts(&generate_series_values(
+            &default_pattern(FillPatternType::Copy),
+            &[cv_text("x")],
+            1,
+            1,
+            &loc,
+            &[]
+        )),
+        vec!["x"]
+    );
 }
 
 #[test]
@@ -832,6 +953,20 @@ fn rejecting_generators_fall_back_to_copy() {
 
     let mut custom = default_pattern(FillPatternType::CustomList);
     custom.list_id = Some("priority".into());
-    let result = generate_series_values(&custom, &[cv_text("Missing"), cv_text("AlsoMissing")], 3, 1, &loc, &lists);
-    assert_eq!(result, vec![cv_text("Missing"), cv_text("AlsoMissing"), cv_text("Missing")]);
+    let result = generate_series_values(
+        &custom,
+        &[cv_text("Missing"), cv_text("AlsoMissing")],
+        3,
+        1,
+        &loc,
+        &lists,
+    );
+    assert_eq!(
+        result,
+        vec![
+            cv_text("Missing"),
+            cv_text("AlsoMissing"),
+            cv_text("Missing")
+        ]
+    );
 }

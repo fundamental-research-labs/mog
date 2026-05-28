@@ -60,7 +60,10 @@ impl WorkbookDataFeatures {
             && self.slicers.is_empty()
             && self.timeline_caches.is_empty()
             && self.timelines.is_empty()
-            && self.metadata.as_ref().is_none_or(WorkbookMetadata::is_empty)
+            && self
+                .metadata
+                .as_ref()
+                .is_none_or(WorkbookMetadata::is_empty)
             && self.what_if.is_empty()
             && self.unsupported.is_empty()
     }

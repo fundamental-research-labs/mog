@@ -1,6 +1,6 @@
 use super::support::{
-    assert_number_value, assert_text_value, formula_cell, init_core, sheet_snapshot, val_cell,
-    workbook_snapshot, SHEET1_UUID, SHEET2_UUID,
+    SHEET1_UUID, SHEET2_UUID, assert_number_value, assert_text_value, formula_cell, init_core,
+    sheet_snapshot, val_cell, workbook_snapshot,
 };
 use value_types::CellValue;
 

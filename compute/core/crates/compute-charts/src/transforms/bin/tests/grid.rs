@@ -1,5 +1,5 @@
 use crate::transforms::bin::{
-    calculate_bins, find_bin_index, get_bin_boundaries, nice_step, BinParams,
+    BinParams, calculate_bins, find_bin_index, get_bin_boundaries, nice_step,
 };
 
 #[test]

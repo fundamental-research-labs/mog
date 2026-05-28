@@ -308,8 +308,7 @@ fn test_xlookup_single_column_return() {
     // When return array has a single column, should return scalar
     let f = FnXlookup;
     let lookup_arr = CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)], vec![num(3.0)]]);
-    let return_arr =
-        CellValue::from_rows(vec![vec![text("a")], vec![text("b")], vec![text("c")]]);
+    let return_arr = CellValue::from_rows(vec![vec![text("a")], vec![text("b")], vec![text("c")]]);
     let result = f.call(&[num(2.0), lookup_arr, return_arr]);
     assert_eq!(result, text("b"));
 }

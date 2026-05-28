@@ -144,16 +144,10 @@ fn test_absolute_emu_roundtrip_and_legacy_read() {
     };
 
     let entries = to_yrs_prelim(&obj);
-    assert!(
-        entries
-            .iter()
-            .any(|(k, v)| k == "absoluteXEmu" && matches!(v, Any::Number(n) if (*n - 12345.0).abs() < f64::EPSILON))
-    );
-    assert!(
-        entries
-            .iter()
-            .any(|(k, v)| k == "absoluteYEmu" && matches!(v, Any::Number(n) if (*n - 67890.0).abs() < f64::EPSILON))
-    );
+    assert!(entries.iter().any(|(k, v)| k == "absoluteXEmu"
+        && matches!(v, Any::Number(n) if (*n - 12345.0).abs() < f64::EPSILON)));
+    assert!(entries.iter().any(|(k, v)| k == "absoluteYEmu"
+        && matches!(v, Any::Number(n) if (*n - 67890.0).abs() < f64::EPSILON)));
 
     let doc = Doc::new();
     let root = doc.get_or_insert_map("test");
@@ -214,7 +208,10 @@ fn test_common_read_only_legacy_fields_hydrate() {
     let restored = from_yrs_map(&map_ref, &txn).unwrap();
     assert_eq!(restored.common.lock_aspect_ratio, Some(true));
     assert_eq!(restored.common.alt_text_title.as_deref(), Some("Alt title"));
-    assert_eq!(restored.common.display_name.as_deref(), Some("Display name"));
+    assert_eq!(
+        restored.common.display_name.as_deref(),
+        Some("Display name")
+    );
 }
 
 #[test]

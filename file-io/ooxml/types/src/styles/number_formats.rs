@@ -24,4 +24,3 @@ pub struct NumFmts {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub num_fmt: Vec<NumberFormatDef>,
 }
-

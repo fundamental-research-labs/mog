@@ -1,5 +1,5 @@
-use super::{BulletProperties, ExtensionList, RunProperties, TextAlign, TextFontAlignType};
 use super::super::primitives::{Emu, StTextIndentLevelType};
+use super::{BulletProperties, ExtensionList, RunProperties, TextAlign, TextFontAlignType};
 
 /// Text paragraph (ECMA-376 CT_TextParagraph).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -4,7 +4,6 @@
 //! Structs become `TsInterface`, all-unit enums become `TsStringUnion`, and
 //! enums with data variants become `TsTaggedUnion`.
 
-
 mod config;
 mod enums;
 mod fields;

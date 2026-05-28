@@ -65,9 +65,8 @@ fn canonical_table_round_trips_runtime_entrypoint() {
 
     assert_eq!(
         original,
-        roundtrip_map(
-            table::to_yrs_prelim_from_table(&original),
-            |map, txn| table::from_yrs_map_to_table(map, txn),
-        )
+        roundtrip_map(table::to_yrs_prelim_from_table(&original), |map, txn| {
+            table::from_yrs_map_to_table(map, txn)
+        },)
     );
 }

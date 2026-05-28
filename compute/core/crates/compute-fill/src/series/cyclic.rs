@@ -70,7 +70,11 @@ fn generate_cyclic_text<const N: usize>(
         .collect()
 }
 
-pub(super) fn generate_quarter(pattern: &FillPattern, count: usize, direction_mult: i32) -> Vec<CellValue> {
+pub(super) fn generate_quarter(
+    pattern: &FillPattern,
+    count: usize,
+    direction_mult: i32,
+) -> Vec<CellValue> {
     let start_idx = pattern.start_index.unwrap_or(0) as i64;
     let mult = i64::from(direction_mult);
     (0..count)

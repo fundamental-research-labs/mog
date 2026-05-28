@@ -113,7 +113,6 @@ pub fn get_column_at_position(table: &Table, col: u32) -> Option<&TableColumn> {
     table.columns.get(table_col_index)
 }
 
-
 /// Check if a row is the header row of the table.
 ///
 /// Returns `true` if the table has a header row and the given row matches
@@ -144,4 +143,3 @@ pub fn is_in_data_range(table: &Table, row: u32, col: u32) -> bool {
         false
     }
 }
-

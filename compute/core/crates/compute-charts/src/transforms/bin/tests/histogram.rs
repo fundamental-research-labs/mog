@@ -40,14 +40,7 @@ fn histogram_bins_are_contiguous() {
 
 #[test]
 fn histogram_filters_nan_and_inf() {
-    let values = vec![
-        1.0,
-        f64::NAN,
-        2.0,
-        f64::INFINITY,
-        3.0,
-        f64::NEG_INFINITY,
-    ];
+    let values = vec![1.0, f64::NAN, 2.0, f64::INFINITY, 3.0, f64::NEG_INFINITY];
     let result = histogram(&values, None, None, None);
     let total: usize = result.iter().map(|b| b.count).sum();
     assert_eq!(total, 3);

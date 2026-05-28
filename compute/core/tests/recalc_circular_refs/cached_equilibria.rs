@@ -72,7 +72,6 @@ fn test_stable_equilibrium_preserves_cached_values() {
     }
 }
 
-
 /// Extends test 9 to multiple rows, matching the actual PPA file pattern:
 ///   For each row i (0..3):
 ///     C_i = constant_i
@@ -131,7 +130,6 @@ fn test_stable_equilibrium_multiple_rows() {
         assert_fixed_point_number_or_preserved(&result, 0, row, 4, c_val);
     }
 }
-
 
 /// Same as Test 9 (PPA pattern) but with iterative_calc = false.
 /// With always-converge, cached values should be preserved regardless of the flag.

@@ -73,13 +73,7 @@ pub(crate) fn build_lane_plans(input: &FillInput) -> LanePlans {
         );
     }
 
-    tile_lane_plans(
-        input,
-        is_vertical,
-        direction_mult,
-        &lane_values,
-        &mut plans,
-    );
+    tile_lane_plans(input, is_vertical, direction_mult, &lane_values, &mut plans);
 
     LanePlans { is_vertical, plans }
 }

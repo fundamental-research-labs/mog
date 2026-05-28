@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use value_types::CellValue;
 
-use super::*;
 use super::range_ref::{col_index_to_letters, col_letters_to_index, parse_range_ref};
 use super::runtime::FilterState;
+use super::*;
 
 #[test]
 fn column_filter_values_roundtrip() {
@@ -177,8 +177,7 @@ fn test_auto_filter_to_filter_state() {
         sort: None,
         xr_uid: None,
     };
-    let resolver =
-        |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
+    let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
     assert_eq!(state.filter_kind, FilterKind::AutoFilter);
     assert_eq!(state.header_start_cell_id, "cell-0-0");
@@ -222,8 +221,7 @@ fn test_auto_filter_to_filter_state_skips_childless_columns() {
         sort: None,
         xr_uid: None,
     };
-    let resolver =
-        |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
+    let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
     assert_eq!(state.header_start_cell_id, "cell-0-0");
     assert_eq!(state.header_end_cell_id, "cell-0-2");
@@ -261,8 +259,7 @@ fn test_filter_state_to_auto_filter_roundtrip() {
         sort: None,
         xr_uid: None,
     };
-    let resolver =
-        |row: u32, col: u32| -> Option<String> { Some(format!("c-{}-{}", row, col)) };
+    let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("c-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
 
     let pos_resolver = |cell_id: &str| -> Option<(u32, u32)> {

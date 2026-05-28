@@ -105,4 +105,3 @@ pub fn create_table(
         auto_calculated_columns: true,
     })
 }
-

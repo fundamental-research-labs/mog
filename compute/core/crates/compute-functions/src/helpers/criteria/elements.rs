@@ -20,4 +20,3 @@ pub fn extract_criteria_elements(val: &CellValue) -> Option<(Vec<&CellValue>, us
         _ => None,
     }
 }
-

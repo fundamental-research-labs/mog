@@ -23,13 +23,13 @@ use embedded::{
     append_form_control_entries, append_ole_object_entries, read_camera, read_diagram,
     read_equation, read_form_control, read_ole_object,
 };
-use shapes::{
-    append_connector_entries, append_picture_entries, append_shape_entries, append_textbox_entries,
-    read_connector, read_picture, read_shape, read_textbox,
-};
 pub use keys::{
     KEY_ANCHOR_COL_OFFSET_EMU, KEY_ANCHOR_ROW_OFFSET_EMU, KEY_END_COL_OFFSET_EMU,
     KEY_END_ROW_OFFSET_EMU,
+};
+use shapes::{
+    append_connector_entries, append_picture_entries, append_shape_entries, append_textbox_entries,
+    read_connector, read_picture, read_shape, read_textbox,
 };
 
 // ── to_yrs_prelim ────────────────────────────────────────────────────

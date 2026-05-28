@@ -126,7 +126,10 @@ fn empty_string_triggers_required() {
         },
     );
     let result = validate(&text(""), &schema);
-    assert!(!result.valid, "Empty string should fail required constraint");
+    assert!(
+        !result.valid,
+        "Empty string should fail required constraint"
+    );
     assert!(
         result
             .errors
@@ -185,9 +188,18 @@ fn inferred_type_always_present() {
 #[test]
 fn unsupported_variants_preserve_inferred_type_and_coercion_behavior() {
     let any_schema = make_schema(SchemaType::Any);
-    assert_eq!(validate(&error_value(), &any_schema).inferred_type, Some(SchemaType::Any));
-    assert_eq!(validate(&array_value(), &any_schema).inferred_type, Some(SchemaType::Any));
-    assert_eq!(validate(&image_value(), &any_schema).inferred_type, Some(SchemaType::Any));
+    assert_eq!(
+        validate(&error_value(), &any_schema).inferred_type,
+        Some(SchemaType::Any)
+    );
+    assert_eq!(
+        validate(&array_value(), &any_schema).inferred_type,
+        Some(SchemaType::Any)
+    );
+    assert_eq!(
+        validate(&image_value(), &any_schema).inferred_type,
+        Some(SchemaType::Any)
+    );
     assert_eq!(
         validate(&control_value(), &any_schema).inferred_type,
         Some(SchemaType::Boolean)

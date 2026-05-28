@@ -1,11 +1,11 @@
 #[path = "gated_codegen/support.rs"]
 mod support;
 
-pub use support::{compute_security, compute_wire, value_types};
 pub use support::{
     AccessLevel, AccessTarget, CellAddr, CellRange, FakeDispatch, FakeEngine, PlainService,
     Principal, PrincipalPool, SheetAccessMatrix, SheetId, StubService, new_service,
 };
+pub use support::{compute_security, compute_wire, value_types};
 
 #[path = "gated_codegen/descriptors.rs"]
 mod descriptors;

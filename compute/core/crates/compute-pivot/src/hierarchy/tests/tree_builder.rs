@@ -10,7 +10,12 @@ fn test_aggregated_tree_builder_expanded_tree_indexes_visible_leaf_rows() {
             "east\x00widget",
             vec![
                 make_header("east", CellValue::Text("East".into()), "region", 0),
-                make_header("east\x00widget", CellValue::Text("Widget".into()), "product", 1),
+                make_header(
+                    "east\x00widget",
+                    CellValue::Text("Widget".into()),
+                    "product",
+                    1,
+                ),
             ],
             vec![CellValue::number(100.0)],
         ),
@@ -18,13 +23,23 @@ fn test_aggregated_tree_builder_expanded_tree_indexes_visible_leaf_rows() {
             "east\x00gadget",
             vec![
                 make_header("east", CellValue::Text("East".into()), "region", 0),
-                make_header("east\x00gadget", CellValue::Text("Gadget".into()), "product", 1),
+                make_header(
+                    "east\x00gadget",
+                    CellValue::Text("Gadget".into()),
+                    "product",
+                    1,
+                ),
             ],
             vec![CellValue::number(200.0)],
         ),
         make_subtotal_row(
             "east__SUBTOTAL__",
-            vec![make_header("east", CellValue::Text("East Total".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East Total".into()),
+                "region",
+                0,
+            )],
             0,
             vec![CellValue::number(300.0)],
         ),
@@ -32,13 +47,23 @@ fn test_aggregated_tree_builder_expanded_tree_indexes_visible_leaf_rows() {
             "west\x00widget",
             vec![
                 make_header("west", CellValue::Text("West".into()), "region", 0),
-                make_header("west\x00widget", CellValue::Text("Widget".into()), "product", 1),
+                make_header(
+                    "west\x00widget",
+                    CellValue::Text("Widget".into()),
+                    "product",
+                    1,
+                ),
             ],
             vec![CellValue::number(150.0)],
         ),
         make_subtotal_row(
             "west__SUBTOTAL__",
-            vec![make_header("west", CellValue::Text("West Total".into()), "region", 0)],
+            vec![make_header(
+                "west",
+                CellValue::Text("West Total".into()),
+                "region",
+                0,
+            )],
             0,
             vec![CellValue::number(150.0)],
         ),
@@ -87,8 +112,7 @@ fn test_aggregated_tree_builder_expanded_tree_indexes_visible_leaf_rows() {
         ),
     ];
 
-    let hierarchy =
-        build_group_hierarchy_from_aggregated_tree(&tree, &rows, &field_names, None);
+    let hierarchy = build_group_hierarchy_from_aggregated_tree(&tree, &rows, &field_names, None);
 
     assert_eq!(
         hierarchy.children_by_parent.get(&(0, String::new())),
@@ -127,12 +151,22 @@ fn test_aggregated_tree_builder_collapsed_node_maps_parent_row() {
     let rows = vec![
         make_data_row(
             "east",
-            vec![make_header("east", CellValue::Text("East".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(300.0)],
         ),
         make_subtotal_row(
             "east__SUBTOTAL__",
-            vec![make_header("east", CellValue::Text("East Total".into()), "region", 0)],
+            vec![make_header(
+                "east",
+                CellValue::Text("East Total".into()),
+                "region",
+                0,
+            )],
             0,
             vec![CellValue::number(300.0)],
         ),
@@ -193,7 +227,12 @@ fn test_aggregated_tree_builder_selective_expansion_omits_missing_rows() {
         ),
         make_data_row(
             "west",
-            vec![make_header("west", CellValue::Text("West".into()), "region", 0)],
+            vec![make_header(
+                "west",
+                CellValue::Text("West".into()),
+                "region",
+                0,
+            )],
             vec![CellValue::number(150.0)],
         ),
         make_grand_total_row(vec![CellValue::number(250.0)]),
@@ -253,7 +292,10 @@ fn test_aggregated_tree_builder_selective_expansion_omits_missing_rows() {
         hierarchy.children_by_parent.get(&(1, "east".to_string())),
         Some(&vec![0])
     );
-    assert_eq!(hierarchy.children_by_parent.get(&(1, "west".to_string())), None);
+    assert_eq!(
+        hierarchy.children_by_parent.get(&(1, "west".to_string())),
+        None
+    );
     assert!(hierarchy.subtotal_index.is_empty());
     assert_eq!(
         hierarchy.row_group_paths[0],

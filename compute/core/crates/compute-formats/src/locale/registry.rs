@@ -1,4 +1,4 @@
-use super::data::{culture_for_tag, SUPPORTED_CULTURE_TAGS};
+use super::data::{SUPPORTED_CULTURE_TAGS, culture_for_tag};
 use super::types::CultureInfo;
 
 /// Build a [`CultureInfo`] from an IETF culture tag (e.g., `"de-DE"`).

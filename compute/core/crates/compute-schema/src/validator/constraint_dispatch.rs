@@ -8,7 +8,10 @@ use crate::types::{
 use super::numeric;
 
 /// Validate constraints.
-pub(super) fn validate_constraints(value: &CellValue, schema: &ColumnSchema) -> Vec<ValidationError> {
+pub(super) fn validate_constraints(
+    value: &CellValue,
+    schema: &ColumnSchema,
+) -> Vec<ValidationError> {
     let c = match &schema.constraints {
         Some(c) => c,
         None => return Vec::new(),

@@ -333,10 +333,12 @@ mod tests {
     #[test]
     fn parses_fixed_fraction_denominator_digits() {
         let section = parse_section("# ??/100");
-        assert!(section
-            .tokens
-            .iter()
-            .any(|token| matches!(token, Token::FractionSlash)));
+        assert!(
+            section
+                .tokens
+                .iter()
+                .any(|token| matches!(token, Token::FractionSlash))
+        );
         assert!(section.tokens.iter().any(
             |token| matches!(token, Token::FractionDenominatorLiteral(value) if value == "100")
         ));
@@ -345,14 +347,18 @@ mod tests {
     #[test]
     fn leaves_single_zero_denominator_as_placeholder_fraction() {
         let section = parse_section("0/0");
-        assert!(section
-            .tokens
-            .iter()
-            .any(|token| matches!(token, Token::FractionSlash)));
-        assert!(!section
-            .tokens
-            .iter()
-            .any(|token| matches!(token, Token::FractionDenominatorLiteral(_))));
+        assert!(
+            section
+                .tokens
+                .iter()
+                .any(|token| matches!(token, Token::FractionSlash))
+        );
+        assert!(
+            !section
+                .tokens
+                .iter()
+                .any(|token| matches!(token, Token::FractionDenominatorLiteral(_)))
+        );
     }
 }
 

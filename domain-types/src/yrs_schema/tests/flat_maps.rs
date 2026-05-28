@@ -1,5 +1,6 @@
 use ooxml_types::web_publish::TargetScreenSize;
 
+use crate::MergeRegion;
 use crate::domain::hyperlink::{Hyperlink, HyperlinkTargetKind};
 use crate::domain::named_range::DefinedName;
 use crate::domain::print::{PageBreakEntry, PageBreaks};
@@ -13,7 +14,6 @@ use crate::yrs_schema::{
     doc_properties, file_sharing, file_version, frozen_panes, hyperlink, merge, named_range,
     page_breaks, sheet_view, web_publishing, workbook_properties,
 };
-use crate::MergeRegion;
 
 use super::support::{roundtrip_map, roundtrip_map_value};
 
@@ -61,10 +61,9 @@ fn workbook_metadata_round_trips_through_real_yrs_maps() {
     };
     assert_eq!(
         doc_props,
-        roundtrip_map_value(
-            doc_properties::to_yrs_prelim(&doc_props),
-            |map, txn| doc_properties::from_yrs_map(map, txn),
-        )
+        roundtrip_map_value(doc_properties::to_yrs_prelim(&doc_props), |map, txn| {
+            doc_properties::from_yrs_map(map, txn)
+        },)
     );
 
     let file_version = FileVersion {
@@ -76,10 +75,9 @@ fn workbook_metadata_round_trips_through_real_yrs_maps() {
     };
     assert_eq!(
         file_version,
-        roundtrip_map_value(
-            file_version::to_yrs_prelim(&file_version),
-            |map, txn| file_version::from_yrs_map(map, txn),
-        )
+        roundtrip_map_value(file_version::to_yrs_prelim(&file_version), |map, txn| {
+            file_version::from_yrs_map(map, txn)
+        },)
     );
 
     let file_sharing = FileSharing {
@@ -93,10 +91,9 @@ fn workbook_metadata_round_trips_through_real_yrs_maps() {
     };
     assert_eq!(
         file_sharing,
-        roundtrip_map_value(
-            file_sharing::to_yrs_prelim(&file_sharing),
-            |map, txn| file_sharing::from_yrs_map(map, txn),
-        )
+        roundtrip_map_value(file_sharing::to_yrs_prelim(&file_sharing), |map, txn| {
+            file_sharing::from_yrs_map(map, txn)
+        },)
     );
 }
 
@@ -144,10 +141,9 @@ fn sheet_and_workbook_view_metadata_round_trips_through_real_yrs_maps() {
     };
     assert_eq!(
         page_breaks,
-        roundtrip_map_value(
-            page_breaks::to_yrs_prelim(&page_breaks),
-            |map, txn| page_breaks::from_yrs_map(map, txn),
-        )
+        roundtrip_map_value(page_breaks::to_yrs_prelim(&page_breaks), |map, txn| {
+            page_breaks::from_yrs_map(map, txn)
+        },)
     );
 }
 
@@ -176,10 +172,9 @@ fn named_range_and_workbook_properties_round_trip_through_real_yrs_maps() {
     };
     assert_eq!(
         defined_name,
-        roundtrip_map(
-            named_range::to_yrs_prelim(&defined_name),
-            |map, txn| named_range::from_yrs_map(map, txn),
-        )
+        roundtrip_map(named_range::to_yrs_prelim(&defined_name), |map, txn| {
+            named_range::from_yrs_map(map, txn)
+        },)
     );
 
     let workbook_props = WorkbookProperties {
@@ -224,9 +219,8 @@ fn web_publishing_round_trips_optional_scalars() {
     };
     assert_eq!(
         web,
-        roundtrip_map_value(
-            web_publishing::to_yrs_prelim(&web),
-            |map, txn| web_publishing::from_yrs_map(map, txn),
-        )
+        roundtrip_map_value(web_publishing::to_yrs_prelim(&web), |map, txn| {
+            web_publishing::from_yrs_map(map, txn)
+        },)
     );
 }

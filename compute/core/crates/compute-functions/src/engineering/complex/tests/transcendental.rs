@@ -1,7 +1,7 @@
 use value_types::{CellError, CellValue};
 
+use super::super::transcendental::{FnImExp, FnImLn, FnImLog2, FnImLog10};
 use super::helpers::*;
-use super::super::transcendental::{FnImExp, FnImLn, FnImLog10, FnImLog2};
 use crate::PureFunction;
 
 #[test]

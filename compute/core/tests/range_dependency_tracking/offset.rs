@@ -134,7 +134,6 @@ pub(crate) fn run_offset_case(variant: u8) -> Result<(), String> {
     assert_dependent_identity(&before, &after, &format!("offset variant={}", variant))
 }
 
-
 pub(crate) fn class_ii_offset_family() {
     let mut s = Summary::new("offset");
     for v in 0..6 {

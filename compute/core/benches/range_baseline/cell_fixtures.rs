@@ -12,8 +12,7 @@ pub(crate) fn numeric_column_snapshot(rows: u32) -> WorkbookSnapshot {
 
 #[allow(dead_code)]
 pub(crate) fn two_column_snapshot(rows: u32) -> WorkbookSnapshot {
-    let mut c: Vec<(u32, u32, CellValue, Option<String>)> =
-        Vec::with_capacity(2 * rows as usize);
+    let mut c: Vec<(u32, u32, CellValue, Option<String>)> = Vec::with_capacity(2 * rows as usize);
     for row in 0..rows {
         c.push((row, 0, CellValue::number((row + 1) as f64), None));
         c.push((row, 1, CellValue::number(((row + 1) * 10) as f64), None));
@@ -22,8 +21,7 @@ pub(crate) fn two_column_snapshot(rows: u32) -> WorkbookSnapshot {
 }
 
 pub(crate) fn sum_snapshot(rows: u32) -> WorkbookSnapshot {
-    let mut c: Vec<(u32, u32, CellValue, Option<String>)> =
-        Vec::with_capacity(rows as usize + 1);
+    let mut c: Vec<(u32, u32, CellValue, Option<String>)> = Vec::with_capacity(rows as usize + 1);
     for row in 0..rows {
         c.push((row, 0, CellValue::number((row + 1) as f64), None));
     }
@@ -32,8 +30,7 @@ pub(crate) fn sum_snapshot(rows: u32) -> WorkbookSnapshot {
 }
 
 pub(crate) fn match_snapshot(rows: u32) -> WorkbookSnapshot {
-    let mut c: Vec<(u32, u32, CellValue, Option<String>)> =
-        Vec::with_capacity(rows as usize + 1);
+    let mut c: Vec<(u32, u32, CellValue, Option<String>)> = Vec::with_capacity(rows as usize + 1);
     for row in 0..rows {
         c.push((row, 0, CellValue::number((row + 1) as f64), None));
     }
@@ -47,8 +44,7 @@ pub(crate) fn match_snapshot(rows: u32) -> WorkbookSnapshot {
 }
 
 pub(crate) fn index_snapshot(rows: u32) -> WorkbookSnapshot {
-    let mut c: Vec<(u32, u32, CellValue, Option<String>)> =
-        Vec::with_capacity(rows as usize + 1);
+    let mut c: Vec<(u32, u32, CellValue, Option<String>)> = Vec::with_capacity(rows as usize + 1);
     for row in 0..rows {
         c.push((row, 0, CellValue::number((row + 1) as f64), None));
     }
@@ -79,8 +75,7 @@ pub(crate) fn vlookup_snapshot(rows: u32) -> WorkbookSnapshot {
 }
 
 pub(crate) fn countifs_snapshot(rows: u32) -> WorkbookSnapshot {
-    let mut c: Vec<(u32, u32, CellValue, Option<String>)> =
-        Vec::with_capacity(rows as usize + 1);
+    let mut c: Vec<(u32, u32, CellValue, Option<String>)> = Vec::with_capacity(rows as usize + 1);
     for row in 0..rows {
         c.push((row, 0, CellValue::number((row as f64) % 100.0), None));
     }

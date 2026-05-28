@@ -127,7 +127,9 @@ pub(super) fn find_param_by_exact_name(method: &Method, name: &str) -> Option<St
 /// 2. `row: u32, col: u32` — name-based extraction; both must be present.
 ///
 /// Returns token streams that evaluate to `row` and `col` u32s.
-pub(super) fn cell_scope_row_col(method: &Method) -> Result<(TokenStream, TokenStream), TokenStream> {
+pub(super) fn cell_scope_row_col(
+    method: &Method,
+) -> Result<(TokenStream, TokenStream), TokenStream> {
     if let Some(addr_name) = find_param_by_type_substr(method, "CellAddr") {
         let ident = format_ident!("{}", addr_name);
         return Ok((quote! { #ident.row }, quote! { #ident.col }));

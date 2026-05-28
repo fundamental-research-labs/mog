@@ -15,11 +15,11 @@ mod support;
 
 #[path = "recalc_circular_refs/basic_cycles.rs"]
 mod basic_cycles;
-#[path = "recalc_circular_refs/convergence.rs"]
-mod convergence;
-#[path = "recalc_circular_refs/cached_equilibria.rs"]
-mod cached_equilibria;
 #[path = "recalc_circular_refs/benign_self_refs.rs"]
 mod benign_self_refs;
+#[path = "recalc_circular_refs/cached_equilibria.rs"]
+mod cached_equilibria;
+#[path = "recalc_circular_refs/convergence.rs"]
+mod convergence;
 #[path = "recalc_circular_refs/selective_ranges.rs"]
 mod selective_ranges;

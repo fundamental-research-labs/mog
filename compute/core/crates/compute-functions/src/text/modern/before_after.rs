@@ -2,8 +2,8 @@ use value_types::{CellError, CellValue};
 
 use crate::PureFunction;
 
-use super::args::{parse_before_after_args, BeforeAfterArgs};
-use super::delimiter::{match_positions, DelimiterMatch};
+use super::args::{BeforeAfterArgs, parse_before_after_args};
+use super::delimiter::{DelimiterMatch, match_positions};
 
 pub(super) struct FnTextBefore;
 pub(super) struct FnTextAfter;

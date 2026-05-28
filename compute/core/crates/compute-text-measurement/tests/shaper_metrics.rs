@@ -1,4 +1,4 @@
-use compute_text_measurement::{measure_line_height, measure_text_width, FontDb};
+use compute_text_measurement::{FontDb, measure_line_height, measure_text_width};
 
 #[test]
 fn line_height_matches_font_metrics_formula() {

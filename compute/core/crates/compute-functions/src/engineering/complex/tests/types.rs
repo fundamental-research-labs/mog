@@ -1,7 +1,7 @@
-use super::helpers::*;
 use super::super::arithmetic::{FnImProduct, FnImSub, FnImSum};
 use super::super::components::{FnComplex, FnImAbs, FnImConjugate, FnImReal, FnImaginary};
 use super::super::types::parse_complex;
+use super::helpers::*;
 use crate::PureFunction;
 
 #[test]
@@ -66,7 +66,6 @@ fn test_parse_complex_cases() {
     assert_eq!(parse_complex("3-4j"), Some((3.0, -4.0, 'j')));
     assert_eq!(parse_complex("0"), Some((0.0, 0.0, 'i')));
 }
-
 
 #[test]
 fn test_parse_complex_empty() {

@@ -33,9 +33,7 @@ impl PureFunction for FnText {
         if format_code == "@" {
             return match &args[0] {
                 CellValue::Text(t) => CellValue::Text(t.clone()),
-                CellValue::Number(n) => {
-                    CellValue::Text(value_types::format_number(n.get()).into())
-                }
+                CellValue::Number(n) => CellValue::Text(value_types::format_number(n.get()).into()),
                 CellValue::Boolean(b) => CellValue::Text(if *b { "TRUE" } else { "FALSE" }.into()),
                 CellValue::Null => CellValue::Text("".into()),
                 CellValue::Error(e, _) => CellValue::Error(*e, None),

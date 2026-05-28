@@ -1,5 +1,5 @@
-use super::*;
 use super::test_fixtures::make_test_table;
+use super::*;
 
 // ---- get_column_by_name ----
 
@@ -26,7 +26,6 @@ fn get_column_by_name_not_found() {
     assert!(get_column_by_name(&t, "Missing").is_none());
 }
 
-
 // ---- get_column_by_id ----
 
 #[test]
@@ -41,5 +40,3 @@ fn get_column_by_id_not_found() {
     let t = make_test_table();
     assert!(get_column_by_id(&t, "nonexistent").is_none());
 }
-
-

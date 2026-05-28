@@ -146,9 +146,7 @@ pub fn format_value(
             let text = format_text(s, format_code);
             FormatResult::text(text)
         }
-        value_types::CellValue::Boolean(b) => {
-            FormatResult::text(if *b { "TRUE" } else { "FALSE" })
-        }
+        value_types::CellValue::Boolean(b) => FormatResult::text(if *b { "TRUE" } else { "FALSE" }),
         value_types::CellValue::Error(e, _) => FormatResult::error(e.to_string()),
         value_types::CellValue::Null => FormatResult::text(""),
         value_types::CellValue::Array(_) => FormatResult::text("{...}"),

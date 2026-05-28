@@ -184,7 +184,6 @@ pub(super) fn build_two_level_rows() -> (Vec<PivotRow>, Vec<String>) {
 
 // ---- build_group_hierarchy: basic structure ----
 
-
 pub(super) fn build_single_level_rows(values: Vec<CellValue>) -> (Vec<PivotRow>, Vec<String>) {
     let field_names = vec!["Category".to_string()];
     let mut rows: Vec<PivotRow> = values

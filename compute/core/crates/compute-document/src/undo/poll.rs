@@ -7,9 +7,7 @@ use std::task::{Context, Poll, Waker};
 /// The future is only `Pending` when another yrs transaction is active on the same
 /// document. Since we always call undo/redo outside any active transaction, the
 /// future resolves on the first poll.
-pub(in crate::undo) fn poll_once<F: std::future::Future>(
-    f: F,
-) -> Result<F::Output, DocumentError> {
+pub(in crate::undo) fn poll_once<F: std::future::Future>(f: F) -> Result<F::Output, DocumentError> {
     let mut pinned = std::pin::pin!(f);
     let mut cx = Context::from_waker(Waker::noop());
     match pinned.as_mut().poll(&mut cx) {

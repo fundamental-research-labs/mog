@@ -22,7 +22,6 @@ mod tests;
 pub use deps::{DepEdge, DepEdges, FormulaDeps};
 pub use lookup::{NameDef, RefStyle, ReferenceTarget, TableDefLookup, WorkbookLookup};
 pub use types::{
-    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef,
-    IdentityFullColRef, IdentityFullRowRef, IdentityRangeRef, IdentityRectRangeRef,
-    IdentityRowRangeRef,
+    IdentityCellRef, IdentityColRangeRef, IdentityFormula, IdentityFormulaRef, IdentityFullColRef,
+    IdentityFullRowRef, IdentityRangeRef, IdentityRectRangeRef, IdentityRowRangeRef,
 };

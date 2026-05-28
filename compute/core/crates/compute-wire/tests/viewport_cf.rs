@@ -4,8 +4,8 @@ mod support;
 
 use compute_wire::constants::*;
 use compute_wire::flags::*;
-use compute_wire::types::*;
 use compute_wire::serialize_viewport_binary;
+use compute_wire::types::*;
 use support::fixtures::viewport_cell as cell;
 use support::layout::ViewportLayout;
 use support::wire::{read_f32, read_u8, read_u16, read_u32};

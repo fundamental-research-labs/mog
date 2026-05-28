@@ -218,4 +218,3 @@ pub(crate) fn run_class_ii_v2_split(
     }
     (passed, failed, failures)
 }
-

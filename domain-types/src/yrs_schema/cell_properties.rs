@@ -89,7 +89,10 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
         entries.push((KEY_PHONETIC, Any::Bool(true)));
     }
     if let Some(ref date) = props.date_lexical_value {
-        entries.push((KEY_DATE_LEXICAL_VALUE, Any::String(Arc::from(date.as_str()))));
+        entries.push((
+            KEY_DATE_LEXICAL_VALUE,
+            Any::String(Arc::from(date.as_str())),
+        ));
     }
     if let Some(frt) = props.formula_result_type {
         entries.push((KEY_FORMULA_RESULT_TYPE, Any::Number(frt as f64)));

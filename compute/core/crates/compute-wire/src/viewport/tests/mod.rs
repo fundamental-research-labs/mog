@@ -4,28 +4,7 @@
     clippy::float_cmp,
     clippy::default_trait_access
 )]
-mod header;
-#[allow(
-    clippy::unreadable_literal,
-    clippy::similar_names,
-    clippy::float_cmp,
-    clippy::default_trait_access
-)]
 mod cells;
-#[allow(
-    clippy::unreadable_literal,
-    clippy::similar_names,
-    clippy::float_cmp,
-    clippy::default_trait_access
-)]
-mod strings;
-#[allow(
-    clippy::unreadable_literal,
-    clippy::similar_names,
-    clippy::float_cmp,
-    clippy::default_trait_access
-)]
-mod layout_sections;
 #[allow(
     clippy::unreadable_literal,
     clippy::similar_names,
@@ -39,7 +18,28 @@ mod cf_extras;
     clippy::float_cmp,
     clippy::default_trait_access
 )]
+mod header;
+#[allow(
+    clippy::unreadable_literal,
+    clippy::similar_names,
+    clippy::float_cmp,
+    clippy::default_trait_access
+)]
+mod layout_sections;
+#[allow(
+    clippy::unreadable_literal,
+    clippy::similar_names,
+    clippy::float_cmp,
+    clippy::default_trait_access
+)]
 mod positions;
+#[allow(
+    clippy::unreadable_literal,
+    clippy::similar_names,
+    clippy::float_cmp,
+    clippy::default_trait_access
+)]
+mod strings;
 
 use crate::constants::{
     CELL_STRIDE, DATA_BAR_ENTRY_STRIDE, DIM_STRIDE, ICON_ENTRY_STRIDE, MERGE_STRIDE, NO_STRING,

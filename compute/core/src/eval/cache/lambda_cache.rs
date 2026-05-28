@@ -13,7 +13,7 @@ use compute_parser::{ASTNode, AstVisitor};
 
 use crate::eval::eval_value::{EvalValue, LambdaParam};
 
-use crate::eval::engine::evaluator::cell_ref_to_a1;
+use crate::eval::engine::reference_resolution::cell_ref_to_a1;
 
 // ---------------------------------------------------------------------------
 // Parameter-free analysis

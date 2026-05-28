@@ -11,7 +11,8 @@ use rustc_hash::FxHashMap;
 use super::super::MAX_SCOPE_DEPTH;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 
-use super::evaluator::{Evaluator, cell_ref_to_a1};
+use super::evaluator::Evaluator;
+use super::reference_resolution::cell_ref_to_a1;
 
 use crate::eval::eval_value::{EvalValue, LambdaParam};
 use compute_parser::{ASTNode, CellRefNode};

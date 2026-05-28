@@ -21,7 +21,7 @@ import type {
 } from '@mog-sdk/contracts/actions';
 import type { FillSeriesOptions } from '@mog-sdk/contracts/fill';
 import type { Worksheet } from '@mog-sdk/contracts/api';
-import type { CellRange } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 
 import { getUIStore, handled } from './types';
@@ -42,6 +42,96 @@ async function checkRangeForProtectedCells(ws: Worksheet, range: CellRange): Pro
     }
   }
   return false;
+}
+
+function getSeriesSourceCell(
+  range: CellRange,
+  direction: FillSeriesOptions['direction'],
+): { row: number; col: number } {
+  switch (direction) {
+    case 'down':
+      return { row: range.startRow, col: range.startCol };
+    case 'up':
+      return { row: range.endRow, col: range.startCol };
+    case 'right':
+      return { row: range.startRow, col: range.startCol };
+    case 'left':
+      return { row: range.startRow, col: range.endCol };
+  }
+}
+
+function getLinearStopValueItemCount(startValue: number, step: number, stopValue: number): number {
+  if (!Number.isFinite(startValue) || !Number.isFinite(step) || !Number.isFinite(stopValue)) {
+    return 0;
+  }
+  if (step === 0) {
+    return 0;
+  }
+  if ((step > 0 && stopValue < startValue) || (step < 0 && stopValue > startValue)) {
+    return 0;
+  }
+
+  const distance = step > 0 ? stopValue - startValue : startValue - stopValue;
+  const itemCount = Math.floor(distance / Math.abs(step)) + 1;
+  return itemCount >= 2 ? itemCount : 0;
+}
+
+function rangeWithStopValueExtent(
+  range: CellRange,
+  direction: FillSeriesOptions['direction'],
+  itemCount: number,
+): CellRange {
+  const additionalCells = itemCount - 1;
+  switch (direction) {
+    case 'down':
+      return {
+        ...range,
+        endRow: Math.min(MAX_ROWS - 1, range.startRow + additionalCells),
+      };
+    case 'up':
+      return {
+        ...range,
+        startRow: Math.max(0, range.endRow - additionalCells),
+      };
+    case 'right':
+      return {
+        ...range,
+        endCol: Math.min(MAX_COLS - 1, range.startCol + additionalCells),
+      };
+    case 'left':
+      return {
+        ...range,
+        startCol: Math.max(0, range.endCol - additionalCells),
+      };
+  }
+}
+
+async function resolveFillSeriesExecutionRange(
+  ws: Worksheet,
+  selectionRange: CellRange,
+  options: Pick<FillSeriesOptions, 'direction' | 'seriesType' | 'stopValue'> & { step: number },
+): Promise<CellRange> {
+  if (
+    options.seriesType === 'growth' ||
+    options.stopValue === undefined ||
+    !Number.isFinite(options.stopValue)
+  ) {
+    return selectionRange;
+  }
+
+  const sourceCell = getSeriesSourceCell(selectionRange, options.direction);
+  const sourceData = await ws.getCell(sourceCell.row, sourceCell.col);
+  const startValue = sourceData.value;
+  if (typeof startValue !== 'number') {
+    return selectionRange;
+  }
+
+  const itemCount = getLinearStopValueItemCount(startValue, options.step, options.stopValue);
+  if (itemCount === 0) {
+    return selectionRange;
+  }
+
+  return rangeWithStopValueExtent(selectionRange, options.direction, itemCount);
 }
 
 // =============================================================================
@@ -149,8 +239,15 @@ export const EXECUTE_FILL_SERIES: AsyncActionHandler = async (
     };
   }
 
-  // Protection check: Verify all cells in the selection range are editable
-  const hasProtectedCells = await checkRangeForProtectedCells(ws, selectionRange);
+  const executionRange = await resolveFillSeriesExecutionRange(ws, selectionRange, {
+    direction,
+    seriesType,
+    step,
+    stopValue,
+  });
+
+  // Protection check: Verify all cells in the effective fill range are editable
+  const hasProtectedCells = await checkRangeForProtectedCells(ws, executionRange);
   if (hasProtectedCells) {
     return {
       handled: true,
@@ -169,7 +266,7 @@ export const EXECUTE_FILL_SERIES: AsyncActionHandler = async (
 
   // Convert range to A1 notation and delegate to ws.fillSeries()
   // The kernel handles splitting the range into source + target based on direction
-  const rangeA1 = cellRangeToA1(selectionRange);
+  const rangeA1 = cellRangeToA1(executionRange);
 
   try {
     await ws.fillSeries(rangeA1, options);

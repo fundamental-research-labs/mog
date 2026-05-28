@@ -3,7 +3,7 @@
 //! Usage: cargo run --example load_ground_truth -- <ground-truth-json>
 
 use std::fs;
-use xlsx_parser::roundtrip::fidelity::GroundTruthWorkbook;
+use xlsx_parser::testing::fidelity::GroundTruthWorkbook;
 
 fn main() {
     let json_path = std::env::args()

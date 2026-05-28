@@ -5,7 +5,7 @@ use formula_types::{IdentityFormula, WorkbookLookup};
 use value_types::CellValue;
 
 use super::cell_mirror::CellMirror;
-use super::normalize_sheet_key;
+use super::sheet_key::normalize_sheet_key;
 use super::types::{MergeRegion, SheetMirror};
 
 // ---------------------------------------------------------------------------

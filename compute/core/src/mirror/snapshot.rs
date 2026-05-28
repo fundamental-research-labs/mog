@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use value_types::{CellValue, ComputeError};
 
 use super::cell_mirror::CellMirror;
-use super::normalize_sheet_key;
+use super::sheet_key::normalize_sheet_key;
 use super::types::{CellEntry, SheetMirror};
 
 /// Parse an A1-style range reference (e.g., "A1:C5") into

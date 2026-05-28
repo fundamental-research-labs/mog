@@ -3,7 +3,7 @@
 use cell_types::SheetId;
 
 use super::cell_mirror::CellMirror;
-use super::normalize_sheet_key;
+use super::sheet_key::normalize_sheet_key;
 
 impl CellMirror {
     /// Remove a sheet by SheetId.

@@ -457,6 +457,23 @@ function emptyMutationResult(): MutationResult {
   };
 }
 
+function isParsedTopLevelDateFormula(input: CellInput): boolean {
+  if (input.kind !== 'parse') return false;
+  return /^=\s*(?:_xlfn\.)?date\s*\(/i.test(input.text.trim());
+}
+
+function hasGeneralNumberFormat(format: CellFormat): boolean {
+  return format.numberFormat == null || format.numberFormat === 'General';
+}
+
+function appendPropertyChanges(result: MutationResult, extra: MutationResult): MutationResult {
+  if (!extra.propertyChanges?.length) return result;
+  return {
+    ...result,
+    propertyChanges: [...(result.propertyChanges ?? []), ...extra.propertyChanges],
+  };
+}
+
 // =============================================================================
 // ComputeBridge Class — Thin Composition Root
 // =============================================================================
@@ -1499,7 +1516,41 @@ export class ComputeBridge extends GeneratedBridgeBase {
       ),
       edits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
     );
-    return result;
+    return this.applyDateFormulaFormatCompatibility(sheetId, edits, result);
+  }
+
+  private async applyDateFormulaFormatCompatibility(
+    sheetId: SheetId,
+    edits: Array<{ row: number; col: number; input: CellInput }>,
+    result: MutationResult,
+  ): Promise<MutationResult> {
+    const dateFormulaEdits = edits.filter((edit) => isParsedTopLevelDateFormula(edit.input));
+    if (dateFormulaEdits.length === 0) return result;
+
+    const ranges: [number, number, number, number][] = [];
+    for (const edit of dateFormulaEdits) {
+      const [format, value] = await Promise.all([
+        this.getResolvedFormat(sheetId, edit.row, edit.col),
+        this.getCellValue(sheetId, edit.row, edit.col),
+      ]);
+      if (!hasGeneralNumberFormat(format) || typeof value !== 'number') {
+        continue;
+      }
+      ranges.push([edit.row, edit.col, edit.row, edit.col]);
+    }
+
+    if (ranges.length === 0) return result;
+
+    const formatResult = await this.core.mutateCore(
+      this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', {
+        docId: this.core.docId,
+        sheetId,
+        ranges,
+        format: { numberFormat: 'M/d/yyyy' },
+      }),
+      ranges.map(([row, col]) => ({ sheetId, row, col })),
+    );
+    return appendPropertyChanges(result, formatResult);
   }
 
   /** Patch Rust-owned workbook settings through the generated Rust bridge. */

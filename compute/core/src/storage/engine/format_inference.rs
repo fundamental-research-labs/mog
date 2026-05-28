@@ -5,7 +5,7 @@ use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
-use value_types::ComputeError;
+use value_types::{CellValue, ComputeError};
 
 use super::{YrsComputeEngine, mutation, services};
 
@@ -229,6 +229,9 @@ impl YrsComputeEngine {
             };
             match formula_result_format_intent(&formula.template) {
                 FormulaResultFormatIntent::Apply(format) => {
+                    if !self.formula_cell_result_is_numeric(sheet_id, *row, *col) {
+                        continue;
+                    }
                     to_apply.push((*sheet_id, *row, *col, format.to_string()));
                     continue;
                 }
@@ -301,6 +304,14 @@ impl YrsComputeEngine {
             .number_format
             .as_deref()
             .is_some_and(is_non_general_number_format)
+    }
+
+    fn formula_cell_result_is_numeric(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
+        matches!(
+            self.mirror
+                .get_cell_value_at(sheet_id, SheetPos::new(row, col)),
+            Some(CellValue::Number(_))
+        )
     }
 
     fn effective_number_format_for_cell(&self, cell_id: &CellId) -> Option<String> {
@@ -410,7 +421,7 @@ fn formula_result_format_intent(template: &str) -> FormulaResultFormatIntent {
     };
     match root.as_str() {
         "DATE" | "DATEVALUE" | "EDATE" | "EOMONTH" | "NOW" | "TODAY" => {
-            FormulaResultFormatIntent::Apply("m/d/yyyy")
+            FormulaResultFormatIntent::Apply("M/d/yyyy")
         }
         "TIME" | "TIMEVALUE" => FormulaResultFormatIntent::Apply("h:mm"),
         "NETWORKDAYS" | "NETWORKDAYS.INTL" | "DAYS" | "DATEDIF" | "COUNT" | "COUNTA"

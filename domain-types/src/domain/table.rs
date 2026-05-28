@@ -1,4 +1,7 @@
+use ooxml_types::cond_format::IconSetType;
 use serde::{Deserialize, Serialize};
+
+use super::filter::{SortConditionBy, SortMethod};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,9 +78,15 @@ pub struct TableSpec {
 pub struct TableSortState {
     /// Reference range for the sort
     pub ref_range: String,
+    /// Whether the sort operates column-wise rather than row-wise.
+    #[serde(default)]
+    pub column_sort: bool,
     /// Whether sort is case sensitive
     #[serde(default)]
     pub case_sensitive: bool,
+    /// CJK sort method.
+    #[serde(default)]
+    pub sort_method: SortMethod,
     /// Sort conditions
     pub conditions: Vec<TableSortCondition>,
 }
@@ -91,6 +100,21 @@ pub struct TableSortCondition {
     /// Whether this condition sorts descending
     #[serde(default)]
     pub descending: bool,
+    /// What to sort on: value, cell color, font color, or icon.
+    #[serde(default)]
+    pub sort_by: SortConditionBy,
+    /// Custom sort list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_list: Option<String>,
+    /// Differential format ID for color sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dxf_id: Option<u32>,
+    /// Conditional-formatting icon set for icon sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_set: Option<IconSetType>,
+    /// Zero-based icon ID for icon sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_id: Option<u32>,
 }
 
 impl Default for TableSpec {

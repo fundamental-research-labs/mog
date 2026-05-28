@@ -4435,11 +4435,18 @@ export interface TableNameValidationResult {
 export interface TableSortCondition {
   refRange: string;
   descending: boolean;
+  sortBy: SortConditionBy;
+  customList?: string;
+  dxfId?: number;
+  iconSet?: string;
+  iconId?: number;
 }
 
 export interface TableSortState {
   refRange: string;
+  columnSort: boolean;
   caseSensitive: boolean;
+  sortMethod: SortMethod;
   conditions: TableSortCondition[];
 }
 

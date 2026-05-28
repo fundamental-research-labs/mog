@@ -139,9 +139,15 @@ impl CustomFilter {
 #[derive(Debug, Clone)]
 pub enum FilterType {
     /// Discrete values filter
-    Filters(Vec<String>),
+    Filters {
+        values: Vec<String>,
+        blank: bool,
+    },
     /// Custom filters (1 or 2 conditions)
-    CustomFilters(Vec<CustomFilter>),
+    CustomFilters {
+        filters: Vec<CustomFilter>,
+        and: bool,
+    },
     /// Top 10 filter
     Top10 {
         /// Filter top (true) or bottom (false)
@@ -150,18 +156,35 @@ pub enum FilterType {
         percent: bool,
         /// The filter value
         val: f64,
+        /// Application-computed filter threshold
+        filter_val: Option<f64>,
     },
     /// Dynamic filter
     DynamicFilter {
         /// The dynamic filter type
         kind: DynamicFilterType,
+        /// Optional value for range-based dynamic filters
+        val: Option<f64>,
+        /// Optional max value for range-based dynamic filters
+        max_val: Option<f64>,
+        /// Optional ISO datetime value
+        val_iso: Option<String>,
+        /// Optional ISO datetime max value
+        max_val_iso: Option<String>,
     },
     /// Color filter
     ColorFilter {
-        /// Cell color (hex string)
-        cell_color: Option<String>,
+        /// Whether to filter by cell color instead of font color
+        cell_color: bool,
         /// Differential format ID
         dxf_id: Option<u32>,
+    },
+    /// Icon filter
+    IconFilter {
+        /// Icon set identifier
+        icon_set: String,
+        /// Icon ID within the set
+        icon_id: Option<u32>,
     },
 }
 
@@ -170,6 +193,10 @@ pub enum FilterType {
 pub struct FilterColumn {
     /// Column index (0-based from table start)
     pub col_id: u32,
+    /// Hide the filter dropdown in the UI.
+    pub hidden_button: bool,
+    /// Show the filter dropdown in the UI.
+    pub show_button: bool,
     /// The filter type and settings
     pub filter: FilterType,
 }
@@ -179,7 +206,12 @@ impl FilterColumn {
     pub fn with_values(col_id: u32, values: Vec<String>) -> Self {
         Self {
             col_id,
-            filter: FilterType::Filters(values),
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::Filters {
+                values,
+                blank: false,
+            },
         }
     }
 
@@ -187,7 +219,12 @@ impl FilterColumn {
     pub fn with_custom_filters(col_id: u32, filters: Vec<CustomFilter>) -> Self {
         Self {
             col_id,
-            filter: FilterType::CustomFilters(filters),
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::CustomFilters {
+                filters,
+                and: false,
+            },
         }
     }
 
@@ -195,7 +232,14 @@ impl FilterColumn {
     pub fn with_top10(col_id: u32, top: bool, percent: bool, val: f64) -> Self {
         Self {
             col_id,
-            filter: FilterType::Top10 { top, percent, val },
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::Top10 {
+                top,
+                percent,
+                val,
+                filter_val: None,
+            },
         }
     }
 
@@ -203,26 +247,48 @@ impl FilterColumn {
     pub fn with_dynamic_filter(col_id: u32, kind: DynamicFilterType) -> Self {
         Self {
             col_id,
-            filter: FilterType::DynamicFilter { kind },
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::DynamicFilter {
+                kind,
+                val: None,
+                max_val: None,
+                val_iso: None,
+                max_val_iso: None,
+            },
         }
     }
 
     /// Write the filter column to XML
     fn write_xml(&self, w: &mut XmlWriter) {
         w.start_element("filterColumn")
-            .attr_num("colId", self.col_id)
-            .end_attrs();
+            .attr_num("colId", self.col_id);
+        if self.hidden_button {
+            w.attr("hiddenButton", "1");
+        }
+        if !self.show_button {
+            w.attr("showButton", "0");
+        }
+        w.end_attrs();
 
         match &self.filter {
-            FilterType::Filters(values) => {
-                w.start_element("filters").end_attrs();
+            FilterType::Filters { values, blank } => {
+                w.start_element("filters");
+                if *blank {
+                    w.attr("blank", "1");
+                }
+                w.end_attrs();
                 for val in values {
                     w.empty_element("filter", &[("val", val)]);
                 }
                 w.end_element("filters");
             }
-            FilterType::CustomFilters(filters) => {
-                w.start_element("customFilters").end_attrs();
+            FilterType::CustomFilters { filters, and } => {
+                w.start_element("customFilters");
+                if *and {
+                    w.attr("and", "1");
+                }
+                w.end_attrs();
                 for filter in filters {
                     w.empty_element(
                         "customFilter",
@@ -234,25 +300,57 @@ impl FilterColumn {
                 }
                 w.end_element("customFilters");
             }
-            FilterType::Top10 { top, percent, val } => {
+            FilterType::Top10 {
+                top,
+                percent,
+                val,
+                filter_val,
+            } => {
                 w.start_element("top10")
                     .attr_bool("top", *top)
                     .attr_bool("percent", *percent)
-                    .attr_num("val", *val)
-                    .self_close();
+                    .attr_num("val", *val);
+                if let Some(fv) = filter_val {
+                    w.attr_num("filterVal", *fv);
+                }
+                w.self_close();
             }
-            FilterType::DynamicFilter { kind } => {
-                w.start_element("dynamicFilter")
-                    .attr("type", kind.as_str())
-                    .self_close();
+            FilterType::DynamicFilter {
+                kind,
+                val,
+                max_val,
+                val_iso,
+                max_val_iso,
+            } => {
+                w.start_element("dynamicFilter").attr("type", kind.as_str());
+                if let Some(v) = val {
+                    w.attr_num("val", *v);
+                }
+                if let Some(v) = max_val {
+                    w.attr_num("maxVal", *v);
+                }
+                if let Some(v) = val_iso {
+                    w.attr("valIso", v);
+                }
+                if let Some(v) = max_val_iso {
+                    w.attr("maxValIso", v);
+                }
+                w.self_close();
             }
             FilterType::ColorFilter { cell_color, dxf_id } => {
                 w.start_element("colorFilter");
-                if let Some(color) = cell_color {
-                    w.attr("cellColor", color);
-                }
                 if let Some(id) = dxf_id {
                     w.attr_num("dxfId", *id);
+                }
+                if !cell_color {
+                    w.attr("cellColor", "0");
+                }
+                w.self_close();
+            }
+            FilterType::IconFilter { icon_set, icon_id } => {
+                w.start_element("iconFilter").attr("iconSet", icon_set);
+                if let Some(id) = icon_id {
+                    w.attr_num("iconId", *id);
                 }
                 w.self_close();
             }
@@ -326,8 +424,14 @@ pub struct SortCondition {
     pub descending: bool,
     /// Sort by type
     pub sort_by: Option<SortBy>,
+    /// Custom sort list
+    pub custom_list: Option<String>,
+    /// Differential format ID for color sorts
+    pub dxf_id: Option<u32>,
     /// Icon set name for icon sorts
     pub icon_set: Option<IconSetType>,
+    /// Icon ID for icon sorts
+    pub icon_id: Option<u32>,
 }
 
 impl SortCondition {
@@ -337,7 +441,10 @@ impl SortCondition {
             col_ref: col_ref.to_string(),
             descending: false,
             sort_by: None,
+            custom_list: None,
+            dxf_id: None,
             icon_set: None,
+            icon_id: None,
         }
     }
 
@@ -347,7 +454,10 @@ impl SortCondition {
             col_ref: col_ref.to_string(),
             descending: true,
             sort_by: None,
+            custom_list: None,
+            dxf_id: None,
             icon_set: None,
+            icon_id: None,
         }
     }
 
@@ -368,6 +478,15 @@ impl SortCondition {
         if let Some(ref icon_set) = self.icon_set {
             w.attr("iconSet", icon_set.to_ooxml());
         }
+        if let Some(icon_id) = self.icon_id {
+            w.attr_num("iconId", icon_id);
+        }
+        if let Some(ref custom_list) = self.custom_list {
+            w.attr("customList", custom_list);
+        }
+        if let Some(dxf_id) = self.dxf_id {
+            w.attr_num("dxfId", dxf_id);
+        }
 
         w.attr("ref", &self.col_ref).self_close();
     }
@@ -380,6 +499,10 @@ pub struct SortState {
     pub range: String,
     /// Case sensitive sort
     pub case_sensitive: bool,
+    /// Whether to sort by columns.
+    pub column_sort: bool,
+    /// CJK sort method.
+    pub sort_method: domain_types::SortMethod,
     /// Sort conditions
     pub conditions: Vec<SortCondition>,
 }
@@ -390,6 +513,8 @@ impl SortState {
         Self {
             range: range.to_string(),
             case_sensitive: false,
+            column_sort: false,
+            sort_method: domain_types::SortMethod::None,
             conditions: Vec::new(),
         }
     }
@@ -406,6 +531,12 @@ impl SortState {
 
         if self.case_sensitive {
             w.attr_bool("caseSensitive", true);
+        }
+        if self.column_sort {
+            w.attr_bool("columnSort", true);
+        }
+        if self.sort_method != domain_types::SortMethod::None {
+            w.attr("sortMethod", self.sort_method.to_ooxml_token());
         }
 
         w.end_attrs();
@@ -930,10 +1061,11 @@ mod tests {
     fn test_filter_column_with_values() {
         let fc = FilterColumn::with_values(0, vec!["Value1".to_string(), "Value2".to_string()]);
         assert_eq!(fc.col_id, 0);
-        if let FilterType::Filters(values) = fc.filter {
+        if let FilterType::Filters { values, blank } = fc.filter {
             assert_eq!(values.len(), 2);
             assert_eq!(values[0], "Value1");
             assert_eq!(values[1], "Value2");
+            assert!(!blank);
         } else {
             panic!("Expected Filters variant");
         }
@@ -947,10 +1079,11 @@ mod tests {
         ];
         let fc = FilterColumn::with_custom_filters(1, filters);
         assert_eq!(fc.col_id, 1);
-        if let FilterType::CustomFilters(cf) = fc.filter {
+        if let FilterType::CustomFilters { filters: cf, and } = fc.filter {
             assert_eq!(cf.len(), 2);
             assert_eq!(cf[0].operator, FilterOperator::GreaterThan);
             assert_eq!(cf[0].value, "100");
+            assert!(!and);
         } else {
             panic!("Expected CustomFilters variant");
         }
@@ -960,10 +1093,17 @@ mod tests {
     fn test_filter_column_with_top10() {
         let fc = FilterColumn::with_top10(2, true, false, 10.0);
         assert_eq!(fc.col_id, 2);
-        if let FilterType::Top10 { top, percent, val } = fc.filter {
+        if let FilterType::Top10 {
+            top,
+            percent,
+            val,
+            filter_val,
+        } = fc.filter
+        {
             assert!(top);
             assert!(!percent);
             assert!((val - 10.0).abs() < 0.001);
+            assert!(filter_val.is_none());
         } else {
             panic!("Expected Top10 variant");
         }
@@ -973,8 +1113,19 @@ mod tests {
     fn test_filter_column_with_dynamic_filter() {
         let fc = FilterColumn::with_dynamic_filter(3, DynamicFilterType::ThisMonth);
         assert_eq!(fc.col_id, 3);
-        if let FilterType::DynamicFilter { kind } = fc.filter {
+        if let FilterType::DynamicFilter {
+            kind,
+            val,
+            max_val,
+            val_iso,
+            max_val_iso,
+        } = fc.filter
+        {
             assert_eq!(kind, DynamicFilterType::ThisMonth);
+            assert!(val.is_none());
+            assert!(max_val.is_none());
+            assert!(val_iso.is_none());
+            assert!(max_val_iso.is_none());
         } else {
             panic!("Expected DynamicFilter variant");
         }
@@ -1241,22 +1392,114 @@ mod tests {
     }
 
     #[test]
+    fn test_table_filter_columns_preserve_rich_ooxml_attrs() {
+        let mut writer = TableWriter::new(1, "Table1", "A1:F10");
+        writer.add_column("A");
+
+        let mut af = AutoFilterDef::new("A1:F10");
+        af.add_filter_column(FilterColumn {
+            col_id: 0,
+            hidden_button: true,
+            show_button: false,
+            filter: FilterType::Filters {
+                values: vec!["Open".to_string()],
+                blank: true,
+            },
+        });
+        af.add_filter_column(FilterColumn {
+            col_id: 1,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::CustomFilters {
+                filters: vec![CustomFilter::new(FilterOperator::GreaterThan, "5")],
+                and: true,
+            },
+        });
+        af.add_filter_column(FilterColumn {
+            col_id: 2,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::Top10 {
+                top: false,
+                percent: true,
+                val: 10.0,
+                filter_val: Some(42.0),
+            },
+        });
+        af.add_filter_column(FilterColumn {
+            col_id: 3,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::DynamicFilter {
+                kind: DynamicFilterType::ThisMonth,
+                val: Some(1.0),
+                max_val: Some(2.0),
+                val_iso: Some("2026-05-01T00:00:00Z".to_string()),
+                max_val_iso: Some("2026-05-31T00:00:00Z".to_string()),
+            },
+        });
+        af.add_filter_column(FilterColumn {
+            col_id: 4,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::ColorFilter {
+                dxf_id: Some(7),
+                cell_color: false,
+            },
+        });
+        af.add_filter_column(FilterColumn {
+            col_id: 5,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterType::IconFilter {
+                icon_set: "3TrafficLights1".to_string(),
+                icon_id: Some(2),
+            },
+        });
+        writer.set_auto_filter(af);
+
+        let xml_str = String::from_utf8(writer.to_xml()).unwrap();
+
+        assert!(xml_str.contains(r#"<filterColumn colId="0" hiddenButton="1" showButton="0">"#));
+        assert!(xml_str.contains(r#"<filters blank="1">"#));
+        assert!(xml_str.contains(r#"<customFilters and="1">"#));
+        assert!(xml_str.contains(r#"<top10 top="0" percent="1" val="10" filterVal="42"/>"#));
+        assert!(xml_str.contains(r#"<dynamicFilter type="thisMonth" val="1" maxVal="2" valIso="2026-05-01T00:00:00Z" maxValIso="2026-05-31T00:00:00Z"/>"#));
+        assert!(xml_str.contains(r#"<colorFilter dxfId="7" cellColor="0"/>"#));
+        assert!(xml_str.contains(r#"<iconFilter iconSet="3TrafficLights1" iconId="2"/>"#));
+    }
+
+    #[test]
     fn test_table_with_sort_state_xml() {
         let mut writer = TableWriter::new(1, "Table1", "A1:D10");
         writer.add_column("Name").add_column("Value");
 
         let mut ss = SortState::new("A2:D10");
+        ss.column_sort = true;
+        ss.sort_method = domain_types::SortMethod::PinYin;
         ss.add_condition(SortCondition::new("B:B"))
             .add_condition(SortCondition::descending("C:C"));
+        let mut icon_condition = SortCondition::new("D:D");
+        icon_condition.sort_by = Some(SortBy::Icon);
+        icon_condition.icon_set = Some(IconSetType::ThreeTrafficLights1);
+        icon_condition.icon_id = Some(1);
+        icon_condition.custom_list = Some("High,Medium,Low".to_string());
+        icon_condition.dxf_id = Some(4);
+        ss.add_condition(icon_condition);
         writer.set_sort_state(ss);
 
         let xml = writer.to_xml();
         let xml_str = String::from_utf8(xml).unwrap();
 
-        assert!(xml_str.contains("<sortState ref=\"A2:D10\">"));
+        assert!(xml_str.contains("<sortState ref=\"A2:D10\" columnSort=\"1\" sortMethod=\"pinYin\">"));
         assert!(xml_str.contains("<sortCondition ref=\"B:B\"/>"));
         assert!(xml_str.contains("descending=\"1\""));
         assert!(xml_str.contains("ref=\"C:C\""));
+        assert!(xml_str.contains("sortBy=\"icon\""));
+        assert!(xml_str.contains("iconSet=\"3TrafficLights1\""));
+        assert!(xml_str.contains("iconId=\"1\""));
+        assert!(xml_str.contains("customList=\"High,Medium,Low\""));
+        assert!(xml_str.contains("dxfId=\"4\""));
     }
 
     #[test]
@@ -1496,10 +1739,22 @@ pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec)
     // Sort state (table-level)
     if let Some(ref ss) = table.sort_state {
         let mut sort = SortState::new(&ss.ref_range);
+        sort.column_sort = ss.column_sort;
         sort.case_sensitive = ss.case_sensitive;
+        sort.sort_method = ss.sort_method;
         for sc in &ss.conditions {
             let mut cond = SortCondition::new(&sc.ref_range);
             cond.descending = sc.descending;
+            cond.sort_by = Some(match sc.sort_by {
+                domain_types::SortConditionBy::Value => SortBy::Value,
+                domain_types::SortConditionBy::CellColor => SortBy::CellColor,
+                domain_types::SortConditionBy::FontColor => SortBy::FontColor,
+                domain_types::SortConditionBy::Icon => SortBy::Icon,
+            });
+            cond.custom_list = sc.custom_list.clone();
+            cond.dxf_id = sc.dxf_id;
+            cond.icon_set = sc.icon_set;
+            cond.icon_id = sc.icon_id;
             sort.add_condition(cond);
         }
         tw.sort_state = Some(sort);
@@ -1522,34 +1777,54 @@ fn convert_filter_column_spec_to_writer(
     spec: &domain_types::FilterColumnSpec,
 ) -> Option<FilterColumn> {
     let filter = match &spec.filter {
-        domain_types::FilterSpec::Values { values, .. } => FilterType::Filters(values.clone()),
-        domain_types::FilterSpec::Custom { filters, .. } => FilterType::CustomFilters(
-            filters
+        domain_types::FilterSpec::Values { values, blank } => FilterType::Filters {
+            values: values.clone(),
+            blank: *blank,
+        },
+        domain_types::FilterSpec::Custom { filters, and } => FilterType::CustomFilters {
+            filters: filters
                 .iter()
                 .map(|f| CustomFilter::new(FilterOperator::from_ooxml(&f.operator), &f.val))
                 .collect(),
-        ),
+            and: *and,
+        },
         domain_types::FilterSpec::Top10 {
-            top, percent, val, ..
+            top,
+            percent,
+            val,
+            filter_val,
         } => FilterType::Top10 {
             top: *top,
             percent: *percent,
             val: *val,
+            filter_val: *filter_val,
         },
-        domain_types::FilterSpec::Dynamic { kind, .. } => FilterType::DynamicFilter {
+        domain_types::FilterSpec::Dynamic {
+            kind,
+            val,
+            max_val,
+            val_iso,
+            max_val_iso,
+        } => FilterType::DynamicFilter {
             kind: DynamicFilterType::from_ooxml(kind),
+            val: *val,
+            max_val: *max_val,
+            val_iso: val_iso.clone(),
+            max_val_iso: max_val_iso.clone(),
         },
-        domain_types::FilterSpec::Color { dxf_id, .. } => FilterType::ColorFilter {
-            cell_color: None,
+        domain_types::FilterSpec::Color { dxf_id, cell_color } => FilterType::ColorFilter {
+            cell_color: *cell_color,
             dxf_id: *dxf_id,
         },
-        domain_types::FilterSpec::Icon { .. } => {
-            // Icon filters not supported by writer yet
-            return None;
-        }
+        domain_types::FilterSpec::Icon { icon_set, icon_id } => FilterType::IconFilter {
+            icon_set: icon_set.clone(),
+            icon_id: *icon_id,
+        },
     };
     Some(FilterColumn {
         col_id: spec.col_id,
+        hidden_button: spec.hidden_button,
+        show_button: spec.show_button,
         filter,
     })
 }

@@ -628,11 +628,18 @@ export interface ParsedTableColumn {
 export interface ParsedTableSortCondition {
   refRange: string;
   descending?: boolean;
+  sortBy?: "value" | "cellColor" | "fontColor" | "icon";
+  customList?: string;
+  dxfId?: number;
+  iconSet?: string;
+  iconId?: number;
 }
 
 export interface ParsedTableSortState {
   refRange: string;
+  columnSort?: boolean;
   caseSensitive?: boolean;
+  sortMethod?: "none" | "stroke" | "pinYin";
   conditions: ParsedTableSortCondition[];
 }
 

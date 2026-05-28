@@ -400,15 +400,31 @@ mod tests {
 
     #[test]
     fn test_parse_sort_state() {
-        let xml = br#"<sortState ref="A2:E100" caseSensitive="0">
-            <sortCondition ref="B2:B100" descending="1"/>
+        let xml = br#"<sortState ref="A2:E100" columnSort="1" caseSensitive="0" sortMethod="pinYin">
+            <sortCondition ref="B2:B100" descending="1" sortBy="icon" customList="High,Medium,Low" dxfId="7" iconSet="3TrafficLights1" iconId="2"/>
         </sortState>"#;
         let ss = SortState::parse(xml).unwrap();
         assert_eq!(ss.ref_range, "A2:E100");
+        assert!(ss.column_sort);
         assert!(!ss.case_sensitive);
+        assert_eq!(ss.sort_method, domain_types::SortMethod::PinYin);
         assert_eq!(ss.sort_conditions.len(), 1);
         assert_eq!(ss.sort_conditions[0].ref_range, "B2:B100");
         assert!(ss.sort_conditions[0].descending);
+        assert_eq!(
+            ss.sort_conditions[0].sort_by,
+            ooxml_types::tables::SortBy::Icon
+        );
+        assert_eq!(
+            ss.sort_conditions[0].custom_list.as_deref(),
+            Some("High,Medium,Low")
+        );
+        assert_eq!(ss.sort_conditions[0].dxf_id, Some(7));
+        assert_eq!(
+            ss.sort_conditions[0].icon_set,
+            Some(IconSetType::ThreeTrafficLights1)
+        );
+        assert_eq!(ss.sort_conditions[0].icon_id, Some(2));
     }
 
     // -------------------------------------------------------------------------

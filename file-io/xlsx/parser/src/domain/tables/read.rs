@@ -327,13 +327,29 @@ fn convert_table_sort_state(table: &tables::Table) -> Option<ParsedTableSortStat
 
     Some(ParsedTableSortState {
         ref_range: ss.ref_range.clone(),
+        column_sort: ss.column_sort,
         case_sensitive: ss.case_sensitive,
+        sort_method: ss.sort_method,
         conditions: ss
             .sort_conditions
             .iter()
             .map(|sc| ParsedTableSortCondition {
                 ref_range: sc.ref_range.clone(),
                 descending: sc.descending,
+                sort_by: match sc.sort_by {
+                    ooxml_types::tables::SortBy::Value => domain_types::SortConditionBy::Value,
+                    ooxml_types::tables::SortBy::CellColor => {
+                        domain_types::SortConditionBy::CellColor
+                    }
+                    ooxml_types::tables::SortBy::FontColor => {
+                        domain_types::SortConditionBy::FontColor
+                    }
+                    ooxml_types::tables::SortBy::Icon => domain_types::SortConditionBy::Icon,
+                },
+                custom_list: sc.custom_list.clone(),
+                dxf_id: sc.dxf_id,
+                icon_set: sc.icon_set,
+                icon_id: sc.icon_id,
             })
             .collect(),
     })

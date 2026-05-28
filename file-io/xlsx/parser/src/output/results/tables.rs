@@ -172,9 +172,15 @@ pub struct ParsedTable {
 pub struct ParsedTableSortState {
     /// Reference range for the sort
     pub ref_range: String,
+    /// Whether the sort operates column-wise rather than row-wise.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub column_sort: bool,
     /// Whether sort is case sensitive
     #[serde(default, skip_serializing_if = "is_false")]
     pub case_sensitive: bool,
+    /// CJK sort method.
+    #[serde(default)]
+    pub sort_method: domain_types::SortMethod,
     /// Sort conditions
     pub conditions: Vec<ParsedTableSortCondition>,
 }
@@ -188,6 +194,21 @@ pub struct ParsedTableSortCondition {
     /// Whether this condition sorts descending
     #[serde(default, skip_serializing_if = "is_false")]
     pub descending: bool,
+    /// What to sort on: value, cell color, font color, or icon.
+    #[serde(default)]
+    pub sort_by: domain_types::SortConditionBy,
+    /// Custom sort list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_list: Option<String>,
+    /// Differential format ID for color sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dxf_id: Option<u32>,
+    /// Conditional-formatting icon set for icon sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_set: Option<ooxml_types::cond_format::IconSetType>,
+    /// Zero-based icon ID for icon sorts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_id: Option<u32>,
 }
 
 // =============================================================================

@@ -68,13 +68,20 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
             sort_state: t.sort_state.as_ref().map(|ss| {
                 domain_types::domain::table::TableSortState {
                     ref_range: ss.ref_range.clone(),
+                    column_sort: ss.column_sort,
                     case_sensitive: ss.case_sensitive,
+                    sort_method: ss.sort_method,
                     conditions: ss
                         .conditions
                         .iter()
                         .map(|sc| domain_types::domain::table::TableSortCondition {
                             ref_range: sc.ref_range.clone(),
                             descending: sc.descending,
+                            sort_by: sc.sort_by,
+                            custom_list: sc.custom_list.clone(),
+                            dxf_id: sc.dxf_id,
+                            icon_set: sc.icon_set,
+                            icon_id: sc.icon_id,
                         })
                         .collect(),
                 }

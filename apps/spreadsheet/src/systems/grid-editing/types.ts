@@ -104,6 +104,14 @@ export interface GridEditingUIStore {
   /** Set the currently selected table */
   setSelectedTable: (tableId: string | null) => void;
 
+  // --- Pivot selection coordination ---
+  /** Pivot field-panel state */
+  pivot: { selectedPivotId: string | null; editingPivotId: string | null };
+  /** Set the currently selected pivot */
+  selectPivot: (pivotId: string | null) => void;
+  /** Close pivot field editing */
+  stopEditingPivot: () => void;
+
   // --- Validation circles coordination ---
   /** Remove a validation circle for a cell */
   removeValidationCircle: (sheetId: string, row: number, col: number) => void;

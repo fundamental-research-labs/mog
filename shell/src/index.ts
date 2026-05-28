@@ -276,3 +276,15 @@ export {
   readHasAnyAppendActive,
   type LifecycleDocSnapshot,
 } from './services/lifecycle-state';
+
+export {
+  attachImportedPivotMetadata,
+  extractImportedPivotMetadata,
+  getImportedPivotMetadata,
+} from './services/document/imported-pivot-metadata';
+export type {
+  ImportedPivotFieldMetadata,
+  ImportedPivotMetadataSet,
+  ImportedPivotRange,
+  ImportedPivotTableMetadata,
+} from './services/document/imported-pivot-metadata';

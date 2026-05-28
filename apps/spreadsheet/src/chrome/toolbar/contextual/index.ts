@@ -15,5 +15,6 @@ export type {
   ContextualTabContext,
   ContextualTabProps,
   DiagramSelectionContext,
+  PivotSelectionContext,
 } from './contextual-tab-registry';
 export { useContextualTabs } from './useContextualTabs';

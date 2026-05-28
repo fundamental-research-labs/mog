@@ -62,6 +62,11 @@ export interface DiagramSelectionContext {
   selectedDiagramId: string | null;
 }
 
+export interface PivotSelectionContext {
+  /** Currently selected PivotTable ID (null if none) */
+  selectedPivotId: string | null;
+}
+
 /**
  * Context object passed to showWhen() predicates
  * Contains all selection and object state needed to determine tab visibility
@@ -83,6 +88,8 @@ export interface ContextualTabContext {
   sparklineSelection: SparklineSelectionContext;
   /** Diagram selection state (from UIStore Diagram slice) */
   diagramSelection: DiagramSelectionContext;
+  /** PivotTable selection state (from UIStore Pivot slice) */
+  pivotSelection: PivotSelectionContext;
 }
 
 /**
@@ -140,6 +147,8 @@ export interface ContextualTabConfig {
  * - sparkline-tools: JK (multi-key sequence J then K)
  * - diagram-design: JA (multi-key sequence J then A)
  * - diagram-format: JO (multi-key sequence J then O)
+ * - pivot-analyze: JY (multi-key sequence J then Y)
+ * - pivot-design: JV (multi-key sequence J then V)
  */
 export const CONTEXTUAL_TAB_REGISTRY: ContextualTabConfig[] = [
   // Table Design tab - shows when selection is inside a table
@@ -232,9 +241,26 @@ export const CONTEXTUAL_TAB_REGISTRY: ContextualTabConfig[] = [
     component: (() => null) as ComponentType<ContextualTabProps>,
   },
 
+  {
+    id: 'pivot-analyze',
+    label: 'PivotTable Analyze',
+    groupLabel: 'PivotTable Tools',
+    accentColor: 'var(--color-pivot-accent, #2e7d32)',
+    showWhen: (context) => context.pivotSelection.selectedPivotId !== null,
+    component: (() => null) as ComponentType<ContextualTabProps>,
+  },
+
+  {
+    id: 'pivot-design',
+    label: 'Design',
+    groupLabel: 'PivotTable Tools',
+    accentColor: 'var(--color-pivot-accent, #2e7d32)',
+    showWhen: (context) => context.pivotSelection.selectedPivotId !== null,
+    component: (() => null) as ComponentType<ContextualTabProps>,
+  },
+
   // Future contextual tabs (when implemented):
   // - Draw Tools (when drawing mode is active)
-  // - PivotTable Tools (when selection is in a PivotTable)
 ];
 
 // =============================================================================

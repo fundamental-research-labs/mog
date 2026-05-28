@@ -56,7 +56,9 @@ export type RibbonTabId =
   | 'slicer-tools'
   | 'sparkline-tools'
   | 'diagram-design'
-  | 'diagram-format';
+  | 'diagram-format'
+  | 'pivot-analyze'
+  | 'pivot-design';
 
 /** Payload for SWITCH_RIBBON_TAB action — typed argument carried via KeyboardShortcut.actionArg. */
 export interface SwitchRibbonTabPayload {

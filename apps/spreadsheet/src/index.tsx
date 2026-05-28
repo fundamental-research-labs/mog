@@ -39,6 +39,7 @@ import {
   useDocumentManagerOptional,
   useShellStore,
   useShellStoreApi,
+  getImportedPivotMetadata,
 } from '@mog/shell';
 import type { AppAppearanceMode, AppProps } from '@mog/shell/apps';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
@@ -87,6 +88,7 @@ import { DialogLayer, OverlayLayer, PanelLayer } from './chrome/layers';
 // Read-only mode safety net for dispatcher
 import { setDispatcherReadOnly } from './actions/dispatcher';
 import { ensureMetricCompatibleFontsLoaded } from './infra/styles/fonts';
+import { installImportedPivotRuntime } from './pivot/imported-pivot-runtime';
 
 type DocumentRuntime = Pick<DocumentContextValue, 'workbook' | 'uiStore' | 'eventBus'>;
 type SpreadsheetAppAppearanceMode = AppAppearanceMode & SpreadsheetDisplayMode;
@@ -114,6 +116,7 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
         getActiveObjectType: () => null,
       },
     });
+    installImportedPivotRuntime(workbook as WorkbookInternal, getImportedPivotMetadata(handle));
     try {
       performance.mark('spreadsheetApp:createWorkbook:end');
       performance.measure(

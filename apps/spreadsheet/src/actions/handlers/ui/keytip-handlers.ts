@@ -53,6 +53,8 @@ const OPTIMISTIC_CONTEXTUAL_RIBBON_TABS = new Set<RibbonTabId>([
   'sparkline-tools',
   'diagram-design',
   'diagram-format',
+  'pivot-analyze',
+  'pivot-design',
 ]);
 
 export const SWITCH_RIBBON_TAB: ActionHandler = (deps, payload): ActionResult => {

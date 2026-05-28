@@ -42,7 +42,7 @@ function ribbonTabShortcut(args: {
   bindings: ReturnType<typeof altBinding>;
   description: string;
   tabId: RibbonTabId;
-  sequence?: readonly ('KeyT' | 'KeyC' | 'KeyF')[];
+  sequence?: readonly ('KeyT' | 'KeyC' | 'KeyF' | 'KeyY' | 'KeyV')[];
 }): KeyboardShortcut<'SWITCH_RIBBON_TAB'> {
   return {
     id: args.id,
@@ -152,5 +152,19 @@ export const RIBBON_SHORTCUTS: KeyboardShortcut[] = [
     description: 'Switch to Chart Format tab (contextual)',
     tabId: 'chart-format',
     sequence: ['KeyF'],
+  }),
+  ribbonTabShortcut({
+    id: 'ribbon.switch-pivot-analyze',
+    bindings: altBinding('KeyJ'),
+    description: 'Switch to PivotTable Analyze tab (contextual)',
+    tabId: 'pivot-analyze',
+    sequence: ['KeyY'],
+  }),
+  ribbonTabShortcut({
+    id: 'ribbon.switch-pivot-design',
+    bindings: altBinding('KeyJ'),
+    description: 'Switch to PivotTable Design tab (contextual)',
+    tabId: 'pivot-design',
+    sequence: ['KeyV'],
   }),
 ];

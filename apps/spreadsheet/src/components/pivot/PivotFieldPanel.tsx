@@ -45,6 +45,8 @@ export interface PivotFieldPanelProps {
   onDelete?: () => void;
   /** Close panel */
   onClose: () => void;
+  /** Render imported cached pivots as inspect-only. */
+  readOnly?: boolean;
   /** Custom style */
   style?: CSSProperties;
 }
@@ -62,6 +64,7 @@ export function PivotFieldPanel({
   onRefresh,
   onDelete,
   onClose,
+  readOnly = false,
   style,
 }: PivotFieldPanelProps) {
   const { config, result, error } = pivot;
@@ -152,6 +155,7 @@ export function PivotFieldPanel({
           onRemoveField={handleRemoveField}
           onMoveField={handleMoveField}
           onAggregateChange={handleAggregateChange}
+          disabled={readOnly}
         />
 
         {/* Stats section */}
@@ -171,7 +175,7 @@ export function PivotFieldPanel({
 
       {/* Footer with actions */}
       <div className="flex gap-3 px-4 py-4 border-t border-ss-border-light bg-ss-surface-secondary">
-        {onRefresh && (
+        {!readOnly && onRefresh && (
           <Button
             variant="secondary"
             className="flex-1"
@@ -181,7 +185,7 @@ export function PivotFieldPanel({
             Refresh
           </Button>
         )}
-        {onDelete && (
+        {!readOnly && onDelete && (
           <Button variant="danger" className="flex-1" onClick={onDelete} title="Delete pivot table">
             Delete
           </Button>

@@ -34,6 +34,7 @@ import { useContextualTabs } from '../contextual';
 import { ChartFormatRibbon } from '../contextual/ChartFormatRibbon';
 import { ChartToolsRibbon } from '../contextual/ChartToolsRibbon';
 import { PictureToolsRibbon } from '../contextual/PictureToolsRibbon';
+import { PivotAnalyzeRibbon, PivotDesignRibbon } from '../contextual/PivotToolsRibbon';
 import { SlicerToolsRibbon } from '../contextual/SlicerToolsRibbon';
 import { SparklineToolsRibbon } from '../contextual/SparklineToolsRibbon';
 import { KeyTipOverlay, KeyTipProvider } from '../keytips';
@@ -68,7 +69,9 @@ type TabId =
   | 'slicer-tools'
   | 'sparkline-tools'
   | 'diagram-design'
-  | 'diagram-format';
+  | 'diagram-format'
+  | 'pivot-analyze'
+  | 'pivot-design';
 
 // NOTE: TabbedToolbarProps now uses Partial<ToolbarProps> because HomeRibbon, InsertRibbon, and PageLayoutRibbon are self-sufficient.
 // They get their state from hooks and context, not from props.
@@ -560,6 +563,10 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
               {activeTab === 'diagram-design' && <DiagramDesignTab />}
 
               {activeTab === 'diagram-format' && <DiagramFormatTab />}
+
+              {activeTab === 'pivot-analyze' && <PivotAnalyzeRibbon />}
+
+              {activeTab === 'pivot-design' && <PivotDesignRibbon />}
             </div>
           </RibbonCollapseProvider>
         )}

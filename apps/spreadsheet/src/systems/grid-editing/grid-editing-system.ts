@@ -78,6 +78,7 @@ import { setupEditorCommitCoordination } from './coordination/editor-commit-coor
 import { setupClipboardPasteIntegration } from './coordination/paste-integration';
 import { setupValidationCirclesCoordination } from './features/validation';
 import { setupTableSelectionCoordination } from './features/table';
+import { setupPivotSelectionCoordination } from './features/pivot';
 import {
   setupCommentHoverCoordination,
   setupCommentSelectionCoordination,
@@ -681,7 +682,10 @@ export class GridEditingSystem implements IGridEditingSystem {
     // selection movement and table topology changes under the active cell.
     this.setupTableSelectionCoordination();
 
-    // 3e. Wire comment popover coordination. Hover opens from the rendered
+    // 3e. Wire PivotTable contextual selection coordination.
+    this.setupPivotSelectionCoordination();
+
+    // 3f. Wire comment popover coordination. Hover opens from the rendered
     // indicator, and selection movement closes viewing popovers.
     this.setupCommentCoordination();
 
@@ -1600,6 +1604,26 @@ export class GridEditingSystem implements IGridEditingSystem {
 
     const cleanups = new CleanupManager();
     setupTableSelectionCoordination(
+      {
+        actors: { selection: this.selectionActor as any },
+        uiStoreApi,
+        getActiveSheetId: () =>
+          (this.config.getActiveSheetId ?? (() => this.config.initialSheetId))(),
+        workbook,
+      },
+      cleanups,
+    );
+
+    this.cleanupFns.push(() => cleanups.dispose());
+  }
+
+  private setupPivotSelectionCoordination(): void {
+    const workbook = this.config.workbook;
+    const uiStoreApi = this.config.uiStoreApi;
+    if (!workbook || !uiStoreApi) return;
+
+    const cleanups = new CleanupManager();
+    setupPivotSelectionCoordination(
       {
         actors: { selection: this.selectionActor as any },
         uiStoreApi,

@@ -120,6 +120,7 @@ export function usePivotEditorActions(
     () => pivotTables.find((p) => p.config.id === editingPivotId) ?? null,
     [pivotTables, editingPivotId],
   );
+  const editingPivotReadOnly = editingPivot?.config.id.startsWith('imported:') ?? false;
 
   // ==========================================================================
   // Field Panel Handlers
@@ -134,11 +135,11 @@ export function usePivotEditorActions(
       area: PivotFieldArea,
       options?: { aggregateFunction?: AggregateFunction },
     ) => {
-      if (editingPivotId) {
+      if (editingPivotId && !editingPivotReadOnly) {
         addFieldToArea(editingPivotId, fieldId, area, options);
       }
     },
-    [editingPivotId, addFieldToArea],
+    [editingPivotId, editingPivotReadOnly, addFieldToArea],
   );
 
   /**
@@ -146,11 +147,11 @@ export function usePivotEditorActions(
    */
   const handlePivotRemoveField = useCallback(
     (fieldId: string, area: PivotFieldArea) => {
-      if (editingPivotId) {
+      if (editingPivotId && !editingPivotReadOnly) {
         removeFieldFromArea(editingPivotId, fieldId, area);
       }
     },
-    [editingPivotId, removeFieldFromArea],
+    [editingPivotId, editingPivotReadOnly, removeFieldFromArea],
   );
 
   /**
@@ -158,11 +159,11 @@ export function usePivotEditorActions(
    */
   const handlePivotMoveField = useCallback(
     (fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, position: number) => {
-      if (editingPivotId) {
+      if (editingPivotId && !editingPivotReadOnly) {
         moveField(editingPivotId, fieldId, fromArea, toArea, position);
       }
     },
-    [editingPivotId, moveField],
+    [editingPivotId, editingPivotReadOnly, moveField],
   );
 
   /**
@@ -170,31 +171,31 @@ export function usePivotEditorActions(
    */
   const handlePivotAggregateChange = useCallback(
     (fieldId: string, aggregate: AggregateFunction) => {
-      if (editingPivotId) {
+      if (editingPivotId && !editingPivotReadOnly) {
         setAggregateFunction(editingPivotId, fieldId, aggregate);
       }
     },
-    [editingPivotId, setAggregateFunction],
+    [editingPivotId, editingPivotReadOnly, setAggregateFunction],
   );
 
   /**
    * Refresh the pivot table data from source.
    */
   const handlePivotRefresh = useCallback(() => {
-    if (editingPivotId) {
+    if (editingPivotId && !editingPivotReadOnly) {
       refreshPivotTable(editingPivotId);
     }
-  }, [editingPivotId, refreshPivotTable]);
+  }, [editingPivotId, editingPivotReadOnly, refreshPivotTable]);
 
   /**
    * Delete the currently editing pivot table and close the editor.
    */
   const handlePivotDelete = useCallback(() => {
-    if (editingPivotId) {
+    if (editingPivotId && !editingPivotReadOnly) {
       deletePivotTable(editingPivotId);
       stopEditingPivot();
     }
-  }, [editingPivotId, deletePivotTable, stopEditingPivot]);
+  }, [editingPivotId, editingPivotReadOnly, deletePivotTable, stopEditingPivot]);
 
   // ==========================================================================
   // Return

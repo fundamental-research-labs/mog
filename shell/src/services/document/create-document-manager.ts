@@ -37,6 +37,10 @@ import type {
   ShellDocumentMode,
   Unsubscribe,
 } from './types';
+import {
+  attachImportedPivotMetadata,
+  extractImportedPivotMetadata,
+} from './imported-pivot-metadata';
 
 /**
  * Create a DocumentManager instance.
@@ -349,6 +353,20 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
           throw new Error(
             `Document identity mismatch: fileId=${fileId}, documentId=${handle.documentId}`,
           );
+        }
+        try {
+          attachImportedPivotMetadata(handle, await extractImportedPivotMetadata(source.data));
+        } catch (metadataError) {
+          console.warn('[DocumentManager] failed to extract imported PivotTable metadata', {
+            fileId,
+            error: metadataError,
+          });
+          attachImportedPivotMetadata(handle, {
+            pivots: [],
+            diagnostics: [
+              metadataError instanceof Error ? metadataError.message : String(metadataError),
+            ],
+          });
         }
         return { handle, hostAdapter: hostResult };
       } catch (error) {

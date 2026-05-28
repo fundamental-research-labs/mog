@@ -34,6 +34,7 @@ import type {
   SlicerSelectionContext,
   DiagramSelectionContext,
   SparklineSelectionContext,
+  PivotSelectionContext,
 } from './contextual-tab-registry';
 import { getVisibleContextualTabs } from './contextual-tab-registry';
 
@@ -77,6 +78,7 @@ export function useContextualTabs(): ContextualTabConfig[] {
   // Diagram selection state from UIStore
   // Read selectedDiagramId from the Diagram UI slice
   const selectedDiagramId = useStore(uiStore, (s) => s.selectedDiagramId);
+  const selectedPivotId = useStore(uiStore, (s) => s.pivot.selectedPivotId);
 
   // Determine object type for selected objects
   const firstSelectedId = objectInteraction.selectedIds[0] ?? '';
@@ -126,6 +128,13 @@ export function useContextualTabs(): ContextualTabConfig[] {
     [selectedDiagramId],
   );
 
+  const pivotSelectionContext: PivotSelectionContext = useMemo(
+    () => ({
+      selectedPivotId,
+    }),
+    [selectedPivotId],
+  );
+
   // Build context object for tab visibility checks
   const context: ContextualTabContext = useMemo(
     () => ({
@@ -135,6 +144,7 @@ export function useContextualTabs(): ContextualTabConfig[] {
       slicerSelection: slicerSelectionContext,
       sparklineSelection: sparklineSelectionContext,
       diagramSelection: diagramSelectionContext,
+      pivotSelection: pivotSelectionContext,
     }),
     [
       tableSelection,
@@ -143,6 +153,7 @@ export function useContextualTabs(): ContextualTabConfig[] {
       slicerSelectionContext,
       sparklineSelectionContext,
       diagramSelectionContext,
+      pivotSelectionContext,
     ],
   );
 

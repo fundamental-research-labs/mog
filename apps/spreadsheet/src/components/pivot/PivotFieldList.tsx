@@ -69,9 +69,11 @@ function DataTypeIcon({ dataType }: { dataType: string }) {
 function AggregateSelector({
   value,
   onChange,
+  disabled,
 }: {
   value: AggregateFunction;
   onChange: (value: AggregateFunction) => void;
+  disabled?: boolean;
 }) {
   const options: { value: AggregateFunction; label: string }[] = [
     { value: 'sum', label: 'Sum' },
@@ -91,6 +93,7 @@ function AggregateSelector({
       value={value}
       onChange={(e) => onChange(e.target.value as AggregateFunction)}
       onClick={(e) => e.stopPropagation()}
+      disabled={disabled}
       data-pivot-target="aggregate-selector"
     >
       {options.map((opt) => (
@@ -257,10 +260,11 @@ export function PivotFieldList({
           <AggregateSelector
             value={placement.aggregateFunction}
             onChange={(agg) => onAggregateChange(placementId, agg)}
+            disabled={disabled}
           />
         )}
 
-        {area !== 'available' && (
+        {area !== 'available' && !disabled && (
           <button
             type="button"
             className="flex items-center justify-center w-5 h-5 p-0 border-none rounded-full bg-transparent cursor-pointer text-ss-text-secondary text-caption leading-none hover:bg-ss-surface-active"

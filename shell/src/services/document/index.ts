@@ -23,6 +23,17 @@ export type {
   ShellDocumentMode,
   Unsubscribe,
 } from './types';
+export {
+  attachImportedPivotMetadata,
+  extractImportedPivotMetadata,
+  getImportedPivotMetadata,
+} from './imported-pivot-metadata';
+export type {
+  ImportedPivotFieldMetadata,
+  ImportedPivotMetadataSet,
+  ImportedPivotRange,
+  ImportedPivotTableMetadata,
+} from './imported-pivot-metadata';
 
 // Interface
 export type { DocumentManager } from './document-manager';

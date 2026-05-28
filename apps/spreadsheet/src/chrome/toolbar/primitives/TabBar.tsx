@@ -67,6 +67,8 @@ export const TAB_KEYTIP_MAP: Record<string, string> = {
   'table-design': 'JT', // Multi-key sequence (J followed by T)
   'chart-design': 'JC', // Multi-key sequence (J followed by C)
   'chart-format': 'JF', // Multi-key sequence (J followed by F)
+  'pivot-analyze': 'JY', // Multi-key sequence (J followed by Y)
+  'pivot-design': 'JV', // Multi-key sequence (J followed by V)
 };
 
 // =============================================================================

@@ -58,10 +58,10 @@ pub use compute_pivot::types::{
 };
 pub use domain_types::domain::pivot::PivotTableConfig;
 
-// Cell format from properties (used in formatting.rs bridge methods)
+// Cell format from properties (used in formatting bridge methods)
 // CellFormat and FontSize come via `crate::engine_types::*` (which re-exports from domain_types)
 
-// Wire type for schema map entries (used in formatting.rs bridge methods).
+// Wire type for schema map entries (used in formatting bridge methods).
 // SchemaKey contains SheetId (non-string), so we accept String sheet_id over the bridge
 // and convert inside the method body.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

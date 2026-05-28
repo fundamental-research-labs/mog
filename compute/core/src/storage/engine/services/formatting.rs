@@ -2,7 +2,7 @@
 //!
 //! Each function takes explicit references to the engine sub-structs it needs
 //! (e.g. `&EngineStores`, `&mut EngineStores`) instead of `&self`.  The original
-//! bridge methods in `formatting.rs` delegate to these with one-line calls.
+//! bridge methods in `engine::formatting` delegate to these with one-line calls.
 
 use std::sync::Arc;
 

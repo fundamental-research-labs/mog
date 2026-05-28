@@ -307,6 +307,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn splits_sections_on_unquoted_semicolons() {
+        let sections = split_sections("pos;neg;zero;text");
+        assert_eq!(sections.len(), 4);
+        assert_eq!(sections[0], "pos");
+        assert_eq!(sections[1], "neg");
+        assert_eq!(sections[2], "zero");
+        assert_eq!(sections[3], "text");
+    }
+
+    #[test]
+    fn keeps_quoted_semicolons_inside_section() {
+        let sections = split_sections("0\";\"0");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0], "0\";\"0");
+    }
+
+    #[test]
+    fn marks_single_at_section_as_text_section() {
+        let code = parse_format_code("@");
+        assert_eq!(code.sections.len(), 1);
+        assert!(code.sections[0].is_text_section);
+    }
+
+    #[test]
     fn parses_fixed_fraction_denominator_digits() {
         let section = parse_section("# ??/100");
         assert!(section

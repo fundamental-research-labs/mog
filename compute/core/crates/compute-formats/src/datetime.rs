@@ -200,3 +200,26 @@ pub(crate) fn format_datetime(
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn date_to_serial(year: i32, month: u32, day: u32) -> f64 {
+        let date = chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap();
+        value_types::date_serial::date_to_serial(&date)
+    }
+
+    #[test]
+    fn serial_to_datetime_parts_roundtrips_normal_dates() {
+        let serial = date_to_serial(2024, 6, 15);
+        let (year, month, day, _, _, _) = serial_to_datetime_parts(serial);
+        assert_eq!((year, month, day), (2024, 6, 15));
+    }
+
+    #[test]
+    fn serial_zero_uses_excel_january_zero() {
+        let (year, month, day, _, _, _) = serial_to_datetime_parts(0.0);
+        assert_eq!((year, month, day), (1900, 1, 0));
+    }
+}

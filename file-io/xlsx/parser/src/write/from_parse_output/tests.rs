@@ -36,6 +36,89 @@ fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     }
 }
 
+fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32) -> DomainCellData {
+    DomainCellData {
+        row,
+        col,
+        value: DomainValue::Text(Arc::from(value)),
+        original_sst_index: Some(index),
+        original_value: Some(index.to_string()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn shared_string_rich_text_hint_is_preserved_from_parse_output() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![make_text_cell_with_original_sst(0, 0, "Rich", 0)],
+            ..Default::default()
+        }],
+        shared_string_hints: vec![domain_types::SharedStringHint {
+            index: 0,
+            text: "Rich".to_string(),
+            rich_text: Some(vec![domain_types::RichTextRun {
+                text: "Rich".to_string(),
+                font_name: Some("Calibri".to_string()),
+                font_size: Some(11.0),
+                bold: true,
+                ..Default::default()
+            }]),
+            phonetic_xml: None,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+
+    assert!(shared_strings.contains("<rPr><b/>"));
+    assert!(shared_strings.contains("<t>Rich</t>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn shared_string_phonetic_hint_does_not_capture_plain_cells_with_same_text() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![
+                make_text_cell_with_original_sst(0, 0, "Kana", 0),
+                make_cell(1, 0, DomainValue::Text(Arc::from("Kana"))),
+            ],
+            ..Default::default()
+        }],
+        shared_string_hints: vec![domain_types::SharedStringHint {
+            index: 0,
+            text: "Kana".to_string(),
+            rich_text: None,
+            phonetic_xml: Some(
+                br#"<rPh sb="0" eb="4"><t>kana</t></rPh><phoneticPr fontId="1" type="fullwidthKatakana"/>"#
+                    .to_vec(),
+            ),
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert_eq!(shared_strings.matches("<si>").count(), 2);
+    assert!(shared_strings.contains("count=\"2\""));
+    assert!(shared_strings.contains("uniqueCount=\"2\""));
+    assert_eq!(shared_strings.matches("<rPh").count(), 1);
+    assert!(sheet_xml.contains(r#"<c r="A1" t="s"><v>0</v></c>"#));
+    assert!(sheet_xml.contains(r#"<c r="A2" t="s"><v>1</v></c>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn make_formula_cell(row: u32, col: u32, formula: &str, cached: DomainValue) -> DomainCellData {
     DomainCellData {
         row,

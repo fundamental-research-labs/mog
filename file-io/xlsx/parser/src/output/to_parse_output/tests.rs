@@ -876,7 +876,6 @@ fn threading_result(
         extensions: None,
         raw_metadata_xml: None,
         raw_doc_metadata_label_info: None,
-        raw_shared_strings_xml: None,
         external_links: Vec::new(),
         custom_xml_parts: Vec::new(),
         raw_persons_xml,

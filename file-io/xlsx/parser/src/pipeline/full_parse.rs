@@ -182,12 +182,6 @@ fn parse_xlsx_full_native_impl(
         Err(ZipError::FileNotFound(_)) => Vec::new(),
         Err(e) => return Err(format!("Failed to read xl/sharedStrings.xml: {}", e)),
     };
-    // Store raw bytes for verbatim round-trip passthrough (avoids SST reordering)
-    let raw_shared_strings_xml: Option<Vec<u8>> = if shared_strings_xml.is_empty() {
-        None
-    } else {
-        Some(shared_strings_xml.clone())
-    };
     let t_ss1 = tick(&timings);
     let ss_xml_len = shared_strings_xml.len();
     let mut shared_strings_parser = SharedStrings::parse(shared_strings_xml);
@@ -929,7 +923,6 @@ fn parse_xlsx_full_native_impl(
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),
         raw_metadata_xml,
         raw_doc_metadata_label_info,
-        raw_shared_strings_xml,
         external_links,
         custom_xml_parts,
         raw_persons_xml,

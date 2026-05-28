@@ -13,6 +13,7 @@ use domain_types::{
     domain::workbook::{WorkbookView, WorkbookViewVisibility},
 };
 use formula_types::CellRef;
+use std::sync::Arc;
 use value_types::{CellValue, FiniteF64};
 
 fn worksheet_sort_state() -> SortState {
@@ -122,6 +123,42 @@ fn engine_from_parse_output_normal_with_roundtrip(
         workbook_snap,
         round_trip_context,
     )
+}
+
+#[test]
+fn shared_string_hints_survive_yrs_hydration_export() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Text(Arc::from("Rich")),
+                original_sst_index: Some(0),
+                original_value: Some("0".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        shared_string_hints: vec![domain_types::SharedStringHint {
+            index: 0,
+            text: "Rich".to_string(),
+            rich_text: Some(vec![domain_types::RichTextRun {
+                text: "Rich".to_string(),
+                bold: true,
+                ..Default::default()
+            }]),
+            phonetic_xml: None,
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+
+    assert_eq!(exported.shared_string_hints, input.shared_string_hints);
 }
 
 #[test]
@@ -914,11 +951,7 @@ fn stale_roundtrip_named_range_lists_do_not_resurrect_deleted_names() {
         named_ranges: vec![stale_name.clone()],
         ..Default::default()
     };
-    let round_trip_context = domain_types::RoundTripContext {
-        skipped_named_ranges: vec![stale_name.clone()],
-        original_named_ranges_order: vec![stale_name],
-        ..Default::default()
-    };
+    let round_trip_context = domain_types::RoundTripContext::default();
 
     let mut engine =
         engine_from_parse_output_normal_with_roundtrip(&input, Some(round_trip_context));

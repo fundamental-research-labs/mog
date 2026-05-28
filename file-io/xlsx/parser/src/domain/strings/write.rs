@@ -249,9 +249,6 @@ impl SharedStringsWriter {
             count: 1,
             phonetic_xml: hint.phonetic_xml.clone(),
         });
-        if matches!(hint.value, SharedStringValue::Plain(_)) {
-            self.index_map.entry(text.to_string()).or_insert(idx);
-        }
         self.imported_hint_indices.insert(original_index, idx);
         self.next_index += 1;
         Some(idx)

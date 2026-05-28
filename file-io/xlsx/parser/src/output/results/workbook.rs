@@ -590,10 +590,6 @@ pub struct FullParseResult {
     /// This part is entirely missing from the structured write path, so we store and write it verbatim.
     #[serde(skip)]
     pub raw_doc_metadata_label_info: Option<Vec<u8>>,
-    /// Raw bytes of `xl/sharedStrings.xml` for verbatim round-trip passthrough.
-    /// Avoids SST reordering issues when doing a pure round-trip (no string modifications).
-    #[serde(skip)]
-    pub raw_shared_strings_xml: Option<Vec<u8>>,
     /// Parsed external link definitions for domain-based round-tripping.
     #[serde(skip)]
     pub external_links: Vec<domain_types::domain::external_link::ExternalLink>,

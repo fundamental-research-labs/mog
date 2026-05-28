@@ -805,6 +805,8 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         }
     }
 
+    stores.compute.regenerate_formula_strings(mirror);
+
     let moved_ids: Vec<String> = result
         .moved_cell_ids
         .iter()

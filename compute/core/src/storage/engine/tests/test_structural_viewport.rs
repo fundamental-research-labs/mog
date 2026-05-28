@@ -3,6 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use formula_types::StructureChange;
+use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
 // Test: Insert column with formula -- the original bug
@@ -189,4 +190,45 @@ fn test_structural_change_without_viewport_no_crash() {
         result.is_ok(),
         "Structure change without viewport should succeed"
     );
+}
+
+#[test]
+fn relocate_precedent_regenerates_dependent_formula_text() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 0, 1, "=A1*2")
+        .expect("seed B1 formula");
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=A1*2"));
+
+    engine
+        .relocate_cells_yrs(&sid, 0, 0, 0, 0, &sid, 0, 2)
+        .expect("relocate A1 to C1");
+
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=C1*2"));
+
+    let row = engine.query_range(&sid, 0, 0, 0, 2);
+    assert!(
+        row.cells.iter().all(|cell| !(cell.row == 0 && cell.col == 0)),
+        "source A1 should be empty after relocate: {:?}",
+        row.cells
+    );
+
+    let b1 = row
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 1)
+        .expect("B1 formula cell");
+    assert_eq!(b1.value, CellValue::Number(FiniteF64::must(20.0)));
+    assert_eq!(b1.formula.as_deref(), Some("=C1*2"));
+
+    let c1 = row
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 2)
+        .expect("C1 moved value");
+    assert_eq!(c1.value, CellValue::Number(FiniteF64::must(10.0)));
+    assert!(c1.formula.is_none());
 }

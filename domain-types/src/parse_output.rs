@@ -400,8 +400,8 @@ pub struct SheetData {
     pub sort_state: Option<SortState>,
     /// Known worksheet semantic containers whose full OOXML model is not yet
     /// decomposed into smaller runtime objects.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub worksheet_semantic_containers: Vec<WorksheetSemanticContainer>,
+    #[serde(default, skip_serializing_if = "WorksheetSemanticContainers::is_empty")]
+    pub worksheet_semantic_containers: WorksheetSemanticContainers,
     pub outline_groups: Vec<OutlineGroup>,
     /// Worksheet-level `<sheetPr>` attributes and child properties.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -410,6 +410,55 @@ pub struct SheetData {
     /// Controls summary row/column placement and outline symbol visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline_properties: Option<ooxml_types::worksheet::OutlineProperties>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorksheetSemanticXml {
+    pub raw_xml: String,
+}
+
+impl WorksheetSemanticXml {
+    pub fn new(raw_xml: String) -> Self {
+        Self { raw_xml }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorksheetSemanticContainers {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_sheet_views: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignored_errors: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_calc_pr: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected_ranges: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenarios: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_consolidate: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_pr: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smart_tags: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_watches: Option<WorksheetSemanticXml>,
+}
+
+impl WorksheetSemanticContainers {
+    pub fn is_empty(&self) -> bool {
+        self.custom_sheet_views.is_none()
+            && self.ignored_errors.is_none()
+            && self.sheet_calc_pr.is_none()
+            && self.protected_ranges.is_none()
+            && self.scenarios.is_none()
+            && self.data_consolidate.is_none()
+            && self.phonetic_pr.is_none()
+            && self.smart_tags.is_none()
+            && self.cell_watches.is_none()
+    }
 }
 
 /// Parser-owned classification for imported cells whose OOXML metadata affects

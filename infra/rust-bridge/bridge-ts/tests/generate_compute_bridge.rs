@@ -22,7 +22,7 @@ fn generate_compute_bridge() {
         format!("{}/compute/core/src/storage/engine/structural.rs", base),
         format!("{}/compute/core/src/storage/engine/formatting.rs", base),
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
-        format!("{}/compute/core/src/storage/engine/features.rs", base),
+        format!("{}/compute/core/src/storage/engine/features/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/objects/comments.rs", base),
         format!("{}/compute/core/src/storage/engine/objects/charts.rs", base),
         format!("{}/compute/core/src/storage/engine/objects/floating.rs", base),

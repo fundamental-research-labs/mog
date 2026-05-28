@@ -84,6 +84,13 @@ fn create_two_variable(engine: &mut YrsComputeEngine) -> Result<(), ComputeError
     Ok(())
 }
 
+fn expect_invalid_code(err: ComputeError, code: &str) {
+    assert!(
+        matches!(&err, ComputeError::InvalidInput { message } if message.contains(code)),
+        "expected {code}, got {err:?}"
+    );
+}
+
 #[test]
 fn create_data_table_persists_region_to_yrs_and_hydrates_from_state() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
@@ -127,10 +134,7 @@ fn create_data_table_rejects_overlap_atomically() {
     let err = engine
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
-    assert!(
-        matches!(err, ComputeError::InvalidInput { ref message } if message.contains("DATA_TABLE_REGION_OVERLAP")),
-        "expected DATA_TABLE_REGION_OVERLAP, got {err:?}"
-    );
+    expect_invalid_code(err, "DATA_TABLE_REGION_OVERLAP");
     assert_eq!(engine.mirror().all_data_table_regions().len(), 1);
 }
 
@@ -150,10 +154,7 @@ fn create_data_table_rejects_non_empty_body_atomically() {
     let err = engine
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
-    assert!(
-        matches!(err, ComputeError::InvalidInput { ref message } if message.contains("DATA_TABLE_BODY_NOT_EMPTY")),
-        "expected DATA_TABLE_BODY_NOT_EMPTY, got {err:?}"
-    );
+    expect_invalid_code(err, "DATA_TABLE_BODY_NOT_EMPTY");
     assert!(engine.mirror().all_data_table_regions().is_empty());
 }
 
@@ -171,9 +172,78 @@ fn create_data_table_rejects_input_refs_inside_table_range() {
     let err = engine
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
-    assert!(
-        matches!(err, ComputeError::InvalidInput { ref message } if message.contains("DATA_TABLE_INPUT_INSIDE_TABLE")),
-        "expected DATA_TABLE_INPUT_INSIDE_TABLE, got {err:?}"
-    );
+    expect_invalid_code(err, "DATA_TABLE_INPUT_INSIDE_TABLE");
+    assert!(engine.mirror().all_data_table_regions().is_empty());
+}
+
+#[test]
+fn create_data_table_requires_at_least_one_input_ref() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+
+    let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    let input = CreateDataTableInput {
+        sheet_id,
+        table_range: "B2:D4".to_string(),
+        row_input_cell: None,
+        col_input_cell: None,
+    };
+    let err = engine
+        .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
+        .unwrap_err();
+    expect_invalid_code(err, "DATA_TABLE_INPUT_REQUIRED");
+    assert!(engine.mirror().all_data_table_regions().is_empty());
+}
+
+#[test]
+fn create_data_table_rejects_selection_without_body() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+
+    let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    let input = CreateDataTableInput {
+        sheet_id,
+        table_range: "B2:D2".to_string(),
+        row_input_cell: Some("A1".to_string()),
+        col_input_cell: Some("A2".to_string()),
+    };
+    let err = engine
+        .create_data_table(&sheet_id, 1, 1, 1, 3, &input)
+        .unwrap_err();
+    expect_invalid_code(err, "DATA_TABLE_INVALID_LAYOUT");
+    assert!(engine.mirror().all_data_table_regions().is_empty());
+}
+
+#[test]
+fn create_data_table_rejects_duplicate_input_refs() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+
+    let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    let input = CreateDataTableInput {
+        sheet_id,
+        table_range: "B2:D4".to_string(),
+        row_input_cell: Some("A1".to_string()),
+        col_input_cell: Some("A1".to_string()),
+    };
+    let err = engine
+        .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
+        .unwrap_err();
+    expect_invalid_code(err, "DATA_TABLE_INPUT_DUPLICATE");
+    assert!(engine.mirror().all_data_table_regions().is_empty());
+}
+
+#[test]
+fn create_data_table_requires_layout_specific_formula_sources() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+
+    let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    let input = CreateDataTableInput {
+        sheet_id,
+        table_range: "B2:D4".to_string(),
+        row_input_cell: None,
+        col_input_cell: Some("A2".to_string()),
+    };
+    let err = engine
+        .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
+        .unwrap_err();
+    expect_invalid_code(err, "DATA_TABLE_FORMULA_REQUIRED");
     assert!(engine.mirror().all_data_table_regions().is_empty());
 }

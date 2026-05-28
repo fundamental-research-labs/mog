@@ -16,7 +16,7 @@
  * @see engine/src/state/coordinator/features/table/table-selection-coordination.ts
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { TableInfo } from '@mog-sdk/contracts/api';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
@@ -193,35 +193,60 @@ export function useTableSelection(): UseTableSelectionReturn {
   const selectedTableId = useUIStore((s) => s.tableDesign.selectedTableId);
 
   const [table, setTable] = useState<TableInfo | null>(null);
+  const refreshGenerationRef = useRef(0);
+  const refreshContextRef = useRef({
+    wb,
+    selectedTableId,
+    activeSheetId,
+    activeRow,
+    activeCol,
+  });
+  refreshContextRef.current = { wb, selectedTableId, activeSheetId, activeRow, activeCol };
 
   const refreshSelectedTable = useCallback(async () => {
+    const generation = ++refreshGenerationRef.current;
+    const context = { wb, selectedTableId, activeSheetId, activeRow, activeCol };
+    const commitTable = (nextTable: TableInfo | null) => {
+      const currentContext = refreshContextRef.current;
+      if (generation !== refreshGenerationRef.current) return false;
+      if (
+        currentContext.wb !== context.wb ||
+        currentContext.selectedTableId !== context.selectedTableId ||
+        currentContext.activeSheetId !== context.activeSheetId ||
+        currentContext.activeRow !== context.activeRow ||
+        currentContext.activeCol !== context.activeCol
+      ) {
+        return false;
+      }
+      setTable(nextTable);
+      return true;
+    };
+
     if (!selectedTableId) {
-      setTable(null);
+      commitTable(null);
       return;
     }
 
     try {
       const wsForTable = wb.getSheetById(activeSheetId);
       const byName = await wsForTable.tables.get(selectedTableId);
+      if (generation !== refreshGenerationRef.current) return;
       if (byName) {
-        setTable(byName);
+        commitTable(byName);
         return;
       }
       const byCell = await wsForTable.tables.getAtCell(activeRow, activeCol);
-      setTable(byCell ?? null);
+      commitTable(byCell ?? null);
     } catch {
-      setTable(null);
+      commitTable(null);
     }
   }, [wb, selectedTableId, activeSheetId, activeRow, activeCol]);
 
   useEffect(() => {
-    let cancelled = false;
-    void refreshSelectedTable().catch(() => {
-      if (!cancelled) setTable(null);
-    });
+    void refreshSelectedTable();
 
     return () => {
-      cancelled = true;
+      refreshGenerationRef.current += 1;
     };
   }, [refreshSelectedTable]);
 
@@ -234,6 +259,7 @@ export function useTableSelection(): UseTableSelectionReturn {
     const clearIfDeleted = (event: { tableId?: string; sheetId?: string }) => {
       if (event.sheetId && event.sheetId !== activeSheetId) return;
       if (!event.tableId || event.tableId === selectedTableId || event.tableId === table?.name) {
+        refreshGenerationRef.current += 1;
         setTable(null);
       }
     };

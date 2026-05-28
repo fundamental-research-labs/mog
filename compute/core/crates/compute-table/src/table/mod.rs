@@ -29,13 +29,23 @@ mod columns_tests;
 #[cfg(test)]
 mod create_tests;
 #[cfg(test)]
+mod hit_testing_tests;
+#[cfg(test)]
 mod lookup_tests;
 #[cfg(test)]
 mod names_tests;
 #[cfg(test)]
 mod options_tests;
 #[cfg(test)]
+mod overlap_tests;
+#[cfg(test)]
+mod range_validation_tests;
+#[cfg(test)]
 mod ranges_tests;
+#[cfg(test)]
+mod regions_tests;
+#[cfg(test)]
+mod resize_tests;
 #[cfg(test)]
 mod totals_tests;
 

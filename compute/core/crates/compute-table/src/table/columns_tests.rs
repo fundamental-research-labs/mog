@@ -26,6 +26,36 @@ fn add_column_at_beginning() {
 }
 
 #[test]
+fn add_column_on_first_column() {
+    let t = make_test_table();
+    let t2 = add_column(&t, "ID", Some(0));
+    assert_eq!(t2.columns.len(), 4);
+    assert_eq!(t2.columns[0].name, "ID");
+    assert_eq!(t2.columns[0].index, 0);
+    assert_eq!(t2.columns[1].name, "Name");
+    assert_eq!(t2.columns[1].index, 1);
+    assert_eq!(t2.columns[2].name, "Age");
+    assert_eq!(t2.columns[2].index, 2);
+    assert_eq!(t2.columns[3].name, "City");
+    assert_eq!(t2.columns[3].index, 3);
+    assert_eq!(t2.range.end_col(), t.range.end_col() + 1);
+}
+
+#[test]
+fn add_column_on_last_column() {
+    let t = make_test_table();
+    let last_idx = t.columns.len();
+    let t2 = add_column(&t, "Score", Some(last_idx));
+    assert_eq!(t2.columns.len(), 4);
+    assert_eq!(t2.columns[3].name, "Score");
+    assert_eq!(t2.columns[3].index, 3);
+    assert_eq!(t2.columns[0].name, "Name");
+    assert_eq!(t2.columns[1].name, "Age");
+    assert_eq!(t2.columns[2].name, "City");
+    assert_eq!(t2.range.end_col(), t.range.end_col() + 1);
+}
+
+#[test]
 fn add_column_dedup_incrementing_counter() {
     // BUG FIX TEST: Name dedup must use incrementing counter
     let t = make_test_table(); // has "Name", "Age", "City"
@@ -70,6 +100,32 @@ fn remove_column_basic() {
 }
 
 #[test]
+fn remove_column_first() {
+    let t = make_test_table();
+    let first_col_id = t.columns[0].id.clone();
+    let t2 = remove_column(&t, &first_col_id);
+    assert_eq!(t2.columns.len(), 2);
+    assert_eq!(t2.columns[0].name, "Age");
+    assert_eq!(t2.columns[0].index, 0);
+    assert_eq!(t2.columns[1].name, "City");
+    assert_eq!(t2.columns[1].index, 1);
+    assert_eq!(t2.range.end_col(), t.range.end_col() - 1);
+}
+
+#[test]
+fn remove_column_last() {
+    let t = make_test_table();
+    let last_col_id = t.columns[2].id.clone();
+    let t2 = remove_column(&t, &last_col_id);
+    assert_eq!(t2.columns.len(), 2);
+    assert_eq!(t2.columns[0].name, "Name");
+    assert_eq!(t2.columns[0].index, 0);
+    assert_eq!(t2.columns[1].name, "Age");
+    assert_eq!(t2.columns[1].index, 1);
+    assert_eq!(t2.range.end_col(), t.range.end_col() - 1);
+}
+
+#[test]
 fn remove_column_not_found() {
     let t = make_test_table();
     let t2 = remove_column(&t, "nonexistent");
@@ -81,6 +137,33 @@ fn remove_column_last_column_prevented() {
     let t = create_table("T1", "s1", TableRange::new(0, 0, 5, 0), &["Only"], None).unwrap();
     let t2 = remove_column(&t, &t.columns[0].id);
     assert_eq!(t2.columns.len(), 1); // unchanged
+}
+
+#[test]
+fn table_with_nonzero_start_col() {
+    let t = create_table(
+        "T1",
+        "s1",
+        TableRange::new(0, 5, 10, 7),
+        &["A", "B", "C"],
+        None,
+    )
+    .unwrap();
+    assert_eq!(t.columns.len(), 3);
+    assert_eq!(t.range.start_col(), 5);
+    assert_eq!(t.range.end_col(), 7);
+
+    let t2 = add_column(&t, "D", None);
+    assert_eq!(t2.columns.len(), 4);
+    assert_eq!(t2.range.end_col(), 8);
+
+    let col_id = t2.columns[1].id.clone();
+    let t3 = remove_column(&t2, &col_id);
+    assert_eq!(t3.columns.len(), 3);
+    assert_eq!(t3.range.end_col(), 7);
+    for (i, col) in t3.columns.iter().enumerate() {
+        assert_eq!(col.index, i as u32);
+    }
 }
 
 
@@ -115,38 +198,6 @@ fn rename_column_not_found() {
 }
 
 
-// ---- Resize Table ----
-
-#[test]
-fn resize_table_expand_columns() {
-    let t = make_test_table(); // 3 columns
-    let t2 = resize_table(&t, TableRange::new(0, 0, 10, 4)).unwrap();
-    assert_eq!(t2.columns.len(), 5);
-    assert_eq!(t2.columns[3].name, "Column4");
-    assert_eq!(t2.columns[4].name, "Column5");
-    // Indices re-numbered
-    for (i, col) in t2.columns.iter().enumerate() {
-        assert_eq!(col.index, i as u32);
-    }
-}
-
-#[test]
-fn resize_table_shrink_columns() {
-    let t = make_test_table(); // 3 columns
-    let t2 = resize_table(&t, TableRange::new(0, 0, 10, 1)).unwrap();
-    assert_eq!(t2.columns.len(), 2);
-    assert_eq!(t2.columns[0].name, "Name");
-    assert_eq!(t2.columns[1].name, "Age");
-}
-
-#[test]
-fn resize_table_same_columns() {
-    let t = make_test_table();
-    let t2 = resize_table(&t, t.range).unwrap();
-    assert_eq!(t2.columns.len(), t.columns.len());
-}
-
-
 // ---- Immutability: original table is not modified ----
 
 #[test]
@@ -161,4 +212,3 @@ fn operations_do_not_mutate_original() {
     let _t4 = toggle_totals_row(&t);
     assert!(!t.has_totals_row); // original unchanged
 }
-

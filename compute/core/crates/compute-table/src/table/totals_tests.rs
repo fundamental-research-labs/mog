@@ -1,7 +1,6 @@
 use super::*;
 use super::super::types::{TableRange, TotalsFunction};
 use super::test_fixtures::make_test_table;
-use super::super::structured_refs::escape_column_name;
 use super::totals::subtotal_function_number;
 
 // ---- Toggle Totals Row ----
@@ -38,6 +37,21 @@ fn toggle_totals_row_off_end_row_zero_no_underflow() {
     assert_eq!(t2.range.end_row(), 0); // saturates at 0, no underflow
 }
 
+#[test]
+fn toggle_totals_row_with_end_row_zero() {
+    let mut t = make_test_table();
+    t.has_totals_row = true;
+    t.range = TableRange::new(
+        t.range.start_row(),
+        t.range.start_col(),
+        0,
+        t.range.end_col(),
+    );
+    let t2 = toggle_totals_row(&t);
+    assert!(!t2.has_totals_row);
+    assert_eq!(t2.range.end_row(), 0);
+}
+
 
 // ---- Totals Function ----
 
@@ -72,6 +86,12 @@ fn get_subtotal_formula_count() {
 }
 
 #[test]
+fn get_subtotal_formula_escapes_column_name() {
+    let f = get_subtotal_formula(&TotalsFunction::Sum, "John's").unwrap();
+    assert_eq!(f, "=SUBTOTAL(109,['John''s'])");
+}
+
+#[test]
 fn get_subtotal_formula_none_returns_none() {
     assert!(get_subtotal_formula(&TotalsFunction::None, "C").is_none());
 }
@@ -79,34 +99,6 @@ fn get_subtotal_formula_none_returns_none() {
 #[test]
 fn get_subtotal_formula_custom_returns_none() {
     assert!(get_subtotal_formula(&TotalsFunction::Custom, "C").is_none());
-}
-
-
-// ---- Column Name Escaping ----
-
-#[test]
-fn escape_column_name_no_special_chars() {
-    assert_eq!(escape_column_name("Sales"), "Sales");
-}
-
-#[test]
-fn escape_column_name_with_single_quote() {
-    assert_eq!(escape_column_name("John's"), "'John''s'");
-}
-
-#[test]
-fn escape_column_name_with_brackets() {
-    assert_eq!(escape_column_name("Data[1]"), "'Data[[1]]'");
-}
-
-#[test]
-fn escape_column_name_with_hash() {
-    assert_eq!(escape_column_name("Col#1"), "'Col#1'");
-}
-
-#[test]
-fn escape_column_name_with_at() {
-    assert_eq!(escape_column_name("@mention"), "'@mention'");
 }
 
 

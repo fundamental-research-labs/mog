@@ -838,7 +838,7 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<ooxml_types::worksheet::SheetView> {
                     .map(crate::output::results::Pane::from_ooxml)
                     .unwrap_or(crate::output::results::Pane::TopLeft);
 
-                Some(crate::common::range::SheetPane::from_parsed(
+                Some(ooxml_types::worksheet::SheetPane::from_parsed(
                     x_split,
                     y_split,
                     top_left_cell.as_deref(),

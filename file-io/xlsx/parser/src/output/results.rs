@@ -38,10 +38,11 @@ pub use timings::*;
 pub use views::*;
 pub use workbook::*;
 
-// Re-export serde-compatible range and pane types from common::range.
+// Re-export serde-compatible range and pane types from the canonical OOXML
+// worksheet vocabulary crate.
 // These types use snake_case serde field names for compatibility with existing
 // JSON output. This differs from the TypeScript-facing camelCase DTOs.
-pub use crate::common::range::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
+pub use ooxml_types::worksheet::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
 
 // Re-export style enums used as public field types on FontOutput, FillOutput,
 // BorderSideOutput, AlignmentOutput. This lets downstream consumers (e.g.,

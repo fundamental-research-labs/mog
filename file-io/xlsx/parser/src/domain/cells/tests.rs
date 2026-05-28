@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::common::range::RowHeight;
+use ooxml_types::worksheet::RowHeight;
 
 // Helpers copy packed fields by value, avoiding references to unaligned fields.
 impl CellData {

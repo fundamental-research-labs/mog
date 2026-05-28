@@ -77,8 +77,7 @@ pub(crate) fn now_us() -> f64 {
 
 // Infrastructure
 pub mod bridge;
-pub mod common;
-pub mod infra; // keep for now (range types still here)
+pub mod infra;
 
 // Domain modules (all OOXML features)
 pub mod domain;

@@ -24,7 +24,6 @@
 //! ```
 
 use super::xml_writer::XmlWriter;
-pub use crate::common::range::{ColWidth, MergeRange, SheetPane};
 use crate::domain::print::write::{PrintWriter, format_f64};
 use crate::domain::worksheet::write::{
     write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_properties,
@@ -32,7 +31,9 @@ use crate::domain::worksheet::write::{
 };
 use crate::roundtrip::unknown_elements::PreservedXml;
 use domain_types::AuthoredStyleRun;
-pub use ooxml_types::worksheet::{OutlineProperties, Selection, SheetView, SheetViewType};
+pub use ooxml_types::worksheet::{
+    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetView, SheetViewType,
+};
 use std::collections::BTreeMap;
 
 /// XML namespace for SpreadsheetML
@@ -1782,7 +1783,7 @@ impl SheetWriter {
 }
 
 // ============================================================================
-// Helper Functions — re-exported from common::a1
+// Helper Functions
 // ============================================================================
 
 pub use crate::infra::a1::{col_to_letter, to_a1};

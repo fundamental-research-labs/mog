@@ -25,12 +25,12 @@
 
 use rayon::prelude::*;
 
-use crate::common::range::RowHeight;
 use crate::domain::cells::{CellData, parse_worksheet_fast};
 use crate::domain::strings::read::SharedStrings;
 use crate::domain::workbook::read::parse_workbook;
 use crate::zip::constants::{MAX_SHARED_STRINGS, MAX_WORKSHEET_CELLS};
 use crate::zip::{XlsxArchive, ZipError};
+use ooxml_types::worksheet::RowHeight;
 
 fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
     let mut count = 0usize;

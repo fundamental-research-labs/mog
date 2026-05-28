@@ -766,7 +766,7 @@ fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
 }
 
 fn col_to_letters(col: usize) -> String {
-    xlsx_parser::common::a1::col_to_letter(col as u32)
+    xlsx_parser::col_to_letter(col as u32)
 }
 
 fn write_file(path: &Path, data: &[u8]) -> std::io::Result<()> {

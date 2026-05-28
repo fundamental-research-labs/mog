@@ -16,12 +16,13 @@
 //! The orchestrator owns the `<sheetData>` cell iteration loop and calls these
 //! helpers for the surrounding structural sections.
 
-use crate::common::range::{ColWidth, MergeRange, SheetPane};
 use crate::domain::print::write::format_f64;
 use crate::infra::a1::to_a1;
 use crate::write::sheet::SheetFormatPr;
 use crate::write::xml_writer::XmlWriter;
-use ooxml_types::worksheet::{OutlineProperties, Selection, SheetView};
+use ooxml_types::worksheet::{
+    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetView,
+};
 
 // ============================================================================
 // Public write helpers

@@ -19,8 +19,8 @@ use super::recovery::{CellParseResult, parse_cell_element_with_context};
 use super::types::{
     CellData, DataTableEntry, ParseExtras, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA,
 };
-use crate::common::range::RowHeight;
 use crate::infra::error::{ErrorCode, ErrorLocation, ParseContext, ParseErrorDetail};
+use ooxml_types::worksheet::RowHeight;
 
 /// Classify a single XLSX `<f t="dataTable">` `r1` / `r2` attribute into the
 /// typed `formula_types::CellRef` form.

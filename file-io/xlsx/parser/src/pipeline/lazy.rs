@@ -45,7 +45,6 @@
 
 use std::collections::HashMap;
 
-use crate::common::range::{ColWidth, MergeRange, RowHeight, SheetPane};
 use crate::domain::cells::{CellData, parse_worksheet_fast};
 use crate::domain::cond_format::read::parse_conditional_formats;
 use crate::domain::controls::types::FormControl;
@@ -61,6 +60,7 @@ use crate::infra::error::{
 use crate::output::results::{CfSummary, DvSummary, HyperlinkOutput, ProtectionOutput};
 use crate::zip::constants::{MAX_MERGES, MAX_SHARED_STRINGS, MAX_VALIDATIONS, MAX_WORKSHEET_CELLS};
 use crate::zip::{XlsxArchive, ZipError};
+use ooxml_types::worksheet::{ColWidth, MergeRange, RowHeight, SheetPane};
 
 fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
     let mut count = 0usize;

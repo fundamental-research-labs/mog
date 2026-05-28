@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use crate::common::ColWidth;
 use crate::domain::cells::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_EMPTY, CELL_TYPE_ERROR, CELL_TYPE_FORMULA,
     CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, ParseExtras,
@@ -13,6 +12,7 @@ use crate::output::results::{
     CELL_TYPE_VAL_BOOL, CELL_TYPE_VAL_EMPTY, CELL_TYPE_VAL_ERROR, CELL_TYPE_VAL_FORMULA,
     CELL_TYPE_VAL_NUMBER, CELL_TYPE_VAL_STRING, DataTableInfo, FullCellData,
 };
+use ooxml_types::worksheet::ColWidth;
 
 /// Build a flat col_styles lookup from parsed ColWidth entries.
 ///

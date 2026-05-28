@@ -46,7 +46,7 @@ pub struct SheetViewOutput {
     pub view: Option<String>,
     /// Preserved pane configuration (frozen or split) for round-trip fidelity.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pane: Option<crate::common::range::SheetPane>,
+    pub pane: Option<ooxml_types::worksheet::SheetPane>,
     /// Preserved selection elements for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selections: Vec<ooxml_types::worksheet::Selection>,

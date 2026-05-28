@@ -4,6 +4,7 @@ use super::super::helpers::extract_attr_value_in_element;
 use super::super::reader::elements::{
     direct_child_elements, direct_child_slice, document_element_slice,
 };
+use super::super::reader::raw::extract_ext_lst_raw;
 use super::super::types::{
     BlackWhiteMode, DrawingContent, GroupLocking, GroupShape, GroupTransform2D,
     SpreadsheetGraphicFrame,
@@ -165,7 +166,7 @@ fn parse_group_locking(xml: &[u8]) -> GroupLocking {
         no_change_aspect: parse_bool_attr(xml, b"noChangeAspect=\""),
         no_move: parse_bool_attr(xml, b"noMove=\""),
         no_resize: parse_bool_attr(xml, b"noResize=\""),
-        ext_lst: None,
+        ext_lst: extract_ext_lst_raw(xml),
     }
 }
 
@@ -220,6 +221,30 @@ mod tests {
     }
 
     #[test]
+    fn group_properties_preserve_direct_scene3d_and_ext_lst() {
+        let xml = br#"<xdr:grpSp>
+            <xdr:nvGrpSpPr><xdr:cNvPr id="1" name="Group"/></xdr:nvGrpSpPr>
+            <xdr:grpSpPr>
+                <a:scene3d>
+                    <a:camera prst="orthographicFront"/>
+                    <a:lightRig rig="threePt" dir="t"/>
+                </a:scene3d>
+                <a:extLst><a:ext uri="group-props"/></a:extLst>
+            </xdr:grpSpPr>
+        </xdr:grpSp>"#;
+        let group = parse_group_shape(xml, 0).unwrap();
+
+        assert!(group.grp_sp_pr.scene3d.is_some());
+        assert!(
+            group
+                .grp_sp_pr
+                .ext_lst
+                .as_deref()
+                .is_some_and(|xml| xml.contains("group-props"))
+        );
+    }
+
+    #[test]
     fn group_non_visual_locking_reads_direct_children_only() {
         let xml = br#"<xdr:grpSp>
             <xdr:nvGrpSpPr>
@@ -256,6 +281,35 @@ mod tests {
     }
 
     #[test]
+    fn group_locks_preserve_direct_ext_lst() {
+        let xml = br#"<xdr:grpSp>
+            <xdr:nvGrpSpPr>
+                <xdr:cNvPr id="1" name="Group"/>
+                <xdr:cNvGrpSpPr>
+                    <a:grpSpLocks noMove="1">
+                        <a:extLst><a:ext uri="group-locks"/></a:extLst>
+                    </a:grpSpLocks>
+                </xdr:cNvGrpSpPr>
+            </xdr:nvGrpSpPr>
+            <xdr:grpSpPr/>
+        </xdr:grpSp>"#;
+
+        let group = parse_group_shape(xml, 0).unwrap();
+        let locks = group
+            .nv_grp_sp_pr
+            .c_nv_grp_sp_pr
+            .expect("direct group locks");
+
+        assert!(locks.no_move);
+        assert!(
+            locks
+                .ext_lst
+                .as_deref()
+                .is_some_and(|xml| xml.contains("group-locks"))
+        );
+    }
+
+    #[test]
     fn group_transform_reads_root_and_direct_pairs_only() {
         let xml = br#"<a:xfrm rot="60000" flipH="1">
             <a:extLst>
@@ -286,5 +340,35 @@ mod tests {
         assert_eq!(xfrm.extent, Some((33, 44)));
         assert_eq!(xfrm.child_offset, Some((55, 66)));
         assert_eq!(xfrm.child_extent, Some((77, 88)));
+    }
+
+    #[test]
+    fn group_child_graphic_frame_is_preserved_as_opaque_child() {
+        let xml = br#"<xdr:grpSp>
+            <xdr:nvGrpSpPr><xdr:cNvPr id="1" name="Group"/></xdr:nvGrpSpPr>
+            <xdr:grpSpPr/>
+            <xdr:graphicFrame macro="">
+                <xdr:nvGraphicFramePr>
+                    <xdr:cNvPr id="2" name="Frame"/>
+                    <xdr:cNvGraphicFramePr/>
+                </xdr:nvGraphicFramePr>
+                <xdr:xfrm><a:off x="1" y="2"/><a:ext cx="3" cy="4"/></xdr:xfrm>
+                <a:graphic><a:graphicData uri="opaque"/></a:graphic>
+            </xdr:graphicFrame>
+        </xdr:grpSp>"#;
+        let group = parse_group_shape(xml, 0).unwrap();
+
+        let DrawingContent::GraphicFrame(frame) = &group.children[0] else {
+            panic!("expected graphic frame child");
+        };
+        assert_eq!(frame.nv_graphic_frame_pr.c_nv_pr.name, "Frame");
+        assert_eq!(frame.xfrm.offset, Some((1, 2)));
+        assert_eq!(frame.macro_name.as_deref(), Some(""));
+        assert!(
+            frame
+                .graphic_xml
+                .as_deref()
+                .is_some_and(|xml| xml.contains("graphicFrame"))
+        );
     }
 }

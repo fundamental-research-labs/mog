@@ -233,6 +233,24 @@ mod tests {
     }
 
     #[test]
+    fn regular_direct_shape_precedes_direct_connector() {
+        let xml = br#"<xdr:twoCellAnchor>
+            <xdr:sp>
+                <xdr:nvSpPr><xdr:cNvPr id="2" name="Shape"/><xdr:cNvSpPr/></xdr:nvSpPr>
+                <xdr:spPr/>
+            </xdr:sp>
+            <xdr:cxnSp>
+                <xdr:nvCxnSpPr><xdr:cNvPr id="3" name="Connector"/><xdr:cNvCxnSpPr/></xdr:nvCxnSpPr>
+                <xdr:spPr/>
+            </xdr:cxnSp>
+        </xdr:twoCellAnchor>"#;
+        let dispatched = dispatch_drawing_content(xml);
+
+        assert_eq!(dispatched.result.kind, DispatchKind::Shape);
+        assert!(matches!(dispatched.content, DrawingContent::Shape(_)));
+    }
+
+    #[test]
     fn smartart_direct_graphic_frame_is_typed_before_opaque() {
         let xml = br#"<xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="5" name="SmartArt"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:relIds r:dm="rId1" r:lo="rId2" r:qs="rId3" r:cs="rId4"/></a:graphicData></a:graphic></xdr:graphicFrame></xdr:twoCellAnchor>"#;
         let dispatched = dispatch_drawing_content(xml);
@@ -259,5 +277,30 @@ mod tests {
         assert_eq!(dispatched.result.kind, DispatchKind::SlicerGraphicFrame);
         assert_eq!(dispatched.result.preservation, Preservation::OpaqueRawXml);
         assert_eq!(dispatched.result.relationship_ids, ["rId9", "rIdMedia"]);
+    }
+
+    #[test]
+    fn direct_opaque_graphic_frame_preserves_raw_metadata_and_relationships() {
+        let xml = br#"<xdr:twoCellAnchor><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="8" name="Opaque"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm rot="60000" flipH="1"><a:off x="10" y="20"/><a:ext cx="30" cy="40"/></xdr:xfrm><a:graphic><a:graphicData uri="urn:custom"><custom:item r:id="rId10"/></a:graphicData></a:graphic></xdr:graphicFrame></xdr:twoCellAnchor>"#;
+        let dispatched = dispatch_drawing_content(xml);
+
+        assert_eq!(dispatched.result.kind, DispatchKind::OpaqueGraphicFrame);
+        assert_eq!(dispatched.result.preservation, Preservation::OpaqueRawXml);
+        assert_eq!(dispatched.result.relationship_ids, ["rId10"]);
+        let DrawingContent::GraphicFrame(frame) = dispatched.content else {
+            panic!("expected graphic frame");
+        };
+        assert_eq!(frame.nv_graphic_frame_pr.c_nv_pr.name, "Opaque");
+        assert_eq!(frame.xfrm.rotation, Some(ooxml_types::drawings::StAngle::new(60000)));
+        assert_eq!(frame.xfrm.flip_h, Some(true));
+        assert_eq!(frame.xfrm.offset, Some((10, 20)));
+        assert_eq!(frame.xfrm.extent, Some((30, 40)));
+        assert_eq!(frame.macro_name.as_deref(), Some(""));
+        assert!(
+            frame
+                .graphic_xml
+                .as_deref()
+                .is_some_and(|xml| xml.contains("custom:item"))
+        );
     }
 }

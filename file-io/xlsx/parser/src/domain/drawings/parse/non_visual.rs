@@ -122,4 +122,82 @@ mod tests {
                 .contains("sibling")
         );
     }
+
+    #[test]
+    fn non_visual_reads_metadata_and_decodes_entities() {
+        let xml = br#"<xdr:cNvPr id="42" name="A &amp; B" descr="C &lt; D" title="E &quot; F" hidden="1"/>"#;
+        let props = parse_nv_props(xml);
+
+        assert_eq!(props.id, StDrawingElementId::new(42));
+        assert_eq!(props.name, "A & B");
+        assert_eq!(props.descr.as_deref(), Some("C < D"));
+        assert_eq!(props.title.as_deref(), Some("E \" F"));
+        assert!(props.hidden);
+    }
+
+    #[test]
+    fn non_visual_reads_click_and_hover_hyperlinks() {
+        let xml = br#"<xdr:cNvPr id="1" name="Shape">
+            <a:hlinkClick r:id="rId1" action="ppaction://hlinksldjump" tooltip="Click &amp; go"/>
+            <a:hlinkHover r:id="rId2" action="hover" tooltip="Hover &lt; here"/>
+        </xdr:cNvPr>"#;
+        let props = parse_nv_props(xml);
+
+        let click = props.hlink_click.expect("hlinkClick");
+        assert_eq!(click.r_id.as_deref(), Some("rId1"));
+        assert_eq!(click.action.as_deref(), Some("ppaction://hlinksldjump"));
+        assert_eq!(click.tooltip.as_deref(), Some("Click & go"));
+
+        let hover = props.hlink_hover.expect("hlinkHover");
+        assert_eq!(hover.r_id.as_deref(), Some("rId2"));
+        assert_eq!(hover.action.as_deref(), Some("hover"));
+        assert_eq!(hover.tooltip.as_deref(), Some("Hover < here"));
+    }
+
+    #[test]
+    fn non_visual_filters_empty_hyperlink_attributes() {
+        let xml = br#"<xdr:cNvPr id="1" name="Shape">
+            <a:hlinkClick r:id="" action="" tooltip=""/>
+        </xdr:cNvPr>"#;
+        let props = parse_nv_props(xml);
+
+        let click = props.hlink_click.expect("hlinkClick");
+        assert!(click.r_id.is_none());
+        assert!(click.action.is_none());
+        assert!(click.tooltip.is_none());
+    }
+
+    #[test]
+    fn non_visual_preserves_direct_cnvpr_ext_lst() {
+        let xml = br#"<xdr:cNvPr id="1" name="Shape">
+            <a:extLst><a:ext uri="cnvpr"/></a:extLst>
+        </xdr:cNvPr>"#;
+        let props = parse_nv_props(xml);
+
+        assert!(
+            props
+                .ext_lst
+                .as_deref()
+                .is_some_and(|xml| xml.contains("cnvpr"))
+        );
+    }
+
+    #[test]
+    fn self_closing_hyperlink_does_not_read_sibling_ext_lst() {
+        let xml = br#"<xdr:cNvPr id="1" name="Shape">
+            <a:hlinkClick r:id="rId1"/>
+            <a:extLst><a:ext uri="sibling"/></a:extLst>
+        </xdr:cNvPr>"#;
+        let props = parse_nv_props(xml);
+
+        let click = props.hlink_click.expect("hlinkClick");
+        assert_eq!(click.r_id.as_deref(), Some("rId1"));
+        assert!(click.ext_lst.is_none());
+        assert!(
+            props
+                .ext_lst
+                .as_deref()
+                .is_some_and(|xml| xml.contains("sibling"))
+        );
+    }
 }

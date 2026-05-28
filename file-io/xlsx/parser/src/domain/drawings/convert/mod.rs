@@ -8,13 +8,24 @@ use super::write;
 use crate::domain::drawings as read;
 
 mod anchors;
-mod objects;
+mod connectors;
+mod dispatch;
+mod graphic_frames;
+mod groups;
 mod outcome;
+mod pictures;
+mod shapes;
+mod smartart;
+
+#[cfg(test)]
+mod tests;
 
 pub use anchors::{convert_absolute_anchor, convert_one_cell_anchor, convert_two_cell_anchor};
-pub use objects::{
-    connector_to_props, convert_drawing_content, convert_drawing_content_with_outcome,
-    extract_chart_ref_from_graphic_frame, group_shape_to_props, picture_to_image_props,
-    populate_smartart_parts, shape_to_text_box,
-};
+pub use connectors::connector_to_props;
+pub use dispatch::{convert_drawing_content, convert_drawing_content_with_outcome};
+pub use graphic_frames::extract_chart_ref_from_graphic_frame;
+pub use groups::group_shape_to_props;
 pub use outcome::{ConversionStatus, DrawingConversionOutcome};
+pub use pictures::picture_to_image_props;
+pub use shapes::shape_to_text_box;
+pub use smartart::populate_smartart_parts;

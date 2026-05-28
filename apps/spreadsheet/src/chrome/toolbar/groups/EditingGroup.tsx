@@ -412,6 +412,14 @@ export const EditingGroup = React.memo(function EditingGroup() {
               Find...
             </RibbonDropdownItem>
             <RibbonDropdownItem
+              dataValue="replace"
+              icon={<FindAndReplaceIcon />}
+              onClick={() => dispatchAction('OPEN_FIND_REPLACE_DIALOG')}
+              shortcut="Ctrl+H"
+            >
+              Replace...
+            </RibbonDropdownItem>
+            <RibbonDropdownItem
               dataValue="goto"
               icon={<GoToIcon />}
               onClick={() => dispatchAction('OPEN_GO_TO_DIALOG')}

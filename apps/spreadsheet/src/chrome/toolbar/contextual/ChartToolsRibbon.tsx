@@ -99,8 +99,8 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
 
   const handleToggleTitle = useCallback(() => {
     if (selectedChartId && selectedChart) {
-      // Toggle title - set to default title if none exists, or clear if it does
-      const newTitle = hasTitle ? undefined : 'Chart Title';
+      // `null` explicitly clears title; `undefined` means no title update.
+      const newTitle = hasTitle ? null : 'Chart Title';
       updateChart(selectedChartId, { title: newTitle });
     }
   }, [selectedChartId, selectedChart, hasTitle, updateChart]);

@@ -57,8 +57,9 @@ const UNSUPPORTED_NATIVE_XLSX_CHART_TYPES = new Set<ChartType>(['heatmap', 'viol
 // Chart Conversion Helpers
 // =============================================================================
 
-type ChartUpdatePayload = Omit<Partial<ChartFloatingObject>, 'anchor'> & {
+type ChartUpdatePayload = Omit<Partial<ChartFloatingObject>, 'anchor' | 'title'> & {
   anchor?: Partial<ChartFloatingObject['anchor']>;
+  title?: string | null;
 };
 
 function numericField(fields: Record<string, unknown>, key: string): number | undefined {
@@ -434,7 +435,7 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     seriesRange: config.seriesRange,
     categoryRange: config.categoryRange,
     seriesOrientation: config.seriesOrientation,
-    title: config.title,
+    title: config.title ?? undefined,
     subtitle: config.subtitle,
     legend,
     axis,

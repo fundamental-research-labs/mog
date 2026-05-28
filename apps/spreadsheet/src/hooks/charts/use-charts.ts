@@ -152,11 +152,23 @@ function isOnlyPositionChange(prev: SerializedChart, next: SerializedChart): boo
  * Create a CellDataAccessor that reads from Worksheet viewport (sync).
  * Replaced Cells.getDisplayValue with ws.viewport.getCellData.
  */
-function createCellAccessor(ws: WorksheetWithInternals, _sheetId: SheetId): CellDataAccessor {
+function createCellAccessor(
+  ws: WorksheetWithInternals,
+  _sheetId: SheetId,
+  sourceSheets?: Map<string, WorksheetWithInternals>,
+): CellDataAccessor {
   return {
-    getValue(row: number, col: number) {
+    getValue(row: number, col: number, sheetRef?: string) {
+      const sourceWs = sheetRef
+        ? sheetRef === _sheetId
+          ? ws
+          : sourceSheets?.get(sheetRef)
+        : ws;
+      if (!sourceWs) {
+        return '';
+      }
       // Use Worksheet viewport for sync cell reads
-      const vpCell = ws.viewport.getCellData(row, col);
+      const vpCell = sourceWs.viewport.getCellData(row, col);
       if (vpCell?.value != null) {
         // Return typed value directly — number stays number, string stays string
         if (typeof vpCell.value === 'number') return vpCell.value;
@@ -165,6 +177,45 @@ function createCellAccessor(ws: WorksheetWithInternals, _sheetId: SheetId): Cell
       return '';
     },
   };
+}
+
+function collectChartSourceSheetNames(chart: StoredChartConfig): string[] {
+  const refs = [
+    chart.dataRange,
+    chart.seriesRange,
+    chart.categoryRange,
+    ...(chart.series ?? []).flatMap((series) => [
+      series.values,
+      series.categories,
+      series.bubbleSize,
+    ]),
+  ];
+  const names = new Set<string>();
+  for (const ref of refs) {
+    if (!ref) continue;
+    const parsed = parseCellRange(ref);
+    if (parsed?.sheetName) {
+      names.add(parsed.sheetName);
+    }
+  }
+  return [...names];
+}
+
+async function resolveChartSourceSheets(
+  wb: ReturnType<typeof useWorkbook>,
+  chart: StoredChartConfig,
+): Promise<Map<string, WorksheetWithInternals>> {
+  const sourceSheets = new Map<string, WorksheetWithInternals>();
+  await Promise.all(
+    collectChartSourceSheetNames(chart).map(async (sheetName) => {
+      try {
+        sourceSheets.set(sheetName, await wb.getSheet(sheetName));
+      } catch {
+        // Missing sheet references are handled as blank chart values at render time.
+      }
+    }),
+  );
+  return sourceSheets;
 }
 
 /**
@@ -274,9 +325,9 @@ async function getChartDataRange(
  * This ensures charts move correctly when rows/cols are inserted/deleted.
  */
 async function serializedToChartDefinition(
+  wb: ReturnType<typeof useWorkbook>,
   ws: WorksheetWithInternals,
   serialized: SerializedChart,
-  cellAccessor: CellDataAccessor,
 ): Promise<ChartDefinition> {
   // Resolve chart position using CellId if available
   const resolvedPosition = await getChartPosition(ws, serialized);
@@ -311,6 +362,8 @@ async function serializedToChartDefinition(
 
   // Extract chart data using resolved data range
   const dataRange = await getChartDataRange(ws, serialized);
+  const sourceSheets = await resolveChartSourceSheets(wb, serialized);
+  const cellAccessor = createCellAccessor(ws, serialized.sheetId ?? '', sourceSheets);
   let data: ChartData;
 
   if (dataRange && serialized.dataRangeIdentity) {
@@ -471,7 +524,6 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
 
     async function resolveCharts(): Promise<void> {
       const ws = wb.getSheetById(sheetId);
-      const cellAccessor = createCellAccessor(ws, sheetId);
       const cache = chartDefCache.current;
 
       // Track which chart IDs are still present (for cache cleanup)
@@ -527,7 +579,7 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
           // Case 3: Cache miss - compute new definition
           // This happens when: new chart, config changed, or data changed
           // Pass ws for CellId resolution
-          const definition = await serializedToChartDefinition(ws, serialized, cellAccessor);
+          const definition = await serializedToChartDefinition(wb, ws, serialized);
           cache.set(serialized.id, { serialized, dataVersion, definition });
           return definition;
         }),

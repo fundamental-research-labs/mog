@@ -51,6 +51,7 @@ export type RibbonTabId =
   | 'view'
   | 'table-design'
   | 'chart-design'
+  | 'chart-format'
   | 'picture-tools'
   | 'slicer-tools'
   | 'sparkline-tools'

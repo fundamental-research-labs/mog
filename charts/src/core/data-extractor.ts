@@ -6,6 +6,7 @@ import type {
   ChartData,
   ChartDataPoint,
   ChartDataSeries,
+  SeriesConfig,
   SeriesOrientation,
 } from '../types';
 
@@ -58,6 +59,7 @@ export function parseRange(range: string): CellRange {
     startCol: Math.min(parsed.startCol, parsed.endCol),
     endRow: Math.max(parsed.startRow, parsed.endRow),
     endCol: Math.max(parsed.startCol, parsed.endCol),
+    ...(parsed.sheetName ? { sheetId: parsed.sheetName } : {}),
   };
 }
 
@@ -70,6 +72,7 @@ function tryParseRange(range: string | undefined): CellRange | null {
     startCol: Math.min(parsed.startCol, parsed.endCol),
     endRow: Math.max(parsed.startRow, parsed.endRow),
     endCol: Math.max(parsed.startCol, parsed.endCol),
+    ...(parsed.sheetName ? { sheetId: parsed.sheetName } : {}),
   };
 }
 
@@ -202,6 +205,11 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
  * @returns Extracted chart data ready for rendering
  */
 export function extractChartData(accessor: CellDataAccessor, config: ChartConfig): ChartData {
+  const importedSeries = config.series?.filter((series) => Boolean(series.values));
+  if (importedSeries?.length) {
+    return extractChartDataFromSeriesRefs(accessor, importedSeries);
+  }
+
   if (!config.dataRange) {
     return { categories: [], series: [] };
   }
@@ -375,6 +383,63 @@ function extractLabels(accessor: CellDataAccessor, range: CellRange): (string | 
   }
 
   return labels;
+}
+
+function extractValues(accessor: CellDataAccessor, range: CellRange): ChartCellValue[] {
+  const values: ChartCellValue[] = [];
+  for (let row = range.startRow; row <= range.endRow; row++) {
+    for (let col = range.startCol; col <= range.endCol; col++) {
+      values.push(getRangeValue(accessor, range, row, col));
+    }
+  }
+  return values;
+}
+
+function extractChartDataFromSeriesRefs(
+  accessor: CellDataAccessor,
+  seriesConfigs: SeriesConfig[],
+): ChartData {
+  const series: ChartDataSeries[] = [];
+  let categories: (string | number)[] = [];
+
+  for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
+    const seriesConfig = seriesConfigs[seriesIndex];
+    const valueRange = tryParseRange(seriesConfig.values);
+    if (!valueRange) continue;
+
+    const valueItems = extractValues(accessor, valueRange);
+    const categoryRange = tryParseRange(seriesConfig.categories);
+    const categoryItems = categoryRange ? extractLabels(accessor, categoryRange) : [];
+    if (categories.length === 0 && categoryItems.length > 0) {
+      categories = categoryItems;
+    }
+
+    const data: ChartDataPoint[] = valueItems.map((rawValue, pointIndex) => {
+      const y = toNumber(rawValue);
+      const category = categoryItems[pointIndex] ?? categories[pointIndex] ?? pointIndex + 1;
+      return {
+        x: category,
+        y: isNaN(y) ? 0 : y,
+        name: String(category),
+      };
+    });
+
+    if (categories.length === 0) {
+      categories = data.map((point) => point.x);
+    }
+
+    series.push({
+      name: seriesConfig.name ?? `Series ${seriesIndex + 1}`,
+      data,
+      ...(seriesConfig.type ? { type: seriesConfig.type as ChartDataSeries['type'] } : {}),
+      ...(seriesConfig.color ? { color: seriesConfig.color } : {}),
+      ...(seriesConfig.yAxisIndex === 0 || seriesConfig.yAxisIndex === 1
+        ? { yAxisIndex: seriesConfig.yAxisIndex }
+        : {}),
+    });
+  }
+
+  return { categories, series };
 }
 
 /**

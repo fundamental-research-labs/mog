@@ -16,6 +16,7 @@
  * Alt+W → view
  * Alt+J,T → table-design (contextual, two-key chord)
  * Alt+J,C → chart-design (contextual, two-key chord)
+ * Alt+J,F → chart-format (contextual, two-key chord)
  *
  * Each entry fires `SWITCH_RIBBON_TAB` with `actionArg: { tabId }` —
  * the typed payload threads from contract → coordinator → dispatcher
@@ -41,7 +42,7 @@ function ribbonTabShortcut(args: {
   bindings: ReturnType<typeof altBinding>;
   description: string;
   tabId: RibbonTabId;
-  sequence?: readonly ('KeyT' | 'KeyC')[];
+  sequence?: readonly ('KeyT' | 'KeyC' | 'KeyF')[];
 }): KeyboardShortcut<'SWITCH_RIBBON_TAB'> {
   return {
     id: args.id,
@@ -144,5 +145,12 @@ export const RIBBON_SHORTCUTS: KeyboardShortcut[] = [
     description: 'Switch to Chart Design tab (contextual)',
     tabId: 'chart-design',
     sequence: ['KeyC'],
+  }),
+  ribbonTabShortcut({
+    id: 'ribbon.switch-chart-format',
+    bindings: altBinding('KeyJ'),
+    description: 'Switch to Chart Format tab (contextual)',
+    tabId: 'chart-format',
+    sequence: ['KeyF'],
   }),
 ];

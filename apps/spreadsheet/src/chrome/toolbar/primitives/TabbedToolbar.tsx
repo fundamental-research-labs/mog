@@ -31,6 +31,7 @@ import type { ToolbarProps } from '../../../internal-api';
 import type { UndoHistoryEntry } from '../../../ui-store';
 import { RibbonCollapseProvider, useRibbonCollapse } from '../collapse';
 import { useContextualTabs } from '../contextual';
+import { ChartFormatRibbon } from '../contextual/ChartFormatRibbon';
 import { ChartToolsRibbon } from '../contextual/ChartToolsRibbon';
 import { PictureToolsRibbon } from '../contextual/PictureToolsRibbon';
 import { SlicerToolsRibbon } from '../contextual/SlicerToolsRibbon';
@@ -62,6 +63,7 @@ type TabId =
   | 'view'
   | 'table-design'
   | 'chart-design'
+  | 'chart-format'
   | 'picture-tools'
   | 'slicer-tools'
   | 'sparkline-tools'
@@ -545,6 +547,8 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
               )}
 
               {activeTab === 'chart-design' && <ChartToolsRibbon />}
+
+              {activeTab === 'chart-format' && <ChartFormatRibbon />}
 
               {activeTab === 'picture-tools' && <PictureToolsRibbon />}
 

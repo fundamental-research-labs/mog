@@ -818,7 +818,7 @@ export interface ChartConfig {
   seriesOrientation?: SeriesOrientation;
 
   // Appearance
-  title?: string;
+  title?: string | null;
   subtitle?: string;
   legend?: LegendConfig;
   axis?: AxisConfig;

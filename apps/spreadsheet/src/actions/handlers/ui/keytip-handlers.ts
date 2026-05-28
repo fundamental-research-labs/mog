@@ -47,6 +47,7 @@ import { getUIStore, handled, notHandled } from '../handler-utils';
 const OPTIMISTIC_CONTEXTUAL_RIBBON_TABS = new Set<RibbonTabId>([
   'table-design',
   'chart-design',
+  'chart-format',
   'picture-tools',
   'slicer-tools',
   'sparkline-tools',

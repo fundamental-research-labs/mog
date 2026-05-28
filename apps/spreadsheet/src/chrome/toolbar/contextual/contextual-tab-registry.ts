@@ -134,6 +134,7 @@ export interface ContextualTabConfig {
  * KeyTip mappings (defined in TabBar.tsx TAB_KEYTIP_MAP):
  * - table-design: JT (multi-key sequence J then T)
  * - chart-design: JC (multi-key sequence J then C)
+ * - chart-format: JF (multi-key sequence J then F)
  * - picture-tools: JP (multi-key sequence J then P)
  * - slicer-tools: JS (multi-key sequence J then S)
  * - sparkline-tools: JK (multi-key sequence J then K)
@@ -156,6 +157,17 @@ export const CONTEXTUAL_TAB_REGISTRY: ContextualTabConfig[] = [
   {
     id: 'chart-design',
     label: 'Chart Design',
+    groupLabel: 'Chart Tools',
+    accentColor: 'var(--color-chart-accent, #1976d2)', // Blue accent for charts
+    showWhen: (context) => context.chartUI.selectedChartId !== null,
+    // Component will be imported dynamically to avoid circular dependencies
+    component: (() => null) as ComponentType<ContextualTabProps>,
+  },
+
+  // Chart Format tab - shows when a chart is selected
+  {
+    id: 'chart-format',
+    label: 'Chart Format',
     groupLabel: 'Chart Tools',
     accentColor: 'var(--color-chart-accent, #1976d2)', // Blue accent for charts
     showWhen: (context) => context.chartUI.selectedChartId !== null,

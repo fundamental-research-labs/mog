@@ -268,7 +268,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       label="Alignment"
       collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
       dropdownIcon={<AlignCenterIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
+      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' })}
       dialogLaunchTitle="Alignment Settings"
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">

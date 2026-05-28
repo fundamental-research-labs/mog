@@ -437,7 +437,7 @@ export const FontGroup = React.memo(function FontGroup() {
       label="Font"
       collapseConfig={FONT_COLLAPSE_CONFIG}
       dropdownIcon={<FontIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
+      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'font' })}
       dialogLaunchTitle="Font Settings"
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">

@@ -191,6 +191,7 @@ export type DialogKeyboardAction =
   | { type: 'OPEN_GO_TO_DIALOG' }
   | { type: 'OPEN_GO_TO_SPECIAL_DIALOG' }
   | { type: 'OPEN_FORMAT_CELLS_DIALOG' }
+  | { type: 'OPEN_FONT_DIALOG' }
   | { type: 'OPEN_INSERT_FUNCTION_DIALOG' }
   | { type: 'OPEN_INSERT_CELLS_DIALOG' }
   | { type: 'OPEN_DELETE_CELLS_DIALOG' }
@@ -442,6 +443,7 @@ export const ACTION_TARGET_MAP: Record<string, ActionTarget> = {
   OPEN_GO_TO_DIALOG: 'ui',
   OPEN_GO_TO_SPECIAL_DIALOG: 'ui',
   OPEN_FORMAT_CELLS_DIALOG: 'ui',
+  OPEN_FONT_DIALOG: 'ui',
   OPEN_INSERT_FUNCTION_DIALOG: 'ui',
   OPEN_INSERT_CELLS_DIALOG: 'ui',
   OPEN_DELETE_CELLS_DIALOG: 'ui',

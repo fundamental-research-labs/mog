@@ -336,6 +336,7 @@ export function isUIAction(action: string): action is UIActionType {
     'NAVIGATE_TO_REFERENCE',
     'OPEN_GO_TO_SPECIAL_DIALOG',
     'OPEN_FORMAT_CELLS_DIALOG',
+    'OPEN_FONT_DIALOG',
     'CLOSE_FORMAT_CELLS_DIALOG',
     'OPEN_INSERT_CELLS_DIALOG',
     'OPEN_DELETE_CELLS_DIALOG',

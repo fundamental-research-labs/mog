@@ -49,6 +49,7 @@ import {
   type ProtectionTabRef,
 } from './format-cells';
 import { NumberFormatPanel } from './NumberFormatPanel';
+import type { FormatCellsTabId } from '../../ui-store/slices/core/misc';
 
 // =============================================================================
 // Types
@@ -56,7 +57,7 @@ import { NumberFormatPanel } from './NumberFormatPanel';
 
 // No props needed - dialog subscribes to its own open state from UIStore
 
-type TabId = 'number' | 'alignment' | 'font' | 'border' | 'fill' | 'protection';
+type TabId = FormatCellsTabId;
 
 // =============================================================================
 // Component
@@ -66,6 +67,7 @@ export function FormatCellsDialog() {
   // Dialog subscribes to its own open state - prevents SpreadsheetContent from re-rendering
   // when this dialog opens/closes (render isolation per ARCHITECTURE-CHECKLIST.md Section 14)
   const open = useUIStore((s) => s.formatCellsDialogOpen);
+  const initialTab = useUIStore((s) => s.formatCellsDialogInitialTab);
   const deps = useActionDependencies();
   const wb = useWorkbook();
   const recentFormats = useUIStore((s) => s.recentNumberFormats);
@@ -77,7 +79,8 @@ export function FormatCellsDialog() {
   const setPendingFillFormat = useUIStore((s) => s.setPendingFillFormat);
   const setPendingProtectionFormat = useUIStore((s) => s.setPendingProtectionFormat);
 
-  const [activeTab, setActiveTab] = useState<TabId>('number');
+  const effectiveInitialTab = initialTab ?? 'number';
+  const [activeTab, setActiveTab] = useState<TabId>(effectiveInitialTab);
 
   // Recent colors from localStorage for color pickers
   const [recentFontColors, setRecentFontColors] = useState(() => getRecentColors('font'));
@@ -155,10 +158,11 @@ export function FormatCellsDialog() {
 
   useEffect(() => {
     if (open) {
+      setActiveTab(effectiveInitialTab);
       pendingNumberFormatRef.current = null;
       setPendingNumberFormatDraft(null);
     }
-  }, [open]);
+  }, [open, effectiveInitialTab]);
 
   useEffect(() => {
     if (!open) return;

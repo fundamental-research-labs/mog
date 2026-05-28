@@ -56,6 +56,7 @@ import {
 
 import { useKeyboardShortcutsDialogStore } from '../../../dialogs/settings/keyboard-shortcuts-dialog-store';
 import type { QuickRuleDialogType } from '../../../ui-store/slices/dialogs/cf-dialog';
+import { isFormatCellsTabId, type FormatCellsTabId } from '../../../ui-store/slices/core/misc';
 
 import {
   getRelativeCommandColumn,
@@ -99,6 +100,16 @@ const QUICK_RULE_TYPES: readonly NonNullable<QuickRuleDialogType>[] = [
 
 function isQuickRuleDialogType(value: string): value is NonNullable<QuickRuleDialogType> {
   return (QUICK_RULE_TYPES as readonly string[]).includes(value);
+}
+
+interface OpenFormatCellsDialogPayload {
+  initialTab?: FormatCellsTabId;
+}
+
+function getFormatCellsInitialTab(payload: unknown): FormatCellsTabId | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const initialTab = (payload as OpenFormatCellsDialogPayload).initialTab;
+  return isFormatCellsTabId(initialTab) ? initialTab : undefined;
 }
 
 // =============================================================================
@@ -329,8 +340,18 @@ export const OPEN_GO_TO_SPECIAL_DIALOG: ActionHandler = (deps): ActionResult => 
  * fonts, borders, fill, and protection.
  * Uses direct UIStore access - handlers should be self-contained.
  */
-export const OPEN_FORMAT_CELLS_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().openFormatCellsDialog();
+export const OPEN_FORMAT_CELLS_DIALOG: ActionHandler = (deps, payload): ActionResult => {
+  getUIStore(deps).getState().openFormatCellsDialog(getFormatCellsInitialTab(payload));
+  return handled();
+};
+
+/**
+ * Open Font dialog.
+ *
+ * Excel routes this command to the Font tab within Format Cells.
+ */
+export const OPEN_FONT_DIALOG: ActionHandler = (deps): ActionResult => {
+  getUIStore(deps).getState().openFormatCellsDialog('font');
   return handled();
 };
 

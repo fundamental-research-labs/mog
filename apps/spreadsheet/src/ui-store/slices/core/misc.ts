@@ -8,6 +8,21 @@
 
 import type { StateCreator } from 'zustand';
 
+export const FORMAT_CELLS_TAB_IDS = [
+  'number',
+  'alignment',
+  'font',
+  'border',
+  'fill',
+  'protection',
+] as const;
+
+export type FormatCellsTabId = (typeof FORMAT_CELLS_TAB_IDS)[number];
+
+export function isFormatCellsTabId(value: unknown): value is FormatCellsTabId {
+  return typeof value === 'string' && (FORMAT_CELLS_TAB_IDS as readonly string[]).includes(value);
+}
+
 export interface MiscSlice {
   // Recent number formats (for quick access in number format panel)
   /** Recently used number format codes (most recent first, max 10) */
@@ -40,7 +55,9 @@ export interface MiscSlice {
   // Format cells dialog (Context Menu Parity)
   /** Whether the format cells dialog is open */
   formatCellsDialogOpen: boolean;
-  openFormatCellsDialog: () => void;
+  /** Initial tab to show when opening format cells dialog */
+  formatCellsDialogInitialTab?: FormatCellsTabId;
+  openFormatCellsDialog: (initialTab?: FormatCellsTabId) => void;
   closeFormatCellsDialog: () => void;
 
   // Protection alert dialog
@@ -230,13 +247,14 @@ export const createMiscSlice: StateCreator<MiscSlice, [], [], MiscSlice> = (set)
 
   // Format cells dialog
   formatCellsDialogOpen: false,
+  formatCellsDialogInitialTab: undefined,
 
-  openFormatCellsDialog: () => {
-    set({ formatCellsDialogOpen: true });
+  openFormatCellsDialog: (initialTab?: FormatCellsTabId) => {
+    set({ formatCellsDialogOpen: true, formatCellsDialogInitialTab: initialTab });
   },
 
   closeFormatCellsDialog: () => {
-    set({ formatCellsDialogOpen: false });
+    set({ formatCellsDialogOpen: false, formatCellsDialogInitialTab: undefined });
   },
 
   // Protection alert dialog

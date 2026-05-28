@@ -600,7 +600,7 @@ export const HANDLER_MAP: Record<ActionType, AnyActionHandler> = {
   // Threaded comments
   OPEN_THREADED_COMMENTS: notImplemented,
   // Font dialog
-  OPEN_FONT_DIALOG: notImplemented,
+  OPEN_FONT_DIALOG: UIHandlers.OPEN_FONT_DIALOG,
   // Print preview / PDF dialog
   OPEN_PRINT_PREVIEW: UIHandlers.OPEN_PRINT_PREVIEW,
   OPEN_PRINT_PDF_DIALOG: UIHandlers.OPEN_PRINT_PDF_DIALOG,

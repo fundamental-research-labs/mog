@@ -12,7 +12,7 @@
 //! - **Serde always on** — `serde` derive is unconditional (feature kept as no-op for compat)
 //! - **Attribute-level conversion** — `from_ooxml(&str)` / `to_ooxml(&self)` for
 //!   string↔enum conversion. No XML tree parsing.
-//! - **Spec-complete** — `ShapePreset` covers all 186 OOXML ST_ShapeType values
+//! - **Spec-complete** — `ShapePreset` covers all 187 OOXML ST_ShapeType values
 //! - **Shared vocabulary** — types used by both read and write paths live here
 
 // OOXML choice groups are represented as direct schema enums. Boxing large

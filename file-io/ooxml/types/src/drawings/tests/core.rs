@@ -54,7 +54,7 @@ fn shape_preset_default_is_rect() {
 }
 
 #[test]
-fn shape_preset_roundtrip_all_186_variants() {
+fn shape_preset_roundtrip_all_variants() {
     let variants = ShapePreset::all_variants();
     assert_eq!(variants.len(), SHAPE_PRESET_COUNT);
     for &v in variants {
@@ -69,9 +69,35 @@ fn shape_preset_roundtrip_all_186_variants() {
 }
 
 #[test]
+fn shape_preset_all_variants_are_unique() {
+    let mut seen = std::collections::HashSet::new();
+    for &v in ShapePreset::all_variants() {
+        assert!(seen.insert(v), "duplicate ShapePreset variant: {v:?}");
+    }
+}
+
+#[test]
+fn shape_preset_canonical_tokens_are_unique() {
+    let mut seen = std::collections::HashSet::new();
+    for &v in ShapePreset::all_variants() {
+        let token = v.to_ooxml();
+        assert!(seen.insert(token), "duplicate ShapePreset token: {token}");
+        assert_eq!(
+            ShapePreset::from_ooxml(token),
+            Some(v),
+            "canonical token did not parse back to {v:?}"
+        );
+    }
+}
+
+#[test]
 fn shape_preset_from_ooxml_unknown_returns_none() {
     assert_eq!(ShapePreset::from_ooxml(""), None);
     assert_eq!(ShapePreset::from_ooxml("bogus"), None);
+    assert_eq!(ShapePreset::from_ooxml("Rect"), None);
+    assert_eq!(ShapePreset::from_ooxml("RECT"), None);
+    assert_eq!(ShapePreset::from_ooxml(" rect"), None);
+    assert_eq!(ShapePreset::from_ooxml("rect "), None);
 }
 
 #[test]
@@ -97,6 +123,16 @@ fn shape_preset_flowchart_data_alias() {
     assert_eq!(
         ShapePreset::FlowChartInputOutput.to_ooxml(),
         "flowChartInputOutput"
+    );
+    assert_ne!(
+        ShapePreset::FlowChartInputOutput.to_ooxml(),
+        "flowChartData"
+    );
+    assert!(
+        !ShapePreset::all_variants()
+            .iter()
+            .any(|v| v.to_ooxml() == "flowChartData"),
+        "read alias must not appear in canonical shape presets"
     );
 }
 
@@ -126,6 +162,20 @@ fn shape_preset_serde_roundtrip() {
         let deserialized: ShapePreset = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, v, "serde roundtrip failed for {v:?}");
     }
+}
+
+#[test]
+fn shape_preset_serde_deserializes_all_canonical_tokens() {
+    for &v in ShapePreset::all_variants() {
+        let json = format!("\"{}\"", v.to_ooxml());
+        let deserialized: ShapePreset = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, v, "serde deserialize failed for {json}");
+    }
+}
+
+#[test]
+fn shape_preset_serde_rejects_read_alias() {
+    assert!(serde_json::from_str::<ShapePreset>("\"flowChartData\"").is_err());
 }
 
 #[test]
@@ -171,8 +221,8 @@ fn shape_preset_spec_xml_roundtrip() {
 
     assert_eq!(
         spec_names.len(),
-        186,
-        "Expected 186 unique shape names in spec XML, got {}",
+        187,
+        "Expected 187 unique OOXML shape names in spec XML, got {}",
         spec_names.len()
     );
 

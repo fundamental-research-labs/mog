@@ -96,7 +96,7 @@ fn sparkline_groups_are_authoritative_ext_lst_source_without_relationships() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();

@@ -72,7 +72,7 @@ fn shared_string_rich_text_hint_is_preserved_from_parse_output() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
@@ -98,7 +98,7 @@ fn sheet_protection_modern_hash_fields_are_written_from_parse_output() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -135,7 +135,7 @@ fn shared_string_phonetic_hint_does_not_capture_plain_cells_with_same_text() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
@@ -232,9 +232,31 @@ fn pivot_package_output(pivots: Vec<pivot_types::PivotTableConfig>) -> ParseOutp
     output
 }
 
-fn chart_auxiliary_round_trip_data(chart_num: usize) -> domain_types::chart::ChartRoundTripData {
-    domain_types::chart::ChartRoundTripData {
-        auxiliary_files: vec![
+fn chart_auxiliary_data(
+    chart_num: usize,
+) -> (
+    Vec<domain_types::chart::ChartRelationshipData>,
+    Vec<(String, Vec<u8>)>,
+) {
+    (
+        vec![
+            domain_types::chart::ChartRelationshipData {
+                r_id: "rId9".to_string(),
+                relationship_type: Some(
+                    "http://schemas.microsoft.com/office/2011/relationships/chartStyle"
+                        .to_string(),
+                ),
+                target: Some(format!("style{chart_num}.xml")),
+                target_mode: None,
+            },
+            domain_types::chart::ChartRelationshipData {
+                r_id: "rId10".to_string(),
+                relationship_type: Some("http://example.com/vendorChartSidecar".to_string()),
+                target: Some(format!("vendor{chart_num}.xml")),
+                target_mode: None,
+            },
+        ],
+        vec![
             (
                 format!("xl/charts/style{chart_num}.xml"),
                 b"<c:styleSheet xmlns:c=\"http://schemas.microsoft.com/office/drawing/2012/chartStyle\"/>"
@@ -245,15 +267,7 @@ fn chart_auxiliary_round_trip_data(chart_num: usize) -> domain_types::chart::Cha
                 b"<vendor:chartSidecar/>".to_vec(),
             ),
         ],
-        chart_rels_bytes: Some((
-            format!("xl/charts/_rels/chart{chart_num}.xml.rels"),
-            format!(
-                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style{chart_num}.xml"/><Relationship Id="rId10" Type="http://example.com/vendorChartSidecar" Target="vendor{chart_num}.xml"/></Relationships>"#
-            )
-            .into_bytes(),
-        )),
-        ..Default::default()
-    }
+    )
 }
 
 fn with_chart_identity(mut chart: ChartSpec, target: &str) -> ChartSpec {
@@ -268,7 +282,9 @@ fn with_chart_identity(mut chart: ChartSpec, target: &str) -> ChartSpec {
 }
 
 fn with_chart_auxiliary(mut chart: ChartSpec, chart_num: usize) -> ChartSpec {
-    chart.rt = Some(chart_auxiliary_round_trip_data(chart_num));
+    let (relationships, auxiliary_files) = chart_auxiliary_data(chart_num);
+    chart.chart_relationships = relationships;
+    chart.chart_auxiliary_files = auxiliary_files;
     chart
 }
 
@@ -341,8 +357,9 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         floor_format: None,
         side_wall_format: None,
         back_wall_format: None,
-        rt: None,
         chart_frame: None,
+        chart_relationships: Vec::new(),
+        chart_auxiliary_files: Vec::new(),
         is_chart_ex: false,
         cnv_pr_name: Some("Revenue Chart".to_string()),
         cnv_pr_id: Some(2),

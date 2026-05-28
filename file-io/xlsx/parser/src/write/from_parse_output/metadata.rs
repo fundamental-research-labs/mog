@@ -1,10 +1,7 @@
 use crate::write::xml_writer::XmlWriter;
 use domain_types::{ParseOutput, WorkbookMetadata};
 
-pub(super) fn metadata_xml_for_export(
-    output: &ParseOutput,
-    _round_trip_ctx: Option<&domain_types::RoundTripContext>,
-) -> Option<Vec<u8>> {
+pub(super) fn metadata_xml_for_export(output: &ParseOutput) -> Option<Vec<u8>> {
     output
         .metadata
         .as_ref()

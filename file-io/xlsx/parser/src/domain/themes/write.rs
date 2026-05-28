@@ -1447,15 +1447,8 @@ mod tests;
 // Domain bridge: domain_types::ThemeData → ThemeWriter → XML bytes
 // ============================================================================
 
-/// Build theme XML from a `domain_types::ThemeData` and optional `RoundTripContext`.
-///
-/// When the round-trip context provides rich parsed theme data (font scheme,
-/// format scheme, etc.), those are used directly for lossless round-tripping.
-/// Otherwise, falls back to reconstructing from the simplified `ThemeData`.
-pub fn theme_writer_from_domain(
-    theme: &domain_types::ThemeData,
-    _round_trip_ctx: Option<&domain_types::RoundTripContext>,
-) -> Vec<u8> {
+/// Build theme XML from a `domain_types::ThemeData`.
+pub fn theme_writer_from_domain(theme: &domain_types::ThemeData) -> Vec<u8> {
     use ooxml_types::drawings::{DrawingColor, SystemColorVal};
 
     let mut tw = ThemeWriter::default_office_theme();

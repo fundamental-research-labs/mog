@@ -4,7 +4,6 @@ pub(super) fn relationship_for_export(
     sheet_idx: usize,
     sheet_num: usize,
     print_settings: &domain_types::PrintSettings,
-    _original_sheet_rels: &[domain_types::OpcRelationship],
 ) -> Option<WorksheetPrinterSettingsGraphEntry> {
     let imported_identity = current_imported_printer_settings_identity(print_settings)?;
     let path = imported_identity.path.clone();

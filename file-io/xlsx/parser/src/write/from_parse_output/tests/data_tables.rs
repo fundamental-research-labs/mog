@@ -51,7 +51,7 @@ fn data_table_regions_drive_ooxml_formula_export_with_flags() {
         }),
     });
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -107,7 +107,7 @@ fn data_table_regions_preserve_authored_r1_r2_spelling_when_present() {
         }),
     });
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -133,7 +133,7 @@ fn table_formula_body_cells_export_as_cached_values_only() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();

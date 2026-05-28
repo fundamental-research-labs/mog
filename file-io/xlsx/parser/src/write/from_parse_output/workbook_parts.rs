@@ -1,4 +1,4 @@
-use domain_types::{ParseOutput, RoundTripContext};
+use domain_types::ParseOutput;
 
 use super::WriteError;
 use super::external_links;
@@ -16,7 +16,6 @@ pub(super) struct WorkbookXmlParts {
 
 pub(super) fn build_workbook_xml(
     output: &ParseOutput,
-    round_trip_ctx: Option<&RoundTripContext>,
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     external_link_exports: &[(domain_types::domain::external_link::ExternalLink, String)],
@@ -92,36 +91,6 @@ pub(super) fn build_workbook_xml(
     }
     if let Some(ref web_publishing) = output.web_publishing {
         workbook_writer.set_web_publishing(web_publishing.clone());
-    }
-
-    // ── Workbook Preserved Namespaces + Elements (round-trip) ─────
-    if let Some(ctx) = round_trip_ctx {
-        if !ctx.workbook_namespace_attrs.is_empty() {
-            let mut ns_map = crate::roundtrip::namespaces::NamespaceMap::new();
-            for (prefix, uri) in &ctx.workbook_namespace_attrs {
-                if prefix.is_empty() {
-                    ns_map.set_default(uri.as_str());
-                } else {
-                    ns_map.add_prefixed(prefix.as_str(), uri.as_str());
-                }
-            }
-            workbook_writer.set_preserved_namespaces(ns_map);
-        }
-        if !ctx.workbook_preserved_elements.is_empty() {
-            let preserved_pairs: Vec<_> = ctx
-                .workbook_preserved_elements
-                .iter()
-                .filter(|(_, xml)| !crate::infra::xml::raw_xml_contains_relationship_attr(xml))
-                .cloned()
-                .collect();
-            if !preserved_pairs.is_empty() {
-                let preserved =
-                    crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(
-                        &preserved_pairs,
-                    );
-                workbook_writer.set_preserved_elements(preserved);
-            }
-        }
     }
 
     // ── Iterative Calc Settings ──────────────────────────────────────

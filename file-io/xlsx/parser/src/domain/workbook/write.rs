@@ -156,7 +156,7 @@ fn update_links_to_xml(update_links: UpdateLinks) -> &'static str {
 }
 
 fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
-    raw_xml.contains(&format!("<{local_name}")) || raw_xml.contains(&format!(":{local_name}"))
+    crate::roundtrip::preserved_xml_policy::raw_xml_contains_element(raw_xml, local_name)
 }
 
 // ============================================================================
@@ -383,6 +383,12 @@ impl WorkbookWriter {
     }
 
     fn should_skip_preserved_element(&self, raw_xml: &str) -> bool {
+        if crate::roundtrip::preserved_xml_policy::raw_xml_contains_dropped_workbook_semantic_child(
+            raw_xml,
+        ) {
+            return true;
+        }
+
         [
             "fileVersion",
             "fileSharing",

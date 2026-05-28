@@ -6,7 +6,7 @@ fn test_empty_workbook() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -20,7 +20,7 @@ fn test_number_cells() {
         ],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -31,7 +31,7 @@ fn test_string_cells() {
         cells: vec![make_cell(0, 0, DomainValue::Text(Arc::from("hello world")))],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -47,7 +47,7 @@ fn test_formula_cells() {
         )],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -72,7 +72,7 @@ fn modeled_formula_metadata_decorates_current_formula_cell() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -101,7 +101,7 @@ fn shared_formula_range_is_not_replayed_without_modeled_group() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -134,7 +134,7 @@ fn array_formula_range_is_not_replayed_without_modeled_group() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -166,7 +166,7 @@ fn modeled_shared_formula_range_is_not_replayed_without_modeled_group() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -199,7 +199,7 @@ fn modeled_array_formula_range_is_preserved_when_current_array_ref_matches() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -220,9 +220,7 @@ fn default_roundtrip_context_does_not_decorate_formula_cell() {
         )],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -245,9 +243,7 @@ fn stale_formula_hints_do_not_decorate_replaced_value_cell() {
         )],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -279,7 +275,7 @@ fn stale_data_table_formula_metadata_does_not_decorate_edited_formula_cell() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -302,7 +298,7 @@ fn test_mixed_cell_types() {
         ],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -319,7 +315,7 @@ fn test_merges() {
         }],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -347,7 +343,7 @@ fn test_col_widths_and_row_heights() {
         },
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -362,7 +358,7 @@ fn test_frozen_pane() {
         }),
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -383,7 +379,7 @@ fn stale_pane_qualified_selection_is_dropped_without_current_pane() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -404,9 +400,7 @@ fn sheet_view_selection_exports_from_modeled_state() {
         },
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -443,7 +437,7 @@ fn stale_extra_sheet_view_pane_selection_is_dropped_without_current_pane() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -479,7 +473,7 @@ fn split_pane_exports_from_typed_view_state() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -520,7 +514,7 @@ fn extra_sheet_view_exports_from_domain_view_state() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -549,7 +543,7 @@ fn test_multiple_sheets() {
             ..Default::default()
         },
     ]);
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }
 
@@ -598,6 +592,6 @@ fn test_styled_cells() {
         workbook_stylesheet: None,
         ..Default::default()
     };
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
 }

@@ -1,4 +1,4 @@
-use domain_types::{ParseOutput, RoundTripContext};
+use domain_types::ParseOutput;
 
 use super::assembly::{
     ChartEntry, ChartExEntry, SheetExtras, WorksheetCommentsGraphEntry, WorksheetDrawingGraphEntry,
@@ -15,7 +15,6 @@ use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_zip_package(
     output: &ParseOutput,
-    _round_trip_ctx: Option<&RoundTripContext>,
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
     sheet_writers: Vec<SheetWriter>,
@@ -153,8 +152,6 @@ pub(super) fn write_zip_package(
             zip.add_file(&external_links::rels_path(&zip_path), rels.to_xml());
         }
     }
-
-    crate::write::opaque_subgraph::write_opaque_parts(&mut zip, package_graph);
 
     // Pre-generate all sheet XMLs (parallel when the "parallel" feature is enabled).
     #[cfg(feature = "parallel")]

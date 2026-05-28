@@ -14,7 +14,7 @@ fn authored_non_finite_numeric_lexeme_roundtrips_through_domain_cell_metadata() 
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -50,7 +50,7 @@ fn authored_style_runs_stream_blank_cells_and_style_overlapping_values() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
@@ -96,7 +96,7 @@ fn center_continuous_style_run_exports_styled_blanks_without_merges() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
     let sheet_xml =
@@ -136,30 +136,7 @@ fn stale_calc_chain_round_trip_metadata_is_not_exported_without_calc_chain_part(
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        sheet_workbook_r_ids: vec!["rId1".to_string()],
-        workbook_relationships: vec![
-            domain_types::OpcRelationship {
-                id: "rId1".to_string(),
-                rel_type: crate::write::REL_WORKSHEET.to_string(),
-                target: "worksheets/sheet1.xml".to_string(),
-                target_mode: None,
-            },
-            domain_types::OpcRelationship {
-                id: "rId1".to_string(),
-                rel_type: crate::write::REL_CALC_CHAIN.to_string(),
-                target: "calcChain.xml".to_string(),
-                target_mode: None,
-            },
-        ],
-        content_type_overrides: vec![(
-            "/xl/calcChain.xml".to_string(),
-            crate::write::CT_CALC_CHAIN.to_string(),
-        )],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
@@ -179,18 +156,7 @@ fn stale_workbook_rels_without_shared_strings_are_repaired_when_text_cells_emit_
         cells: vec![make_cell(0, 0, DomainValue::Text(Arc::from("hello")))],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        sheet_workbook_r_ids: vec!["rId1".to_string()],
-        workbook_relationships: vec![domain_types::OpcRelationship {
-            id: "rId1".to_string(),
-            rel_type: crate::write::REL_WORKSHEET.to_string(),
-            target: "worksheets/sheet1.xml".to_string(),
-            target_mode: None,
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
@@ -214,9 +180,7 @@ fn imported_original_sst_count_does_not_override_generated_counts() {
         ],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
@@ -235,9 +199,7 @@ fn imported_unused_shared_strings_do_not_force_sst_part_rel_or_content_type() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_rels =
         String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
@@ -257,9 +219,7 @@ fn imported_rich_text_hint_is_not_preserved_from_roundtrip_context() {
         cells: vec![make_text_cell_with_original_sst(0, 0, "Rich", 0)],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
@@ -287,7 +247,7 @@ fn imported_rich_text_hint_is_preserved_from_parse_output() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
@@ -304,9 +264,7 @@ fn edited_imported_rich_text_cell_has_no_stale_hint() {
         cells: vec![make_text_cell_with_original_sst(0, 0, "Edited", 0)],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext::default();
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let shared_strings =
         String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();

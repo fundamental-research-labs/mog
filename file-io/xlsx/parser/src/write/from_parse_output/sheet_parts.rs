@@ -1,16 +1,12 @@
-use domain_types::{Hyperlink, RoundTripContext};
+use domain_types::Hyperlink;
 
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
 use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
-use super::{
-    chart_allows_auxiliary_replay, comments_have_imported_identity, sheet_preservation,
-    should_reconstruct_chart_space, worksheet_custom_properties,
-};
+use super::{chart_allows_auxiliary_replay, sheet_preservation, should_reconstruct_chart_space};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use crate::infra::opc::resolve_relationship_target;
 use crate::write::{SharedStringsWriter, SheetWriter};
 
 pub(super) struct BuiltSheetParts {
@@ -35,7 +31,6 @@ pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> Shared
 
 pub(super) fn build_sheet_parts(
     output: &domain_types::ParseOutput,
-    round_trip_ctx: Option<&RoundTripContext>,
     shared_strings: &mut SharedStringsWriter,
 ) -> BuiltSheetParts {
     let mut sheet_writers = Vec::with_capacity(output.sheets.len());
@@ -102,11 +97,9 @@ pub(super) fn build_sheet_parts(
             .collect();
 
         // Build the base SheetWriter (cells, merges, views, etc.)
-        let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
         let mut sheet_writer = build_sheet(
             sheet_data,
             shared_strings,
-            sheet_rt,
             &data_table_body_positions,
             &sheet_data_table_regions,
             emit_cell_metadata_refs,
@@ -115,28 +108,6 @@ pub(super) fn build_sheet_parts(
         // ── Sheet UID (xr:uid on <worksheet> root) ───────────────────
         if let Some(ref uid) = sheet_data.uid {
             sheet_writer.set_uid(uid.clone());
-        }
-
-        // ── Preserved Namespaces + Dimension (round-trip) ──────────────
-        if let Some(ctx) = round_trip_ctx {
-            if let Some(sheet_rt) = ctx.sheets.get(sheet_idx) {
-                if !sheet_rt.preserved_namespace_attrs.is_empty() {
-                    let mut ns_map = crate::roundtrip::namespaces::NamespaceMap::new();
-                    for (prefix, uri) in &sheet_rt.preserved_namespace_attrs {
-                        if prefix.is_empty() {
-                            ns_map.set_default(uri.as_str());
-                        } else {
-                            ns_map.add_prefixed(prefix.as_str(), uri.as_str());
-                        }
-                    }
-                    sheet_writer.set_preserved_namespaces(ns_map);
-                }
-                if let Some(preserved) =
-                    sheet_preservation::preserved_elements_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_preserved_elements(preserved);
-                }
-            }
         }
 
         // ── Hyperlinks ──────────────────────────────────────────────────
@@ -150,7 +121,7 @@ pub(super) fn build_sheet_parts(
         // (`data_validations_declared_count`,
         // `data_validations_disable_prompts`, `data_validations_x_window`,
         // `data_validations_y_window`). The former raw-XML sidecar on
-        // `SheetRoundTripContext.data_validations_xml` has been removed.
+        // The former raw data-validations sidecar has been removed.
         if !sheet_data.data_validations.is_empty()
             || sheet_data.data_validations_disable_prompts
             || sheet_data.data_validations_x_window.is_some()
@@ -218,7 +189,7 @@ pub(super) fn build_sheet_parts(
         // ── Auto Filter ─────────────────────────────────────────────────
         // Typed OOXML preservation: auto filter now reconstructs from the typed
         // `SheetData.auto_filter` only. The former raw-XML sidecar
-        // fallback on `SheetRoundTripContext.auto_filter_xml` is gone — the
+        // fallback on raw auto-filter XML is gone — the
         // domain type is lossless over CT_AutoFilter.
         if let Some(ref af) = sheet_data.auto_filter {
             let xml = crate::domain::auto_filter::write::write_auto_filter_xml(af);
@@ -228,7 +199,7 @@ pub(super) fn build_sheet_parts(
         // ── Sort State ──────────────────────────────────────────────────
         // Typed OOXML preservation: worksheet-level sort state now reconstructs from
         // the typed `SheetData.sort_state`. The former raw-XML sidecar on
-        // `SheetRoundTripContext.sort_state_xml` was silently dropping sort
+        // raw sort-state sidecar was silently dropping sort
         // state on the Yrs-hydration path whenever the blob was absent.
         if let Some(ref ss) = sheet_data.sort_state {
             let xml = crate::domain::auto_filter::write::write_sort_state_xml(ss);
@@ -236,7 +207,6 @@ pub(super) fn build_sheet_parts(
         }
 
         // ── Sparklines / extLst ──────────────────────────────────────────
-        let sheet_rt_for_ext = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
         let mut ext_entries = Vec::new();
         if !sheet_data.sparkline_groups.is_empty() {
             let xml = crate::domain::sparklines::write::sparkline_groups_xml_from_domain(
@@ -272,26 +242,12 @@ pub(super) fn build_sheet_parts(
         }
         if !ext_entries.is_empty() {
             sheet_writer.set_ext_lst_xml(combine_ext_lst_entries(&ext_entries));
-        } else {
-            if let Some(sheet_rt) = sheet_rt_for_ext {
-                if let Some(ext_xml) =
-                    sheet_preservation::standalone_ext_lst_for_export(sheet_data, sheet_rt)
-                {
-                    sheet_writer.set_ext_lst_xml(ext_xml.clone());
-                }
-            }
         }
 
         // ── Comments ────────────────────────────────────────────────────
         let comments_data = if !sheet_data.comments.is_empty() {
-            let sheet_rt = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-            let imported_comment_identity = comments_have_imported_identity(sheet_data);
-            let original_authors = sheet_rt
-                .map(|rt| rt.comment_authors.as_slice())
-                .filter(|authors| imported_comment_identity && !authors.is_empty());
-            let root_ns_attrs = sheet_rt
-                .map(|rt| rt.comments_root_namespace_attrs.as_slice())
-                .filter(|attrs| imported_comment_identity && !attrs.is_empty());
+            let original_authors = None;
+            let root_ns_attrs = None;
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(
                     sheet_num,
@@ -415,33 +371,8 @@ pub(super) fn build_sheet_parts(
         // Check for floating objects (images, shapes, etc.)
         let has_floating_objects = !sheet_data.floating_objects.is_empty();
 
-        // Extract original comment/VML/drawing paths from round-trip context for ZIP assembly
         let (original_comment_path, original_vml_path, hf_vml, original_drawing_path) =
-            round_trip_ctx
-                .and_then(|ctx| ctx.sheets.get(sheet_idx))
-                .map(|sheet_rt| {
-                    // Identify the comment VML path by matching legacyDrawing r:id
-                    let comment_vml_path =
-                        imported_comment_vml_path_for_export(sheet_idx, sheet_data, sheet_rt);
-                    let hf_vml_parsed = (!sheet_data.hf_images.is_empty())
-                        .then(|| {
-                            header_footer_vml_from_opaque_subgraphs(
-                                round_trip_ctx,
-                                sheet_idx,
-                                imported_header_footer_vml_path(sheet_idx, sheet_rt).as_deref(),
-                                comment_vml_path.as_deref(),
-                                &sheet_data.hf_images,
-                            )
-                        })
-                        .flatten();
-                    (
-                        None,
-                        comment_vml_path,
-                        hf_vml_parsed,
-                        original_drawing_path_for_export(sheet_data, sheet_rt),
-                    )
-                })
-                .unwrap_or((None, None, None, None));
+            (None, None, None, None);
 
         let has_printer_settings = sheet_data
             .print_settings
@@ -463,11 +394,7 @@ pub(super) fn build_sheet_parts(
                 })
                 .collect();
         let form_controls = convert_unified_form_controls(&form_control_fobjs);
-        let custom_properties = round_trip_ctx.and_then(|ctx| {
-            ctx.sheets.get(sheet_idx).and_then(|sheet_rt| {
-                worksheet_custom_properties::custom_properties_for_export(ctx, sheet_rt, sheet_idx)
-            })
-        });
+        let custom_properties = None;
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {
@@ -513,326 +440,4 @@ fn ext_lst_inner(xml: &str) -> Option<&str> {
     let start_tag_end = xml.find("<extLst>").map(|pos| pos + "<extLst>".len())?;
     let end = xml.rfind("</extLst>")?;
     (start_tag_end <= end).then_some(&xml[start_tag_end..end])
-}
-
-fn original_drawing_path_for_export(
-    sheet_data: &domain_types::SheetData,
-    sheet_rt: &domain_types::SheetRoundTripContext,
-) -> Option<String> {
-    let original_path = sheet_rt.original_drawing_path.as_ref()?;
-    let imported_path = sheet_rt
-        .imported_drawing
-        .as_ref()
-        .map(|drawing| drawing.path.trim_start_matches('/').replace('\\', "/"));
-    if imported_path.as_deref() != Some(original_path.trim_start_matches('/')) {
-        return None;
-    }
-    current_sheet_has_imported_drawing_identity(sheet_data).then(|| original_path.clone())
-}
-
-fn current_sheet_has_imported_drawing_identity(sheet_data: &domain_types::SheetData) -> bool {
-    sheet_data
-        .charts
-        .iter()
-        .any(|chart| chart.chart_frame.is_some())
-        || sheet_data
-            .floating_objects
-            .iter()
-            .any(floating_object_has_imported_drawing_identity)
-}
-
-fn imported_comment_vml_path_for_export(
-    sheet_idx: usize,
-    sheet_data: &domain_types::SheetData,
-    sheet_rt: &domain_types::SheetRoundTripContext,
-) -> Option<String> {
-    if !comments_have_imported_identity(sheet_data) {
-        return None;
-    }
-    let legacy_drawing_r_id = sheet_rt.legacy_drawing_r_id.as_ref()?;
-    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
-    let path = sheet_rt
-        .sheet_opc_rels
-        .iter()
-        .find(|rel| {
-            &rel.id == legacy_drawing_r_id
-                && rel.rel_type == crate::infra::opc::REL_VML_DRAWING
-                && rel.target_mode.as_deref() != Some("External")
-        })
-        .and_then(|rel| resolve_relationship_target(Some(&owner_path), &rel.target).ok())
-        .map(|path| normalize_path(&path))?;
-    sheet_rt
-        .raw_vml_drawings
-        .iter()
-        .any(|vml| normalize_path(&vml.path) == path)
-        .then_some(path)
-}
-
-fn floating_object_has_imported_drawing_identity(
-    object: &domain_types::domain::floating_object::FloatingObject,
-) -> bool {
-    use domain_types::domain::floating_object::FloatingObjectData;
-
-    match &object.data {
-        FloatingObjectData::Picture(data) => data.ooxml.is_some(),
-        FloatingObjectData::Shape(data) => data.ooxml.is_some(),
-        FloatingObjectData::Textbox(data) => data.ooxml.is_some(),
-        FloatingObjectData::Connector(data) => data.ooxml.is_some(),
-        FloatingObjectData::Chart(data) => data
-            .ooxml
-            .as_ref()
-            .and_then(|ooxml| ooxml.drawing_frame.as_ref())
-            .is_some(),
-        FloatingObjectData::OleObject(data) => data.ooxml.is_some(),
-        FloatingObjectData::FormControl(data) => data.ooxml.is_some(),
-        _ => false,
-    }
-}
-
-fn header_footer_vml_from_opaque_subgraphs(
-    round_trip_ctx: Option<&RoundTripContext>,
-    sheet_idx: usize,
-    expected_vml_path: Option<&str>,
-    comment_vml_path: Option<&str>,
-    modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
-) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
-    let clean_subgraphs =
-        crate::write::opaque_subgraph::normalized_round_trip_opaque_subgraphs(round_trip_ctx);
-    for subgraph in clean_subgraphs {
-        if !emits_clean_opaque_part(subgraph.ownership) {
-            continue;
-        }
-        if !subgraph_allows_hf_vml_for_sheet(&subgraph, sheet_idx) {
-            continue;
-        }
-        for part in subgraph.parts.iter().filter(|part| {
-            emits_clean_opaque_part(part.ownership)
-                && part.part.path.ends_with(".vml")
-                && expected_vml_path.is_none_or(|expected| {
-                    normalize_path(&part.part.path) == normalize_path(expected)
-                })
-                && comment_vml_path != Some(part.part.path.as_str())
-        }) {
-            let rels_path = crate::write::package_graph::part_relationships_path(&part.part.path);
-            let rels_data = opaque_relationships_xml_for_owner(&subgraph, &part.part.path);
-            let Some(parsed) = crate::domain::print::hf_images::parse_hf_vml_context(
-                &part.part.path,
-                &part.part.data,
-                Some(&rels_path),
-                rels_data.as_deref(),
-            ) else {
-                continue;
-            };
-            if let Some(filtered) =
-                filter_hf_vml_to_modeled_clean_images(parsed, modeled_images, &subgraph)
-            {
-                return Some(filtered);
-            }
-        }
-    }
-    None
-}
-
-fn imported_header_footer_vml_path(
-    sheet_idx: usize,
-    sheet_rt: &domain_types::SheetRoundTripContext,
-) -> Option<String> {
-    let legacy_drawing_hf_r_id = sheet_rt.legacy_drawing_hf_r_id.as_ref()?;
-    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
-    sheet_rt
-        .sheet_opc_rels
-        .iter()
-        .find(|rel| {
-            &rel.id == legacy_drawing_hf_r_id
-                && rel.rel_type == crate::infra::opc::REL_VML_DRAWING
-                && rel.target_mode.as_deref() != Some("External")
-        })
-        .and_then(|rel| resolve_relationship_target(Some(&owner_path), &rel.target).ok())
-        .map(|path| normalize_path(&path))
-}
-
-fn subgraph_allows_hf_vml_for_sheet(
-    subgraph: &domain_types::OpaquePackageSubgraph,
-    sheet_idx: usize,
-) -> bool {
-    match &subgraph.owner {
-        domain_types::OpaquePackageOwner::Worksheet { index, .. } => *index == sheet_idx,
-        _ => true,
-    }
-}
-
-fn opaque_relationships_xml_for_owner(
-    subgraph: &domain_types::OpaquePackageSubgraph,
-    owner_path: &str,
-) -> Option<Vec<u8>> {
-    let owner_path = normalize_path(owner_path);
-    let mut rels = crate::write::relationships::RelationshipManager::new();
-    let mut has_relationships = false;
-    for relationship in &subgraph.relationships {
-        let domain_types::OpaquePackageOwner::Part { path } = &relationship.owner else {
-            continue;
-        };
-        if normalize_path(path) != owner_path {
-            continue;
-        }
-        let target = match &relationship.target {
-            domain_types::OpaqueRelationshipTarget::InternalPart { path } => {
-                relative_target(&owner_path, path)
-            }
-            domain_types::OpaqueRelationshipTarget::InternalPath { target } => target.clone(),
-            domain_types::OpaqueRelationshipTarget::External { target } => target.clone(),
-        };
-        if let Some(id) = &relationship.relationship_id_hint {
-            rels.add_with_id(id, &relationship.relationship_type, &target);
-        } else {
-            rels.add(&relationship.relationship_type, &target);
-        }
-        has_relationships = true;
-    }
-    has_relationships.then(|| rels.to_xml())
-}
-
-fn emits_clean_opaque_part(ownership: domain_types::OpaquePackageOwnership) -> bool {
-    matches!(
-        ownership,
-        domain_types::OpaquePackageOwnership::CleanImported
-            | domain_types::OpaquePackageOwnership::OrphanCleanPackageData
-    )
-}
-
-fn filter_hf_vml_to_modeled_clean_images(
-    mut hf_vml: crate::domain::print::hf_images::ParsedHfVml,
-    modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
-    subgraph: &domain_types::OpaquePackageSubgraph,
-) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
-    let modeled_by_target: std::collections::HashMap<
-        String,
-        &domain_types::domain::print::HeaderFooterImageInfo,
-    > = modeled_images
-        .iter()
-        .filter_map(|image| {
-            normalize_hf_image_target(&hf_vml.vml_path, &image.src).map(|target| (target, image))
-        })
-        .collect();
-
-    let modeled_by_rel_id: std::collections::HashMap<
-        String,
-        &domain_types::domain::print::HeaderFooterImageInfo,
-    > = hf_vml
-        .image_targets
-        .iter()
-        .filter_map(|(rel_id, target)| {
-            let target_path = normalize_hf_image_target(&hf_vml.vml_path, target)?;
-            let modeled = modeled_by_target.get(&target_path).copied()?;
-            (subgraph_contains_clean_part(subgraph, &target_path)
-                && modeled_hf_position_matches(modeled.position, rel_id, &hf_vml.images))
-            .then(|| (rel_id.clone(), modeled))
-        })
-        .collect();
-
-    hf_vml.images.retain_mut(|image| {
-        let Some(modeled) = modeled_by_rel_id.get(&image.image_rel_id) else {
-            return false;
-        };
-        if !hf_image_positions_match(image.position, modeled.position) {
-            return false;
-        }
-        image.title = modeled.title.clone();
-        image.width_pt = modeled.width_pt;
-        image.height_pt = modeled.height_pt;
-        true
-    });
-    if hf_vml.images.is_empty() {
-        return None;
-    }
-
-    hf_vml
-        .image_targets
-        .retain(|(rel_id, _)| modeled_by_rel_id.contains_key(rel_id));
-    Some(hf_vml)
-}
-
-fn subgraph_contains_clean_part(
-    subgraph: &domain_types::OpaquePackageSubgraph,
-    path: &str,
-) -> bool {
-    let normalized = normalize_path(path);
-    subgraph.parts.iter().any(|part| {
-        emits_clean_opaque_part(part.ownership) && normalize_path(&part.part.path) == normalized
-    })
-}
-
-fn normalize_hf_image_target(vml_path: &str, target: &str) -> Option<String> {
-    if target.starts_with("data:") {
-        return None;
-    }
-    if target.trim_start_matches('/').starts_with("xl/") {
-        return Some(target.trim_start_matches('/').to_string());
-    }
-    crate::infra::opc::resolve_relationship_target(Some(vml_path), target).ok()
-}
-
-fn normalize_path(path: &str) -> String {
-    path.trim_start_matches('/').replace('\\', "/")
-}
-
-fn relative_target(owner_path: &str, target_path: &str) -> String {
-    let owner_path = normalize_path(owner_path);
-    let target_path = normalize_path(target_path);
-    let owner_dir = owner_path.rsplit_once('/').map_or("", |(dir, _)| dir);
-    let from_components: Vec<_> = owner_dir
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    let to_components: Vec<_> = target_path
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    let common = from_components
-        .iter()
-        .zip(&to_components)
-        .take_while(|(a, b)| a == b)
-        .count();
-    let mut result = vec![".."; from_components.len() - common];
-    result.extend(to_components[common..].iter().copied());
-    result.join("/")
-}
-
-fn modeled_hf_position_matches(
-    position: domain_types::domain::print::HfImagePosition,
-    rel_id: &str,
-    images: &[crate::domain::print::hf_images::HeaderFooterImage],
-) -> bool {
-    images
-        .iter()
-        .find(|image| image.image_rel_id == rel_id)
-        .is_some_and(|image| hf_image_positions_match(image.position, position))
-}
-
-fn hf_image_positions_match(
-    parsed: crate::domain::print::hf_images::HfImagePosition,
-    modeled: domain_types::domain::print::HfImagePosition,
-) -> bool {
-    matches!(
-        (parsed, modeled),
-        (
-            crate::domain::print::hf_images::HfImagePosition::LeftHeader,
-            domain_types::domain::print::HfImagePosition::LeftHeader
-        ) | (
-            crate::domain::print::hf_images::HfImagePosition::CenterHeader,
-            domain_types::domain::print::HfImagePosition::CenterHeader
-        ) | (
-            crate::domain::print::hf_images::HfImagePosition::RightHeader,
-            domain_types::domain::print::HfImagePosition::RightHeader
-        ) | (
-            crate::domain::print::hf_images::HfImagePosition::LeftFooter,
-            domain_types::domain::print::HfImagePosition::LeftFooter
-        ) | (
-            crate::domain::print::hf_images::HfImagePosition::CenterFooter,
-            domain_types::domain::print::HfImagePosition::CenterFooter
-        ) | (
-            crate::domain::print::hf_images::HfImagePosition::RightFooter,
-            domain_types::domain::print::HfImagePosition::RightFooter
-        )
-    )
 }

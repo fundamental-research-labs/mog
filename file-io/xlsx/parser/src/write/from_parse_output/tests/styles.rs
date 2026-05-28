@@ -44,7 +44,7 @@ fn writes_table_styles_from_typed_parse_output() {
     }];
     output.default_table_style = Some("MyCustomTableStyle".to_string());
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
 
@@ -55,7 +55,7 @@ fn writes_table_styles_from_typed_parse_output() {
 }
 
 #[test]
-fn workbook_stylesheet_dxfs_export_without_round_trip_context() {
+fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         conditional_formats: vec![ConditionalFormat {
@@ -98,7 +98,7 @@ fn workbook_stylesheet_dxfs_export_without_round_trip_context() {
         ..Default::default()
     });
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
 
@@ -219,7 +219,7 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
         ..Default::default()
     };
 
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
     let sheet_xml =
@@ -291,7 +291,7 @@ fn test_named_ranges() {
         }],
         ..Default::default()
     };
-    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
     assert_eq!(&bytes[0..2], b"PK");
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
@@ -345,7 +345,6 @@ fn test_col_styles_roundtrip() {
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,
-        None,
         &no_dt_bodies,
         &no_dt_regions,
         true,

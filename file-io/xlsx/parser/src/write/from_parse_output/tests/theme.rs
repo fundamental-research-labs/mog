@@ -9,10 +9,6 @@ fn output_with_theme(theme: domain_types::ThemeData) -> ParseOutput {
     output
 }
 
-fn theme_round_trip_context() -> domain_types::RoundTripContext {
-    domain_types::RoundTripContext::default()
-}
-
 fn matching_theme() -> domain_types::ThemeData {
     domain_types::ThemeData {
         name: Some("Office Theme".to_string()),
@@ -23,18 +19,17 @@ fn matching_theme() -> domain_types::ThemeData {
     }
 }
 
-fn exported_theme_xml(output: &ParseOutput, ctx: &domain_types::RoundTripContext) -> String {
-    let bytes = write_xlsx_from_parse_output(output, Some(ctx)).unwrap();
+fn exported_theme_xml(output: &ParseOutput) -> String {
+    let bytes = write_xlsx_from_parse_output(output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     String::from_utf8(archive.read_file("xl/theme/theme1.xml").unwrap()).unwrap()
 }
 
 #[test]
 fn theme_roundtrip_context_does_not_preserve_raw_sidecars() {
-    let ctx = theme_round_trip_context();
     let output = output_with_theme(matching_theme());
 
-    let theme_xml = exported_theme_xml(&output, &ctx);
+    let theme_xml = exported_theme_xml(&output);
 
     assert!(!theme_xml.contains("vendor:objectDefaultsMarker"));
     assert!(!theme_xml.contains("vendor:extraColorMarker"));
@@ -43,12 +38,11 @@ fn theme_roundtrip_context_does_not_preserve_raw_sidecars() {
 
 #[test]
 fn mutated_modeled_theme_drops_raw_sidecars() {
-    let ctx = theme_round_trip_context();
     let mut theme = matching_theme();
     theme.major_font = Some("Aptos Display".to_string());
     let output = output_with_theme(theme);
 
-    let theme_xml = exported_theme_xml(&output, &ctx);
+    let theme_xml = exported_theme_xml(&output);
 
     assert!(theme_xml.contains("typeface=\"Aptos Display\""));
     assert!(!theme_xml.contains("vendor:objectDefaultsMarker"));

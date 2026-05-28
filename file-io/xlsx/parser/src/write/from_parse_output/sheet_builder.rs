@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use domain_types::{
     AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue, SheetData,
-    SheetPaneConfig as DomainSheetPaneConfig, SheetRoundTripContext, SheetView as DomainSheetView,
+    SheetPaneConfig as DomainSheetPaneConfig, SheetView as DomainSheetView,
 };
 use domain_types::{DataTableRegion, OutlineGroup};
 
@@ -28,7 +28,6 @@ use value_types::CellError;
 pub(super) fn build_sheet(
     sheet_data: &SheetData,
     shared_strings: &mut SharedStringsWriter,
-    _sheet_rt: Option<&SheetRoundTripContext>,
     data_table_body_positions: &HashSet<(u32, u32)>,
     data_table_regions: &[DataTableRegion],
     emit_cell_metadata_refs: bool,

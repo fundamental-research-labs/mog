@@ -6,13 +6,11 @@ use crate::write::relationships::RelationshipManager;
 pub(super) fn add_relationship_for_export(
     sheet_idx: usize,
     global_idx: usize,
-    original_sheet_rels: &[domain_types::OpcRelationship],
     comments: &[domain_types::Comment],
     rels: &mut RelationshipManager,
 ) -> WorksheetThreadedCommentsGraphEntry {
     let path = current_comments_have_imported_threaded_identity(comments)
-        .then(|| original_threaded_comments_path(sheet_idx, original_sheet_rels))
-        .flatten()
+        .then(|| format!("xl/threadedComments/threadedComment{global_idx}.xml"))
         .unwrap_or_else(|| format!("xl/threadedComments/threadedComment{global_idx}.xml"));
     let target = worksheet_relative_target(&path);
     let relationship_id_hint = Some(rels.add(REL_THREADED_COMMENT, &target));
@@ -34,31 +32,4 @@ fn current_comments_have_imported_threaded_identity(comments: &[domain_types::Co
                 || comment.xr_uid.is_some()
                 || comment.ext_lst_xml.is_some())
     })
-}
-
-fn original_threaded_comments_path(
-    sheet_idx: usize,
-    original_sheet_rels: &[domain_types::OpcRelationship],
-) -> Option<String> {
-    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
-    original_sheet_rels
-        .iter()
-        .find(|rel| {
-            rel.rel_type == REL_THREADED_COMMENT && rel.target_mode.as_deref() != Some("External")
-        })
-        .and_then(|rel| {
-            crate::infra::opc::resolve_relationship_target(Some(&owner_path), &rel.target).ok()
-        })
-        .filter(|path| is_threaded_comments_part_path(path))
-}
-
-fn is_threaded_comments_part_path(path: &str) -> bool {
-    let Some(number) = path
-        .strip_prefix("xl/threadedComments/threadedComment")
-        .and_then(|rest| rest.strip_suffix(".xml"))
-    else {
-        return false;
-    };
-
-    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
 }

@@ -175,8 +175,8 @@ impl YrsStorage {
     /// (no replay) docs, the first write creates them once, deterministically
     /// owned by that session's client_id.
     ///
-    /// See: `compute-collab/src/lib.rs` test
-    /// `provider_replay_after_realistic_bootstrap_is_visible`.
+    /// See: `compute-collab/tests/provider_replay.rs` test
+    /// `provider_replay_after_independent_bootstrap`.
     pub fn new() -> Self {
         let doc = Doc::new();
 

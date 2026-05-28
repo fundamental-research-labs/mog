@@ -1,0 +1,48 @@
+use std::sync::Arc;
+
+use domain_types::{SheetData, WorksheetSemanticContainers};
+use yrs::{Any, Map, MapRef};
+
+pub(crate) fn hydrate_worksheet_semantic_containers(
+    txn: &mut yrs::TransactionMut,
+    meta_map: &MapRef,
+    containers: &WorksheetSemanticContainers,
+) {
+    if containers.is_empty() {
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(containers) {
+        meta_map.insert(
+            txn,
+            "worksheetSemanticContainers",
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+}
+
+pub(crate) fn hydrate_worksheet_import_xml_metadata(
+    txn: &mut yrs::TransactionMut,
+    meta_map: &MapRef,
+    sheet: &SheetData,
+) {
+    if !sheet.worksheet_root_namespaces.is_empty()
+        && let Ok(json) = serde_json::to_string(&sheet.worksheet_root_namespaces)
+    {
+        meta_map.insert(
+            txn,
+            "worksheetRootNamespaces",
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+    if let Some(xml) = sheet
+        .worksheet_ext_lst_xml
+        .as_deref()
+        .filter(|xml| !xml.is_empty())
+    {
+        meta_map.insert(
+            txn,
+            "worksheetExtLstXml",
+            Any::String(Arc::from(xml)),
+        );
+    }
+}

@@ -65,6 +65,9 @@ pub(super) fn append_dropped_import_diagnostics(
     }) {
         dropped.push("drawing lexical/package sidecars");
     }
+    if result.imported_calc_chain_entry_count > 0 {
+        dropped.push("calculation chain cache");
+    }
 
     if dropped.is_empty() {
         return;
@@ -83,4 +86,5 @@ pub(super) fn append_dropped_import_diagnostics(
         row: None,
         col: None,
     });
+    diagnostics.import_report = Some(diagnostics.clone().into_import_report());
 }

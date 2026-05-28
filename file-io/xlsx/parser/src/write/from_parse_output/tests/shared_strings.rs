@@ -143,9 +143,72 @@ fn stale_calc_chain_round_trip_metadata_is_not_exported_without_calc_chain_part(
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
-    assert!(!archive.contains("xl/calcChain.xml"));
-    assert!(!workbook_rels.contains("relationships/calcChain"));
-    assert!(!content_types.contains("/xl/calcChain.xml"));
+    assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn no_calc_chain_export_policy_forces_recalc_on_open() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(B1:C1)",
+            DomainValue::Number(FiniteF64::new(3.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert_recalc_on_open_calc_pr(&workbook_xml);
+    assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_calc_chain_is_diagnosed_and_never_replayed() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(B1:C1)",
+            DomainValue::Number(FiniteF64::new(3.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let input_bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let input_bytes = inject_stale_calc_chain_part(&input_bytes);
+
+    let (parsed, diagnostics) =
+        crate::parse_xlsx_to_output(&input_bytes).expect("parse xlsx with calcChain");
+    assert!(
+        diagnostics.errors.iter().any(|error| {
+            error.part.is_none() && error.message.contains("calculation chain cache")
+        }),
+        "import diagnostics should explain dropped calcChain: {:?}",
+        diagnostics.errors
+    );
+
+    let exported_bytes = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive =
+        crate::XlsxArchive::new(&exported_bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert_recalc_on_open_calc_pr(&workbook_xml);
+    assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -168,6 +231,73 @@ fn stale_workbook_rels_without_shared_strings_are_repaired_when_text_cells_emit_
     assert!(workbook_rels.contains("Target=\"sharedStrings.xml\""));
     assert!(content_types.contains("PartName=\"/xl/sharedStrings.xml\""));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+fn assert_no_calc_chain_package_parts(
+    archive: &crate::XlsxArchive<'_>,
+    workbook_rels: &str,
+    content_types: &str,
+) {
+    assert!(!archive.contains("xl/calcChain.xml"));
+    assert!(!workbook_rels.contains("relationships/calcChain"));
+    assert!(!content_types.contains("/xl/calcChain.xml"));
+}
+
+fn assert_recalc_on_open_calc_pr(workbook_xml: &str) {
+    assert!(workbook_xml.contains(r#"<calcPr "#));
+    assert!(workbook_xml.contains(r#"calcId="0""#));
+    assert!(workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(workbook_xml.contains(r#"forceFullCalc="1""#));
+}
+
+fn inject_stale_calc_chain_part(bytes: &[u8]) -> Vec<u8> {
+    let archive = crate::XlsxArchive::new(bytes).expect("source XLSX should be readable");
+    let mut zip = crate::write::zip_writer::ZipWriter::with_compression(
+        crate::write::CompressionMethod::Deflate(1),
+    );
+    for entry in archive.entries() {
+        let data = match entry.name.as_str() {
+            "[Content_Types].xml" => {
+                let xml = String::from_utf8(archive.read_file(&entry.name).unwrap()).unwrap();
+                xml.replace(
+                    "</Types>",
+                    concat!(
+                        r#"<Override PartName="/xl/calcChain.xml" "#,
+                        r#"ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>"#,
+                        "</Types>"
+                    ),
+                )
+                .into_bytes()
+            }
+            "xl/_rels/workbook.xml.rels" => {
+                let xml = String::from_utf8(archive.read_file(&entry.name).unwrap()).unwrap();
+                xml.replace(
+                    "</Relationships>",
+                    concat!(
+                        r#"<Relationship Id="rId99" "#,
+                        r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" "#,
+                        r#"Target="calcChain.xml"/>"#,
+                        "</Relationships>"
+                    ),
+                )
+                .into_bytes()
+            }
+            _ => archive.read_file(&entry.name).unwrap(),
+        };
+        zip.add_file(&entry.name, data);
+    }
+    zip.add_file(
+        "xl/calcChain.xml",
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
+            r#"<c r="A1" i="1"/></calcChain>"#
+        )
+        .as_bytes()
+        .to_vec(),
+    );
+    zip.finish().expect("zip calcChain fixture")
 }
 
 #[test]

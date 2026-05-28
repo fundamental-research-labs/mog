@@ -928,6 +928,11 @@ fn parse_xlsx_full_native_impl(
         .unwrap_or_default();
     let rich_data = collect_rich_data_parts(&archive, &content_type_overrides);
     ensure_no_archive_safety_error(&archive)?;
+    let imported_calc_chain_entry_count = archive
+        .read_file("xl/calcChain.xml")
+        .ok()
+        .map(|xml| crate::domain::calc::parse_calc_chain(&xml).len())
+        .unwrap_or(0);
 
     // Build result
     let result = FullParseResult {
@@ -954,6 +959,7 @@ fn parse_xlsx_full_native_impl(
             .has_explicit_iterate_delta
             .then_some(calc_settings.iterate_delta),
         calc_pr_settings: Some(calc_settings),
+        imported_calc_chain_entry_count,
         pivot_caches,
         slicer_caches,
         theme_name,

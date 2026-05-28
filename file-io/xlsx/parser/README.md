@@ -13,6 +13,15 @@ Parse 500K cells in under 50ms using SIMD-optimized parsing.
 - **Streaming Architecture**: Pre-allocated buffers for efficient memory usage
 - **Pure Rust**: No external dependencies except wasm-bindgen
 
+## XLSX Calculation Chain Policy
+
+Mog never exports `xl/calcChain.xml`. The calculation chain is an Excel engine
+cache, not authoritative workbook state, and imported chains may be stale after
+formula edits. Import counts an existing calcChain only for diagnostics; it is
+not represented in `ParseOutput`, Yrs state, or package sidecars. Export always
+emits `calcPr` metadata that invalidates any prior chain and asks spreadsheet
+consumers to rebuild and recalculate on open.
+
 ## Architecture
 
 ```

@@ -531,6 +531,13 @@ pub struct FullParseResult {
     /// Contains all CT_CalcPr attributes (calcOnSave, concurrentCalc, etc.).
     #[serde(skip)]
     pub calc_pr_settings: Option<crate::domain::workbook::types::CalcSettings>,
+    /// Number of entries found in imported `xl/calcChain.xml`.
+    ///
+    /// Calc chains are Excel engine caches, not workbook semantics. Mog never
+    /// replays imported calcChain data into `ParseOutput` or XLSX export; this
+    /// count exists only so import diagnostics can explain the intentional drop.
+    #[serde(skip)]
+    pub imported_calc_chain_entry_count: usize,
     /// Full pivot cache definitions for structured round-trip writing.
     /// Keyed by cache_id. Contains source, fields, shared items — everything
     /// needed to reconstruct pivotCacheDefinition XML.

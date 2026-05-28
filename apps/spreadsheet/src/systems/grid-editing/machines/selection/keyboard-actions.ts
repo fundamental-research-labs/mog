@@ -44,7 +44,7 @@ import {
   moveInAdditive,
   moveTo,
 } from './helpers';
-import { escapeMergeOnMove } from './merge-escape';
+import { escapeMergeOnMove, resolveActiveCellArrowMove } from './merge-escape';
 import { pageActions } from './page-actions';
 import type { SelectionContext, SelectionEvent } from './types';
 
@@ -111,10 +111,14 @@ const moveActiveCell = assign(
       context.isRowHidden,
       context.isColHidden,
     );
-    // when the stepped cell lands inside a merged region, jump
-    // past the merge in the arrow direction so the user doesn't get stuck on
-    // the same merge anchor across consecutive presses.
-    const newCell = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+    // Plain active-cell arrows enter a merge at its origin, then exit past the
+    // merge when the next arrow moves through that same region.
+    const newCell = resolveActiveCellArrowMove(
+      context.activeCell,
+      stepped,
+      event.direction,
+      context.getMergedRegionAt,
+    );
     return context.modes.additive ? moveInAdditive(context, newCell) : moveTo(newCell);
   },
 );

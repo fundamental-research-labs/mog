@@ -3,9 +3,9 @@
  *
  * These tests exercise the production navigation contract: the selection
  * machine receives `getMergedRegionAt` through SET_LAYOUT_CALLBACKS and treats
- * merged regions as single obstacles for arrow/Tab movement. Ctrl+Arrow data
- * navigation can still land on a merge origin because merged cells are data
- * blocks, but plain navigation skips through merged interiors.
+ * merged regions as single stops for plain active-cell arrows and single
+ * obstacles for Tab/Shift+Arrow movement. Ctrl+Arrow data navigation can still
+ * land on a merge origin because merged cells are data blocks.
  */
 
 import { createIntegrationSimulator, type IntegrationSimulator } from '../../integration-simulator';
@@ -29,7 +29,7 @@ function expectSingleCell(row: number, col: number): void {
 }
 
 describe('Arrow navigation around merged regions', () => {
-  it('ArrowLeft treats adjacent horizontal merges as one obstacle until the sheet boundary', () => {
+  it('ArrowLeft enters the adjacent merge before exiting through the boundary merge', () => {
     sim = createIntegrationSimulator({
       merges: [
         { startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
@@ -39,11 +39,13 @@ describe('Arrow navigation around merged regions', () => {
     });
 
     sim.pressKey('ArrowLeft');
+    expectSingleCell(0, 2);
 
+    sim.pressKey('ArrowLeft');
     expectSingleCell(0, 0);
   });
 
-  it('ArrowUp into a boundary merge falls back to the merge origin', () => {
+  it('ArrowUp into a boundary merge enters and remains at the merge origin', () => {
     sim = createIntegrationSimulator({
       merges: [{ startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
       activeCell: { row: 2, col: 0 },
@@ -52,27 +54,34 @@ describe('Arrow navigation around merged regions', () => {
     sim.pressKey('ArrowUp');
 
     expectSingleCell(0, 0);
+
+    sim.pressKey('ArrowUp');
+    expectSingleCell(0, 0);
   });
 
-  it('ArrowDown skips past a merged region', () => {
+  it('ArrowDown enters a merged region then exits past it', () => {
     sim = createIntegrationSimulator({
       merges: [{ startRow: 2, startCol: 0, endRow: 3, endCol: 1 }],
       activeCell: { row: 1, col: 0 },
     });
 
     sim.pressKey('ArrowDown');
+    expectSingleCell(2, 0);
 
+    sim.pressKey('ArrowDown');
     expectSingleCell(4, 0);
   });
 
-  it('ArrowRight skips past a merged region', () => {
+  it('ArrowRight enters a merged region then exits past it', () => {
     sim = createIntegrationSimulator({
       merges: [{ startRow: 1, startCol: 2, endRow: 2, endCol: 3 }],
       activeCell: { row: 1, col: 1 },
     });
 
     sim.pressKey('ArrowRight');
+    expectSingleCell(1, 2);
 
+    sim.pressKey('ArrowRight');
     expectSingleCell(1, 4);
   });
 

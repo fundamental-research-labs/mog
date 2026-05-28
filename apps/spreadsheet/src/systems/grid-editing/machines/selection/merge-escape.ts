@@ -1,9 +1,12 @@
 /**
  * Selection Machine - Merge Escape Helper
  *
- * Centralizes "navigate one cell past a merged region in the arrow direction"
- * for KEY_ARROW / KEY_HOME / KEY_END / KEY_TAB / KEY_ENTER. Consumes
- * `ctx.getMergedRegionAt` (set via SET_LAYOUT_CALLBACKS by the coordinator).
+ * Centralizes merge-aware movement for selection-machine navigation. The
+ * generic `escapeMergeOnMove` helper navigates one cell past a merged region
+ * for callers that intentionally skip merge interiors; plain active-cell
+ * arrows use `resolveActiveCellArrowMove` so entering a merge lands at its
+ * origin first. Both consume `ctx.getMergedRegionAt` (set via
+ * SET_LAYOUT_CALLBACKS by the coordinator).
  *
  * Before this helper, merge-escape was reimplemented per-handler in
  * `actions/handlers/selection/movement.ts` (4× via `createMergedRegionGetter`)
@@ -40,6 +43,10 @@ import type { CellCoord, Direction } from '../../../shared/types';
  * helper does not import from `./types.ts` (cycle-prevention).
  */
 export type MergedRegionGetter = (row: number, col: number) => CellRange | null;
+
+function mergeKey(merge: CellRange): string {
+  return `${merge.startRow}:${merge.startCol}:${merge.endRow}:${merge.endCol}`;
+}
 
 // =============================================================================
 // MERGE ESCAPE
@@ -78,7 +85,7 @@ export function escapeMergeOnMove(
     const merge = getMergedRegionAt(current.row, current.col);
     if (!merge) return current;
 
-    const key = `${merge.startRow}:${merge.startCol}:${merge.endRow}:${merge.endCol}`;
+    const key = mergeKey(merge);
     if (seenMerges.has(key)) {
       return { row: merge.startRow, col: merge.startCol };
     }
@@ -120,6 +127,33 @@ export function escapeMergeOnMove(
       }
     }
   }
+}
+
+/**
+ * Resolve plain active-cell arrow movement through merged regions.
+ *
+ * Unlike `escapeMergeOnMove`, entering a merge from outside lands on the merge
+ * origin so the merge behaves as a selectable single-cell stop. Once the
+ * active cell is already inside that same merge, the next arrow delegates to
+ * the existing escape semantics and exits past the merge in the move direction.
+ */
+export function resolveActiveCellArrowMove(
+  currentCell: CellCoord,
+  steppedCell: CellCoord,
+  direction: Direction,
+  getMergedRegionAt: MergedRegionGetter | undefined,
+): CellCoord {
+  if (!getMergedRegionAt) return steppedCell;
+
+  const steppedMerge = getMergedRegionAt(steppedCell.row, steppedCell.col);
+  if (!steppedMerge) return steppedCell;
+
+  const currentMerge = getMergedRegionAt(currentCell.row, currentCell.col);
+  if (!currentMerge || mergeKey(currentMerge) !== mergeKey(steppedMerge)) {
+    return { row: steppedMerge.startRow, col: steppedMerge.startCol };
+  }
+
+  return escapeMergeOnMove(steppedCell, direction, getMergedRegionAt);
 }
 
 /**

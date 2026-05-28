@@ -365,13 +365,11 @@ describe('selection-mode lifecycle', () => {
   // ===========================================================================
   // 14/15/16: merge × mode
   //
-  // These tests pin the merge-escape behavior added in the related wiring,
-  // composed with the priority matrix from 1a. `getMergedRegionAt` is
-  // pushed via SET_LAYOUT_CALLBACKS so the in-machine `escapeMergeOnMove`
-  // helper resolves merges. Without the layout-callback wiring,
-  // `escapeMergeOnMove` degrades gracefully (returns the input cell) — so
-  // these tests fail specifically when (a) the callback is not wired or
-  // (b) the escape logic is wrong.
+  // These tests pin merge-aware selection behavior, composed with the priority
+  // matrix from 1a. `getMergedRegionAt` is pushed via SET_LAYOUT_CALLBACKS so
+  // in-machine navigation resolves merges. Without the layout-callback wiring,
+  // merge resolution degrades gracefully — so these tests fail specifically
+  // when (a) the callback is not wired or (b) the merge logic is wrong.
   // ===========================================================================
 
   /**
@@ -408,24 +406,32 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
-  it('14. arrow_into_merge_escapes_to_far_side', () => {
+  it('14. arrow_into_merge_enters_origin_then_exits_to_far_side', () => {
     // Bare arrow into merge B2:D4 (rows 1-3, cols 1-3). No mode set.
     // From A2 (1, 0) arrow right → step into (1, 1) which is the merge
-    // origin → escape to (1, 4) (one past the merge's endCol).
+    // origin. The next ArrowRight exits to one past the merge's endCol.
     const actor = startActorAt(1, 0); // A2
     pushMerge(actor, rng(1, 1, 3, 3));
 
     actor.send({ type: 'KEY_ARROW', direction: 'right', shiftKey: false });
 
-    const after = actor.getSnapshot().context;
-    expect(after.activeCell).toEqual(cell(1, 4)); // E2 — past the merge
-    expect(after.pendingRange).toEqual(rng(1, 4, 1, 4));
-    expect(after.committedRanges).toEqual([]);
-    expect(after.modes.additive).toBe(false);
+    const entered = actor.getSnapshot().context;
+    expect(entered.activeCell).toEqual(cell(1, 1)); // B2 — merge origin
+    expect(entered.pendingRange).toEqual(rng(1, 1, 1, 1));
+    expect(entered.committedRanges).toEqual([]);
+    expect(entered.modes.additive).toBe(false);
+
+    actor.send({ type: 'KEY_ARROW', direction: 'right', shiftKey: false });
+
+    const exited = actor.getSnapshot().context;
+    expect(exited.activeCell).toEqual(cell(1, 4)); // E2 — past the merge
+    expect(exited.pendingRange).toEqual(rng(1, 4, 1, 4));
+    expect(exited.committedRanges).toEqual([]);
+    expect(exited.modes.additive).toBe(false);
     actor.stop();
   });
 
-  it('14b. arrow_into_adjacent_merges_escapes_until_stable', () => {
+  it('14b. arrow_into_adjacent_merges_enters_then_escapes_until_stable', () => {
     const actor = startActorAt(0, 4); // E1
     const leftMerge = rng(0, 0, 1, 1); // A1:B2
     const rightMerge = rng(0, 2, 1, 3); // C1:D2
@@ -448,9 +454,15 @@ describe('selection-mode lifecycle', () => {
 
     actor.send({ type: 'KEY_ARROW', direction: 'left', shiftKey: false });
 
-    const after = actor.getSnapshot().context;
-    expect(after.activeCell).toEqual(cell(0, 0));
-    expect(after.pendingRange).toEqual(rng(0, 0, 0, 0));
+    const entered = actor.getSnapshot().context;
+    expect(entered.activeCell).toEqual(cell(0, 2));
+    expect(entered.pendingRange).toEqual(rng(0, 2, 0, 2));
+
+    actor.send({ type: 'KEY_ARROW', direction: 'left', shiftKey: false });
+
+    const exited = actor.getSnapshot().context;
+    expect(exited.activeCell).toEqual(cell(0, 0));
+    expect(exited.pendingRange).toEqual(rng(0, 0, 0, 0));
     actor.stop();
   });
 
@@ -471,9 +483,9 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
-  it('15. additive_mode_arrow_into_merge_escapes_correctly', () => {
+  it('15. additive_mode_arrow_into_merge_enters_origin', () => {
     // Additive on with one committed range. Arrow into merge → pending
-    // collapses to the post-merge cell; committed untouched.
+    // collapses to the merge origin; committed untouched.
     const actor = startActorAt(0, 0);
     actor.send({
       type: 'SET_SELECTION',
@@ -490,8 +502,8 @@ describe('selection-mode lifecycle', () => {
     const after = actor.getSnapshot().context;
     expect(after.modes.additive).toBe(true); // sticky
     expect(after.committedRanges).toEqual([rng(0, 0, 0, 0)]); // untouched
-    expect(after.activeCell).toEqual(cell(1, 4)); // post-merge cell
-    expect(after.pendingRange).toEqual(rng(1, 4, 1, 4)); // collapsed pending
+    expect(after.activeCell).toEqual(cell(1, 1)); // merge origin
+    expect(after.pendingRange).toEqual(rng(1, 1, 1, 1)); // collapsed pending
     actor.stop();
   });
 

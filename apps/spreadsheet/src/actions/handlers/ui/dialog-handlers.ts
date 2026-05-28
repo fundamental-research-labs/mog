@@ -53,6 +53,7 @@ import {
   parseCellAddress,
   parseCellRange,
 } from '@mog/spreadsheet-utils/a1';
+import type { ParsedCellRange } from '@mog-sdk/contracts/utils';
 
 import { useKeyboardShortcutsDialogStore } from '../../../dialogs/settings/keyboard-shortcuts-dialog-store';
 import type { QuickRuleDialogType } from '../../../ui-store/slices/dialogs/cf-dialog';
@@ -76,6 +77,17 @@ import { requestFormulaBarRefresh } from '../../../infra/events/formula-bar-refr
 // =============================================================================
 
 const PAPER_SIZES: readonly PaperSize[] = ['letter', 'legal', 'a4', 'a3', 'custom'];
+
+function rangeFromParsedCellRange(parsedRange: ParsedCellRange): CellRange {
+  return {
+    startRow: parsedRange.startRow,
+    startCol: parsedRange.startCol,
+    endRow: parsedRange.endRow,
+    endCol: parsedRange.endCol,
+    ...(parsedRange.isFullColumn ? { isFullColumn: true } : {}),
+    ...(parsedRange.isFullRow ? { isFullRow: true } : {}),
+  };
+}
 
 function isPaperSize(value: string): value is PaperSize {
   return (PAPER_SIZES as readonly string[]).includes(value);
@@ -285,14 +297,7 @@ export const NAVIGATE_TO_REFERENCE: AsyncActionHandler = async (deps): Promise<A
     // MIGRATION: Uses deps.commands.selection instead of direct actor.send()
     if (deps.commands?.selection) {
       deps.commands.selection.setSelection(
-        [
-          {
-            startRow: rangeParsed.startRow,
-            startCol: rangeParsed.startCol,
-            endRow: rangeParsed.endRow,
-            endCol: rangeParsed.endCol,
-          },
-        ],
+        [rangeFromParsedCellRange(rangeParsed)],
         { row: rangeParsed.startRow, col: rangeParsed.startCol },
       );
     }

@@ -4,7 +4,7 @@
  * Pure utility functions for A1 cell address parsing and formatting.
  */
 
-import type { CellRange } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import type { ParsedCellAddress, ParsedCellRange } from '@mog-sdk/contracts/utils';
 
 import { normalizeRange } from './range';
@@ -136,6 +136,8 @@ export function cellRangeToSheetA1(range: CellRange, sheetName: string): string 
 
 /** Regex for cell addresses, optionally with sheet name: A1, Sheet1!A1, 'Sheet Name'!A1 */
 const SHEET_NAME_PATTERN = "'((?:[^']|'')*)'|([^!]+)";
+const COLUMN_REF_PATTERN = '\\$?([A-Z]+)';
+const ROW_REF_PATTERN = '\\$?(\\d+)';
 const CELL_REF_PATTERN = '\\$?([A-Z]+)\\$?(\\d+)';
 
 const CELL_ADDRESS_REGEX = new RegExp(`^(?:(?:${SHEET_NAME_PATTERN})!)?${CELL_REF_PATTERN}$`, 'i');
@@ -146,9 +148,29 @@ const CELL_RANGE_REGEX = new RegExp(
   'i',
 );
 
+const WHOLE_COLUMN_RANGE_REGEX = new RegExp(
+  `^(?:(?:${SHEET_NAME_PATTERN})!)?${COLUMN_REF_PATTERN}:${COLUMN_REF_PATTERN}$`,
+  'i',
+);
+
+const WHOLE_ROW_RANGE_REGEX = new RegExp(
+  `^(?:(?:${SHEET_NAME_PATTERN})!)?${ROW_REF_PATTERN}:${ROW_REF_PATTERN}$`,
+  'i',
+);
+
 function parsedSheetName(quoted: string | undefined, unquoted: string | undefined): string | null {
   if (quoted != null) return quoted.replace(/''/g, "'");
   return unquoted || null;
+}
+
+function parseColumnIndex(letters: string): number | null {
+  const col = letterToCol(letters);
+  return col >= 0 && col < MAX_COLS ? col : null;
+}
+
+function parseRowIndex(rowNumber: string): number | null {
+  const row = parseInt(rowNumber, 10) - 1;
+  return row >= 0 && row < MAX_ROWS ? row : null;
 }
 
 export type { ParsedCellAddress, ParsedCellRange } from '@mog-sdk/contracts/utils';
@@ -183,12 +205,48 @@ export function parseCellAddress(ref: string): ParsedCellAddress | null {
  *
  * @example
  * parseCellRange("A1:B2")          // { startRow: 0, startCol: 0, endRow: 1, endCol: 1 }
+ * parseCellRange("A:C")            // { startRow: 0, startCol: 0, endRow: MAX_ROWS - 1, endCol: 2, isFullColumn: true }
+ * parseCellRange("2:10")           // { startRow: 1, startCol: 0, endRow: 9, endCol: MAX_COLS - 1, isFullRow: true }
  * parseCellRange("A1")             // { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }
  * parseCellRange("Sheet1!A1:C10")  // { ..., sheetName: "Sheet1" }
  * parseCellRange("Sheet1!A1")      // { startRow: 0, startCol: 0, ..., sheetName: "Sheet1" }
  * parseCellRange("invalid")        // null
  */
 export function parseCellRange(ref: string): ParsedCellRange | null {
+  const wholeColumnMatch = ref.match(WHOLE_COLUMN_RANGE_REGEX);
+  if (wholeColumnMatch) {
+    const startCol = parseColumnIndex(wholeColumnMatch[3]);
+    const endCol = parseColumnIndex(wholeColumnMatch[4]);
+    if (startCol == null || endCol == null) return null;
+
+    const sheetName = parsedSheetName(wholeColumnMatch[1], wholeColumnMatch[2]);
+    return {
+      startRow: 0,
+      startCol,
+      endRow: MAX_ROWS - 1,
+      endCol,
+      isFullColumn: true,
+      ...(sheetName ? { sheetName } : {}),
+    };
+  }
+
+  const wholeRowMatch = ref.match(WHOLE_ROW_RANGE_REGEX);
+  if (wholeRowMatch) {
+    const startRow = parseRowIndex(wholeRowMatch[3]);
+    const endRow = parseRowIndex(wholeRowMatch[4]);
+    if (startRow == null || endRow == null) return null;
+
+    const sheetName = parsedSheetName(wholeRowMatch[1], wholeRowMatch[2]);
+    return {
+      startRow,
+      startCol: 0,
+      endRow,
+      endCol: MAX_COLS - 1,
+      isFullRow: true,
+      ...(sheetName ? { sheetName } : {}),
+    };
+  }
+
   const rangeMatch = ref.match(CELL_RANGE_REGEX);
   if (rangeMatch) {
     const sheetName = parsedSheetName(rangeMatch[1], rangeMatch[2]);

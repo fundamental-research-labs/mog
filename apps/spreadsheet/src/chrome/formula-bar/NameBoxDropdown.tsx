@@ -27,7 +27,8 @@ import {
 } from '../../internal-api';
 
 import { parseCellAddress, parseCellRange } from '@mog-sdk/kernel';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { ParsedCellRange } from '@mog-sdk/contracts/utils';
 import {
   createVirtualRef,
   MenuItem,
@@ -61,6 +62,17 @@ export interface NameBoxDropdownProps {
 // =============================================================================
 // Store Adapter
 // =============================================================================
+
+function rangeFromParsedCellRange(parsedRange: ParsedCellRange): CellRange {
+  return {
+    startRow: parsedRange.startRow,
+    startCol: parsedRange.startCol,
+    endRow: parsedRange.endRow,
+    endCol: parsedRange.endCol,
+    ...(parsedRange.isFullColumn ? { isFullColumn: true } : {}),
+    ...(parsedRange.isFullRow ? { isFullRow: true } : {}),
+  };
+}
 
 /**
  * Create a NameCompletionStoreLike adapter from cached async data.
@@ -371,14 +383,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             }
           }
           selectionCommands.setSelection(
-            [
-              {
-                startRow: parsedRange.startRow,
-                startCol: parsedRange.startCol,
-                endRow: parsedRange.endRow,
-                endCol: parsedRange.endCol,
-              },
-            ],
+            [rangeFromParsedCellRange(parsedRange)],
             { row: parsedRange.startRow, col: parsedRange.startCol },
           );
           return;
@@ -407,14 +412,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           }
         }
         selectionCommands.setSelection(
-          [
-            {
-              startRow: parsedRange.startRow,
-              startCol: parsedRange.startCol,
-              endRow: parsedRange.endRow,
-              endCol: parsedRange.endCol,
-            },
-          ],
+          [rangeFromParsedCellRange(parsedRange)],
           { row: parsedRange.startRow, col: parsedRange.startCol },
         );
         return true;
@@ -493,14 +491,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // Set selection to the range (or single cell when start === end);
         // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
         selectionCommands.setSelection(
-          [
-            {
-              startRow: parsed.startRow,
-              startCol: parsed.startCol,
-              endRow: parsed.endRow,
-              endCol: parsed.endCol,
-            },
-          ],
+          [rangeFromParsedCellRange(parsed)],
           { row: parsed.startRow, col: parsed.startCol },
         );
         return;

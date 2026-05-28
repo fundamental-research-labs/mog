@@ -9,5 +9,7 @@ export interface ParsedCellRange {
   startCol: number;
   endRow: number;
   endCol: number;
+  isFullColumn?: boolean;
+  isFullRow?: boolean;
   sheetName?: string;
 }

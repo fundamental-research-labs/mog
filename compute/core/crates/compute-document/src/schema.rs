@@ -125,6 +125,13 @@ pub const KEY_FORMULA_VOLATILE: &str = "fv";
 /// `#[serde(default)]` default on [`formula_types::IdentityFormula`], so
 /// pre-W7 Yrs documents that never wrote this key deserialize correctly.
 pub const KEY_FORMULA_AGGREGATE: &str = "fa";
+/// Original OOXML formula metadata for import/export fidelity.
+///
+/// Stored as a JSON-serialized `ooxml_types::worksheet::CellFormula` on formula
+/// cells. The plain formula body remains in [`KEY_FORMULA`]; this field only
+/// carries OOXML attributes such as `t="array"`, `ref`, `si`, and data-table
+/// flags.
+pub const KEY_FORMULA_METADATA: &str = "fm";
 
 /// CSE array-formula: CSE (`Ctrl+Shift+Enter`) array-formula range, written on
 /// the anchor cell only. Stored as A1 range string (e.g. `"A1:C5"`) so it

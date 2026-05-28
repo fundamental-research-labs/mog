@@ -39,6 +39,7 @@ fn batch_read_props_formulas_and_array_refs(
     FxHashMap<CellId, CellProperties>,
     FxHashMap<CellId, String>,
     FxHashMap<CellId, String>,
+    FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
 ) {
     let doc = stores.storage.doc();
     let txn = doc.transact();
@@ -80,6 +81,7 @@ fn batch_read_props_formulas_and_array_refs(
     // --- Raw formulas (only for lossless round-trip) + array formula refs ---
     let mut raw_formulas = FxHashMap::default();
     let mut array_refs = FxHashMap::default();
+    let mut formula_metadata = FxHashMap::default();
     if let Some(cells_map) = crate::storage::infra::grid_helpers::get_cells_map(
         &txn,
         stores.storage.sheets(),
@@ -87,6 +89,7 @@ fn batch_read_props_formulas_and_array_refs(
     ) {
         raw_formulas.reserve(cells_map.len(&txn) as usize);
         array_refs.reserve(cells_map.len(&txn) as usize);
+        formula_metadata.reserve(cells_map.len(&txn) as usize);
         for (cell_hex, value) in cells_map.iter(&txn) {
             let Out::YMap(cell_map) = value else {
                 continue;
@@ -102,10 +105,23 @@ fn batch_read_props_formulas_and_array_refs(
             if let Some(Out::Any(Any::String(array_ref))) = cell_map.get(&txn, KEY_ARRAY_REF) {
                 array_refs.insert(cell_id, array_ref.to_string());
             }
+            if let Some(cell_formula) = read_formula_metadata_from_yrs(&cell_map, &txn) {
+                formula_metadata.insert(cell_id, cell_formula);
+            }
         }
     }
 
-    (all_props, raw_formulas, array_refs)
+    (all_props, raw_formulas, array_refs, formula_metadata)
+}
+
+fn read_formula_metadata_from_yrs<T: yrs::ReadTxn>(
+    cell_map: &yrs::MapRef,
+    txn: &T,
+) -> Option<ooxml_types::worksheet::CellFormula> {
+    match cell_map.get(txn, KEY_FORMULA_METADATA) {
+        Some(Out::Any(Any::String(json))) => serde_json::from_str(&json).ok(),
+        _ => None,
+    }
 }
 
 fn batch_read_range_format_style_ids(
@@ -220,7 +236,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     // Batch-read ALL cell properties and raw formulas in a single Yrs
     // transaction, avoiding duplicate transaction setup overhead (O2+O3).
     // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
-    let (all_props, raw_formulas, array_refs) =
+    let (all_props, raw_formulas, array_refs, formula_metadata) =
         batch_read_props_formulas_and_array_refs(stores, sheet_id, has_lossless_stylesheet);
     let imported_range_style_ids = batch_read_range_format_style_ids(stores, sheet_id);
 
@@ -258,6 +274,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &all_props,
                 &raw_formulas,
                 &array_refs,
+                &formula_metadata,
                 has_lossless_stylesheet,
                 original_cellxfs_count,
                 palette,
@@ -336,6 +353,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     &all_props,
                     &raw_formulas,
                     &array_refs,
+                    &formula_metadata,
                     has_lossless_stylesheet,
                     original_cellxfs_count,
                     palette,
@@ -477,6 +495,7 @@ fn build_cell_data_for_cell_id(
     all_props: &FxHashMap<CellId, CellProperties>,
     raw_formulas: &FxHashMap<CellId, String>,
     array_refs: &FxHashMap<CellId, String>,
+    formula_metadata: &FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
     has_lossless_stylesheet: bool,
     original_cellxfs_count: u32,
     palette: &impl PaletteOps,
@@ -557,7 +576,7 @@ fn build_cell_data_for_cell_id(
             .map(|f| f.strip_prefix('=').unwrap_or(f).to_string()),
         array_ref: array_refs.get(cell_id).cloned(),
         style_id,
-        cell_formula: None,
+        cell_formula: formula_metadata.get(cell_id).cloned(),
         cm,
         formula_result_type,
         has_empty_cached_value: false,
@@ -1013,6 +1032,7 @@ mod tests {
         );
         let raw_formulas = FxHashMap::default();
         let array_refs = FxHashMap::default();
+        let formula_metadata = FxHashMap::default();
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
         let (engine, _) =
@@ -1028,6 +1048,7 @@ mod tests {
             &props,
             &raw_formulas,
             &array_refs,
+            &formula_metadata,
             true,
             20,
             &palette,

@@ -260,6 +260,13 @@ fn build_parse_output_from_yrs_preserves_workbook_views() {
 
 #[test]
 fn build_parse_output_from_yrs_preserves_imported_array_refs() {
+    let cell_formula = ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Array,
+        r#ref: Some("A1:A3".to_string()),
+        text: "_xlfn.SEQUENCE(3)".to_string(),
+        aca: true,
+        ..Default::default()
+    };
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -271,6 +278,7 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
                 value: CellValue::Text("first".into()),
                 formula: Some("_xlfn.SEQUENCE(3)".to_string()),
                 array_ref: Some("A1:A3".to_string()),
+                cell_formula: Some(cell_formula.clone()),
                 ..Default::default()
             }],
             ..Default::default()
@@ -288,6 +296,7 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
 
     assert_eq!(cell.formula.as_deref(), Some("SEQUENCE(3)"));
     assert_eq!(cell.array_ref.as_deref(), Some("A1:A3"));
+    assert_eq!(cell.cell_formula.as_ref(), Some(&cell_formula));
 }
 
 fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {

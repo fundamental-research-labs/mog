@@ -62,6 +62,9 @@ pub(super) fn hydrate_cells(
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }
+        if let Some(cell_formula) = cell.cell_formula.as_ref() {
+            write_formula_metadata_to_yrs(&cell_map, txn, cell_formula);
+        }
 
         // Track position → cell_hex in memory for downstream hydration lookups
         let pos_key = format!("{}:{}", cell.row, cell.col);
@@ -139,8 +142,25 @@ pub(super) fn hydrate_cells_with_ids(
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }
+        if let Some(cell_formula) = cell.cell_formula.as_ref() {
+            write_formula_metadata_to_yrs(&cell_map, txn, cell_formula);
+        }
     }
     pos_map
+}
+
+fn write_formula_metadata_to_yrs(
+    cell_map: &MapRef,
+    txn: &mut yrs::TransactionMut<'_>,
+    formula: &ooxml_types::worksheet::CellFormula,
+) {
+    let json = serde_json::to_string(formula)
+        .expect("ooxml cell formula metadata should be JSON-serializable");
+    cell_map.insert(
+        txn,
+        compute_document::schema::KEY_FORMULA_METADATA,
+        Any::String(Arc::from(json)),
+    );
 }
 
 // ===========================================================================

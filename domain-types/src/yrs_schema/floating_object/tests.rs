@@ -100,6 +100,8 @@ fn assert_common_eq(a: &FloatingObjectCommon, b: &FloatingObjectCommon) {
     assert_eq!(a.anchor.anchor_row_offset, b.anchor.anchor_row_offset);
     assert_eq!(a.anchor.anchor_col_offset, b.anchor.anchor_col_offset);
     assert_eq!(a.anchor.anchor_mode, b.anchor.anchor_mode);
+    assert_eq!(a.anchor.absolute_x, b.anchor.absolute_x);
+    assert_eq!(a.anchor.absolute_y, b.anchor.absolute_y);
     assert_eq!(a.anchor.end_row, b.anchor.end_row);
     assert_eq!(a.anchor.end_col, b.anchor.end_col);
     assert_eq!(a.anchor.end_row_offset, b.anchor.end_row_offset);
@@ -122,6 +124,97 @@ fn assert_common_eq(a: &FloatingObjectCommon, b: &FloatingObjectCommon) {
     assert_eq!(a.group_id, b.group_id);
     assert_eq!(a.anchor_cell_id, b.anchor_cell_id);
     assert_eq!(a.to_anchor_cell_id, b.to_anchor_cell_id);
+    assert_eq!(a.lock_aspect_ratio, b.lock_aspect_ratio);
+    assert_eq!(a.alt_text_title, b.alt_text_title);
+    assert_eq!(a.display_name, b.display_name);
+    assert_eq!(a.import_status, b.import_status);
+}
+
+#[test]
+fn test_absolute_emu_roundtrip_and_legacy_read() {
+    let mut common = make_common("abs-1", "sheet-1");
+    common.anchor.absolute_x = Some(12345);
+    common.anchor.absolute_y = Some(67890);
+    let obj = FloatingObject {
+        common,
+        data: FloatingObjectData::Shape(ShapeData {
+            shape_type: "rect".to_string(),
+            ..Default::default()
+        }),
+    };
+
+    let entries = to_yrs_prelim(&obj);
+    assert!(
+        entries
+            .iter()
+            .any(|(k, v)| k == "absoluteXEmu" && matches!(v, Any::Number(n) if (*n - 12345.0).abs() < f64::EPSILON))
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|(k, v)| k == "absoluteYEmu" && matches!(v, Any::Number(n) if (*n - 67890.0).abs() < f64::EPSILON))
+    );
+
+    let doc = Doc::new();
+    let root = doc.get_or_insert_map("test");
+    {
+        let mut txn = doc.transact_mut();
+        let prelim: MapPrelim = vec![
+            ("type".to_string(), Any::String(Arc::from("shape"))),
+            ("id".to_string(), Any::String(Arc::from("legacy-abs"))),
+            ("sheetId".to_string(), Any::String(Arc::from("sheet-1"))),
+            ("absoluteX".to_string(), Any::Number(11.0)),
+            ("absoluteY".to_string(), Any::Number(22.0)),
+        ]
+        .into_iter()
+        .collect();
+        root.insert(&mut txn, "item", prelim);
+    }
+    let txn = doc.transact();
+    let map_ref = root
+        .get(&txn, "item")
+        .unwrap()
+        .cast::<yrs::MapRef>()
+        .unwrap();
+    let restored = from_yrs_map(&map_ref, &txn).unwrap();
+    assert_eq!(restored.common.anchor.absolute_x, Some(11));
+    assert_eq!(restored.common.anchor.absolute_y, Some(22));
+}
+
+#[test]
+fn test_common_read_only_legacy_fields_hydrate() {
+    let doc = Doc::new();
+    let root = doc.get_or_insert_map("test");
+    {
+        let mut txn = doc.transact_mut();
+        let prelim: MapPrelim = vec![
+            ("type".to_string(), Any::String(Arc::from("shape"))),
+            ("id".to_string(), Any::String(Arc::from("legacy-common"))),
+            ("sheetId".to_string(), Any::String(Arc::from("sheet-1"))),
+            ("lockAspectRatio".to_string(), Any::Bool(true)),
+            (
+                "altTextTitle".to_string(),
+                Any::String(Arc::from("Alt title")),
+            ),
+            (
+                "displayName".to_string(),
+                Any::String(Arc::from("Display name")),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        root.insert(&mut txn, "item", prelim);
+    }
+    let txn = doc.transact();
+    let map_ref = root
+        .get(&txn, "item")
+        .unwrap()
+        .cast::<yrs::MapRef>()
+        .unwrap();
+    let restored = from_yrs_map(&map_ref, &txn).unwrap();
+    assert_eq!(restored.common.lock_aspect_ratio, Some(true));
+    assert_eq!(restored.common.alt_text_title.as_deref(), Some("Alt title"));
+    assert_eq!(restored.common.display_name.as_deref(), Some("Display name"));
 }
 
 #[test]
@@ -268,7 +361,7 @@ fn test_picture_roundtrip() {
                 transparency: None,
             }),
             border: None,
-            color_type: None,
+            color_type: Some(ImageColorType::GrayScale),
             ooxml: None,
         }),
     };
@@ -284,6 +377,7 @@ fn test_picture_roundtrip() {
         assert!((crop.top - 0.1).abs() < f64::EPSILON);
         let adj = p.adjustments.as_ref().unwrap();
         assert_eq!(adj.brightness, Some(0.1));
+        assert_eq!(p.color_type, Some(ImageColorType::GrayScale));
     } else {
         panic!("Expected Picture variant");
     }
@@ -345,7 +439,9 @@ fn test_textbox_roundtrip() {
 
 #[test]
 fn test_chart_roundtrip() {
-    use crate::domain::chart::{ChartSubType, ChartType, SeriesOrientation};
+    use crate::domain::chart::{
+        ChartFormatStringData, ChartSubType, ChartType, PivotChartOptionsData, SeriesOrientation,
+    };
     use crate::domain::conditional_format::CellIdRange;
 
     let obj = FloatingObject {
@@ -433,7 +529,12 @@ fn test_chart_roundtrip() {
             title_h_align: None,
             title_v_align: None,
             title_show_shadow: None,
-            pivot_options: None,
+            pivot_options: Some(PivotChartOptionsData {
+                show_axis_field_buttons: Some(true),
+                show_legend_field_buttons: Some(false),
+                show_report_filter_field_buttons: Some(true),
+                show_value_field_buttons: Some(false),
+            }),
             bar_shape: None,
             // Bubble / Surface / Theming
             bubble_3d_effect: None,
@@ -452,7 +553,10 @@ fn test_chart_roundtrip() {
             chart_format: None,
             plot_format: None,
             title_format: None,
-            title_rich_text: None,
+            title_rich_text: Some(vec![ChartFormatStringData {
+                text: "Rich title".to_string(),
+                font: None,
+            }]),
             title_formula: None,
             data_table: None,
             view_3d: None,
@@ -460,10 +564,10 @@ fn test_chart_roundtrip() {
             side_wall_format: None,
             back_wall_format: None,
             source_table_id: Some("table-1".to_string()),
-            table_data_columns: None,
+            table_data_columns: Some(vec!["Revenue".to_string(), "Cost".to_string()]),
             table_category_column: None,
             use_table_column_names_as_labels: None,
-            table_column_names: None,
+            table_column_names: Some(vec!["Quarter".to_string(), "Amount".to_string()]),
             width_cells: Some(8.0),
             height_cells: Some(15.0),
             ooxml: Some(ChartOoxmlProps {
@@ -496,7 +600,32 @@ fn test_chart_roundtrip() {
         assert_eq!(c.title.as_deref(), Some("My Chart"));
         assert_eq!(c.colors.as_ref().map(|v| v.len()), Some(1));
         assert_eq!(c.show_lines, Some(true));
+        assert_eq!(
+            c.pivot_options
+                .as_ref()
+                .and_then(|opts| opts.show_axis_field_buttons),
+            Some(true)
+        );
+        assert_eq!(
+            c.title_rich_text
+                .as_ref()
+                .and_then(|runs| runs.first())
+                .map(|run| run.text.as_str()),
+            Some("Rich title")
+        );
         assert_eq!(c.source_table_id.as_deref(), Some("table-1"));
+        assert_eq!(
+            c.table_data_columns
+                .as_ref()
+                .map(|cols| cols.iter().map(String::as_str).collect::<Vec<_>>()),
+            Some(vec!["Revenue", "Cost"])
+        );
+        assert_eq!(
+            c.table_column_names
+                .as_ref()
+                .map(|cols| cols.iter().map(String::as_str).collect::<Vec<_>>()),
+            Some(vec!["Quarter", "Amount"])
+        );
         assert_eq!(c.width_cells, Some(8.0));
         assert_eq!(c.height_cells, Some(15.0));
         let ooxml = c.ooxml.as_ref().expect("chart OOXML data");
@@ -864,11 +993,23 @@ fn test_minimal_shape_roundtrip() {
 #[test]
 fn test_known_fields_shape() {
     let (prims, subs) = known_fields("shape");
+    assert!(prims.contains(&"absoluteXEmu"));
+    assert!(prims.contains(&"absoluteYEmu"));
+    assert!(prims.contains(&"lockAspectRatio"));
+    assert!(prims.contains(&"altTextTitle"));
+    assert!(prims.contains(&"displayName"));
+    assert!(subs.contains(&"importStatus"));
     assert!(prims.contains(&"shapeType"));
     assert!(subs.contains(&"fill"));
     assert!(subs.contains(&"outline"));
     assert!(subs.contains(&"text"));
     assert!(subs.contains(&"shadow"));
+}
+
+#[test]
+fn test_known_fields_picture() {
+    let (_prims, subs) = known_fields("picture");
+    assert!(subs.contains(&"colorType"));
 }
 
 #[test]

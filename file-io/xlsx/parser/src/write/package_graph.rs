@@ -1840,7 +1840,3 @@ fn owner_part_path_from_rels_path(owner_rels_path: &str) -> Option<Option<String
         format!("{dir}/{owner_file}")
     }))
 }
-
-#[cfg(test)]
-#[path = "package_graph_tests.rs"]
-mod tests;

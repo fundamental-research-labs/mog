@@ -155,6 +155,26 @@ pub(super) fn export_xlsx_metadata(
         .filter(|metadata| !metadata.is_empty())
 }
 
+pub(super) fn export_shared_string_hints(
+    stores: &EngineStores,
+) -> Vec<domain_types::SharedStringHint> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let hints_map = match workbook.get(&txn, KEY_SHARED_STRING_HINTS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Vec::new(),
+    };
+
+    let json_str = match hints_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return Vec::new(),
+    };
+
+    serde_json::from_str::<Vec<domain_types::SharedStringHint>>(&json_str).unwrap_or_default()
+}
+
 pub(super) fn export_extended_document_properties(
     stores: &EngineStores,
 ) -> Option<ooxml_types::doc_props::ExtendedProperties> {

@@ -275,11 +275,6 @@ pub struct FullParsedSheet {
     pub ole_objects: Vec<OleObjectOutput>,
     /// Connector lines between shapes
     pub connectors: Vec<ConnectorOutput>,
-    /// Original `<dimension ref="..."/>` value from the source worksheet XML.
-    /// When present the writer uses this instead of recalculating from cell data.
-    /// Not serialized to TypeScript — internal round-trip data only.
-    #[serde(skip)]
-    pub original_dimension: Option<String>,
     /// Whether the original worksheet had an empty `<extLst/>` element.
     #[serde(skip)]
     pub has_empty_ext_lst: bool,

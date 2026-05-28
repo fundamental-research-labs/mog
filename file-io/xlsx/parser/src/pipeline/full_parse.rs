@@ -1099,8 +1099,6 @@ fn process_sheet_core(
     let custom_height = fmt_pr.custom_height;
     let zero_height = fmt_pr.zero_height;
 
-    // Extract original <dimension ref="..."/> for round-trip fidelity
-    let original_dimension = parse_dimension_ref(pre_sd);
     let outline_properties = crate::domain::worksheet::read::parse_outline_properties(pre_sd);
 
     // Detect empty <extLst/> for round-trip fidelity
@@ -1342,7 +1340,6 @@ fn process_sheet_core(
         worksheet_controls_xml,
         ole_objects,
         connectors,
-        original_dimension,
         has_empty_ext_lst,
         ext_lst_xml,
         sheet_opc_rels,
@@ -1500,8 +1497,6 @@ fn parse_sheets_sequential(
         let custom_height = fmt_pr_seq.custom_height;
         let zero_height = fmt_pr_seq.zero_height;
 
-        // Extract original <dimension ref="..."/> for round-trip fidelity
-        let original_dimension = parse_dimension_ref(pre_sd_early);
         let outline_properties =
             crate::domain::worksheet::read::parse_outline_properties(pre_sd_early);
 
@@ -1880,7 +1875,6 @@ fn parse_sheets_sequential(
             worksheet_controls_xml,
             ole_objects,
             connectors,
-            original_dimension,
             has_empty_ext_lst,
             sheet_opc_rels,
             raw_vml_drawings,

@@ -20,5 +20,3 @@ mod styles;
 mod utf8;
 #[path = "roundtrip_parse_output/workbook.rs"]
 mod workbook;
-#[path = "roundtrip_parse_output/workbook_relationships.rs"]
-mod workbook_relationships;

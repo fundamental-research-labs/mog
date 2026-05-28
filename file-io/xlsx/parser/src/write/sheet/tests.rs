@@ -337,8 +337,9 @@ fn test_empty_worksheet() {
     assert!(xml.contains("</sheetData>"));
     assert!(xml.contains("</worksheet>"));
 
-    // Should not have dimension, cols, or mergeCells
-    assert!(!xml.contains("<dimension"));
+    // Empty sheets still have a generated canonical dimension.
+    assert!(xml.contains("<dimension ref=\"A1\"/>"));
+    // Should not have cols or mergeCells
     assert!(!xml.contains("<cols>"));
     assert!(!xml.contains("<mergeCells"));
 }

@@ -102,11 +102,12 @@ fn utf16_custom_xml_parts_are_preserved_as_verbatim_passthrough() {
         parse_xlsx_to_output(&bytes).expect("UTF-16 customXml should not block workbook import");
     for (path, expected) in &custom_xml_parts {
         let preserved = round_trip_ctx
-            .custom_xml_parts
+            .opaque_package_subgraphs
             .iter()
-            .find(|part| part.path == *path)
+            .flat_map(|subgraph| subgraph.parts.iter())
+            .find(|part| part.part.path == *path)
             .expect("customXml item captured for passthrough");
-        assert_eq!(&preserved.data, expected);
+        assert_eq!(&preserved.part.data, expected);
     }
     assert!(
         round_trip_ctx

@@ -5,9 +5,6 @@ use domain_types::{RoundTripContext, SheetRoundTripContext};
 pub(super) const REL_WORKSHEET_CUSTOM_PROPERTY: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customProperty";
 
-pub(super) const CT_WORKSHEET_CUSTOM_PROPERTY: &str =
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.customProperty+xml";
-
 #[derive(Clone)]
 pub(super) struct WorksheetCustomProperties {
     pub xml: String,
@@ -41,6 +38,7 @@ pub(super) fn with_resolved_relationship_ids(
     remapped
 }
 
+#[cfg(test)]
 fn custom_property_relationship_ids(xml: &str) -> Vec<String> {
     let mut ids = Vec::new();
     let mut rest = xml.as_bytes();
@@ -58,6 +56,7 @@ fn custom_property_relationship_ids(xml: &str) -> Vec<String> {
     ids
 }
 
+#[cfg(test)]
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())

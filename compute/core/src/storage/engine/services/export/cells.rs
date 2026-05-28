@@ -832,14 +832,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let ctx = domain_types::RoundTripContext {
-            raw_shared_strings_xml: Some(
-                br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1"><si><t></t></si></sst>"#
-                    .to_vec(),
-            ),
-            original_sst_count: Some(1),
-            ..Default::default()
-        };
+        let ctx = domain_types::RoundTripContext::default();
 
         xlsx_parser::write::write_xlsx_from_parse_output(&output, Some(&ctx))
             .expect("source XLSX should be writable")

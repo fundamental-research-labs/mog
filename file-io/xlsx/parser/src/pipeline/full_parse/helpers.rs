@@ -536,25 +536,6 @@ pub(super) fn is_known_child(tag_name: &[u8], known_list: &[&[u8]]) -> bool {
     known_list.contains(&local)
 }
 
-/// Extract the original `<dimension ref="..."/>` value from the pre-sheetData XML.
-///
-/// Scans for `<dimension ref="XYZ"/>` and returns the ref attribute value (e.g. "A1:J10").
-pub(super) fn parse_dimension_ref(pre_sd: &[u8]) -> Option<String> {
-    // Find `<dimension ` first, then look for `ref="` within that element
-    let dim_pos = memchr::memmem::find(pre_sd, b"<dimension ")?;
-    // Scope search to the element (up to the next `>`)
-    let elem_end = memchr::memchr(b'>', &pre_sd[dim_pos..])
-        .map(|p| dim_pos + p + 1)
-        .unwrap_or(pre_sd.len());
-    let elem = &pre_sd[dim_pos..elem_end];
-    let ref_pos = memchr::memmem::find(elem, b"ref=\"")?;
-    let value_start = ref_pos + b"ref=\"".len();
-    let value_end = memchr::memchr(b'"', &elem[value_start..]).map(|p| value_start + p)?;
-    std::str::from_utf8(&elem[value_start..value_end])
-        .ok()
-        .map(|s| s.to_owned())
-}
-
 /// Capture preserved elements from a region of worksheet XML.
 ///
 /// Scans the given XML slice for child elements not in `known_children`.

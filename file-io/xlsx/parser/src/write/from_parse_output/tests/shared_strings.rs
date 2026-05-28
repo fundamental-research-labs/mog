@@ -214,14 +214,7 @@ fn imported_original_sst_count_does_not_override_generated_counts() {
         ],
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        original_sst_count: Some(99),
-        raw_shared_strings_xml: Some(
-            br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="99" uniqueCount="1"><si><t>old</t></si></sst>"#
-                .to_vec(),
-        ),
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
@@ -242,24 +235,7 @@ fn imported_unused_shared_strings_do_not_force_sst_part_rel_or_content_type() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        original_sst_count: Some(3),
-        raw_shared_strings_xml: Some(
-            br#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="1"><si><t>stale</t></si></sst>"#
-                .to_vec(),
-        ),
-        workbook_relationships: vec![domain_types::OpcRelationship {
-            id: "rId9".to_string(),
-            rel_type: crate::write::REL_SHARED_STRINGS.to_string(),
-            target: "sharedStrings.xml".to_string(),
-            target_mode: None,
-        }],
-        content_type_overrides: vec![(
-            "/xl/sharedStrings.xml".to_string(),
-            crate::write::CT_SHARED_STRINGS.to_string(),
-        )],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
@@ -291,6 +267,33 @@ fn imported_rich_text_hint_is_not_preserved_from_roundtrip_context() {
     assert!(shared_strings.contains("<t>Rich</t>"));
     assert!(!shared_strings.contains("<rPr><b/>"));
     assert!(!shared_strings.contains("<rPh"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn imported_rich_text_hint_is_preserved_from_parse_output() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![make_text_cell_with_original_sst(0, 0, "Rich", 0)],
+            ..Default::default()
+        }],
+        shared_string_hints: vec![domain_types::SharedStringHint {
+            index: 0,
+            text: "Rich".to_string(),
+            rich_text: Some(vec![rich_text_run("Rich")]),
+            phonetic_xml: None,
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let shared_strings =
+        String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+
+    assert!(shared_strings.contains("<rPr><b/>"));
+    assert!(shared_strings.contains("<t>Rich</t>"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

@@ -62,8 +62,8 @@ use crate::storage::engine::stores::EngineStores;
 use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_document_properties, export_external_links,
-    export_file_sharing, export_file_version, export_workbook_named_ranges,
-    export_workbook_properties, export_workbook_views,
+    export_file_sharing, export_file_version, export_shared_string_hints,
+    export_workbook_named_ranges, export_workbook_properties, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -776,6 +776,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     ParseOutput {
         sheets: output_sheets,
         style_palette,
+        shared_string_hints: export_shared_string_hints(stores),
         named_ranges,
         pivot_tables: export_workbook_parsed_pivot_tables(stores),
         pivot_cache_records: std::collections::HashMap::new(),

@@ -1,26 +1,17 @@
 use super::styles::hex_to_color_def;
 use super::*;
-use crate::domain::content_types::write::{CT_PIVOT_CACHE, CT_PIVOT_TABLE};
 use crate::domain::styles::write::ColorDef;
 use crate::infra::package_integrity::validate_archive_package_integrity;
 use crate::write::REL_PIVOT_TABLE;
-use domain_types::domain::workbook::{FileSharing, FileVersion, WorkbookProperties};
 use domain_types::{
-    AlignmentFormat, AnchorPosition, AuthoredStyleRun, BorderFormat,
-    BorderSide as DomainBorderSide, CFCellRange, CFRule, CFStyle, CellData as DomainCellData,
-    CellValue as DomainValue, ChartSpec, ChartType, ColDimension, ColStyleEntry, Comment,
-    CommentType, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentCustomProperty,
-    DocumentCustomPropertyValue, DocumentFormat, DocumentProperties, FillFormat, FontFormat,
-    FrozenPane, Hyperlink, MergeRegion, NamedRange, ObjectSize, ParseOutput, PersonInfo,
-    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec, WorkbookView,
+    AnchorPosition, BorderFormat, BorderSide as DomainBorderSide, CellData as DomainCellData,
+    CellValue as DomainValue, ChartSpec, ChartType, ColDimension, ColStyleEntry,
+    DataTableOoxmlFlags, DataTableRegion, DocumentFormat, FillFormat, FontFormat, FrozenPane,
+    MergeRegion, NamedRange, ObjectSize, ParseOutput, RowDimension, SheetData, SheetDimensions,
 };
 use formula_types::CellRef;
-use ooxml_types::cond_format::CfOperator;
 use std::sync::Arc;
-use value_types::{CellError, FiniteF64};
-
-const CT_PIVOT_CACHE_RECORDS: &str =
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
+use value_types::FiniteF64;
 
 fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
     ParseOutput {
@@ -31,15 +22,10 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
 
 mod charts;
 mod data_tables;
-mod opaque_package;
-mod package_relationships;
 mod pivot_package;
-mod shared_strings;
 mod smoke_and_formulas;
 mod styles;
 mod theme;
-mod workbook;
-mod worksheet_relationships;
 
 fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     DomainCellData {
@@ -47,38 +33,6 @@ fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
         col,
         value,
         ..Default::default()
-    }
-}
-
-fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32) -> DomainCellData {
-    DomainCellData {
-        row,
-        col,
-        value: DomainValue::Text(Arc::from(value)),
-        original_sst_index: Some(index),
-        original_value: Some(index.to_string()),
-        ..Default::default()
-    }
-}
-
-fn rich_text_run(text: &str) -> domain_types::RichTextRun {
-    domain_types::RichTextRun {
-        text: text.to_string(),
-        font_name: Some("Calibri".to_string()),
-        font_size: Some(11.0),
-        bold: true,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        color: Some("FFFF0000".to_string()),
-        color_indexed: None,
-        color_theme: None,
-        color_tint: None,
-        charset: None,
-        family: None,
-        scheme: None,
-        vert_align: None,
-        preserve_space: false,
     }
 }
 

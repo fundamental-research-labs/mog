@@ -51,7 +51,6 @@ pub struct RoundTripContext {
     /// the insertion point (e.g., "first:workbook", "after:workbook:fileVersion").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_preserved_elements: Vec<(String, String)>,
-
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

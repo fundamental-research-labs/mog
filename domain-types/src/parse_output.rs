@@ -22,6 +22,14 @@ use value_types::CellValue;
 pub struct ParseOutput {
     pub sheets: Vec<SheetData>,
     pub style_palette: Vec<DocumentFormat>,
+    /// Typed import hints for shared-string entries that cannot be regenerated
+    /// from plain cell text alone, such as rich text and phonetic metadata.
+    ///
+    /// This is deliberately sparse: canonical plain strings are generated from
+    /// current modeled cells during export and do not need a workbook-level
+    /// copy of the original SST.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_string_hints: Vec<SharedStringHint>,
     pub named_ranges: Vec<NamedRange>,
     pub pivot_tables: Vec<ParsedPivotTable>,
     /// Pivot cache record data for eval-only use (cache_id → rows of cell values).
@@ -55,6 +63,21 @@ pub struct ParseOutput {
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub persons: Vec<PersonInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedStringHint {
+    /// Original SST index from `xl/sharedStrings.xml`.
+    pub index: u32,
+    /// Plain text content. Export uses this to reject stale hints after edits.
+    pub text: String,
+    /// Rich text runs for this SST entry, when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich_text: Option<Vec<RichTextRun>>,
+    /// Raw typed phonetic XML children (`<rPh>` / `<phoneticPr>`) for this entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_xml: Option<Vec<u8>>,
 }
 
 /// A named range definition (position-keyed, no CellIds).

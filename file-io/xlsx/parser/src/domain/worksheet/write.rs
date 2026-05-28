@@ -31,18 +31,20 @@ use ooxml_types::worksheet::{
 /// Write the `<dimension>` element.
 ///
 /// `dimension` is the pre-computed dimension `(start_row, start_col, end_row,
-/// end_col)` in 0-indexed coordinates, or `None` to emit nothing.
+/// end_col)` in 0-indexed coordinates. Empty sheets emit the canonical `A1`
+/// extent instead of relying on imported worksheet dimension text.
 pub fn write_dimensions(w: &mut XmlWriter, dimension: Option<(u32, u32, u32, u32)>) {
-    if let Some((start_row, start_col, end_row, end_col)) = dimension {
-        let ref_str = format!(
-            "{}:{}",
-            to_a1(start_row, start_col),
-            to_a1(end_row, end_col)
-        );
-        w.start_element("dimension")
-            .attr("ref", &ref_str)
-            .self_close();
-    }
+    let (start_row, start_col, end_row, end_col) = dimension.unwrap_or((0, 0, 0, 0));
+    let start_ref = to_a1(start_row, start_col);
+    let end_ref = to_a1(end_row, end_col);
+    let ref_str = if start_ref == end_ref {
+        start_ref
+    } else {
+        format!("{start_ref}:{end_ref}")
+    };
+    w.start_element("dimension")
+        .attr("ref", &ref_str)
+        .self_close();
 }
 
 /// Write modeled worksheet properties currently represented in `SheetData`.

@@ -370,6 +370,21 @@ pub(super) fn hydrate_workbook_metadata(
     }
 }
 
+pub(super) fn hydrate_shared_string_hints(
+    workbook: &MapRef,
+    hints: &[domain_types::SharedStringHint],
+    txn: &mut yrs::TransactionMut,
+) {
+    if hints.is_empty() {
+        return;
+    }
+    let hints_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_SHARED_STRING_HINTS);
+    if let Ok(json) = serde_json::to_string(hints) {
+        hints_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
+    }
+}
+
 /// Hydrate slicers into the workbook-level `KEY_SLICERS` Y.Map as `StoredSlicer` JSON.
 ///
 /// Merges per-sheet slicer definitions and anchors with workbook-level slicer

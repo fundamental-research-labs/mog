@@ -163,7 +163,7 @@ pub fn write_xlsx_from_parse_output(
     let styles_writer = build_styles(style_palette_for_export);
 
     // ── 2. Build sheets ─────────────────────────────────────────────────
-    let mut shared_strings = sheet_parts::build_shared_strings(round_trip_ctx);
+    let mut shared_strings = sheet_parts::build_shared_strings(output);
     let sheet_parts::BuiltSheetParts {
         mut sheet_writers,
         sheet_extras,

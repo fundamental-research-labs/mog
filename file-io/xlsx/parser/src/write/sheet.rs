@@ -58,8 +58,6 @@ pub use data::{CellData, CellValue, RowDef, SheetFormatPr};
 pub struct SheetWriter {
     /// Sheet dimension (startRow, startCol, endRow, endCol), all 0-indexed
     dimension: Option<(u32, u32, u32, u32)>,
-    /// Raw dimension ref string for round-trip fidelity (e.g. "A1" instead of "A1:A1")
-    dimension_ref: Option<String>,
     /// Column definitions
     cols: Vec<ColWidth>,
     /// Row data: row index -> (RowDef, cells)
@@ -113,9 +111,6 @@ pub struct SheetWriter {
     table_parts_xml: Option<String>,
     /// Relationship IDs for generated worksheet pivot table references.
     pivot_table_r_ids: Vec<String>,
-    /// Relationship IDs for clean imported pivot table references whose
-    /// worksheet markers should be replayed from preserved raw XML, if present.
-    preserved_pivot_table_r_ids: Vec<String>,
     /// Raw extLst XML for sparklines and other extensions.
     ext_lst_xml: Option<String>,
 }
@@ -131,7 +126,6 @@ impl SheetWriter {
     pub fn new() -> Self {
         Self {
             dimension: None,
-            dimension_ref: None,
             cols: Vec::new(),
             rows: BTreeMap::new(),
             authored_style_runs: Vec::new(),
@@ -157,7 +151,6 @@ impl SheetWriter {
             controls_xml: None,
             table_parts_xml: None,
             pivot_table_r_ids: Vec::new(),
-            preserved_pivot_table_r_ids: Vec::new(),
             ext_lst_xml: None,
         }
     }
@@ -177,16 +170,6 @@ impl SheetWriter {
         end_col: u32,
     ) -> &mut Self {
         self.dimension = Some((start_row, start_col, end_row, end_col));
-        self
-    }
-
-    /// Set the raw dimension ref string for round-trip fidelity.
-    ///
-    /// When set, the writer uses this verbatim instead of computing
-    /// "start:end" from the numeric coordinates. Useful for preserving
-    /// single-cell refs like "A1" that would otherwise become "A1:A1".
-    pub fn set_dimension_ref(&mut self, dim_ref: String) -> &mut Self {
-        self.dimension_ref = Some(dim_ref);
         self
     }
 
@@ -743,12 +726,6 @@ impl SheetWriter {
         self
     }
 
-    /// Set clean imported worksheet pivot table relationship references.
-    pub fn set_preserved_pivot_table_r_ids(&mut self, r_ids: Vec<String>) -> &mut Self {
-        self.preserved_pivot_table_r_ids = r_ids;
-        self
-    }
-
     /// Set raw extLst XML for sparklines and other extensions.
     pub fn set_ext_lst_xml(&mut self, xml: String) -> &mut Self {
         self.ext_lst_xml = Some(xml);
@@ -771,10 +748,7 @@ impl SheetWriter {
             return false;
         }
 
-        !self.preserved_pivot_table_r_ids.iter().any(|r_id| {
-            raw_xml.contains(&format!("r:id=\"{}\"", r_id))
-                || raw_xml.contains(&format!("id=\"{}\"", r_id))
-        })
+        true
     }
 
     fn write_preserved_element(&self, w: &mut XmlWriter, elem: &PreservedXml) -> bool {
@@ -1270,14 +1244,7 @@ impl SheetWriter {
     }
 
     fn write_dimension(&self, w: &mut XmlWriter) {
-        // Prefer the raw dimension string for exact round-trip fidelity
-        if let Some(ref dim_ref) = self.dimension_ref {
-            w.start_element("dimension")
-                .attr("ref", dim_ref)
-                .self_close();
-        } else {
-            write_dimensions(w, self.calculate_dimension());
-        }
+        write_dimensions(w, self.calculate_dimension());
     }
 
     fn write_sheet_views(&self, w: &mut XmlWriter) {

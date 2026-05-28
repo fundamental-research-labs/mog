@@ -252,6 +252,7 @@ pub fn full_parse_result_to_parse_output(
     let parse_output = ParseOutput {
         sheets: sheet_data_vec,
         style_palette,
+        shared_string_hints: build_shared_string_hints(result),
         named_ranges,
         pivot_tables: all_parsed_pivots,
         pivot_cache_records,
@@ -285,6 +286,43 @@ pub fn full_parse_result_to_parse_output(
     append_object_import_diagnostics(&parse_output, &mut diagnostics);
 
     (parse_output, round_trip, diagnostics)
+}
+
+fn build_shared_string_hints(result: &FullParseResult) -> Vec<domain_types::SharedStringHint> {
+    let mut referenced = std::collections::HashSet::new();
+    for sheet in &result.sheets {
+        for cell in &sheet.cells {
+            if let Some(index) = cell.sst_index {
+                referenced.insert(index as usize);
+            }
+        }
+    }
+
+    let mut hints = Vec::new();
+    for index in referenced {
+        let rich_text = result
+            .shared_strings_rich_runs
+            .get(index)
+            .and_then(Clone::clone);
+        let phonetic_xml = result
+            .shared_strings_phonetic_xml
+            .get(index)
+            .and_then(Clone::clone);
+        if rich_text.is_none() && phonetic_xml.is_none() {
+            continue;
+        }
+        let Some(text) = result.shared_strings.get(index) else {
+            continue;
+        };
+        hints.push(domain_types::SharedStringHint {
+            index: index as u32,
+            text: text.clone(),
+            rich_text,
+            phonetic_xml,
+        });
+    }
+    hints.sort_by_key(|hint| hint.index);
+    hints
 }
 
 fn append_object_import_diagnostics(

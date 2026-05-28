@@ -20,8 +20,17 @@ pub(super) struct BuiltSheetParts {
     pub(super) all_chart_ex_entries: Vec<Vec<ChartExEntry>>,
 }
 
-pub(super) fn build_shared_strings() -> SharedStringsWriter {
-    SharedStringsWriter::new()
+pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> SharedStringsWriter {
+    let mut shared_strings = SharedStringsWriter::new();
+    for hint in &output.shared_string_hints {
+        shared_strings.add_imported_hint(
+            hint.index as usize,
+            &hint.text,
+            hint.rich_text.clone(),
+            hint.phonetic_xml.clone(),
+        );
+    }
+    shared_strings
 }
 
 pub(super) fn build_sheet_parts(

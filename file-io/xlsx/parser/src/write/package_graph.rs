@@ -965,10 +965,13 @@ fn imported_internal_target(
 
 fn is_inert_opaque_candidate(path: &str) -> bool {
     let normalized = normalize_part_path(path);
-    normalized.starts_with("xl/webextensions/")
-        || normalized.starts_with("customXml/")
+    normalized.starts_with("customXml/")
         || (normalized.starts_with("xl/printerSettings/") && normalized.ends_with(".bin"))
         || normalized.starts_with("docProps/thumbnail.")
+        || normalized == "docMetadata/LabelInfo.xml"
+        || (normalized.starts_with("xl/customProperty")
+            && normalized.ends_with(".bin")
+            && !normalized.starts_with("xl/customProperty/"))
 }
 
 fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
@@ -976,12 +979,14 @@ fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
     let target_path = normalize_part_path(target_path);
     if owner_path.starts_with("customXml/") {
         target_path.starts_with("customXml/")
-    } else if owner_path.starts_with("xl/webextensions/") {
-        target_path.starts_with("xl/webextensions/")
     } else if owner_path.starts_with("xl/printerSettings/") {
         target_path.starts_with("xl/printerSettings/")
     } else if owner_path.starts_with("docProps/thumbnail.") {
         target_path.starts_with("docProps/thumbnail.")
+    } else if owner_path == "docMetadata/LabelInfo.xml" {
+        target_path == "docMetadata/LabelInfo.xml"
+    } else if owner_path.starts_with("xl/customProperty") && owner_path.ends_with(".bin") {
+        target_path.starts_with("xl/customProperty") && target_path.ends_with(".bin")
     } else {
         false
     }

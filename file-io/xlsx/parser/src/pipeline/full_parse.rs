@@ -1044,6 +1044,7 @@ fn parse_xlsx_full_native_impl(
                     || entry.name.starts_with("xl/featurePropertyBag/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
+                    || entry.name == "xl/volatileDependencies.xml"
                     || entry.name.starts_with("xl/timelineCaches/")
                     || entry.name.starts_with("xl/timelines/")
                     // Pivots and slicers are modeled features. Do not capture

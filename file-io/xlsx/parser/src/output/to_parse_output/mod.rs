@@ -317,6 +317,9 @@ fn build_package_fidelity_metadata(
         );
     }
     raw_parts.extend(result.custom_xml_parts.iter().cloned());
+    if let Some(bytes) = result.raw_doc_metadata_label_info.clone() {
+        raw_parts.push(("docMetadata/LabelInfo.xml".to_string(), bytes));
+    }
     if let Some(bytes) = result.raw_persons_xml.clone() {
         raw_parts.push(("xl/persons/person.xml".to_string(), bytes));
     }

@@ -19,6 +19,7 @@ pub(super) fn append_dropped_import_diagnostics(
         {
             dropped.push("worksheet namespace declarations");
         }
+        append_suppressed_auxiliary_diagnostics(ext.imported_parts.paths(), &mut dropped);
     }
 
     if result
@@ -27,9 +28,6 @@ pub(super) fn append_dropped_import_diagnostics(
         .any(|sheet| !sheet.raw_vml_drawings.is_empty())
     {
         dropped.push("raw VML drawing sidecars");
-    }
-    if result.raw_doc_metadata_label_info.is_some() {
-        dropped.push("document label metadata package part");
     }
     if result
         .sheets
@@ -106,4 +104,23 @@ pub(super) fn append_dropped_import_diagnostics(
         col: None,
     });
     diagnostics.import_report = Some(diagnostics.clone().into_import_report());
+}
+
+fn append_suppressed_auxiliary_diagnostics<'a>(
+    paths: impl Iterator<Item = &'a str>,
+    dropped: &mut Vec<&'static str>,
+) {
+    for path in paths {
+        if path.starts_with("xl/webextensions/") {
+            dropped.push("active web extension package parts");
+        } else if path == "xl/vbaProject.bin" {
+            dropped.push("VBA project active content");
+        } else if path == "xl/volatileDependencies.xml" {
+            dropped.push("volatile dependency calculation sidecar");
+        } else if path.starts_with("xl/timelineCaches/") || path.starts_with("xl/timelines/") {
+            dropped.push("timeline package parts");
+        } else if path.starts_with("xl/featurePropertyBag/") {
+            dropped.push("feature property bag package parts");
+        }
+    }
 }

@@ -243,14 +243,14 @@ fn detected_count_message(
     format!("Detected {count} {noun} from {source}. {caveat}")
 }
 
-fn count_ooxml_smartart_diagrams(sheets: &[FullParsedSheet]) -> usize {
+pub(super) fn count_ooxml_smartart_diagrams(sheets: &[FullParsedSheet]) -> usize {
     sheets
         .iter()
         .map(|sheet| sheet.smartart_diagrams.len())
         .sum()
 }
 
-fn count_ooxml_wordart_text_effects(sheets: &[FullParsedSheet]) -> usize {
+pub(super) fn count_ooxml_wordart_text_effects(sheets: &[FullParsedSheet]) -> usize {
     sheets
         .iter()
         .filter_map(|sheet| sheet.parsed_drawing.as_ref())

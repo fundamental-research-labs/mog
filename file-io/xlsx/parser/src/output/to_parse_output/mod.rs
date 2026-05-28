@@ -41,6 +41,8 @@ use comments::build_sheet_comment_package_info;
 use diagnostics::{
     append_import_compatibility_acknowledgements, append_object_import_diagnostics,
 };
+#[cfg(test)]
+use diagnostics::{count_ooxml_smartart_diagrams, count_ooxml_wordart_text_effects};
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
 use dxf_registry::populate_dxf_registry_owners;
 use features::*;

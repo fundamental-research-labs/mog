@@ -70,6 +70,14 @@ pub struct OlapConnectionProperties {
     pub local_refresh: bool,
     pub send_locale: bool,
     pub row_drill_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_fill: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_number_format: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_font: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_font_color: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -106,8 +114,12 @@ pub struct TextConnectionProperties {
     pub prompt: bool,
     pub file_type: Option<String>,
     pub code_page: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_set: Option<String>,
     pub first_row: Option<u32>,
     pub source_file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delimited: Option<bool>,
     pub delimiter: Option<String>,
     pub decimal: Option<String>,
     pub thousands: Option<String>,
@@ -132,7 +144,7 @@ pub struct TextConnectionField {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionParameter {
     pub name: Option<String>,
-    pub sql_type: Option<u32>,
+    pub sql_type: Option<i32>,
     pub parameter_type: Option<String>,
     pub refresh_on_change: bool,
     pub prompt: Option<String>,
@@ -173,6 +185,22 @@ pub struct QueryTable {
     pub first_background_refresh: bool,
     pub next_id: Option<u32>,
     pub minimum_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub refresh_present: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub preserve_sort_filter_layout: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub field_id_wrapped: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub headers_in_last_refresh: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unbound_columns_left: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unbound_columns_right: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort_state_xml: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_ext_lst_xml: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<QueryTableField>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -191,10 +219,16 @@ pub struct QueryTableField {
     pub row_numbers: bool,
     pub fill_formulas: bool,
     pub clipped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryTableDeletedField {
     pub name: Option<String>,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }

@@ -4,7 +4,10 @@ use domain_types::domain::connections::*;
 
 use crate::infra::opc::{PackageOwner, parse_owned_relationships};
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    extract_direct_child_element_xml, parse_bool_attr_opt, parse_i32_attr, parse_string_attr,
+    parse_u32_attr,
+};
 use crate::zip::XlsxArchive;
 
 pub const REL_CONNECTIONS: &str =
@@ -81,24 +84,42 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
     let start = find_tag_simd(xml, b"queryTable", 0)?;
     let tag_end = find_gt_simd(xml, start)?;
     let tag = &xml[start..tag_end];
-    let refresh = find_tag_simd(xml, b"queryTableRefresh", tag_end)
-        .and_then(|s| find_gt_simd(xml, s).map(|e| &xml[s..e]));
+    let query_table_xml = element_slice(xml, b"queryTable", start, tag_end)?;
+    let refresh_xml =
+        extract_direct_child_element_xml(query_table_xml, b"queryTable", b"queryTableRefresh");
+    let refresh_bytes = refresh_xml.as_deref().map(str::as_bytes);
+    let refresh_tag = refresh_bytes.and_then(|refresh| {
+        find_gt_simd(refresh, 0).map(|end| &refresh[..end])
+    });
 
-    let fields_content = find_tag_simd(xml, b"queryTableFields", tag_end).and_then(|s| {
-        let e = find_gt_simd(xml, s)?;
-        let close = find_closing_tag(xml, b"queryTableFields", e)?;
-        Some(&xml[e + 1..close])
+    let fields_xml = refresh_bytes.and_then(|refresh| {
+        extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"queryTableFields")
+    });
+    let deleted_fields_xml = refresh_bytes.and_then(|refresh| {
+        extract_direct_child_element_xml(
+            refresh,
+            b"queryTableRefresh",
+            b"queryTableDeletedFields",
+        )
     });
 
     let mut fields = Vec::new();
     let mut deleted_fields = Vec::new();
-    if let Some(content) = fields_content {
+    if let Some(fields_xml) = fields_xml.as_deref() {
+        let content = fields_xml.as_bytes();
+        let content_start = find_gt_simd(content, 0).map_or(0, |end| end + 1);
+        let content_end =
+            find_closing_tag(content, b"queryTableFields", content_start).unwrap_or(content.len());
+        let content = &content[content_start..content_end];
         let mut pos = 0;
         while let Some(s) = find_tag_simd(content, b"queryTableField", pos) {
             let Some(e) = find_gt_simd(content, s) else {
                 break;
             };
-            let field_tag = &content[s..e];
+            let Some(field_xml) = element_slice(content, b"queryTableField", s, e) else {
+                break;
+            };
+            let field_tag = &field_xml[..e - s];
             fields.push(QueryTableField {
                 id: parse_u32_attr(field_tag, b"id=\"").unwrap_or(0),
                 name: parse_string_attr(field_tag, b"name=\""),
@@ -107,9 +128,21 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
                 row_numbers: parse_bool_attr_opt(field_tag, b"rowNumbers=\"").unwrap_or(false),
                 fill_formulas: parse_bool_attr_opt(field_tag, b"fillFormulas=\"").unwrap_or(false),
                 clipped: parse_bool_attr_opt(field_tag, b"clipped=\"").unwrap_or(false),
+                ext_lst_xml: extract_direct_child_element_xml(
+                    field_xml,
+                    b"queryTableField",
+                    b"extLst",
+                ),
             });
             pos = e + 1;
         }
+    }
+    if let Some(deleted_fields_xml) = deleted_fields_xml.as_deref() {
+        let content = deleted_fields_xml.as_bytes();
+        let content_start = find_gt_simd(content, 0).map_or(0, |end| end + 1);
+        let content_end = find_closing_tag(content, b"queryTableDeletedFields", content_start)
+            .unwrap_or(content.len());
+        let content = &content[content_start..content_end];
         let mut pos = 0;
         while let Some(s) = find_tag_simd(content, b"deletedField", pos) {
             let Some(e) = find_gt_simd(content, s) else {
@@ -135,8 +168,7 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
         apply_width_height_formats: parse_bool_attr_opt(tag, b"applyWidthHeightFormats=\"")
             .unwrap_or(false),
         refresh_on_load: parse_bool_attr_opt(tag, b"refreshOnLoad=\"").unwrap_or(false),
-        grow_shrink_type: parse_string_attr(tag, b"refreshStyle=\"")
-            .or_else(|| refresh.and_then(|t| parse_string_attr(t, b"refreshStyle=\""))),
+        grow_shrink_type: parse_string_attr(tag, b"growShrinkType=\""),
         fill_formulas: parse_bool_attr_opt(tag, b"fillFormulas=\"").unwrap_or(false),
         remove_data_on_save: parse_bool_attr_opt(tag, b"removeDataOnSave=\"").unwrap_or(false),
         disable_edit: parse_bool_attr_opt(tag, b"disableEdit=\"").unwrap_or(false),
@@ -151,11 +183,31 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
         first_background_refresh: parse_bool_attr_opt(tag, b"firstBackgroundRefresh=\"")
             .unwrap_or(false),
         next_id: parse_u32_attr(tag, b"nextId=\"")
-            .or_else(|| refresh.and_then(|t| parse_u32_attr(t, b"nextId=\""))),
-        minimum_version: refresh.and_then(|t| parse_u32_attr(t, b"minimumVersion=\"")),
+            .or_else(|| refresh_tag.and_then(|t| parse_u32_attr(t, b"nextId=\""))),
+        minimum_version: refresh_tag.and_then(|t| parse_u32_attr(t, b"minimumVersion=\"")),
+        refresh_present: refresh_bytes.is_some(),
+        preserve_sort_filter_layout: refresh_tag
+            .and_then(|t| parse_bool_attr_opt(t, b"preserveSortFilterLayout=\""))
+            .unwrap_or(false),
+        field_id_wrapped: refresh_tag
+            .and_then(|t| parse_bool_attr_opt(t, b"fieldIdWrapped=\""))
+            .unwrap_or(false),
+        headers_in_last_refresh: refresh_tag
+            .and_then(|t| parse_bool_attr_opt(t, b"headersInLastRefresh=\""))
+            .unwrap_or(false),
+        unbound_columns_left: refresh_tag
+            .and_then(|t| parse_u32_attr(t, b"unboundColumnsLeft=\"")),
+        unbound_columns_right: refresh_tag
+            .and_then(|t| parse_u32_attr(t, b"unboundColumnsRight=\"")),
+        sort_state_xml: refresh_bytes.and_then(|refresh| {
+            extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"sortState")
+        }),
+        refresh_ext_lst_xml: refresh_bytes.and_then(|refresh| {
+            extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"extLst")
+        }),
         fields,
         deleted_fields,
-        ext_lst_xml: parse_ext_lst(xml),
+        ext_lst_xml: extract_direct_child_element_xml(query_table_xml, b"queryTable", b"extLst"),
         ..Default::default()
     })
 }
@@ -208,6 +260,14 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
             attr_bool(&mut xml, "localRefresh", olap.local_refresh);
             attr_bool(&mut xml, "sendLocale", olap.send_locale);
             attr_u32(&mut xml, "rowDrillCount", olap.row_drill_count);
+            attr_bool_opt(&mut xml, "serverFill", olap.server_fill);
+            attr_bool_opt(
+                &mut xml,
+                "serverNumberFormat",
+                olap.server_number_format,
+            );
+            attr_bool_opt(&mut xml, "serverFont", olap.server_font);
+            attr_bool_opt(&mut xml, "serverFontColor", olap.server_font_color);
             xml.push_str("/>");
         }
         if let Some(web) = &c.web_pr {
@@ -221,7 +281,7 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
             for p in &c.parameters {
                 xml.push_str("<parameter");
                 attr_opt(&mut xml, "name", p.name.as_deref());
-                attr_u32(&mut xml, "sqlType", p.sql_type);
+                attr_i32(&mut xml, "sqlType", p.sql_type);
                 attr_opt(&mut xml, "parameterType", p.parameter_type.as_deref());
                 attr_bool(&mut xml, "refreshOnChange", p.refresh_on_change);
                 attr_opt(&mut xml, "prompt", p.prompt.as_deref());
@@ -285,7 +345,7 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
     attr_bool(&mut xml, "refreshOnLoad", query_table.refresh_on_load);
     attr_opt(
         &mut xml,
-        "refreshStyle",
+        "growShrinkType",
         query_table.grow_shrink_type.as_deref(),
     );
     attr_bool(&mut xml, "fillFormulas", query_table.fill_formulas);
@@ -328,11 +388,46 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
     );
     attr_u32(&mut xml, "nextId", query_table.next_id);
     xml.push('>');
-    xml.push_str("<queryTableRefresh");
-    attr_u32(&mut xml, "nextId", query_table.next_id);
-    attr_u32(&mut xml, "minimumVersion", query_table.minimum_version);
-    xml.push('>');
-    if !query_table.fields.is_empty() || !query_table.deleted_fields.is_empty() {
+    let write_refresh = query_table.refresh_present
+        || query_table.next_id.is_some()
+        || query_table.minimum_version.is_some()
+        || query_table.preserve_sort_filter_layout
+        || query_table.field_id_wrapped
+        || query_table.headers_in_last_refresh
+        || query_table.unbound_columns_left.is_some()
+        || query_table.unbound_columns_right.is_some()
+        || query_table.sort_state_xml.is_some()
+        || query_table.refresh_ext_lst_xml.is_some()
+        || !query_table.fields.is_empty()
+        || !query_table.deleted_fields.is_empty();
+    if write_refresh {
+        xml.push_str("<queryTableRefresh");
+        attr_bool(
+            &mut xml,
+            "preserveSortFilterLayout",
+            query_table.preserve_sort_filter_layout,
+        );
+        attr_bool(&mut xml, "fieldIdWrapped", query_table.field_id_wrapped);
+        attr_bool(
+            &mut xml,
+            "headersInLastRefresh",
+            query_table.headers_in_last_refresh,
+        );
+        attr_u32(&mut xml, "nextId", query_table.next_id);
+        attr_u32(&mut xml, "minimumVersion", query_table.minimum_version);
+        attr_u32(
+            &mut xml,
+            "unboundColumnsLeft",
+            query_table.unbound_columns_left,
+        );
+        attr_u32(
+            &mut xml,
+            "unboundColumnsRight",
+            query_table.unbound_columns_right,
+        );
+        xml.push('>');
+    }
+    if !query_table.fields.is_empty() {
         xml.push_str(&format!(
             r#"<queryTableFields count="{}">"#,
             query_table.fields.len()
@@ -346,16 +441,37 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
             attr_bool(&mut xml, "rowNumbers", field.row_numbers);
             attr_bool(&mut xml, "fillFormulas", field.fill_formulas);
             attr_bool(&mut xml, "clipped", field.clipped);
-            xml.push_str("/>");
+            if let Some(ext) = &field.ext_lst_xml {
+                xml.push('>');
+                xml.push_str(ext);
+                xml.push_str("</queryTableField>");
+            } else {
+                xml.push_str("/>");
+            }
         }
+        xml.push_str("</queryTableFields>");
+    }
+    if !query_table.deleted_fields.is_empty() {
+        xml.push_str(&format!(
+            r#"<queryTableDeletedFields count="{}">"#,
+            query_table.deleted_fields.len()
+        ));
         for field in &query_table.deleted_fields {
             xml.push_str("<deletedField");
             attr_opt(&mut xml, "name", field.name.as_deref());
             xml.push_str("/>");
         }
-        xml.push_str("</queryTableFields>");
+        xml.push_str("</queryTableDeletedFields>");
     }
-    xml.push_str("</queryTableRefresh>");
+    if write_refresh {
+        if let Some(sort_state_xml) = &query_table.sort_state_xml {
+            xml.push_str(sort_state_xml);
+        }
+        if let Some(ext) = &query_table.refresh_ext_lst_xml {
+            xml.push_str(ext);
+        }
+        xml.push_str("</queryTableRefresh>");
+    }
     if let Some(ext) = &query_table.ext_lst_xml {
         xml.push_str(ext);
     }
@@ -422,6 +538,10 @@ fn parse_olap_pr(xml: &[u8]) -> Option<OlapConnectionProperties> {
         local_refresh: parse_bool_attr_opt(tag, b"localRefresh=\"").unwrap_or(false),
         send_locale: parse_bool_attr_opt(tag, b"sendLocale=\"").unwrap_or(false),
         row_drill_count: parse_u32_attr(tag, b"rowDrillCount=\""),
+        server_fill: parse_bool_attr_opt(tag, b"serverFill=\""),
+        server_number_format: parse_bool_attr_opt(tag, b"serverNumberFormat=\""),
+        server_font: parse_bool_attr_opt(tag, b"serverFont=\""),
+        server_font_color: parse_bool_attr_opt(tag, b"serverFontColor=\""),
     })
 }
 
@@ -429,6 +549,7 @@ fn parse_web_pr(xml: &[u8]) -> Option<WebConnectionProperties> {
     let start = find_tag_simd(xml, b"webPr", 0)?;
     let end = find_gt_simd(xml, start)?;
     let tag = &xml[start..end];
+    let web_xml = element_slice(xml, b"webPr", start, end).unwrap_or(&xml[start..end + 1]);
     Some(WebConnectionProperties {
         xml: parse_bool_attr_opt(tag, b"xml=\"").unwrap_or(false),
         source_data: parse_bool_attr_opt(tag, b"sourceData=\"").unwrap_or(false),
@@ -443,7 +564,7 @@ fn parse_web_pr(xml: &[u8]) -> Option<WebConnectionProperties> {
         html_tables: parse_bool_attr_opt(tag, b"htmlTables=\"").unwrap_or(false),
         html_format: parse_string_attr(tag, b"htmlFormat=\""),
         edit_page: parse_string_attr(tag, b"editPage=\""),
-        tables: Vec::new(),
+        tables: parse_connection_tables(web_xml),
     })
 }
 
@@ -451,12 +572,15 @@ fn parse_text_pr(xml: &[u8]) -> Option<TextConnectionProperties> {
     let start = find_tag_simd(xml, b"textPr", 0)?;
     let end = find_gt_simd(xml, start)?;
     let tag = &xml[start..end];
+    let text_xml = element_slice(xml, b"textPr", start, end).unwrap_or(&xml[start..end + 1]);
     Some(TextConnectionProperties {
         prompt: parse_bool_attr_opt(tag, b"prompt=\"").unwrap_or(false),
         file_type: parse_string_attr(tag, b"fileType=\""),
         code_page: parse_u32_attr(tag, b"codePage=\""),
+        character_set: parse_string_attr(tag, b"characterSet=\""),
         first_row: parse_u32_attr(tag, b"firstRow=\""),
         source_file: parse_string_attr(tag, b"sourceFile=\""),
+        delimited: parse_bool_attr_opt(tag, b"delimited=\""),
         delimiter: parse_string_attr(tag, b"delimiter=\""),
         decimal: parse_string_attr(tag, b"decimal=\""),
         thousands: parse_string_attr(tag, b"thousands=\""),
@@ -466,7 +590,7 @@ fn parse_text_pr(xml: &[u8]) -> Option<TextConnectionProperties> {
         semicolon: parse_bool_attr_opt(tag, b"semicolon=\"").unwrap_or(false),
         consecutive: parse_bool_attr_opt(tag, b"consecutive=\"").unwrap_or(false),
         qualifier: parse_string_attr(tag, b"qualifier=\""),
-        fields: Vec::new(),
+        fields: parse_text_fields(text_xml),
     })
 }
 
@@ -490,7 +614,7 @@ fn parse_parameters(xml: &[u8]) -> Vec<ConnectionParameter> {
         let tag = &content[s..e];
         parameters.push(ConnectionParameter {
             name: parse_string_attr(tag, b"name=\""),
-            sql_type: parse_u32_attr(tag, b"sqlType=\""),
+            sql_type: parse_i32_attr(tag, b"sqlType=\""),
             parameter_type: parse_string_attr(tag, b"parameterType=\""),
             refresh_on_change: parse_bool_attr_opt(tag, b"refreshOnChange=\"").unwrap_or(false),
             prompt: parse_string_attr(tag, b"prompt=\""),
@@ -505,10 +629,131 @@ fn parse_parameters(xml: &[u8]) -> Vec<ConnectionParameter> {
     parameters
 }
 
+fn parse_connection_tables(web_xml: &[u8]) -> Vec<ConnectionTableRef> {
+    let Some(tables_xml) = extract_direct_child_element_xml(web_xml, b"webPr", b"tables") else {
+        return Vec::new();
+    };
+    let xml = tables_xml.as_bytes();
+    let start = find_gt_simd(xml, 0).map_or(0, |end| end + 1);
+    let end = find_closing_tag(xml, b"tables", start).unwrap_or(xml.len());
+    let content = &xml[start..end];
+    let mut tables = Vec::new();
+    let mut pos = 0;
+    while let Some(s) = next_child_tag(content, pos) {
+        let Some(e) = find_gt_simd(content, s) else {
+            break;
+        };
+        let tag = &content[s..e];
+        match child_local_name(tag) {
+            Some(name) if name == b"m" => tables.push(ConnectionTableRef::Missing),
+            Some(name) if name == b"s" => {
+                if let Some(value) = parse_string_attr(tag, b"v=\"") {
+                    tables.push(ConnectionTableRef::Name(value));
+                }
+            }
+            Some(name) if name == b"x" => {
+                if let Some(value) = parse_u32_attr(tag, b"v=\"") {
+                    tables.push(ConnectionTableRef::Index(value));
+                }
+            }
+            _ => {}
+        }
+        pos = element_end(content, s, e).unwrap_or(e + 1);
+    }
+    tables
+}
+
+fn parse_text_fields(text_xml: &[u8]) -> Vec<TextConnectionField> {
+    let Some(fields_xml) = extract_direct_child_element_xml(text_xml, b"textPr", b"textFields")
+    else {
+        return Vec::new();
+    };
+    let xml = fields_xml.as_bytes();
+    let start = find_gt_simd(xml, 0).map_or(0, |end| end + 1);
+    let end = find_closing_tag(xml, b"textFields", start).unwrap_or(xml.len());
+    let content = &xml[start..end];
+    let mut fields = Vec::new();
+    let mut pos = 0;
+    while let Some(s) = find_tag_simd(content, b"textField", pos) {
+        let Some(e) = find_gt_simd(content, s) else {
+            break;
+        };
+        let tag = &content[s..e];
+        fields.push(TextConnectionField {
+            field_type: parse_string_attr(tag, b"type=\""),
+            position: parse_u32_attr(tag, b"position=\""),
+        });
+        pos = e + 1;
+    }
+    fields
+}
+
 fn parse_ext_lst(xml: &[u8]) -> Option<String> {
     let start = find_tag_simd(xml, b"extLst", 0)?;
     let end = find_closing_tag(xml, b"extLst", start)?;
     String::from_utf8(xml[start..end + b"</extLst>".len()].to_vec()).ok()
+}
+
+fn element_slice<'a>(
+    xml: &'a [u8],
+    tag_name: &[u8],
+    start: usize,
+    tag_end: usize,
+) -> Option<&'a [u8]> {
+    let end = element_end(xml, start, tag_end)?;
+    if tag_name.is_empty() {
+        return None;
+    }
+    Some(&xml[start..end])
+}
+
+fn element_end(xml: &[u8], start: usize, tag_end: usize) -> Option<usize> {
+    if tag_end > start && xml[tag_end - 1] == b'/' {
+        return Some(tag_end + 1);
+    }
+    let name_start = start + 1;
+    let name_end = tag_name_end(xml, name_start);
+    let close_start = find_closing_tag(xml, &xml[name_start..name_end], tag_end)?;
+    find_gt_simd(xml, close_start).map(|end| end + 1)
+}
+
+fn next_child_tag(xml: &[u8], mut pos: usize) -> Option<usize> {
+    while pos < xml.len() {
+        let start = memchr::memchr(b'<', &xml[pos..])? + pos;
+        if start + 1 >= xml.len() {
+            return None;
+        }
+        if matches!(xml[start + 1], b'/' | b'!' | b'?') {
+            pos = find_gt_simd(xml, start).map_or(xml.len(), |end| end + 1);
+            continue;
+        }
+        return Some(start);
+    }
+    None
+}
+
+fn child_local_name(tag: &[u8]) -> Option<&[u8]> {
+    if tag.len() < 2 || tag[0] != b'<' {
+        return None;
+    }
+    let name_end = tag_name_end(tag, 1);
+    let name = &tag[1..name_end];
+    Some(
+        name.iter()
+            .rposition(|b| *b == b':')
+            .map_or(name, |idx| &name[idx + 1..]),
+    )
+}
+
+fn tag_name_end(xml: &[u8], mut pos: usize) -> usize {
+    while pos < xml.len() {
+        let b = xml[pos];
+        if matches!(b, b'>' | b'/' | b' ' | b'\t' | b'\n' | b'\r') {
+            break;
+        }
+        pos += 1;
+    }
+    pos
 }
 
 fn table_relationships_path(table_path: &str) -> Option<String> {
@@ -545,7 +790,28 @@ fn write_web_pr(xml: &mut String, web: &WebConnectionProperties) {
     attr_bool(xml, "htmlTables", web.html_tables);
     attr_opt(xml, "htmlFormat", web.html_format.as_deref());
     attr_opt(xml, "editPage", web.edit_page.as_deref());
-    xml.push_str("/>");
+    if web.tables.is_empty() {
+        xml.push_str("/>");
+        return;
+    }
+    xml.push('>');
+    xml.push_str(&format!(r#"<tables count="{}">"#, web.tables.len()));
+    for table in &web.tables {
+        match table {
+            ConnectionTableRef::Missing => xml.push_str("<m/>"),
+            ConnectionTableRef::Name(value) => {
+                xml.push_str("<s");
+                attr_opt(xml, "v", Some(value));
+                xml.push_str("/>");
+            }
+            ConnectionTableRef::Index(value) => {
+                xml.push_str("<x");
+                attr_u32(xml, "v", Some(*value));
+                xml.push_str("/>");
+            }
+        }
+    }
+    xml.push_str("</tables></webPr>");
 }
 
 fn write_text_pr(xml: &mut String, text_pr: &TextConnectionProperties) {
@@ -553,8 +819,10 @@ fn write_text_pr(xml: &mut String, text_pr: &TextConnectionProperties) {
     attr_bool(xml, "prompt", text_pr.prompt);
     attr_opt(xml, "fileType", text_pr.file_type.as_deref());
     attr_u32(xml, "codePage", text_pr.code_page);
+    attr_opt(xml, "characterSet", text_pr.character_set.as_deref());
     attr_u32(xml, "firstRow", text_pr.first_row);
     attr_opt(xml, "sourceFile", text_pr.source_file.as_deref());
+    attr_bool_opt(xml, "delimited", text_pr.delimited);
     attr_opt(xml, "delimiter", text_pr.delimiter.as_deref());
     attr_opt(xml, "decimal", text_pr.decimal.as_deref());
     attr_opt(xml, "thousands", text_pr.thousands.as_deref());
@@ -564,7 +832,22 @@ fn write_text_pr(xml: &mut String, text_pr: &TextConnectionProperties) {
     attr_bool(xml, "semicolon", text_pr.semicolon);
     attr_bool(xml, "consecutive", text_pr.consecutive);
     attr_opt(xml, "qualifier", text_pr.qualifier.as_deref());
-    xml.push_str("/>");
+    if text_pr.fields.is_empty() {
+        xml.push_str("/>");
+        return;
+    }
+    xml.push('>');
+    xml.push_str(&format!(
+        r#"<textFields count="{}">"#,
+        text_pr.fields.len()
+    ));
+    for field in &text_pr.fields {
+        xml.push_str("<textField");
+        attr_opt(xml, "type", field.field_type.as_deref());
+        attr_u32(xml, "position", field.position);
+        xml.push_str("/>");
+    }
+    xml.push_str("</textFields></textPr>");
 }
 
 fn attr_opt(xml: &mut String, name: &str, value: Option<&str>) {
@@ -583,9 +866,21 @@ fn attr_u32(xml: &mut String, name: &str, value: Option<u32>) {
     }
 }
 
+fn attr_i32(xml: &mut String, name: &str, value: Option<i32>) {
+    if let Some(value) = value {
+        xml.push_str(&format!(r#" {name}="{value}""#));
+    }
+}
+
 fn attr_bool(xml: &mut String, name: &str, value: bool) {
     if value {
         xml.push_str(&format!(r#" {name}="1""#));
+    }
+}
+
+fn attr_bool_opt(xml: &mut String, name: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        xml.push_str(&format!(r#" {name}="{}""#, if value { 1 } else { 0 }));
     }
 }
 

@@ -85,4 +85,80 @@ describe('resolveChartRangeReferences', () => {
       }),
     ]);
   });
+
+  it('uses the first series category reference when the chart has no category range', async () => {
+    const resolved = await resolveChartRangeReferences(
+      createCtx(),
+      chart({
+        dataRange: "'Q1 Data''s'!$B$2:$B$4",
+        series: [
+          {
+            values: "'Q1 Data''s'!$B$2:$B$4",
+            categories: "'Q1 Data''s'!$A$2:$A$4",
+          },
+        ],
+      }),
+    );
+
+    expect(resolved.diagnostics).toEqual([]);
+    expect(resolved.categoryRange?.range).toMatchObject({
+      sheetId: QUOTED,
+      startRow: 1,
+      startCol: 0,
+      endRow: 3,
+      endCol: 0,
+    });
+    expect(resolved.categoryRange?.ref).toBe("'Q1 Data''s'!$A$2:$A$4");
+  });
+
+  it('prefers an explicit category range over series category references', async () => {
+    const resolved = await resolveChartRangeReferences(
+      createCtx(),
+      chart({
+        dataRange: 'Formulas!$B$2:$B$4',
+        categoryRange: 'Formulas!$A$2:$A$4',
+        series: [
+          {
+            values: 'Formulas!$B$2:$B$4',
+            categories: "'Q1 Data''s'!$A$2:$A$4",
+          },
+        ],
+      }),
+    );
+
+    expect(resolved.diagnostics).toEqual([]);
+    expect(resolved.categoryRange?.range).toMatchObject({
+      sheetId: FORMULAS,
+      startRow: 1,
+      startCol: 0,
+      endRow: 3,
+      endCol: 0,
+    });
+    expect(resolved.categoryRange?.ref).toBe('Formulas!$A$2:$A$4');
+  });
+
+  it('reports unknown sheets from fallback series category references', async () => {
+    const resolved = await resolveChartRangeReferences(
+      createCtx(),
+      chart({
+        dataRange: 'Formulas!$B$2:$B$4',
+        series: [
+          {
+            values: 'Formulas!$B$2:$B$4',
+            categories: 'Missing!$A$2:$A$4',
+          },
+        ],
+      }),
+    );
+
+    expect(resolved.categoryRange).toBeNull();
+    expect(resolved.diagnostics).toEqual([
+      expect.objectContaining({
+        kind: 'categoryRange',
+        code: 'UNKNOWN_SHEET',
+        ref: 'Missing!$A$2:$A$4',
+        sheetName: 'Missing',
+      }),
+    ]);
+  });
 });

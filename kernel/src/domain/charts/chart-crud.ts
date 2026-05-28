@@ -305,6 +305,14 @@ async function resolveA1ChartRange(
   };
 }
 
+function firstSeriesCategoryRangeRef(chart: ChartFloatingObject): string | undefined {
+  for (const series of chart.series ?? []) {
+    const ref = series.categories?.trim();
+    if (ref) return ref;
+  }
+  return undefined;
+}
+
 async function resolveChartRangeReference(
   ctx: DocumentContext,
   chartSheetId: SheetId | null,
@@ -345,7 +353,7 @@ async function resolveChartRangeReference(
     kind === 'dataRange'
       ? chart.dataRange
       : kind === 'categoryRange'
-        ? chart.categoryRange
+        ? chart.categoryRange || firstSeriesCategoryRangeRef(chart)
         : chart.seriesRange;
   return resolveA1ChartRange(ctx, chartSheetId, kind, ref, diagnostics);
 }

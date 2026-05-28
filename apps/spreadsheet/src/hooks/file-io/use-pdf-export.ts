@@ -295,6 +295,18 @@ function downloadPdf(blob: Blob, filename: string): void {
   URL.revokeObjectURL(href);
 }
 
+async function getPdfExportSheetName(wb: Workbook, exportSheetIds: string[]): Promise<string> {
+  const firstSheetId = exportSheetIds[0];
+  if (!firstSheetId) return 'Sheet';
+
+  try {
+    const ws = wb.getSheetById(toSheetId(firstSheetId));
+    return (await ws.getName()) || ws.name || 'Sheet';
+  } catch {
+    return 'Sheet';
+  }
+}
+
 export function usePdfExport(
   activeSheetId: SheetId,
   _selection?: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -342,6 +354,20 @@ export function usePdfExport(
             onProgress?.(percent);
           },
         });
+
+        if (result.pageCount === 0) {
+          const sheetName = await getPdfExportSheetName(wb, exportSheetIds);
+          const errorMsg = `PDF export unavailable: "${sheetName}" has no printable content.`;
+          setState({
+            isExporting: false,
+            progress: 0,
+            error: errorMsg,
+            message: errorMsg,
+            lastResult: result,
+          });
+          onExportError?.(errorMsg);
+          return false;
+        }
 
         const pdfBlob = getPdfBlob(result);
         const dataUrl = (result as DownloadablePdfResult).dataUrl;

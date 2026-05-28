@@ -484,8 +484,6 @@ pub enum ASTNode {
     Paren(Box<Self>),
     /// Identifier (named range, LET/LAMBDA variable, etc.)
     Identifier(String),
-    /// Bracketed optional LAMBDA parameter declaration, e.g. `[value]`.
-    OptionalLambdaParam(String),
     /// Array literal: `{1,2;3,4}`
     Array { rows: Vec<Vec<Self>> },
     /// Call expression: `(LAMBDA(x, x+1))(5)` or `myFunc(3, 4)` where callee is an expression
@@ -858,7 +856,6 @@ impl std::fmt::Display for ASTNode {
             }
             Self::Paren(inner) => write!(f, "({inner})"),
             Self::Identifier(name) => write!(f, "{name}"),
-            Self::OptionalLambdaParam(name) => write!(f, "[{name}]"),
             Self::Array { rows } => {
                 write!(f, "{{")?;
                 for (i, row) in rows.iter().enumerate() {

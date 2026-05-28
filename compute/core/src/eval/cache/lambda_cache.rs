@@ -11,7 +11,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use compute_functions::helpers::VOLATILE_FUNCTIONS;
 use compute_parser::{ASTNode, AstVisitor};
 
-use crate::eval::eval_value::{EvalValue, LambdaParam};
+use crate::eval::eval_value::EvalValue;
 
 use crate::eval::engine::evaluator::cell_ref_to_a1;
 
@@ -26,14 +26,14 @@ use crate::eval::engine::evaluator::cell_ref_to_a1;
 /// params, LET variables that could transitively depend on params, etc.).
 /// Named ranges are also rejected — an acceptable false negative since named
 /// range lookups are cheap.
-pub(in crate::eval) fn is_parameter_free(node: &ASTNode, params: &[LambdaParam]) -> bool {
+pub(in crate::eval) fn is_parameter_free(node: &ASTNode, params: &[String]) -> bool {
     let mut checker = ParameterFreeChecker { params, free: true };
     checker.visit(node);
     checker.free
 }
 
 struct ParameterFreeChecker<'a> {
-    params: &'a [LambdaParam],
+    params: &'a [String],
     free: bool,
 }
 
@@ -53,11 +53,7 @@ impl AstVisitor for ParameterFreeChecker<'_> {
     fn visit_cell_ref(&mut self, r: &compute_parser::CellRefNode) {
         // Cell references: check A1 text against param names
         let a1 = cell_ref_to_a1(&r.reference);
-        if self
-            .params
-            .iter()
-            .any(|param| a1.eq_ignore_ascii_case(&param.name))
-        {
+        if self.params.iter().any(|p| a1.eq_ignore_ascii_case(p)) {
             self.free = false;
         }
     }
@@ -85,20 +81,20 @@ impl AstVisitor for ParameterFreeChecker<'_> {
 /// visit the children.
 pub(in crate::eval) fn collect_cacheable_nodes(
     body: &ASTNode,
-    params: &[LambdaParam],
+    params: &[String],
 ) -> FxHashSet<*const ASTNode> {
     let mut set = FxHashSet::default();
     collect_inner(body, params, &mut set);
     set
 }
 
-fn collect_inner(node: &ASTNode, params: &[LambdaParam], set: &mut FxHashSet<*const ASTNode>) {
+fn collect_inner(node: &ASTNode, params: &[String], set: &mut FxHashSet<*const ASTNode>) {
     let mut collector = CacheableCollector { params, set };
     collector.visit(node);
 }
 
 struct CacheableCollector<'a> {
-    params: &'a [LambdaParam],
+    params: &'a [String],
     set: &'a mut FxHashSet<*const ASTNode>,
 }
 

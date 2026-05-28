@@ -812,14 +812,6 @@ fn ast_to_template(
         // ── Omitted argument ────────────────────────────────────────
         ASTNode::Omitted => Ok(()),
 
-        // ── Optional LAMBDA parameter declaration ──────────────────
-        ASTNode::OptionalLambdaParam(name) => {
-            out.push('[');
-            out.push_str(name);
-            out.push(']');
-            Ok(())
-        }
-
         // ── Expression-level range operator ────────────────────────
         ASTNode::RangeOp { start, end } => {
             ast_to_template(

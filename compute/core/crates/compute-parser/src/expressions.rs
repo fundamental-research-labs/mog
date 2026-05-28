@@ -470,14 +470,6 @@ const MAX_ARGS: usize = 4096;
 /// Handles omitted arguments (empty positions become `ASTNode::Omitted`).
 /// Callers are responsible for consuming the opening `(` before and closing `)` after.
 fn parse_arg_list(input: &mut &str, state: &ParseState) -> ModalResult<Vec<ASTNode>> {
-    parse_arg_list_for_function(input, state, None)
-}
-
-fn parse_arg_list_for_function(
-    input: &mut &str,
-    state: &ParseState,
-    function_name: Option<&str>,
-) -> ModalResult<Vec<ASTNode>> {
     let _ = lexer::ws.parse_next(input)?;
     let mut args = Vec::with_capacity(4);
     if input.starts_with(')') {
@@ -487,7 +479,7 @@ fn parse_arg_list_for_function(
     if input.starts_with(',') {
         args.push(ASTNode::Omitted);
     } else {
-        args.push(parse_function_argument(input, state, function_name)?);
+        args.push(parse_expression(input, state)?);
     }
     loop {
         let _ = lexer::ws.parse_next(input)?;
@@ -503,41 +495,13 @@ fn parse_arg_list_for_function(
             if input.starts_with(',') || input.starts_with(')') {
                 args.push(ASTNode::Omitted);
             } else {
-                args.push(parse_function_argument(input, state, function_name)?);
+                args.push(parse_expression(input, state)?);
             }
         } else {
             break;
         }
     }
     Ok(args)
-}
-
-fn parse_function_argument(
-    input: &mut &str,
-    state: &ParseState,
-    function_name: Option<&str>,
-) -> ModalResult<ASTNode> {
-    if function_name.is_some_and(|name| name.eq_ignore_ascii_case("LAMBDA")) {
-        let saved = *input;
-        if let Ok(param) = parse_optional_lambda_param(input) {
-            return Ok(param);
-        }
-        *input = saved;
-    }
-    parse_expression(input, state)
-}
-
-fn parse_optional_lambda_param(input: &mut &str) -> ModalResult<ASTNode> {
-    if !input.starts_with('[') {
-        return Err(backtrack());
-    }
-    *input = &input[1..];
-    let name = lexer::identifier.parse_next(input)?;
-    if !input.starts_with(']') {
-        return Err(backtrack());
-    }
-    *input = &input[1..];
-    Ok(ASTNode::OptionalLambdaParam(name.to_string()))
 }
 
 /// Check if an AST node can be the callee of a call expression.
@@ -992,7 +956,7 @@ pub fn try_parse_function_call(input: &mut &str, state: &ParseState) -> ModalRes
     *input = &input[1..]; // consume '('
 
     // ── Committed to function call after NAME( ──
-    let args = match parse_arg_list_for_function(input, state, Some(name)) {
+    let args = match parse_arg_list(input, state) {
         Ok(args) => args,
         Err(e) => {
             // If the arg list itself raised a cut error, propagate it.

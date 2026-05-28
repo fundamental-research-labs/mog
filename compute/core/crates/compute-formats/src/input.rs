@@ -5,7 +5,7 @@
 
 use crate::{is_date_format, is_time_only_format};
 use serde::{Deserialize, Serialize};
-use value_types::date_serial::date_to_serial;
+use value_types::date_serial::{date_to_serial, ymd_to_serial};
 
 /// Result of preparing a date/time value for cell storage.
 ///
@@ -184,6 +184,9 @@ fn resolve_year(y: i32) -> i32 {
 fn validate_date(year: i32, month: u32, day: u32) -> Option<f64> {
     if !(1900..=9999).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
+    }
+    if year == 1900 && month == 2 && day == 29 {
+        return Some(ymd_to_serial(1900, 2, 29));
     }
     let date = chrono::NaiveDate::from_ymd_opt(year, month, day)?;
     Some(date_to_serial(&date))
@@ -430,11 +433,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_date_accepts_excel_1900_leap_day_forms() {
+        let locale = CultureInfo::default();
+        for text in [
+            "2/29/1900",
+            "1900-02-29",
+            "February 29, 1900",
+            "29-Feb-1900",
+        ] {
+            let result = parse_date_input(text, &locale).unwrap();
+            assert_eq!(result.serial, 60.0, "failed for {text}");
+        }
+    }
+
+    #[test]
     fn test_parse_date_invalid() {
         let locale = CultureInfo::default();
         assert!(parse_date_input("not a date", &locale).is_none());
         assert!(parse_date_input("", &locale).is_none());
         assert!(parse_date_input("13/32/2024", &locale).is_none());
+        assert!(parse_date_input("1900-02-30", &locale).is_none());
+        assert!(parse_date_input("2/30/1900", &locale).is_none());
+        assert!(parse_date_input("2023-02-29", &locale).is_none());
     }
 
     #[test]

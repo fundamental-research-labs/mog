@@ -147,6 +147,25 @@ mod tests {
     }
 
     #[test]
+    fn test_datevalue_accepts_excel_1900_leap_day_forms() {
+        let f = FnDatevalue;
+        for text_value in ["2/29/1900", "1900-02-29", "February 29, 1900"] {
+            let result = f.call(&[text(text_value)]);
+            if let CellValue::Number(n) = result {
+                assert_eq!(n.get(), 60.0, "failed for {text_value}");
+            } else {
+                panic!("Expected number for {text_value}, got {:?}", result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_datevalue_rejects_nearby_invalid_1900_date() {
+        let f = FnDatevalue;
+        assert_eq!(f.call(&[text("1900-02-30")]), err(CellError::Value));
+    }
+
+    #[test]
     fn test_timevalue() {
         let f = FnTimeValue;
         let result = f.call(&[text("12:30:45")]);

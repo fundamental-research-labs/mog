@@ -145,6 +145,10 @@ pub fn serial_to_ymd(serial: f64) -> (i32, i32, i32) {
 #[allow(clippy::cast_precision_loss)]
 #[must_use]
 pub fn ymd_to_serial(year: i32, month: i32, day: i32) -> f64 {
+    if year == 1900 && month == 2 && day == 29 {
+        return 60.0;
+    }
+
     let mut total: i64 = 0;
     for y in 1900..year {
         total += if is_leap_year(y) { 366 } else { 365 };
@@ -730,6 +734,12 @@ mod tests {
     }
 
     #[test]
+    fn ymd_to_serial_preserves_excel_1900_leap_day() {
+        assert_eq!(ymd_to_serial(1900, 2, 29), 60.0);
+        assert_eq!(serial_to_ymd(60.0), (1900, 2, 29));
+    }
+
+    #[test]
     fn coerce_to_number_datetime_ampm() {
         let v = CellValue::Text("01/30/2026 03:50 PM".into());
         let n = v.coerce_to_number().unwrap();
@@ -826,6 +836,20 @@ mod tests {
         assert_eq!(serial, ymd_to_serial(2024, 1, 15));
     }
 
+    #[test]
+    fn try_parse_date_accepts_excel_1900_leap_day_forms() {
+        for text in [
+            "2/29/1900",
+            "1900-02-29",
+            "2-29-1900",
+            "February 29, 1900",
+            "Feb 29, 1900",
+            "29-Feb-1900",
+        ] {
+            assert_eq!(try_parse_date(text).unwrap(), 60.0, "failed for {text}");
+        }
+    }
+
     // -----------------------------------------------------------------------
     // 2-digit year support (P3 fix for DATEVALUE mismatches)
     // -----------------------------------------------------------------------
@@ -874,6 +898,9 @@ mod tests {
         assert!(try_parse_date("2/30/2024").is_err()); // Feb 30
         assert!(try_parse_date("2/29/2023").is_err()); // Feb 29 non-leap
         assert!(try_parse_date("2/29/2024").is_ok()); // Feb 29 leap year OK
+        assert!(try_parse_date("1900-02-30").is_err()); // nearby invalid fake date
+        assert!(try_parse_date("2/30/1900").is_err()); // nearby invalid fake date
+        assert!(try_parse_date("2023-02-29").is_err()); // ISO non-leap
         assert!(try_parse_date("abc/def/ghi").is_err());
         assert!(try_parse_date("1/2/3/4").is_err()); // too many separators
     }
@@ -943,6 +970,15 @@ mod tests {
         let serial = try_parse_datetime("January 15, 2024 3:00 PM").unwrap();
         let expected = ymd_to_serial(2024, 1, 15) + 0.625;
         assert!((serial - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn try_parse_datetime_accepts_excel_1900_leap_day_forms() {
+        let serial = try_parse_datetime("2/29/1900 15:30").unwrap();
+        assert!((serial - 60.645_833_333_333_336).abs() < 1e-10);
+
+        let serial = try_parse_datetime("February 29, 1900 3:30 PM").unwrap();
+        assert!((serial - 60.645_833_333_333_336).abs() < 1e-10);
     }
 
     // -----------------------------------------------------------------------

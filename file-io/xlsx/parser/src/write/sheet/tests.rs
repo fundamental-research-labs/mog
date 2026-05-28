@@ -275,6 +275,26 @@ fn test_explicit_dimension() {
     assert!(xml.contains("<dimension ref=\"A1:J10\"/>"));
 }
 
+#[test]
+fn test_preserved_dimension_cannot_override_computed_dimension() {
+    let mut preserved = crate::roundtrip::unknown_elements::PreservedElements::new();
+    preserved.add(PreservedXml::after(
+        "worksheet",
+        r#"<dimension ref="A1:XFD1048576"/>"#,
+        "dimension",
+    ));
+
+    let mut writer = SheetWriter::new();
+    writer.set_preserved_elements(preserved);
+    writer.set_number(0, 0, 1.0);
+    writer.set_number(5, 3, 2.0);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("<dimension ref=\"A1:D6\"/>"));
+    assert!(!xml.contains("A1:XFD1048576"));
+    assert_eq!(xml.matches("<dimension ").count(), 1);
+}
+
 // -------------------------------------------------------------------------
 // Complete worksheet tests
 // -------------------------------------------------------------------------

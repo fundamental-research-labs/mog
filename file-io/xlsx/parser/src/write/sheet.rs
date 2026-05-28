@@ -55,6 +55,10 @@ pub use data::{CellData, CellValue, RowDef, SheetFormatPr};
 /// The main sheet writer.
 ///
 /// Generates worksheet XML for XLSX files.
+///
+/// Worksheet `<dimension>` is semantic output: by default it is derived from
+/// the cells queued on this writer, with empty sheets emitting the canonical
+/// `A1` extent. Imported or preserved raw dimension XML is not replayed.
 #[derive(Debug, Clone)]
 pub struct SheetWriter {
     /// Sheet dimension (startRow, startCol, endRow, endCol), all 0-indexed
@@ -154,6 +158,11 @@ impl SheetWriter {
     }
 
     /// Set sheet dimension explicitly.
+    ///
+    /// Most production exports should leave this unset so the writer derives
+    /// the `<dimension>` ref from modeled cells. This override is for callers
+    /// that already computed a compatible semantic extent, not for replaying
+    /// an authored worksheet XML string.
     ///
     /// # Arguments
     /// * `start_row` - Start row (0-indexed)
@@ -753,7 +762,14 @@ impl SheetWriter {
         if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
             return false;
         }
-        w.raw_str(&elem.raw_xml);
+        let Some(replay_xml) =
+            crate::roundtrip::preserved_xml_policy::worksheet_preserved_xml_for_replay(
+                &elem.raw_xml,
+            )
+        else {
+            return false;
+        };
+        w.raw_str(&replay_xml);
         true
     }
 

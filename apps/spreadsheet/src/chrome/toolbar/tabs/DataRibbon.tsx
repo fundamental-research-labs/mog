@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
-import { useUIStore } from '../../../internal-api';
+import { useActiveCell, useUIStore } from '../../../internal-api';
 import {
   useActiveSheetId,
   useSpreadsheetHostCommandsOptional,
@@ -67,6 +67,8 @@ import {
 } from '../primitives/ToolbarIcons';
 
 type JsonRow = Record<string, unknown>;
+type JsonCellValue = string | number | boolean | null;
+type JsonCellUpdate = { row: number; col: number; value: JsonCellValue };
 
 function isPlainObject(value: unknown): value is JsonRow {
   return value != null && typeof value === 'object' && !Array.isArray(value);
@@ -91,20 +93,41 @@ function flattenJsonValue(value: unknown, prefix = '', out: JsonRow = {}): JsonR
 
 function jsonToRows(value: unknown): { headers: string[]; rows: JsonRow[] } {
   const rows = (Array.isArray(value) ? value : [value]).map((item) => flattenJsonValue(item));
+  // Stable table contract: nested keys use dot paths, array indexes are path segments,
+  // headers are sorted, and missing fields are written as blank cells.
   const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).sort();
   return { headers: headers.length > 0 ? headers : ['value'], rows };
 }
 
 function cellValueFromJson(value: unknown): string | number | boolean | null {
-  if (
-    value == null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return value;
   }
   return JSON.stringify(value);
+}
+
+function jsonToCellUpdates(value: unknown, startRow: number, startCol: number): JsonCellUpdate[] {
+  const { headers, rows } = jsonToRows(value);
+  const updates: JsonCellUpdate[] = headers.map((header, colOffset) => ({
+    row: startRow,
+    col: startCol + colOffset,
+    value: header,
+  }));
+
+  rows.forEach((row, rowIndex) => {
+    headers.forEach((header, colOffset) => {
+      updates.push({
+        row: startRow + rowIndex + 1,
+        col: startCol + colOffset,
+        value: cellValueFromJson(row[header]),
+      });
+    });
+  });
+
+  return updates;
 }
 
 // =============================================================================
@@ -201,6 +224,7 @@ export function DataRibbon({
   const shellService = useShellService();
   const workbook = useWorkbook();
   const activeSheetId = useActiveSheetId();
+  const { row: activeRow, col: activeCol } = useActiveCell();
 
   // F1: Validation circles state
   const validationCirclesVisible = useUIStore((s) => s.validationCirclesVisible);
@@ -279,22 +303,25 @@ export function DataRibbon({
         } else {
           void file.text().then(async (text) => {
             const parsed = JSON.parse(text);
-            const { headers, rows } = jsonToRows(parsed);
+            const updates = jsonToCellUpdates(parsed, activeRow, activeCol);
             const ws = workbook.getSheetById(activeSheetId);
-            await Promise.all(headers.map((header, col) => ws.setCell(0, col, header)));
-            for (const [rowIndex, row] of rows.entries()) {
-              await Promise.all(
-                headers.map((header, col) =>
-                  ws.setCell(rowIndex + 1, col, cellValueFromJson(row[header])),
-                ),
-              );
+            if (updates.length > 0) {
+              await ws.setCells(updates);
             }
           });
         }
       }
     };
     input.click();
-  }, [activeSheetId, hostCommands, onImportJson, setIsGetDataDropdownOpen, workbook]);
+  }, [
+    activeCol,
+    activeRow,
+    activeSheetId,
+    hostCommands,
+    onImportJson,
+    setIsGetDataDropdownOpen,
+    workbook,
+  ]);
 
   const handleImportFromWeb = useCallback(() => {
     setIsGetDataDropdownOpen(false);

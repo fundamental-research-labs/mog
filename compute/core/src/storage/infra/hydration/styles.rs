@@ -9,6 +9,23 @@ use domain_types::{CellData, DocumentFormat, SheetData, WorkbookStylesheet};
 use compute_document::hex::{SmallHex, id_to_hex};
 use compute_document::schema::*;
 
+const KEY_STYLE_REGISTRY_NUMBER_FORMATS: &str = "numberFormats";
+const KEY_STYLE_REGISTRY_FONTS: &str = "fonts";
+const KEY_STYLE_REGISTRY_FILLS: &str = "fills";
+const KEY_STYLE_REGISTRY_BORDERS: &str = "borders";
+const KEY_STYLE_REGISTRY_CELL_STYLE_XFS: &str = "cellStyleXfs";
+const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
+const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
+const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
+const KEY_STYLE_REGISTRY_TABLE_STYLES: &str = "tableStyles";
+const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
+const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
+const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
+const KEY_STYLE_REGISTRY_KNOWN_FONTS: &str = "knownFonts";
+const KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS: &str = "rootNamespaceAttrs";
+const KEY_STYLE_REGISTRY_EXT_LST_XML: &str = "extLstXml";
+const KEY_STYLE_REGISTRY_COUNT: &str = "count";
+
 #[derive(Debug, Clone)]
 pub(crate) struct ImportedRangeStyle {
     pub range_id: cell_types::RangeId,
@@ -112,15 +129,119 @@ pub(super) fn hydrate_workbook_stylesheet(
     workbook_stylesheet: &Option<WorkbookStylesheet>,
 ) {
     if let Some(stylesheet) = workbook_stylesheet {
-        let json = serde_json::to_string(stylesheet)
-            .expect("WorkbookStylesheet serialization should not fail");
-        workbook.insert(
+        let stylesheet = stylesheet.normalized();
+        let map: MapRef = workbook.insert(
             txn,
             KEY_WORKBOOK_STYLESHEET,
-            Any::String(Arc::from(json.as_str())),
+            MapPrelim::from([] as [(&str, Any); 0]),
+        );
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_NUMBER_FORMATS,
+            &stylesheet.number_formats,
+        );
+        hydrate_style_registry_vec(txn, &map, KEY_STYLE_REGISTRY_FONTS, &stylesheet.fonts);
+        hydrate_style_registry_vec(txn, &map, KEY_STYLE_REGISTRY_FILLS, &stylesheet.fills);
+        hydrate_style_registry_vec(txn, &map, KEY_STYLE_REGISTRY_BORDERS, &stylesheet.borders);
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_CELL_STYLE_XFS,
+            &stylesheet.cell_style_xfs,
+        );
+        hydrate_style_registry_vec(txn, &map, KEY_STYLE_REGISTRY_CELL_XFS, &stylesheet.cell_xfs);
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_NAMED_CELL_STYLES,
+            &stylesheet.named_cell_styles,
+        );
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_DXFS,
+            &stylesheet.differential_formats,
+        );
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_TABLE_STYLES,
+            &stylesheet.table_styles,
+        );
+        hydrate_style_registry_value(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_INDEXED_COLORS,
+            &stylesheet.indexed_colors,
+        );
+        hydrate_style_registry_value(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE,
+            &stylesheet.default_table_style,
+        );
+        hydrate_style_registry_value(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE,
+            &stylesheet.default_pivot_style,
+        );
+        map.insert(
+            txn,
+            KEY_STYLE_REGISTRY_KNOWN_FONTS,
+            Any::Bool(stylesheet.known_fonts),
+        );
+        hydrate_style_registry_vec(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS,
+            &stylesheet.root_namespace_attrs,
+        );
+        hydrate_style_registry_value(
+            txn,
+            &map,
+            KEY_STYLE_REGISTRY_EXT_LST_XML,
+            &stylesheet.ext_lst_xml,
         );
     } else {
         workbook.remove(txn, KEY_WORKBOOK_STYLESHEET);
+    }
+}
+
+fn hydrate_style_registry_vec<T: serde::Serialize>(
+    txn: &mut yrs::TransactionMut,
+    parent: &MapRef,
+    key: &str,
+    values: &[T],
+) {
+    if values.is_empty() {
+        return;
+    }
+
+    let map: MapRef = parent.insert(txn, key, MapPrelim::from([] as [(&str, Any); 0]));
+    map.insert(txn, KEY_STYLE_REGISTRY_COUNT, Any::Number(values.len() as f64));
+    for (index, value) in values.iter().enumerate() {
+        let json = serde_json::to_string(value)
+            .expect("style registry entry serialization should not fail");
+        map.insert(
+            txn,
+            &*index.to_string(),
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+}
+
+fn hydrate_style_registry_value<T: serde::Serialize>(
+    txn: &mut yrs::TransactionMut,
+    parent: &MapRef,
+    key: &str,
+    value: &Option<T>,
+) {
+    if let Some(value) = value {
+        let json = serde_json::to_string(value)
+            .expect("style registry value serialization should not fail");
+        parent.insert(txn, key, Any::String(Arc::from(json.as_str())));
     }
 }
 

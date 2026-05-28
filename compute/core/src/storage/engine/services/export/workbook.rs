@@ -29,6 +29,23 @@ use crate::storage::workbook::{
     named_ranges as workbook_named_ranges, settings as workbook_settings,
 };
 
+const KEY_STYLE_REGISTRY_NUMBER_FORMATS: &str = "numberFormats";
+const KEY_STYLE_REGISTRY_FONTS: &str = "fonts";
+const KEY_STYLE_REGISTRY_FILLS: &str = "fills";
+const KEY_STYLE_REGISTRY_BORDERS: &str = "borders";
+const KEY_STYLE_REGISTRY_CELL_STYLE_XFS: &str = "cellStyleXfs";
+const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
+const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
+const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
+const KEY_STYLE_REGISTRY_TABLE_STYLES: &str = "tableStyles";
+const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
+const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
+const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
+const KEY_STYLE_REGISTRY_KNOWN_FONTS: &str = "knownFonts";
+const KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS: &str = "rootNamespaceAttrs";
+const KEY_STYLE_REGISTRY_EXT_LST_XML: &str = "extLstXml";
+const KEY_STYLE_REGISTRY_COUNT: &str = "count";
+
 // -------------------------------------------------------------------
 // Workbook-level exports
 // -------------------------------------------------------------------
@@ -184,12 +201,97 @@ pub(super) fn export_workbook_stylesheet(
     let txn = doc.transact();
     let workbook = stores.storage.workbook_map();
 
-    let json = match workbook.get(&txn, KEY_WORKBOOK_STYLESHEET) {
-        Some(Out::Any(Any::String(s))) => s,
-        _ => return None,
+    match workbook.get(&txn, KEY_WORKBOOK_STYLESHEET) {
+        Some(Out::Any(Any::String(json))) => {
+            serde_json::from_str::<domain_types::WorkbookStylesheet>(&json)
+                .ok()
+                .map(|stylesheet| stylesheet.normalized())
+        }
+        Some(Out::YMap(map)) => Some(domain_types::WorkbookStylesheet {
+            number_formats: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_NUMBER_FORMATS),
+            fonts: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_FONTS),
+            fills: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_FILLS),
+            borders: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_BORDERS),
+            cell_style_xfs: read_style_registry_vec(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_CELL_STYLE_XFS,
+            ),
+            cell_xfs: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_CELL_XFS),
+            named_cell_styles: read_style_registry_vec(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_NAMED_CELL_STYLES,
+            ),
+            differential_formats: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_DXFS),
+            table_styles: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_TABLE_STYLES),
+            indexed_colors: read_style_registry_value(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_INDEXED_COLORS,
+            ),
+            default_table_style: read_style_registry_value(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE,
+            ),
+            default_pivot_style: read_style_registry_value(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE,
+            ),
+            known_fonts: matches!(
+                map.get(&txn, KEY_STYLE_REGISTRY_KNOWN_FONTS),
+                Some(Out::Any(Any::Bool(true)))
+            ),
+            root_namespace_attrs: read_style_registry_vec(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS,
+            ),
+            ext_lst_xml: read_style_registry_value(&txn, &map, KEY_STYLE_REGISTRY_EXT_LST_XML),
+            stylesheet: ooxml_types::styles::Stylesheet::default(),
+        }),
+        _ => None,
+    }
+}
+
+fn read_style_registry_vec<T: for<'de> serde::Deserialize<'de>>(
+    txn: &yrs::Transaction,
+    parent: &yrs::MapRef,
+    key: &str,
+) -> Vec<T> {
+    let map = match parent.get(txn, key) {
+        Some(Out::YMap(map)) => map,
+        _ => return Vec::new(),
     };
 
-    serde_json::from_str::<domain_types::WorkbookStylesheet>(&json).ok()
+    let count = match map.get(txn, KEY_STYLE_REGISTRY_COUNT) {
+        Some(Out::Any(Any::Number(count))) if count.is_finite() && count > 0.0 => count as usize,
+        _ => 0,
+    };
+    let mut values = Vec::with_capacity(count);
+    for index in 0..count {
+        let Some(Out::Any(Any::String(json))) = map.get(txn, &*index.to_string()) else {
+            continue;
+        };
+        if let Ok(value) = serde_json::from_str::<T>(&json) {
+            values.push(value);
+        }
+    }
+    values
+}
+
+fn read_style_registry_value<T: for<'de> serde::Deserialize<'de>>(
+    txn: &yrs::Transaction,
+    parent: &yrs::MapRef,
+    key: &str,
+) -> Option<T> {
+    let json = match parent.get(txn, key) {
+        Some(Out::Any(Any::String(json))) => json,
+        _ => return None,
+    };
+    serde_json::from_str::<T>(&json).ok()
 }
 
 pub(super) fn export_workbook_table_styles(

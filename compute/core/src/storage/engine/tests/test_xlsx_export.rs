@@ -136,8 +136,8 @@ fn workbook_stylesheet_survives_yrs_hydration_export() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }];
-    input.workbook_stylesheet = Some(domain_types::WorkbookStylesheet {
-        stylesheet: ooxml_types::styles::Stylesheet {
+    input.workbook_stylesheet = Some(domain_types::WorkbookStylesheet::from_stylesheet(
+        ooxml_types::styles::Stylesheet {
             dxfs: vec![ooxml_types::styles::DxfDef {
                 font: Some(ooxml_types::styles::FontDef {
                     bold: Some(true),
@@ -148,12 +148,12 @@ fn workbook_stylesheet_survives_yrs_hydration_export() {
             default_table_style: Some("TableStyleMedium4".to_string()),
             ..Default::default()
         },
-        root_namespace_attrs: vec![(
+        vec![(
             "x14".to_string(),
             "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main".to_string(),
         )],
-        ext_lst_xml: Some(br#"<extLst><ext uri="{typed-style-ext}"/></extLst>"#.to_vec()),
-    });
+        Some(br#"<extLst><ext uri="{typed-style-ext}"/></extLst>"#.to_vec()),
+    ));
 
     let engine = engine_from_parse_output_normal(&input);
     let exported = engine.build_parse_output_from_yrs();

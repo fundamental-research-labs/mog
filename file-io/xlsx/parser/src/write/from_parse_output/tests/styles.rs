@@ -80,8 +80,8 @@ fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
         }],
         ..Default::default()
     }]);
-    output.workbook_stylesheet = Some(WorkbookStylesheet {
-        stylesheet: ooxml_types::styles::Stylesheet {
+    output.workbook_stylesheet = Some(WorkbookStylesheet::from_stylesheet(
+        ooxml_types::styles::Stylesheet {
             dxfs: vec![ooxml_types::styles::DxfDef {
                 font: Some(ooxml_types::styles::FontDef {
                     bold: Some(true),
@@ -95,8 +95,9 @@ fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
             }],
             ..Default::default()
         },
-        ..Default::default()
-    });
+        Vec::new(),
+        None,
+    ));
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");

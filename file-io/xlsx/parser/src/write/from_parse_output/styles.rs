@@ -66,32 +66,24 @@ pub(super) fn apply_workbook_stylesheet(
     workbook_stylesheet: &WorkbookStylesheet,
     include_cell_xfs: bool,
 ) {
-    let stylesheet = &workbook_stylesheet.stylesheet;
-    writer.num_fmts = stylesheet.num_fmts.clone();
-    if !stylesheet.fonts.is_empty() {
-        writer.fonts = stylesheet.fonts.clone();
-    }
-    if !stylesheet.fills.is_empty() {
-        writer.fills = stylesheet.fills.clone();
-    }
-    if !stylesheet.borders.is_empty() {
-        writer.borders = stylesheet.borders.clone();
-    }
-    if !stylesheet.cell_style_xfs.is_empty() {
-        writer.cell_style_xfs = stylesheet.cell_style_xfs.clone();
-    }
-    if !stylesheet.cell_styles.is_empty() {
-        writer.cell_styles = stylesheet.cell_styles.clone();
-    }
-    writer.dxfs = stylesheet.dxfs.clone();
-    writer.colors = stylesheet.colors.clone();
-    writer.table_styles = stylesheet.table_styles.clone();
-    writer.default_table_style = stylesheet.default_table_style.clone();
-    writer.default_pivot_style = stylesheet.default_pivot_style.clone();
-    writer.known_fonts = stylesheet.known_fonts;
-    writer.ext_lst_raw = workbook_stylesheet.ext_lst_xml.clone();
-
+    let stylesheet = workbook_stylesheet.to_stylesheet();
     if include_cell_xfs {
+        writer.num_fmts = stylesheet.num_fmts.clone();
+        if !stylesheet.fonts.is_empty() {
+            writer.fonts = stylesheet.fonts.clone();
+        }
+        if !stylesheet.fills.is_empty() {
+            writer.fills = stylesheet.fills.clone();
+        }
+        if !stylesheet.borders.is_empty() {
+            writer.borders = stylesheet.borders.clone();
+        }
+        if !stylesheet.cell_style_xfs.is_empty() {
+            writer.cell_style_xfs = stylesheet.cell_style_xfs.clone();
+        }
+        if !stylesheet.cell_styles.is_empty() {
+            writer.cell_styles = stylesheet.cell_styles.clone();
+        }
         writer.cell_xfs.clear();
         writer.cell_xfs.push(CellXfDef {
             num_fmt_id: Some(0),
@@ -102,7 +94,14 @@ pub(super) fn apply_workbook_stylesheet(
             ..Default::default()
         });
         writer.cell_xfs.extend(stylesheet.cell_xfs.iter().cloned());
+        writer.dxfs = stylesheet.dxfs.clone();
+        writer.colors = stylesheet.colors.clone();
+        writer.table_styles = stylesheet.table_styles.clone();
+        writer.default_table_style = stylesheet.default_table_style.clone();
+        writer.default_pivot_style = stylesheet.default_pivot_style.clone();
     }
+    writer.known_fonts = stylesheet.known_fonts;
+    writer.ext_lst_raw = workbook_stylesheet.ext_lst_xml.clone();
 
     if !workbook_stylesheet.root_namespace_attrs.is_empty() {
         let mut ns = crate::roundtrip::namespaces::NamespaceMap::new();

@@ -42,9 +42,9 @@ sidecar; it is not semantic authority.
 | `raw_persons_xml` | deprecated compatibility only | `ParseOutput.persons` | domain | persons writer | persons part registration | person tests |
 | `custom_xml_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | opaque custom XML tests |
 | `web_extension_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | web extension tests |
-| `opaque_package_subgraphs` | persisted opaque sidecar | `OpaquePackageSubgraph` | round_trip | `write::opaque_subgraph` | clean subgraph registration | opaque subgraph tests |
-| `binary_blobs` | deprecated compatibility only | opaque subgraphs or typed feature sidecars | round_trip | ignored by writer except when lowered into typed feature state | clean opaque subgraph registration only | binary passthrough tests |
-| `pivot_package` | persisted opaque sidecar | `PivotPackageRoundTrip` | round_trip | pivot writer | pivot package graph registration | pivot package tests |
+| `opaque_package_subgraphs` | persisted opaque sidecar | `OpaquePackageSubgraph`; never modeled features such as pivots/slicers | round_trip | `write::opaque_subgraph` filters modeled feature subgraphs | clean subgraph registration | opaque subgraph tests |
+| `binary_blobs` | deprecated compatibility only | opaque subgraphs or typed feature sidecars; never pivots/slicers | round_trip | ignored by writer except when lowered into typed feature state | clean opaque subgraph registration only | binary passthrough tests |
+| `pivot_package` | deprecated compatibility only | modeled pivot storage / `ParseOutput.pivot_tables` | domain | ignored for fresh imports; legacy deserialize only | generated pivot package graph | pivot package tests |
 | `extensions` | deprecated compatibility only | namespace / preserved-element fields | none | ignored | none | serde omission tests |
 | `workbook_namespace_attrs` | persisted typed metadata | workbook lexical metadata | round_trip | workbook writer | workbook XML | unknown element tests |
 | `workbook_preserved_elements` | persisted typed metadata | workbook unknown element metadata | round_trip | workbook writer after modeled filtering | workbook XML | unknown element tests |

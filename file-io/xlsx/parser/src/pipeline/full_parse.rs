@@ -964,10 +964,8 @@ fn parse_xlsx_full_native_impl(
                     || entry.name.starts_with("xl/queryTables/")
                     || entry.name.starts_with("xl/timelineCaches/")
                     || entry.name.starts_with("xl/timelines/")
-                    || entry.name.starts_with("xl/pivotTables/")
-                    || entry.name.starts_with("xl/pivotCache/")
-                    || entry.name.starts_with("xl/slicers/")
-                    || entry.name.starts_with("xl/slicerCaches/")
+                    // Pivots and slicers are modeled features. Do not capture
+                    // their package parts through generic roundtrip passthrough.
                     // Note: xl/ctrlProps/ is NOT included here because the structured
                     // ControlsWriter in from_parse_output.rs already regenerates ctrlProp files
                     // from parsed FormControl data. Adding them to binary passthrough would

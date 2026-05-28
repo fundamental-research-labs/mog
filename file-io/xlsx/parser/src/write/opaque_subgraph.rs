@@ -81,11 +81,11 @@ pub fn round_trip_opaque_subgraphs(
         return Vec::new();
     };
     let mut subgraphs = explicit_or_legacy_opaque_subgraphs(ctx);
+    subgraphs.retain(|subgraph| !is_modeled_feature_opaque_subgraph(subgraph));
     subgraphs.retain(|subgraph| !is_shadowed_worksheet_drawing_subgraph(output, subgraph));
     subgraphs.retain(|subgraph| !is_worksheet_custom_property_subgraph(subgraph));
     subgraphs.retain(|subgraph| !is_stale_printer_settings_subgraph(output, subgraph));
     remove_feature_owned_hf_vml_parts(ctx, output, &mut subgraphs);
-    subgraphs.extend(lower_pivot_package(ctx));
     subgraphs
 }
 
@@ -169,6 +169,36 @@ fn is_stale_printer_settings_subgraph(
                     print_settings,
                 )
     })
+}
+
+fn is_modeled_feature_opaque_subgraph(subgraph: &OpaquePackageSubgraph) -> bool {
+    is_modeled_feature_relationship_type(&subgraph.owner_relationship.relationship_type)
+        || subgraph.relationships.iter().any(|relationship| {
+            is_modeled_feature_relationship_type(&relationship.relationship_type)
+        })
+        || subgraph
+            .parts
+            .iter()
+            .any(|part| is_modeled_feature_part_path(&part.part.path))
+}
+
+fn is_modeled_feature_relationship_type(rel_type: &str) -> bool {
+    matches!(
+        rel_type,
+        crate::infra::opc::REL_PIVOT_TABLE
+            | crate::infra::opc::REL_PIVOT_CACHE
+            | crate::infra::opc::REL_PIVOT_CACHE_RECORDS
+            | crate::infra::opc::REL_SLICER
+            | crate::infra::opc::REL_SLICER_CACHE
+    )
+}
+
+fn is_modeled_feature_part_path(path: &str) -> bool {
+    let path = normalize_path(path);
+    path.starts_with("xl/pivotTables/")
+        || path.starts_with("xl/pivotCache/")
+        || path.starts_with("xl/slicers/")
+        || path.starts_with("xl/slicerCaches/")
 }
 
 fn opaque_subgraph_single_part_path(subgraph: &OpaquePackageSubgraph) -> Option<String> {

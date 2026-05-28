@@ -186,13 +186,11 @@ pub struct RoundTripContext {
     /// instead of blanket binary passthrough.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binary_blobs: Vec<BlobPart>,
-    /// Typed pivot package preservation data.
+    /// Deprecated compatibility-only input for legacy snapshots.
     ///
-    /// Clean imported pivot packages are OPC package identity, not semantic pivot
-    /// configs: they include workbook/sheet relationships, part paths, content
-    /// types, raw OOXML bytes, and ownership state. The XLSX writer uses this
-    /// sidecar to replay clean imported pivot packages verbatim while generating
-    /// packages only for API-created or explicitly dirty pivots.
+    /// Pivots are modeled features. Fresh imports must lower pivot state into
+    /// domain pivot storage and regenerate package parts from modeled state,
+    /// rather than replaying clean imported pivot package bytes.
     #[serde(default, skip_serializing_if = "PivotPackageRoundTrip::is_empty")]
     pub pivot_package: PivotPackageRoundTrip,
     #[serde(default, skip_serializing_if = "Option::is_none")]

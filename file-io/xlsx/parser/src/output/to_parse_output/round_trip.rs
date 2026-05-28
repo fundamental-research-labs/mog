@@ -1254,7 +1254,11 @@ pub(super) fn build_round_trip_context(
         web_extension_parts,
         opaque_package_subgraphs,
         binary_blobs,
-        pivot_package: build_pivot_package_round_trip(result),
+        // Pivots are modeled through ParseOutput.pivot_tables/pivot_caches and
+        // compute workbook pivot storage. New imports must not emit a pivot
+        // roundtrip package sidecar; the field remains deserialize-only for
+        // legacy documents.
+        pivot_package: PivotPackageRoundTrip::default(),
         extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead
 
         // Workbook-level namespace + preserved element preservation

@@ -1,0 +1,56 @@
+use crate::domain::workbook::read::SheetInfo;
+use crate::domain::worksheet::read::{
+    parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views,
+};
+use crate::output::results::FullParsedSheet;
+use crate::zip::{XlsxArchive, ZipError};
+
+pub(super) fn append_metadata_only_sheets(
+    archive: &XlsxArchive<'_>,
+    sheets: &mut Vec<FullParsedSheet>,
+    sheet_namespaces: &mut Vec<crate::infra::xml_namespaces::NamespaceMap>,
+    sheet_infos: &[SheetInfo],
+    parse_cell_count: usize,
+    sheet_count: usize,
+) -> Result<(), String> {
+    for sheet_idx in parse_cell_count..sheet_count {
+        let sheet_num = sheet_idx + 1;
+        let sheet_info = sheet_infos.get(sheet_idx);
+        let sheet_name = sheet_info
+            .map(|si| si.name.clone())
+            .unwrap_or_else(|| format!("Sheet{}", sheet_num));
+        let mut empty_sheet = FullParsedSheet {
+            name: sheet_name,
+            index: sheet_idx,
+            sheet_id: sheet_info.map(|si| si.sheet_id),
+            state: sheet_info
+                .map(|si| si.state)
+                .unwrap_or(crate::domain::workbook::types::SheetState::Visible),
+            ..Default::default()
+        };
+
+        let metadata_xml = match archive.get_worksheet(sheet_num) {
+            Ok(xml) => Some(xml),
+            Err(ZipError::FileNotFound(_)) => None,
+            Err(e) => return Err(format!("Failed to read worksheet {}: {}", sheet_num, e)),
+        };
+        if let Some(xml) = metadata_xml {
+            let pre_sd = memchr::memmem::find(&xml, b"<sheetData")
+                .map(|p| &xml[..p])
+                .unwrap_or(&xml);
+            empty_sheet.view_options = parse_sheet_views(pre_sd)
+                .into_iter()
+                .map(crate::output::results::SheetViewOutput::from)
+                .collect();
+            empty_sheet.frozen_pane = parse_frozen_pane(pre_sd);
+            let fmt_pr = parse_sheet_format_pr(pre_sd);
+            empty_sheet.default_row_height = fmt_pr.default_row_height;
+            empty_sheet.default_col_width = fmt_pr.default_col_width;
+        }
+
+        sheets.push(empty_sheet);
+        sheet_namespaces.push(Default::default());
+    }
+
+    Ok(())
+}

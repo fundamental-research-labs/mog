@@ -49,6 +49,7 @@ import {
 } from './operations/table-operations';
 import { columnFilterCriteriaToCompute } from '../../bridges/compute/compute-wire-converters';
 import * as FilterOps from './operations/filter-operations';
+import * as FillOps from './operations/fill-operations';
 import { toCellInput } from './operations/cell-input';
 import {
   assertCalculatedColumnAllowed,
@@ -755,7 +756,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
       throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     }
 
-    const cells = getTableColumnDataCellsFromInfo(table, colIndex);
+    const cells = [...getTableColumnDataCellsFromInfo(table, colIndex)].sort((a, b) =>
+      a.row === b.row ? a.col - b.col : a.row - b.row,
+    );
     await assertCalculatedColumnAllowed(
       this.ctx,
       this.sheetId,
@@ -763,11 +766,40 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table,
       cells,
     );
-    await this.ctx.computeBridge.updateCalculatedColumn(tableName, colIndex, formula);
-    if (cells.length === 0) return;
-
-    const edits = cells.map(({ row, col }) => ({ row, col, input: toCellInput(formula) }));
-    await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    await this.ctx.computeBridge.beginUndoGroup();
+    try {
+      await this.ctx.computeBridge.updateCalculatedColumn(tableName, colIndex, formula);
+      if (cells.length > 0) {
+        const sourceCell = cells[0]!;
+        await this.ctx.computeBridge.setCellsByPosition(this.sheetId, [
+          { row: sourceCell.row, col: sourceCell.col, input: toCellInput(formula) },
+        ]);
+        if (cells.length > 1) {
+          const firstTargetCell = cells[1]!;
+          const lastCell = cells[cells.length - 1]!;
+          await FillOps.autoFill(
+            this.ctx,
+            this.sheetId,
+            {
+              startRow: sourceCell.row,
+              startCol: sourceCell.col,
+              endRow: sourceCell.row,
+              endCol: sourceCell.col,
+            },
+            {
+              startRow: firstTargetCell.row,
+              startCol: firstTargetCell.col,
+              endRow: lastCell.row,
+              endCol: lastCell.col,
+            },
+            'withoutFormats',
+            { undoGroup: false },
+          );
+        }
+      }
+    } finally {
+      await this.ctx.computeBridge.endUndoGroup();
+    }
     this.emitTableUpdated(tableName);
   }
 

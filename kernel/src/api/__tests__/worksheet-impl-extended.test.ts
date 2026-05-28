@@ -273,6 +273,9 @@ function createMockCtx(): any {
       setCellFormat: jest.fn().mockResolvedValue(undefined),
       setCells: jest.fn().mockResolvedValue(undefined),
       setCellsByPosition: jest.fn().mockResolvedValue(undefined),
+      autoFill: jest.fn().mockResolvedValue({ data: { patternType: 'copy', filledCellCount: 0 } }),
+      beginUndoGroup: jest.fn().mockResolvedValue(undefined),
+      endUndoGroup: jest.fn().mockResolvedValue(undefined),
       getProjectionRange: jest.fn().mockResolvedValue(null),
       getProjectionSource: jest.fn().mockResolvedValue(null),
       isProjectedPosition: jest.fn().mockResolvedValue(false),
@@ -300,6 +303,7 @@ function createMockCtx(): any {
       getColWidthsBatch: jest.fn().mockResolvedValue([]),
       getTableAtCell: jest.fn().mockResolvedValue(null),
       getTableByName: jest.fn().mockResolvedValue(null),
+      tableValidateTableName: jest.fn().mockResolvedValue({ valid: true }),
       getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       deleteTable: jest.fn().mockResolvedValue(undefined),
       createTable: jest.fn().mockResolvedValue(undefined),
@@ -714,10 +718,41 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(result).toBeNull();
     });
 
-    it('renameTable delegates to computeBridge.renameTable', async () => {
+    it('renameTable validates before delegating to computeBridge.renameTable', async () => {
       await ws.tables.rename('OldName', 'NewName');
 
+      expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('NewName', []);
       expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith('OldName', 'NewName');
+    });
+
+    it('renameTable rejects invalid names before compute rename', async () => {
+      ctx.computeBridge.tableValidateTableName.mockResolvedValueOnce({
+        valid: false,
+        reason: 'Table name can only contain letters, digits, and underscores',
+      });
+
+      await expect(ws.tables.rename('Table1', 'Bad Name')).rejects.toMatchObject({
+        code: 'TABLE_INVALID_NAME',
+        message: 'Table name can only contain letters, digits, and underscores',
+      });
+      expect(ctx.computeBridge.renameTable).not.toHaveBeenCalled();
+    });
+
+    it('renameTable excludes the current table from duplicate validation', async () => {
+      ctx.computeBridge.getAllTablesInSheet.mockResolvedValueOnce([
+        { name: 'Table1', range: 'A1:B2' },
+        { name: 'OtherTable', range: 'D1:E2' },
+      ]);
+      (TableOps.bridgeTableToTableInfo as jest.Mock)
+        .mockReturnValueOnce({ name: 'Table1', range: 'A1:B2' })
+        .mockReturnValueOnce({ name: 'OtherTable', range: 'D1:E2' });
+
+      await ws.tables.rename('Table1', 'table1');
+
+      expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('table1', [
+        'OtherTable',
+      ]);
+      expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith('Table1', 'table1');
     });
 
     it('addTable with style delegates to one Rust lifecycle command', async () => {
@@ -813,6 +848,27 @@ describe('WorksheetImpl Extended Methods', () => {
       await ws.tables.update('Table1', { style: 'TableStyleLight1' });
 
       expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith('Table1', 'TableStyleLight1');
+    });
+
+    it('updateTable rejects invalid renamed names before compute rename', async () => {
+      ctx.computeBridge.getTableByName.mockResolvedValueOnce({ raw: 'bridge-table' });
+      (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValueOnce({
+        name: 'Table1',
+        range: 'A1:B2',
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+        columns: [],
+      });
+      ctx.computeBridge.tableValidateTableName.mockResolvedValueOnce({
+        valid: false,
+        reason: 'Table name cannot be a cell reference',
+      });
+
+      await expect(ws.tables.update('Table1', { name: 'A1' })).rejects.toMatchObject({
+        code: 'TABLE_INVALID_NAME',
+        message: 'Table name cannot be a cell reference',
+      });
+      expect(ctx.computeBridge.renameTable).not.toHaveBeenCalled();
     });
 
     it('setTableStylePreset delegates to computeBridge.setTableStyle', async () => {
@@ -1231,7 +1287,7 @@ describe('WorksheetImpl Extended Methods', () => {
   // Calculated Column Operations
   // =========================================================================
   describe('Calculated Column Operations', () => {
-    it('setCalculatedColumn fetches table then writes formula to column cells', async () => {
+    it('setCalculatedColumn seeds the first data cell then autofills the rest without formats', async () => {
       const mockTableInfo = {
         name: 'Table1',
         range: 'A1:D10',
@@ -1251,20 +1307,31 @@ describe('WorksheetImpl Extended Methods', () => {
         { row: 3, col: 2 },
       ]);
 
-      await ws.tables.setCalculatedColumn('Table1', 2, '=[@Price]*[@Quantity]');
+      await ws.tables.setCalculatedColumn('Table1', 2, '=A2+B2');
 
       expect(ctx.computeBridge.getTableByName).toHaveBeenCalledWith('Table1');
       expect(TableOps.getTableColumnDataCellsFromInfo).toHaveBeenCalledWith(mockTableInfo, 2);
-      expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith(
-        'Table1',
-        2,
-        '=[@Price]*[@Quantity]',
-      );
+      expect(ctx.computeBridge.beginUndoGroup).toHaveBeenCalledTimes(1);
+      expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith('Table1', 2, '=A2+B2');
       expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-        { row: 1, col: 2, input: { kind: 'parse', text: '=[@Price]*[@Quantity]' } },
-        { row: 2, col: 2, input: { kind: 'parse', text: '=[@Price]*[@Quantity]' } },
-        { row: 3, col: 2, input: { kind: 'parse', text: '=[@Price]*[@Quantity]' } },
+        { row: 1, col: 2, input: { kind: 'parse', text: '=A2+B2' } },
       ]);
+      expect(ctx.computeBridge.autoFill).toHaveBeenCalledWith(SHEET_ID, {
+        sourceRange: { startRow: 1, startCol: 2, endRow: 1, endCol: 2 },
+        targetRange: { startRow: 2, startCol: 2, endRow: 3, endCol: 2 },
+        direction: 'down',
+        mode: 'withoutFormats',
+        stepValue: 1,
+        includeFormulas: true,
+        includeValues: true,
+        includeFormats: false,
+      });
+      expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
+      const updateOrder = ctx.computeBridge.updateCalculatedColumn.mock.invocationCallOrder[0];
+      const seedOrder = ctx.computeBridge.setCellsByPosition.mock.invocationCallOrder[0];
+      const fillOrder = ctx.computeBridge.autoFill.mock.invocationCallOrder[0];
+      expect(updateOrder).toBeLessThan(seedOrder);
+      expect(seedOrder).toBeLessThan(fillOrder);
     });
 
     it('clearCalculatedColumn fetches table then clears column cells', async () => {

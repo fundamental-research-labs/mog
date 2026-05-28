@@ -16,6 +16,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { toA1 } from '@mog/spreadsheet-utils/a1';
+import { toPlainText } from '@mog/spreadsheet-utils/rich-text';
 
 import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
 
@@ -26,12 +27,43 @@ interface CommentSummary {
   cellAddress: string;
 }
 
+function isTextRunArray(value: unknown): value is Array<{ text: string }> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (run) =>
+        typeof run === 'object' &&
+        run !== null &&
+        'text' in run &&
+        typeof run.text === 'string',
+    )
+  );
+}
+
+function normalizeCommentBodyValue(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') return value;
+  if (isTextRunArray(value)) return toPlainText(value);
+  return '';
+}
+
+function getCommentBodyText(comment: any): string {
+  return (
+    normalizeCommentBodyValue(comment.content) ??
+    normalizeCommentBodyValue(comment.text) ??
+    normalizeCommentBodyValue(comment.body) ??
+    normalizeCommentBodyValue(comment.runs) ??
+    ''
+  );
+}
+
 function CommentsPanelImpl() {
   const wb = useWorkbook();
   const sheetId = useActiveSheetId();
   const ws = useMemo(() => wb.getSheetById(sheetId), [wb, sheetId]);
 
   const setCommentsPanelVisible = useUIStore((s) => s.setCommentsPanelVisible);
+  const setShowAllComments = useUIStore((s) => s.setShowAllComments);
 
   const [items, setItems] = useState<CommentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +77,7 @@ function CommentsPanelImpl() {
         if (cancelled) return;
         const summary: CommentSummary[] = (list ?? []).map((c: any) => ({
           id: String(c.id ?? c.commentId ?? `${c.row},${c.col}`),
-          text: String(c.text ?? c.body ?? ''),
+          text: getCommentBodyText(c),
           author: c.author ?? null,
           cellAddress:
             typeof c.row === 'number' && typeof c.col === 'number' ? toA1(c.row, c.col) : '',
@@ -89,7 +121,8 @@ function CommentsPanelImpl() {
 
   const handleClose = useCallback(() => {
     setCommentsPanelVisible(false);
-  }, [setCommentsPanelVisible]);
+    setShowAllComments(false);
+  }, [setCommentsPanelVisible, setShowAllComments]);
 
   return (
     <aside

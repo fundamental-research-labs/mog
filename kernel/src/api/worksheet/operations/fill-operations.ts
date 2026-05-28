@@ -96,6 +96,7 @@ export async function autoFill(
   sourceRange: CellRange,
   targetRange: CellRange,
   mode: AutoFillMode,
+  options: { undoGroup?: boolean } = {},
 ): Promise<AutoFillResult> {
   // Validate ranges
   if (
@@ -129,9 +130,9 @@ export async function autoFill(
     ...flags,
   };
 
-  const bridgeResult = await runAsSingleUndoStep(ctx, () =>
-    ctx.computeBridge.autoFill(sheetId, bridgeRequest),
-  );
+  const operation = () => ctx.computeBridge.autoFill(sheetId, bridgeRequest);
+  const bridgeResult =
+    options.undoGroup === false ? await operation() : await runAsSingleUndoStep(ctx, operation);
 
   const fillData = bridgeResult?.data as
     | {

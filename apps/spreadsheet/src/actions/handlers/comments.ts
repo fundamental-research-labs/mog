@@ -256,8 +256,8 @@ export const PREVIOUS_COMMENT: AsyncActionHandler = async (deps) => {
 /**
  * Toggle visibility of all comments in the sheet.
  *
- * This action toggles the "Show All Comments" state in UIStore.
- * When enabled, all comment indicators are visible simultaneously.
+ * This action toggles the "Show All Comments" state in UIStore and opens/closes
+ * the review comments pane with the same state.
  *
  * Architecture: Uses UIStore slice (ephemeral UI state) via getUIStore helper.
  */
@@ -267,6 +267,9 @@ export const TOGGLE_SHOW_ALL_COMMENTS: ActionHandler = (deps) => {
     return notHandled('not_implemented');
   }
 
-  uiStore.getState().toggleShowAllComments();
+  const ui = uiStore.getState();
+  const nextShowAllComments = !ui.showAllComments;
+  ui.setShowAllComments(nextShowAllComments);
+  ui.setCommentsPanelVisible(nextShowAllComments);
   return handled();
 };

@@ -515,7 +515,7 @@ fn export_single_sheet(
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols) = {
+    let (stored_rows, stored_cols, legacy_comment_authors) = {
         let txn = stores.storage.doc().transact();
         if let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) {
             let rows = match meta.get(&txn, KEY_ROWS) {
@@ -526,9 +526,13 @@ fn export_single_sheet(
                 Some(Out::Any(Any::Number(n))) => Some(n.max(0.0) as u32),
                 _ => None,
             };
-            (rows, cols)
+            let legacy_comment_authors = match meta.get(&txn, "legacyCommentAuthors") {
+                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).unwrap_or_default(),
+                _ => Vec::new(),
+            };
+            (rows, cols, legacy_comment_authors)
         } else {
-            (None, None)
+            (None, None, Vec::new())
         }
     };
     let rows = stored_rows.unwrap_or(100).max(max_row);
@@ -704,6 +708,7 @@ fn export_single_sheet(
         frozen_pane,
         view,
         comments: comments_out,
+        legacy_comment_authors,
         conditional_formats,
         hyperlinks: hyperlinks_out,
         data_validations,

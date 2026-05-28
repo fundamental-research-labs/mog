@@ -27,6 +27,14 @@ pub struct FloatingObjectAnchor {
     #[serde(rename = "anchorColOffsetEmu", alias = "anchorColOffset")]
     pub anchor_col_offset: i64,
     pub anchor_mode: AnchorMode,
+    /// Absolute x position in EMU for `xdr:absoluteAnchor`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "absoluteXEmu", alias = "absoluteX")]
+    pub absolute_x: Option<i64>,
+    /// Absolute y position in EMU for `xdr:absoluteAnchor`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "absoluteYEmu", alias = "absoluteY")]
+    pub absolute_y: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_row: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,6 +63,8 @@ impl Default for FloatingObjectAnchor {
             anchor_row_offset: 0,
             anchor_col_offset: 0,
             anchor_mode: AnchorMode::OneCell,
+            absolute_x: None,
+            absolute_y: None,
             end_row: None,
             end_col: None,
             end_row_offset: None,

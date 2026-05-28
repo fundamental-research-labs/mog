@@ -1013,6 +1013,7 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
                 visible: None,
                 note_height: None,
                 note_width: None,
+                note_shape_anchor: None,
             }
         })
         .collect();
@@ -1024,6 +1025,7 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
             visible: bool,
             note_height: Option<f64>,
             note_width: Option<f64>,
+            note_shape_anchor: domain_types::domain::comment::NoteShapeAnchor,
         }
         let mut shape_by_cell: HashMap<String, ShapeData> = HashMap::new();
         for (_, bytes, _) in &sheet.raw_vml_drawings {
@@ -1035,6 +1037,16 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
                             visible: shape.visible,
                             note_height: shape.note_height,
                             note_width: shape.note_width,
+                            note_shape_anchor: domain_types::domain::comment::NoteShapeAnchor {
+                                left_column: shape.left_column,
+                                left_offset: shape.left_offset,
+                                top_row: shape.top_row,
+                                top_offset: shape.top_offset,
+                                right_column: shape.right_column,
+                                right_offset: shape.right_offset,
+                                bottom_row: shape.bottom_row,
+                                bottom_offset: shape.bottom_offset,
+                            },
                         },
                     );
                 }
@@ -1048,6 +1060,7 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
                     }
                     comment.note_height = data.note_height;
                     comment.note_width = data.note_width;
+                    comment.note_shape_anchor = Some(data.note_shape_anchor.clone());
                 }
             }
         }
@@ -1218,6 +1231,7 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
         charts,
         conditional_formats,
         comments,
+        legacy_comment_authors: sheet.comment_authors.clone(),
         hyperlinks,
         data_validations,
         x14_data_validations,

@@ -12,6 +12,8 @@ fn make_common(id: &str, sheet_id: &str) -> FloatingObjectCommon {
             anchor_row_offset: 0,
             anchor_col_offset: 0,
             anchor_mode: AnchorMode::OneCell,
+            absolute_x: None,
+            absolute_y: None,
             end_row: None,
             end_col: None,
             end_row_offset: None,

@@ -73,6 +73,8 @@ pub(crate) fn convert_floating_objects(
                             _ => AnchorMode::TwoCell,
                         })
                         .unwrap_or(AnchorMode::TwoCell),
+                    absolute_x: None,
+                    absolute_y: None,
                     end_row: Some(tc.to.row),
                     end_col: Some(tc.to.col),
                     end_row_offset: Some(tc.to.row_off),
@@ -90,6 +92,8 @@ pub(crate) fn convert_floating_objects(
                     anchor_row_offset: oc.from.row_off,
                     anchor_col_offset: oc.from.col_off,
                     anchor_mode: AnchorMode::OneCell,
+                    absolute_x: None,
+                    absolute_y: None,
                     end_row: None,
                     end_col: None,
                     end_row_offset: None,
@@ -105,8 +109,29 @@ pub(crate) fn convert_floating_objects(
                     None,
                 )
             }
-            DrawingAnchor::Absolute(_) => {
-                continue;
+            DrawingAnchor::Absolute(abs) => {
+                let a = FloatingObjectAnchor {
+                    anchor_row: 0,
+                    anchor_col: 0,
+                    anchor_row_offset: 0,
+                    anchor_col_offset: 0,
+                    anchor_mode: AnchorMode::Absolute,
+                    absolute_x: Some(abs.pos.x),
+                    absolute_y: Some(abs.pos.y),
+                    end_row: None,
+                    end_col: None,
+                    end_row_offset: None,
+                    end_col_offset: None,
+                    extent_cx: Some(abs.extent.cx),
+                    extent_cy: Some(abs.extent.cy),
+                };
+                (
+                    a,
+                    Some((abs.extent.cx, abs.extent.cy)),
+                    &abs.content,
+                    &abs.client_data,
+                    Some("absolute".to_string()),
+                )
             }
         };
 

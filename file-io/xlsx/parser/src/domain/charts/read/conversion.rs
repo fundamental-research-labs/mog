@@ -53,6 +53,8 @@ pub(super) fn convert_chart_to_chart_spec(
             anchor_col: anchor.from_col,
             anchor_row_offset: anchor.from_row_off,
             anchor_col_offset: anchor.from_col_off,
+            absolute_x: anchor.absolute_x,
+            absolute_y: anchor.absolute_y,
             end_row: anchor.to_row,
             end_col: anchor.to_col,
             end_row_offset: anchor.to_row_off,

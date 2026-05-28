@@ -38,8 +38,8 @@ use domain_types::domain::hyperlink::HyperlinkTargetKind;
 
 use super::write_error::WriteError;
 use crate::domain::drawings::write::{
-    CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject, DrawingWriter,
-    Extent, OneCellAnchor, TwoCellAnchor,
+    AbsoluteAnchor, CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject,
+    DrawingWriter, Extent, OneCellAnchor, Position, TwoCellAnchor,
 };
 use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
@@ -765,8 +765,28 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         .and_then(|frame| frame.edit_as.as_deref())
                         .or(chart_spec.anchor_edit_as.as_deref())
                         .map(ooxml_types::drawings::EditAs::from_ooxml);
-                    deferred_chart_anchors.push((
-                        anchor_index,
+                    let chart_object = DrawingObject::ChartEx(cx_ref);
+                    let drawing_anchor = if let (Some(x), Some(y)) = (
+                        chart_spec.position.absolute_x,
+                        chart_spec.position.absolute_y,
+                    ) {
+                        let cx = chart_spec
+                            .position
+                            .extent_cx
+                            .unwrap_or((chart_spec.size.width as i64) * 9525);
+                        let cy = chart_spec
+                            .position
+                            .extent_cy
+                            .unwrap_or((chart_spec.size.height as i64) * 9525);
+                        DrawingAnchor::Absolute(
+                            AbsoluteAnchor {
+                                pos: Position { x, y },
+                                extent: Extent { cx, cy },
+                                client_data,
+                            },
+                            chart_object,
+                        )
+                    } else {
                         DrawingAnchor::TwoCell(
                             TwoCellAnchor {
                                 from,
@@ -775,9 +795,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                                 client_data,
                                 mc_alternate_content: None,
                             },
-                            DrawingObject::ChartEx(cx_ref),
-                        ),
-                    ));
+                            chart_object,
+                        )
+                    };
+                    deferred_chart_anchors.push((anchor_index, drawing_anchor));
                     cx_local_idx += 1;
                 } else {
                     let Some(chart_entry) = chart_entry_map.get(&source_idx) else {
@@ -879,7 +900,30 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or(chart_spec.xfrm_ext_cy),
                     };
-                    if let (Some(cx), Some(cy)) =
+                    if let (Some(x), Some(y)) = (
+                        chart_spec.position.absolute_x,
+                        chart_spec.position.absolute_y,
+                    ) {
+                        let cx = chart_spec
+                            .position
+                            .extent_cx
+                            .unwrap_or((chart_spec.size.width as i64) * 9525);
+                        let cy = chart_spec
+                            .position
+                            .extent_cy
+                            .unwrap_or((chart_spec.size.height as i64) * 9525);
+                        deferred_chart_anchors.push((
+                            anchor_index,
+                            DrawingAnchor::Absolute(
+                                AbsoluteAnchor {
+                                    pos: Position { x, y },
+                                    extent: Extent { cx, cy },
+                                    client_data,
+                                },
+                                DrawingObject::Chart(chart_ref),
+                            ),
+                        ));
+                    } else if let (Some(cx), Some(cy)) =
                         (chart_spec.position.extent_cx, chart_spec.position.extent_cy)
                     {
                         deferred_chart_anchors.push((

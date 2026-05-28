@@ -330,6 +330,34 @@ pub struct ChartRelationshipData {
     pub target_mode: Option<String>,
 }
 
+/// Typed chart-owned auxiliary package part.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartAuxiliaryPart {
+    pub path: String,
+    pub relationship: ChartRelationshipData,
+    pub content: ChartAuxiliaryContent,
+}
+
+/// Supported chart auxiliary part payloads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ChartAuxiliaryContent {
+    Style { xml: String },
+    ColorStyle { xml: String },
+    UserShapes { xml: String },
+}
+
+impl ChartAuxiliaryPart {
+    pub fn bytes(&self) -> Vec<u8> {
+        match &self.content {
+            ChartAuxiliaryContent::Style { xml }
+            | ChartAuxiliaryContent::ColorStyle { xml }
+            | ChartAuxiliaryContent::UserShapes { xml } => xml.as_bytes().to_vec(),
+        }
+    }
+}
+
 /// Metadata for reconstructing a ChartGroup during export.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

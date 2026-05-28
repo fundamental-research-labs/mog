@@ -261,7 +261,8 @@ pub(super) fn build_sheet_parts(
 
         // ── Comments ────────────────────────────────────────────────────
         let comments_data = if !sheet_data.comments.is_empty() {
-            let original_authors = None;
+            let original_authors = (!sheet_data.legacy_comment_authors.is_empty())
+                .then_some(sheet_data.legacy_comment_authors.as_slice());
             let root_ns_attrs = None;
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(

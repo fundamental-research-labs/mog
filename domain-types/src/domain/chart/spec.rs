@@ -10,7 +10,8 @@ use super::floating_object::{
 };
 use super::{
     AnchorPosition, AxisData, ChartDataTableData, ChartDefinition, ChartFormatData,
-    ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType, ChartView3DData,
+    ChartAuxiliaryPart, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
+    ChartView3DData,
     DataLabelData, LegendData, ObjectSize,
 };
 
@@ -151,6 +152,9 @@ pub struct ChartSpec {
     /// Chart-owned auxiliary package parts imported with this chart part.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_files: Vec<(String, Vec<u8>)>,
+    /// Typed chart-owned auxiliary package parts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
 
     /// Whether this chart uses ChartEx format (cx: namespace) instead of standard c: namespace.
     /// ChartEx covers modern chart types: Waterfall, Treemap, Sunburst, Funnel, etc.
@@ -250,6 +254,8 @@ impl ChartSpec {
             anchor_col: anchor.anchor_col,
             anchor_row_offset: anchor.anchor_row_offset,
             anchor_col_offset: anchor.anchor_col_offset,
+            absolute_x: anchor.absolute_x,
+            absolute_y: anchor.absolute_y,
             end_row: anchor.end_row,
             end_col: anchor.end_col,
             end_row_offset: anchor.end_row_offset,
@@ -276,6 +282,9 @@ impl ChartSpec {
             .unwrap_or_default();
         let chart_auxiliary_files = ooxml
             .map(|o| o.chart_auxiliary_files.clone())
+            .unwrap_or_default();
+        let chart_auxiliary_parts = ooxml
+            .map(|o| o.chart_auxiliary_parts.clone())
             .unwrap_or_default();
         let is_chart_ex = ooxml.map(|o| o.is_chart_ex).unwrap_or_else(|| {
             matches!(
@@ -408,6 +417,7 @@ impl ChartSpec {
             chart_frame,
             chart_relationships,
             chart_auxiliary_files,
+            chart_auxiliary_parts,
             is_chart_ex,
             cnv_pr_name,
             cnv_pr_id,
@@ -507,6 +517,7 @@ impl ChartSpec {
             && drawing_frame.is_none()
             && self.chart_relationships.is_empty()
             && self.chart_auxiliary_files.is_empty()
+            && self.chart_auxiliary_parts.is_empty()
             && !self.is_chart_ex
         {
             None
@@ -516,12 +527,16 @@ impl ChartSpec {
                 drawing_frame,
                 chart_relationships: self.chart_relationships.clone(),
                 chart_auxiliary_files: self.chart_auxiliary_files.clone(),
+                chart_auxiliary_parts: self.chart_auxiliary_parts.clone(),
                 is_chart_ex: self.is_chart_ex,
             })
         };
 
         // Determine anchor mode from position fields
-        let anchor_mode = if self.position.end_row.is_some() && self.position.end_col.is_some() {
+        let anchor_mode = if self.position.absolute_x.is_some() && self.position.absolute_y.is_some()
+        {
+            AnchorMode::Absolute
+        } else if self.position.end_row.is_some() && self.position.end_col.is_some() {
             AnchorMode::TwoCell
         } else {
             AnchorMode::OneCell
@@ -536,6 +551,8 @@ impl ChartSpec {
                 anchor_row_offset: self.position.anchor_row_offset,
                 anchor_col_offset: self.position.anchor_col_offset,
                 anchor_mode,
+                absolute_x: self.position.absolute_x,
+                absolute_y: self.position.absolute_y,
                 end_row: self.position.end_row,
                 end_col: self.position.end_col,
                 end_row_offset: self.position.end_row_offset,

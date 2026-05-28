@@ -12,6 +12,8 @@ pub(super) const KEY_END_ROW_OFFSET_EMU: &str = "endRowOffsetEmu";
 pub(super) const KEY_END_COL_OFFSET_EMU: &str = "endColOffsetEmu";
 const KEY_EXTENT_CX_EMU: &str = "extentCxEmu";
 const KEY_EXTENT_CY_EMU: &str = "extentCyEmu";
+const KEY_ABSOLUTE_X_EMU: &str = "absoluteXEmu";
+const KEY_ABSOLUTE_Y_EMU: &str = "absoluteYEmu";
 
 // ── Serialization helpers ─────────────────────────────────────────────
 
@@ -132,6 +134,12 @@ pub fn to_yrs_prelim(obj: &FloatingObject) -> Vec<(String, Any)> {
     }
     if let Some(v) = a.extent_cy {
         entries.push((KEY_EXTENT_CY_EMU.into(), Any::Number(v as f64)));
+    }
+    if let Some(v) = a.absolute_x {
+        entries.push((KEY_ABSOLUTE_X_EMU.into(), Any::Number(v as f64)));
+    }
+    if let Some(v) = a.absolute_y {
+        entries.push((KEY_ABSOLUTE_Y_EMU.into(), Any::Number(v as f64)));
     }
     if let Some(ref v) = c.group_id {
         entries.push(("groupId".into(), Any::String(Arc::from(v.as_str()))));
@@ -603,6 +611,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<FloatingObject>
         anchor_mode: read_string(map, txn, "anchorMode")
             .map(|s| str_to_anchor_mode(&s))
             .unwrap_or(AnchorMode::OneCell),
+        absolute_x: read_i64_aliased(map, txn, KEY_ABSOLUTE_X_EMU, "absoluteX"),
+        absolute_y: read_i64_aliased(map, txn, KEY_ABSOLUTE_Y_EMU, "absoluteY"),
         end_row: read_u32(map, txn, "endRow"),
         end_col: read_u32(map, txn, "endCol"),
         end_row_offset: read_i64_aliased(map, txn, KEY_END_ROW_OFFSET_EMU, "endRowOffset"),

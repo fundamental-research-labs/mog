@@ -848,6 +848,12 @@ pub(crate) fn hydrate_sheet(
     let identity_only_cells =
         insert_missing_anchored_identities(&mut pos_map, &anchored_identities);
 
+    if !sheet.legacy_comment_authors.is_empty()
+        && let Ok(json) = serde_json::to_string(&sheet.legacy_comment_authors)
+    {
+        sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
+    }
+
     // --- Comments (yrs_schema::comment) ---
     // Resolve A1 cell_refs to stable CellId hex strings via the authoritative
     // import position map. Empty comment-only targets are identity-only entries
@@ -1495,6 +1501,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
     );
     let identity_only_cells =
         insert_missing_anchored_identities(&mut pos_map, &alloc.identity_only_cells);
+    if !sheet.legacy_comment_authors.is_empty()
+        && let Ok(json) = serde_json::to_string(&sheet.legacy_comment_authors)
+    {
+        sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
+    }
     hydrate_comments(txn, &comments_map, &pos_map, &sheet.comments, persons);
     hydrate_sparklines(
         txn,

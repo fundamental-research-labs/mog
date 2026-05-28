@@ -26,6 +26,23 @@ pub struct CommentMention {
     pub length: u32,
 }
 
+/// Legacy VML note shape anchor.
+///
+/// Excel stores legacy note callout geometry in VML `<x:Anchor>` as
+/// `leftColumn,leftOffset,topRow,topOffset,rightColumn,rightOffset,bottomRow,bottomOffset`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteShapeAnchor {
+    pub left_column: u32,
+    pub left_offset: u32,
+    pub top_row: u32,
+    pub top_offset: u32,
+    pub right_column: u32,
+    pub right_offset: u32,
+    pub bottom_row: u32,
+    pub bottom_offset: u32,
+}
+
 /// Whether a comment is a legacy note or a modern threaded comment.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,6 +135,10 @@ pub struct Comment {
     /// Only meaningful when comment_type == CommentType::Note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_width: Option<f64>,
+    /// Full VML note shape anchor geometry.
+    /// Only meaningful when comment_type == CommentType::Note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note_shape_anchor: Option<NoteShapeAnchor>,
 }
 
 impl Default for Comment {
@@ -146,6 +167,7 @@ impl Default for Comment {
             visible: None,
             note_height: None,
             note_width: None,
+            note_shape_anchor: None,
         }
     }
 }

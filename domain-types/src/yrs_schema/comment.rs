@@ -31,6 +31,7 @@ pub const KEY_COMMENT_TYPE: &str = "commentType";
 pub const KEY_VISIBLE: &str = "visible";
 pub const KEY_NOTE_HEIGHT: &str = "noteHeight";
 pub const KEY_NOTE_WIDTH: &str = "noteWidth";
+pub const KEY_NOTE_SHAPE_ANCHOR: &str = "noteShapeAnchor";
 
 /// Convert a [`Comment`] to Yrs prelim entries.
 ///
@@ -119,6 +120,11 @@ pub fn to_yrs_prelim(comment: &Comment) -> Vec<(&str, Any)> {
     if let Some(w) = comment.note_width {
         entries.push((KEY_NOTE_WIDTH, Any::Number(w)));
     }
+    if let Some(ref anchor) = comment.note_shape_anchor
+        && let Ok(json) = serde_json::to_string(anchor)
+    {
+        entries.push((KEY_NOTE_SHAPE_ANCHOR, Any::String(Arc::from(json))));
+    }
     entries
 }
 
@@ -165,6 +171,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Comment> {
         visible: read_bool(map, txn, KEY_VISIBLE),
         note_height: read_number(map, txn, KEY_NOTE_HEIGHT),
         note_width: read_number(map, txn, KEY_NOTE_WIDTH),
+        note_shape_anchor: read_string(map, txn, KEY_NOTE_SHAPE_ANCHOR)
+            .and_then(|s| serde_json::from_str(&s).ok()),
     })
 }
 
@@ -221,6 +229,16 @@ mod tests {
             visible: Some(true),
             note_height: Some(60.0),
             note_width: Some(120.0),
+            note_shape_anchor: Some(crate::domain::comment::NoteShapeAnchor {
+                left_column: 1,
+                left_offset: 2,
+                top_row: 3,
+                top_offset: 4,
+                right_column: 5,
+                right_offset: 6,
+                bottom_row: 7,
+                bottom_offset: 8,
+            }),
             ..Default::default()
         };
 
@@ -243,6 +261,7 @@ mod tests {
         assert_eq!(restored.visible, Some(true));
         assert_eq!(restored.note_height, Some(60.0));
         assert_eq!(restored.note_width, Some(120.0));
+        assert_eq!(restored.note_shape_anchor, original.note_shape_anchor);
     }
 
     #[test]

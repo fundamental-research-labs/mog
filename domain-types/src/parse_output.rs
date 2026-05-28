@@ -399,6 +399,10 @@ pub struct SheetData {
     pub charts: Vec<ChartSpec>,
     pub conditional_formats: Vec<ConditionalFormat>,
     pub comments: Vec<Comment>,
+    /// Legacy `<comments><authors>` list for note comments, including unused
+    /// authors and original ordering.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legacy_comment_authors: Vec<String>,
     pub hyperlinks: Vec<Hyperlink>,
     pub data_validations: Vec<ValidationSpec>,
     /// Source count attribute on `<dataValidations>`, when imported.

@@ -1854,6 +1854,16 @@ pub fn comments_from_domain(
         shape.visible = visible;
         shape.note_height = comment.note_height;
         shape.note_width = comment.note_width;
+        if let Some(anchor) = &comment.note_shape_anchor {
+            shape.left_col = anchor.left_column;
+            shape.left_offset = anchor.left_offset as f64;
+            shape.top_row = anchor.top_row;
+            shape.top_offset = anchor.top_offset as f64;
+            shape.right_col = anchor.right_column;
+            shape.right_offset = anchor.right_offset as f64;
+            shape.bottom_row = anchor.bottom_row;
+            shape.bottom_offset = anchor.bottom_offset as f64;
+        }
         cw.add_with_shape(legacy, shape);
     }
 

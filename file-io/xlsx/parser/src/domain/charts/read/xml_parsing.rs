@@ -26,6 +26,10 @@ pub struct ChartRefInfo {
     pub from_col_off: i64,
     /// EMU offset within the from-cell row
     pub from_row_off: i64,
+    /// Absolute x position in EMUs for `xdr:absoluteAnchor`
+    pub absolute_x: Option<i64>,
+    /// Absolute y position in EMUs for `xdr:absoluteAnchor`
+    pub absolute_y: Option<i64>,
     /// End anchor row (for twoCellAnchor)
     pub to_row: Option<u32>,
     /// End anchor col (for twoCellAnchor)
@@ -221,6 +225,8 @@ pub(super) fn extract_chart_refs_from_drawing(
                         from_col,
                         from_col_off,
                         from_row_off,
+                        absolute_x: None,
+                        absolute_y: None,
                         to_row: Some(to_row),
                         to_col: Some(to_col),
                         to_col_off: Some(to_col_off),
@@ -279,6 +285,8 @@ pub(super) fn extract_chart_refs_from_drawing(
                         from_col,
                         from_col_off,
                         from_row_off,
+                        absolute_x: None,
+                        absolute_y: None,
                         to_row: None,
                         to_col: None,
                         to_col_off: None,

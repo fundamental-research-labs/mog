@@ -9,6 +9,12 @@ pub struct AnchorPosition {
     pub anchor_row_offset: i64,
     /// EMU offset
     pub anchor_col_offset: i64,
+    /// Absolute x position in EMU for `xdr:absoluteAnchor`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub absolute_x: Option<i64>,
+    /// Absolute y position in EMU for `xdr:absoluteAnchor`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub absolute_y: Option<i64>,
     /// Two-cell anchor end row
     pub end_row: Option<u32>,
     /// Two-cell anchor end col

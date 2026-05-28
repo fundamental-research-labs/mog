@@ -251,6 +251,8 @@ pub fn create_chart_object(
                 anchor_row_offset: y_offset_emu,
                 anchor_col_offset: x_offset_emu,
                 anchor_mode,
+                absolute_x: config_obj.get("absoluteXEmu").and_then(|v| v.as_i64()),
+                absolute_y: config_obj.get("absoluteYEmu").and_then(|v| v.as_i64()),
                 end_row: config_obj
                     .get("endRow")
                     .and_then(|v| v.as_u64())

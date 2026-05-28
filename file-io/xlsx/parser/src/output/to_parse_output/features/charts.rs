@@ -63,6 +63,8 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 .as_ref()
                 .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
                 .unwrap_or_default();
+            spec.chart_auxiliary_parts =
+                chart_auxiliary_parts(&spec.chart_relationships, &spec.chart_auxiliary_files);
 
             spec
         })
@@ -77,6 +79,49 @@ fn chart_owned_relationships(rels_xml: &[u8]) -> Vec<domain_types::chart::ChartR
             relationship_type: Some(rel.rel_type),
             target: Some(rel.target),
             target_mode: rel.target_mode,
+        })
+        .collect()
+}
+
+fn chart_auxiliary_parts(
+    relationships: &[domain_types::chart::ChartRelationshipData],
+    files: &[(String, Vec<u8>)],
+) -> Vec<domain_types::chart::ChartAuxiliaryPart> {
+    const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
+    const REL_CHART_COLOR_STYLE: &str =
+        "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
+    const REL_CHART_USER_SHAPES: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+
+    relationships
+        .iter()
+        .filter_map(|rel| {
+            let rel_type = rel.relationship_type.as_deref()?;
+            let target = rel.target.as_deref()?;
+            let file_name = target.rsplit('/').next().unwrap_or(target);
+            let (_, bytes) = files
+                .iter()
+                .find(|(path, _)| path.rsplit('/').next().unwrap_or(path) == file_name)?;
+            let xml = String::from_utf8(bytes.clone()).ok()?;
+            let content = match rel_type {
+                REL_CHART_STYLE => domain_types::chart::ChartAuxiliaryContent::Style { xml },
+                REL_CHART_COLOR_STYLE => {
+                    domain_types::chart::ChartAuxiliaryContent::ColorStyle { xml }
+                }
+                REL_CHART_USER_SHAPES => {
+                    domain_types::chart::ChartAuxiliaryContent::UserShapes { xml }
+                }
+                _ => return None,
+            };
+            Some(domain_types::chart::ChartAuxiliaryPart {
+                path: files
+                    .iter()
+                    .find(|(path, _)| path.rsplit('/').next().unwrap_or(path) == file_name)?
+                    .0
+                    .clone(),
+                relationship: rel.clone(),
+                content,
+            })
         })
         .collect()
 }
@@ -112,6 +157,8 @@ fn build_chart_ref_info_from_spec(
             from_col: spec.position.anchor_col,
             from_row_off: spec.position.anchor_row_offset,
             from_col_off: spec.position.anchor_col_offset,
+            absolute_x: spec.position.absolute_x,
+            absolute_y: spec.position.absolute_y,
             to_row: spec.position.end_row,
             to_col: spec.position.end_col,
             to_row_off: spec.position.end_row_offset,
@@ -144,6 +191,8 @@ fn build_chart_ref_info_from_spec(
             from_col: 0,
             from_row_off: 0,
             from_col_off: 0,
+            absolute_x: None,
+            absolute_y: None,
             to_row: None,
             to_col: None,
             to_row_off: None,
@@ -203,6 +252,8 @@ fn build_chart_ref_info_from_frame(
         from_col: position.anchor_col,
         from_row_off: position.anchor_row_offset,
         from_col_off: position.anchor_col_offset,
+        absolute_x: position.absolute_x,
+        absolute_y: position.absolute_y,
         to_row: position.end_row,
         to_col: position.end_col,
         to_row_off: position.end_row_offset,
@@ -274,6 +325,8 @@ fn chart_drawing_frame_from_anchor(
                 anchor_col: tc.from.col,
                 anchor_row_offset: tc.from.row_off,
                 anchor_col_offset: tc.from.col_off,
+                absolute_x: None,
+                absolute_y: None,
                 end_row: Some(tc.to.row),
                 end_col: Some(tc.to.col),
                 end_row_offset: Some(tc.to.row_off),
@@ -292,6 +345,8 @@ fn chart_drawing_frame_from_anchor(
                 anchor_col: oc.from.col,
                 anchor_row_offset: oc.from.row_off,
                 anchor_col_offset: oc.from.col_off,
+                absolute_x: None,
+                absolute_y: None,
                 end_row: None,
                 end_col: None,
                 end_row_offset: None,
@@ -304,7 +359,26 @@ fn chart_drawing_frame_from_anchor(
             None,
             &oc.client_data,
         ),
-        DrawingAnchor::Absolute(_) => return None,
+        DrawingAnchor::Absolute(abs) => (
+            AnchorPosition {
+                anchor_row: 0,
+                anchor_col: 0,
+                anchor_row_offset: 0,
+                anchor_col_offset: 0,
+                absolute_x: Some(abs.pos.x),
+                absolute_y: Some(abs.pos.y),
+                end_row: None,
+                end_col: None,
+                end_row_offset: None,
+                end_col_offset: None,
+                extent_cx: Some(abs.extent.cx),
+                extent_cy: Some(abs.extent.cy),
+            },
+            &abs.content,
+            Some((abs.extent.cx, abs.extent.cy)),
+            Some("absolute".to_string()),
+            &abs.client_data,
+        ),
     };
 
     let DrawingContent::GraphicFrame(gf) = content else {
@@ -458,6 +532,7 @@ pub(crate) fn build_fallback_chart_spec(
         chart_frame: None,
         chart_relationships: Vec::new(),
         chart_auxiliary_files: Vec::new(),
+        chart_auxiliary_parts: Vec::new(),
         is_chart_ex: false,
         cnv_pr_name: None,
         cnv_pr_id: None,
@@ -526,6 +601,13 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 .get(idx)
                 .map(|(position, _)| position.clone())
                 .unwrap_or_default();
+            let chart_relationships = cx
+                .chart_rels_bytes
+                .as_ref()
+                .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
+                .unwrap_or_default();
+            let chart_auxiliary_parts =
+                chart_auxiliary_parts(&chart_relationships, &cx.auxiliary_files);
 
             let mut spec = ChartSpec {
                 chart_type: domain_types::ChartType::from_str(&chart_type),
@@ -582,12 +664,9 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 side_wall_format: None,
                 back_wall_format: None,
                 chart_frame: None,
-                chart_relationships: cx
-                    .chart_rels_bytes
-                    .as_ref()
-                    .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
-                    .unwrap_or_default(),
+                chart_relationships,
                 chart_auxiliary_files: cx.auxiliary_files.clone(),
+                chart_auxiliary_parts,
                 is_chart_ex: true,
                 cnv_pr_name: None,
                 cnv_pr_id: None,
@@ -642,6 +721,8 @@ pub(crate) fn chart_ex_anchor_position(anchor: &DrawingAnchor) -> Option<AnchorP
             anchor_col: tc.from.col,
             anchor_row_offset: tc.from.row_off,
             anchor_col_offset: tc.from.col_off,
+            absolute_x: None,
+            absolute_y: None,
             end_row: Some(tc.to.row),
             end_col: Some(tc.to.col),
             end_row_offset: Some(tc.to.row_off),
@@ -654,6 +735,8 @@ pub(crate) fn chart_ex_anchor_position(anchor: &DrawingAnchor) -> Option<AnchorP
             anchor_col: oc.from.col,
             anchor_row_offset: oc.from.row_off,
             anchor_col_offset: oc.from.col_off,
+            absolute_x: None,
+            absolute_y: None,
             end_row: None,
             end_col: None,
             end_row_offset: None,

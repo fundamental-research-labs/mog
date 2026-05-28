@@ -19,9 +19,9 @@ use domain_types::domain::floating_object::{
 };
 
 use crate::domain::drawings::write::{
-    CellAnchor, ClientData, Connection, ConnectorProps, DrawingAnchor, DrawingLocking,
+    AbsoluteAnchor, CellAnchor, ClientData, Connection, ConnectorProps, DrawingAnchor, DrawingLocking,
     DrawingObject, EditAs, Extent, GroupShapeProps, ImageProps, OneCellAnchor, PresetGeometry,
-    ShapePreset, ShapeProps, SmartArtWriteData, TextBox, Transform2D, TwoCellAnchor,
+    Position, ShapePreset, ShapeProps, SmartArtWriteData, TextBox, Transform2D, TwoCellAnchor,
 };
 
 // =============================================================================
@@ -224,6 +224,8 @@ fn anchor_to_legacy_position(anchor: &FloatingObjectAnchor) -> AnchorPosition {
         anchor_col: anchor.anchor_col,
         anchor_row_offset: anchor.anchor_row_offset,
         anchor_col_offset: anchor.anchor_col_offset,
+        absolute_x: anchor.absolute_x,
+        absolute_y: anchor.absolute_y,
         end_row: anchor.end_row,
         end_col: anchor.end_col,
         end_row_offset: anchor.end_row_offset,
@@ -306,6 +308,31 @@ pub fn anchor_position_to_one_cell(
     }
 }
 
+/// Convert an absolute-positioned anchor into a write-side absolute anchor.
+pub fn anchor_position_to_absolute(
+    pos: &AnchorPosition,
+    size: &ObjectSize,
+    extent_emu: Option<(i64, i64)>,
+) -> AbsoluteAnchor {
+    let (cx, cy) = extent_emu
+        .or_else(|| pos.extent_cx.zip(pos.extent_cy))
+        .unwrap_or_else(|| {
+            (
+                size.width as i64 * EMUS_PER_PIXEL,
+                size.height as i64 * EMUS_PER_PIXEL,
+            )
+        });
+
+    AbsoluteAnchor {
+        pos: Position {
+            x: pos.absolute_x.unwrap_or(pos.anchor_col_offset),
+            y: pos.absolute_y.unwrap_or(pos.anchor_row_offset),
+        },
+        extent: Extent { cx, cy },
+        client_data: ClientData::default(),
+    }
+}
+
 /// Determine the best anchor type for the given position/size and wrap a
 /// `DrawingObject` into a `DrawingAnchor`.
 fn wrap_in_anchor(
@@ -315,7 +342,9 @@ fn wrap_in_anchor(
     extent_emu: Option<(i64, i64)>,
     obj: DrawingObject,
 ) -> DrawingAnchor {
-    if pos.end_row.is_some() && pos.end_col.is_some() {
+    if pos.absolute_x.is_some() && pos.absolute_y.is_some() {
+        DrawingAnchor::Absolute(anchor_position_to_absolute(pos, size, extent_emu), obj)
+    } else if pos.end_row.is_some() && pos.end_col.is_some() {
         let mut anchor = anchor_position_to_two_cell(pos);
         if let Some(ea) = edit_as {
             anchor.edit_as = Some(EditAs::from_ooxml(ea));
@@ -844,6 +873,8 @@ mod tests {
                 anchor_row_offset: 0,
                 anchor_col_offset: 0,
                 anchor_mode: AnchorMode::TwoCell,
+                absolute_x: None,
+                absolute_y: None,
                 end_row: Some(5),
                 end_col: Some(5),
                 end_row_offset: Some(0),
@@ -881,6 +912,8 @@ mod tests {
             anchor_col: 2,
             anchor_row_offset: 100,
             anchor_col_offset: 200,
+            absolute_x: None,
+            absolute_y: None,
             end_row: Some(5),
             end_col: Some(6),
             end_row_offset: Some(300),
@@ -907,6 +940,8 @@ mod tests {
             anchor_col: 4,
             anchor_row_offset: 0,
             anchor_col_offset: 0,
+            absolute_x: None,
+            absolute_y: None,
             end_row: None,
             end_col: None,
             end_row_offset: None,

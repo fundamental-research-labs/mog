@@ -403,6 +403,7 @@ pub fn add_comment(
         visible: None,
         note_height: None,
         note_width: None,
+        note_shape_anchor: None,
     };
     let prelim: MapPrelim = comment_schema::to_yrs_prelim(&comment)
         .into_iter()

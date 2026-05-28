@@ -7,7 +7,7 @@
 //! it.
 //!
 //! Replaces `Option<ooxml_types::charts::ManualLayout>` on
-//! `ChartRoundTripData.plot_area_layout` and `TrendlineLabelData.layout` when
+//! chart plot-area layout and `TrendlineLabelData.layout` when
 //! they are migrated.
 
 use serde::{Deserialize, Serialize};

@@ -10,7 +10,7 @@ use super::floating_object::{
 };
 use super::{
     AnchorPosition, AxisData, ChartDataTableData, ChartDefinition, ChartFormatData,
-    ChartFormatStringData, ChartRoundTripData, ChartSubType, ChartType, ChartView3DData,
+    ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType, ChartView3DData,
     DataLabelData, LegendData, ObjectSize,
 };
 
@@ -140,13 +140,17 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub back_wall_format: Option<ChartFormatData>,
 
-    // -- Round-trip preservation --
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub rt: Option<ChartRoundTripData>,
-
     /// Typed drawing-frame OOXML contract for imported chart anchors.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub chart_frame: Option<ChartDrawingFrameOoxmlProps>,
+
+    /// Chart-owned package relationships imported with this chart part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_relationships: Vec<ChartRelationshipData>,
+
+    /// Chart-owned auxiliary package parts imported with this chart part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_auxiliary_files: Vec<(String, Vec<u8>)>,
 
     /// Whether this chart uses ChartEx format (cx: namespace) instead of standard c: namespace.
     /// ChartEx covers modern chart types: Waterfall, Treemap, Sunburst, Funnel, etc.
@@ -267,6 +271,12 @@ impl ChartSpec {
         // Unpack typed OOXML preservation data.
         let ooxml = chart_data.ooxml.as_ref();
         let chart_frame = ooxml.and_then(|o| o.drawing_frame.clone());
+        let chart_relationships = ooxml
+            .map(|o| o.chart_relationships.clone())
+            .unwrap_or_default();
+        let chart_auxiliary_files = ooxml
+            .map(|o| o.chart_auxiliary_files.clone())
+            .unwrap_or_default();
         let is_chart_ex = ooxml.map(|o| o.is_chart_ex).unwrap_or_else(|| {
             matches!(
                 ooxml.and_then(|o| o.definition.as_ref()),
@@ -395,9 +405,9 @@ impl ChartSpec {
             floor_format: chart_data.floor_format.clone(),
             side_wall_format: chart_data.side_wall_format.clone(),
             back_wall_format: chart_data.back_wall_format.clone(),
-            // Round-trip preservation
-            rt: chart_data.rt.clone(),
             chart_frame,
+            chart_relationships,
+            chart_auxiliary_files,
             is_chart_ex,
             cnv_pr_name,
             cnv_pr_id,
@@ -493,12 +503,19 @@ impl ChartSpec {
             .clone()
             .or_else(|| self.legacy_chart_frame_ooxml_props());
         let definition = self.definition.clone();
-        let ooxml_val = if definition.is_none() && drawing_frame.is_none() && !self.is_chart_ex {
+        let ooxml_val = if definition.is_none()
+            && drawing_frame.is_none()
+            && self.chart_relationships.is_empty()
+            && self.chart_auxiliary_files.is_empty()
+            && !self.is_chart_ex
+        {
             None
         } else {
             Some(ChartOoxmlProps {
                 definition,
                 drawing_frame,
+                chart_relationships: self.chart_relationships.clone(),
+                chart_auxiliary_files: self.chart_auxiliary_files.clone(),
                 is_chart_ex: self.is_chart_ex,
             })
         };
@@ -634,8 +651,6 @@ impl ChartSpec {
             floor_format: self.floor_format.clone(),
             side_wall_format: self.side_wall_format.clone(),
             back_wall_format: self.back_wall_format.clone(),
-            // Round-trip preservation
-            rt: self.rt.clone(),
             source_table_id: None,
             table_data_columns: None,
             table_category_column: None,

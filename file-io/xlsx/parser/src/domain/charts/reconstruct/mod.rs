@@ -4,9 +4,9 @@
 //! build the ooxml_types::charts::ChartSpace that serializes to valid OOXML.
 //!
 //! Design principles:
-//! - Fields from `ChartRoundTripData` (via `spec.rt`) restore non-API features losslessly.
+//! - Imported `ChartDefinition` stores the OOXML chart model for features that
+//!   do not yet have a dedicated API surface.
 //! - Fields from ChartSpec typed fields reconstruct API-visible content.
-//! - When both exist, rt takes precedence for structural layout.
 //! - `..Default::default()` is used extensively to avoid listing every optional field.
 
 mod axes;
@@ -107,8 +107,9 @@ mod tests {
             floor_format: None,
             side_wall_format: None,
             back_wall_format: None,
-            rt: None,
             chart_frame: None,
+            chart_relationships: Vec::new(),
+            chart_auxiliary_files: Vec::new(),
             is_chart_ex: false,
             cnv_pr_name: None,
             cnv_pr_id: None,

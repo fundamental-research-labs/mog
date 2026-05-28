@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::chart::ChartDefinition;
+use crate::domain::chart::{ChartDefinition, ChartRelationshipData};
 
 // ===========================================================================
 // OOXML Prop Wrappers — typed replacements for serde_json::Value blobs
@@ -138,6 +138,12 @@ pub struct ChartOoxmlProps {
     /// Typed drawing-frame metadata and anchor/relationship bookkeeping.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drawing_frame: Option<ChartDrawingFrameOoxmlProps>,
+    /// Chart-owned package relationships imported with the chart part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_relationships: Vec<ChartRelationshipData>,
+    /// Chart-owned auxiliary part bytes imported with the chart part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_auxiliary_files: Vec<(String, Vec<u8>)>,
     /// Whether this chart uses ChartEx format.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_chart_ex: bool,

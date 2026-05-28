@@ -467,10 +467,6 @@ pub fn to_yrs_prelim(obj: &FloatingObject) -> Vec<(String, Any)> {
             if let Some(a) = option_sub_object(&d.back_wall_format) {
                 entries.push(("backWallFormat".into(), a));
             }
-            // Round-trip preservation
-            if let Some(a) = option_sub_object(&d.rt) {
-                entries.push(("rt".into(), a));
-            }
             if let Some(ref v) = d.source_table_id {
                 entries.push(("sourceTableId".into(), Any::String(Arc::from(v.as_str()))));
             }
@@ -788,7 +784,6 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<FloatingObject>
             side_wall_format: read_sub_object(map, txn, "sideWallFormat"),
             back_wall_format: read_sub_object(map, txn, "backWallFormat"),
             // Round-trip preservation
-            rt: read_sub_object(map, txn, "rt"),
             source_table_id: read_string(map, txn, "sourceTableId"),
             table_data_columns: read_sub_object::<Vec<String>, _>(map, txn, "tableDataColumns"),
             table_category_column: read_string(map, txn, "tableCategoryColumn"),

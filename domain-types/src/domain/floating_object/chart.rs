@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use super::ChartOoxmlProps;
 use crate::domain::chart::{
-    AxisData, ChartDataTableData, ChartFormatData, ChartFormatStringData, ChartRoundTripData,
-    ChartSeriesData, ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData,
-    PieSliceData, PivotChartOptionsData, SeriesOrientation, TrendlineData, WaterfallOptions,
+    AxisData, ChartDataTableData, ChartFormatData, ChartFormatStringData, ChartSeriesData,
+    ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData, PieSliceData,
+    PivotChartOptionsData, SeriesOrientation, TrendlineData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
 
@@ -184,10 +184,6 @@ pub struct ChartData {
     pub side_wall_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub back_wall_format: Option<ChartFormatData>,
-
-    // ── Round-trip preservation ──
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub rt: Option<ChartRoundTripData>,
 
     // -- Table linking --
     #[serde(skip_serializing_if = "Option::is_none")]

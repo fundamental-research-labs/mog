@@ -632,11 +632,6 @@ pub fn extract_chart_spec_from_chart_space(
     let data_range = reconstruct_data_range_from_chart_space(cs);
 
     // -------------------------------------------------------------------------
-    // (k) ChartRoundTripData
-    // -------------------------------------------------------------------------
-    let rt = build_round_trip_data(cs);
-
-    // -------------------------------------------------------------------------
     // display_blanks_as, plot_visible_only
     // -------------------------------------------------------------------------
     let display_blanks_as = chart.disp_blanks_as.map(|d| d.to_ooxml().to_string());
@@ -727,8 +722,9 @@ pub fn extract_chart_spec_from_chart_space(
         floor_format,
         side_wall_format,
         back_wall_format,
-        rt: Some(rt),
         chart_frame: None,
+        chart_relationships: Vec::new(),
+        chart_auxiliary_files: Vec::new(),
         is_chart_ex: false,
         cnv_pr_name: anchor.cnv_pr_name.clone(),
         cnv_pr_id: anchor.cnv_pr_id,
@@ -1378,77 +1374,6 @@ fn extract_cat_ref_formula_str(src: &ooxml_types::charts::CatDataSource) -> Opti
         ooxml_types::charts::CatDataSource::MultiLvlStrRef(mr) => Some(&mr.f),
         ooxml_types::charts::CatDataSource::NumLit(_)
         | ooxml_types::charts::CatDataSource::StrLit(_) => None,
-    }
-}
-
-/// Build ChartRoundTripData from ChartSpace.
-fn build_round_trip_data(
-    cs: &ooxml_types::charts::ChartSpace,
-) -> domain_types::chart::ChartRoundTripData {
-    let chart = &cs.chart;
-    let plot_area = &chart.plot_area;
-
-    // Chart groups meta
-    let chart_groups_meta: Vec<domain_types::chart::ChartGroupMeta> = plot_area
-        .chart_groups
-        .iter()
-        .map(|g| {
-            let series_indices: Vec<u32> = g.series.iter().map(|s| s.idx).collect();
-            // Chart-type discriminant: prefer non-standard @chartType
-            // attribute verbatim (Google Sheets exports) via
-            // `ChartType::Unknown(s)`, else map the OOXML enum to the
-            // domain superset. This folds the prior `raw_chart_type_attr`
-            // sidecar into a single typed field (inventory row 2.21).
-            let chart_type = if let Some(ref raw) = g.raw_chart_type_attr {
-                domain_types::chart::ChartType::Unknown(raw.clone())
-            } else {
-                domain_types::chart::ChartType::from_ooxml(g.chart_type)
-            };
-            domain_types::chart::ChartGroupMeta {
-                chart_type,
-                config_template: (&g.config).into(),
-                ax_ids: g.ax_id.clone(),
-                series_indices,
-            }
-        })
-        .collect();
-
-    // Axes ordered (ax_ids in original order)
-    let axes_ordered: Vec<u32> = plot_area.axes.iter().map(|ax| ax.ax_id).collect();
-
-    domain_types::chart::ChartRoundTripData {
-        chart_groups_meta,
-        axes_ordered,
-        protection: cs.protection.as_ref().map(Into::into),
-        print_settings: cs.print_settings.as_ref().map(Into::into),
-        pivot_source: cs.pivot_source.as_ref().map(Into::into),
-        external_data: cs.external_data.as_ref().map(|external_data| {
-            domain_types::chart::ChartExternalData {
-                relationship: domain_types::chart::ChartRelationshipData {
-                    r_id: external_data.r_id.clone(),
-                    ..Default::default()
-                },
-                auto_update: external_data.auto_update,
-            }
-        }),
-        user_shapes: cs.user_shapes.as_ref().map(|r_id| {
-            domain_types::chart::ChartRelationshipData {
-                r_id: r_id.clone(),
-                ..Default::default()
-            }
-        }),
-        pivot_fmts: chart.pivot_fmts.iter().map(Into::into).collect(),
-        clr_map_ovr: cs.clr_map_ovr.as_ref().map(Into::into),
-        date1904: cs.date1904,
-        lang: cs.lang.clone(),
-        chart_space_extensions: cs.extensions.clone(),
-        chart_extensions: chart.extensions.clone(),
-        plot_area_extensions: plot_area.extensions.clone(),
-        plot_area_layout: plot_area.layout.as_ref().map(Into::into),
-        style_alternate_content: cs.style_alternate_content.clone(),
-        style_after_chart: cs.style_after_chart,
-        auxiliary_files: Vec::new(), // populated later when archive bytes are available
-        chart_rels_bytes: None,      // populated later when archive bytes are available
     }
 }
 

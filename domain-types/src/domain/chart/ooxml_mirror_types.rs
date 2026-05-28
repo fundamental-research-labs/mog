@@ -1,9 +1,7 @@
-//! Chart-specific round-trip domain types.
+//! Chart-specific OOXML mirror domain types.
 //!
-//! Typed domain replacements for the `ooxml_types::charts::*` fields that
-//! previously sat on
-//! [`ChartRoundTripData`](super::ChartRoundTripData) and
-//! [`ChartGroupMeta`](super::ChartGroupMeta).
+//! Typed domain wrappers for `ooxml_types::charts::*` fields that need a stable
+//! storage/API shape while the broader chart model is elevated.
 //!
 //! Each type:
 //! - has a `camelCase` JSON serialization,
@@ -15,8 +13,7 @@
 //! drawings/text-body model (ChartPivotFormat -> sp_pr/tx_pr/marker/d_lbl;
 //! ChartTypeConfig -> chart-type-specific deep configs) keep the outer chart
 //! contract typed and use the established OOXML extension-entry structures for
-//! opaque vendor extension payloads. Round-trip storage is reserved for chart
-//! constructs that do not yet have a first-class Mog editing surface.
+//! opaque vendor extension payloads.
 
 use serde::{Deserialize, Serialize};
 
@@ -550,9 +547,8 @@ pub struct ChartColorMapping {
 
 impl From<&othemes::ColorMapping> for ChartColorMapping {
     fn from(m: &othemes::ColorMapping) -> Self {
-        // Note: `m.ext_lst` is intentionally dropped at this layer — it's
-        // already captured upstream via `ChartRoundTripData.chart_space_extensions`
-        // and siblings; the color-mapping variant here is the inline mapping only.
+        // Note: `m.ext_lst` is intentionally dropped at this layer; the
+        // color-mapping variant here is the inline mapping only.
         Self {
             bg1: m.bg1.into(),
             tx1: m.tx1.into(),

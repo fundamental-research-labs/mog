@@ -57,41 +57,28 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             // Also store the ChartSpace blob in definition for backward compatibility
             // during the transition. This can be removed once all consumers use typed fields.
             spec.definition = Some(ChartDefinition::Chart(chart_space.clone()));
-            // Preserve auxiliary files for round-trip (stored on Chart, not ChartSpace)
-            if let Some(ref mut rt) = spec.rt {
-                rt.auxiliary_files = chart.auxiliary_files.clone();
-                rt.chart_rels_bytes = chart.chart_rels_bytes.clone();
-                enrich_chart_owned_relationships(rt);
-            }
+            spec.chart_auxiliary_files = chart.auxiliary_files.clone();
+            spec.chart_relationships = chart
+                .chart_rels_bytes
+                .as_ref()
+                .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
+                .unwrap_or_default();
 
             spec
         })
         .collect()
 }
 
-fn enrich_chart_owned_relationships(rt: &mut domain_types::chart::ChartRoundTripData) {
-    let Some((_, rels_xml)) = rt.chart_rels_bytes.as_ref() else {
-        return;
-    };
-    let relationships = crate::domain::workbook::read::parse_all_rels(rels_xml);
-
-    if let Some(external_data) = rt.external_data.as_mut()
-        && let Some(rel) = relationships
-            .iter()
-            .find(|rel| rel.id == external_data.relationship.r_id)
-    {
-        external_data.relationship.relationship_type = Some(rel.rel_type.clone());
-        external_data.relationship.target = Some(rel.target.clone());
-        external_data.relationship.target_mode = rel.target_mode.clone();
-    }
-
-    if let Some(user_shapes) = rt.user_shapes.as_mut()
-        && let Some(rel) = relationships.iter().find(|rel| rel.id == user_shapes.r_id)
-    {
-        user_shapes.relationship_type = Some(rel.rel_type.clone());
-        user_shapes.target = Some(rel.target.clone());
-        user_shapes.target_mode = rel.target_mode.clone();
-    }
+fn chart_owned_relationships(rels_xml: &[u8]) -> Vec<domain_types::chart::ChartRelationshipData> {
+    crate::domain::workbook::read::parse_all_rels(rels_xml)
+        .into_iter()
+        .map(|rel| domain_types::chart::ChartRelationshipData {
+            r_id: rel.id,
+            relationship_type: Some(rel.rel_type),
+            target: Some(rel.target),
+            target_mode: rel.target_mode,
+        })
+        .collect()
 }
 
 pub(crate) fn chart_frames_by_relationship_target(
@@ -468,8 +455,9 @@ pub(crate) fn build_fallback_chart_spec(
         floor_format: None,
         side_wall_format: None,
         back_wall_format: None,
-        rt: None,
         chart_frame: None,
+        chart_relationships: Vec::new(),
+        chart_auxiliary_files: Vec::new(),
         is_chart_ex: false,
         cnv_pr_name: None,
         cnv_pr_id: None,
@@ -593,12 +581,13 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 floor_format: None,
                 side_wall_format: None,
                 back_wall_format: None,
-                rt: Some(domain_types::chart::ChartRoundTripData {
-                    auxiliary_files: cx.auxiliary_files.clone(),
-                    chart_rels_bytes: cx.chart_rels_bytes.clone(),
-                    ..Default::default()
-                }),
                 chart_frame: None,
+                chart_relationships: cx
+                    .chart_rels_bytes
+                    .as_ref()
+                    .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
+                    .unwrap_or_default(),
+                chart_auxiliary_files: cx.auxiliary_files.clone(),
                 is_chart_ex: true,
                 cnv_pr_name: None,
                 cnv_pr_id: None,

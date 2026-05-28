@@ -5,12 +5,20 @@ use super::*;
 // =============================================================================
 
 pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
-    let rt = spec.rt.as_ref();
-
-    // If we have axes_ordered from round-trip, build axes in that order
-    if let (Some(rt), Some(axes_data)) = (rt, spec.axes.as_ref()) {
-        if !rt.axes_ordered.is_empty() {
-            return build_axes_from_ordered(axes_data, &rt.axes_ordered);
+    if let (
+        Some(domain_types::ChartDefinition::Chart(chart_space)),
+        Some(axes_data),
+    ) = (spec.definition.as_ref(), spec.axes.as_ref())
+    {
+        let axes_ordered: Vec<_> = chart_space
+            .chart
+            .plot_area
+            .axes
+            .iter()
+            .map(|axis| axis.ax_id)
+            .collect();
+        if !axes_ordered.is_empty() {
+            return build_axes_from_ordered(axes_data, &axes_ordered);
         }
     }
 

@@ -4,7 +4,7 @@ mod formatting;
 mod labels;
 mod legend;
 mod position;
-mod round_trip_types;
+mod ooxml_mirror_types;
 mod series;
 mod spec;
 mod view_3d;
@@ -18,7 +18,7 @@ pub use formatting::*;
 pub use labels::*;
 pub use legend::*;
 pub use position::*;
-pub use round_trip_types::*;
+pub use ooxml_mirror_types::*;
 pub use series::*;
 pub use spec::*;
 pub use view_3d::*;
@@ -316,61 +316,6 @@ impl SeriesOrientation {
     }
 }
 
-/// Structured round-trip data for OOXML features not yet API-exposed.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartRoundTripData {
-    // Chart-group reconstruction
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chart_groups_meta: Vec<ChartGroupMeta>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub axes_ordered: Vec<u32>,
-
-    // Features not yet API-exposed
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub protection: Option<ChartProtection>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub print_settings: Option<ChartPrintSettings>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pivot_source: Option<ChartPivotSource>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub external_data: Option<ChartExternalData>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_shapes: Option<ChartRelationshipData>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pivot_fmts: Vec<ChartPivotFormat>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub clr_map_ovr: Option<ChartColorMappingOverride>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub date1904: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lang: Option<String>,
-
-    // Extension lists
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chart_space_extensions: Vec<ooxml_types::charts::ExtensionEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chart_extensions: Vec<ooxml_types::charts::ExtensionEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub plot_area_extensions: Vec<ooxml_types::charts::ExtensionEntry>,
-
-    // Layout
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plot_area_layout: Option<super::drawings::ManualLayout>,
-
-    // Style
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub style_alternate_content: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub style_after_chart: bool,
-
-    // Auxiliary files
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub auxiliary_files: Vec<(String, Vec<u8>)>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub chart_rels_bytes: Option<(String, Vec<u8>)>,
-}
-
 /// Chart-owned relationship metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -385,16 +330,6 @@ pub struct ChartRelationshipData {
     pub target_mode: Option<String>,
 }
 
-/// Chart external data reference.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(default)]
-pub struct ChartExternalData {
-    pub relationship: ChartRelationshipData,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub auto_update: Option<bool>,
-}
-
 /// Metadata for reconstructing a ChartGroup during export.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -406,9 +341,9 @@ pub struct ChartGroupMeta {
     pub chart_type: ChartType,
     /// Chart-type-specific configuration template (CT_*Chart). Lifted off
     /// `ooxml_types::charts::ChartTypeConfig` in favour of the domain-owned
-    /// `ChartTypeConfig` per inventory row 2.14 — the outer discriminant is
+    /// `ChartTypeConfig`; the outer discriminant is
     /// typed; inner per-variant deep config is carried opaquely pending the
-    /// broader chart elevation (see module docs in `round_trip_types.rs`).
+    /// broader chart elevation.
     pub config_template: ChartTypeConfig,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ax_ids: Vec<u32>,

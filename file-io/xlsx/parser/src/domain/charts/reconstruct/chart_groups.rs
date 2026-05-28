@@ -5,20 +5,19 @@ use super::*;
 // =============================================================================
 
 pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
-    let rt = spec.rt.as_ref();
-
-    // If we have chart group metadata from round-trip, use it for structure
-    if let Some(rt) = rt {
-        if !rt.chart_groups_meta.is_empty() {
-            return rt
-                .chart_groups_meta
+    if let Some(domain_types::ChartDefinition::Chart(chart_space)) = spec.definition.as_ref() {
+        if !chart_space.chart.plot_area.chart_groups.is_empty() {
+            return chart_space
+                .chart
+                .plot_area
+                .chart_groups
                 .iter()
-                .map(|meta| {
-                    // Collect series for this group based on series_indices
-                    let series: Vec<_> = meta
-                        .series_indices
+                .map(|group| {
+                    let series: Vec<_> = group
+                        .series
                         .iter()
-                        .filter_map(|&idx| spec.series.iter().find(|s| s.idx == Some(idx)))
+                        .map(|series| series.idx)
+                        .filter_map(|idx| spec.series.iter().find(|s| s.idx == Some(idx)))
                         .enumerate()
                         .map(|(fallback_idx, sd)| {
                             build_series(sd, &spec.chart_type, fallback_idx as u32)
@@ -28,8 +27,7 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     // Inject series into the config template. The template is
                     // stored as a domain `ChartTypeConfig`; convert back to
                     // the ooxml form for the writer helpers to consume.
-                    let ooxml_template: ChartTypeConfig = meta.config_template.clone().into();
-                    let config = inject_series_into_config(&ooxml_template, &series, spec);
+                    let config = inject_series_into_config(&group.config, &series, spec);
 
                     // Inject chart-level data labels
                     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
@@ -38,19 +36,13 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     // (from a non-standard @chartType attribute) round-trips
                     // as the raw attribute on `ChartGroup`; everything else
                     // maps to the OOXML enum (row 2.13 + 2.21 fold).
-                    let (ooxml_ct, raw_attr) = match &meta.chart_type {
-                        DomainChartType::Unknown(s) if !s.is_empty() => {
-                            (OoxmlChartType::Unknown, Some(s.clone()))
-                        }
-                        other => (other.to_ooxml(), None),
-                    };
                     ChartGroup {
-                        chart_type: ooxml_ct,
+                        chart_type: group.chart_type,
                         config,
                         series,
                         d_lbls,
-                        ax_id: meta.ax_ids.clone(),
-                        raw_chart_type_attr: raw_attr,
+                        ax_id: group.ax_id.clone(),
+                        raw_chart_type_attr: group.raw_chart_type_attr.clone(),
                     }
                 })
                 .collect();

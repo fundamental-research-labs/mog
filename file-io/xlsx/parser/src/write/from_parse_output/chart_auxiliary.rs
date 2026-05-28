@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
-use domain_types::ChartSpec;
+use domain_types::chart::ChartRelationshipData;
+use domain_types::{ChartDefinition, ChartSpec};
 
 use crate::infra::opc::opc_target_to_zip_path;
 
@@ -12,7 +13,7 @@ const REL_CHART_USER_SHAPES: &str =
 
 pub(super) struct ChartAuxiliaryDataRef<'a> {
     pub(super) auxiliary_files: &'a [(String, Vec<u8>)],
-    pub(super) chart_rels: &'a [u8],
+    pub(super) chart_relationships: &'a [ChartRelationshipData],
     pub(super) original_path: String,
 }
 
@@ -24,14 +25,12 @@ pub(super) struct ChartUserShapesDataRef<'a> {
 }
 
 pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxiliaryDataRef<'_>> {
-    let rt = chart_spec.rt.as_ref()?;
-    let (_, chart_rels) = rt.chart_rels_bytes.as_ref()?;
-    if rt.auxiliary_files.is_empty() {
+    if chart_spec.chart_auxiliary_files.is_empty() || chart_spec.chart_relationships.is_empty() {
         return None;
     }
     Some(ChartAuxiliaryDataRef {
-        auxiliary_files: rt.auxiliary_files.as_slice(),
-        chart_rels: chart_rels.as_slice(),
+        auxiliary_files: chart_spec.chart_auxiliary_files.as_slice(),
+        chart_relationships: chart_spec.chart_relationships.as_slice(),
         original_path: chart_identity_path(chart_spec)?,
     })
 }
@@ -40,15 +39,18 @@ pub(super) fn chart_user_shapes_data<'a>(
     chart_spec: &'a ChartSpec,
     chart_path: &str,
 ) -> Option<ChartUserShapesDataRef<'a>> {
-    let rt = chart_spec.rt.as_ref()?;
-    let user_shapes = rt.user_shapes.as_ref()?;
+    let r_id = chart_user_shapes_relationship_id(chart_spec)?;
+    let user_shapes = chart_spec
+        .chart_relationships
+        .iter()
+        .find(|rel| rel.r_id == r_id)?;
     let relationship_type = user_shapes.relationship_type.as_deref()?;
     let target = user_shapes.target.as_deref()?;
     let target_path = crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
         .ok()
         .map(|path| normalize_path(&path))?;
-    let (_, data) = rt
-        .auxiliary_files
+    let (_, data) = chart_spec
+        .chart_auxiliary_files
         .iter()
         .find(|(path, _)| normalize_path(path) == target_path)?;
 
@@ -56,7 +58,7 @@ pub(super) fn chart_user_shapes_data<'a>(
         path: target_path,
         data: data.as_slice(),
         relationship_type,
-        relationship_id_hint: user_shapes.r_id.as_str(),
+        relationship_id_hint: r_id,
     })
 }
 
@@ -77,7 +79,7 @@ pub(super) fn supported_auxiliary_file_paths(
     chart_path: &str,
 ) -> BTreeSet<String> {
     let relationship_targets: BTreeSet<_> =
-        supported_auxiliary_relationship_targets(chart_path, aux.chart_rels).collect();
+        supported_auxiliary_relationship_targets(chart_path, aux.chart_relationships).collect();
 
     aux.auxiliary_files
         .iter()
@@ -88,19 +90,21 @@ pub(super) fn supported_auxiliary_file_paths(
 
 pub(super) fn supported_auxiliary_relationship_targets<'a>(
     chart_path: &'a str,
-    rels_data: &'a [u8],
+    relationships: &'a [ChartRelationshipData],
 ) -> impl Iterator<Item = String> + 'a {
-    crate::domain::workbook::read::parse_all_rels(rels_data)
-        .into_iter()
+    relationships
+        .iter()
         .filter_map(move |rel| {
             if rel.target_mode.as_deref() == Some("External") {
                 return None;
             }
+            let rel_type = rel.relationship_type.as_deref()?;
+            let target = rel.target.as_deref()?;
             let target_path =
-                crate::infra::opc::resolve_relationship_target(Some(chart_path), &rel.target)
+                crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
                     .ok()?;
             let target_path = normalize_path(&target_path);
-            is_supported_auxiliary_relationship(&rel.rel_type, &target_path).then_some(target_path)
+            is_supported_auxiliary_relationship(rel_type, &target_path).then_some(target_path)
         })
 }
 
@@ -123,6 +127,27 @@ fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {
         target,
         "xl/drawings",
     )))
+}
+
+pub(super) fn chart_external_data_relationship<'a>(
+    chart_spec: &'a ChartSpec,
+) -> Option<(&'a ooxml_types::charts::ExternalData, &'a ChartRelationshipData)> {
+    let external_data = match chart_spec.definition.as_ref()? {
+        ChartDefinition::Chart(chart_space) => chart_space.external_data.as_ref()?,
+        ChartDefinition::ChartEx(_) => return None,
+    };
+    let relationship = chart_spec
+        .chart_relationships
+        .iter()
+        .find(|rel| rel.r_id == external_data.r_id)?;
+    Some((external_data, relationship))
+}
+
+fn chart_user_shapes_relationship_id(chart_spec: &ChartSpec) -> Option<&str> {
+    match chart_spec.definition.as_ref()? {
+        ChartDefinition::Chart(chart_space) => chart_space.user_shapes.as_deref(),
+        ChartDefinition::ChartEx(_) => None,
+    }
 }
 
 fn original_chart_number(path: &str, prefix: &str) -> Option<usize> {

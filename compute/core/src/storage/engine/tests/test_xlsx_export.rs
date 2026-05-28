@@ -730,6 +730,39 @@ fn hidden_imported_defined_name_exports_from_modeled_storage() {
 }
 
 #[test]
+fn workbook_scoped_broken_defined_name_exports_from_modeled_storage() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Names".to_string(),
+            rows: 10,
+            cols: 4,
+            dimensions: SheetDimensions::default(),
+            ..Default::default()
+        }],
+        named_ranges: vec![domain_types::NamedRange {
+            name: "LegacyInput".to_string(),
+            refers_to: "#REF!".to_string(),
+            local_sheet_id: None,
+            hidden: false,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine
+        .export_to_parse_output()
+        .expect("broken workbook-scoped defined-name export should succeed")
+        .parse_output;
+
+    assert_eq!(exported.named_ranges.len(), 1);
+    assert_eq!(exported.named_ranges[0].name, "LegacyInput");
+    assert_eq!(exported.named_ranges[0].refers_to, "#REF!");
+    assert_eq!(exported.named_ranges[0].local_sheet_id, None);
+    assert!(!exported.named_ranges[0].hidden);
+}
+
+#[test]
 fn stale_roundtrip_named_range_lists_do_not_resurrect_deleted_names() {
     let stale_name = domain_types::NamedRange {
         name: "ToDelete".to_string(),

@@ -35,20 +35,10 @@ pub(super) fn hydrate_workbook_named_ranges(
     // pre-fix dependency on the eager bulk-insert at `from_snapshot` time.
     let nr_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_NAMED_RANGES);
     // Store defined names in Yrs — including hidden ones (e.g. _xlnm._FilterDatabase,
-    // _xlchart.v*) — so they survive the L2 round-trip.
-    // Skip workbook-scoped #REF!-only entries: these are orphaned artifacts from
-    // Excel that shadow valid sheet-scoped names and confuse API consumers.
-    // Sheet-scoped entries (even broken ones) are kept for round-trip fidelity.
+    // _xlchart.v*) and workbook-scoped broken names — so they survive the L2
+    // round-trip. API/UI consumers can filter stale names at query boundaries;
+    // hydration must preserve workbook state for export fidelity.
     for (idx, nr) in named_ranges.iter().enumerate() {
-        if nr.local_sheet_id.is_none()
-            && !is_external_workbook_ref(&nr.refers_to)
-            && matches!(
-                compute_parser::ParsedExpr::classify(&nr.refers_to),
-                compute_parser::ParsedExpr::BrokenRef { .. } | compute_parser::ParsedExpr::Empty
-            )
-        {
-            continue;
-        }
         // Resolve local_sheet_id (index) to a SheetId hex string for scope
         let scope: Option<String> = nr.local_sheet_id.and_then(|idx| {
             sheet_ids

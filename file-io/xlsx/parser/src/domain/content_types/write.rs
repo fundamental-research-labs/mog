@@ -273,6 +273,26 @@ impl ContentTypesManager {
         self
     }
 
+    /// Prefer an imported content type for an already-required default row.
+    ///
+    /// This is intentionally update-only: callers must first derive the current
+    /// package's required defaults from emitted graph parts. Imported defaults
+    /// that do not correspond to a current required row are ignored.
+    pub fn prefer_existing_default_content_type(
+        &mut self,
+        extension: &str,
+        content_type: &str,
+    ) -> &mut Self {
+        if let Some(default) = self
+            .defaults
+            .iter_mut()
+            .find(|default| default.extension.eq_ignore_ascii_case(extension))
+        {
+            default.content_type = content_type.to_string();
+        }
+        self
+    }
+
     /// Add an override mapping for a specific path.
     ///
     /// # Arguments
@@ -923,10 +943,8 @@ mod tests {
         );
 
         // Check namespace
-        assert!(
-            xml_str
-                .contains("xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"")
-        );
+        assert!(xml_str
+            .contains("xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\""));
 
         // Check defaults
         assert!(xml_str.contains("<Default Extension=\"rels\""));

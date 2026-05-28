@@ -1164,6 +1164,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 has_metadata: metadata_xml.is_some(),
                 has_persons: persons_xml.is_some(),
                 has_doc_metadata_label_info: false,
+                package_fidelity: output.package_fidelity.clone(),
             },
         )?;
     for (link, part_name) in &external_link_exports {
@@ -1431,6 +1432,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             )?;
         }
     }
+    package_graph_builder.register_imported_opaque_parts()?;
     for entry in &worksheet_printer_settings_relationships {
         if package_graph_builder.contains_part(&entry.path) {
             crate::write::package_graph::register_worksheet_printer_settings(

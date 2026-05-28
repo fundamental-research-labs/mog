@@ -6,6 +6,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use domain_types::PackageFidelityMetadata;
+
 use super::relationships::{Relationship, RelationshipManager};
 use super::write_error::{PackageIntegrityIssue, WriteError};
 use super::{
@@ -66,6 +68,7 @@ pub enum PackageOwner {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackagePartKind {
     Modeled,
+    Opaque,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +119,7 @@ pub struct ResolvedPackageRelationship {
 pub struct ResolvedPackageGraph {
     parts: BTreeMap<String, PackagePart>,
     relationships: Vec<ResolvedPackageRelationship>,
+    package_fidelity: Option<PackageFidelityMetadata>,
 }
 
 impl ResolvedPackageGraph {
@@ -238,7 +242,12 @@ impl ResolvedPackageGraph {
 
         for part in parts {
             if let Some((extension, content_type)) = &part.default_extension {
-                content_types.add_default(extension, content_type);
+                let hinted_content_type = self
+                    .package_fidelity
+                    .as_ref()
+                    .and_then(|metadata| metadata.content_type_default_for_extension(extension))
+                    .unwrap_or(content_type);
+                content_types.add_default(extension, hinted_content_type);
             }
             if let Some(content_type) = &part.content_type {
                 content_types.add_override(&part.path, content_type);
@@ -246,8 +255,38 @@ impl ResolvedPackageGraph {
         }
     }
 
+    pub fn apply_content_type_preferences_to(&self, content_types: &mut ContentTypesManager) {
+        let Some(metadata) = self.package_fidelity.as_ref() else {
+            return;
+        };
+        let emitted_default_extensions: HashSet<String> = self
+            .parts
+            .values()
+            .filter_map(|part| {
+                part.default_extension
+                    .as_ref()
+                    .map(|(extension, _)| extension.to_ascii_lowercase())
+            })
+            .collect();
+        for hint in &metadata.content_type_defaults {
+            let extension = hint.extension.to_ascii_lowercase();
+            if emitted_default_extensions.contains(&extension)
+                || matches!(extension.as_str(), "rels" | "xml" | "bin")
+            {
+                content_types
+                    .prefer_existing_default_content_type(&hint.extension, &hint.content_type);
+            }
+        }
+    }
+
     pub fn contains_part(&self, path: &str) -> bool {
         self.parts.contains_key(&normalize_part_path(path))
+    }
+
+    pub fn opaque_parts(&self) -> impl Iterator<Item = &PackagePart> {
+        self.parts
+            .values()
+            .filter(|part| matches!(part.kind, PackagePartKind::Opaque))
     }
 }
 
@@ -287,9 +326,10 @@ pub fn part_relationships_path(part_path: &str) -> String {
 pub struct PackageGraphBuilder {
     parts: BTreeMap<String, PackagePart>,
     relationships: Vec<PackageRelationship>,
+    package_fidelity: Option<PackageFidelityMetadata>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ModeledWorkbookGraphOptions {
     pub sheet_count: usize,
     pub has_theme: bool,
@@ -300,11 +340,19 @@ pub struct ModeledWorkbookGraphOptions {
     pub has_metadata: bool,
     pub has_persons: bool,
     pub has_doc_metadata_label_info: bool,
+    pub package_fidelity: Option<PackageFidelityMetadata>,
 }
 
 impl PackageGraphBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_package_fidelity(package_fidelity: Option<PackageFidelityMetadata>) -> Self {
+        Self {
+            package_fidelity,
+            ..Self::default()
+        }
     }
 
     pub fn register_part(&mut self, part: PackagePart) -> Result<(), WriteError> {
@@ -350,20 +398,158 @@ impl PackageGraphBuilder {
         self.parts.contains_key(&normalize_part_path(path))
     }
 
+    pub fn register_imported_opaque_parts(&mut self) -> Result<(), WriteError> {
+        let Some(metadata) = self.package_fidelity.clone() else {
+            return Ok(());
+        };
+
+        for part in &metadata.opaque_parts {
+            if !is_inert_opaque_candidate(&part.path) {
+                continue;
+            }
+            if crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(&part.path)
+            {
+                continue;
+            }
+            if self.contains_part(&part.path) {
+                continue;
+            }
+            self.register_part(imported_opaque_part(
+                &part.path,
+                part.content_type.clone(),
+                part.bytes.clone(),
+            ))?;
+        }
+
+        self.register_imported_root_and_workbook_opaque_relationships(&metadata);
+        self.register_imported_opaque_sidecar_relationships(&metadata);
+
+        Ok(())
+    }
+
+    fn register_imported_root_and_workbook_opaque_relationships(
+        &mut self,
+        metadata: &PackageFidelityMetadata,
+    ) {
+        for hint in &metadata.root_relationships {
+            let Some(target_path) = imported_internal_target(None, hint) else {
+                continue;
+            };
+            if self.is_opaque_part(&target_path) {
+                self.add_imported_hint_relationship(PackageOwner::Root, hint, target_path);
+            }
+        }
+
+        for hint in &metadata.workbook_relationships {
+            let Some(target_path) = imported_internal_target(Some("xl/workbook.xml"), hint) else {
+                continue;
+            };
+            if self.is_opaque_part(&target_path) {
+                self.add_imported_hint_relationship(PackageOwner::Workbook, hint, target_path);
+            }
+        }
+    }
+
+    fn register_imported_opaque_sidecar_relationships(
+        &mut self,
+        metadata: &PackageFidelityMetadata,
+    ) {
+        for part in &metadata.opaque_parts {
+            if !self.is_opaque_part(&part.path) {
+                continue;
+            }
+            let owner = PackageOwner::Part {
+                path: part.path.clone(),
+            };
+            for hint in &part.relationships {
+                if hint.target_mode.as_deref() == Some("External") {
+                    self.add_relationship(PackageRelationship {
+                        owner: owner.clone(),
+                        relationship_type: hint.relationship_type.clone(),
+                        target: PackageRelationshipTarget::External {
+                            target: hint.target.clone(),
+                        },
+                        identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+                    });
+                    continue;
+                }
+
+                let Some(target_path) = imported_internal_target(Some(&part.path), hint) else {
+                    continue;
+                };
+                if self.is_opaque_part(&target_path) && same_inert_cluster(&part.path, &target_path)
+                {
+                    self.add_imported_hint_relationship(owner.clone(), hint, target_path);
+                }
+            }
+        }
+    }
+
+    fn add_imported_hint_relationship(
+        &mut self,
+        owner: PackageOwner,
+        hint: &domain_types::PackageRelationshipHint,
+        target_path: String,
+    ) {
+        if self.relationship_exists(&owner, &hint.relationship_type, &target_path) {
+            return;
+        }
+        self.add_relationship(PackageRelationship {
+            owner,
+            relationship_type: hint.relationship_type.clone(),
+            target: PackageRelationshipTarget::InternalPart { path: target_path },
+            identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+        });
+    }
+
+    fn relationship_exists(&self, owner: &PackageOwner, relationship_type: &str, path: &str) -> bool {
+        let normalized = normalize_part_path(path);
+        self.relationships.iter().any(|rel| {
+            &rel.owner == owner
+                && rel.relationship_type == relationship_type
+                && matches!(
+                    &rel.target,
+                    PackageRelationshipTarget::InternalPart { path } if normalize_part_path(path) == normalized
+                )
+        })
+    }
+
+    fn is_opaque_part(&self, path: &str) -> bool {
+        self.parts
+            .get(&normalize_part_path(path))
+            .is_some_and(|part| matches!(part.kind, PackagePartKind::Opaque))
+    }
+
     pub fn resolve(self) -> Result<ResolvedPackageGraph, WriteError> {
         let mut used_ids_by_owner: HashMap<String, HashSet<String>> = HashMap::new();
         let mut next_id_by_owner: HashMap<String, u32> = HashMap::new();
         let mut relationships = Vec::with_capacity(self.relationships.len());
+        let imported_order_eligible =
+            imported_order_eligible_by_owner(self.package_fidelity.as_ref(), &self.relationships);
 
-        for relationship in &self.relationships {
+        let mut pending: Vec<_> = self.relationships.iter().enumerate().collect();
+        pending.sort_by_key(|(index, relationship)| {
+            (
+                imported_relationship_order(
+                    self.package_fidelity.as_ref(),
+                    &imported_order_eligible,
+                    relationship,
+                ),
+                *index,
+            )
+        });
+
+        for (_, relationship) in pending {
             validate_internal_target_is_registered(relationship, &self.parts)?;
             let owner_rels_path = owner_rels_path(&relationship.owner);
+            let hinted_id = relationship
+                .identity_hint
+                .as_ref()
+                .map(|hint| hint.id.as_str())
+                .or_else(|| current_relationship_hint_id(self.package_fidelity.as_ref(), relationship));
             let id = allocate_relationship_id(
                 &owner_rels_path,
-                relationship
-                    .identity_hint
-                    .as_ref()
-                    .map(|hint| hint.id.as_str()),
+                hinted_id,
                 &mut used_ids_by_owner,
                 &mut next_id_by_owner,
             );
@@ -380,6 +566,7 @@ impl PackageGraphBuilder {
         Ok(ResolvedPackageGraph {
             parts: self.parts,
             relationships,
+            package_fidelity: self.package_fidelity,
         })
     }
 }
@@ -387,7 +574,7 @@ impl PackageGraphBuilder {
 pub fn build_modeled_workbook_graph_builder(
     options: ModeledWorkbookGraphOptions,
 ) -> Result<PackageGraphBuilder, WriteError> {
-    let mut graph = PackageGraphBuilder::new();
+    let mut graph = PackageGraphBuilder::with_package_fidelity(options.package_fidelity.clone());
 
     register_modeled_workbook_graph(&mut graph, options)?;
     Ok(graph)
@@ -396,7 +583,7 @@ pub fn build_modeled_workbook_graph_builder(
 pub fn build_modeled_workbook_graph(
     options: ModeledWorkbookGraphOptions,
 ) -> Result<ResolvedPackageGraph, WriteError> {
-    let mut graph = PackageGraphBuilder::new();
+    let mut graph = PackageGraphBuilder::with_package_fidelity(options.package_fidelity.clone());
 
     register_modeled_workbook_graph(&mut graph, options)?;
 
@@ -414,7 +601,12 @@ fn register_modeled_workbook_graph(
         target: PackageRelationshipTarget::InternalPart {
             path: "xl/workbook.xml".to_string(),
         },
-        identity_hint: None,
+        identity_hint: imported_relationship_identity_hint(
+            options.package_fidelity.as_ref(),
+            &PackageOwner::Root,
+            REL_OFFICE_DOCUMENT,
+            "xl/workbook.xml",
+        ),
     });
 
     for sheet_idx in 0..options.sheet_count {
@@ -424,7 +616,11 @@ fn register_modeled_workbook_graph(
             owner: PackageOwner::Workbook,
             relationship_type: REL_WORKSHEET.to_string(),
             target: PackageRelationshipTarget::InternalPart { path },
-            identity_hint: None,
+            identity_hint: options
+                .package_fidelity
+                .as_ref()
+                .and_then(|metadata| metadata.sheet_workbook_r_ids.get(sheet_idx))
+                .map(RelationshipIdentityHint::new),
         });
     }
 
@@ -435,7 +631,12 @@ fn register_modeled_workbook_graph(
         target: PackageRelationshipTarget::InternalPart {
             path: "xl/styles.xml".to_string(),
         },
-        identity_hint: None,
+        identity_hint: imported_relationship_identity_hint(
+            options.package_fidelity.as_ref(),
+            &PackageOwner::Workbook,
+            REL_STYLES,
+            "xl/styles.xml",
+        ),
     });
 
     if options.has_theme {
@@ -446,7 +647,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "xl/theme/theme1.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Workbook,
+                REL_THEME,
+                "xl/theme/theme1.xml",
+            ),
         });
     }
 
@@ -458,7 +664,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "xl/sharedStrings.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Workbook,
+                REL_SHARED_STRINGS,
+                "xl/sharedStrings.xml",
+            ),
         });
     }
 
@@ -470,7 +681,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "docProps/core.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Root,
+                REL_CORE_PROPERTIES,
+                "docProps/core.xml",
+            ),
         });
     }
     if options.has_app_props {
@@ -481,7 +697,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "docProps/app.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Root,
+                REL_EXTENDED_PROPERTIES,
+                "docProps/app.xml",
+            ),
         });
     }
     if options.has_custom_props {
@@ -492,7 +713,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "docProps/custom.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Root,
+                REL_CUSTOM_PROPERTIES,
+                "docProps/custom.xml",
+            ),
         });
     }
     if options.has_metadata {
@@ -503,7 +729,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "xl/metadata.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Workbook,
+                REL_METADATA,
+                "xl/metadata.xml",
+            ),
         });
     }
     if options.has_persons {
@@ -517,7 +748,12 @@ fn register_modeled_workbook_graph(
             target: PackageRelationshipTarget::InternalPart {
                 path: "xl/persons/person.xml".to_string(),
             },
-            identity_hint: None,
+            identity_hint: imported_relationship_identity_hint(
+                options.package_fidelity.as_ref(),
+                &PackageOwner::Workbook,
+                super::REL_PERSON,
+                "xl/persons/person.xml",
+            ),
         });
     }
     if options.has_doc_metadata_label_info {
@@ -537,6 +773,217 @@ pub fn modeled_part(path: &str, content_type: &str) -> PackagePart {
         default_extension: None,
         kind: PackagePartKind::Modeled,
         bytes: None,
+    }
+}
+
+fn imported_opaque_part(path: &str, content_type: Option<String>, bytes: Vec<u8>) -> PackagePart {
+    let normalized = normalize_part_path(path);
+    let default_extension = content_type.is_none().then(|| {
+        normalized
+            .rsplit_once('.')
+            .map(|(_, extension)| extension.to_ascii_lowercase())
+            .unwrap_or_else(|| "bin".to_string())
+    });
+    let default_extension = default_extension.map(|extension| {
+        let content_type = match extension.as_str() {
+            "bin" if normalized.starts_with("xl/printerSettings/") => {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"
+                    .to_string()
+            }
+            "xml" => "application/xml".to_string(),
+            "rels" => "application/vnd.openxmlformats-package.relationships+xml".to_string(),
+            "png" => CT_PNG.to_string(),
+            "jpg" | "jpeg" => CT_JPEG.to_string(),
+            other => format!("application/octet-stream; extension={other}"),
+        };
+        (extension, content_type)
+    });
+    PackagePart {
+        path: normalized,
+        content_type,
+        default_extension,
+        kind: PackagePartKind::Opaque,
+        bytes: Some(bytes),
+    }
+}
+
+fn imported_relationship_identity_hint(
+    metadata: Option<&PackageFidelityMetadata>,
+    owner: &PackageOwner,
+    relationship_type: &str,
+    target_path: &str,
+) -> Option<RelationshipIdentityHint> {
+    imported_relationship_hint(metadata, owner, relationship_type, target_path)
+        .map(|hint| RelationshipIdentityHint::new(hint.id.as_str()))
+}
+
+fn current_relationship_hint_id<'a>(
+    metadata: Option<&'a PackageFidelityMetadata>,
+    relationship: &PackageRelationship,
+) -> Option<&'a str> {
+    let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
+        return None;
+    };
+    imported_relationship_hint(
+        metadata,
+        &relationship.owner,
+        &relationship.relationship_type,
+        path,
+    )
+    .map(|hint| hint.id.as_str())
+}
+
+fn imported_relationship_hint<'a>(
+    metadata: Option<&'a PackageFidelityMetadata>,
+    owner: &PackageOwner,
+    relationship_type: &str,
+    target_path: &str,
+) -> Option<&'a domain_types::PackageRelationshipHint> {
+    let metadata = metadata?;
+    let (owner_part, hints) = match owner {
+        PackageOwner::Root => (None, metadata.root_relationships.as_slice()),
+        PackageOwner::Workbook => (
+            Some("xl/workbook.xml"),
+            metadata.workbook_relationships.as_slice(),
+        ),
+        _ => return None,
+    };
+    let normalized_target = normalize_part_path(target_path);
+    hints.iter().find(|hint| {
+        hint.relationship_type == relationship_type
+            && hint.target_mode.as_deref() != Some("External")
+            && imported_internal_target(owner_part, hint)
+                .is_some_and(|target| target == normalized_target)
+    })
+}
+
+fn imported_relationship_order(
+    metadata: Option<&PackageFidelityMetadata>,
+    eligible_by_owner: &HashMap<RelationshipOwnerPath, bool>,
+    relationship: &PackageRelationship,
+) -> usize {
+    let Some(metadata) = metadata else {
+        return usize::MAX;
+    };
+    let owner_rels_path = owner_rels_path(&relationship.owner);
+    if !eligible_by_owner
+        .get(&owner_rels_path)
+        .copied()
+        .unwrap_or(false)
+    {
+        return usize::MAX;
+    }
+    let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
+        return usize::MAX;
+    };
+    let (owner_part, hints) = match &relationship.owner {
+        PackageOwner::Root => (None, metadata.root_relationships.as_slice()),
+        PackageOwner::Workbook => (
+            Some("xl/workbook.xml"),
+            metadata.workbook_relationships.as_slice(),
+        ),
+        _ => return usize::MAX,
+    };
+    let normalized_target = normalize_part_path(path);
+    hints
+        .iter()
+        .position(|hint| {
+            hint.relationship_type == relationship.relationship_type
+                && hint.target_mode.as_deref() != Some("External")
+                && imported_internal_target(owner_part, hint)
+                    .is_some_and(|target| target == normalized_target)
+        })
+        .unwrap_or(usize::MAX)
+}
+
+fn imported_order_eligible_by_owner(
+    metadata: Option<&PackageFidelityMetadata>,
+    relationships: &[PackageRelationship],
+) -> HashMap<RelationshipOwnerPath, bool> {
+    let mut result = HashMap::new();
+    let Some(metadata) = metadata else {
+        return result;
+    };
+    result.insert(
+        owner_rels_path(&PackageOwner::Root),
+        imported_owner_set_matches_current(None, &metadata.root_relationships, relationships),
+    );
+    result.insert(
+        owner_rels_path(&PackageOwner::Workbook),
+        imported_owner_set_matches_current(
+            Some("xl/workbook.xml"),
+            &metadata.workbook_relationships,
+            relationships,
+        ),
+    );
+    result
+}
+
+fn imported_owner_set_matches_current(
+    owner_part: Option<&str>,
+    imported: &[domain_types::PackageRelationshipHint],
+    relationships: &[PackageRelationship],
+) -> bool {
+    let owner = if owner_part.is_none() {
+        PackageOwner::Root
+    } else {
+        PackageOwner::Workbook
+    };
+    let current_set: HashSet<(String, String)> = relationships
+        .iter()
+        .filter(|relationship| relationship.owner == owner)
+        .filter_map(|relationship| {
+            let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
+                return None;
+            };
+            Some((
+                relationship.relationship_type.clone(),
+                normalize_part_path(path),
+            ))
+        })
+        .collect();
+    let imported_set: HashSet<(String, String)> = imported
+        .iter()
+        .filter(|hint| hint.target_mode.as_deref() != Some("External"))
+        .filter_map(|hint| {
+            imported_internal_target(owner_part, hint)
+                .map(|target| (hint.relationship_type.clone(), normalize_part_path(&target)))
+        })
+        .collect();
+    current_set == imported_set
+}
+
+fn imported_internal_target(
+    owner_part: Option<&str>,
+    hint: &domain_types::PackageRelationshipHint,
+) -> Option<String> {
+    if hint.target_mode.as_deref() == Some("External") {
+        return None;
+    }
+    crate::infra::opc::resolve_relationship_target(owner_part, &hint.target).ok()
+}
+
+fn is_inert_opaque_candidate(path: &str) -> bool {
+    let normalized = normalize_part_path(path);
+    normalized.starts_with("xl/webextensions/")
+        || normalized.starts_with("customXml/")
+        || (normalized.starts_with("xl/printerSettings/") && normalized.ends_with(".bin"))
+        || normalized.starts_with("docProps/thumbnail.")
+}
+
+fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
+    let owner_path = normalize_part_path(owner_path);
+    let target_path = normalize_part_path(target_path);
+    if owner_path.starts_with("customXml/") {
+        target_path.starts_with("customXml/")
+    } else if owner_path.starts_with("xl/webextensions/") {
+        target_path.starts_with("xl/webextensions/")
+    } else if owner_path.starts_with("xl/printerSettings/") {
+        target_path.starts_with("xl/printerSettings/")
+    } else if owner_path.starts_with("docProps/thumbnail.") {
+        target_path.starts_with("docProps/thumbnail.")
+    } else {
+        false
     }
 }
 
@@ -1250,6 +1697,9 @@ fn validate_internal_target_is_registered(
 }
 
 fn validate_required_content_type(part: &PackagePart, errors: &mut Vec<PackageIntegrityIssue>) {
+    if !matches!(part.kind, PackagePartKind::Modeled) {
+        return;
+    }
     let Some(expected) = required_content_type_for_modeled_part(&part.path) else {
         return;
     };
@@ -1759,4 +2209,173 @@ fn owner_part_path_from_rels_path(owner_rels_path: &str) -> Option<Option<String
     } else {
         format!("{dir}/{owner_file}")
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn graph_options(package_fidelity: Option<PackageFidelityMetadata>) -> ModeledWorkbookGraphOptions {
+        ModeledWorkbookGraphOptions {
+            sheet_count: 1,
+            has_theme: false,
+            has_shared_strings: false,
+            has_core_props: true,
+            has_app_props: false,
+            has_custom_props: false,
+            has_metadata: false,
+            has_persons: false,
+            has_doc_metadata_label_info: false,
+            package_fidelity,
+        }
+    }
+
+    fn relationship_hint(
+        id: &str,
+        relationship_type: &str,
+        target: &str,
+    ) -> domain_types::PackageRelationshipHint {
+        domain_types::PackageRelationshipHint {
+            id: id.to_string(),
+            relationship_type: relationship_type.to_string(),
+            target: target.to_string(),
+            target_mode: None,
+        }
+    }
+
+    #[test]
+    fn imported_root_order_and_ids_are_reused_only_for_matching_current_set() {
+        let metadata = PackageFidelityMetadata {
+            root_relationships: vec![
+                relationship_hint("rId5", REL_CORE_PROPERTIES, "docProps/core.xml"),
+                relationship_hint("rId9", REL_OFFICE_DOCUMENT, "xl/workbook.xml"),
+            ],
+            ..Default::default()
+        };
+
+        let graph = build_modeled_workbook_graph(graph_options(Some(metadata))).unwrap();
+        let root_rels: Vec<_> = graph
+            .relationships
+            .iter()
+            .filter(|rel| rel.owner_rels_path == "_rels/.rels")
+            .collect();
+
+        assert_eq!(root_rels[0].id, "rId5");
+        assert_eq!(root_rels[0].relationship_type, REL_CORE_PROPERTIES);
+        assert_eq!(root_rels[1].id, "rId9");
+        assert_eq!(root_rels[1].relationship_type, REL_OFFICE_DOCUMENT);
+    }
+
+    #[test]
+    fn imported_order_is_ignored_when_current_owner_set_changes() {
+        let metadata = PackageFidelityMetadata {
+            root_relationships: vec![relationship_hint(
+                "rId9",
+                REL_OFFICE_DOCUMENT,
+                "xl/workbook.xml",
+            )],
+            ..Default::default()
+        };
+
+        let graph = build_modeled_workbook_graph(graph_options(Some(metadata))).unwrap();
+        let root_rels: Vec<_> = graph
+            .relationships
+            .iter()
+            .filter(|rel| rel.owner_rels_path == "_rels/.rels")
+            .collect();
+
+        assert_eq!(root_rels[0].relationship_type, REL_OFFICE_DOCUMENT);
+        assert_eq!(root_rels[1].relationship_type, REL_CORE_PROPERTIES);
+    }
+
+    #[test]
+    fn imported_default_mime_preference_updates_existing_current_default() {
+        let metadata = PackageFidelityMetadata {
+            content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {
+                extension: "jpg".to_string(),
+                content_type: "image/jpg".to_string(),
+            }],
+            ..Default::default()
+        };
+        let mut builder = PackageGraphBuilder::with_package_fidelity(Some(metadata));
+        register_media_part(&mut builder, "xl/media/image1.jpg").unwrap();
+        let graph = builder.resolve().unwrap();
+        let mut content_types = ContentTypesManager::new();
+        content_types.add_default("jpg", CT_JPEG);
+        graph.add_content_types_to(&mut content_types);
+        graph.apply_content_type_preferences_to(&mut content_types);
+
+        let jpg = content_types
+            .defaults()
+            .iter()
+            .find(|default| default.extension == "jpg")
+            .unwrap();
+        assert_eq!(jpg.content_type, "image/jpg");
+    }
+
+    #[test]
+    fn inert_custom_xml_cluster_is_registered_with_graph_generated_sidecar() {
+        let metadata = PackageFidelityMetadata {
+            root_relationships: vec![relationship_hint(
+                "rId7",
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+                "customXml/item1.xml",
+            )],
+            opaque_parts: vec![
+                domain_types::OpaquePackagePartHint {
+                    path: "customXml/item1.xml".to_string(),
+                    bytes: b"<root/>".to_vec(),
+                    content_type: Some("application/xml".to_string()),
+                    relationships: vec![relationship_hint(
+                        "rId1",
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps",
+                        "itemProps1.xml",
+                    )],
+                },
+                domain_types::OpaquePackagePartHint {
+                    path: "customXml/itemProps1.xml".to_string(),
+                    bytes: b"<props/>".to_vec(),
+                    content_type: Some("application/xml".to_string()),
+                    relationships: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+        builder.register_imported_opaque_parts().unwrap();
+        let graph = builder.resolve().unwrap();
+
+        assert!(graph.contains_part("customXml/item1.xml"));
+        assert!(graph.contains_part("customXml/itemProps1.xml"));
+        assert!(graph.relationships.iter().any(|rel| {
+            rel.owner_rels_path == "_rels/.rels"
+                && rel.id == "rId7"
+                && rel.target == "/customXml/item1.xml"
+        }));
+        assert!(graph.relationships.iter().any(|rel| {
+            rel.owner_rels_path == "customXml/_rels/item1.xml.rels"
+                && rel.id == "rId1"
+                && rel.target == "itemProps1.xml"
+        }));
+    }
+
+    #[test]
+    fn modeled_paths_are_not_replayed_as_opaque_parts() {
+        let metadata = PackageFidelityMetadata {
+            opaque_parts: vec![domain_types::OpaquePackagePartHint {
+                path: "xl/comments1.xml".to_string(),
+                bytes: b"<comments/>".to_vec(),
+                content_type: Some(CT_COMMENTS.to_string()),
+                relationships: Vec::new(),
+            }],
+            ..Default::default()
+        };
+
+        let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+        builder.register_imported_opaque_parts().unwrap();
+        let graph = builder.resolve().unwrap();
+
+        assert!(!graph.contains_part("xl/comments1.xml"));
+    }
 }

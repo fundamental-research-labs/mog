@@ -24,6 +24,13 @@ pub struct ParseOutput {
     pub style_palette: Vec<DocumentFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workbook_stylesheet: Option<WorkbookStylesheet>,
+    /// Writer-only OPC package fidelity hints captured from imported XLSX.
+    ///
+    /// This is deliberately skipped from public serialized parse output. The
+    /// writer may use these facts only as validated identity/formatting hints
+    /// for current emitted graph nodes, never as an export manifest.
+    #[serde(default, skip)]
+    pub package_fidelity: Option<PackageFidelityMetadata>,
     /// Typed import hints for shared-string entries that cannot be regenerated
     /// from plain cell text alone, such as rich text and phonetic metadata.
     ///
@@ -77,6 +84,90 @@ pub struct ParseOutput {
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub persons: Vec<PersonInfo>,
+}
+
+/// Writer-only package metadata captured during import.
+///
+/// All fields are hints for current graph construction. Export must validate
+/// owner, relationship type, target identity, and content-type requirements
+/// before reusing any imported value.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PackageFidelityMetadata {
+    pub content_type_defaults: Vec<PackageContentTypeDefaultHint>,
+    pub content_type_overrides: Vec<PackageContentTypeOverrideHint>,
+    pub root_relationships: Vec<PackageRelationshipHint>,
+    pub workbook_relationships: Vec<PackageRelationshipHint>,
+    pub sheet_workbook_r_ids: Vec<String>,
+    pub opaque_parts: Vec<OpaquePackagePartHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PackageContentTypeDefaultHint {
+    pub extension: String,
+    pub content_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PackageContentTypeOverrideHint {
+    /// Normalized package part path without a leading slash.
+    pub part_name: String,
+    /// Original part-name spelling from `[Content_Types].xml`.
+    pub original_part_name: String,
+    pub content_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PackageRelationshipHint {
+    pub id: String,
+    pub relationship_type: String,
+    pub target: String,
+    pub target_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OpaquePackagePartHint {
+    /// Normalized ZIP package path without a leading slash.
+    pub path: String,
+    pub bytes: Vec<u8>,
+    pub content_type: Option<String>,
+    /// Parsed relationships from this part's imported sidecar, when captured.
+    pub relationships: Vec<PackageRelationshipHint>,
+}
+
+impl PackageFidelityMetadata {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.content_type_defaults.is_empty()
+            && self.content_type_overrides.is_empty()
+            && self.root_relationships.is_empty()
+            && self.workbook_relationships.is_empty()
+            && self.sheet_workbook_r_ids.is_empty()
+            && self.opaque_parts.is_empty()
+    }
+
+    #[must_use]
+    pub fn content_type_default_for_extension(&self, extension: &str) -> Option<&str> {
+        self.content_type_defaults
+            .iter()
+            .find(|hint| hint.extension.eq_ignore_ascii_case(extension))
+            .map(|hint| hint.content_type.as_str())
+    }
+}
+
+impl From<ooxml_types::shared::OpcRelationship> for PackageRelationshipHint {
+    fn from(value: ooxml_types::shared::OpcRelationship) -> Self {
+        Self {
+            id: value.id,
+            relationship_type: value.rel_type,
+            target: value.target,
+            target_mode: value.target_mode,
+        }
+    }
+}
+
+#[must_use]
+pub fn normalize_package_path(path: &str) -> String {
+    path.trim_start_matches('/').replace('\\', "/")
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

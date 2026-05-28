@@ -65,6 +65,7 @@ pub(super) fn write_zip_package(
         );
     }
     package_graph.add_content_types_to(&mut content_types);
+    package_graph.apply_content_type_preferences_to(&mut content_types);
     // Comments, VML comment drawings, and threaded comments are registered
     // through the package graph when emitted.
     // docMetadata/LabelInfo.xml is registered through the package graph when emitted.
@@ -657,6 +658,26 @@ pub(super) fn write_zip_package(
             if !drawing_rels.is_empty() {
                 zip.add_file(&drawing_rels_path, drawing_rels.to_xml());
             }
+        }
+    }
+
+    for part in package_graph.opaque_parts() {
+        let bytes = part.bytes.clone().ok_or_else(|| {
+            WriteError::PackageIntegrity(format!(
+                "opaque part {} has no bytes to emit",
+                part.path
+            ))
+        })?;
+        zip.add_file(&part.path, bytes);
+        let owner = crate::write::package_graph::PackageOwner::Part {
+            path: part.path.clone(),
+        };
+        let rels = package_graph.relationship_manager_for_owner(&owner);
+        if !rels.is_empty() {
+            zip.add_file(
+                &crate::write::package_graph::part_relationships_path(&part.path),
+                rels.to_xml(),
+            );
         }
     }
 

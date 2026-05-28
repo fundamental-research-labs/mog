@@ -8,13 +8,7 @@ pub(super) fn append_dropped_import_diagnostics(
 ) {
     let mut dropped = Vec::new();
 
-    if !result.custom_xml_parts.is_empty() {
-        dropped.push("custom XML package parts");
-    }
     if let Some(ext) = result.extensions.as_ref() {
-        if !ext.imported_parts.is_empty() {
-            dropped.push("binary passthrough package parts");
-        }
         if !ext.workbook_namespaces.all().is_empty() {
             dropped.push("workbook namespace declarations");
         }

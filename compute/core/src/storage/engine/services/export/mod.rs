@@ -884,6 +884,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         sheets: output_sheets,
         style_palette,
         workbook_stylesheet: export_workbook_stylesheet(stores),
+        package_fidelity: None,
         shared_string_hints: export_shared_string_hints(stores),
         named_ranges,
         pivot_tables: export_workbook_parsed_pivot_tables(stores),

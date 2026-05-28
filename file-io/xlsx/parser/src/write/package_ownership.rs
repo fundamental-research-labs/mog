@@ -104,7 +104,8 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "query table definition mutation",
             "table connection binding mutation",
         ],
-        opaque_policy: "known connection/query-table clusters must be emitted only from typed owner state",
+        opaque_policy:
+            "known connection/query-table clusters must be emitted only from typed owner state",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::OleObjects,
@@ -297,6 +298,12 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
         Some(PackageFeatureOwner::ChartAuxiliary)
     } else if path.starts_with("xl/externalLinks/externalLink") && path.ends_with(".xml") {
         Some(PackageFeatureOwner::ExternalLinks)
+    } else if (path.starts_with("xl/comments") && path.ends_with(".xml"))
+        || (path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml"))
+    {
+        Some(PackageFeatureOwner::Comments)
+    } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
+        Some(PackageFeatureOwner::ThreadedComments)
     } else if matches!(
         path,
         "docProps/core.xml"

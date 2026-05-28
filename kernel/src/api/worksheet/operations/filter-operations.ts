@@ -17,31 +17,11 @@ import { columnFilterCriteriaToCompute } from '../../../bridges/compute/compute-
 import type { DocumentContext, OperationResult } from './shared';
 import { invalidRange, operationFailed } from './shared';
 import { KernelError } from '../../../errors';
+import { resolveFilterRange } from '../filter-range-resolution';
 import {
   assertFilterMutationAllowed,
   assertNoProtectedTableFilterCreation,
 } from '../protected-table-operations';
-
-/**
- * Resolve a FilterState's CellId-based bounds to numeric row/col positions.
- */
-async function resolveFilterRange(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  filter: FilterState,
-): Promise<{ startRow: number; startCol: number; endRow: number; endCol: number }> {
-  const [startPos, endPos, dataEndPos] = await Promise.all([
-    ctx.computeBridge.getCellPosition(sheetId, filter.headerStartCellId),
-    ctx.computeBridge.getCellPosition(sheetId, filter.headerEndCellId),
-    ctx.computeBridge.getCellPosition(sheetId, filter.dataEndCellId),
-  ]);
-  return {
-    startRow: startPos?.row ?? 0,
-    startCol: startPos?.col ?? 0,
-    endRow: dataEndPos?.row ?? endPos?.row ?? 0,
-    endCol: endPos?.col ?? 0,
-  };
-}
 
 // =============================================================================
 // Filter Operations

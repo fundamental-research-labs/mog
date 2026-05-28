@@ -12,6 +12,7 @@ function createMockCtx(): any {
     },
     computeBridge: {
       getFiltersInSheet: jest.fn().mockResolvedValue([]),
+      getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       getCellPosition: jest.fn().mockResolvedValue(null),
       getCellIdAt: jest.fn().mockResolvedValue(null),
       getCellValue: jest.fn().mockResolvedValue(null),
@@ -114,6 +115,91 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
       ['A', null, null],
       { type: 'values', included: ['A'], includeBlanks: false },
       new Uint8Array([1, 0, 1]),
+    );
+  });
+
+  it('uses canonical table range for table-backed filters even when stored identities moved', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      tableId: 'table-1',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-b',
+      dataEndCellId: 'moved-data-end',
+      columnFilters: {
+        'header-a': { type: 'values', values: ['A'], includeBlanks: false },
+      },
+    };
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([
+      {
+        id: 'table-1',
+        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+      },
+    ]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 1 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 2, col: 1 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.getCellValue.mockImplementation(
+      async (_sheet: unknown, row: number, _col: number) => {
+        if (row === 1) return 'A';
+        if (row === 2) return 'B';
+        if (row === 3) return 'C';
+        return null;
+      },
+    );
+
+    await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+    expect(ctx.computeBridge.getCellPosition).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(
+      ['A', 'B', 'C'],
+      { type: 'values', included: ['A'], includeBlanks: false },
+      null,
+    );
+  });
+
+  it('falls back to identity-derived range when table metadata is missing', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      tableId: 'missing-table',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-b',
+      dataEndCellId: 'data-end',
+      columnFilters: {},
+    };
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([
+      {
+        id: 'other-table',
+        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+      },
+    ]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 1 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 2, col: 1 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.getCellValue.mockImplementation(
+      async (_sheet: unknown, row: number, _col: number) => {
+        if (row === 1) return 'A';
+        if (row === 2) return 'B';
+        if (row === 3) return 'C';
+        return null;
+      },
+    );
+
+    await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(
+      ['A', 'B'],
+      null,
+      null,
     );
   });
 

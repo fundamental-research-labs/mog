@@ -226,6 +226,9 @@ pub struct FullParsedSheet {
     pub hyperlinks: Vec<HyperlinkOutput>,
     /// Sheet protection settings
     pub protection: Option<ProtectionOutput>,
+    /// Typed worksheet semantic containers that are not runtime-decomposed yet.
+    #[serde(skip)]
+    pub worksheet_semantic_containers: domain_types::WorksheetSemanticContainers,
     /// Print settings (structured output)
     pub print_settings: Option<PrintSettingsOutput>,
     /// Raw `<headerFooter>...</headerFooter>` XML for verbatim round-trip passthrough.

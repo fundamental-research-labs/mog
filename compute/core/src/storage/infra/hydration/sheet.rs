@@ -116,6 +116,23 @@ fn sheet_color_to_hex(color: &ooxml_types::styles::ColorDef) -> Option<String> {
     }
 }
 
+fn hydrate_worksheet_semantic_containers(
+    txn: &mut yrs::TransactionMut,
+    meta_map: &MapRef,
+    containers: &domain_types::WorksheetSemanticContainers,
+) {
+    if containers.is_empty() {
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(containers) {
+        meta_map.insert(
+            txn,
+            "worksheetSemanticContainers",
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+}
+
 fn allocate_anchored_identities(
     sheet: &SheetData,
     allocator: &mut impl IdAllocator,
@@ -873,6 +890,7 @@ pub(crate) fn hydrate_sheet(
 
     // --- Standalone worksheet sort state (typed OOXML metadata only) ---
     hydrate_sort_state(txn, &meta_map, &sheet.sort_state);
+    hydrate_worksheet_semantic_containers(txn, &meta_map, &sheet.worksheet_semantic_containers);
 
     // --- Outline groups (domain grouping config) ---
     hydrate_outline_groups(
@@ -1505,6 +1523,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
     );
     hydrate_auto_filter(txn, &meta_map, &filters_map, &pos_map, &sheet.auto_filter);
     hydrate_sort_state(txn, &meta_map, &sheet.sort_state);
+    hydrate_worksheet_semantic_containers(txn, &meta_map, &sheet.worksheet_semantic_containers);
     hydrate_outline_groups(
         txn,
         &grouping_map,

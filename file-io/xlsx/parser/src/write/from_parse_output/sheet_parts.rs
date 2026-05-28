@@ -109,6 +109,11 @@ pub(super) fn build_sheet_parts(
         if let Some(ref uid) = sheet_data.uid {
             sheet_writer.set_uid(uid.clone());
         }
+        if !sheet_data.worksheet_semantic_containers.is_empty() {
+            sheet_writer.set_worksheet_semantic_containers(
+                sheet_data.worksheet_semantic_containers.clone(),
+            );
+        }
 
         // ── Hyperlinks ──────────────────────────────────────────────────
         // Hyperlink r:ids are assigned during rels generation below.

@@ -5,25 +5,42 @@
 //! until a typed owner is added.
 
 pub const DROPPED_WORKBOOK_SEMANTIC_CHILDREN: &[&str] = &[
-    "fileRecoveryPr",
-    "smartTagPr",
-    "smartTagTypes",
-    "webPublishItems",
-    "extLst",
+    "fileRecoveryPr",  // Recovery metadata is file-authoring policy, not sheet state.
+    "smartTagPr",      // Smart Tags are legacy app metadata until typed ownership lands.
+    "smartTagTypes",   // Smart Tag definitions must not be replayed opaquely.
+    "webPublishItems", // Web publish settings are omitted until workbook web export is modeled.
+    "extLst",          // Workbook extension owners must be typed before replay.
 ];
 
 pub const DROPPED_WORKSHEET_SEMANTIC_CHILDREN: &[&str] = &[
-    "dimension",
-    "customSheetViews",
-    "ignoredErrors",
-    "sheetCalcPr",
-    "protectedRanges",
-    "scenarios",
-    "dataConsolidate",
-    "phoneticPr",
-    "smartTags",
-    "cellWatches",
-    "webPublishItems",
+    "dimension",        // Export derives worksheet extent from modeled cells.
+    "customSheetViews", // View state can conflict with modeled sheet views.
+    "ignoredErrors",    // Error-suppression policy needs typed cell/range ownership.
+    "sheetCalcPr",      // Sheet calculation settings must follow typed calc state.
+    "protectedRanges",  // Range permissions need typed protection ownership.
+    "scenarios",        // What-if scenarios are domain state, not opaque XML.
+    "dataConsolidate",  // Consolidation settings affect data semantics.
+    "phoneticPr",       // Phonetic display policy needs typed text ownership.
+    "smartTags",        // Smart Tags are legacy app metadata.
+    "cellWatches",      // Watch-window metadata can reference stale cells.
+    "webPublishItems",  // Web publish settings are omitted until modeled.
+];
+
+pub const DROPPED_WORKSHEET_EXT_URIS: &[&str] = &[
+    // x14:sparklineGroups
+    "{05C60535-1F16-4fd2-B633-F4F36F0B64E0}",
+    // x14:dataValidations
+    "{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}",
+    // x14:id links from standard conditional-format rules to x14 CF owners.
+    "{B025F937-C7B1-47D3-B67F-A62EFF666E3E}",
+];
+
+pub const DROPPED_WORKSHEET_EXT_CHILDREN: &[&str] = &[
+    "dataValidations",
+    "conditionalFormatting",
+    "conditionalFormattings",
+    "sparklineGroups",
+    "id",
 ];
 
 pub fn is_dropped_workbook_semantic_child(local_name: &str) -> bool {

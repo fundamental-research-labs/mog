@@ -30,7 +30,7 @@ use crate::domain::worksheet::write::{
     write_sheet_views,
 };
 use crate::roundtrip::unknown_elements::PreservedXml;
-use domain_types::AuthoredStyleRun;
+use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers, WorksheetSemanticXml};
 pub use ooxml_types::worksheet::{
     ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
     SheetViewType,
@@ -87,6 +87,8 @@ pub struct SheetWriter {
     preserved_elements: Option<crate::roundtrip::unknown_elements::PreservedElements>,
     /// Raw autoFilter XML for verbatim round-trip passthrough.
     auto_filter_xml: Option<String>,
+    /// Typed worksheet semantic containers emitted from SheetData, not preserved XML.
+    worksheet_semantic_containers: WorksheetSemanticContainers,
     /// Raw sortState XML for verbatim round-trip passthrough.
     sort_state_xml: Option<String>,
     /// Raw conditionalFormatting XML for verbatim round-trip passthrough.
@@ -141,6 +143,7 @@ impl SheetWriter {
             preserved_namespaces: None,
             preserved_elements: None,
             auto_filter_xml: None,
+            worksheet_semantic_containers: WorksheetSemanticContainers::default(),
             sort_state_xml: None,
             conditional_formatting_xml: None,
             data_validations_xml: None,
@@ -691,6 +694,14 @@ impl SheetWriter {
         self
     }
 
+    pub fn set_worksheet_semantic_containers(
+        &mut self,
+        containers: WorksheetSemanticContainers,
+    ) -> &mut Self {
+        self.worksheet_semantic_containers = containers;
+        self
+    }
+
     /// Set raw sortState XML for verbatim round-trip passthrough.
     pub fn set_sort_state_xml(&mut self, xml: String) -> &mut Self {
         self.sort_state_xml = Some(xml);
@@ -1011,9 +1022,15 @@ impl SheetWriter {
 
         // Sheet protection is modeled-authoritative; never let preserved XML
         // override current SheetData.protection.
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.sheet_calc_pr);
         if let Some(ref sp) = self.sheet_protection_xml {
             w.raw_str(sp);
         }
+        self.write_semantic_container(
+            &mut w,
+            &self.worksheet_semantic_containers.protected_ranges,
+        );
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.scenarios);
 
         // Write autoFilter (OOXML order: after sheetData, before sortState)
         if let Some(ref af) = self.auto_filter_xml {
@@ -1024,9 +1041,18 @@ impl SheetWriter {
         if let Some(ref ss) = self.sort_state_xml {
             w.raw_str(ss);
         }
+        self.write_semantic_container(
+            &mut w,
+            &self.worksheet_semantic_containers.data_consolidate,
+        );
+        self.write_semantic_container(
+            &mut w,
+            &self.worksheet_semantic_containers.custom_sheet_views,
+        );
 
         // Write merge cells
         self.write_merge_cells(&mut w);
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.phonetic_pr);
 
         // Drain preserved elements positioned after mergeCells (e.g. phoneticPr)
         if let Some(ref preserved) = self.preserved_elements {
@@ -1104,6 +1130,9 @@ impl SheetWriter {
         if let Some(ref cp) = self.custom_properties_xml {
             w.raw_str(cp);
         }
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.cell_watches);
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.ignored_errors);
+        self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.smart_tags);
 
         // Write <drawing r:id="..."/> (OOXML order: after colBreaks, before legacyDrawing)
         if let Some(ref r_id) = self.drawing_r_id {
@@ -1246,6 +1275,14 @@ impl SheetWriter {
             Some((min_row, min_col, max_row, max_col))
         } else {
             None
+        }
+    }
+
+    fn write_semantic_container(&self, w: &mut XmlWriter, container: &Option<WorksheetSemanticXml>) {
+        if let Some(container) = container
+            && !container.raw_xml.is_empty()
+        {
+            w.raw_str(&container.raw_xml);
         }
     }
 

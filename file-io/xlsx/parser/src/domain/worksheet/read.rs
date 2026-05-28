@@ -8,6 +8,7 @@ use crate::infra::scanner;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use crate::output::results::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
+use domain_types::{WorksheetSemanticContainers, WorksheetSemanticXml};
 use ooxml_types::styles::ColorDef;
 use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetProperties};
 
@@ -162,6 +163,31 @@ fn parse_sheet_pr_color(xml: &[u8], tag: &[u8]) -> Option<ColorDef> {
         return Some(ColorDef::Auto { tint });
     }
     None
+}
+
+// =============================================================================
+// Worksheet Semantic Containers
+// =============================================================================
+
+pub fn parse_worksheet_semantic_containers(xml: &[u8]) -> WorksheetSemanticContainers {
+    WorksheetSemanticContainers {
+        custom_sheet_views: extract_semantic_xml(xml, b"customSheetViews"),
+        ignored_errors: extract_semantic_xml(xml, b"ignoredErrors"),
+        sheet_calc_pr: extract_semantic_xml(xml, b"sheetCalcPr"),
+        protected_ranges: extract_semantic_xml(xml, b"protectedRanges"),
+        scenarios: extract_semantic_xml(xml, b"scenarios"),
+        data_consolidate: extract_semantic_xml(xml, b"dataConsolidate"),
+        phonetic_pr: extract_semantic_xml(xml, b"phoneticPr"),
+        smart_tags: extract_semantic_xml(xml, b"smartTags"),
+        cell_watches: extract_semantic_xml(xml, b"cellWatches"),
+    }
+}
+
+fn extract_semantic_xml(xml: &[u8], tag: &[u8]) -> Option<WorksheetSemanticXml> {
+    let start = find_tag_simd(xml, tag, 0)?;
+    let (_, end) = crate::roundtrip::unknown_elements::extract_element_bounds(xml, start)?;
+    let raw_xml = std::str::from_utf8(&xml[start..end]).ok()?.to_owned();
+    Some(WorksheetSemanticXml::new(raw_xml))
 }
 
 // =============================================================================

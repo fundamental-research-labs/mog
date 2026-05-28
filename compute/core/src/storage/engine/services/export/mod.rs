@@ -588,7 +588,13 @@ fn export_single_sheet(
     charts.sort_by_key(|c| c.z_index);
 
     // --- Sheet metadata from Yrs meta map ---
-    let (original_sheet_id, visibility, sheet_uid, mut sheet_properties) = {
+    let (
+        original_sheet_id,
+        visibility,
+        sheet_uid,
+        mut sheet_properties,
+        worksheet_semantic_containers,
+    ) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
         match meta {
@@ -641,9 +647,25 @@ fn export_single_sheet(
                     let properties = sheet_properties.get_or_insert_with(Default::default);
                     properties.tab_color = Some(tab_color_to_ooxml_color(&tab_color));
                 }
-                (osi, vis, uid, sheet_properties)
+                let worksheet_semantic_containers = m
+                    .get(&txn, "worksheetSemanticContainers")
+                    .and_then(|v| match v {
+                        Out::Any(Any::String(s)) => {
+                            serde_json::from_str::<domain_types::WorksheetSemanticContainers>(&s)
+                                .ok()
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                (osi, vis, uid, sheet_properties, worksheet_semantic_containers)
             }
-            None => (None, domain_types::SheetState::Visible, None, None),
+            None => (
+                None,
+                domain_types::SheetState::Visible,
+                None,
+                None,
+                Default::default(),
+            ),
         }
     };
     if let Some(outline) = outline_properties.clone() {
@@ -692,6 +714,7 @@ fn export_single_sheet(
         print_settings,
         hf_images,
         protection,
+        worksheet_semantic_containers,
         row_styles,
         col_styles,
         charts,

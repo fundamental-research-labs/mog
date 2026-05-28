@@ -8,7 +8,10 @@
 use std::collections::{HashMap, HashSet};
 
 use cell_types::SheetId;
+use compute_document::hex::id_to_hex;
+use compute_document::schema::KEY_PROPERTIES;
 use formula_types::StructureChange;
+use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
@@ -40,6 +43,7 @@ pub(in crate::storage::engine) fn shift_all_metadata_ranges(
     shift_sparkline_ranges(stores, sheet_id, change);
     shift_pivot_ranges(stores, mirror, sheet_id, change);
     shift_print_metadata(stores, sheet_id, change);
+    invalidate_range_bound_worksheet_semantic_containers(stores, sheet_id, change);
 }
 
 /// Relocate range-backed validation metadata for a cut/move operation.
@@ -278,6 +282,32 @@ fn shift_range(
             Some(cell_types::SheetRange::new(sr, new_sc, er, new_ec))
         }
         StructureChange::RemapPositions { .. } => Some(*range),
+    }
+}
+
+fn invalidate_range_bound_worksheet_semantic_containers(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    change: &StructureChange,
+) {
+    if !matches!(
+        change,
+        StructureChange::InsertRows { .. }
+            | StructureChange::DeleteRows { .. }
+            | StructureChange::InsertCols { .. }
+            | StructureChange::DeleteCols { .. }
+    ) {
+        return;
+    }
+
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut txn = doc.transact_mut();
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, sheet_hex.as_str())
+        && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
+    {
+        meta_map.remove(&mut txn, "worksheetSemanticContainers");
     }
 }
 

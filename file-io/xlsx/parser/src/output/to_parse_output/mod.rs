@@ -1257,6 +1257,7 @@ fn convert_sheet(
         page_breaks,
         hf_images,
         protection,
+        worksheet_semantic_containers: sheet.worksheet_semantic_containers.clone(),
         auto_filter: sheet.auto_filter.clone(),
         sort_state: sheet.sort_state.clone(),
         data_validations_declared_count: sheet.data_validations_declared_count,

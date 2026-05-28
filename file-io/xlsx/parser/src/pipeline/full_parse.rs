@@ -1254,6 +1254,8 @@ fn process_sheet_core(
             select_locked_cells: sp.select_locked_cells,
             select_unlocked_cells: sp.select_unlocked_cells,
         });
+    let worksheet_semantic_containers =
+        crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd);
 
     let mut ps = print::PrintSettings::parse(post_sd);
     ps.page_setup_properties = sheet_properties
@@ -1332,6 +1334,7 @@ fn process_sheet_core(
         comments_root_namespace_attrs,
         hyperlinks: hyperlinks_parsed,
         protection: protection_output,
+        worksheet_semantic_containers,
         print_settings,
         header_footer_xml,
         page_breaks,
@@ -1891,6 +1894,8 @@ fn parse_sheets_sequential(
             comments_root_namespace_attrs,
             hyperlinks: hyperlinks_parsed,
             protection: protection_output,
+            worksheet_semantic_containers:
+                crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd),
             print_settings,
             header_footer_xml,
             page_breaks,

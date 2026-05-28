@@ -1,8 +1,13 @@
 //! Domain coordinator: parse conditional formats from worksheet XML.
 
-use crate::domain::cond_format::parse_conditional_formatting_element;
+use crate::domain::cond_format::{
+    parse_conditional_formatting_element, parse_conditional_formatting_x14,
+};
 use crate::infra::scanner::{self, find_gt_simd, find_tag_simd};
 use crate::output::results::CfSummary;
+use ooxml_types::cond_format::{
+    CfRule, CfRuleX14, ConditionalFormatting, ConditionalFormattingX14,
+};
 
 /// Parse conditional formats from worksheet XML.
 ///
@@ -16,7 +21,7 @@ pub fn parse_conditional_formats(
     xml: &[u8],
 ) -> (
     Vec<CfSummary>,
-    Vec<ooxml_types::cond_format::ConditionalFormatting>,
+    Vec<ConditionalFormatting>,
 ) {
     let mut summaries = Vec::new();
     let mut full = Vec::new();
@@ -52,7 +57,85 @@ pub fn parse_conditional_formats(
         pos = cf_end + 1;
     }
 
+    merge_x14_conditional_formatting(&mut full, parse_conditional_formatting_x14(xml));
+    summaries = full
+        .iter()
+        .map(|cf| CfSummary {
+            sqref: cf.sqref.clone(),
+            pivot: cf.pivot,
+            rules_count: cf.rules.len(),
+        })
+        .collect();
+
     (summaries, full)
+}
+
+fn merge_x14_conditional_formatting(
+    base: &mut Vec<ConditionalFormatting>,
+    x14_blocks: Vec<ConditionalFormattingX14>,
+) {
+    for x14_block in x14_blocks {
+        let mut standalone_rules = Vec::new();
+        for x14_rule in x14_block.rules {
+            if !apply_x14_rule_to_base(base, &x14_rule) {
+                standalone_rules.push(cf_rule_from_x14(x14_rule));
+            }
+        }
+        if !standalone_rules.is_empty() {
+            base.push(ConditionalFormatting {
+                sqref: x14_block.sqref,
+                pivot: false,
+                rules: standalone_rules,
+            });
+        }
+    }
+}
+
+fn apply_x14_rule_to_base(base: &mut [ConditionalFormatting], x14_rule: &CfRuleX14) -> bool {
+    if x14_rule.id.is_empty() {
+        return false;
+    }
+    for cf in base {
+        for rule in &mut cf.rules {
+            if rule.ext_id.as_deref() == Some(x14_rule.id.as_str()) {
+                overlay_x14_rule(rule, x14_rule);
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn overlay_x14_rule(rule: &mut CfRule, x14_rule: &CfRuleX14) {
+    rule.rule_type = x14_rule.rule_type;
+    if x14_rule.priority != 0 {
+        rule.priority = x14_rule.priority;
+    }
+    if x14_rule.dxf_id.is_some() {
+        rule.dxf_id = x14_rule.dxf_id;
+    }
+    if x14_rule.color_scale.is_some() {
+        rule.color_scale = x14_rule.color_scale.clone();
+    }
+    if x14_rule.data_bar.is_some() {
+        rule.data_bar = x14_rule.data_bar.clone();
+    }
+    if x14_rule.icon_set.is_some() {
+        rule.icon_set = x14_rule.icon_set.clone();
+    }
+}
+
+fn cf_rule_from_x14(x14_rule: CfRuleX14) -> CfRule {
+    CfRule {
+        rule_type: x14_rule.rule_type,
+        priority: x14_rule.priority,
+        dxf_id: x14_rule.dxf_id,
+        color_scale: x14_rule.color_scale,
+        data_bar: x14_rule.data_bar,
+        icon_set: x14_rule.icon_set,
+        ext_id: (!x14_rule.id.is_empty()).then_some(x14_rule.id),
+        ..CfRule::default()
+    }
 }
 
 #[cfg(test)]

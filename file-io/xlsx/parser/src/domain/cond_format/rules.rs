@@ -458,9 +458,21 @@ pub fn parse_cf_rule_x14(xml: &[u8]) -> CfRuleX14 {
         rule.priority = priority;
     }
 
+    // Parse dxfId attribute
+    if let Some(dxf_id) = parse_u32_attr(xml, b"dxfId=\"") {
+        rule.dxf_id = Some(dxf_id);
+    }
+
     // Parse id attribute
     if let Some(id) = parse_string_attr(xml, b"id=\"") {
         rule.id = id;
+    }
+
+    // Parse colorScale element
+    if let Some(cs_start) = find_tag_simd(xml, b"colorScale", 0) {
+        let cs_end = find_closing_tag(xml, b"colorScale", cs_start).unwrap_or(xml.len());
+        let cs_xml = &xml[cs_start..cs_end];
+        rule.color_scale = Some(parse_color_scale(cs_xml));
     }
 
     // Parse dataBar element

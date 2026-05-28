@@ -33,12 +33,15 @@ pub const DROPPED_WORKSHEET_EXT_URIS: &[&str] = &[
     "{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}",
     // x14:id links from standard conditional-format rules to x14 CF owners.
     "{B025F937-C7B1-47D3-B67F-A62EFF666E3E}",
+    // x14:slicerList
+    "{A8765BA9-456A-4dab-B4F3-ACF838C121DE}",
 ];
 
 pub const DROPPED_WORKSHEET_EXT_CHILDREN: &[&str] = &[
     "dataValidations",
     "conditionalFormatting",
     "conditionalFormattings",
+    "slicerList",
     "sparklineGroups",
     "id",
 ];
@@ -276,30 +279,10 @@ mod tests {
         let raw = r#"<extLst><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations/></ext></extLst>"#;
         assert!(worksheet_preserved_xml_for_replay(raw).is_none());
     }
-}
-
-
-
-pub fn worksheet_preserved_xml_for_replay(raw_xml: &str) -> Option<String> {
-    if raw_xml_contains_dropped_worksheet_semantic_child(raw_xml) {
-        return None;
-    }
-    Some(raw_xml.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn worksheet_dimension_is_modeled_not_raw_preserved() {
         let raw = r#"<dimension ref="A1:XFD1048576"/>"#;
         assert!(worksheet_preserved_xml_for_replay(raw).is_none());
-    }
-
-    #[test]
-    fn unknown_worksheet_xml_replays() {
-        let raw = r#"<thirdPartyFeature/>"#;
-        assert_eq!(worksheet_preserved_xml_for_replay(raw).as_deref(), Some(raw));
     }
 }

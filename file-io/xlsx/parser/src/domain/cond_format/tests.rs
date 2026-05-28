@@ -722,15 +722,15 @@ fn test_cf_rule_x14_data_bar() {
 
 #[test]
 fn test_conditional_formatting_x14() {
-    let xml = br#"<conditionalFormatting>
-        <sqref>A1:A10</sqref>
-        <cfRule type="dataBar" id="{GUID}">
-            <dataBar gradient="1">
-                <cfvo type="min"/>
-                <cfvo type="max"/>
-            </dataBar>
-        </cfRule>
-    </conditionalFormatting>"#;
+    let xml = br#"<x14:conditionalFormatting xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+        <xm:sqref>A1:A10</xm:sqref>
+        <x14:cfRule type="dataBar" id="{GUID}">
+            <x14:dataBar gradient="1">
+                <x14:cfvo type="min"/>
+                <x14:cfvo type="max"/>
+            </x14:dataBar>
+        </x14:cfRule>
+    </x14:conditionalFormatting>"#;
     let cf = parse_conditional_formatting_x14_element(xml);
     assert_eq!(cf.sqref, "A1:A10");
     assert_eq!(cf.rules.len(), 1);

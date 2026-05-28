@@ -13,7 +13,7 @@ use crate::write::XmlWriter;
 
 /// Write a `<color>` element for a `CFColorPoint`, using the most specific
 /// color attribute available (theme > indexed > rgb).
-fn write_cf_color_point_color(w: &mut XmlWriter, pt: &CFColorPoint) {
+pub(super) fn write_cf_color_point_color(w: &mut XmlWriter, pt: &CFColorPoint) {
     w.start_element("color");
     if let Some(theme) = pt.color_theme {
         w.attr_num("theme", theme);
@@ -38,7 +38,7 @@ fn write_data_bar_color_element(w: &mut XmlWriter, element: &str, color: &str) {
         .self_close();
 }
 
-fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
+pub(super) fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
     point
         .value
         .to_ooxml_val()
@@ -81,7 +81,7 @@ pub fn cf_xml_from_domain(cfs: &[ConditionalFormat]) -> String {
 /// An empty `ranges` slice yields the empty string, matching the old
 /// `join(" ")` behaviour; the caller (`cf_xml_from_domain`) emits the
 /// `sqref=""` attribute verbatim in that case.
-fn ranges_to_sqref(ranges: &[CFCellRange]) -> String {
+pub(super) fn ranges_to_sqref(ranges: &[CFCellRange]) -> String {
     let sheet = cell_types::SheetId::from_raw(0);
     let ref_list: Vec<compute_parser::RangeRef> = ranges
         .iter()

@@ -245,6 +245,15 @@ pub(super) fn build_sheet_parts(
                 ext_entries.push(xml);
             }
         }
+        if !sheet_data.conditional_formats.is_empty() {
+            let xml =
+                crate::domain::cond_format::write::x14_conditional_formatting_ext_xml_from_domain(
+                    &sheet_data.conditional_formats,
+                );
+            if !xml.is_empty() {
+                ext_entries.push(xml);
+            }
+        }
         if !ext_entries.is_empty() {
             sheet_writer.set_ext_lst_xml(combine_ext_lst_entries(&ext_entries));
         }

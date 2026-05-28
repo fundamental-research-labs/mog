@@ -985,8 +985,12 @@ pub struct CfRuleX14 {
     pub rule_type: CfRuleType,
     /// Priority.
     pub priority: i32,
+    /// Differential format ID (references styles.xml dxf list).
+    pub dxf_id: Option<u32>,
     /// GUID linking to the base rule.
     pub id: String,
+    /// Extended color scale configuration.
+    pub color_scale: Option<ColorScale>,
     /// Extended data bar configuration.
     pub data_bar: Option<DataBar>,
     /// Extended icon set configuration.

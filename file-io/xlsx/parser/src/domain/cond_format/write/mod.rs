@@ -43,6 +43,7 @@ mod bridge;
 mod rules;
 mod types;
 mod writer;
+mod x14;
 
 #[cfg(test)]
 mod tests;
@@ -56,3 +57,4 @@ pub use types::{
 
 pub use bridge::cf_xml_from_domain;
 pub use writer::CfWriter;
+pub use x14::x14_conditional_formatting_ext_xml_from_domain;

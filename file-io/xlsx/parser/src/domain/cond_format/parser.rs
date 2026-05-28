@@ -67,6 +67,23 @@ pub fn parse_conditional_formatting_x14(xml: &[u8]) -> Vec<ConditionalFormatting
             pos = cf_start + 22;
             continue;
         }
+        let name_start = cf_start + 1;
+        let mut name_end = name_start;
+        while name_end < xml.len() {
+            let b = xml[name_end];
+            if matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
+                break;
+            }
+            name_end += 1;
+        }
+        let tag_name = &xml[name_start..name_end];
+        // Skip base worksheet CF and the plural x14:conditionalFormattings
+        // container. Only prefixed singular x14:conditionalFormatting entries
+        // are semantic x14 CF blocks on this path.
+        if !tag_name.ends_with(b":conditionalFormatting") {
+            pos = cf_start + 1;
+            continue;
+        }
 
         let cf_end = find_closing_tag(xml, b"conditionalFormatting", cf_start)
             .map(|end| find_gt_simd(xml, end).unwrap_or(xml.len()) + 1)

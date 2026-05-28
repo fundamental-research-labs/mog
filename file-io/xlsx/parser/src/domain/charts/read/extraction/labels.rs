@@ -1,4 +1,4 @@
-pub(super) fn extract_data_label_data(
+pub(in crate::domain::charts::read) fn extract_data_label_data(
     dl: &ooxml_types::charts::DataLabelOptions,
 ) -> domain_types::chart::DataLabelData {
     use ooxml_types::charts::DataLabelPosition;

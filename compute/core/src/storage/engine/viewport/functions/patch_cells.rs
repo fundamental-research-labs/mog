@@ -5,7 +5,7 @@ use value_types::CellValue;
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
 
-pub(super) fn build_comment_changed_cells(
+pub(in crate::storage::engine::viewport) fn build_comment_changed_cells(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
@@ -54,7 +54,7 @@ pub(super) fn build_comment_changed_cells(
 /// Sparkline mutations affect only metadata flags. The cell value comes from
 /// the current mirror state and `HAS_SPARKLINE` is derived from post-mutation
 /// storage state so add/update/delete all serialize the correct bit.
-pub(super) fn build_sparkline_changed_cells(
+pub(in crate::storage::engine::viewport) fn build_sparkline_changed_cells(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,

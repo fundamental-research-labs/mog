@@ -33,7 +33,7 @@ pub use ooxml_sort::{SortCondition, SortConditionBy, SortMethod, SortState};
 pub use runtime::{
     ColorPosition, ColumnFilter, DynamicFilterRule, FilterCondition, FilterEvaluationResult,
     FilterHeaderInfo, FilterKind, FilterLogic, FilterOperator, FilterRecordCount, FilterSortState,
-    SortBy, SortOrder, TopBottomBy, TopBottomDirection,
+    FilterState, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
 };
 
 /// Monotonic counter for generating unique filter IDs.

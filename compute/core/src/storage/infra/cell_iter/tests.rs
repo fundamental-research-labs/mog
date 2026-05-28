@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::super::grid_helpers::{get_cells_map, get_properties_map};
 use super::*;
 use crate::storage::YrsStorage;
-use cell_types::{IdAllocator, SheetId};
+use cell_types::{CellId, IdAllocator, RangePos, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
 use compute_document::schema::{KEY_COL_ORDER, KEY_ROW_ORDER, KEY_VALUE};

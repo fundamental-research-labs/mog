@@ -1,4 +1,8 @@
 use super::super::*;
+use domain_types::{
+    CellBorderSide, CellBorders, CellFormat, FontSize, GradientCenter, GradientFillFormat,
+    GradientStopFormat,
+};
 
 /// Helper: roundtrip serialize then deserialize, assert equality.
 fn roundtrip(formats: &[CellFormat], start_index: u16) -> Vec<CellFormat> {

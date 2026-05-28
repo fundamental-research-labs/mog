@@ -6,7 +6,7 @@ pub fn part_relationships_path(part_path: &str) -> String {
     })
 }
 
-pub(super) fn normalize_external_link_part_path(part_name: &str) -> String {
+pub(in crate::write) fn normalize_external_link_part_path(part_name: &str) -> String {
     let trimmed = normalize_part_path(part_name);
     if trimmed.starts_with("xl/") {
         trimmed
@@ -15,14 +15,17 @@ pub(super) fn normalize_external_link_part_path(part_name: &str) -> String {
     }
 }
 
-pub(super) fn relative_target(owner_path: &str, target_path: &str) -> Result<String, WriteError> {
+pub(in crate::write) fn relative_target(
+    owner_path: &str,
+    target_path: &str,
+) -> Result<String, WriteError> {
     let owner_path = normalize_part_path(owner_path);
     let target_path = normalize_part_path(target_path);
     let owner_dir = owner_path.rsplit_once('/').map_or("", |(dir, _)| dir);
     Ok(relative_path(owner_dir, &target_path))
 }
 
-pub(super) fn relative_path(from_dir: &str, to_path: &str) -> String {
+pub(in crate::write) fn relative_path(from_dir: &str, to_path: &str) -> String {
     let from_components: Vec<_> = from_dir
         .split('/')
         .filter(|part| !part.is_empty())
@@ -38,7 +41,7 @@ pub(super) fn relative_path(from_dir: &str, to_path: &str) -> String {
     result.join("/")
 }
 
-pub(super) fn owner_rels_path(owner: &PackageOwner) -> RelationshipOwnerPath {
+pub(in crate::write) fn owner_rels_path(owner: &PackageOwner) -> RelationshipOwnerPath {
     match owner {
         PackageOwner::Root => "_rels/.rels".to_string(),
         PackageOwner::Workbook => "xl/_rels/workbook.xml.rels".to_string(),
@@ -53,11 +56,11 @@ pub(super) fn owner_rels_path(owner: &PackageOwner) -> RelationshipOwnerPath {
     }
 }
 
-pub(super) fn normalize_part_path(path: &str) -> String {
+pub(in crate::write) fn normalize_part_path(path: &str) -> String {
     path.trim_start_matches('/').to_string()
 }
 
-pub(super) fn relationship_target_part_path(
+pub(in crate::write) fn relationship_target_part_path(
     owner_rels_path: &str,
     target: &str,
 ) -> Result<Option<String>, String> {
@@ -76,7 +79,9 @@ pub(super) fn relationship_target_part_path(
         .map(Some)
 }
 
-pub(super) fn owner_part_path_from_rels_path(owner_rels_path: &str) -> Option<Option<String>> {
+pub(in crate::write) fn owner_part_path_from_rels_path(
+    owner_rels_path: &str,
+) -> Option<Option<String>> {
     if owner_rels_path == "_rels/.rels" {
         return Some(None);
     }

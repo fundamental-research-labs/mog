@@ -5,63 +5,63 @@
 // ---------------------------------------------------------------------------
 
 /// Bit for `font_family`: `Option<String>`.
-pub(super) const BIT_FONT_FAMILY: u32 = 1 << 0;
+pub(crate) const BIT_FONT_FAMILY: u32 = 1 << 0;
 /// Bit for `font_size`: `Option<FontSize>`.
-pub(super) const BIT_FONT_SIZE: u32 = 1 << 1;
+pub(crate) const BIT_FONT_SIZE: u32 = 1 << 1;
 /// Bit for `font_color`: `Option<String>`.
-pub(super) const BIT_FONT_COLOR: u32 = 1 << 2;
+pub(crate) const BIT_FONT_COLOR: u32 = 1 << 2;
 /// Bit for `bold`: `Option<bool>`.
-pub(super) const BIT_BOLD: u32 = 1 << 3;
+pub(crate) const BIT_BOLD: u32 = 1 << 3;
 /// Bit for `italic`: `Option<bool>`.
-pub(super) const BIT_ITALIC: u32 = 1 << 4;
+pub(crate) const BIT_ITALIC: u32 = 1 << 4;
 /// Bit for `underline_type`: `Option<String>`.
-pub(super) const BIT_UNDERLINE_TYPE: u32 = 1 << 5;
+pub(crate) const BIT_UNDERLINE_TYPE: u32 = 1 << 5;
 /// Bit for `strikethrough`: `Option<bool>`.
-pub(super) const BIT_STRIKETHROUGH: u32 = 1 << 6;
+pub(crate) const BIT_STRIKETHROUGH: u32 = 1 << 6;
 /// Bit for `superscript`: `Option<bool>`.
-pub(super) const BIT_SUPERSCRIPT: u32 = 1 << 7;
+pub(crate) const BIT_SUPERSCRIPT: u32 = 1 << 7;
 /// Bit for `subscript`: `Option<bool>`.
-pub(super) const BIT_SUBSCRIPT: u32 = 1 << 8;
+pub(crate) const BIT_SUBSCRIPT: u32 = 1 << 8;
 /// Bit for `font_outline`: `Option<bool>`.
-pub(super) const BIT_FONT_OUTLINE: u32 = 1 << 9;
+pub(crate) const BIT_FONT_OUTLINE: u32 = 1 << 9;
 /// Bit for `font_shadow`: `Option<bool>`.
-pub(super) const BIT_FONT_SHADOW: u32 = 1 << 10;
+pub(crate) const BIT_FONT_SHADOW: u32 = 1 << 10;
 /// Bit for `font_theme`: `Option<String>`.
-pub(super) const BIT_FONT_THEME: u32 = 1 << 11;
+pub(crate) const BIT_FONT_THEME: u32 = 1 << 11;
 /// Bit for `font_charset`: `Option<u32>`.
-pub(super) const BIT_FONT_CHARSET: u32 = 1 << 12;
+pub(crate) const BIT_FONT_CHARSET: u32 = 1 << 12;
 /// Bit for `font_family_type`: `Option<u32>`.
-pub(super) const BIT_FONT_FAMILY_TYPE: u32 = 1 << 13;
+pub(crate) const BIT_FONT_FAMILY_TYPE: u32 = 1 << 13;
 /// Bit for `horizontal_align`: `Option<String>`.
-pub(super) const BIT_HORIZONTAL_ALIGN: u32 = 1 << 14;
+pub(crate) const BIT_HORIZONTAL_ALIGN: u32 = 1 << 14;
 /// Bit for `vertical_align`: `Option<String>`.
-pub(super) const BIT_VERTICAL_ALIGN: u32 = 1 << 15;
+pub(crate) const BIT_VERTICAL_ALIGN: u32 = 1 << 15;
 /// Bit for `wrap_text`: `Option<bool>`.
-pub(super) const BIT_WRAP_TEXT: u32 = 1 << 16;
+pub(crate) const BIT_WRAP_TEXT: u32 = 1 << 16;
 /// Bit for `indent`: `Option<u32>`.
-pub(super) const BIT_INDENT: u32 = 1 << 17;
+pub(crate) const BIT_INDENT: u32 = 1 << 17;
 /// Bit for `text_rotation`: `Option<i32>`.
-pub(super) const BIT_TEXT_ROTATION: u32 = 1 << 18;
+pub(crate) const BIT_TEXT_ROTATION: u32 = 1 << 18;
 /// Bit for `shrink_to_fit`: `Option<bool>`.
-pub(super) const BIT_SHRINK_TO_FIT: u32 = 1 << 19;
+pub(crate) const BIT_SHRINK_TO_FIT: u32 = 1 << 19;
 /// Bit for `reading_order`: `Option<String>`.
-pub(super) const BIT_READING_ORDER: u32 = 1 << 20;
+pub(crate) const BIT_READING_ORDER: u32 = 1 << 20;
 /// Bit for `number_format`: `Option<String>`.
-pub(super) const BIT_NUMBER_FORMAT: u32 = 1 << 21;
+pub(crate) const BIT_NUMBER_FORMAT: u32 = 1 << 21;
 /// Bit for `background_color`: `Option<String>`.
-pub(super) const BIT_BACKGROUND_COLOR: u32 = 1 << 22;
+pub(crate) const BIT_BACKGROUND_COLOR: u32 = 1 << 22;
 /// Bit for `pattern_type`: `Option<String>`.
-pub(super) const BIT_PATTERN_TYPE: u32 = 1 << 23;
+pub(crate) const BIT_PATTERN_TYPE: u32 = 1 << 23;
 /// Bit for `pattern_foreground_color`: `Option<String>`.
-pub(super) const BIT_PATTERN_FG_COLOR: u32 = 1 << 24;
+pub(crate) const BIT_PATTERN_FG_COLOR: u32 = 1 << 24;
 /// Bit for `gradient_fill`: `Option<GradientFillFormat>`.
-pub(super) const BIT_GRADIENT_FILL: u32 = 1 << 25;
+pub(crate) const BIT_GRADIENT_FILL: u32 = 1 << 25;
 /// Bit for `borders`: `Option<CellBorders>`.
-pub(super) const BIT_BORDERS: u32 = 1 << 26;
+pub(crate) const BIT_BORDERS: u32 = 1 << 26;
 /// Bit for `locked`: `Option<bool>`.
-pub(super) const BIT_LOCKED: u32 = 1 << 27;
+pub(crate) const BIT_LOCKED: u32 = 1 << 27;
 /// Bit for `hidden`: `Option<bool>`.
-pub(super) const BIT_HIDDEN: u32 = 1 << 28;
+pub(crate) const BIT_HIDDEN: u32 = 1 << 28;
 
 /// Palette header size: `u16` `start_index` + `u16` `format_count` + `u32` `string_pool_bytes`.
 pub(super) const PALETTE_HEADER_SIZE: usize = 8;

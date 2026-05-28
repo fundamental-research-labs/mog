@@ -44,6 +44,9 @@ use compute_core::CellInfo;
 use compute_core::bridge_types::{PivotExpansionState, PivotTableResult};
 use compute_core::storage::engine::CsvImportOptions;
 use compute_core::storage::engine::search::{WorkbookComment, WorkbookPivotTable, WorkbookTable};
+use compute_core::storage::sheet::{
+    filters as sheet_filters, grouping as sheet_grouping, sparklines as sheet_sparklines,
+};
 use domain_types::domain::cell_style::CellStyleDef;
 use domain_types::domain::comment::{Comment, CommentMention, CommentType};
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};
@@ -158,6 +161,10 @@ bridge_delegate::delegate!(
     dispatch = dispatch,
     gated = true,
     compute_core::__bridge_descriptor_YrsComputeEngine_core,
+    compute_core::__bridge_descriptor_YrsComputeEngine_core_cells,
+    compute_core::__bridge_descriptor_YrsComputeEngine_core_sync,
+    compute_core::__bridge_descriptor_YrsComputeEngine_core_undo,
+    compute_core::__bridge_descriptor_YrsComputeEngine_core_theme,
     compute_core::__bridge_descriptor_YrsComputeEngine_viewport,
     compute_core::__bridge_descriptor_YrsComputeEngine_tables,
     compute_core::__bridge_descriptor_YrsComputeEngine_features,
@@ -169,6 +176,12 @@ bridge_delegate::delegate!(
     compute_core::__bridge_descriptor_YrsComputeEngine_atomics,
     compute_core::__bridge_descriptor_YrsComputeEngine_layout,
     compute_core::__bridge_descriptor_YrsComputeEngine_objects,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_comments,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_floating,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_groups,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_hyperlinks,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_pivots,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_z_order,
     compute_core::__bridge_descriptor_YrsComputeEngine_delegations,
     compute_core::__bridge_descriptor_YrsComputeEngine_viewport_registry,
     compute_core::__bridge_descriptor_YrsComputeEngine_export,

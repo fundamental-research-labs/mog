@@ -6,7 +6,7 @@ use domain_types::CellFormat;
 use super::super::render::color_to_u32;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 
-pub(super) fn build_cf_color_overrides(
+pub(in crate::storage::engine::viewport) fn build_cf_color_overrides(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<CfColorOverrides> {

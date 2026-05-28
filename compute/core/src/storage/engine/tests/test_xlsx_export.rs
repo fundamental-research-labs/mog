@@ -288,7 +288,8 @@ fn imported_picture_survives_context_stripped_hydration_export_and_deletion_remo
         .common
         .id
         .clone();
-    let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
+    let sheet_id_after_hydration =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
     engine
         .delete_floating_object(&sheet_id_after_hydration, &object_id)
         .expect("picture owner deletion should succeed");
@@ -327,7 +328,8 @@ fn modeled_ole_survives_context_stripped_hydration_export_and_deletion_removes_p
         .common
         .id
         .clone();
-    let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
+    let sheet_id_after_hydration =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
     engine
         .delete_floating_object(&sheet_id_after_hydration, &object_id)
         .expect("OLE owner deletion should succeed");

@@ -2,7 +2,7 @@ use super::*;
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::slicers::{
     SlicerCacheDef, SlicerCrossFilter, SlicerDef, SlicerPivotTableRef, SlicerSortOrder,
-    SlicerTabularItem, TableSlicerCache,
+    SlicerTabularData, SlicerTabularItem, TableSlicerCache,
 };
 
 // -------------------------------------------------------------------------

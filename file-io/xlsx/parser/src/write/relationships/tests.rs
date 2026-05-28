@@ -562,7 +562,7 @@ fn test_from_relationships_mixed_ids_allocates_after_max_numeric_id() {
     assert_eq!(mgr.add(REL_WORKSHEET, "worksheets/sheet2.xml"), "rId13");
 }
 
-fn relationship_fragment(xml: &str, id: &str) -> &str {
+fn relationship_fragment<'a>(xml: &'a str, id: &str) -> &'a str {
     let start = xml.find(&format!("Id=\"{}\"", id)).unwrap();
     let rest = &xml[start..];
     let end = rest.find("/>").unwrap() + 2;

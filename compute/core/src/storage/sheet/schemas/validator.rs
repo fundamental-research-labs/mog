@@ -16,7 +16,7 @@ use crate::identity::GridIndex;
 use crate::mirror::CellMirror;
 use crate::scheduler::ast_transform::shift_ast_for_cf;
 
-pub(super) fn str_to_cell_value(s: &str) -> value_types::CellValue {
+pub(in crate::storage::sheet) fn str_to_cell_value(s: &str) -> value_types::CellValue {
     if s.is_empty() {
         return value_types::CellValue::Text(Arc::from(""));
     }

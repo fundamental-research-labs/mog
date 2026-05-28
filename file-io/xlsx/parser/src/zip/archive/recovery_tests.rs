@@ -1,10 +1,10 @@
-
 use super::super::constants::{
     CENTRAL_FILE_HEADER_SIGNATURE, COMPRESSION_STORE, END_OF_CENTRAL_DIR_SIGNATURE,
     LOCAL_FILE_HEADER_SIGNATURE,
 };
 use super::*;
 use crate::infra::error::ParseMode;
+use crate::{ErrorCode, ParseContext};
 
 // Helper to create a minimal valid ZIP file with a single stored file
 fn create_test_zip(filename: &str, content: &[u8]) -> Vec<u8> {

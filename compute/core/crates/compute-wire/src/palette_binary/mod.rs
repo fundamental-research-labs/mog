@@ -33,6 +33,15 @@ use layout::PALETTE_HEADER_SIZE;
 use read::Cursor;
 use string_pool::StringPool;
 
+pub(super) use layout::{
+    BIT_BACKGROUND_COLOR, BIT_BOLD, BIT_BORDERS, BIT_FONT_CHARSET, BIT_FONT_COLOR, BIT_FONT_FAMILY,
+    BIT_FONT_FAMILY_TYPE, BIT_FONT_OUTLINE, BIT_FONT_SHADOW, BIT_FONT_SIZE, BIT_FONT_THEME,
+    BIT_GRADIENT_FILL, BIT_HIDDEN, BIT_HORIZONTAL_ALIGN, BIT_INDENT, BIT_ITALIC, BIT_LOCKED,
+    BIT_NUMBER_FORMAT, BIT_PATTERN_FG_COLOR, BIT_PATTERN_TYPE, BIT_READING_ORDER,
+    BIT_SHRINK_TO_FIT, BIT_STRIKETHROUGH, BIT_SUBSCRIPT, BIT_SUPERSCRIPT, BIT_TEXT_ROTATION,
+    BIT_UNDERLINE_TYPE, BIT_VERTICAL_ALIGN, BIT_WRAP_TEXT,
+};
+
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------

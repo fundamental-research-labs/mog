@@ -34,8 +34,8 @@ pub(super) fn storage_with_sheet_and_mirror() -> (
 }
 
 pub(super) fn insert_style_palette_entry(
-    doc: &yrs::Doc,
-    workbook: &yrs::MapRef,
+    doc: &::yrs::Doc,
+    workbook: &::yrs::MapRef,
     style_id: u32,
     format: &CellFormat,
 ) {

@@ -8,7 +8,7 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 use crate::storage::sheet::{hyperlinks, merges};
 
-pub(super) fn get_active_cell(
+pub(in crate::storage::engine::viewport) fn get_active_cell(
     stores: &EngineStores,
     mirror: &CellMirror,
     settings: &EngineSettings,
@@ -195,6 +195,8 @@ pub(super) fn get_active_cell(
         style_id: props.style_id,
         cm: props.cm,
         vm: props.vm,
+        phonetic: props.phonetic,
+        date_lexical_value: props.date_lexical_value,
         formula_result_type: props.formula_result_type,
         has_empty_cached_value: props.has_empty_cached_value,
         original_sst_index: props.original_sst_index,

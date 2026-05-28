@@ -11,7 +11,7 @@ use value_types::ComputeError;
 #[bridge::api(
     service = "YrsComputeEngine",
     key = "doc_id",
-    group = "objects",
+    group = "objects_z_order",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]

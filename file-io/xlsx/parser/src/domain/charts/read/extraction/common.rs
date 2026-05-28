@@ -1,4 +1,4 @@
-pub(super) fn chart_import_status_for_renderability(
+pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
     series: &[domain_types::chart::ChartSeriesData],
     data_range: Option<&str>,
     part_path: Option<&str>,

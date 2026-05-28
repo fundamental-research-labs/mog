@@ -64,6 +64,16 @@ mod validation;
 mod integration_tests_old_value;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+use crate::{CellId, RangePos, SheetId, WorkbookSnapshot};
+#[cfg(test)]
+use cell_types::SheetPos;
+#[cfg(test)]
+use compute_document::hex::id_to_hex;
+#[cfg(test)]
+use mutation::{EngineMutation, MutationOutput};
+#[cfg(test)]
+use snapshot_types::MutationResult;
 
 // Re-export `CsvImportOptions` so the bridge type generator (which reads
 // `compute/core/src/storage/engine/mod.rs` as a source file) sees the

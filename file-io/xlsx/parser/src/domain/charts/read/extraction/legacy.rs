@@ -8,7 +8,7 @@ use super::labels::extract_data_label_data;
 use super::markers::extract_marker_config;
 use super::series::extract_single_series;
 
-pub(super) fn extract_chart_series(
+pub(in crate::domain::charts::read) fn extract_chart_series(
     chart: &crate::domain::charts::Chart,
 ) -> Vec<domain_types::chart::ChartSeriesData> {
     use crate::domain::charts::series::SeriesTextSource;
@@ -185,7 +185,7 @@ fn extract_error_bars_typed(
     (general, x_bars, y_bars)
 }
 
-pub(super) fn extract_legend(
+pub(in crate::domain::charts::read) fn extract_legend(
     chart: &crate::domain::charts::Chart,
 ) -> Option<domain_types::chart::LegendData> {
     use ooxml_types::charts::LegendPosition;
@@ -214,7 +214,7 @@ pub(super) fn extract_legend(
 }
 
 /// Extract axes as typed AxisData.
-pub(super) fn extract_axes(
+pub(in crate::domain::charts::read) fn extract_axes(
     chart: &crate::domain::charts::Chart,
 ) -> Option<domain_types::chart::AxisData> {
     let cat_ax = chart
@@ -258,7 +258,7 @@ pub(super) fn extract_axes(
 }
 
 /// Extract chart-level data labels as typed DataLabelData.
-pub(super) fn extract_chart_data_labels(
+pub(in crate::domain::charts::read) fn extract_chart_data_labels(
     chart: &crate::domain::charts::Chart,
 ) -> Option<domain_types::chart::DataLabelData> {
     chart
@@ -268,7 +268,9 @@ pub(super) fn extract_chart_data_labels(
 }
 
 /// Extract a reconstructed data range from all series references.
-pub(super) fn extract_data_range(chart: &crate::domain::charts::Chart) -> Option<String> {
+pub(in crate::domain::charts::read) fn extract_data_range(
+    chart: &crate::domain::charts::Chart,
+) -> Option<String> {
     if matches!(
         chart.chart_type,
         ooxml_types::charts::ChartType::Scatter | ooxml_types::charts::ChartType::Bubble
@@ -282,7 +284,9 @@ pub(super) fn extract_data_range(chart: &crate::domain::charts::Chart) -> Option
 }
 
 /// Map Rust ChartType + config to the TS ChartType string.
-pub(super) fn map_chart_type_to_ts(chart: &crate::domain::charts::Chart) -> String {
+pub(in crate::domain::charts::read) fn map_chart_type_to_ts(
+    chart: &crate::domain::charts::Chart,
+) -> String {
     use ooxml_types::charts::{BarDirection, ChartType, ChartTypeConfig};
 
     match chart.chart_type {
@@ -322,7 +326,9 @@ pub(super) fn map_chart_type_to_ts(chart: &crate::domain::charts::Chart) -> Stri
 }
 
 /// Extract sub-type string from chart type config (grouping).
-pub(super) fn extract_sub_type(chart: &crate::domain::charts::Chart) -> Option<String> {
+pub(in crate::domain::charts::read) fn extract_sub_type(
+    chart: &crate::domain::charts::Chart,
+) -> Option<String> {
     use ooxml_types::charts::ChartTypeConfig;
 
     match &chart.chart_type_config {

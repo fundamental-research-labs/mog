@@ -1,4 +1,5 @@
 use super::*;
+use ooxml_types::charts::MarkerStyle;
 
 #[test]
 fn test_parse_empty_series() {

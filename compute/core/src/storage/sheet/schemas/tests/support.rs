@@ -1,4 +1,5 @@
 use super::*;
+use yrs::ReadTxn;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)

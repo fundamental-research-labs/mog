@@ -2,7 +2,7 @@ use chrono::Datelike;
 
 use crate::storage::engine::settings::EngineSettings;
 
-pub(super) fn parse_date_input(
+pub(in crate::storage::engine::viewport) fn parse_date_input(
     settings: &EngineSettings,
     text: &str,
 ) -> Option<compute_formats::ParsedDateInput> {
@@ -11,7 +11,7 @@ pub(super) fn parse_date_input(
 }
 
 /// Format a batch of cell values using format codes and the workbook's locale.
-pub(super) fn format_values(
+pub(in crate::storage::engine::viewport) fn format_values(
     settings: &EngineSettings,
     entries: Vec<compute_formats::FormatEntry>,
 ) -> Vec<String> {

@@ -6,7 +6,7 @@ use super::super::super::types::{Paragraph, TextRun, TextRunContent};
 use super::para_props::parse_para_props;
 use super::run_props::parse_run_props;
 
-pub(super) fn parse_paragraph(xml: &[u8]) -> Option<Paragraph> {
+pub(in crate::domain::drawings::parse) fn parse_paragraph(xml: &[u8]) -> Option<Paragraph> {
     let element = document_element_slice(xml)?;
 
     let mut para = Paragraph::default();

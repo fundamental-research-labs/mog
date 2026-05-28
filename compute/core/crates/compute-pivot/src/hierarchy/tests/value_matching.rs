@@ -67,7 +67,7 @@ fn test_find_sibling_by_value_blank_unification() {
     let hierarchy = build_group_hierarchy(&rows, &field_names);
 
     // Search from row 1 for Text("") at depth 0 — should find the Null row.
-    let found = hierarchy.find_sibling_by_value(1, 0, &rows, &CellValue::Text("".to_string()));
+    let found = hierarchy.find_sibling_by_value(1, 0, &rows, &CellValue::Text("".into()));
     assert_eq!(
         found,
         Some(0),

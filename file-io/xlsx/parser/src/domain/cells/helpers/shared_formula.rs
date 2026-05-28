@@ -1,6 +1,7 @@
 use super::super::adapters::{find_byte, find_sequence};
 use super::bytes::parse_u32;
 
+#[derive(Debug)]
 pub struct SharedFormulaExtract<'a> {
     /// The `si` attribute value
     pub si: u32,

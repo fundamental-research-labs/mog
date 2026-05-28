@@ -9,7 +9,7 @@ use super::enums::parse_text_align;
 use super::run_props::parse_run_props;
 use ooxml_types::drawings::StTextIndentLevelType;
 
-pub(super) fn parse_para_props(xml: &[u8]) -> ParagraphProperties {
+pub(in crate::domain::drawings::parse) fn parse_para_props(xml: &[u8]) -> ParagraphProperties {
     let mut props = ParagraphProperties::default();
 
     props.align = extract_attr_value_in_element(xml, b"algn=\"").and_then(|v| parse_text_align(v));

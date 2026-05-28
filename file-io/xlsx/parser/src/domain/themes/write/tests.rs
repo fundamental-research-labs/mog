@@ -1,4 +1,9 @@
 use super::*;
+use ooxml_types::drawings::{
+    ColorTransform, DrawingFill, EffectList, EffectProperties, LineDash, LineFill, LineJoin,
+    Outline, PatternFill, SolidFill,
+};
+use ooxml_types::themes::EffectStyleItem;
 
 // -------------------------------------------------------------------------
 // ThemeColorIndex tests

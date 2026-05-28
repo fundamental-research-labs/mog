@@ -2,7 +2,7 @@ use super::super::super::reader::elements::direct_child_slice;
 use super::super::super::types::TextListStyle;
 use super::para_props::parse_para_props;
 
-pub(super) fn parse_list_style(xml: &[u8]) -> Option<TextListStyle> {
+pub(in crate::domain::drawings::parse) fn parse_list_style(xml: &[u8]) -> Option<TextListStyle> {
     let mut style = TextListStyle::default();
 
     if let Some(def_ppr) = direct_child_slice(xml, b"defPPr") {

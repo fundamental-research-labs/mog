@@ -71,6 +71,7 @@ pub(super) fn cell_values_bit_equal(a: &CellValue, b: &CellValue) -> bool {
         (CellValue::Null, CellValue::Null) => true,
         (CellValue::Array(_), CellValue::Array(_)) => a == b,
         (CellValue::Control(_), CellValue::Control(_)) => a == b,
+        (CellValue::Image(_), CellValue::Image(_)) => a == b,
         _ => false,
     }
 }
@@ -84,6 +85,7 @@ pub(super) fn describe_cell_value(v: &CellValue) -> String {
         CellValue::Null => "Null".to_string(),
         CellValue::Array(_) => "Array(..)".to_string(),
         CellValue::Control(_) => "Control(..)".to_string(),
+        CellValue::Image(_) => "Image(..)".to_string(),
     }
 }
 
@@ -107,7 +109,7 @@ pub(super) fn render_input(v: &CellValue) -> String {
         CellValue::Boolean(false) => "FALSE".to_string(),
         CellValue::Error(e, _) => e.as_str().to_string(),
         CellValue::Null => String::new(),
-        CellValue::Array(_) | CellValue::Control(_) => String::new(),
+        CellValue::Array(_) | CellValue::Control(_) | CellValue::Image(_) => String::new(),
     }
 }
 

@@ -10,7 +10,7 @@ use value_types::ComputeError;
 #[bridge::api(
     service = "YrsComputeEngine",
     key = "doc_id",
-    group = "core",
+    group = "core_theme",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]

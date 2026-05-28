@@ -8,7 +8,11 @@ pub(super) fn parse_range_corners(rr: &IdentityRangeSchemaRef) -> Option<((u32, 
     Some((parse_row_col(&rr.start_id)?, parse_row_col(&rr.end_id)?))
 }
 
-pub(super) fn position_in_range(row: u32, col: u32, rr: &IdentityRangeSchemaRef) -> bool {
+pub(in crate::storage::sheet) fn position_in_range(
+    row: u32,
+    col: u32,
+    rr: &IdentityRangeSchemaRef,
+) -> bool {
     let Some(((sr, sc), (er, ec))) = parse_range_corners(rr) else {
         return false;
     };

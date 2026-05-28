@@ -1,6 +1,8 @@
-
 use super::*;
-use ooxml_types::drawings::{StPercentage, StTextFontSize, StTextNonNegativePoint, StTextPoint};
+use ooxml_types::drawings::{
+    StAngle, StPercentage, StTextFontSize, StTextIndentLevelType, StTextNonNegativePoint,
+    StTextPoint, TextAutonumberType,
+};
 
 #[test]
 fn parse_prst_tx_warp_with_one_guide() {

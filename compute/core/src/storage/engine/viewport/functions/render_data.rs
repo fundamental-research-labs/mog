@@ -11,7 +11,7 @@ use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::sheet::{dimensions, merges};
 
-pub(super) fn build_viewport_render_data_inner(
+pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     stores: &EngineStores,
     mirror: &CellMirror,
     settings: &EngineSettings,

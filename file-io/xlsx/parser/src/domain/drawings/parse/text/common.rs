@@ -33,7 +33,7 @@ pub(super) fn parse_text_spacing(xml: &[u8]) -> Option<TextSpacing> {
 }
 
 /// Parse an extension list, capturing the raw XML for roundtrip.
-pub(super) fn parse_ext_lst(xml: &[u8]) -> Option<ExtensionList> {
+pub(in crate::domain::drawings::parse) fn parse_ext_lst(xml: &[u8]) -> Option<ExtensionList> {
     let element = document_element_slice(xml)?;
     let raw = String::from_utf8_lossy(element).into_owned();
     Some(ExtensionList { raw_xml: Some(raw) })

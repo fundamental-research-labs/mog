@@ -117,10 +117,9 @@ pub(super) fn assert_cell_is_42(engine: &YrsComputeEngine, sheet_id: &SheetId) {
     );
 }
 
-pub(super) fn sync_a_to_b<F>(mutate_a: F) -> (YrsComputeEngine, SheetId, MutationResult)
-where
-    F: FnOnce(&mut YrsComputeEngine, &SheetId),
-{
+pub(super) fn sync_a_to_b(
+    mutate_a: fn(&mut YrsComputeEngine, &SheetId),
+) -> (YrsComputeEngine, SheetId, MutationResult) {
     let (room_state, sheet_id) = canonical_room_state();
     let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&room_state);
 

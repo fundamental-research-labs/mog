@@ -456,7 +456,7 @@ impl YrsComputeEngine {
     pub fn map_slicer_invalidation_reason(
         &self,
         reason: &str,
-    ) -> Result<slicers::CacheInvalidationEventReason, ComputeError> {
+    ) -> Result<domain_types::domain::slicer::CacheInvalidationEventReason, ComputeError> {
         slicers::map_slicer_invalidation_reason(self, reason)
     }
 
@@ -465,13 +465,16 @@ impl YrsComputeEngine {
     pub fn map_slicer_disconnection_reason(
         &self,
         reason: &str,
-    ) -> Result<slicers::DisconnectionEventReason, ComputeError> {
+    ) -> Result<domain_types::domain::slicer::DisconnectionEventReason, ComputeError> {
         slicers::map_slicer_disconnection_reason(self, reason)
     }
 
     /// Convert slicer cache items to UI-ready slicer items.
     #[bridge::read(scope = "workbook")]
-    pub fn get_slicer_items_from_cache(&self, cache: SlicerCache) -> Vec<slicers::SlicerItem> {
+    pub fn get_slicer_items_from_cache(
+        &self,
+        cache: SlicerCache,
+    ) -> Vec<domain_types::domain::slicer::SlicerItem> {
         slicers::get_slicer_items_from_cache(self, cache)
     }
 

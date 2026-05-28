@@ -1,4 +1,5 @@
 use super::*;
+use crate::write::from_parse_output::styles::build_styles;
 
 #[test]
 fn test_hex_to_color_def() {

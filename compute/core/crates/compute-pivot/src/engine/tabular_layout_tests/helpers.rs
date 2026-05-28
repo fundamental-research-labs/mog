@@ -37,7 +37,7 @@ pub(super) fn subtotal_with_outer_header<'a>(
     rows: &'a [&PivotRow],
     outer_header: &str,
 ) -> Option<&'a PivotRow> {
-    let total_header = CellValue::Text(format!("{outer_header} Total"));
+    let total_header = CellValue::Text(format!("{outer_header} Total").into());
     rows.iter().copied().find(|row| {
         row.headers
             .iter()

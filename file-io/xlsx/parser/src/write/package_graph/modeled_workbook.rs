@@ -6,7 +6,8 @@ use super::{
     PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind, PackageRelationship,
     PackageRelationshipTarget, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_EXTENDED_PROPERTIES,
     REL_METADATA, REL_OFFICE_DOCUMENT, REL_PERSON, REL_SHARED_STRINGS, REL_STYLES, REL_THEME,
-    REL_WORKSHEET, ResolvedPackageGraph, imported_relationship_identity_hint, normalize_part_path,
+    REL_WORKSHEET, RelationshipIdentityHint, ResolvedPackageGraph,
+    imported_relationship_identity_hint, normalize_part_path,
 };
 use crate::write::write_error::WriteError;
 

@@ -41,6 +41,8 @@ pub(super) use range_geometry::position_in_range;
 pub(super) use validator::str_to_cell_value;
 #[cfg(test)]
 use yrs::{Map, Transact};
+#[cfg(test)]
+use yrs_io::get_properties_map;
 
 #[cfg(test)]
 mod tests;

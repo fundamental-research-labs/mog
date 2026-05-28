@@ -129,6 +129,10 @@ pub struct CellProperties {
     pub cm: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub phonetic: bool,
+    #[serde(rename = "dateLexicalValue", skip_serializing_if = "Option::is_none")]
+    pub date_lexical_value: Option<String>,
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
     #[serde(

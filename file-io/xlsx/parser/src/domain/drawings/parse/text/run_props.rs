@@ -10,7 +10,7 @@ use ooxml_types::drawings::{
     StPercentage, StPitchFamily, StTextFontSize, StTextNonNegativePoint, StTextPoint,
 };
 
-pub(super) fn parse_run_props(xml: &[u8]) -> RunProperties {
+pub(in crate::domain::drawings::parse) fn parse_run_props(xml: &[u8]) -> RunProperties {
     let mut props = RunProperties::default();
 
     props.size = extract_attr_value_in_element(xml, b"sz=\"")

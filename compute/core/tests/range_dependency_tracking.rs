@@ -38,17 +38,28 @@ mod matrix;
 use matrix::{EditPosition as V2EditPos, ValueType as V2ValueType};
 
 #[cfg(feature = "audit-tests")]
+#[path = "range_dependency_tracking/audit_summary.rs"]
 mod audit_summary;
+#[path = "range_dependency_tracking/fullcol.rs"]
 mod fullcol;
+#[path = "range_dependency_tracking/helpers.rs"]
 mod helpers;
+#[path = "range_dependency_tracking/indirect.rs"]
 mod indirect;
+#[path = "range_dependency_tracking/named.rs"]
 mod named;
+#[path = "range_dependency_tracking/offset.rs"]
 mod offset;
+#[path = "range_dependency_tracking/regression_ib6cymnt.rs"]
 mod regression_ib6cymnt;
+#[path = "range_dependency_tracking/summary.rs"]
 mod summary;
+#[path = "range_dependency_tracking/table_refs.rs"]
 mod table_refs;
+#[path = "range_dependency_tracking/three_d.rs"]
 mod three_d;
 #[cfg(feature = "audit-tests")]
+#[path = "range_dependency_tracking/v2_matrix.rs"]
 mod v2_matrix;
 
 #[test]

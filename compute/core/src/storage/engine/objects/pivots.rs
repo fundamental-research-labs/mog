@@ -170,7 +170,7 @@ impl YrsComputeEngine {
 #[bridge::api(
     service = "YrsComputeEngine",
     key = "doc_id",
-    group = "objects",
+    group = "objects_pivots",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]

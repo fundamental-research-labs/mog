@@ -431,6 +431,7 @@ fn export_single_sheet(
         sqref,
         pane: pane_config,
         selections,
+        pivot_selection: Vec::new(),
     };
 
     // --- Dimensions (custom row heights, col widths) ---

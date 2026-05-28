@@ -9,7 +9,7 @@ use super::common::parse_ext_lst;
 use super::enums::{parse_text_anchor, parse_text_wrap};
 use ooxml_types::drawings::StAngle;
 
-pub(super) fn parse_body_props(xml: &[u8]) -> TextBodyProperties {
+pub(in crate::domain::drawings::parse) fn parse_body_props(xml: &[u8]) -> TextBodyProperties {
     let mut props = TextBodyProperties::default();
 
     props.rot = extract_attr_value_in_element(xml, b"rot=\"")

@@ -5,7 +5,7 @@ use value_types::ComputeError;
 use super::super::service::{ViewportRegistration, ViewportService};
 use crate::snapshot::MutationResult;
 
-pub(super) fn viewport_key_for_sheet(sheet_id: &SheetId) -> String {
+pub(in crate::storage::engine::viewport) fn viewport_key_for_sheet(sheet_id: &SheetId) -> String {
     format!("__sheet_{}", sheet_id.to_uuid_string())
 }
 
@@ -16,7 +16,7 @@ pub(super) fn viewport_key_for_sheet(sheet_id: &SheetId) -> String {
 /// Register a named viewport with explicit bounds.
 ///
 /// If a viewport with this ID already exists, it is replaced.
-pub(super) fn register_viewport(
+pub(in crate::storage::engine::viewport) fn register_viewport(
     viewport: &ViewportService,
     viewport_id: &str,
     sheet_id: &SheetId,
@@ -44,7 +44,7 @@ pub(super) fn register_viewport(
 /// Update the bounds of an already-registered viewport.
 ///
 /// No-op if the viewport ID is not found.
-pub(super) fn update_viewport_bounds(
+pub(in crate::storage::engine::viewport) fn update_viewport_bounds(
     viewport: &ViewportService,
     viewport_id: &str,
     start_row: u32,
@@ -66,7 +66,7 @@ pub(super) fn update_viewport_bounds(
 /// Unregister a viewport by ID.
 ///
 /// No-op if the viewport ID is not found.
-pub(super) fn unregister_viewport(
+pub(in crate::storage::engine::viewport) fn unregister_viewport(
     viewport: &ViewportService,
     viewport_id: &str,
 ) -> Result<MutationResult, ComputeError> {
@@ -77,7 +77,7 @@ pub(super) fn unregister_viewport(
 /// Get all registered viewports.
 ///
 /// Returns a list of `(viewport_id, sheet_id_hex, start_row, start_col, end_row, end_col)`.
-pub(super) fn get_registered_viewports(
+pub(in crate::storage::engine::viewport) fn get_registered_viewports(
     viewport: &ViewportService,
 ) -> Vec<(String, String, u32, u32, u32, u32)> {
     viewport
@@ -97,7 +97,7 @@ pub(super) fn get_registered_viewports(
 }
 
 /// Reset (unregister) all viewports for a given sheet.
-pub(super) fn reset_sheet_viewports(
+pub(in crate::storage::engine::viewport) fn reset_sheet_viewports(
     viewport: &ViewportService,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
@@ -108,7 +108,7 @@ pub(super) fn reset_sheet_viewports(
 }
 
 /// Reset viewport state for a sheet (removes all viewports for this sheet).
-pub(super) fn reset_viewport_state(
+pub(in crate::storage::engine::viewport) fn reset_viewport_state(
     viewport: &ViewportService,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {

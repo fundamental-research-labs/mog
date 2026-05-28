@@ -37,7 +37,6 @@ mod resolution;
 mod test_helpers;
 
 #[cfg(test)]
-#[path = "structured_refs/structured_refs_tests.rs"]
 mod tests;
 
 pub use adjustment::*;

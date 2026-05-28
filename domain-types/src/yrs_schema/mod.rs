@@ -34,6 +34,7 @@ pub mod column_schema;
 
 // Tier 2: Y.Map with Y.Array for ordered sub-collections
 pub mod conditional_format;
+pub mod pivot_cache_records;
 pub mod table;
 pub mod validation;
 

@@ -162,6 +162,66 @@ fn shared_string_hints_survive_yrs_hydration_export() {
 }
 
 #[test]
+fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
+    let mut input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 3,
+            cols: 2,
+            cells: vec![
+                domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Text(Arc::from("Category")),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 1,
+                    value: CellValue::Text(Arc::from("Amount")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    input.pivot_cache_records.insert(
+        7,
+        vec![vec![
+            CellValue::Text(Arc::from("A")),
+            CellValue::Number(FiniteF64::new(42.0).unwrap()),
+        ]],
+    );
+
+    let engine = engine_from_parse_output_normal_with_roundtrip(&input, None);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.pivot_cache_records, input.pivot_cache_records);
+}
+
+#[test]
+fn round_trip_context_does_not_recreate_absent_pivot_cache_records() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 1,
+            cols: 1,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal_with_roundtrip(
+        &input,
+        Some(domain_types::RoundTripContext::default()),
+    );
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert!(exported.pivot_cache_records.is_empty());
+}
+
+#[test]
 fn sheet_protection_modern_hash_fields_survive_yrs_hydration_export() {
     let protection = domain_types::SheetProtection {
         is_protected: true,

@@ -24,8 +24,9 @@ use super::styles::{ImportedRangeStyle, hydrate_style_palette};
 use super::workbook::{
     hydrate_shared_string_hints, hydrate_workbook_calculation, hydrate_workbook_metadata,
     hydrate_workbook_named_ranges, hydrate_workbook_parsed_pivot_tables,
-    hydrate_workbook_protection, hydrate_workbook_slicers, hydrate_workbook_tables,
-    hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons, hydrate_workbook_views,
+    hydrate_workbook_pivot_cache_records, hydrate_workbook_protection, hydrate_workbook_slicers,
+    hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
+    hydrate_workbook_views,
 };
 use super::{HydrationIdMap, IdAllocator};
 
@@ -201,6 +202,11 @@ impl YrsStorage {
         // Hydrate pivot tables at workbook level (serialized as ParsedPivotTable JSON).
         // TODO: Remove workbook-level pivot hydration — pivots are stored per-sheet.
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
+        hydrate_workbook_pivot_cache_records(
+            &self.workbook,
+            &output.pivot_cache_records,
+            &mut txn,
+        );
 
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
         hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
@@ -399,6 +405,11 @@ impl YrsStorage {
             &mut txn,
         );
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
+        hydrate_workbook_pivot_cache_records(
+            &self.workbook,
+            &output.pivot_cache_records,
+            &mut txn,
+        );
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
         hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
         hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);

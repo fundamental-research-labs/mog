@@ -97,6 +97,7 @@ pub const KEY_DATA_TABLE_REGIONS: &str = "dataTableRegions";
 pub const KEY_SLICERS: &str = "slicers";
 pub const KEY_PIVOT_SPECS: &str = "pivotSpecs";
 pub const KEY_PIVOT_CACHE_SOURCES: &str = "pivotCacheSources";
+pub const KEY_PIVOT_CACHE_RECORDS: &str = "pivotCacheRecords";
 pub const KEY_POWER_QUERY: &str = "powerQuery";
 pub const KEY_SCENARIOS: &str = "scenarios";
 pub const KEY_THEME: &str = "theme";
@@ -287,6 +288,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_SCENARIOS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_SPECS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_CACHE_SOURCES, empty());
+    workbook.insert(&mut txn, KEY_PIVOT_CACHE_RECORDS, empty());
     workbook.insert(&mut txn, KEY_THEME, empty());
     workbook.insert(&mut txn, KEY_EXTENDED_DOCUMENT_PROPERTIES, empty());
     workbook.insert(&mut txn, KEY_XLSX_METADATA, empty());
@@ -485,6 +487,7 @@ mod tests {
             KEY_SLICERS,
             KEY_POWER_QUERY,
             KEY_SCENARIOS,
+            KEY_PIVOT_CACHE_RECORDS,
             KEY_RANGE_BINDINGS,
         ] {
             assert!(

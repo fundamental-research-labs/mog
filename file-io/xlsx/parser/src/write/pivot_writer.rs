@@ -203,8 +203,13 @@ pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
         let global_idx = next_cache_global_idx;
         next_cache_global_idx = global_idx + 1;
 
-        let (definition_xml, records_xml) =
-            build_cache_from_source(cache_src, &output.sheets, &sheet_name_to_idx);
+        let imported_records = output.pivot_cache_records.get(&cache_src.cache_id);
+        let (definition_xml, records_xml) = build_cache(
+            cache_src,
+            &output.sheets,
+            &sheet_name_to_idx,
+            imported_records,
+        );
 
         generated_part_paths.insert(normalize_part_path(&format!(
             "xl/pivotCache/pivotCacheDefinition{}.xml",
@@ -601,10 +606,11 @@ fn col_to_letters(col: u32) -> String {
 }
 
 /// Build pivot cache definition + records XML by reading source range cells.
-fn build_cache_from_source(
+fn build_cache(
     cache_src: &PivotCacheSourceDef,
     sheets: &[SheetData],
     sheet_name_to_idx: &HashMap<&str, usize>,
+    imported_records: Option<&Vec<Vec<CellValue>>>,
 ) -> (Vec<u8>, Vec<u8>) {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
 
@@ -619,6 +625,20 @@ fn build_cache_from_source(
                 r_id: None,
             }),
         };
+
+        if let Some(records) = imported_records
+            && source_records_match(sheets, sheet_name_to_idx, sheet_name, range_ref, records)
+        {
+            let (fields, write_records) =
+                imported_cache_records_to_write_data(&cache_src.field_names, records);
+            for field in fields {
+                cache_writer.add_field(field);
+            }
+            cache_writer.set_record_count(write_records.len() as u32);
+            let definition_xml = cache_writer.to_definition_xml();
+            let records_xml = cache_writer.to_records_xml(&write_records);
+            return (definition_xml, records_xml);
+        }
 
         // Try to read source data from the sheet.
         if let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name.as_str()) {
@@ -645,6 +665,89 @@ fn build_cache_from_source(
     let definition_xml = cache_writer.to_definition_xml();
     let records_xml = cache_writer.to_records_xml(&[]);
     (definition_xml, records_xml)
+}
+
+fn source_records_match(
+    sheets: &[SheetData],
+    sheet_name_to_idx: &HashMap<&str, usize>,
+    sheet_name: &str,
+    range_ref: &str,
+    imported_records: &[Vec<CellValue>],
+) -> bool {
+    let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name) else {
+        return false;
+    };
+    let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) else {
+        return false;
+    };
+    let sheet = &sheets[sheet_idx];
+    let source_records = extract_source_record_values(sheet, start_row, start_col, end_row, end_col);
+    source_records == imported_records
+}
+
+fn imported_cache_records_to_write_data(
+    field_names: &[String],
+    records: &[Vec<CellValue>],
+) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
+    let num_cols = field_names
+        .len()
+        .max(records.iter().map(Vec::len).max().unwrap_or(0));
+    let mut field_shared_items: Vec<Vec<SharedItem>> = vec![Vec::new(); num_cols];
+    let mut field_value_indices: Vec<HashMap<String, u32>> = vec![HashMap::new(); num_cols];
+    let mut write_records = Vec::with_capacity(records.len());
+
+    for row in records {
+        let mut write_row = Vec::with_capacity(num_cols);
+        for col_idx in 0..num_cols {
+            let value = row.get(col_idx).unwrap_or(&CellValue::Null);
+            write_row.push(cell_value_to_cache_record_item(
+                value,
+                &mut field_shared_items[col_idx],
+                &mut field_value_indices[col_idx],
+            ));
+        }
+        write_records.push(write_row);
+    }
+
+    let fields = (0..num_cols)
+        .map(|idx| {
+            let mut field = CacheFieldDef::new(
+                field_names
+                    .get(idx)
+                    .map(String::as_str)
+                    .unwrap_or("Column"),
+            );
+            field.shared_items = field_shared_items[idx].clone();
+            field
+        })
+        .collect();
+
+    (fields, write_records)
+}
+
+fn cell_value_to_cache_record_item(
+    value: &CellValue,
+    shared_items: &mut Vec<SharedItem>,
+    value_indices: &mut HashMap<String, u32>,
+) -> SharedItem {
+    match value {
+        CellValue::Text(s) => {
+            let key = s.to_string();
+            let idx = if let Some(&existing) = value_indices.get(&key) {
+                existing
+            } else {
+                let idx = shared_items.len() as u32;
+                shared_items.push(SharedItem::String(key.clone()));
+                value_indices.insert(key, idx);
+                idx
+            };
+            SharedItem::Index(idx)
+        }
+        CellValue::Number(n) => SharedItem::Number(n.get()),
+        CellValue::Boolean(b) => SharedItem::Boolean(*b),
+        CellValue::Error(err, _) => SharedItem::Error(err.as_str().to_string()),
+        _ => SharedItem::Missing,
+    }
 }
 
 /// Extract cache field definitions and record rows from sheet cell data.
@@ -737,6 +840,34 @@ fn extract_cache_data(
         .collect();
 
     (fields, records)
+}
+
+fn extract_source_record_values(
+    sheet: &SheetData,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Vec<Vec<CellValue>> {
+    let mut cell_map: HashMap<(u32, u32), &CellValue> = HashMap::new();
+    for cell in &sheet.cells {
+        if cell.row >= start_row
+            && cell.row <= end_row
+            && cell.col >= start_col
+            && cell.col <= end_col
+        {
+            cell_map.insert((cell.row, cell.col), &cell.value);
+        }
+    }
+
+    let data_start = start_row.saturating_add(1);
+    (data_start..=end_row)
+        .map(|row| {
+            (start_col..=end_col)
+                .map(|col| cell_map.get(&(row, col)).copied().cloned().unwrap_or_default())
+                .collect()
+        })
+        .collect()
 }
 
 /// Parse a range reference like "A1:D100" or "$A$1:$D$100" into (start_row, start_col, end_row, end_col).

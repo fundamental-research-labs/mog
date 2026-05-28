@@ -465,3 +465,19 @@ pub(super) fn hydrate_workbook_parsed_pivot_tables(
     // is part of ParsedPivotTable.config (cache_id on PivotTableConfig,
     // field list on PivotTableConfig.fields — typed OOXML preservation).
 }
+
+pub(super) fn hydrate_workbook_pivot_cache_records(
+    workbook: &MapRef,
+    records: &domain_types::yrs_schema::pivot_cache_records::PivotCacheRecords,
+    txn: &mut yrs::TransactionMut,
+) {
+    if records.is_empty() {
+        return;
+    }
+    let records_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_PIVOT_CACHE_RECORDS);
+    let prelim = yrs_schema::pivot_cache_records::to_yrs_prelim(records);
+    for (key, value) in prelim {
+        records_map.insert(txn, &*key, value);
+    }
+}

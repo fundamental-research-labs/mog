@@ -213,3 +213,72 @@ fn missing_pivot_cache_ids_are_grouped_by_source_contract() {
     assert!(archive.contains("xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels"));
     assert!(archive.contains("xl/pivotCache/_rels/pivotCacheDefinition2.xml.rels"));
 }
+
+#[test]
+fn pivot_cache_records_xml_uses_typed_records_when_source_matches() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.pivot_cache_records.insert(
+        11,
+        vec![
+            vec![
+                DomainValue::Text(Arc::from("A")),
+                DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+            ],
+            vec![
+                DomainValue::Text(Arc::from("B")),
+                DomainValue::Number(FiniteF64::new(20.0).unwrap()),
+            ],
+        ],
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let records_xml =
+        String::from_utf8(archive.read_file("xl/pivotCache/pivotCacheRecords1.xml").unwrap())
+            .unwrap();
+
+    assert!(records_xml.contains("count=\"2\""));
+    assert!(records_xml.contains("<x v=\"0\"/>"));
+    assert!(records_xml.contains("<n v=\"10\"/>"));
+}
+
+#[test]
+fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.pivot_cache_records.insert(
+        11,
+        vec![
+            vec![
+                DomainValue::Text(Arc::from("A")),
+                DomainValue::Number(FiniteF64::new(999.0).unwrap()),
+            ],
+            vec![
+                DomainValue::Text(Arc::from("B")),
+                DomainValue::Number(FiniteF64::new(20.0).unwrap()),
+            ],
+        ],
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let records_xml =
+        String::from_utf8(archive.read_file("xl/pivotCache/pivotCacheRecords1.xml").unwrap())
+            .unwrap();
+
+    assert!(records_xml.contains("<n v=\"10\"/>"));
+    assert!(!records_xml.contains("<n v=\"999\"/>"));
+}

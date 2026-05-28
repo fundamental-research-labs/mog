@@ -771,7 +771,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         shared_string_hints: export_shared_string_hints(stores),
         named_ranges,
         pivot_tables: export_workbook_parsed_pivot_tables(stores),
-        pivot_cache_records: std::collections::HashMap::new(),
+        pivot_cache_records: workbook::export_pivot_cache_records(stores),
         data_table_regions,
         slicer_caches,
         theme,

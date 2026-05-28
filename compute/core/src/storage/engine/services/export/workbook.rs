@@ -175,6 +175,21 @@ pub(super) fn export_shared_string_hints(
     serde_json::from_str::<Vec<domain_types::SharedStringHint>>(&json_str).unwrap_or_default()
 }
 
+pub(super) fn export_pivot_cache_records(
+    stores: &EngineStores,
+) -> domain_types::yrs_schema::pivot_cache_records::PivotCacheRecords {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let records_map = match workbook.get(&txn, KEY_PIVOT_CACHE_RECORDS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Default::default(),
+    };
+
+    yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn)
+}
+
 pub(super) fn export_extended_document_properties(
     stores: &EngineStores,
 ) -> Option<ooxml_types::doc_props::ExtendedProperties> {

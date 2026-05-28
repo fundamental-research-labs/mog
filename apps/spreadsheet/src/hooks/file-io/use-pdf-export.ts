@@ -44,6 +44,9 @@ export interface PdfExportState {
   /** Error message if export failed */
   error: string | null;
 
+  /** Terminal status message for assistive tech and export UI */
+  message: string | null;
+
   /** Result from last export */
   lastResult: PdfExportResult | null;
 }
@@ -251,8 +254,46 @@ const initialState: PdfExportState = {
   isExporting: false,
   progress: 0,
   error: null,
+  message: null,
   lastResult: null,
 };
+
+type DownloadablePdfResult = PdfExportResult & {
+  blob?: Blob;
+  dataUrl?: string;
+  bytes?: Uint8Array | ArrayBuffer | number[];
+};
+
+function getPdfBlob(result: PdfExportResult): Blob | null {
+  const downloadable = result as DownloadablePdfResult;
+  if (downloadable.blob instanceof Blob) {
+    return downloadable.blob;
+  }
+  if (downloadable.bytes) {
+    if (downloadable.bytes instanceof ArrayBuffer) {
+      return new Blob([downloadable.bytes], { type: 'application/pdf' });
+    }
+    if (ArrayBuffer.isView(downloadable.bytes)) {
+      return new Blob([downloadable.bytes], { type: 'application/pdf' });
+    }
+    return new Blob([new Uint8Array(downloadable.bytes)], { type: 'application/pdf' });
+  }
+  return null;
+}
+
+function downloadPdf(blob: Blob, filename: string): void {
+  if (typeof document === 'undefined' || typeof URL === 'undefined') return;
+
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
+}
 
 export function usePdfExport(
   activeSheetId: SheetId,
@@ -265,7 +306,7 @@ export function usePdfExport(
   const [state, setState] = useState<PdfExportState>(initialState);
 
   const exportPdf = useCallback(
-    async (_filename?: string, sheetIds?: string[]): Promise<boolean> => {
+    async (filename = options.defaultFileName ?? 'workbook.pdf', sheetIds?: string[]): Promise<boolean> => {
       setState({ ...initialState, isExporting: true });
       onExportStart?.();
 
@@ -302,10 +343,36 @@ export function usePdfExport(
           },
         });
 
+        const pdfBlob = getPdfBlob(result);
+        const dataUrl = (result as DownloadablePdfResult).dataUrl;
+        if (pdfBlob) {
+          downloadPdf(pdfBlob, filename);
+        } else if (dataUrl && typeof document !== 'undefined') {
+          const anchor = document.createElement('a');
+          anchor.href = dataUrl;
+          anchor.download = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+          anchor.style.display = 'none';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        } else {
+          const errorMsg = 'PDF export is unavailable in this environment';
+          setState((prev) => ({
+            ...prev,
+            isExporting: false,
+            error: errorMsg,
+            message: errorMsg,
+            lastResult: result,
+          }));
+          onExportError?.(errorMsg);
+          return false;
+        }
+
         setState((prev) => ({
           ...prev,
           isExporting: false,
           progress: 100,
+          message: `PDF export downloaded ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`,
           lastResult: result,
         }));
 
@@ -313,12 +380,20 @@ export function usePdfExport(
         return true;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'PDF export failed';
-        setState((prev) => ({ ...prev, isExporting: false, error: errorMsg }));
+        setState((prev) => ({ ...prev, isExporting: false, error: errorMsg, message: errorMsg }));
         onExportError?.(errorMsg);
         return false;
       }
     },
-    [wb, activeSheetId, onExportStart, onExportComplete, onExportError, onProgress],
+    [
+      wb,
+      activeSheetId,
+      options.defaultFileName,
+      onExportStart,
+      onExportComplete,
+      onExportError,
+      onProgress,
+    ],
   );
 
   const exportSelection = useCallback(
@@ -332,7 +407,7 @@ export function usePdfExport(
   );
 
   const clearError = useCallback(() => {
-    setState((prev) => ({ ...prev, error: null }));
+    setState((prev) => ({ ...prev, error: null, message: null }));
   }, []);
 
   return {

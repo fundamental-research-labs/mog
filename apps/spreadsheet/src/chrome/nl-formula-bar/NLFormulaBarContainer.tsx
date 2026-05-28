@@ -20,19 +20,23 @@ function NLFormulaBarContainerImpl() {
   // Generate slice state
   const nlPrompt = useUIStore((s) => s.nlPrompt);
   const nlResult = useUIStore((s) => s.nlResult);
+  const nlRequest = useUIStore((s) => s.nlRequest);
   const nlLoading = useUIStore((s) => s.nlLoading);
   const nlError = useUIStore((s) => s.nlError);
   const setNLPrompt = useUIStore((s) => s.setNLPrompt);
   const nlSubmitPrompt = useUIStore((s) => s.nlSubmitPrompt);
+  const nlResponseError = useUIStore((s) => s.nlResponseError);
   const nlAcceptFormula = useUIStore((s) => s.nlAcceptFormula);
   const nlRetry = useUIStore((s) => s.nlRetry);
   const nlDismiss = useUIStore((s) => s.nlDismiss);
 
   // Explain slice state
   const nlExplainResult = useUIStore((s) => s.nlExplainResult);
+  const nlExplainRequest = useUIStore((s) => s.nlExplainRequest);
   const nlExplainLoading = useUIStore((s) => s.nlExplainLoading);
   const nlExplainError = useUIStore((s) => s.nlExplainError);
   const nlSubmitExplain = useUIStore((s) => s.nlSubmitExplain);
+  const nlExplainResponseError = useUIStore((s) => s.nlExplainResponseError);
   const nlExplainDismiss = useUIStore((s) => s.nlExplainDismiss);
 
   // Context extraction
@@ -114,6 +118,26 @@ function NLFormulaBarContainerImpl() {
     }
     await handleSubmit();
   }, [activeCellRow, activeCellCol, selectionRanges, handleSubmit]);
+
+  useEffect(() => {
+    if (!nlRequest || !nlLoading) return;
+    const timeout = window.setTimeout(() => {
+      nlResponseError(
+        'Natural-language formula generation is unavailable because no formula provider is configured.',
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [nlRequest, nlLoading, nlResponseError]);
+
+  useEffect(() => {
+    if (!nlExplainRequest || !nlExplainLoading) return;
+    const timeout = window.setTimeout(() => {
+      nlExplainResponseError(
+        'Natural-language formula explanation is unavailable because no formula provider is configured.',
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [nlExplainRequest, nlExplainLoading, nlExplainResponseError]);
 
   /** Write the formula to either the captured range or single cell. */
   const writeFormula = useCallback(

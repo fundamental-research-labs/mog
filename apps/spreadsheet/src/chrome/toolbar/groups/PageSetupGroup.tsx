@@ -289,7 +289,7 @@ export function PageSetupGroup() {
             dataValue="custom"
             onClick={() => {
               setIsMarginsOpen(false);
-              dispatch('OPEN_PAGE_SETUP_DIALOG');
+              dispatch('OPEN_PAGE_SETUP_DIALOG', { initialTab: 'margins' });
             }}
           >
             Custom Margins...

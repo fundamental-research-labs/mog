@@ -186,9 +186,10 @@ function AboutSettings(): React.JSX.Element {
         <h3 className="text-body font-medium text-text mb-3">Links</h3>
         <div className="space-y-2">
           <a
-            href="#"
+            href="https://github.com/fundamental-research-labs/mog#readme"
+            target="_blank"
+            rel="noreferrer"
             className="flex items-center gap-2 text-body-sm text-ss-primary hover:underline"
-            onClick={(e) => e.preventDefault()}
           >
             <svg
               width="16"
@@ -205,9 +206,10 @@ function AboutSettings(): React.JSX.Element {
             Documentation
           </a>
           <a
-            href="#"
+            href="https://github.com/fundamental-research-labs/mog"
+            target="_blank"
+            rel="noreferrer"
             className="flex items-center gap-2 text-body-sm text-ss-primary hover:underline"
-            onClick={(e) => e.preventDefault()}
           >
             <svg
               width="16"
@@ -222,9 +224,10 @@ function AboutSettings(): React.JSX.Element {
             GitHub Repository
           </a>
           <a
-            href="#"
+            href="https://github.com/fundamental-research-labs/mog/issues"
+            target="_blank"
+            rel="noreferrer"
             className="flex items-center gap-2 text-body-sm text-ss-primary hover:underline"
-            onClick={(e) => e.preventDefault()}
           >
             <svg
               width="16"

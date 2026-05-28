@@ -47,6 +47,8 @@ export interface RendererUIStore {
   };
   /** Set whether active cell has a sparkline */
   setHasSparklineInActiveCell: (has: boolean) => void;
+  /** Optional zoom writer when renderer-owned commands update zoom directly. */
+  setZoomLevel?: (sheetId: string, level: number) => void;
 }
 
 // Actor types (for useSelector hook subscriptions)

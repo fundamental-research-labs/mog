@@ -17,7 +17,7 @@
 
 import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
-import { useUIStore } from '../../internal-api';
+import { useDispatch, useUIStore } from '../../internal-api';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, Input } from '@mog/shell';
 
@@ -27,6 +27,7 @@ import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, Input } from '@
 
 export function SpellingDialog() {
   const suggestionsListRef = useRef<HTMLSelectElement>(null);
+  const dispatch = useDispatch();
 
   // Get state from UIStore
   const isOpen = useUIStore((s) => s.spellingDialog.isOpen);
@@ -42,9 +43,7 @@ export function SpellingDialog() {
   const closeSpellingDialog = useUIStore((s) => s.closeSpellingDialog);
   const selectSpellingSuggestion = useUIStore((s) => s.selectSpellingSuggestion);
   const setSpellingCustomReplacement = useUIStore((s) => s.setSpellingCustomReplacement);
-  const ignoreSpellingWord = useUIStore((s) => s.ignoreSpellingWord);
   const ignoreAllSpellingWord = useUIStore((s) => s.ignoreAllSpellingWord);
-  const resolveCurrentSpellingError = useUIStore((s) => s.resolveCurrentSpellingError);
 
   // Focus suggestions list when error changes
   useEffect(() => {
@@ -79,33 +78,27 @@ export function SpellingDialog() {
 
   // Handle Ignore - skip this occurrence
   const handleIgnore = useCallback(() => {
-    ignoreSpellingWord();
-  }, [ignoreSpellingWord]);
+    dispatch('SPELL_CHECK_IGNORE');
+  }, [dispatch]);
 
   // Handle Ignore All - skip all occurrences of this word
   const handleIgnoreAll = useCallback(() => {
-    ignoreAllSpellingWord();
-  }, [ignoreAllSpellingWord]);
+    dispatch('SPELL_CHECK_IGNORE_ALL');
+  }, [dispatch]);
 
   // Handle Change - replace this occurrence
   // Note: Actual cell update requires SPELL_CHECK_CHANGE action implementation
   const handleChange = useCallback(() => {
     if (!currentError || !customReplacement) return;
-
-    // TODO: The SPELL_CHECK_CHANGE action will apply the replacement to the cell
-    // For now, just resolve the error in the UI
-    resolveCurrentSpellingError();
-  }, [currentError, customReplacement, resolveCurrentSpellingError]);
+    dispatch('SPELL_CHECK_CHANGE', { replacement: customReplacement });
+  }, [currentError, customReplacement, dispatch]);
 
   // Handle Change All - replace all occurrences
   // Note: Actual cell updates require SPELL_CHECK_CHANGE_ALL action implementation
   const handleChangeAll = useCallback(() => {
     if (!currentError || !customReplacement) return;
-
-    // TODO: The SPELL_CHECK_CHANGE_ALL action will apply replacement to all occurrences
-    // For now, log that this needs implementation
-    console.log('Change All - requires action handler implementation');
-  }, [currentError, customReplacement]);
+    dispatch('SPELL_CHECK_CHANGE_ALL', { replacement: customReplacement });
+  }, [currentError, customReplacement, dispatch]);
 
   // Handle Add to Dictionary (placeholder - needs dictionary integration)
   const handleAddToDictionary = useCallback(() => {

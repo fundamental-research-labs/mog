@@ -31,6 +31,7 @@ export interface NLFormulaBarSlice {
   setNLPrompt: (prompt: string) => void;
 
   nlRequest: { prompt: string; context: SpreadsheetContext } | null;
+  nlLastRequest: { prompt: string; context: SpreadsheetContext } | null;
   nlResult: NLFormulaResult | null;
   nlLoading: boolean;
   nlError: string | null;
@@ -59,6 +60,7 @@ export interface NLFormulaBarSlice {
 const INITIAL_NL_STATE = {
   nlPrompt: '',
   nlRequest: null,
+  nlLastRequest: null,
   nlResult: null,
   nlLoading: false,
   nlError: null,
@@ -95,6 +97,7 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
     if (get().nlLoading) return;
     set({
       nlRequest: { prompt: get().nlPrompt, context },
+      nlLastRequest: { prompt: get().nlPrompt, context },
       nlResult: null,
       nlError: null,
       nlLoading: true,
@@ -116,15 +119,25 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlRetry: () => {
-    set({ nlResult: null, nlError: null, nlRequest: null, nlLoading: false });
+    const lastRequest = get().nlLastRequest;
+    if (!lastRequest) {
+      set({ nlResult: null, nlError: null, nlRequest: null, nlLoading: false });
+      return;
+    }
+    set({
+      nlResult: null,
+      nlError: null,
+      nlRequest: { ...lastRequest },
+      nlLoading: true,
+    });
   },
 
   nlAcceptFormula: () => {
-    set({ ...INITIAL_NL_STATE });
+    set({ ...INITIAL_NL_STATE, nlLastRequest: null });
   },
 
   nlDismiss: () => {
-    set({ ...INITIAL_NL_STATE, ...INITIAL_EXPLAIN_STATE, nlBarVisible: false });
+    set({ ...INITIAL_NL_STATE, nlLastRequest: null, ...INITIAL_EXPLAIN_STATE, nlBarVisible: false });
   },
 
   // Explain feature

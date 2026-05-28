@@ -50,18 +50,15 @@ export function ExportPanel() {
           >
             {pdfState.isExporting ? 'Exporting…' : 'Export as PDF'}
           </Button>
-          {/* Surface the renderer's error state when present so the leaf
- isn't a silent failure on web (issue #115). The web bytes-out
- path through `pdf_get_document_bytes` is pending follow-up
- #8; until then `usePdfExport` populates `state.error` which
- we render inline next to the button. */}
-          {pdfState.error && (
+          {(pdfState.isExporting || pdfState.message || pdfState.error) && (
             <p
               data-testid="file-menu-item-export-pdf-error"
-              className="text-caption text-ss-error"
+              className={`text-caption ${pdfState.error ? 'text-ss-error' : 'text-ss-text-secondary'}`}
               role="status"
             >
-              {pdfState.error}
+              {pdfState.isExporting
+                ? `Exporting PDF ${pdfState.progress}%`
+                : (pdfState.error ?? pdfState.message)}
             </p>
           )}
           <Button

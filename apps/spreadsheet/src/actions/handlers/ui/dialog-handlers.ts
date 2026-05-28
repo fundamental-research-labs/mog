@@ -68,6 +68,7 @@ import {
   isPickerBackedValidation,
   peekValidationEditorConfig,
 } from '../../../systems/grid-editing/coordination/editor-validation-resolution';
+import { requestFormulaBarRefresh } from '../../../infra/events/formula-bar-refresh';
 
 // =============================================================================
 // Type Guards
@@ -1582,6 +1583,18 @@ export const THESAURUS_INSERT_WORD: AsyncActionHandler = async (
   // Replace entire cell value
   const ws = deps.workbook.getSheetById(sheetId);
   await ws.setCell(activeCell.row, activeCell.col, word);
+  requestFormulaBarRefresh({
+    sheetIds: [sheetId],
+    ranges: [
+      {
+        startRow: activeCell.row,
+        startCol: activeCell.col,
+        endRow: activeCell.row,
+        endCol: activeCell.col,
+      },
+    ],
+  });
+  getUIStore(deps).getState().closeThesaurusDialog?.();
   return handled();
 };
 

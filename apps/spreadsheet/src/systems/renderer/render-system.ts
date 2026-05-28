@@ -58,6 +58,8 @@ import {
   setupViewportFollowCoordination,
   type SelectionActor as ViewportFollowSelectionActor,
 } from './coordination/viewport-follow-coordination';
+import { getSelectionSnapshot } from '../grid-editing/machines/selection/derived-state';
+import { clampZoom } from '../../infra/utils/zoom-utils';
 import { lifecycleDebug } from './debug/debug-lifecycle';
 import type { PageBreakDragState } from './execution/render-context-coordination';
 import {
@@ -214,6 +216,9 @@ export class RenderSystem implements IRenderSystem {
    * the selection actor becomes available; disposed in dispose().
    */
   private viewportFollowCleanup: (() => void) | null = null;
+
+  /** Selection actor retained for renderer-owned commands such as Zoom to Selection. */
+  private selectionActor: ViewportFollowSelectionActor | null = null;
 
   /** Previous renderer state for transition detection */
   private previousRendererState: string | null = null;
@@ -380,8 +385,61 @@ export class RenderSystem implements IRenderSystem {
   }
 
   zoomToSelection(): void {
-    // TODO: Implement zoom-to-selection logic
-    // Requires selection snapshot and coordinate system to calculate bounds
+    if (this.disposed || !this.started) return;
+
+    const geometry = this.getGeometry();
+    const viewport = this.getViewport();
+    if (!geometry || !viewport || !this.selectionActor) return;
+
+    const selection = getSelectionSnapshot(this.selectionActor.getSnapshot());
+    const range = selection.ranges[0] ?? {
+      startRow: selection.activeCell.row,
+      startCol: selection.activeCell.col,
+      endRow: selection.activeCell.row,
+      endCol: selection.activeCell.col,
+    };
+
+    let rects = geometry.getRangeRects(range);
+    if (rects.length === 0) {
+      const scrollTarget = viewport.getScrollToCell(selection.activeCell);
+      if (scrollTarget) {
+        viewport.setScrollPosition(scrollTarget);
+        this.rendererExecution?.getDependencies()?.onScrollPositionReset?.(scrollTarget);
+        rects = geometry.getRangeRects(range);
+      }
+    }
+    if (rects.length === 0) return;
+
+    const bounds = rects.reduce(
+      (acc, rect) => ({
+        left: Math.min(acc.left, rect.x),
+        top: Math.min(acc.top, rect.y),
+        right: Math.max(acc.right, rect.x + rect.width),
+        bottom: Math.max(acc.bottom, rect.y + rect.height),
+      }),
+      {
+        left: rects[0].x,
+        top: rects[0].y,
+        right: rects[0].x + rects[0].width,
+        bottom: rects[0].y + rects[0].height,
+      },
+    );
+    const selectionWidth = Math.max(1, bounds.right - bounds.left);
+    const selectionHeight = Math.max(1, bounds.bottom - bounds.top);
+    const viewportBounds = viewport.getViewportBounds();
+    const padding = 32;
+    const availableWidth = Math.max(1, viewportBounds.width - padding * 2);
+    const availableHeight = Math.max(1, viewportBounds.height - padding * 2);
+    const currentZoom = this.getZoom();
+    const targetZoom = clampZoom(
+      currentZoom * Math.min(availableWidth / selectionWidth, availableHeight / selectionHeight),
+    );
+
+    this.setZoom(targetZoom);
+    const sheetId = this.getRenderCapability()?.getCurrentSheetId();
+    if (sheetId) {
+      this.config.sheetSwitchDeps?.uiStoreApi.getState().setZoomLevel?.(sheetId, targetZoom);
+    }
   }
 
   applyCellLevelScroll(topRow: number, leftCol: number): void {
@@ -590,6 +648,7 @@ export class RenderSystem implements IRenderSystem {
    */
   setSelectionActorForViewportFollow(selectionActor: ViewportFollowSelectionActor): void {
     if (this.disposed) return;
+    this.selectionActor = selectionActor;
     if (this.viewportFollowCleanup) {
       this.viewportFollowCleanup();
       this.viewportFollowCleanup = null;

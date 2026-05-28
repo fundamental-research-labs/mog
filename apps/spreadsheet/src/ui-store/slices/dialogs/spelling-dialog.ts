@@ -175,7 +175,7 @@ export const createSpellingDialogSlice: StateCreator<
         currentError: firstError,
         currentErrorIndex: firstError ? 0 : -1,
         selectedSuggestionIndex: 0,
-        customReplacement: firstError?.word ?? '',
+        customReplacement: firstError?.suggestions[0] ?? firstError?.word ?? '',
         status: errors.length > 0 ? 'checking' : 'no-errors',
       },
     }));
@@ -203,7 +203,7 @@ export const createSpellingDialogSlice: StateCreator<
           currentError: nextError,
           currentErrorIndex: nextIndex,
           selectedSuggestionIndex: 0,
-          customReplacement: nextError.word,
+          customReplacement: nextError.suggestions[0] ?? nextError.word,
         },
       });
     }
@@ -260,7 +260,7 @@ export const createSpellingDialogSlice: StateCreator<
         currentError: nextError,
         currentErrorIndex: nextError ? 0 : -1,
         selectedSuggestionIndex: 0,
-        customReplacement: nextError?.word ?? '',
+        customReplacement: nextError?.suggestions[0] ?? nextError?.word ?? '',
         status: remainingErrors.length > 0 ? 'checking' : 'completed',
       },
     });
@@ -296,7 +296,7 @@ export const createSpellingDialogSlice: StateCreator<
           ? Math.min(state.currentErrorIndex, remainingErrors.length - 1)
           : -1,
         selectedSuggestionIndex: 0,
-        customReplacement: nextError?.word ?? '',
+        customReplacement: nextError?.suggestions[0] ?? nextError?.word ?? '',
         changesCount: state.changesCount + 1,
         status: remainingErrors.length > 0 ? 'checking' : 'completed',
       },

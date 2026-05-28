@@ -469,42 +469,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn round_trip_context_defaults_missing_pivot_package() {
-        let ctx: RoundTripContext = serde_json::from_str(r#"{"sheets":[]}"#).unwrap();
-        assert!(ctx.pivot_package.is_empty());
-        assert!(ctx.binary_blobs.is_empty());
-    }
-
-    #[test]
-    fn round_trip_context_serializes_typed_pivot_package() {
-        let ctx = RoundTripContext {
-            pivot_package: PivotPackageRoundTrip {
-                workbook_cache_entries: vec![PivotWorkbookCacheEntry {
-                    cache_id: 42,
-                    relationship_id: "rId42".to_string(),
-                    relationship_target: "pivotCache/pivotCacheDefinition42.xml".to_string(),
-                    definition_path: "xl/pivotCache/pivotCacheDefinition42.xml".to_string(),
-                    order: 0,
-                    ownership: PivotPackageOwnership::CleanImported,
-                }],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let json = serde_json::to_string(&ctx).unwrap();
-        let round_tripped: RoundTripContext = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            round_tripped.pivot_package.workbook_cache_entries[0].cache_id,
-            42
-        );
-        assert_eq!(
-            round_tripped.pivot_package.workbook_cache_entries[0].ownership,
-            PivotPackageOwnership::CleanImported
-        );
-    }
-
-    #[test]
     fn deprecated_package_authority_fields_deserialize_from_legacy_snapshot() {
         let ctx: RoundTripContext = serde_json::from_str(
             r#"{

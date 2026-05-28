@@ -20,7 +20,7 @@ use crate::domain::pivot::write::types::{
     CacheFieldDef, CacheSource, CacheSourceType, SharedItem, WorksheetSource,
 };
 use domain_types::domain::pivot::ParsedPivotTable;
-use domain_types::{ParseOutput, PivotCacheSourceDef, RoundTripContext, SheetData};
+use domain_types::{ParseOutput, PivotCacheSourceDef, SheetData};
 use std::collections::{HashMap, HashSet};
 use value_types::CellValue;
 
@@ -30,19 +30,8 @@ pub struct PivotWriteData {
     pub pivot_table_entries: Vec<PivotTableEntry>,
     /// (global_1based_idx, definition_xml, records_xml) for each pivotCache.
     pub pivot_cache_entries: Vec<PivotCacheEntry>,
-    /// Clean imported pivot table relationships replayed from the typed package sidecar.
-    pub preserved_pivot_table_entries: Vec<PreservedPivotTableEntry>,
-    /// Clean imported workbook pivot cache entries replayed from the typed package sidecar.
-    pub preserved_workbook_cache_entries: Vec<PreservedWorkbookCacheEntry>,
-    /// Whether `RoundTripContext.pivot_package` was present and should be authoritative
-    /// for pivot preservation decisions.
-    pub has_typed_package_contract: bool,
     /// Exact ZIP paths owned by generated output in this write.
     pub generated_part_paths: HashSet<String>,
-    /// Exact ZIP paths proven to belong to clean imported or orphan pivot package parts.
-    pub preserved_part_paths: HashSet<String>,
-    /// Exact content type part names proven to belong to clean imported or orphan parts.
-    pub preserved_content_type_part_names: HashSet<String>,
 }
 
 pub struct PivotTableEntry {
@@ -58,18 +47,6 @@ pub struct PivotCacheEntry {
     pub cache_id: u32,
     pub definition_xml: Vec<u8>,
     pub records_xml: Vec<u8>,
-}
-
-pub struct PreservedPivotTableEntry {
-    pub sheet_idx: usize,
-    pub relationship_id: String,
-    pub relationship_target: String,
-}
-
-pub struct PreservedWorkbookCacheEntry {
-    pub cache_id: u32,
-    pub relationship_id: String,
-    pub relationship_target: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -88,69 +65,12 @@ enum CacheIdentity {
 /// OOXML round-trip config; typed OOXML preservation). The writer reconstructs the OOXML
 /// `PivotTableDef` from the config, and regenerates pivot caches from source
 /// range cell data.
-pub fn build_pivot_data(
-    output: &ParseOutput,
-    round_trip_ctx: Option<&RoundTripContext>,
-) -> PivotWriteData {
-    let package = round_trip_ctx
-        .map(|ctx| &ctx.pivot_package)
-        .filter(|package| !package.is_empty())
-        .filter(|package| clean_pivot_package_is_closed(package));
-    let has_typed_package_contract = package.is_some();
-    let preserved_pivot_table_entries = package
-        .map(|package| {
-            package
-                .pivot_tables
-                .iter()
-                .filter(|table| {
-                    table.ownership == domain_types::PivotPackageOwnership::CleanImported
-                })
-                .map(|table| PreservedPivotTableEntry {
-                    sheet_idx: table.sheet_index,
-                    relationship_id: table.sheet_relationship_id.clone(),
-                    relationship_target: table.sheet_relationship_target.clone(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let preserved_workbook_cache_entries: Vec<PreservedWorkbookCacheEntry> = package
-        .map(|package| {
-            package
-                .workbook_cache_entries
-                .iter()
-                .filter(|entry| {
-                    entry.ownership == domain_types::PivotPackageOwnership::CleanImported
-                })
-                .map(|entry| PreservedWorkbookCacheEntry {
-                    cache_id: entry.cache_id,
-                    relationship_id: entry.relationship_id.clone(),
-                    relationship_target: entry.relationship_target.clone(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let preserved_part_paths = preserved_pivot_part_paths(round_trip_ctx);
-    let preserved_content_type_part_names = package
-        .map(|package| {
-            package
-                .content_type_overrides
-                .iter()
-                .filter(|ct| ct.ownership == domain_types::PivotPackageOwnership::CleanImported)
-                .map(|ct| normalize_content_type_part_name(&ct.part_name))
-                .collect()
-        })
-        .unwrap_or_default();
-
+pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
     if output.pivot_tables.is_empty() {
         return PivotWriteData {
             pivot_table_entries: Vec::new(),
             pivot_cache_entries: Vec::new(),
-            preserved_pivot_table_entries,
-            preserved_workbook_cache_entries,
-            has_typed_package_contract,
             generated_part_paths: HashSet::new(),
-            preserved_part_paths,
-            preserved_content_type_part_names,
         };
     }
 
@@ -169,7 +89,6 @@ pub fn build_pivot_data(
     let pivot_tables: Vec<std::borrow::Cow<'_, ParsedPivotTable>> = output
         .pivot_tables
         .iter()
-        .filter(|pt| !is_clean_imported_pivot(pt, round_trip_ctx))
         .map(|pt| {
             if !pt.config.fields.is_empty() {
                 return std::borrow::Cow::Borrowed(pt);
@@ -215,12 +134,7 @@ pub fn build_pivot_data(
         return PivotWriteData {
             pivot_table_entries: Vec::new(),
             pivot_cache_entries: Vec::new(),
-            preserved_pivot_table_entries,
-            preserved_workbook_cache_entries,
-            has_typed_package_contract,
             generated_part_paths: HashSet::new(),
-            preserved_part_paths,
-            preserved_content_type_part_names,
         };
     }
 
@@ -286,7 +200,7 @@ pub fn build_pivot_data(
     let mut generated_part_paths = HashSet::new();
     let mut next_cache_global_idx = 1usize;
     for cache_src in &cache_sources {
-        let global_idx = next_available_cache_idx(next_cache_global_idx, &preserved_part_paths);
+        let global_idx = next_cache_global_idx;
         next_cache_global_idx = global_idx + 1;
 
         let (definition_xml, records_xml) =
@@ -318,7 +232,7 @@ pub fn build_pivot_data(
     let mut pivot_table_entries = Vec::new();
     let mut next_table_global_idx = 1usize;
     for ((sheet_idx, pt), cache_id) in resolved_pivots.iter().zip(pivot_cache_ids.iter()) {
-        let global_idx = next_available_table_idx(next_table_global_idx, &preserved_part_paths);
+        let global_idx = next_table_global_idx;
         next_table_global_idx = global_idx + 1;
 
         // Convert ParsedPivotTable → PivotTableDef for the writer.
@@ -346,203 +260,12 @@ pub fn build_pivot_data(
     PivotWriteData {
         pivot_table_entries,
         pivot_cache_entries,
-        preserved_pivot_table_entries,
-        preserved_workbook_cache_entries,
-        has_typed_package_contract,
         generated_part_paths,
-        preserved_part_paths,
-        preserved_content_type_part_names,
     }
 }
 
 fn normalize_part_path(path: &str) -> String {
     path.trim_start_matches('/').to_string()
-}
-
-fn normalize_content_type_part_name(path: &str) -> String {
-    format!("/{}", normalize_part_path(path))
-}
-
-fn preserved_pivot_part_paths(round_trip_ctx: Option<&RoundTripContext>) -> HashSet<String> {
-    let Some(package) = round_trip_ctx
-        .map(|ctx| &ctx.pivot_package)
-        .filter(|package| !package.is_empty())
-        .filter(|package| clean_pivot_package_is_closed(package))
-    else {
-        return HashSet::new();
-    };
-
-    let mut paths = HashSet::new();
-    for cache in &package.cache_definitions {
-        if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        paths.insert(normalize_part_path(&cache.definition_path));
-        if let Some(path) = &cache.definition_rels_path {
-            paths.insert(normalize_part_path(path));
-        }
-        if let Some(path) = &cache.records_path {
-            paths.insert(normalize_part_path(path));
-        }
-    }
-    for table in &package.pivot_tables {
-        if table.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        paths.insert(normalize_part_path(&table.table_path));
-        if let Some(path) = &table.table_rels_path {
-            paths.insert(normalize_part_path(path));
-        }
-    }
-    for orphan in &package.orphan_parts {
-        if orphan.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        paths.insert(normalize_part_path(&orphan.part.path));
-    }
-    paths
-}
-
-pub(super) fn clean_pivot_package_is_closed(package: &domain_types::PivotPackageRoundTrip) -> bool {
-    let mut part_paths = HashSet::new();
-    for cache in &package.cache_definitions {
-        if cache.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        part_paths.insert(normalize_part_path(&cache.definition_path));
-        if let Some(path) = &cache.definition_rels_path {
-            part_paths.insert(normalize_part_path(path));
-        }
-        if let Some(path) = &cache.records_path {
-            part_paths.insert(normalize_part_path(path));
-        }
-    }
-    for table in &package.pivot_tables {
-        if table.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        part_paths.insert(normalize_part_path(&table.table_path));
-        if let Some(path) = &table.table_rels_path {
-            part_paths.insert(normalize_part_path(path));
-        }
-    }
-    for orphan in &package.orphan_parts {
-        if orphan.ownership != domain_types::PivotPackageOwnership::CleanImported {
-            continue;
-        }
-        part_paths.insert(normalize_part_path(&orphan.part.path));
-    }
-
-    package
-        .workbook_cache_entries
-        .iter()
-        .filter(|entry| entry.ownership == domain_types::PivotPackageOwnership::CleanImported)
-        .all(|entry| {
-            part_paths.contains(&normalize_workbook_child_target(&entry.relationship_target))
-        })
-        && package
-            .pivot_tables
-            .iter()
-            .filter(|table| table.ownership == domain_types::PivotPackageOwnership::CleanImported)
-            .all(|table| {
-                let sheet_target = crate::infra::opc::resolve_relationship_target(
-                    Some(&format!("xl/worksheets/sheet{}.xml", table.sheet_index + 1)),
-                    &table.sheet_relationship_target,
-                )
-                .map(|path| normalize_part_path(&path))
-                .ok();
-                sheet_target
-                    .as_ref()
-                    .is_some_and(|path| part_paths.contains(path))
-                    && pivot_relationships_are_closed(
-                        &table.table_path,
-                        &table.raw_relationships,
-                        &part_paths,
-                    )
-            })
-        && package
-            .cache_definitions
-            .iter()
-            .filter(|cache| cache.ownership == domain_types::PivotPackageOwnership::CleanImported)
-            .all(|cache| {
-                pivot_relationships_are_closed(
-                    &cache.definition_path,
-                    &cache.raw_relationships,
-                    &part_paths,
-                )
-            })
-}
-
-fn normalize_workbook_child_target(target: &str) -> String {
-    let normalized = normalize_part_path(target);
-    if normalized.starts_with("xl/") {
-        normalized
-    } else {
-        format!("xl/{normalized}")
-    }
-}
-
-fn pivot_relationships_are_closed(
-    owner_path: &str,
-    relationships: &[domain_types::OpcRelationship],
-    part_paths: &HashSet<String>,
-) -> bool {
-    relationships.iter().all(|rel| {
-        if rel.target_mode.as_deref() == Some("External") {
-            return true;
-        }
-        crate::infra::opc::resolve_relationship_target(Some(owner_path), &rel.target)
-            .map(|path| part_paths.contains(&normalize_part_path(&path)))
-            .unwrap_or(false)
-    })
-}
-
-fn is_clean_imported_pivot(
-    pt: &ParsedPivotTable,
-    round_trip_ctx: Option<&RoundTripContext>,
-) -> bool {
-    let Some(package) = round_trip_ctx
-        .map(|ctx| &ctx.pivot_package)
-        .filter(|package| !package.is_empty())
-        .filter(|package| clean_pivot_package_is_closed(package))
-    else {
-        return false;
-    };
-    package.pivot_tables.iter().any(|table| {
-        table.ownership == domain_types::PivotPackageOwnership::CleanImported
-            && table.referenced_cache_id == pt.config.cache_id.unwrap_or_default()
-            && table.sheet_name == pt.config.output_sheet_name
-            && table
-                .pivot_name
-                .as_deref()
-                .map(|name| name == pt.config.name.as_str())
-                .unwrap_or(true)
-    })
-}
-
-fn next_available_cache_idx(start: usize, reserved_paths: &HashSet<String>) -> usize {
-    let mut idx = start;
-    while reserved_paths.contains(&normalize_part_path(&format!(
-        "xl/pivotCache/pivotCacheDefinition{}.xml",
-        idx
-    ))) || reserved_paths.contains(&normalize_part_path(&format!(
-        "xl/pivotCache/pivotCacheRecords{}.xml",
-        idx
-    ))) {
-        idx += 1;
-    }
-    idx
-}
-
-fn next_available_table_idx(start: usize, reserved_paths: &HashSet<String>) -> usize {
-    let mut idx = start;
-    while reserved_paths.contains(&normalize_part_path(&format!(
-        "xl/pivotTables/pivotTable{}.xml",
-        idx
-    ))) {
-        idx += 1;
-    }
-    idx
 }
 
 /// Read the header row (first row of source range) to get field names.

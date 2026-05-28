@@ -44,6 +44,7 @@ fn roundtrip_theme_colors() {
         major_font: Some("Calibri Light".to_string()),
         minor_font: Some("Calibri".to_string()),
         name: None,
+        ..Default::default()
     });
     let rt = roundtrip(&output);
     let theme = rt.theme.as_ref().expect("theme should survive round-trip");
@@ -80,6 +81,7 @@ fn roundtrip_theme_fonts() {
         major_font: Some("Cambria".to_string()),
         minor_font: Some("Calibri".to_string()),
         name: None,
+        ..Default::default()
     });
     let rt = roundtrip(&output);
     let theme = rt.theme.as_ref().expect("theme should survive round-trip");

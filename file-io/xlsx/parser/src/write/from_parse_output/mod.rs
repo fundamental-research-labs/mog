@@ -166,7 +166,7 @@ pub fn write_xlsx_from_parse_output(
     let mut all_image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
 
     // ── Build pivot table and cache data ──────────────────────────────
-    let pivot_data = pivot_writer::build_pivot_data(output, round_trip_ctx);
+    let pivot_data = pivot_writer::build_pivot_data(output);
 
     // ── Build sheet rels and assign r:ids ────────────────────────────────
     // We need to build rels for each sheet and update hyperlink/table r:ids.
@@ -242,11 +242,7 @@ pub fn write_xlsx_from_parse_output(
         let has_pivot_tables = pivot_data
             .pivot_table_entries
             .iter()
-            .any(|e| e.sheet_idx == sheet_idx)
-            || pivot_data
-                .preserved_pivot_table_entries
-                .iter()
-                .any(|e| e.sheet_idx == sheet_idx);
+            .any(|e| e.sheet_idx == sheet_idx);
         let has_any_hyperlinks = has_hyperlinks || !sheet_data.hyperlinks.is_empty();
         if !has_comments
             && !has_tables
@@ -980,13 +976,6 @@ pub fn write_xlsx_from_parse_output(
         )?;
         external_links::register_owned_relationships(&mut package_graph_builder, part_name, link);
     }
-    for entry in &pivot_data.preserved_workbook_cache_entries {
-        crate::write::package_graph::register_preserved_workbook_pivot_cache(
-            &mut package_graph_builder,
-            &entry.relationship_target,
-            &entry.relationship_id,
-        );
-    }
     for entry in &pivot_data.pivot_cache_entries {
         crate::write::package_graph::register_generated_pivot_cache(
             &mut package_graph_builder,
@@ -1246,14 +1235,6 @@ pub fn write_xlsx_from_parse_output(
             *sheet_idx,
             *global_idx,
             None,
-        )?;
-    }
-    for entry in &pivot_data.preserved_pivot_table_entries {
-        crate::write::package_graph::register_preserved_worksheet_pivot_table(
-            &mut package_graph_builder,
-            entry.sheet_idx,
-            &entry.relationship_target,
-            &entry.relationship_id,
         )?;
     }
     for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_pivot_table_relationships {
@@ -1631,27 +1612,6 @@ pub fn write_xlsx_from_parse_output(
             index: sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         };
-        let preserved_pivot_table_r_ids: Vec<String> = pivot_data
-            .preserved_pivot_table_entries
-            .iter()
-            .filter(|entry| entry.sheet_idx == sheet_idx)
-            .map(|entry| {
-                package_graph
-                    .relationship_id(&owner, REL_PIVOT_TABLE, &entry.relationship_target)
-                    .ok_or_else(|| {
-                        WriteError::PackageIntegrity(format!(
-                            "missing preserved worksheet pivot relationship for sheet {} target {}",
-                            sheet_idx + 1,
-                            entry.relationship_target
-                        ))
-                    })
-                    .map(str::to_string)
-            })
-            .collect::<Result<_, _>>()?;
-        if !preserved_pivot_table_r_ids.is_empty() {
-            sheet_writers[sheet_idx].set_preserved_pivot_table_r_ids(preserved_pivot_table_r_ids);
-        }
-
         let pivot_table_r_ids: Vec<String> = pivot_data
             .pivot_table_entries
             .iter()

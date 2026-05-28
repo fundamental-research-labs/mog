@@ -50,7 +50,16 @@ pub(in crate::storage::engine) fn export_workbook_theme(
     };
 
     if let Ok(theme) = serde_json::from_str::<ThemeData>(&json_str)
-        && (!theme.colors.is_empty() || theme.major_font.is_some() || theme.minor_font.is_some())
+        && (!theme.colors.is_empty()
+            || theme.major_font.is_some()
+            || theme.minor_font.is_some()
+            || theme.name.is_some()
+            || theme.color_scheme.is_some()
+            || theme.font_scheme.is_some()
+            || theme.format_scheme.is_some()
+            || theme.object_defaults_xml.is_some()
+            || theme.extra_clr_scheme_lst_xml.is_some()
+            || theme.ext_lst_xml.is_some())
     {
         return Some(theme);
     }
@@ -74,6 +83,7 @@ pub(in crate::storage::engine) fn export_workbook_theme(
             major_font: internal.major_font,
             minor_font: internal.minor_font,
             name: None,
+            ..ThemeData::default()
         });
     }
 

@@ -9,7 +9,7 @@ use domain_types::{
 };
 use std::collections::{HashMap, HashSet};
 
-use crate::infra::opc::{OoxmlRelationshipType, REL_VML_DRAWING, resolve_relationship_target};
+use crate::infra::opc::{REL_VML_DRAWING, resolve_relationship_target};
 use crate::output::results::FullParseResult;
 
 use super::normalize_rgb_color;
@@ -170,20 +170,6 @@ pub(super) fn convert_theme(result: &FullParseResult) -> Option<ThemeData> {
 
 fn normalize_part_path(path: &str) -> String {
     path.trim_start_matches('/').to_string()
-}
-
-fn content_type_part_name(path: &str) -> String {
-    format!("/{}", normalize_part_path(path))
-}
-
-fn relationship_type_is(rel_type: &str, expected: OoxmlRelationshipType) -> bool {
-    OoxmlRelationshipType::from_uri(rel_type) == expected
-}
-
-fn resolve_internal_rel(owner_part: Option<&str>, target: &str) -> Option<String> {
-    resolve_relationship_target(owner_part, target)
-        .ok()
-        .map(|path| normalize_part_path(&path))
 }
 
 fn build_opaque_package_subgraphs(

@@ -1,468 +1,7 @@
-//! Parse Rust structs and enums into TypeScript type definitions.
-//!
-//! Walks a parsed `syn::File` looking for items with `#[derive(Serialize)]`.
-//! Structs become `TsInterface`, all-unit enums become `TsStringUnion`, and
-//! enums with data variants become `TsTaggedUnion`.
-
+use super::*;
 use std::collections::HashMap;
 
-use crate::mapping::rust_type_to_ts;
-use crate::serde_attrs::{
-    SerdeContainerAttrs, SerdeFieldAttrs, apply_rename_rule, is_optional_skip,
-};
 use crate::types::*;
-
-/// Strip the `r#` prefix from Rust raw identifiers (e.g. `r#macro` → `macro`).
-fn strip_raw_prefix(name: &str) -> &str {
-    name.strip_prefix("r#").unwrap_or(name)
-}
-
-/// Configuration for type generation.
-#[derive(Debug, Clone, Default)]
-pub struct TypeGenConfig {
-    /// Map from Rust type name (or path) to a fixed TsType.
-    ///
-    /// Checked by both last path segment (e.g. `"FiniteF64"`) and full
-    /// qualified path (e.g. `"serde_json::Value"`).
-    pub external_type_map: HashMap<String, TsType>,
-
-    /// Default rename rule applied when a **struct** has no explicit
-    /// `#[serde(rename_all = "...")]`. For example, `Some("camelCase".into())`
-    /// makes all struct fields camelCase by default. An explicit `rename_all`
-    /// on the container always takes precedence.
-    ///
-    /// **Not applied to enum variants.** Enum variant names follow serde's
-    /// default behavior (preserve original casing) unless the enum itself has
-    /// an explicit `#[serde(rename_all)]`. This matches serde semantics:
-    /// struct fields are typically `snake_case` needing conversion, while enum
-    /// variants are `PascalCase` and serialized as-is by default.
-    pub default_rename_all: Option<String>,
-}
-
-/// Parse Rust source code and extract type definitions from items with
-/// `#[derive(Serialize)]`.
-///
-/// Returns type definitions in source order.
-pub fn parse_types(source: &str, config: &TypeGenConfig) -> Result<Vec<TsTypeDef>, String> {
-    let file: syn::File =
-        syn::parse_str(source).map_err(|e| format!("Failed to parse source: {}", e))?;
-
-    let mut defs = Vec::new();
-
-    for item in &file.items {
-        match item {
-            syn::Item::Struct(s) if has_derive_serialize(&s.attrs) => {
-                if let Some(def) = parse_struct(s, config) {
-                    defs.push(def);
-                }
-            }
-            syn::Item::Enum(e) if has_derive_serialize(&e.attrs) => {
-                defs.extend(parse_enum(e, config));
-            }
-            _ => {}
-        }
-    }
-
-    Ok(defs)
-}
-
-/// Check whether an item has `#[derive(Serialize)]` among its attributes.
-fn has_derive_serialize(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        if !attr.path().is_ident("derive") {
-            return false;
-        }
-        let Ok(nested) = attr.parse_args_with(
-            syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
-        ) else {
-            return false;
-        };
-        nested.iter().any(|p| {
-            p.is_ident("Serialize") || p.segments.last().is_some_and(|s| s.ident == "Serialize")
-        })
-    })
-}
-
-/// Map a Rust type name from `serde(into = "...")` to a TsType.
-fn into_target_to_ts_type(target: &str) -> TsType {
-    match target {
-        "String" | "&str" | "std::string::String" => TsType::String,
-        "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64" | "f32" | "f64" | "usize"
-        | "isize" => TsType::Number,
-        "bool" => TsType::Boolean,
-        other => TsType::Named(other.to_string()),
-    }
-}
-
-/// Parse a Rust struct into a `TsInterface`.
-fn parse_struct(item: &syn::ItemStruct, config: &TypeGenConfig) -> Option<TsTypeDef> {
-    let name = item.ident.to_string();
-    let container_attrs = SerdeContainerAttrs::from_attrs(&item.attrs);
-
-    // serde(into) → type alias (e.g. `#[serde(into = "String")]` → `export type Foo = string;`)
-    if let Some(ref target) = container_attrs.into {
-        return Some(TsTypeDef::TypeAlias {
-            name,
-            target: into_target_to_ts_type(target),
-        });
-    }
-
-    let named_fields = match &item.fields {
-        syn::Fields::Named(named) => Some(named),
-        syn::Fields::Unit => None, // Unit struct → empty interface
-        _ => return None,          // Skip tuple structs
-    };
-
-    let mut ts_fields = Vec::new();
-    for field in named_fields.iter().flat_map(|f| &f.named) {
-        let field_attrs = SerdeFieldAttrs::from_attrs(&field.attrs);
-
-        // Skip fields with #[serde(skip)] or #[serde(skip_serializing)]
-        if field_attrs.skip {
-            continue;
-        }
-
-        let rust_name = strip_raw_prefix(&field.ident.as_ref()?.to_string()).to_owned();
-
-        // Determine the JSON field name:
-        // 1. Explicit #[serde(rename = "...")] wins
-        // 2. Otherwise apply container rename_all rule
-        // 3. Otherwise use the Rust name as-is
-        let ts_name = if let Some(ref rename) = field_attrs.rename {
-            rename.clone()
-        } else if let Some(rule) = container_attrs
-            .rename_all
-            .as_ref()
-            .or(config.default_rename_all.as_ref())
-        {
-            apply_rename_rule(rule, &rust_name)
-        } else {
-            rust_name.clone()
-        };
-
-        // Determine type and optionality
-        let (ts_type, optional) = if field_attrs.serialize_with.is_some() {
-            // serialize_with → we can't know the output type; default to string
-            let opt = field_attrs
-                .skip_serializing_if
-                .as_deref()
-                .is_some_and(is_optional_skip);
-            (TsType::String, opt)
-        } else if let Some(inner) = unwrap_option_type(&field.ty, config) {
-            // Option<T>
-            if field_attrs
-                .skip_serializing_if
-                .as_deref()
-                .is_some_and(is_optional_skip)
-            {
-                // Option<T> + skip_serializing_if → field?: T (unwrapped, optional)
-                (inner, true)
-            } else {
-                // Option<T> without skip → field: T | null (present, nullable)
-                (TsType::Nullable(Box::new(inner)), false)
-            }
-        } else if field_attrs
-            .skip_serializing_if
-            .as_deref()
-            .is_some_and(is_optional_skip)
-        {
-            // Non-Option with skip_serializing_if → field?: T
-            (resolve_type(&field.ty, config), true)
-        } else {
-            (resolve_type(&field.ty, config), false)
-        };
-
-        ts_fields.push(TsField {
-            ts_name,
-            ts_type,
-            optional,
-        });
-    }
-
-    Some(TsTypeDef::Interface(TsInterface {
-        name,
-        fields: ts_fields,
-    }))
-}
-
-/// Parse a Rust enum into a `TsStringUnion` (all unit) or `TsTaggedUnion` (has data).
-fn parse_enum(item: &syn::ItemEnum, config: &TypeGenConfig) -> Vec<TsTypeDef> {
-    let name = item.ident.to_string();
-    let container_attrs = SerdeContainerAttrs::from_attrs(&item.attrs);
-
-    // serde(into) → type alias
-    if let Some(ref target) = container_attrs.into {
-        return vec![TsTypeDef::TypeAlias {
-            name,
-            target: into_target_to_ts_type(target),
-        }];
-    }
-
-    // Check if all variants are unit (no data)
-    let all_unit = item
-        .variants
-        .iter()
-        .all(|v| matches!(v.fields, syn::Fields::Unit));
-
-    if all_unit {
-        // All-unit enum → string union
-        // NOTE: Only the enum's own rename_all applies here, NOT config.default_rename_all.
-        // Serde preserves PascalCase variant names by default; the global default is for
-        // struct fields (snake_case → camelCase) and would incorrectly lowercase variants.
-        let variants = item
-            .variants
-            .iter()
-            .map(|v| {
-                let variant_name = strip_raw_prefix(&v.ident.to_string()).to_owned();
-                let variant_attrs = SerdeFieldAttrs::from_attrs(&v.attrs);
-                if let Some(ref explicit) = variant_attrs.rename {
-                    // Per-variant #[serde(rename = "...")] takes precedence.
-                    explicit.clone()
-                } else if let Some(rule) = container_attrs.rename_all.as_ref() {
-                    apply_rename_rule(rule, &variant_name)
-                } else {
-                    variant_name
-                }
-            })
-            .collect();
-
-        return vec![TsTypeDef::StringUnion(TsStringUnion { name, variants })];
-    }
-
-    // Enum with data variants → tagged union
-    let tag_style = if container_attrs.untagged {
-        TagStyle::Untagged
-    } else if let Some(ref tag) = container_attrs.tag {
-        if let Some(ref content) = container_attrs.content {
-            TagStyle::Adjacent {
-                tag: tag.clone(),
-                content: content.clone(),
-            }
-        } else {
-            TagStyle::Internal { tag: tag.clone() }
-        }
-    } else {
-        TagStyle::External
-    };
-
-    // Collect helper interfaces for struct variants
-    let mut helper_defs = Vec::new();
-
-    // NOTE: Only the enum's own rename_all applies to discriminants, NOT config.default_rename_all.
-    let variants = item
-        .variants
-        .iter()
-        .map(|v| {
-            let variant_name = strip_raw_prefix(&v.ident.to_string()).to_owned();
-            let variant_attrs = SerdeFieldAttrs::from_attrs(&v.attrs);
-            let discriminant = if let Some(ref explicit) = variant_attrs.rename {
-                // Variant-level #[serde(rename = "...")] takes precedence.
-                explicit.clone()
-            } else if let Some(rule) = container_attrs.rename_all.as_ref() {
-                apply_rename_rule(rule, &variant_name)
-            } else {
-                variant_name
-            };
-
-            let data_type = match &v.fields {
-                syn::Fields::Unit => TsType::Void,
-                syn::Fields::Unnamed(fields) => {
-                    if fields.unnamed.len() == 1 {
-                        resolve_type(&fields.unnamed[0].ty, config)
-                    } else {
-                        // Multi-field tuple variant → TS tuple
-                        let elems: Vec<TsType> = fields
-                            .unnamed
-                            .iter()
-                            .map(|f| resolve_type(&f.ty, config))
-                            .collect();
-                        TsType::Tuple(elems)
-                    }
-                }
-                syn::Fields::Named(fields) => {
-                    // Struct variant — emit a helper interface for the payload.
-                    // Field naming priority: field-level rename > variant rename_all > container rename_all > raw name.
-                    let variant_rename_all = variant_attrs
-                        .rename_all
-                        .as_deref()
-                        .or(container_attrs.rename_all.as_deref());
-                    let helper_name = format!("{}_{}", name, discriminant);
-                    let ts_fields: Vec<TsField> = fields
-                        .named
-                        .iter()
-                        .filter_map(|f| {
-                            let field_attrs = SerdeFieldAttrs::from_attrs(&f.attrs);
-                            if field_attrs.skip {
-                                return None;
-                            }
-                            let field_name =
-                                strip_raw_prefix(&f.ident.as_ref().unwrap().to_string()).to_owned();
-                            let ts_name = if let Some(ref explicit) = field_attrs.rename {
-                                explicit.clone()
-                            } else if let Some(rule) = variant_rename_all {
-                                apply_rename_rule(rule, &field_name)
-                            } else {
-                                field_name
-                            };
-                            let (ts_type, optional) =
-                                if let Some(inner) = unwrap_option_type(&f.ty, config) {
-                                    (inner, true)
-                                } else {
-                                    (resolve_type(&f.ty, config), false)
-                                };
-                            Some(TsField {
-                                ts_name,
-                                ts_type,
-                                optional,
-                            })
-                        })
-                        .collect();
-                    helper_defs.push(TsTypeDef::Interface(TsInterface {
-                        name: helper_name.clone(),
-                        fields: ts_fields,
-                    }));
-                    TsType::Named(helper_name)
-                }
-            };
-
-            TsTaggedVariant {
-                variant_name: discriminant,
-                data_type,
-            }
-        })
-        .collect();
-
-    let mut result = helper_defs;
-    result.push(TsTypeDef::TaggedUnion(TsTaggedUnion {
-        name,
-        tag_style,
-        variants,
-    }));
-    result
-}
-
-/// Resolve a `syn::Type` to a `TsType`, checking the external_type_map first.
-fn resolve_type(ty: &syn::Type, config: &TypeGenConfig) -> TsType {
-    // 1. Check external_type_map by last segment name and full path
-    if let syn::Type::Path(type_path) = ty {
-        let full_path = path_to_string(&type_path.path);
-
-        // Check full path first (e.g., "serde_json::Value")
-        if let Some(mapped) = config.external_type_map.get(&full_path) {
-            return mapped.clone();
-        }
-
-        // Check last segment name (e.g., "FiniteF64", "Value")
-        if let Some(last) = type_path.path.segments.last() {
-            let last_name = last.ident.to_string();
-            if let Some(mapped) = config.external_type_map.get(&last_name) {
-                return mapped.clone();
-            }
-        }
-    }
-
-    // 2. Unwrap transparent wrappers: Arc<T>, Box<T>
-    if let syn::Type::Path(type_path) = ty
-        && let Some(last) = type_path.path.segments.last()
-    {
-        let name = last.ident.to_string();
-        if (name == "Arc" || name == "Box")
-            && let syn::PathArguments::AngleBracketed(args) = &last.arguments
-            && args.args.len() == 1
-            && let syn::GenericArgument::Type(inner) = &args.args[0]
-        {
-            return resolve_type(inner, config);
-        }
-    }
-
-    // 2b. Resolve container inner types through external_type_map:
-    //     Vec<T> -> T[], Option<T> -> T | null, HashMap<K,V> -> Record<K,V>
-    if let syn::Type::Path(type_path) = ty
-        && let Some(last) = type_path.path.segments.last()
-    {
-        let name = last.ident.to_string();
-        if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
-            match name.as_str() {
-                "Vec" if args.args.len() == 1 => {
-                    if let syn::GenericArgument::Type(inner) = &args.args[0] {
-                        // Vec<u8> → Uint8Array (special case)
-                        if let syn::Type::Path(p) = inner
-                            && p.path.is_ident("u8")
-                        {
-                            return TsType::Uint8Array;
-                        }
-                        return TsType::Array(Box::new(resolve_type(inner, config)));
-                    }
-                }
-                "Option" if args.args.len() == 1 => {
-                    if let syn::GenericArgument::Type(inner) = &args.args[0] {
-                        return TsType::Nullable(Box::new(resolve_type(inner, config)));
-                    }
-                }
-                "HashMap" | "BTreeMap" if args.args.len() == 2 => {
-                    let types: Vec<_> = args
-                        .args
-                        .iter()
-                        .filter_map(|a| {
-                            if let syn::GenericArgument::Type(t) = a {
-                                Some(t)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if types.len() == 2 {
-                        return TsType::Record(
-                            Box::new(resolve_type(types[0], config)),
-                            Box::new(resolve_type(types[1], config)),
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // 3. Fall through to standard mapping
-    let mapped = rust_type_to_ts(ty, false);
-
-    // 4. Strip module paths from Named types: "formula_types::CellValue" -> "CellValue"
-    if let TsType::Named(ref name) = mapped
-        && name.contains("::")
-        && let Some(last) = name.rsplit("::").next()
-    {
-        return TsType::Named(last.to_string());
-    }
-
-    mapped
-}
-
-/// If the type is `Option<T>`, resolve the inner T. Otherwise return None.
-fn unwrap_option_type(ty: &syn::Type, config: &TypeGenConfig) -> Option<TsType> {
-    if let syn::Type::Path(type_path) = ty
-        && let Some(last) = type_path.path.segments.last()
-        && last.ident == "Option"
-        && let syn::PathArguments::AngleBracketed(args) = &last.arguments
-        && args.args.len() == 1
-        && let syn::GenericArgument::Type(inner) = &args.args[0]
-    {
-        return Some(resolve_type(inner, config));
-    }
-    None
-}
-
-/// Convert a `syn::Path` to a string using `::` as separator.
-fn path_to_string(path: &syn::Path) -> String {
-    path.segments
-        .iter()
-        .map(|s| s.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     fn default_config() -> TypeGenConfig {
         TypeGenConfig::default()
@@ -1576,4 +1115,117 @@ mod tests {
             _ => panic!("Expected TypeAlias"),
         }
     }
-}
+
+    #[test]
+    fn source_order_preserves_struct_variant_helpers_before_union() {
+        let source = r#"
+            use serde::Serialize;
+
+            #[derive(Serialize)]
+            pub struct First {
+                pub id: String,
+            }
+
+            #[derive(Serialize)]
+            #[serde(tag = "type")]
+            pub enum Event {
+                Created { item_id: String },
+            }
+
+            #[derive(Serialize)]
+            pub struct Last {
+                pub done: bool,
+            }
+        "#;
+        let defs = parse_types(source, &default_config()).unwrap();
+        let names: Vec<&str> = defs.iter().map(|d| d.name()).collect();
+        assert_eq!(names, vec!["First", "Event_Created", "Event", "Last"]);
+    }
+
+    #[test]
+    fn external_type_map_full_path_takes_precedence_over_last_segment() {
+        let source = r#"
+            use serde::Serialize;
+            #[derive(Serialize)]
+            pub struct Foo {
+                pub data: serde_json::Value,
+            }
+        "#;
+        let mut map = HashMap::new();
+        map.insert(
+            "serde_json::Value".to_string(),
+            TsType::Named("ExactValue".into()),
+        );
+        map.insert("Value".to_string(), TsType::Named("SegmentValue".into()));
+        let config = TypeGenConfig {
+            external_type_map: map,
+            ..Default::default()
+        };
+        let defs = parse_types(source, &config).unwrap();
+        match &defs[0] {
+            TsTypeDef::Interface(iface) => {
+                assert_eq!(iface.fields[0].ts_type, TsType::Named("ExactValue".into()));
+            }
+            _ => panic!("Expected Interface"),
+        }
+    }
+
+    #[test]
+    fn struct_and_enum_struct_variant_optionality_differ() {
+        let source = r#"
+            use serde::Serialize;
+
+            #[derive(Serialize)]
+            pub struct Payload {
+                pub maybe_name: Option<String>,
+            }
+
+            #[derive(Serialize)]
+            pub enum Event {
+                Created { maybe_name: Option<String> },
+            }
+        "#;
+        let defs = parse_types(source, &default_config()).unwrap();
+        match &defs[0] {
+            TsTypeDef::Interface(iface) => {
+                assert_eq!(
+                    iface.fields[0].ts_type,
+                    TsType::Nullable(Box::new(TsType::String))
+                );
+                assert!(!iface.fields[0].optional);
+            }
+            _ => panic!("Expected Interface"),
+        }
+        match &defs[1] {
+            TsTypeDef::Interface(iface) => {
+                assert_eq!(iface.name, "Event_Created");
+                assert_eq!(iface.fields[0].ts_type, TsType::String);
+                assert!(iface.fields[0].optional);
+            }
+            _ => panic!("Expected helper Interface"),
+        }
+    }
+
+    #[test]
+    fn default_rename_all_does_not_apply_to_data_enum_discriminants() {
+        let source = r#"
+            use serde::Serialize;
+            #[derive(Serialize)]
+            pub enum Status {
+                InProgress(String),
+                NotStarted(String),
+            }
+        "#;
+        let config = TypeGenConfig {
+            default_rename_all: Some("camelCase".to_string()),
+            ..Default::default()
+        };
+        let defs = parse_types(source, &config).unwrap();
+        match &defs[0] {
+            TsTypeDef::TaggedUnion(tu) => {
+                assert_eq!(tu.variants[0].variant_name, "InProgress");
+                assert_eq!(tu.variants[1].variant_name, "NotStarted");
+            }
+            _ => panic!("Expected TaggedUnion"),
+        }
+    }

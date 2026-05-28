@@ -433,6 +433,26 @@ describe('ViewportFetchManager', () => {
       expect(events).toContain('frozen:fetch-committed');
     });
 
+    it('restores per-viewport metadata after invalidation', async () => {
+      const transport = makeMockTransport();
+      const { manager } = createManager(transport);
+
+      await manager.refresh('main', 'sheet-1', bounds);
+
+      manager.invalidateAllPrefetch();
+      let state = manager.getPerViewportStates().get('main')!;
+      expect(state.prefetchBounds).toBeNull();
+      expect(state.lastVisibleBounds).toBeNull();
+
+      await manager.forceRefreshAllViewports();
+
+      state = manager.getPerViewportStates().get('main')!;
+      expect(state.prefetchBounds).not.toBeNull();
+      expect(state.lastVisibleBounds).not.toBeNull();
+      expect(state.prefetchDirtyState.dirtyRegion).toBeNull();
+      expect(state.prefetchDirtyState.staleCells.size).toBe(0);
+    });
+
     it('is a no-op when no viewports are registered', async () => {
       const transport = makeMockTransport();
       const { manager } = createManager(transport);
@@ -467,6 +487,33 @@ describe('ViewportFetchManager', () => {
         'compute_get_viewport_binary',
         expect.objectContaining({ sheetId: 'sheet-1' }),
       );
+    });
+
+    it('restores metadata only for invalidated viewports on the target sheet', async () => {
+      const transport = makeMockTransport();
+      const { manager } = createManager(transport);
+
+      await manager.refresh('main:sheet-1', 'sheet-1', bounds);
+      await manager.refresh('main:sheet-2', 'sheet-2', bounds);
+
+      manager.invalidateAllPrefetch();
+      let sheet1State = manager.getPerViewportStates().get('main:sheet-1')!;
+      let sheet2State = manager.getPerViewportStates().get('main:sheet-2')!;
+      expect(sheet1State.prefetchBounds).toBeNull();
+      expect(sheet1State.lastVisibleBounds).toBeNull();
+      expect(sheet2State.prefetchBounds).toBeNull();
+      expect(sheet2State.lastVisibleBounds).toBeNull();
+
+      await manager.forceRefreshSheetViewports('sheet-2');
+
+      sheet1State = manager.getPerViewportStates().get('main:sheet-1')!;
+      sheet2State = manager.getPerViewportStates().get('main:sheet-2')!;
+      expect(sheet1State.prefetchBounds).toBeNull();
+      expect(sheet1State.lastVisibleBounds).toBeNull();
+      expect(sheet2State.prefetchBounds).not.toBeNull();
+      expect(sheet2State.lastVisibleBounds).not.toBeNull();
+      expect(sheet2State.prefetchDirtyState.dirtyRegion).toBeNull();
+      expect(sheet2State.prefetchDirtyState.staleCells.size).toBe(0);
     });
   });
 

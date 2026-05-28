@@ -25,8 +25,11 @@
 
 import type { BridgeTransport } from '@rust-bridge/client';
 
-import type { CellAccessor } from '../wire/binary-viewport-buffer';
-import type { ReadonlyBinaryViewportBuffer } from '../wire/viewport-coordinator';
+import type { CellAccessor, ViewportBounds } from '../wire/binary-viewport-buffer';
+import type {
+  ReadonlyBinaryViewportBuffer,
+  ViewportCoordinator,
+} from '../wire/viewport-coordinator';
 import { ViewportCoordinatorRegistry } from '../wire/viewport-coordinator-registry';
 import type {
   PrefetchConfig,
@@ -178,6 +181,34 @@ export class ViewportFetchManager {
       endRow: bounds.endRow,
       endCol: bounds.endCol,
     });
+  }
+
+  private stripSheetId(bounds: ViewportBounds): PrefetchBounds {
+    return {
+      startRow: bounds.startRow,
+      startCol: bounds.startCol,
+      endRow: bounds.endRow,
+      endCol: bounds.endCol,
+    };
+  }
+
+  private markForceRefreshedViewportFresh(
+    viewportId: string,
+    refreshedBufferBounds: ViewportBounds,
+    coordinator: ViewportCoordinator,
+    previousVisibleBounds: PrefetchBounds | null,
+  ): void {
+    const vpState = this.perViewportState.get(viewportId);
+    if (!vpState) return;
+
+    const refreshedPrefetchBounds = this.stripSheetId(refreshedBufferBounds);
+    const visibleWindow = coordinator.base.getVisibleWindow();
+
+    vpState.prefetchBounds = refreshedPrefetchBounds;
+    vpState.lastVisibleBounds = visibleWindow
+      ? this.stripSheetId(visibleWindow)
+      : (previousVisibleBounds ?? refreshedPrefetchBounds);
+    vpState.prefetchDirtyState = { staleCells: new Set(), dirtyRegion: null };
   }
 
   // ===========================================================================
@@ -400,6 +431,8 @@ export class ViewportFetchManager {
       // Use the coordinator's current buffer bounds to know what region to re-fetch
       const bounds = coordinator.base.getBounds();
       if (!bounds || !coordinator.base.hasBuffer()) continue;
+      const previousVisibleBounds =
+        this.perViewportState.get(coordinator.viewportId)?.lastVisibleBounds ?? null;
 
       refreshes.push(
         (async () => {
@@ -420,6 +453,13 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
+          const refreshedBufferBounds = coordinator.base.getBounds() ?? bounds;
+          this.markForceRefreshedViewportFresh(
+            coordinator.viewportId,
+            refreshedBufferBounds,
+            coordinator,
+            previousVisibleBounds,
+          );
         })(),
       );
     }
@@ -440,6 +480,8 @@ export class ViewportFetchManager {
     for (const coordinator of coordinators) {
       const bounds = coordinator.base.getBounds();
       if (!bounds || !coordinator.base.hasBuffer() || bounds.sheetId !== sheetId) continue;
+      const previousVisibleBounds =
+        this.perViewportState.get(coordinator.viewportId)?.lastVisibleBounds ?? null;
 
       refreshes.push(
         (async () => {
@@ -459,6 +501,13 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
+          const refreshedBufferBounds = coordinator.base.getBounds() ?? bounds;
+          this.markForceRefreshedViewportFresh(
+            coordinator.viewportId,
+            refreshedBufferBounds,
+            coordinator,
+            previousVisibleBounds,
+          );
         })(),
       );
     }

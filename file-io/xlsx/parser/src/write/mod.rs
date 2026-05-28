@@ -38,7 +38,7 @@ pub mod zip_writer;
 
 pub use crate::domain::comments::write::{
     CommentAuthor, CommentShape, CommentTextRun, CommentsWriter, LegacyComment, ThreadedAuthor,
-    ThreadedComment, ThreadedCommentsWriter, generate_guid,
+    ThreadedComment, ThreadedCommentsWriter, ThreadedMention, generate_guid,
 };
 pub use crate::domain::cond_format::write::{
     AboveAverageRule, CellIsRule, CfOperator, CfRule, CfRuleKind, CfRuleType, CfStyle,

@@ -314,33 +314,45 @@ impl PureFunction for FnTextSplit {
             Err(e) => return CellValue::Error(e, None),
         };
 
-        // col_delimiter (arg 1) — can be null/empty to skip
-        let col_delimiter = if matches!(args[1], CellValue::Null) {
-            None
-        } else {
-            if let Some(e) = check_error(&args[1]) {
-                return e;
-            }
-            match args[1].coerce_to_string() {
-                Ok(s) if s.is_empty() => None,
-                Ok(s) => Some(s.into_owned()),
-                Err(e) => return CellValue::Error(e, None),
+        let collect_delimiters = |arg: &CellValue| -> Result<Option<Vec<String>>, CellError> {
+            match arg {
+                CellValue::Null => Ok(None),
+                CellValue::Array(arr) => {
+                    let mut delimiters = Vec::new();
+                    for value in arr.iter() {
+                        let delimiter = value.coerce_to_string()?.into_owned();
+                        if !delimiter.is_empty() {
+                            delimiters.push(delimiter);
+                        }
+                    }
+                    if delimiters.is_empty() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(delimiters))
+                    }
+                }
+                _ => {
+                    let delimiter = arg.coerce_to_string()?.into_owned();
+                    if delimiter.is_empty() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(vec![delimiter]))
+                    }
+                }
             }
         };
 
+        // col_delimiter (arg 1) — can be null/empty to skip, or an array of delimiters.
+        let col_delimiters = match collect_delimiters(&args[1]) {
+            Ok(delimiters) => delimiters,
+            Err(e) => return CellValue::Error(e, None),
+        };
+
         // row_delimiter (arg 2) — optional
-        let row_delimiter = if args.len() > 2 {
-            if matches!(args[2], CellValue::Null) {
-                None
-            } else {
-                if let Some(e) = check_error(&args[2]) {
-                    return e;
-                }
-                match args[2].coerce_to_string() {
-                    Ok(s) if s.is_empty() => None,
-                    Ok(s) => Some(s.into_owned()),
-                    Err(e) => return CellValue::Error(e, None),
-                }
+        let row_delimiters = if args.len() > 2 {
+            match collect_delimiters(&args[2]) {
+                Ok(delimiters) => delimiters,
+                Err(e) => return CellValue::Error(e, None),
             }
         } else {
             None
@@ -385,14 +397,20 @@ impl PureFunction for FnTextSplit {
             )
         };
 
-        // Helper: split a string by delimiter respecting match_mode (char-safe)
-        let split_text = |s: &str, delim: &str| -> Vec<String> {
+        // Helper: split a string by any delimiter respecting match_mode (char-safe).
+        // Delimiter arrays are evaluated in row-major order, matching the array value.
+        let split_text = |s: &str, delimiters: &[String]| -> Vec<String> {
             let s_chars: Vec<char> = s.chars().collect();
-            let delim_chars: Vec<char> = if match_mode == 1 {
-                delim.to_lowercase().chars().collect()
-            } else {
-                delim.chars().collect()
-            };
+            let delimiter_chars: Vec<Vec<char>> = delimiters
+                .iter()
+                .map(|delimiter| {
+                    if match_mode == 1 {
+                        delimiter.to_lowercase().chars().collect()
+                    } else {
+                        delimiter.chars().collect()
+                    }
+                })
+                .collect();
             let search_chars: Vec<char> = if match_mode == 1 {
                 s.to_lowercase().chars().collect()
             } else {
@@ -402,10 +420,19 @@ impl PureFunction for FnTextSplit {
             let mut parts = Vec::new();
             let mut last = 0;
             let mut i = 0;
-            while i + delim_chars.len() <= search_chars.len() {
-                if search_chars[i..i + delim_chars.len()] == delim_chars[..] {
+            while i < search_chars.len() {
+                if let Some(matched_len) = delimiter_chars.iter().find_map(|delimiter| {
+                    if !delimiter.is_empty()
+                        && i + delimiter.len() <= search_chars.len()
+                        && search_chars[i..i + delimiter.len()] == delimiter[..]
+                    {
+                        Some(delimiter.len())
+                    } else {
+                        None
+                    }
+                }) {
                     parts.push(s_chars[last..i].iter().collect::<String>());
-                    last = i + delim_chars.len();
+                    last = i + matched_len;
                     i = last;
                 } else {
                     i += 1;
@@ -416,7 +443,7 @@ impl PureFunction for FnTextSplit {
         };
 
         // Split by row delimiter first
-        let mut rows: Vec<String> = match &row_delimiter {
+        let mut rows: Vec<String> = match &row_delimiters {
             Some(rd) => split_text(&text, rd),
             None => vec![text.clone()],
         };
@@ -426,8 +453,8 @@ impl PureFunction for FnTextSplit {
         }
 
         // Split each row by column delimiter
-        let col_delim = match &col_delimiter {
-            Some(cd) => cd.clone(),
+        let col_delimiters = match &col_delimiters {
+            Some(cd) => cd,
             None => {
                 // No column delimiter — return as single column
                 let result: Vec<Vec<CellValue>> = rows
@@ -445,7 +472,7 @@ impl PureFunction for FnTextSplit {
         let mut max_cols = 0;
 
         for row in &rows {
-            let mut cols: Vec<String> = split_text(row, &col_delim);
+            let mut cols: Vec<String> = split_text(row, col_delimiters);
             if ignore_empty {
                 cols.retain(|c| !c.is_empty());
             }
@@ -965,6 +992,55 @@ mod tests {
                 assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
                 assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
                 assert_eq!(arr.get(0, 2).unwrap(), &text("C"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_array_column_delimiters_case_insensitive() {
+        let delimiters = CellValue::from_rows(vec![vec![text("x"), text("y")]]);
+        let result =
+            FnTextSplit.call(&[text("aXbYc"), delimiters, null(), bool_val(false), num(1.0)]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 1);
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_array_row_delimiters() {
+        let row_delimiters = CellValue::from_rows(vec![vec![text(";"), text("|")]]);
+        let result = FnTextSplit.call(&[text("a;b|c"), null(), row_delimiters]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 3);
+                assert_eq!(arr.cols(), 1);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(1, 0).unwrap(), &text("b"));
+                assert_eq!(arr.get(2, 0).unwrap(), &text("c"));
+            }
+            _ => panic!("Expected array, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_textsplit_array_delimiters_preserve_multi_character_order() {
+        let delimiters = CellValue::from_rows(vec![vec![text("--"), text("|")]]);
+        let result = FnTextSplit.call(&[text("a--b|c"), delimiters]);
+        match &result {
+            CellValue::Array(arr) => {
+                assert_eq!(arr.rows(), 1);
+                assert_eq!(arr.cols(), 3);
+                assert_eq!(arr.get(0, 0).unwrap(), &text("a"));
+                assert_eq!(arr.get(0, 1).unwrap(), &text("b"));
+                assert_eq!(arr.get(0, 2).unwrap(), &text("c"));
             }
             _ => panic!("Expected array, got {:?}", result),
         }

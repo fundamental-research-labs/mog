@@ -150,9 +150,16 @@ interface TextToColumnsDialogProps {
   range: CellRange | null;
   /** Preview function to show split result without applying */
   onPreview: (options: TextToColumnsDialogOptions) => string[][];
+  /** Raw selected source cells before delimiter or fixed-width splitting */
+  onSourcePreview: () => string[][];
 }
 
-export function TextToColumnsDialog({ onConvert, range, onPreview }: TextToColumnsDialogProps) {
+export function TextToColumnsDialog({
+  onConvert,
+  range,
+  onPreview,
+  onSourcePreview,
+}: TextToColumnsDialogProps) {
   const isOpen = useUIStore((s) => s.textToColumnsDialogOpen);
   const closeDialog = useUIStore((s) => s.closeTextToColumnsDialog);
 
@@ -204,6 +211,11 @@ export function TextToColumnsDialog({ onConvert, range, onPreview }: TextToColum
     if (!isOpen || !range) return [];
     return onPreview(previewOptions);
   }, [isOpen, range, onPreview, previewOptions]);
+
+  const sourcePreviewData = useMemo(() => {
+    if (!isOpen || !range) return [];
+    return onSourcePreview();
+  }, [isOpen, range, onSourcePreview]);
 
   // Calculate destination columns that will be affected
   const parsedDestination = useMemo(() => {
@@ -347,11 +359,18 @@ export function TextToColumnsDialog({ onConvert, range, onPreview }: TextToColum
                 <div className="border border-ss-border rounded overflow-hidden max-h-[180px] overflow-y-auto">
                   <table className="w-full border-collapse text-caption">
                     <tbody>
-                      {previewData.slice(0, 5).map((row, rowIdx) => (
+                      {sourcePreviewData.slice(0, 5).map((row, rowIdx) => (
                         <tr key={rowIdx}>
-                          <td className="px-2 py-1.5 border-b border-ss-border bg-ss-surface whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis">
-                            {row.join('')}
-                          </td>
+                          {row.map((cell, cellIdx) => (
+                            <td
+                              key={cellIdx}
+                              className={`px-2 py-1.5 border-b border-r border-ss-border bg-ss-surface whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis ${
+                                cellIdx === row.length - 1 ? 'border-r-0' : ''
+                              }`}
+                            >
+                              {cell || '\u00A0'}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>

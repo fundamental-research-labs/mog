@@ -44,6 +44,20 @@ export function TextToColumnsDialogContainer() {
     [wb, activeSheetId, range],
   );
 
+  const handleSourcePreview = useCallback(() => {
+    if (!range) return [];
+    const result: string[][] = [];
+    for (let row = range.startRow; row <= range.endRow; row++) {
+      const values: string[] = [];
+      for (let col = range.startCol; col <= range.endCol; col++) {
+        const cell = ws.viewport.getCellData(row, col);
+        values.push(cell?.displayText ? displayString(cell.displayText) : '');
+      }
+      result.push(values);
+    }
+    return result;
+  }, [ws.viewport, range]);
+
   // Preview using ViewportBuffer for source cell values + local split logic
   const handlePreview = useCallback(
     (options: TextToColumnsDialogOptions) => {
@@ -91,7 +105,14 @@ export function TextToColumnsDialogContainer() {
     [ws.viewport, range],
   );
 
-  return <TextToColumnsDialog onConvert={handleConvert} range={range} onPreview={handlePreview} />;
+  return (
+    <TextToColumnsDialog
+      onConvert={handleConvert}
+      range={range}
+      onPreview={handlePreview}
+      onSourcePreview={handleSourcePreview}
+    />
+  );
 }
 
 // =============================================================================

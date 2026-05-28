@@ -53,6 +53,7 @@ function makeDeps(opts: {
 
   return {
     deps,
+    getCurrentRegion,
     openSortDialog,
     openRemoveDuplicatesDialog,
     openSubtotalDialog,
@@ -185,17 +186,20 @@ describe('data dialog openers capture resolved command targets', () => {
     });
 
     expect(setup.openTextToColumnsDialog).toHaveBeenCalledWith({ range: single });
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
   });
 
   test('text to columns stores only the captured range', async () => {
-    const range = { startRow: 0, startCol: 0, endRow: 9, endCol: 1 };
+    const selection = { startRow: 3, startCol: 0, endRow: 3, endCol: 0 };
+    const currentRegion = { startRow: 0, startCol: 0, endRow: 9, endCol: 1 };
     const setup = makeDeps({
-      selectionRange: { startRow: 3, startCol: 0, endRow: 3, endCol: 0 },
-      currentRegion: range,
+      selectionRange: selection,
+      currentRegion,
     });
 
     await OPEN_TEXT_TO_COLUMNS_DIALOG(setup.deps);
 
-    expect(setup.openTextToColumnsDialog).toHaveBeenCalledWith({ range });
+    expect(setup.openTextToColumnsDialog).toHaveBeenCalledWith({ range: selection });
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
   });
 });

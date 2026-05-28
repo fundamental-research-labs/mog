@@ -964,7 +964,7 @@ fn typed_custom_doc_props_populate_parse_output() {
 }
 
 #[test]
-fn workbook_views_populate_parse_output_and_round_trip_context() {
+fn workbook_views_populate_parse_output() {
     let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
     result.workbook_views = vec![
         ooxml_types::workbook::BookView {
@@ -992,10 +992,9 @@ fn workbook_views_populate_parse_output_and_round_trip_context() {
         },
     ];
 
-    let (output, round_trip, _diagnostics) = full_parse_result_to_parse_output(&result);
+    let (output, _round_trip, _diagnostics) = full_parse_result_to_parse_output(&result);
 
     assert_eq!(output.workbook_views.len(), 2);
-    assert_eq!(round_trip.workbook_views, output.workbook_views);
 
     let primary = &output.workbook_views[0];
     assert_eq!(primary.active_tab, 2);

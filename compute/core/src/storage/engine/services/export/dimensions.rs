@@ -321,6 +321,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
         default_row_descent,
         base_col_width: rt_meta.base_col_width,
         custom_height: rt_meta.custom_height,
+        zero_height: rt_meta.zero_height,
         outline_level_row: rt_meta.outline_level_row,
         outline_level_col: rt_meta.outline_level_col,
         row_heights,

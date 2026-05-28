@@ -105,6 +105,7 @@ pub const KEY_EXTENDED_DOCUMENT_PROPERTIES: &str = "extendedDocumentProperties";
 pub const KEY_XLSX_METADATA: &str = "xlsxMetadata";
 pub const KEY_FILE_VERSION: &str = "fileVersion";
 pub const KEY_FILE_SHARING: &str = "fileSharing";
+pub const KEY_THREADED_COMMENT_PERSONS: &str = "threadedCommentPersons";
 
 /// Meta map keys
 pub const KEY_NAME: &str = "name";

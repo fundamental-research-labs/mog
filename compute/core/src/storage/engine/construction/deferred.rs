@@ -247,7 +247,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         engine
             .stores
             .storage
-            .hydrate_imported_external_links(&round_trip_ctx)?;
+            .hydrate_imported_external_links(&parse_output.external_links)?;
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "ranged_positions",
@@ -541,7 +541,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                 &range_styles_per_sheet,
                 &mut allocator,
             )?;
-            new_storage.hydrate_imported_external_links(&full_round_trip_ctx)?;
+            new_storage.hydrate_imported_external_links(&full_parse_output.external_links)?;
             profile.counter("sheets", full_parse_output.sheets.len() as u64);
             profile.counter(
                 "ranged_positions",

@@ -8,7 +8,9 @@ use crate::snapshot::{
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use domain_types::{
     AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
+    domain::comment::{Comment, CommentType, PersonInfo},
     domain::external_link::{ExternalLink, ImportedExternalLinkIdentity},
+    domain::workbook::{WorkbookView, WorkbookViewVisibility},
 };
 use formula_types::CellRef;
 use value_types::{CellValue, FiniteF64};
@@ -162,6 +164,130 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
     let exported = engine.build_parse_output_from_yrs();
 
     assert_eq!(exported.metadata, output.metadata);
+}
+
+#[test]
+fn l2_xlsx_export_preserves_threaded_comment_persons() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Comments".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Text("threaded".into()),
+                ..Default::default()
+            }],
+            comments: vec![Comment {
+                id: "comment-1".to_string(),
+                cell_ref: "A1".to_string(),
+                author: "Modeled Author".to_string(),
+                author_id: Some("S::author@example.com::1".to_string()),
+                content: Some("Threaded package comment".to_string()),
+                thread_id: Some("{THREAD-1}".to_string()),
+                person_id: Some("{PERSON-1}".to_string()),
+                timestamp: Some("2026-05-27T10:00:00Z".to_string()),
+                comment_type: CommentType::ThreadedComment,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        persons: vec![PersonInfo {
+            id: "{PERSON-1}".to_string(),
+            display_name: "Modeled Author".to_string(),
+            user_id: Some("S::author@example.com::1".to_string()),
+            provider_id: Some("AD".to_string()),
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_parse = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+    assert_eq!(exported_parse.persons, input.persons);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let parsed = xlsx_api::parse(&exported_bytes)
+        .expect("exported XLSX should parse")
+        .output;
+
+    assert_eq!(parsed.persons.len(), 1);
+    assert_eq!(parsed.persons[0].id, "{PERSON-1}");
+    assert_eq!(parsed.persons[0].display_name, "Modeled Author");
+    assert!(parsed.sheets[0].comments.iter().any(|comment| {
+        comment.comment_type == CommentType::ThreadedComment
+            && comment.thread_id.as_deref() == Some("{THREAD-1}")
+            && comment.person_id.as_deref() == Some("{PERSON-1}")
+            && comment.content.as_deref() == Some("Threaded package comment")
+            && comment.author == "Modeled Author"
+    }));
+}
+
+#[test]
+fn build_parse_output_from_yrs_preserves_workbook_views() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            ..Default::default()
+        }],
+        workbook_views: vec![WorkbookView {
+            active_tab: 8,
+            first_sheet: 3,
+            visibility: WorkbookViewVisibility::Visible,
+            minimized: false,
+            show_horizontal_scroll: true,
+            show_vertical_scroll: true,
+            show_sheet_tabs: true,
+            auto_filter_date_grouping: true,
+            x_window: Some(0),
+            y_window: Some(0),
+            window_width: Some(28800),
+            window_height: Some(12225),
+            tab_ratio: Some(600.0),
+            uid: Some("{1A2B3C4D-0000-0000-0000-000000000000}".to_string()),
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&output);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.workbook_views, output.workbook_views);
+}
+
+#[test]
+fn build_parse_output_from_yrs_preserves_imported_array_refs() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 10,
+            cols: 4,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Text("first".into()),
+                formula: Some("_xlfn.SEQUENCE(3)".to_string()),
+                array_ref: Some("A1:A3".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&output);
+    let exported = engine.build_parse_output_from_yrs();
+    let cell = exported.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 0)
+        .expect("exported array formula anchor");
+
+    assert_eq!(cell.formula.as_deref(), Some("SEQUENCE(3)"));
+    assert_eq!(cell.array_ref.as_deref(), Some("A1:A3"));
 }
 
 fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {
@@ -587,7 +713,7 @@ fn imported_external_links_export_from_modeled_storage() {
 }
 
 #[test]
-fn stale_roundtrip_external_links_do_not_export_without_modeled_storage() {
+fn absent_modeled_external_links_do_not_export_external_references() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -598,18 +724,17 @@ fn stale_roundtrip_external_links_do_not_export_without_modeled_storage() {
         }],
         ..Default::default()
     };
-    let round_trip_context = domain_types::RoundTripContext {
-        external_links: vec![imported_external_link()],
-        ..Default::default()
-    };
-    let engine = engine_from_parse_output_normal_with_roundtrip(&input, Some(round_trip_context));
+    let engine = engine_from_parse_output_normal_with_roundtrip(
+        &input,
+        Some(domain_types::RoundTripContext::default()),
+    );
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
     let parsed = xlsx_api::parse(&exported_bytes).expect("parse exported xlsx");
 
     assert!(
-        parsed.round_trip_ctx.external_links.is_empty(),
-        "stale RoundTripContext external links must not create workbook externalReferences"
+        parsed.output.external_links.is_empty(),
+        "absent modeled external links must not create workbook externalReferences"
     );
 }
 

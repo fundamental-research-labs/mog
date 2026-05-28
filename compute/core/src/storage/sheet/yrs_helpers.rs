@@ -56,6 +56,7 @@ pub(super) const KEY_SHEET_UID: &str = "sheetUid";
 pub(super) const KEY_DEFAULT_ROW_DESCENT: &str = "defaultRowDescent";
 pub(super) const KEY_ZOOM_SCALE_NORMAL: &str = "zoomScaleNormal";
 pub(super) const KEY_CUSTOM_HEIGHT: &str = "customHeight";
+pub(super) const KEY_ZERO_HEIGHT: &str = "zeroHeight";
 pub(super) const KEY_BASE_COL_WIDTH: &str = "baseColWidth";
 pub(super) const KEY_OUTLINE_LEVEL_ROW: &str = "outlineLevelRow";
 pub(super) const KEY_OUTLINE_LEVEL_COL: &str = "outlineLevelCol";

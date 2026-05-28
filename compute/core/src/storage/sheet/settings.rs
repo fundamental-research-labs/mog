@@ -26,8 +26,8 @@ use super::yrs_helpers::{
     KEY_OUTLINE_LEVEL_COL, KEY_OUTLINE_LEVEL_ROW, KEY_PROTECTION_DETAILS,
     KEY_PROTECTION_PASSWORD_HASH, KEY_RIGHT_TO_LEFT, KEY_SHEET_UID, KEY_SHOW_COLUMN_HEADERS,
     KEY_SHOW_FORMULAS, KEY_SHOW_GRIDLINES, KEY_SHOW_ROW_HEADERS, KEY_SHOW_ZERO_VALUES, KEY_SQREF,
-    KEY_TAB_SELECTED, KEY_ZOOM_SCALE, KEY_ZOOM_SCALE_NORMAL, get_meta_map, meta_bool, meta_number,
-    meta_optional_number, meta_optional_u32, meta_string,
+    KEY_TAB_SELECTED, KEY_ZERO_HEIGHT, KEY_ZOOM_SCALE, KEY_ZOOM_SCALE_NORMAL, get_meta_map,
+    meta_bool, meta_number, meta_optional_number, meta_optional_u32, meta_string,
 };
 
 // =========================================================================
@@ -208,6 +208,8 @@ pub struct SheetRoundtripMeta {
     pub zoom_scale_normal: Option<u32>,
     /// Whether the default row height is custom (customHeight="1" on sheetFormatPr).
     pub custom_height: bool,
+    /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
+    pub zero_height: bool,
     /// Outline level for rows (outlineLevelRow on sheetFormatPr).
     pub outline_level_row: Option<u8>,
     /// Outline level for columns (outlineLevelCol on sheetFormatPr).
@@ -235,6 +237,7 @@ pub(crate) fn get_roundtrip_meta(
             base_col_width: meta_optional_u32(&txn, &meta, KEY_BASE_COL_WIDTH),
             zoom_scale_normal: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE_NORMAL),
             custom_height: meta_bool(&txn, &meta, KEY_CUSTOM_HEIGHT, false),
+            zero_height: meta_bool(&txn, &meta, KEY_ZERO_HEIGHT, false),
             outline_level_row: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_ROW)
                 .map(|v| v as u8),
             outline_level_col: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_COL)
@@ -254,6 +257,7 @@ pub(crate) fn get_roundtrip_meta(
             base_col_width: None,
             zoom_scale_normal: None,
             custom_height: false,
+            zero_height: false,
             outline_level_row: None,
             outline_level_col: None,
             trailing_col_ranges: Vec::new(),

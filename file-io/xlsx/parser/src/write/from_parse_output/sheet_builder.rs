@@ -54,11 +54,9 @@ pub(super) fn build_sheet(
             fmt.default_row_descent = Some(d);
         }
         fmt.base_col_width = dims.base_col_width;
+        fmt.zero_height = dims.zero_height;
         fmt.outline_level_row = dims.outline_level_row;
         fmt.outline_level_col = dims.outline_level_col;
-        if let Some(srt) = sheet_rt {
-            fmt.zero_height = srt.zero_height;
-        }
         writer.set_sheet_format_pr(fmt);
     }
 

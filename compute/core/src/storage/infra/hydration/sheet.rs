@@ -581,6 +581,9 @@ pub(crate) fn hydrate_sheet(
     if sheet.dimensions.custom_height {
         meta_map.insert(txn, "customHeight", Any::Bool(true));
     }
+    if sheet.dimensions.zero_height {
+        meta_map.insert(txn, "zeroHeight", Any::Bool(true));
+    }
     if let Some(olr) = sheet.dimensions.outline_level_row {
         meta_map.insert(txn, "outlineLevelRow", Any::Number(olr as f64));
     }
@@ -1119,6 +1122,9 @@ pub(crate) fn hydrate_sheet_with_allocation(
     }
     if sheet.dimensions.custom_height {
         meta_map.insert(txn, "customHeight", Any::Bool(true));
+    }
+    if sheet.dimensions.zero_height {
+        meta_map.insert(txn, "zeroHeight", Any::Bool(true));
     }
     if let Some(olr) = sheet.dimensions.outline_level_row {
         meta_map.insert(txn, "outlineLevelRow", Any::Number(olr as f64));

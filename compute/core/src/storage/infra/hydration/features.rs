@@ -10,7 +10,7 @@ use compute_document::hex::{SmallHex, id_to_hex};
 
 use cell_types::CellId;
 
-use compute_document::cell_serde::build_cell_prelim;
+use compute_document::cell_serde::{build_cell_prelim, write_array_ref_to_yrs};
 
 use super::IdAllocator;
 use super::helpers::get_or_create_cell_id_for_pos;
@@ -58,7 +58,10 @@ pub(super) fn hydrate_cells(
             cell.formula.as_deref(),
             None, // No identity formulas in ParseOutput
         );
-        cells_map.insert(txn, &*cell_hex, cell_prelim);
+        let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        if let Some(array_ref) = cell.array_ref.as_deref() {
+            write_array_ref_to_yrs(&cell_map, txn, array_ref);
+        }
 
         // Track position → cell_hex in memory for downstream hydration lookups
         let pos_key = format!("{}:{}", cell.row, cell.col);
@@ -132,7 +135,10 @@ pub(super) fn hydrate_cells_with_ids(
         }
 
         let cell_prelim = build_cell_prelim(&cell.value, cell.formula.as_deref(), None);
-        cells_map.insert(txn, &*cell_hex, cell_prelim);
+        let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        if let Some(array_ref) = cell.array_ref.as_deref() {
+            write_array_ref_to_yrs(&cell_map, txn, array_ref);
+        }
     }
     pos_map
 }

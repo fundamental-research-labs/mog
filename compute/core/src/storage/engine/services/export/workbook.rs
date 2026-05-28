@@ -11,10 +11,10 @@ use compute_document::workbook_metadata::{
     read_imported_external_cache_records, read_workbook_link_records,
 };
 use domain_types::{
-    NamedRange,
+    NamedRange, PersonInfo,
     domain::external_link::ExternalLink,
     domain::theme::ThemeData,
-    domain::workbook::{CalculationProperties, RefMode, WorkbookProtection},
+    domain::workbook::{CalculationProperties, RefMode, WorkbookProtection, WorkbookView},
     yrs_schema,
 };
 use yrs::{Any, Map, Out, Transact};
@@ -167,24 +167,15 @@ pub(super) fn export_extended_document_properties(
 
 /// Export calculation settings from modeled workbook storage.
 ///
-/// `calcId` is not modeled by the app runtime, so an imported value may be
-/// carried forward as a non-authoritative identity hint. Behavioral settings
-/// must come from the workbook settings map.
-pub(super) fn export_calculation_properties(
-    stores: &EngineStores,
-    calc_id_hint: Option<u32>,
-) -> CalculationProperties {
+pub(super) fn export_calculation_properties(stores: &EngineStores) -> CalculationProperties {
     let settings = workbook_settings::get_calculation_settings(
         stores.storage.doc(),
         stores.storage.workbook_map(),
     );
-    calculation_properties_from_settings(&settings, calc_id_hint)
+    calculation_properties_from_settings(&settings)
 }
 
-fn calculation_properties_from_settings(
-    settings: &CalculationSettings,
-    calc_id_hint: Option<u32>,
-) -> CalculationProperties {
+fn calculation_properties_from_settings(settings: &CalculationSettings) -> CalculationProperties {
     CalculationProperties {
         iterate: settings.enable_iterative_calculation,
         iterate_count: settings.max_iterations,
@@ -206,7 +197,7 @@ fn calculation_properties_from_settings(
         concurrent_calc: settings.concurrent_calc,
         concurrent_manual_count: settings.concurrent_manual_count,
         force_full_calc: settings.force_full_calc,
-        calc_id: calc_id_hint,
+        calc_id: settings.calc_id,
         has_explicit_iterate_count: settings.has_explicit_iterate_count,
         has_explicit_iterate_delta: settings.has_explicit_iterate_delta,
         ..CalculationProperties::default()
@@ -315,6 +306,55 @@ pub(super) fn export_workbook_properties(
         &settings_map,
         &txn,
     ))
+}
+
+/// Export workbook views from the `workbookSettings` Y.Map.
+pub(super) fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let settings_map = match workbook.get(&txn, KEY_WORKBOOK_SETTINGS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Vec::new(),
+    };
+
+    let Some(Out::Any(Any::String(json))) = settings_map.get(&txn, "workbookViews") else {
+        return Vec::new();
+    };
+
+    serde_json::from_str::<Vec<WorkbookView>>(&json).unwrap_or_default()
+}
+
+/// Export workbook-level threaded comment person identities.
+pub(in crate::storage::engine) fn export_workbook_threaded_comment_persons(
+    stores: &EngineStores,
+) -> Vec<PersonInfo> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let persons_map = match workbook.get(&txn, KEY_THREADED_COMMENT_PERSONS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Vec::new(),
+    };
+
+    let mut persons = Vec::new();
+    for (_, value) in persons_map.iter(&txn) {
+        if let Out::Any(Any::String(json)) = value {
+            match serde_json::from_str::<PersonInfo>(&json) {
+                Ok(person) => persons.push(person),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to deserialize threaded comment person during export, skipping entry"
+                    );
+                }
+            }
+        }
+    }
+    persons.sort_by(|a, b| a.id.cmp(&b.id));
+    persons
 }
 
 /// Export file version from the workbook-level `fileVersion` Y.Map.

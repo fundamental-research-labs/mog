@@ -31,11 +31,15 @@ use super::PaletteOps;
 /// Sharing a single transaction eliminates the overhead of opening a
 /// second snapshot. Uses `CellId` keys to avoid per-cell `id_to_hex()`
 /// String allocations (~3.1M saved for large workbooks).
-fn batch_read_props_and_raw_formulas(
+fn batch_read_props_formulas_and_array_refs(
     stores: &EngineStores,
     sheet_id: &SheetId,
     read_raw_formulas: bool,
-) -> (FxHashMap<CellId, CellProperties>, FxHashMap<CellId, String>) {
+) -> (
+    FxHashMap<CellId, CellProperties>,
+    FxHashMap<CellId, String>,
+    FxHashMap<CellId, String>,
+) {
     let doc = stores.storage.doc();
     let txn = doc.transact();
 
@@ -73,27 +77,35 @@ fn batch_read_props_and_raw_formulas(
         }
     }
 
-    // --- Raw formulas (only for lossless round-trip) ---
+    // --- Raw formulas (only for lossless round-trip) + array formula refs ---
     let mut raw_formulas = FxHashMap::default();
-    if read_raw_formulas
-        && let Some(cells_map) = crate::storage::infra::grid_helpers::get_cells_map(
-            &txn,
-            stores.storage.sheets(),
-            &sheet_hex,
-        )
-    {
+    let mut array_refs = FxHashMap::default();
+    if let Some(cells_map) = crate::storage::infra::grid_helpers::get_cells_map(
+        &txn,
+        stores.storage.sheets(),
+        &sheet_hex,
+    ) {
         raw_formulas.reserve(cells_map.len(&txn) as usize);
+        array_refs.reserve(cells_map.len(&txn) as usize);
         for (cell_hex, value) in cells_map.iter(&txn) {
-            if let Out::YMap(cell_map) = value
+            let Out::YMap(cell_map) = value else {
+                continue;
+            };
+            let Some(cell_id) = parse_cell_id(cell_hex) else {
+                continue;
+            };
+            if read_raw_formulas
                 && let Some(Out::Any(Any::String(f))) = cell_map.get(&txn, KEY_FORMULA)
-                && let Some(cell_id) = parse_cell_id(cell_hex)
             {
                 raw_formulas.insert(cell_id, f.to_string());
+            }
+            if let Some(Out::Any(Any::String(array_ref))) = cell_map.get(&txn, KEY_ARRAY_REF) {
+                array_refs.insert(cell_id, array_ref.to_string());
             }
         }
     }
 
-    (all_props, raw_formulas)
+    (all_props, raw_formulas, array_refs)
 }
 
 fn batch_read_range_format_style_ids(
@@ -213,8 +225,8 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     // Batch-read ALL cell properties and raw formulas in a single Yrs
     // transaction, avoiding duplicate transaction setup overhead (O2+O3).
     // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
-    let (all_props, raw_formulas) =
-        batch_read_props_and_raw_formulas(stores, sheet_id, has_lossless_stylesheet);
+    let (all_props, raw_formulas, array_refs) =
+        batch_read_props_formulas_and_array_refs(stores, sheet_id, has_lossless_stylesheet);
     let imported_range_style_ids = batch_read_range_format_style_ids(stores, sheet_id);
 
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
@@ -250,6 +262,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 col,
                 &all_props,
                 &raw_formulas,
+                &array_refs,
                 has_lossless_stylesheet,
                 original_cellxfs_count,
                 palette,
@@ -327,6 +340,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     col,
                     &all_props,
                     &raw_formulas,
+                    &array_refs,
                     has_lossless_stylesheet,
                     original_cellxfs_count,
                     palette,
@@ -472,6 +486,7 @@ fn build_cell_data_for_cell_id(
     col: u32,
     all_props: &FxHashMap<CellId, CellProperties>,
     raw_formulas: &FxHashMap<CellId, String>,
+    array_refs: &FxHashMap<CellId, String>,
     has_lossless_stylesheet: bool,
     original_cellxfs_count: u32,
     palette: &impl PaletteOps,
@@ -550,7 +565,7 @@ fn build_cell_data_for_cell_id(
         formula: formula
             .as_deref()
             .map(|f| f.strip_prefix('=').unwrap_or(f).to_string()),
-        array_ref: None,
+        array_ref: array_refs.get(cell_id).cloned(),
         style_id,
         cell_formula: None,
         cm,
@@ -1058,6 +1073,7 @@ mod tests {
             },
         );
         let raw_formulas = FxHashMap::default();
+        let array_refs = FxHashMap::default();
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
         let (engine, _) =
@@ -1072,6 +1088,7 @@ mod tests {
             55,
             &props,
             &raw_formulas,
+            &array_refs,
             true,
             20,
             &palette,

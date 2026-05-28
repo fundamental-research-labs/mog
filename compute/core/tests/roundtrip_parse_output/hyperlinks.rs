@@ -22,6 +22,7 @@ fn roundtrip_hyperlinks() {
             display: Some("Click me".to_string()),
             tooltip: None,
             uid: None,
+            ..Default::default()
         },
         Hyperlink {
             cell_ref: "A2".to_string(),
@@ -30,6 +31,7 @@ fn roundtrip_hyperlinks() {
             display: Some("Internal link".to_string()),
             tooltip: None,
             uid: None,
+            ..Default::default()
         },
         Hyperlink {
             cell_ref: "A3".to_string(),
@@ -38,6 +40,7 @@ fn roundtrip_hyperlinks() {
             display: Some("With tooltip".to_string()),
             tooltip: Some("Visit example.org".to_string()),
             uid: None,
+            ..Default::default()
         },
     ];
 

@@ -1,6 +1,6 @@
 use yrs::{Any, Map, MapPrelim, MapRef, Transact};
 
-use domain_types::{ParseOutput, RoundTripContext};
+use domain_types::ParseOutput;
 
 use compute_document::hex::id_to_hex;
 use compute_document::schema::*;
@@ -24,7 +24,8 @@ use super::styles::{ImportedRangeStyle, hydrate_style_palette};
 use super::workbook::{
     hydrate_workbook_calculation, hydrate_workbook_metadata, hydrate_workbook_named_ranges,
     hydrate_workbook_parsed_pivot_tables, hydrate_workbook_protection, hydrate_workbook_slicers,
-    hydrate_workbook_tables, hydrate_workbook_theme,
+    hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
+    hydrate_workbook_views,
 };
 use super::{HydrationIdMap, IdAllocator};
 
@@ -40,17 +41,17 @@ impl YrsStorage {
     /// the persisted workbook link registry and imported cache maps.
     pub(crate) fn hydrate_imported_external_links(
         &mut self,
-        round_trip_ctx: &RoundTripContext,
+        external_links: &[ExternalLink],
     ) -> Result<(), ComputeError> {
-        if round_trip_ctx.external_links.is_empty() {
+        if external_links.is_empty() {
             return Ok(());
         }
 
         let mut txn = self.doc.transact_mut();
         let destination_workbook_id =
-            ensure_imported_workbook_identity(&mut txn, &self.workbook, round_trip_ctx)?;
+            ensure_imported_workbook_identity(&mut txn, &self.workbook, external_links)?;
 
-        for link in &round_trip_ctx.external_links {
+        for link in external_links {
             let Some(identity) = &link.imported_identity else {
                 let artifact = imported_external_package_artifact(&destination_workbook_id, link)?;
                 write_imported_external_package_artifact(&mut txn, &self.workbook, &artifact)
@@ -202,6 +203,8 @@ impl YrsStorage {
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
 
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
+        hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
         hydrate_workbook_metadata(
             &self.workbook,
             &output.workbook_properties,
@@ -396,6 +399,8 @@ impl YrsStorage {
         );
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
+        hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
         hydrate_workbook_metadata(
             &self.workbook,
             &output.workbook_properties,
@@ -422,7 +427,7 @@ const WORKBOOK_IMPORT_NAMESPACE: uuid::Uuid =
 fn ensure_imported_workbook_identity(
     txn: &mut yrs::TransactionMut<'_>,
     workbook: &MapRef,
-    round_trip_ctx: &RoundTripContext,
+    external_links: &[ExternalLink],
 ) -> Result<WorkbookId, ComputeError> {
     if let Some(metadata) =
         read_workbook_metadata(txn, workbook).map_err(|err| ComputeError::Deserialize {
@@ -432,8 +437,7 @@ fn ensure_imported_workbook_identity(
         return Ok(metadata.workbook_id);
     }
 
-    let identity_seed = round_trip_ctx
-        .external_links
+    let identity_seed = external_links
         .iter()
         .map(|link| {
             link.imported_identity

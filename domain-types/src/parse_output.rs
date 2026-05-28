@@ -339,6 +339,9 @@ pub struct SheetDimensions {
     /// Whether the default row height is custom (customHeight="1" on sheetFormatPr).
     #[serde(default)]
     pub custom_height: bool,
+    /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
+    #[serde(default)]
+    pub zero_height: bool,
     /// Outline level for rows (outlineLevelRow on sheetFormatPr) — roundtrip only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline_level_row: Option<u8>,

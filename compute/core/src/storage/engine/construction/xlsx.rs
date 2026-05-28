@@ -304,7 +304,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             &range_styles_per_sheet,
             &mut allocator,
         )?;
-        storage.hydrate_imported_external_links(&round_trip_ctx)?;
+        storage.hydrate_imported_external_links(&parse_output.external_links)?;
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "ranged_positions",

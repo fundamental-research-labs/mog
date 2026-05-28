@@ -164,11 +164,6 @@ pub struct RoundTripContext {
         skip_serializing_if = "Option::is_none"
     )]
     pub raw_persons_xml: Option<Vec<u8>>,
-    /// Compatibility input only. External links are modeled through
-    /// `ParseOutput.external_links` and imported workbook storage; exporters
-    /// must not merge this list back into workbook relationships or parts.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub external_links: Vec<crate::domain::external_link::ExternalLink>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_xml_parts: Vec<BlobPart>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -200,20 +195,6 @@ pub struct RoundTripContext {
     /// packages only for API-created or explicitly dirty pivots.
     #[serde(default, skip_serializing_if = "PivotPackageRoundTrip::is_empty")]
     pub pivot_package: PivotPackageRoundTrip,
-    /// Compatibility input only. Workbook views are modeled through
-    /// `ParseOutput.workbook_views` and must be regenerated from that state.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub workbook_views: Vec<crate::domain::workbook::WorkbookView>,
-    /// Original `calcId` from `<calcPr>`. Preserved for round-trip fidelity
-    /// until iterative_calc settings are properly hydrated into Yrs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub calc_id: Option<u32>,
-    /// Full iterative calculation settings from the original file.
-    /// Preserved for round-trip fidelity — includes max_iterations, max_change,
-    /// and the `has_explicit_*` flags that control whether attributes are emitted
-    /// even when they match defaults.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub iterative_calc_settings: Option<crate::domain::workbook::CalculationProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extensions: Option<ExtensionPreservation>,
 
@@ -292,8 +273,6 @@ pub struct SheetRoundTripContext {
     pub legacy_drawing_r_id: Option<String>,
     pub legacy_drawing_hf_r_id: Option<String>,
     #[serde(default)]
-    pub table_xml_passthroughs: Vec<BlobPart>,
-    #[serde(default)]
     pub comments_root_namespace_attrs: Vec<(String, String)>,
     /// Original comment author list from the parsed comments XML.
     /// Preserved for round-trip fidelity — the reconstruction from domain types
@@ -336,9 +315,6 @@ pub struct SheetRoundTripContext {
     /// Export may use it only when it matches current modeled worksheet bounds;
     /// stale imported dimensions must not override generated sheet state.
     pub original_dimension: Option<String>,
-    /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
-    #[serde(default)]
-    pub zero_height: bool,
     /// Whether the original worksheet had an empty `<extLst/>` element.
     /// Compatibility input only; emitted only when no modeled worksheet
     /// extension owner is present.
@@ -383,24 +359,6 @@ pub struct SheetRoundTripContext {
     /// edit or recalculation produces a real cell at the same position.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped_storage_cells: Vec<crate::parse_output::CellData>,
-    /// Raw `<headerFooter>...</headerFooter>` XML from the worksheet.
-    ///
-    /// Header/footer text uses OOXML lexical escapes such as `_x000D_` where a
-    /// literal decoded carriage return is semantically close but not byte/roundtrip
-    /// equivalent. Replaying the source element avoids normalizing that syntax.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub header_footer_xml: Option<String>,
-    /// Raw worksheet-level controls `mc:AlternateContent` XML.
-    ///
-    /// Existing files vary in whether they include an `mc:Fallback` branch and
-    /// where namespace declarations live. Preserve the original wrapper when the
-    /// workbook is otherwise unchanged instead of synthesizing a different one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worksheet_controls_xml: Option<String>,
-    /// Multi-pane selection elements for round-trip fidelity.
-    /// Frozen-pane sheets can have up to 4 selection elements (one per pane).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub view_selections: Vec<ooxml_types::worksheet::Selection>,
     /// Cells where the `<f>` element had `xml:space="preserve"`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub xml_space_formula_cells: Vec<(u32, u32)>,

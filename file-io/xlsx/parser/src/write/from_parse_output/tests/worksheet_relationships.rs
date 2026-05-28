@@ -1323,14 +1323,6 @@ fn stale_table_sidecar_relationships_are_not_replayed() {
                 target: "../tables/table1.xml".to_string(),
                 target_mode: None,
             }],
-            table_xml_passthroughs: vec![domain_types::BlobPart {
-                path: "xl/tables/_rels/table1.xml.rels".to_string(),
-                data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable" Target="../queryTables/queryTable1.xml"/>
-</Relationships>"#
-                    .to_vec(),
-            }],
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -1417,11 +1409,6 @@ fn mutated_table_spec_regenerates_table_package_parts_from_current_model() {
                 "worksheet\0after\0legacyDrawing\0tableParts".to_string(),
                 r#"<tableParts count="1"><tablePart r:id="rIdStale"/></tableParts>"#.to_string(),
             )],
-            table_xml_passthroughs: vec![domain_types::BlobPart {
-                path: "xl/tables/table9.xml".to_string(),
-                data: br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="9" name="Table1" displayName="Table1" ref="A1:B2"><autoFilter ref="A1:B2"/><tableColumns count="2"><tableColumn id="1" name="OldA"/><tableColumn id="2" name="OldB"/></tableColumns></table>"#
-                    .to_vec(),
-            }],
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -2023,10 +2010,6 @@ fn generated_control_property_relationship_uses_graph_registered_part() {
                         .to_vec(),
                 }),
             }],
-            worksheet_controls_xml: Some(
-                r#"<mc:AlternateContent><controls><control shapeId="1025" r:id="rId99" name="Raw Control"/></controls><rawControlsSentinel/></mc:AlternateContent>"#
-                    .to_string(),
-            ),
             ..Default::default()
         }],
         content_type_overrides: vec![(
@@ -2133,10 +2116,6 @@ fn comments_and_form_controls_share_generated_vml_without_raw_replay() {
                 data: b"<xml><rawCombinedVmlSentinel/></xml>".to_vec(),
                 rels: None,
             }],
-            worksheet_controls_xml: Some(
-                r#"<mc:AlternateContent><controls><control shapeId="1025" r:id="rId99" name="Raw Control"/></controls><rawControlsSentinel/></mc:AlternateContent>"#
-                    .to_string(),
-            ),
             ..Default::default()
         }],
         ..Default::default()

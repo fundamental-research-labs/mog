@@ -89,6 +89,13 @@ pub struct CalculationSettings {
     #[serde(default)]
     pub force_full_calc: bool,
 
+    /// Excel calculation engine version (`calcId` on `<calcPr>`).
+    ///
+    /// This is not runtime behavior, but it is workbook calculation metadata and
+    /// must travel with modeled calculation settings rather than round-trip context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calc_id: Option<u32>,
+
     /// Whether `iterateCount` was explicitly present in source OOXML.
     ///
     /// Excel often emits explicit default-valued calcPr attributes. The runtime
@@ -117,6 +124,7 @@ impl Default for CalculationSettings {
             concurrent_calc: true,
             concurrent_manual_count: None,
             force_full_calc: false,
+            calc_id: None,
             has_explicit_iterate_count: false,
             has_explicit_iterate_delta: false,
         }
@@ -700,6 +708,7 @@ impl From<domain_types::domain::workbook::CalculationProperties> for Calculation
             concurrent_calc: v.concurrent_calc,
             concurrent_manual_count: v.concurrent_manual_count,
             force_full_calc: v.force_full_calc,
+            calc_id: v.calc_id,
             has_explicit_iterate_count: v.has_explicit_iterate_count,
             has_explicit_iterate_delta: v.has_explicit_iterate_delta,
         }
@@ -750,6 +759,7 @@ mod tests {
         assert_eq!(settings.concurrent_calc, false);
         assert_eq!(settings.concurrent_manual_count, Some(4));
         assert_eq!(settings.force_full_calc, true);
+        assert_eq!(settings.calc_id, Some(191029));
     }
 
     #[test]

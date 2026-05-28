@@ -122,7 +122,7 @@ fn raw_doc_props_are_dropped_when_document_properties_are_unmodeled() {
 }
 
 #[test]
-fn workbook_views_are_exported_from_modeled_state_not_roundtrip_context() {
+fn workbook_views_are_exported_from_modeled_state() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         ..Default::default()
@@ -134,16 +134,7 @@ fn workbook_views_are_exported_from_modeled_state_not_roundtrip_context() {
         window_width: Some(12345),
         ..Default::default()
     }];
-    let ctx = domain_types::RoundTripContext {
-        workbook_views: vec![WorkbookView {
-            active_tab: 0,
-            first_sheet: 0,
-            tab_ratio: Some(300.0),
-            window_width: Some(999),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
@@ -350,11 +341,8 @@ fn external_link_workbook_relationship_uses_graph_resolved_id() {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    output.external_links = vec![modeled_link.clone()];
-    let ctx = domain_types::RoundTripContext {
-        external_links: vec![modeled_link],
-        ..Default::default()
-    };
+    output.external_links = vec![modeled_link];
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
@@ -450,23 +438,7 @@ fn external_link_defined_names_export_from_modeled_state_not_roundtrip_context()
         imported_identity: Some(identity.clone()),
         ..Default::default()
     }];
-    let ctx = domain_types::RoundTripContext {
-        external_links: vec![domain_types::domain::external_link::ExternalLink {
-            id: "1".to_string(),
-            file_path: Some("file:///stale.xlsx".to_string()),
-            file_path_rid: Some("rId1".to_string()),
-            defined_names: vec![
-                domain_types::domain::external_link::ExternalDefinedName::with_details(
-                    "StaleExternalName".to_string(),
-                    Some("'[1]Stale'!$Z$99".to_string()),
-                    Some(7),
-                ),
-            ],
-            imported_identity: Some(identity),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
@@ -486,36 +458,17 @@ fn external_link_defined_names_export_from_modeled_state_not_roundtrip_context()
     assert!(link_xml.contains(r#"name="ModeledExternalName""#));
     assert!(link_xml.contains(r#"refersTo="&apos;[1]Sheet1&apos;!$A$1""#));
     assert!(link_xml.contains(r#"sheetId="0""#));
-    assert!(!link_xml.contains("StaleExternalName"));
-    assert!(!link_xml.contains("'[1]Stale'!$Z$99"));
     assert!(link_rels.contains(r#"Target="file:///modeled.xlsx""#));
-    assert!(!link_rels.contains("file:///stale.xlsx"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
-fn stale_roundtrip_external_links_do_not_export_without_modeled_links() {
+fn absent_modeled_external_links_do_not_export_external_link_parts() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        external_links: vec![domain_types::domain::external_link::ExternalLink {
-            id: "1".to_string(),
-            imported_identity: Some(
-                domain_types::domain::external_link::ImportedExternalLinkIdentity {
-                    excel_ordinal: 1,
-                    workbook_rel_id: "rId20".to_string(),
-                    part_name: "externalLinks/externalLink9.xml".to_string(),
-                    external_book_rid: None,
-                    target: Some("externalLinks/externalLink9.xml".to_string()),
-                    target_mode: None,
-                },
-            ),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");

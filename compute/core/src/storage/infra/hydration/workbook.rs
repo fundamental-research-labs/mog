@@ -251,6 +251,51 @@ pub(super) fn hydrate_workbook_calculation(
     }
 }
 
+/// Hydrate workbook view state into workbook settings.
+///
+/// Workbook views are workbook-level UI state from workbook.xml (`activeTab`,
+/// `firstSheet`, window geometry, tab visibility, etc.). Parser and writer both
+/// model them in `ParseOutput`; L2 must persist them through Yrs so production
+/// import/export does not silently reset workbook.xml to `<workbookView/>`.
+pub(super) fn hydrate_workbook_views(
+    workbook: &MapRef,
+    workbook_views: &[domain_types::domain::workbook::WorkbookView],
+    txn: &mut yrs::TransactionMut,
+) {
+    if workbook_views.is_empty() {
+        return;
+    }
+
+    let settings_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_SETTINGS);
+    if let Ok(json) = serde_json::to_string(workbook_views) {
+        settings_map.insert(txn, "workbookViews", Any::String(Arc::from(json.as_str())));
+    }
+}
+
+/// Hydrate workbook-level threaded comment person identities.
+///
+/// Threaded comments store `person_id` on each comment, but Excel resolves that
+/// id through `xl/persons/person.xml`. Persist the modeled `PersonInfo` list so
+/// production XLSX export can emit the person part from current workbook state.
+pub(super) fn hydrate_workbook_threaded_comment_persons(
+    workbook: &MapRef,
+    persons: &[domain_types::domain::comment::PersonInfo],
+    txn: &mut yrs::TransactionMut,
+) {
+    if persons.is_empty() {
+        return;
+    }
+
+    let persons_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_THREADED_COMMENT_PERSONS);
+    for person in persons {
+        if let Ok(json) = serde_json::to_string(person) {
+            persons_map.insert(txn, &*person.id, Any::String(Arc::from(json.as_str())));
+        }
+    }
+}
+
 /// Hydrate all workbook metadata (properties, file version, file sharing) into Yrs.
 ///
 /// - `WorkbookProperties` fields go into the existing `workbookSettings` map.

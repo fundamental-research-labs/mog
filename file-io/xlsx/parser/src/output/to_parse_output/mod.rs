@@ -868,6 +868,7 @@ fn convert_sheet(
         default_row_descent: sheet.default_row_descent,
         base_col_width: sheet.base_col_width,
         custom_height: sheet.custom_height,
+        zero_height: sheet.zero_height,
         outline_level_row: sheet.outline_level_row,
         outline_level_col: sheet.outline_level_col,
         row_heights,
@@ -1251,14 +1252,6 @@ fn convert_sheet(
             .collect(),
         legacy_drawing_r_id: sheet.legacy_drawing_r_id.clone(),
         legacy_drawing_hf_r_id: sheet.legacy_drawing_hf_r_id.clone(),
-        table_xml_passthroughs: sheet
-            .table_xml_passthroughs
-            .iter()
-            .map(|(path, data)| BlobPart {
-                path: path.clone(),
-                data: data.clone(),
-            })
-            .collect(),
         comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
         comment_authors: sheet.comment_authors.clone(),
         row_descents: sheet.row_descents.clone(),
@@ -1294,7 +1287,6 @@ fn convert_sheet(
             .map(|rh| rh.row)
             .collect(),
         original_dimension: sheet.original_dimension.clone(),
-        zero_height: sheet.zero_height,
         has_empty_ext_lst: sheet.has_empty_ext_lst,
         ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
@@ -1315,8 +1307,6 @@ fn convert_sheet(
             .collect(),
         explicit_blank_cells,
         skipped_storage_cells,
-        header_footer_xml: sheet.header_footer_xml.clone(),
-        worksheet_controls_xml: sheet.worksheet_controls_xml.clone(),
         xml_space_formula_cells: sheet
             .cells
             .iter()
@@ -1331,11 +1321,6 @@ fn convert_sheet(
             .collect(),
         custom_properties_xml: sheet.custom_properties_xml.clone(),
         sheet_preserved_elements: Vec::new(),
-        view_selections: sheet
-            .view_options
-            .first()
-            .map(|v| v.selections.clone())
-            .unwrap_or_default(),
         // Collect drawing anchor passthroughs: twoCellAnchors with content-level
         // mc:AlternateContent (e.g., ChartEx wrapped in mc:AlternateContent).
         // These need verbatim round-trip to preserve the mc wrapper, fallback shape,

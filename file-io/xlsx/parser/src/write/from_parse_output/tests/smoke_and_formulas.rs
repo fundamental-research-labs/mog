@@ -440,7 +440,7 @@ fn stale_pane_qualified_selection_is_dropped_without_current_pane() {
 }
 
 #[test]
-fn stale_roundtrip_view_selection_does_not_override_current_sheet_view() {
+fn sheet_view_selection_exports_from_modeled_state() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         view: domain_types::SheetView {
@@ -450,18 +450,7 @@ fn stale_roundtrip_view_selection_does_not_override_current_sheet_view() {
         },
         ..Default::default()
     }]);
-    let ctx = domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            view_selections: vec![ooxml_types::worksheet::Selection {
-                pane: Some(ooxml_types::worksheet::Pane::BottomRight),
-                active_cell: Some("C3".to_string()),
-                active_cell_id: None,
-                sqref: Some("C3".to_string()),
-            }],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
+    let ctx = domain_types::RoundTripContext::default();
 
     let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");

@@ -1148,13 +1148,6 @@ pub(super) fn build_round_trip_context(
     sheet_data: &[domain_types::SheetData],
     sheet_contexts: Vec<SheetRoundTripContext>,
 ) -> RoundTripContext {
-    let workbook_views = result
-        .workbook_views
-        .iter()
-        .cloned()
-        .map(domain_types::domain::workbook::WorkbookView::from)
-        .collect();
-
     let custom_xml_parts: Vec<BlobPart> = result
         .custom_xml_parts
         .iter()
@@ -1257,13 +1250,11 @@ pub(super) fn build_round_trip_context(
         raw_doc_props_custom_xml: result.raw_doc_props_custom_xml.clone(),
         raw_metadata_xml: result.raw_metadata_xml.clone(),
         raw_persons_xml: result.raw_persons_xml.clone(),
-        external_links: result.external_links.clone(),
         custom_xml_parts,
         web_extension_parts,
         opaque_package_subgraphs,
         binary_blobs,
         pivot_package: build_pivot_package_round_trip(result),
-        workbook_views,
         extensions: None, // Not serializable — use workbook_namespace_attrs + workbook_preserved_elements instead
 
         // Workbook-level namespace + preserved element preservation
@@ -1297,24 +1288,8 @@ pub(super) fn build_round_trip_context(
         theme_extra_clr_scheme_lst_xml: result.theme_extra_clr_scheme_lst_xml.clone(),
         theme_ext_lst_xml: result.theme_ext_lst_xml.clone(),
         doc_metadata_label_info: result.raw_doc_metadata_label_info.clone(),
-        calc_id: result.calc_id,
         skipped_named_ranges: vec![],
         original_named_ranges_order: vec![],
-        iterative_calc_settings: Some(
-            result
-                .calc_pr_settings
-                .clone()
-                .map(domain_types::domain::workbook::CalculationProperties::from)
-                .unwrap_or_else(|| domain_types::domain::workbook::CalculationProperties {
-                    iterate: result.iterative_calc,
-                    iterate_count: result.max_iterations.unwrap_or(100),
-                    iterate_delta: result.max_change.unwrap_or(0.001),
-                    calc_id: result.calc_id,
-                    has_explicit_iterate_count: result.max_iterations.is_some(),
-                    has_explicit_iterate_delta: result.max_change.is_some(),
-                    ..Default::default()
-                }),
-        ),
     }
 }
 

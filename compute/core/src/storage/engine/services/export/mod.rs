@@ -32,7 +32,7 @@ pub(in crate::storage::engine) use sheet_metadata::{
 };
 pub(in crate::storage::engine) use workbook::{
     export_workbook_parsed_pivot_tables, export_workbook_protection, export_workbook_slicer_caches,
-    export_workbook_theme,
+    export_workbook_theme, export_workbook_threaded_comment_persons,
 };
 
 use cell_types::SheetId;
@@ -63,7 +63,7 @@ use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_document_properties, export_external_links,
     export_file_sharing, export_file_version, export_workbook_named_ranges,
-    export_workbook_properties,
+    export_workbook_properties, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -853,17 +853,14 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         properties: export_document_properties(stores),
         extended_properties: workbook::export_extended_document_properties(stores),
         protection: wb_protection,
-        calculation: export_calculation_properties(
-            stores,
-            round_trip_context.and_then(|ctx| ctx.calc_id),
-        ),
+        calculation: export_calculation_properties(stores),
         metadata: workbook::export_xlsx_metadata(stores),
-        workbook_views: vec![],
+        workbook_views: export_workbook_views(stores),
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),
         file_sharing: export_file_sharing(stores),
         external_links: export_external_links(stores),
-        persons: vec![],
+        persons: export_workbook_threaded_comment_persons(stores),
     }
 }
 

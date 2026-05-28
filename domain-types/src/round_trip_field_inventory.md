@@ -40,15 +40,11 @@ sidecar; it is not semantic authority.
 | `raw_doc_props_custom_xml` | deprecated compatibility only | `DocumentProperties.custom` | domain | document property writer | docProps registration from properties | doc property tests |
 | `raw_metadata_xml` | transient parse-output sidecar | metadata with live `cm`/`vm` cell refs | ParseOutput | metadata writer with live refs | metadata part registration | metadata tests |
 | `raw_persons_xml` | deprecated compatibility only | `ParseOutput.persons` | domain | persons writer | persons part registration | person tests |
-| `external_links` | persisted typed metadata | `domain::external_link` | domain | external link writer | workbook external-link registrations | external link tests |
 | `custom_xml_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | opaque custom XML tests |
 | `web_extension_parts` | deprecated compatibility only | `opaque_package_subgraphs` | round_trip | ignored by writer; import lowering creates typed subgraphs | clean opaque subgraph registration only | web extension tests |
 | `opaque_package_subgraphs` | persisted opaque sidecar | `OpaquePackageSubgraph` | round_trip | `write::opaque_subgraph` | clean subgraph registration | opaque subgraph tests |
 | `binary_blobs` | deprecated compatibility only | opaque subgraphs or typed feature sidecars | round_trip | ignored by writer except when lowered into typed feature state | clean opaque subgraph registration only | binary passthrough tests |
 | `pivot_package` | persisted opaque sidecar | `PivotPackageRoundTrip` | round_trip | pivot writer | pivot package graph registration | pivot package tests |
-| `workbook_views` | typed modeled state | `domain::workbook::WorkbookView` | domain | workbook writer | workbook XML | workbook view tests |
-| `calc_id` | persisted typed metadata | `CalculationProperties.calc_id` | domain | workbook writer | workbook XML | calc property tests |
-| `iterative_calc_settings` | typed modeled state | `domain::workbook::CalculationProperties` | domain | workbook writer | workbook XML | calc property tests |
 | `extensions` | deprecated compatibility only | namespace / preserved-element fields | none | ignored | none | serde omission tests |
 | `workbook_namespace_attrs` | persisted typed metadata | workbook lexical metadata | round_trip | workbook writer | workbook XML | unknown element tests |
 | `workbook_preserved_elements` | persisted typed metadata | workbook unknown element metadata | round_trip | workbook writer after modeled filtering | workbook XML | unknown element tests |
@@ -71,7 +67,6 @@ sidecar; it is not semantic authority.
 | `raw_vml_drawings` | persisted opaque sidecar | VML owner sidecar while clean | round_trip | VML/header-footer writer | VML part registration | VML tests |
 | `legacy_drawing_r_id` | persisted typed metadata | sheet drawing relationship hint | round_trip | drawing writer after owner match | generated sheet drawing rel | drawing tests |
 | `legacy_drawing_hf_r_id` | persisted typed metadata | header/footer drawing rel hint | round_trip | header/footer writer after owner match | generated sheet rel | header/footer tests |
-| `table_xml_passthroughs` | transient parse-output sidecar | table XML until fully modeled | ParseOutput | table writer | table part registration | table tests |
 | `comments_root_namespace_attrs` | persisted typed metadata | comments lexical metadata | round_trip | comments writer | comments part registration | comments tests |
 | `comment_authors` | persisted typed metadata | comments author metadata | round_trip | comments writer | comments part registration | comments tests |
 | `row_descents` | persisted typed metadata | worksheet row metadata | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
@@ -83,7 +78,6 @@ sidecar; it is not semantic authority.
 | `row_hidden_explicit_false` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `row_outline_level_zero` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `original_dimension` | persisted typed metadata | worksheet dimension hint | round_trip | sheet writer only if current bounds match | worksheet XML | dimension tests |
-| `zero_height` | typed modeled state | sheet format/default row metadata | domain | sheet writer | worksheet XML | sheet format tests |
 | `has_empty_ext_lst` | deprecated compatibility only | no durable owner | none | filtered worksheet writer | worksheet XML only | extLst tests |
 | `ext_lst_xml` | transient parse-output sidecar | unknown worksheet extensions | ParseOutput | worksheet writer after modeled filtering | worksheet XML only | extension tests |
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |
@@ -94,9 +88,6 @@ sidecar; it is not semantic authority.
 | `xml_space_value_cells` | persisted typed metadata | cell lexical metadata | round_trip | sheet writer for matching cells | worksheet XML | cell lexical tests |
 | `explicit_blank_cells` | persisted typed metadata | sparse blank-cell lexical metadata | round_trip | sheet writer | worksheet XML | blank cell tests |
 | `skipped_storage_cells` | transient parse-output sidecar | dynamic-array spill cached cells | ParseOutput | sheet writer until recalculated/edited | worksheet XML | dynamic array tests |
-| `header_footer_xml` | persisted typed metadata | header/footer lexical metadata | round_trip | header/footer writer | worksheet XML and VML rels as needed | header/footer tests |
-| `worksheet_controls_xml` | persisted opaque sidecar | worksheet controls XML while clean | round_trip | controls writer | control part/rels registration | controls tests |
-| `view_selections` | typed modeled state | sheet view selections | domain | sheet view writer | worksheet XML | sheet view tests |
 | `xml_space_formula_cells` | persisted typed metadata | formula lexical metadata | round_trip | sheet writer for matching formulas | worksheet XML | formula lexical tests |
 | `force_recalc_cells` | persisted typed metadata | formula recalc metadata | round_trip | sheet writer for matching formulas | worksheet XML | formula flag tests |
 | `sheet_preserved_elements` | persisted typed metadata | worksheet unknown elements | round_trip | sheet writer after modeled filtering | worksheet XML | unknown element tests |

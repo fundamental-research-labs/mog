@@ -21,11 +21,9 @@
  * @see engine/src/components/toolbar/contextual/useContextualTabs.ts
  */
 
-import type { StoreApi } from 'zustand';
-
 import type { ISparklineManager as SparklineManager } from '@mog-sdk/contracts/sparklines';
-import type { ActorManager } from '../../shared/actor-manager';
 import type { CleanupManager } from '../../shared/cleanup-manager';
+import type { ReadableStoreApi } from '../../shared/types';
 import type { RendererUIStore } from '../types';
 
 // =============================================================================
@@ -36,20 +34,34 @@ import type { RendererUIStore } from '../types';
  * Configuration for sparkline selection coordination.
  */
 export interface SparklineSelectionCoordinationConfig {
-  /** Actor manager for accessing selection actor */
-  actors: ActorManager;
+  /** Selection actor; sparkline detection only needs the active cell and idle state. */
+  actors: {
+    selection: {
+      getSnapshot: () => SparklineSelectionSnapshot;
+      subscribe: (
+        listener: (state: SparklineSelectionSnapshot) => void,
+      ) => { unsubscribe: () => void };
+    };
+  };
   /** Sparkline manager for checking sparklines at cells */
   sparklineManager: SparklineManager;
   /** UI store API for updating hasSparklineInActiveCell */
-  uiStoreApi: StoreApi<RendererUIStore>;
+  uiStoreApi: ReadableStoreApi<RendererUIStore>;
   /** Get the current active sheet ID */
   getActiveSheetId: () => string;
+}
+
+interface SparklineSelectionSnapshot {
+  context: { activeCell: { row: number; col: number } };
+  matches: (value: string) => boolean;
 }
 
 /**
  * Result of sparkline selection coordination setup.
  */
 export interface SparklineSelectionCoordinationResult {
+  /** Recompute hasSparklineInActiveCell for the current active cell */
+  refresh: () => void;
   /** Cleanup function to unsubscribe */
   cleanup: () => void;
 }
@@ -81,6 +93,24 @@ export function setupSparklineSelectionCoordination(
   // Track previous active cell to detect changes
   let prevActiveCell = actors.selection.getSnapshot().context.activeCell;
   let hasPendingUpdate = false;
+  let active = true;
+
+  const refresh = (): void => {
+    if (!active) return;
+
+    const activeCell = actors.selection.getSnapshot().context.activeCell;
+    const sheetId = getActiveSheetId();
+    const sparkline = sparklineManager.getSparklineAtCell(sheetId, activeCell.row, activeCell.col);
+    const hasSparkline = !!sparkline;
+
+    // Get current hasSparklineInActiveCell from UIStore
+    const currentHasSparkline = uiStoreApi.getState().contextualTabs.hasSparklineInActiveCell;
+
+    // Only update if the boolean actually changed
+    if (currentHasSparkline !== hasSparkline) {
+      uiStoreApi.getState().setHasSparklineInActiveCell(hasSparkline);
+    }
+  };
 
   // Subscribe to selection actor
   const selectionSub = actors.selection.subscribe((state) => {
@@ -100,32 +130,31 @@ export function setupSparklineSelectionCoordination(
     // This prevents cascading re-renders during drag operations
     if (isIdle && hasPendingUpdate) {
       hasPendingUpdate = false;
-
-      // Get sparkline at the current active cell position
-      const sheetId = getActiveSheetId();
-      const sparkline = sparklineManager.getSparklineAtCell(
-        sheetId,
-        currActiveCell.row,
-        currActiveCell.col,
-      );
-      const hasSparkline = !!sparkline;
-
-      // Get current hasSparklineInActiveCell from UIStore
-      const currentHasSparkline = uiStoreApi.getState().contextualTabs.hasSparklineInActiveCell;
-
-      // Only update if the boolean actually changed
-      if (currentHasSparkline !== hasSparkline) {
-        uiStoreApi.getState().setHasSparklineInActiveCell(hasSparkline);
-      }
+      refresh();
     }
   });
 
+  // Changing sheets changes the coordinate space even when the active cell
+  // position is numerically identical.
+  const activeSheetUnsub = uiStoreApi.subscribe((state, previousState) => {
+    if (state.activeSheetId !== previousState.activeSheetId) {
+      prevActiveCell = actors.selection.getSnapshot().context.activeCell;
+      hasPendingUpdate = false;
+      refresh();
+    }
+  });
+
+  refresh();
+
   const cleanup = () => {
+    if (!active) return;
+    active = false;
     selectionSub.unsubscribe();
+    activeSheetUnsub();
   };
 
   // Register cleanup with manager
   cleanups.register('sparklineSelectionCoordination', cleanup);
 
-  return { cleanup };
+  return { cleanup, refresh };
 }

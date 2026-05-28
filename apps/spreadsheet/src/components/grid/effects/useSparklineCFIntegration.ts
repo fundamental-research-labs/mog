@@ -27,6 +27,8 @@ import type { ConditionalFormatCache } from '@mog-sdk/contracts/api';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import type { SparklineManager } from '../../../coordinator/sparklines/sparkline-manager';
+import { setupSparklineSelectionCoordination } from '../../../systems/renderer/coordination';
+import { CleanupManager } from '../../../systems/shared/cleanup-manager';
 
 /**
  * Options for the useSparklineCFIntegration hook.
@@ -64,25 +66,70 @@ export function useSparklineCFIntegration(options: UseSparklineCFIntegrationOpti
   useEffect(() => {
     // Set sparkline manager on coordinator for sheet-switch invalidation
     coordinator.renderer.setSparklineManager(sparklineManager);
+    const selectionCleanups = new CleanupManager();
+    const sparklineSelection =
+      coordinator.uiStore == null
+        ? null
+        : setupSparklineSelectionCoordination(
+            {
+              actors: { selection: coordinator.grid.access.actors.selection as any },
+              sparklineManager,
+              uiStoreApi: coordinator.uiStore,
+              getActiveSheetId: () => activeSheetId,
+            },
+            selectionCleanups,
+          );
 
     // Register sparkline event handlers via eventSubscriptions
     const eventSubscriptions = coordinator.renderer.getEventSubscriptions();
     if (!eventSubscriptions) {
-      return;
+      return () => selectionCleanups.dispose();
     }
 
+    let disposed = false;
     const cleanup = eventSubscriptions.setSparklineConfig({
       sparklineManager,
       getCurrentSheetId: () => activeSheetId,
+      onSparklineTopologyChanged: (event) => {
+        if (event.type === 'sparkline:changed') {
+          const refreshFromWorkbook =
+            event.position != null
+              ? sparklineManager.refreshSparklineAtCell(
+                  toSheetId(event.sheetId),
+                  event.position.row,
+                  event.position.col,
+                )
+              : sparklineManager.hydrateSheet(toSheetId(event.sheetId));
+          void refreshFromWorkbook
+            .catch(() => undefined)
+            .then(() => {
+              if (!disposed) {
+                sparklineSelection?.refresh();
+              }
+            });
+          return;
+        }
+
+        sparklineSelection?.refresh();
+      },
     });
 
-    void sparklineManager.hydrateSheet(toSheetId(activeSheetId)).then((hydratedCount) => {
-      if (hydratedCount > 0) {
-        coordinator.renderer.invalidate('sparklines hydrated');
-      }
-    });
+    void sparklineManager
+      .hydrateSheet(toSheetId(activeSheetId))
+      .catch(() => 0)
+      .then((hydratedCount) => {
+        if (disposed) return;
+        sparklineSelection?.refresh();
+        if (hydratedCount > 0) {
+          coordinator.renderer.invalidate('sparklines hydrated');
+        }
+      });
 
-    return cleanup;
+    return () => {
+      disposed = true;
+      cleanup();
+      selectionCleanups.dispose();
+    };
   }, [coordinator, sparklineManager, activeSheetId]);
 
   // Effect 2: Set CF Event Integration

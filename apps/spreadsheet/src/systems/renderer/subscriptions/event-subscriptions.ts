@@ -100,6 +100,13 @@ export interface EventSubscriptionConfig {
 export interface SparklineEventConfig {
   sparklineManager: SparklineManager;
   getCurrentSheetId: () => string;
+  onSparklineTopologyChanged?: (event: SparklineTopologyEvent) => void;
+}
+
+export interface SparklineTopologyEvent {
+  type: string;
+  sheetId: string;
+  position?: { row: number; col: number };
 }
 
 /**
@@ -540,8 +547,23 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
   // SPARKLINE EVENTS (set up separately when SparklineManager available)
   // ---------------------------------------------------------------------------
   const setSparklineConfig = (sparklineConfig: SparklineEventConfig): (() => void) => {
-    const { sparklineManager, getCurrentSheetId: getSparklineSheetId } = sparklineConfig;
+    const {
+      sparklineManager,
+      getCurrentSheetId: getSparklineSheetId,
+      onSparklineTopologyChanged,
+    } = sparklineConfig;
+    cleanups.get('sparklines')?.();
+    cleanups.delete('sparklines');
+
     const sparklineCleanups: (() => void)[] = [];
+    let active = true;
+
+    const handleSparklineTopologyEvent = (event: SparklineTopologyEvent): void => {
+      const currentSheetId = getSparklineSheetId();
+      if (event.sheetId !== currentSheetId) return;
+      doInvalidateAll();
+      onSparklineTopologyChanged?.(event);
+    };
 
     // Cell changes → sparkline invalidation
     const cellChangedUnsub = workbook.on('cell:changed', (event) => {
@@ -589,43 +611,58 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
 
     // Sparkline CRUD events → render invalidation
     const sparklineChangedUnsub = workbook.on('sparkline:changed', (event) => {
-      const currentSheetId = getSparklineSheetId();
-      if (event.sheetId !== currentSheetId) return;
-      doInvalidateAll();
+      handleSparklineTopologyEvent(event);
     });
     sparklineCleanups.push(sparklineChangedUnsub);
 
     const sparklineCreatedUnsub = workbook.on('sparkline:created', (event) => {
-      const currentSheetId = getSparklineSheetId();
-      if (event.sheetId !== currentSheetId) return;
-      doInvalidateAll();
+      handleSparklineTopologyEvent(event);
     });
     sparklineCleanups.push(sparklineCreatedUnsub);
 
     const sparklineUpdatedUnsub = workbook.on('sparkline:updated', (event) => {
-      const currentSheetId = getSparklineSheetId();
-      if (event.sheetId !== currentSheetId) return;
-      doInvalidateAll();
+      handleSparklineTopologyEvent(event);
     });
     sparklineCleanups.push(sparklineUpdatedUnsub);
 
     const sparklineDeletedUnsub = workbook.on('sparkline:deleted', (event) => {
-      const currentSheetId = getSparklineSheetId();
-      if (event.sheetId !== currentSheetId) return;
-      doInvalidateAll();
+      handleSparklineTopologyEvent(event);
     });
     sparklineCleanups.push(sparklineDeletedUnsub);
 
     const sparklineDataChangedUnsub = workbook.on('sparkline:dataChanged', (event) => {
-      const currentSheetId = getSparklineSheetId();
-      if (event.sheetId !== currentSheetId) return;
-      doInvalidateAll();
+      handleSparklineTopologyEvent(event);
     });
     sparklineCleanups.push(sparklineDataChangedUnsub);
 
+    const sparklineGroupCreatedUnsub = workbook.on('sparklineGroup:created', (event) => {
+      handleSparklineTopologyEvent(event);
+    });
+    sparklineCleanups.push(sparklineGroupCreatedUnsub);
+
+    const sparklineGroupUpdatedUnsub = workbook.on('sparklineGroup:updated', (event) => {
+      handleSparklineTopologyEvent(event);
+    });
+    sparklineCleanups.push(sparklineGroupUpdatedUnsub);
+
+    const sparklineGroupDeletedUnsub = workbook.on('sparklineGroup:deleted', (event) => {
+      handleSparklineTopologyEvent(event);
+    });
+    sparklineCleanups.push(sparklineGroupDeletedUnsub);
+
+    const sparklinesClearedUnsub = workbook.on('sparklines:cleared', (event) => {
+      handleSparklineTopologyEvent(event);
+    });
+    sparklineCleanups.push(sparklinesClearedUnsub);
+
     // Store combined cleanup
     const sparklineCleanup = () => {
+      if (!active) return;
+      active = false;
       sparklineCleanups.forEach((fn) => fn());
+      if (cleanups.get('sparklines') === sparklineCleanup) {
+        cleanups.delete('sparklines');
+      }
     };
     cleanups.set('sparklines', sparklineCleanup);
 

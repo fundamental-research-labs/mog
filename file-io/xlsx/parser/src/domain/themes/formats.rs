@@ -620,3 +620,276 @@ pub(crate) fn get_attr_i32(xml: &[u8], attr_prefix: &[u8]) -> Option<i32> {
 pub(crate) fn get_attr_u32(xml: &[u8], attr_prefix: &[u8]) -> Option<u32> {
     get_attr(xml, attr_prefix)?.parse().ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_fill_styles_canonical() {
+        use ooxml_types::drawings::{DrawingColor, DrawingFill, StAngle};
+        let xml = br#"
+        <a:fillStyleLst>
+            <a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>
+            <a:gradFill>
+                <a:gsLst>
+                    <a:gs pos="0"><a:srgbClr val="000000"/></a:gs>
+                    <a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs>
+                </a:gsLst>
+                <a:lin ang="5400000"/>
+            </a:gradFill>
+        </a:fillStyleLst>
+        "#;
+
+        let fills = parse_fill_style_list_canonical(xml);
+        assert_eq!(fills.len(), 2);
+
+        // Check solid fill
+        match &fills[0] {
+            DrawingFill::Solid(sf) => match &sf.color {
+                DrawingColor::SrgbClr { val, .. } => assert_eq!(val, "FF0000"),
+                _ => panic!("Expected SrgbClr"),
+            },
+            _ => panic!("Expected Solid fill"),
+        }
+
+        // Check gradient fill
+        match &fills[1] {
+            DrawingFill::Gradient(gf) => {
+                assert_eq!(gf.lin_ang, Some(StAngle::new(5400000)));
+                assert_eq!(gf.stops.len(), 2);
+            }
+            _ => panic!("Expected Gradient fill"),
+        }
+    }
+
+    #[test]
+    fn test_parse_line_styles_canonical() {
+        use ooxml_types::drawings::{CompoundLine, LineCap};
+        let xml = br#"
+        <a:lnStyleLst>
+            <a:ln w="6350" cap="flat" cmpd="sng">
+                <a:solidFill><a:srgbClr val="000000"/></a:solidFill>
+            </a:ln>
+        </a:lnStyleLst>
+        "#;
+
+        let lines = parse_line_style_list_canonical(xml);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].width, Some(6350));
+        assert_eq!(lines[0].cap, Some(LineCap::Flat));
+        assert_eq!(lines[0].compound, Some(CompoundLine::Single));
+    }
+
+    #[test]
+    fn test_parse_drawing_color_scheme() {
+        use ooxml_types::drawings::{DrawingColor, SchemeColor};
+        let xml = br#"<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>"#;
+        let color = parse_drawing_color(xml);
+        assert!(color.is_some());
+        match color.unwrap() {
+            DrawingColor::SchemeClr { val, .. } => {
+                assert_eq!(val, SchemeColor::Accent1);
+            }
+            _ => panic!("Expected SchemeClr"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drawing_color_with_transforms() {
+        use ooxml_types::drawings::{ColorTransform, DrawingColor};
+        let xml = br#"<a:schemeClr val="phClr"><a:tint val="50000"/><a:satMod val="300000"/></a:schemeClr>"#;
+        let color = parse_drawing_color(xml);
+        assert!(color.is_some());
+        match color.unwrap() {
+            DrawingColor::SchemeClr { transforms, .. } => {
+                assert!(
+                    transforms.len() >= 2,
+                    "Expected at least 2 transforms, got {}",
+                    transforms.len()
+                );
+                assert!(
+                    transforms
+                        .iter()
+                        .any(|t| matches!(t, ColorTransform::Tint { val: 50000 }))
+                );
+                assert!(
+                    transforms
+                        .iter()
+                        .any(|t| matches!(t, ColorTransform::SatMod { val: 300000 }))
+                );
+            }
+            _ => panic!("Expected SchemeClr"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drawing_color_all_supported_variants() {
+        use ooxml_types::drawings::DrawingColor;
+
+        assert!(matches!(
+            parse_drawing_color(br#"<a:srgbClr val="112233"/>"#),
+            Some(DrawingColor::SrgbClr { ref val, .. }) if val == "112233"
+        ));
+        assert!(matches!(
+            parse_drawing_color(br#"<a:sysClr val="windowText" lastClr="000000"/>"#),
+            Some(DrawingColor::SysClr { ref last_clr, .. }) if last_clr.as_deref() == Some("000000")
+        ));
+        assert!(matches!(
+            parse_drawing_color(br#"<a:hslClr hue="60000" sat="70000" lum="80000"/>"#),
+            Some(DrawingColor::HslClr { hue: 60000, sat: 70000, lum: 80000, .. })
+        ));
+        assert!(matches!(
+            parse_drawing_color(br#"<a:prstClr val="red"/>"#),
+            Some(DrawingColor::PrstClr { .. })
+        ));
+        assert!(matches!(
+            parse_drawing_color(br#"<a:scrgbClr r="10000" g="20000" b="30000"/>"#),
+            Some(DrawingColor::ScrgbClr { r: 10000, g: 20000, b: 30000, .. })
+        ));
+    }
+
+    #[test]
+    fn test_parse_color_transforms_preserves_prefix_order() {
+        use ooxml_types::drawings::ColorTransform;
+
+        let transforms = parse_color_transforms(
+            br#"<a:schemeClr val="accent1"><a:sat val="1"/><a:satMod val="2"/><a:satOff val="3"/><a:alpha val="4"/><a:alphaMod val="5"/><a:alphaOff val="6"/></a:schemeClr>"#,
+        );
+
+        assert_eq!(
+            transforms,
+            vec![
+                ColorTransform::Sat { val: 1 },
+                ColorTransform::SatMod { val: 2 },
+                ColorTransform::SatOff { val: 3 },
+                ColorTransform::Alpha { val: 4 },
+                ColorTransform::AlphaMod { val: 5 },
+                ColorTransform::AlphaOff { val: 6 },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_fill_styles_preserves_pattern_path_and_tile_metadata() {
+        use ooxml_types::drawings::{
+            DrawingColor, DrawingFill, GradientPathType, PresetPatternVal, TileFlipMode,
+        };
+
+        let xml = br#"
+        <a:fillStyleLst>
+            <a:noFill></a:noFill>
+            <a:pattFill prst="cross">
+                <a:fgClr><a:srgbClr val="111111"/></a:fgClr>
+                <a:bgClr><a:srgbClr val="EEEEEE"/></a:bgClr>
+            </a:pattFill>
+            <a:gradFill flip="xy" rotWithShape="0">
+                <a:gsLst>
+                    <a:gs pos="25000"><a:srgbClr val="123456"/></a:gs>
+                </a:gsLst>
+                <a:path path="rect"><a:fillToRect l="1" t="2" r="3" b="4"/></a:path>
+                <a:tileRect l="5" t="6" r="7" b="8"/>
+            </a:gradFill>
+        </a:fillStyleLst>
+        "#;
+
+        let fills = parse_fill_style_list_canonical(xml);
+        assert_eq!(fills.len(), 3);
+        assert!(matches!(&fills[0], DrawingFill::NoFill));
+        match &fills[1] {
+            DrawingFill::Pattern(pattern) => {
+                assert_eq!(pattern.preset, Some(PresetPatternVal::Cross));
+                assert!(matches!(&pattern.fg_color, Some(DrawingColor::SrgbClr { .. })));
+                assert!(matches!(&pattern.bg_color, Some(DrawingColor::SrgbClr { .. })));
+            }
+            _ => panic!("Expected Pattern fill"),
+        }
+        match &fills[2] {
+            DrawingFill::Gradient(gradient) => {
+                assert_eq!(gradient.flip, Some(TileFlipMode::XY));
+                assert_eq!(gradient.rotate_with_shape, Some(false));
+                assert_eq!(gradient.path, Some(GradientPathType::Rect));
+                assert_eq!(gradient.stops[0].position.value(), 25000);
+                let rect = gradient.fill_to_rect.as_ref().expect("fillToRect");
+                assert_eq!(rect.l.map(|v| v.value()), Some(1));
+                assert_eq!(rect.t.map(|v| v.value()), Some(2));
+                assert_eq!(rect.r.map(|v| v.value()), Some(3));
+                assert_eq!(rect.b.map(|v| v.value()), Some(4));
+                assert!(gradient.tile_rect.is_some());
+            }
+            _ => panic!("Expected Gradient fill"),
+        }
+    }
+
+    #[test]
+    fn test_parse_line_styles_preserves_custom_dash_join_and_ends() {
+        use ooxml_types::drawings::{
+            LineDash, LineEndSize, LineEndType, LineJoin, PenAlignment,
+        };
+
+        let xml = br#"
+        <a:lnStyleLst>
+            <a:ln w="12700" algn="in">
+                <a:custDash><a:ds d="100" sp="200"></a:ds><a:ds d="300" sp="400"></a:ds></a:custDash>
+                <a:miter lim="800000"/>
+                <a:headEnd type="triangle" w="lg" len="sm"/>
+                <a:tailEnd type="diamond" w="med" len="lg"/>
+            </a:ln>
+        </a:lnStyleLst>
+        "#;
+
+        let lines = parse_line_style_list_canonical(xml);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].align, Some(PenAlignment::Inset));
+        assert!(matches!(
+            &lines[0].join,
+            Some(LineJoin::Miter {
+                limit: Some(800000)
+            })
+        ));
+        match lines[0].dash.as_ref().expect("dash") {
+            LineDash::Custom(stops) => {
+                assert_eq!(stops.len(), 2);
+                assert_eq!(stops[0].d, 100);
+                assert_eq!(stops[1].sp, 400);
+            }
+            _ => panic!("Expected custom dash"),
+        }
+        let head = lines[0].head_end.as_ref().expect("head end");
+        assert_eq!(head.end_type, Some(LineEndType::Triangle));
+        assert_eq!(head.width, Some(LineEndSize::Large));
+        assert_eq!(head.length, Some(LineEndSize::Small));
+        let tail = lines[0].tail_end.as_ref().expect("tail end");
+        assert_eq!(tail.end_type, Some(LineEndType::Diamond));
+        assert_eq!(tail.width, Some(LineEndSize::Medium));
+        assert_eq!(tail.length, Some(LineEndSize::Large));
+    }
+
+    #[test]
+    fn test_parse_format_scheme_keeps_lists_separate() {
+        let xml = br#"
+        <a:fmtScheme name="Fmt &amp; Scheme">
+            <a:fillStyleLst><a:solidFill><a:srgbClr val="111111"/></a:solidFill></a:fillStyleLst>
+            <a:lnStyleLst><a:ln w="1"/></a:lnStyleLst>
+            <a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>
+            <a:bgFillStyleLst><a:solidFill><a:srgbClr val="222222"/></a:solidFill></a:bgFillStyleLst>
+        </a:fmtScheme>
+        "#;
+
+        let scheme = parse_format_scheme_canonical(xml);
+        assert_eq!(scheme.name, "Fmt & Scheme");
+        assert_eq!(scheme.fill_style_lst.len(), 1);
+        assert_eq!(scheme.ln_style_lst.len(), 1);
+        assert_eq!(scheme.effect_style_lst.len(), 1);
+        assert_eq!(scheme.bg_fill_style_lst.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_bg_fill_style_list_is_independent() {
+        let fills = parse_bg_fill_style_list_canonical(
+            br#"<a:bgFillStyleLst><a:noFill></a:noFill><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:bgFillStyleLst>"#,
+        );
+
+        assert_eq!(fills.len(), 2);
+    }
+}

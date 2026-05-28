@@ -149,3 +149,90 @@ fn parse_attr(xml: &[u8], attr: &[u8]) -> String {
     }
     String::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_font_scheme() {
+        let xml = br#"
+        <a:theme name="Test">
+            <a:themeElements>
+                <a:clrScheme name="Test"></a:clrScheme>
+                <a:fontScheme name="Office">
+                    <a:majorFont>
+                        <a:latin typeface="Calibri Light"/>
+                        <a:ea typeface=""/>
+                        <a:cs typeface=""/>
+                    </a:majorFont>
+                    <a:minorFont>
+                        <a:latin typeface="Calibri"/>
+                        <a:ea typeface=""/>
+                        <a:cs typeface=""/>
+                    </a:minorFont>
+                </a:fontScheme>
+            </a:themeElements>
+        </a:theme>
+        "#;
+
+        let scheme = parse_font_scheme(xml);
+        assert_eq!(scheme.name, "Office");
+        assert_eq!(scheme.major_font.latin.typeface, "Calibri Light");
+        assert_eq!(scheme.minor_font.latin.typeface, "Calibri");
+    }
+
+    #[test]
+    fn test_parse_font_scheme_decodes_name_and_bounds_major_minor() {
+        let xml = br#"
+        <a:fontScheme name="Major &amp; Minor">
+            <a:majorFont>
+                <a:latin typeface="Major Latin"/>
+            </a:majorFont>
+            <a:minorFont>
+                <a:latin typeface="Minor Latin"/>
+            </a:minorFont>
+        </a:fontScheme>
+        "#;
+
+        let scheme = parse_font_scheme(xml);
+        assert_eq!(scheme.name, "Major & Minor");
+        assert_eq!(scheme.major_font.latin.typeface, "Major Latin");
+        assert_eq!(scheme.minor_font.latin.typeface, "Minor Latin");
+    }
+
+    #[test]
+    fn test_parse_font_collection_preserves_script_order_panose_and_empty_typefaces() {
+        let xml = br#"
+        <a:majorFont>
+            <a:latin typeface="Aptos Display" panose="020F0302020204030204"/>
+            <a:ea typeface=""/>
+            <a:cs typeface=""/>
+            <a:font script="Jpan" typeface="Yu Gothic"/>
+            <a:font script="Hang" typeface="Malgun Gothic"/>
+        </a:majorFont>
+        "#;
+
+        let collection = parse_font_collection(xml);
+        assert_eq!(collection.latin.typeface, "Aptos Display");
+        assert_eq!(
+            collection.latin.panose.as_deref(),
+            Some("020F0302020204030204")
+        );
+        assert_eq!(collection.ea.typeface, "");
+        assert_eq!(collection.cs.typeface, "");
+        assert_eq!(collection.script_fonts.len(), 2);
+        assert_eq!(collection.script_fonts[0].script, "Jpan");
+        assert_eq!(collection.script_fonts[1].script, "Hang");
+    }
+
+    #[test]
+    fn test_parse_font_scheme_tolerates_missing_sections() {
+        let xml = br#"<a:fontScheme name="Sparse"><a:majorFont/></a:fontScheme>"#;
+
+        let scheme = parse_font_scheme(xml);
+        assert_eq!(scheme.name, "Sparse");
+        assert_eq!(scheme.major_font.latin.typeface, "");
+        assert_eq!(scheme.minor_font.latin.typeface, "");
+    }
+}

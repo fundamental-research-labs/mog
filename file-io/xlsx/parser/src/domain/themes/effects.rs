@@ -397,3 +397,161 @@ fn parse_bevel(xml: &[u8]) -> Bevel {
         prst: get_attr(xml, b"prst=\"").map(BevelPresetType::from_ooxml),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::drawings::{ColorTransform, DrawingColor, EffectProperties};
+
+    #[test]
+    fn test_parse_effect_style_list_skips_wrapper_and_keeps_empty_effect_list() {
+        let styles = parse_effect_style_list_canonical(
+            br#"<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>"#,
+        );
+
+        assert_eq!(styles.len(), 1);
+        match &styles[0].effect_properties {
+            Some(EffectProperties::EffectList(list)) => assert!(list.is_empty()),
+            _ => panic!("Expected empty EffectList"),
+        }
+    }
+
+    #[test]
+    fn test_parse_effect_list_supported_members() {
+        let styles = parse_effect_style_list_canonical(
+            br#"
+            <a:effectStyleLst>
+                <a:effectStyle>
+                    <a:effectLst>
+                        <a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0">
+                            <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+                        </a:outerShdw>
+                        <a:innerShdw blurRad="10000" dist="20000" dir="30000">
+                            <a:schemeClr val="accent1"/>
+                        </a:innerShdw>
+                        <a:glow rad="5000"><a:prstClr val="red"/></a:glow>
+                        <a:softEdge rad="6000"/>
+                        <a:reflection blurRad="7000" stA="8000" stPos="9000" endA="10000" endPos="11000" dist="12000" dir="13000" fadeDir="14000" sx="15000" sy="16000" kx="17000" ky="18000" rotWithShape="0"/>
+                        <a:prstShdw prst="shdw1" dist="19000" dir="20000"><a:srgbClr val="111111"/></a:prstShdw>
+                        <a:blur rad="21000" grow="0"/>
+                    </a:effectLst>
+                </a:effectStyle>
+            </a:effectStyleLst>
+            "#,
+        );
+
+        let list = match &styles[0].effect_properties {
+            Some(EffectProperties::EffectList(list)) => list,
+            _ => panic!("Expected EffectList"),
+        };
+
+        let outer = list.outer_shadow.as_ref().expect("outer shadow");
+        assert_eq!(outer.blur_rad.value(), 40000);
+        assert_eq!(outer.dist.value(), 23000);
+        assert_eq!(outer.dir.value(), 5400000);
+        assert!(!outer.rot_with_shape);
+        match outer.color.as_ref().expect("outer color") {
+            DrawingColor::SrgbClr { transforms, .. } => {
+                assert_eq!(transforms, &vec![ColorTransform::Alpha { val: 35000 }]);
+            }
+            _ => panic!("Expected SrgbClr"),
+        }
+
+        assert_eq!(
+            list.inner_shadow.as_ref().expect("inner shadow").dist.value(),
+            20000
+        );
+        assert_eq!(list.glow.as_ref().expect("glow").rad.value(), 5000);
+        assert_eq!(
+            list.soft_edge.as_ref().expect("soft edge").rad.value(),
+            6000
+        );
+        assert_eq!(
+            list.reflection.as_ref().expect("reflection").dist.value(),
+            12000
+        );
+        assert_eq!(
+            list.preset_shadow.as_ref().expect("preset shadow").dist.value(),
+            19000
+        );
+        let blur = list.blur.as_ref().expect("blur");
+        assert_eq!(blur.rad.value(), 21000);
+        assert!(!blur.grow);
+    }
+
+    #[test]
+    fn test_parse_scene3d_and_sp3d_preserve_current_fidelity() {
+        let styles = parse_effect_style_list_canonical(
+            br#"
+            <a:effectStyleLst>
+                <a:effectStyle>
+                    <a:effectLst/>
+                    <a:scene3d>
+                        <a:camera prst="perspectiveRelaxed" fov="5400000" zoom="150000">
+                            <a:rot lat="1000" lon="2000" rev="3000"/>
+                        </a:camera>
+                        <a:lightRig rig="balanced" dir="br">
+                            <a:rot lat="4000" lon="5000" rev="6000"/>
+                        </a:lightRig>
+                    </a:scene3d>
+                    <a:sp3d extrusionH="7000" contourW="8000" prstMaterial="metal" z="9000">
+                        <a:bevelT w="10000" h="11000" prst="circle"/>
+                        <a:bevelB w="12000" h="13000" prst="relaxedInset"/>
+                        <a:extrusionClr><a:srgbClr val="222222"/></a:extrusionClr>
+                        <a:contourClr><a:srgbClr val="333333"/></a:contourClr>
+                    </a:sp3d>
+                </a:effectStyle>
+            </a:effectStyleLst>
+            "#,
+        );
+
+        let scene = styles[0].scene_3d.as_ref().expect("scene3d");
+        assert_eq!(scene.camera.fov.as_ref().map(|v| v.value()), Some(5400000));
+        assert_eq!(scene.camera.zoom, Some(150000));
+        let cam_rot = scene.camera.rot.as_ref().expect("camera rot");
+        assert_eq!(cam_rot.lat.value(), 1000);
+        assert_eq!(cam_rot.lon.value(), 2000);
+        assert_eq!(cam_rot.rev.value(), 3000);
+        let rig_rot = scene.light_rig.rot.as_ref().expect("light rig rot");
+        assert_eq!(rig_rot.lat.value(), 4000);
+        assert_eq!(rig_rot.lon.value(), 5000);
+        assert_eq!(rig_rot.rev.value(), 6000);
+
+        let sp3d = styles[0].sp_3d.as_ref().expect("sp3d");
+        assert_eq!(sp3d.extrusion_h.as_ref().map(|v| v.value()), Some(7000));
+        assert_eq!(sp3d.contour_w.as_ref().map(|v| v.value()), Some(8000));
+        assert_eq!(sp3d.z.as_ref().map(|v| v.value()), Some(9000));
+        assert!(matches!(
+            &sp3d.extrusion_clr,
+            Some(DrawingColor::SrgbClr { .. })
+        ));
+        assert!(matches!(
+            &sp3d.contour_clr,
+            Some(DrawingColor::SrgbClr { .. })
+        ));
+        assert_eq!(
+            sp3d.bevel_t
+                .as_ref()
+                .and_then(|bevel| bevel.w)
+                .map(|v| v.value()),
+            Some(10000)
+        );
+        assert_eq!(
+            sp3d.bevel_b
+                .as_ref()
+                .and_then(|bevel| bevel.h)
+                .map(|v| v.value()),
+            Some(13000)
+        );
+    }
+
+    #[test]
+    fn test_parse_effect_dag_remains_shallow() {
+        let styles = parse_effect_style_list_canonical(
+            br#"<a:effectStyleLst><a:effectStyle><a:effectDag/></a:effectStyle></a:effectStyleLst>"#,
+        );
+
+        assert_eq!(styles.len(), 1);
+        assert!(styles[0].effect_properties.is_none());
+    }
+}

@@ -1465,9 +1465,28 @@ export class MutationResultHandler {
   // Named Range Changes
   // ===========================================================================
 
-  private handleNamedRangeChanges(_changes: NamedRangeChange[], _source: MutationSource): void {
-    // Named range events require full DefinedName data which is not in NamedRangeChange.
-    // Full event emission will be added when Rust populates richer change metadata.
+  private handleNamedRangeChanges(changes: NamedRangeChange[], source: MutationSource): void {
+    const timestamp = Date.now();
+    const eventSource = source === 'user' ? 'user' : 'remote';
+
+    for (const change of changes) {
+      const name = { name: change.name ?? '' };
+      if (change.kind === 'Removed') {
+        this.eventBus.emit({
+          type: 'name:deleted',
+          timestamp,
+          name,
+          source: eventSource,
+        });
+      } else if (change.kind === 'Set') {
+        this.eventBus.emit({
+          type: 'name:updated',
+          timestamp,
+          newName: name,
+          source: eventSource,
+        });
+      }
+    }
   }
 
   // ===========================================================================

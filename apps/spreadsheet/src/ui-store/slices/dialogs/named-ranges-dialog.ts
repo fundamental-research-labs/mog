@@ -32,6 +32,8 @@ export interface DefineNameDialogState {
   mode: 'create' | 'edit';
   /** ID of name being edited (edit mode only) */
   editingNameId: string | null;
+  /** Sheet-name scope of name being edited; undefined/null means workbook scope */
+  editingNameScope: string | null;
   /** Pre-filled name (e.g., when creating from selection) */
   initialName: string;
   /** Pre-filled refersTo (e.g., current selection) */
@@ -64,6 +66,8 @@ export interface NameManagerDialogState {
   searchText: string;
   /** Currently selected name ID (for edit/delete) */
   selectedNameId: string | null;
+  /** Bumped when a child Define Name dialog saves into the manager stack. */
+  refreshToken: number;
 }
 
 // =============================================================================
@@ -76,6 +80,7 @@ export interface NamedRangesDialogSlice {
   openDefineNameDialog: (options?: {
     mode?: 'create' | 'edit';
     editingNameId?: string;
+    editingNameScope?: string | null;
     initialName?: string;
     initialRefersTo?: string;
     initialScope?: SheetId;
@@ -90,12 +95,14 @@ export interface NamedRangesDialogSlice {
   setNameManagerFilter: (filter: NameManagerFilter) => void;
   setNameManagerSearchText: (text: string) => void;
   setNameManagerSelectedName: (nameId: string | null) => void;
+  notifyNameManagerNamesChanged: () => void;
 }
 
 const initialDefineNameDialogState: DefineNameDialogState = {
   isOpen: false,
   mode: 'create',
   editingNameId: null,
+  editingNameScope: null,
   initialName: '',
   initialRefersTo: '',
   initialScope: undefined,
@@ -107,6 +114,7 @@ const initialNameManagerDialogState: NameManagerDialogState = {
   filter: 'all',
   searchText: '',
   selectedNameId: null,
+  refreshToken: 0,
 };
 
 export const createNamedRangesDialogSlice: StateCreator<
@@ -124,6 +132,7 @@ export const createNamedRangesDialogSlice: StateCreator<
         isOpen: true,
         mode: options?.mode ?? 'create',
         editingNameId: options?.editingNameId ?? null,
+        editingNameScope: options?.editingNameScope ?? null,
         initialName: options?.initialName ?? '',
         initialRefersTo: options?.initialRefersTo ?? '',
         initialScope: options?.initialScope,
@@ -140,12 +149,13 @@ export const createNamedRangesDialogSlice: StateCreator<
   nameManagerDialog: initialNameManagerDialogState,
 
   openNameManagerDialog: () => {
-    set({
+    set((state) => ({
       nameManagerDialog: {
         ...initialNameManagerDialogState,
         isOpen: true,
+        refreshToken: state.nameManagerDialog.refreshToken,
       },
-    });
+    }));
   },
 
   closeNameManagerDialog: () => {
@@ -175,6 +185,15 @@ export const createNamedRangesDialogSlice: StateCreator<
       nameManagerDialog: {
         ...state.nameManagerDialog,
         selectedNameId: nameId,
+      },
+    }));
+  },
+
+  notifyNameManagerNamesChanged: () => {
+    set((state) => ({
+      nameManagerDialog: {
+        ...state.nameManagerDialog,
+        refreshToken: state.nameManagerDialog.refreshToken + 1,
       },
     }));
   },

@@ -26,8 +26,9 @@ export interface WorkbookNames {
    * @param name - The name to define.
    * @param reference - A1-style reference (e.g. "Sheet1!$A$1:$B$10"). May omit leading "=".
    * @param comment - Optional descriptive comment.
+   * @param scope - Optional sheet name scope. Omit for workbook-scoped names.
    */
-  add(name: string, reference: string, comment?: string): Promise<NameAddReceipt>;
+  add(name: string, reference: string, comment?: string, scope?: string): Promise<NameAddReceipt>;
 
   /**
    * Check if a named range exists.
@@ -73,8 +74,9 @@ export interface WorkbookNames {
    * Update an existing named range.
    * @param name - The current name to update.
    * @param updates - Fields to change (name, reference, comment).
+   * @param scope - Optional sheet name scope. Omit for workbook-scoped names.
    */
-  update(name: string, updates: NamedRangeUpdateOptions): Promise<void>;
+  update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;
 
   /**
    * Remove all named ranges from the workbook.

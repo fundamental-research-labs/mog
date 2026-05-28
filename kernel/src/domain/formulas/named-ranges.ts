@@ -577,7 +577,7 @@ export async function remove(
     throw new KernelError('DOMAIN_DEFINED_NAME_NOT_FOUND', `Defined name with ID ${id} not found`);
   }
 
-  void ctx.computeBridge.removeNamedRangeById(existing.id);
+  await ctx.computeBridge.removeNamedRangeById(existing.id);
 }
 
 /**

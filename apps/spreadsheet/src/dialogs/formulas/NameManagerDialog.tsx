@@ -17,7 +17,7 @@
  *
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CollapsibleRangeInput,
   MinimizableDialog,
@@ -47,6 +47,7 @@ interface NameRowData {
   value: string;
   refersTo: string;
   scope: string;
+  scopeKey: string | undefined;
   comment: string;
   isTable: boolean;
   hasError: boolean;
@@ -84,13 +85,56 @@ export function NameManagerDialog() {
   const [editingRefersTo, setEditingRefersTo] = useState<string | null>(null);
   const [editedRefersTo, setEditedRefersTo] = useState('');
 
-  // Version counter to force re-render when names change
-  const [namesVersion, setNamesVersion] = useState(0);
+  const [namedRangesData, setNamedRangesData] = useState<any[]>([]);
+  const [tablesData, setTablesData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pendingMutation, setPendingMutation] = useState(false);
+  const refreshRequestId = useRef(0);
 
-  // Subscribe to name events and recalc events to refresh the list
-  // namedRangeChanged covers name CRUD; recalc:completed ensures values update
+  const refreshNames = useCallback(async () => {
+    const requestId = ++refreshRequestId.current;
+    setLoading(true);
+    try {
+      const [names, tables] = await Promise.all([
+        wb.names.list(),
+        (async () => {
+          const allTables: any[] = [];
+          for (const sheetName of wb.sheetNames) {
+            const ws = await wb.getSheet(sheetName);
+            const tableList = await ws.tables.list();
+            for (const table of tableList) {
+              allTables.push({ ...table, _sheetName: sheetName });
+            }
+          }
+          return allTables;
+        })(),
+      ]);
+      if (requestId !== refreshRequestId.current) return;
+      setNamedRangesData(names);
+      setTablesData(tables);
+    } catch (err) {
+      if (requestId === refreshRequestId.current) {
+        console.error('Failed to load name manager data:', err);
+      }
+    } finally {
+      if (requestId === refreshRequestId.current) {
+        setLoading(false);
+      }
+    }
+  }, [wb]);
+
   useEffect(() => {
-    const handleNameChange = () => setNamesVersion((v) => v + 1);
+    if (dialogState.isOpen) {
+      void refreshNames();
+    }
+  }, [dialogState.isOpen, dialogState.refreshToken, refreshNames]);
+
+  useEffect(() => {
+    const handleNameChange = () => {
+      if (dialogState.isOpen) {
+        void refreshNames();
+      }
+    };
 
     const unsub1 = wb.on('namedRangeChanged', handleNameChange);
     const unsub2 = wb.on('recalc:completed', handleNameChange);
@@ -99,64 +143,7 @@ export function NameManagerDialog() {
       unsub1();
       unsub2();
     };
-  }, [wb]);
-
-  // Load named ranges from Workbook API (async)
-  const [namedRangesData, setNamedRangesData] = useState<any[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadNames() {
-      try {
-        const names = await wb.names.list();
-        if (!cancelled) setNamedRangesData(names);
-      } catch (err) {
-        console.error('Failed to load named ranges:', err);
-      }
-    }
-    loadNames();
-    return () => {
-      cancelled = true;
-    };
-  }, [wb, namesVersion]);
-
-  // Load sheet names (sync) + tables (async) from Workbook/Worksheet API
-  const [sheetNameMap, setSheetNameMap] = useState<Map<string, string>>(new Map());
-  const [tablesData, setTablesData] = useState<any[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadSheetAndTableData() {
-      try {
-        // Load all sheet names for scope resolution (ASYNC)
-        const sheetNames = wb.sheetNames;
-        const nameMap = new Map<string, string>();
-        for (const sheetName of sheetNames) {
-          const ws = await wb.getSheet(sheetName);
-          nameMap.set(ws.getSheetId(), sheetName);
-        }
-        if (!cancelled) setSheetNameMap(nameMap);
-
-        // Load all tables across all sheets
-        const allTables: any[] = [];
-        for (const sheetName of sheetNames) {
-          const ws = await wb.getSheet(sheetName);
-          const sid = ws.getSheetId();
-          const tables = await ws.tables.list();
-          for (const t of tables) {
-            allTables.push({ ...t, sheetId: sid, _sheetName: sheetName });
-          }
-        }
-        if (!cancelled) setTablesData(allTables);
-      } catch (err) {
-        console.error('Failed to load sheet/table data:', err);
-      }
-    }
-    loadSheetAndTableData();
-    return () => {
-      cancelled = true;
-    };
-  }, [wb, namesVersion]);
+  }, [wb, dialogState.isOpen, refreshNames]);
 
   // Get all names and convert to display format
   const allNames = useMemo((): NameRowData[] => {
@@ -165,18 +152,20 @@ export function NameManagerDialog() {
     for (const name of namedRangesData) {
       // NamedRangeInfo has: name, reference (A1-style), scope, comment
       const refersToA1 = name.reference ?? '';
-      const scopeName = name.scope ? (sheetNameMap.get(name.scope) ?? name.scope) : 'Workbook';
+      const scopeName = name.scope ?? 'Workbook';
+      const scopeKey = name.scope;
       const hasError = refersToA1.includes('#REF!') || refersToA1.includes('#NAME?');
 
       // Display the refersTo reference as the value (matches Excel for non-evaluated names).
       const displayValue = hasError ? '#REF!' : refersToA1;
 
       result.push({
-        id: name.name,
+        id: `name:${scopeKey ?? 'workbook'}:${name.name}`,
         name: name.name,
         value: displayValue,
         refersTo: refersToA1,
         scope: scopeName,
+        scopeKey,
         comment: name.comment ?? '',
         isTable: false,
         hasError,
@@ -188,11 +177,12 @@ export function NameManagerDialog() {
       const sheetName = table._sheetName ?? 'Unknown';
       const rangeRef = `${sheetName}!${table.range ?? ''}`;
       result.push({
-        id: `table:${table.name}`,
+        id: `table:${sheetName}:${table.name}`,
         name: table.name,
         value: rangeRef,
         refersTo: `=${rangeRef}`,
         scope: sheetName,
+        scopeKey: sheetName,
         comment: '',
         isTable: true,
         hasError: false,
@@ -200,7 +190,7 @@ export function NameManagerDialog() {
     }
 
     return result;
-  }, [namedRangesData, sheetNameMap, tablesData]);
+  }, [namedRangesData, tablesData]);
 
   // Apply filters
   const filteredNames = useMemo(() => {
@@ -243,6 +233,16 @@ export function NameManagerDialog() {
     return filteredNames.find((n) => n.id === dialogState.selectedNameId) ?? null;
   }, [filteredNames, dialogState.selectedNameId]);
 
+  useEffect(() => {
+    if (
+      dialogState.selectedNameId &&
+      !loading &&
+      !allNames.some((name) => name.id === dialogState.selectedNameId)
+    ) {
+      setSelectedName(null);
+    }
+  }, [allNames, dialogState.selectedNameId, loading, setSelectedName]);
+
   // Handle New button
   const handleNew = useCallback(() => {
     openDefineNameDialog({ mode: 'create', parentDialogId: 'name-manager-dialog' });
@@ -253,15 +253,17 @@ export function NameManagerDialog() {
     if (!selectedNameData || selectedNameData.isTable) return;
     openDefineNameDialog({
       mode: 'edit',
-      editingNameId: selectedNameData.id,
+      editingNameId: selectedNameData.name,
+      editingNameScope: selectedNameData.scopeKey ?? null,
       parentDialogId: 'name-manager-dialog',
     });
   }, [selectedNameData, openDefineNameDialog]);
 
+  const controlsDisabled = loading || pendingMutation;
+
   // Handle Delete button
-  // Fire-and-forget via wb.removeNamedRange
-  const handleDelete = useCallback(() => {
-    if (!selectedNameData || selectedNameData.isTable) return;
+  const handleDelete = useCallback(async () => {
+    if (!selectedNameData || selectedNameData.isTable || pendingMutation) return;
 
     // Confirm deletion
     const confirmDelete = window.confirm(
@@ -269,14 +271,18 @@ export function NameManagerDialog() {
     );
     if (!confirmDelete) return;
 
+    setPendingMutation(true);
     try {
-      void wb.names.remove(selectedNameData.name);
+      await wb.names.remove(selectedNameData.name, selectedNameData.scopeKey);
       setSelectedName(null);
+      await refreshNames();
     } catch (error) {
       // Show error - in production would use a toast/alert
       console.error('Failed to delete name:', error);
+    } finally {
+      setPendingMutation(false);
     }
-  }, [selectedNameData, wb, setSelectedName]);
+  }, [pendingMutation, refreshNames, selectedNameData, wb, setSelectedName]);
 
   // Handle row selection
   const handleRowClick = useCallback(
@@ -290,14 +296,14 @@ export function NameManagerDialog() {
 
   // Handle inline refersTo editing
   const handleRefersToDoubleClick = useCallback((name: NameRowData) => {
-    if (name.isTable) return; // Tables can't be edited
+    if (name.isTable || pendingMutation) return; // Tables can't be edited
     setEditingRefersTo(name.id);
     setEditedRefersTo(name.refersTo);
-  }, []);
+  }, [pendingMutation]);
 
   // Save inline refersTo edit via Workbook API
-  const handleRefersToSave = useCallback(() => {
-    if (!editingRefersTo) return;
+  const handleRefersToSave = useCallback(async () => {
+    if (!editingRefersTo || pendingMutation) return;
 
     const name = filteredNames.find((n) => n.id === editingRefersTo);
     if (!name || name.isTable) {
@@ -305,14 +311,17 @@ export function NameManagerDialog() {
       return;
     }
 
+    setPendingMutation(true);
     try {
-      void wb.names.update(name.id, { reference: editedRefersTo });
+      await wb.names.update(name.name, { reference: editedRefersTo }, name.scopeKey);
+      await refreshNames();
+      setEditingRefersTo(null);
     } catch (error) {
       console.error('Failed to update refersTo:', error);
+    } finally {
+      setPendingMutation(false);
     }
-
-    setEditingRefersTo(null);
-  }, [editingRefersTo, editedRefersTo, filteredNames, wb]);
+  }, [editingRefersTo, pendingMutation, filteredNames, wb, editedRefersTo, refreshNames]);
 
   // Cancel inline edit
   const handleRefersToCancel = useCallback(() => {
@@ -347,14 +356,20 @@ export function NameManagerDialog() {
 
       <DialogToolbar>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleNew} size="sm" data-testid="name-manager-new">
+          <Button
+            variant="secondary"
+            onClick={handleNew}
+            size="sm"
+            disabled={controlsDisabled}
+            data-testid="name-manager-new"
+          >
             New...
           </Button>
           <Button
             variant="secondary"
             onClick={handleEdit}
             size="sm"
-            disabled={!selectedNameData || selectedNameData.isTable}
+            disabled={controlsDisabled || !selectedNameData || selectedNameData.isTable}
             data-testid="name-manager-edit"
           >
             Edit...
@@ -363,7 +378,7 @@ export function NameManagerDialog() {
             variant="secondary"
             onClick={handleDelete}
             size="sm"
-            disabled={!selectedNameData || selectedNameData.isTable}
+            disabled={controlsDisabled || !selectedNameData || selectedNameData.isTable}
             data-testid="name-manager-delete"
           >
             Delete
@@ -408,7 +423,13 @@ export function NameManagerDialog() {
               </tr>
             </thead>
             <tbody>
-              {filteredNames.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-ss-text-tertiary">
+                    Loading names...
+                  </td>
+                </tr>
+              ) : filteredNames.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-ss-text-tertiary">
                     {dialogState.searchText
@@ -441,6 +462,7 @@ export function NameManagerDialog() {
                           onBlur={handleRefersToSave}
                           onKeyDown={handleRefersToKeyDown}
                           className="h-6 py-0 text-caption font-ss-mono"
+                          disabled={pendingMutation}
                           autoFocus
                         />
                       ) : (
@@ -479,7 +501,7 @@ export function NameManagerDialog() {
                 }}
                 onBlur={handleRefersToSave}
                 onKeyDown={handleRefersToKeyDown}
-                disabled={selectedNameData.isTable}
+                disabled={selectedNameData.isTable || pendingMutation}
                 dialogId="name-manager-dialog"
                 inputId="refers-to-inline"
                 className="font-ss-mono"

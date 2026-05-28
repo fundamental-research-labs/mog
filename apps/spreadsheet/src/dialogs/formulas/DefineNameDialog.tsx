@@ -64,6 +64,7 @@ export function DefineNameDialog() {
   // UI Store state
   const { parentDialogId, ...dialogState } = useUIStore((s) => s.defineNameDialog);
   const closeDialog = useUIStore((s) => s.closeDefineNameDialog);
+  const notifyNameManagerNamesChanged = useUIStore((s) => s.notifyNameManagerNamesChanged);
 
   // Form state
   const [name, setName] = useState('');
@@ -137,10 +138,18 @@ export function DefineNameDialog() {
           .list()
           .then((names) => {
             if (cancelled) return;
-            const existingName = names.find((n) => n.name === editingId);
+            const existingName = names.find(
+              (n) =>
+                n.name === editingId &&
+                (dialogState.editingNameScope == null || n.scope === dialogState.editingNameScope),
+            );
             if (existingName) {
               setName(existingName.name);
-              setScope(existingName.scope ?? 'workbook');
+              const scopeOption =
+                existingName.scope == null
+                  ? undefined
+                  : scopeOptions.find((option) => option.label === existingName.scope);
+              setScope(scopeOption?.value ?? 'workbook');
               setComment(existingName.comment ?? '');
               // NamedRangeInfo.reference is already A1-style
               setRefersTo(existingName.reference ?? '');
@@ -188,12 +197,14 @@ export function DefineNameDialog() {
     dialogState.isOpen,
     dialogState.mode,
     dialogState.editingNameId,
+    dialogState.editingNameScope,
     dialogState.initialName,
     dialogState.initialRefersTo,
     dialogState.initialScope,
     wb,
     ranges,
     activeSheetId,
+    scopeOptions,
   ]);
 
   // Validate name as user types
@@ -230,18 +241,29 @@ export function DefineNameDialog() {
     try {
       if (dialogState.mode === 'edit' && dialogState.editingNameId) {
         // Update existing name via Workbook API
-        await wb.names.update(dialogState.editingNameId, {
-          name,
-          reference: refersTo,
-          comment: comment || undefined,
-        });
+        await wb.names.update(
+          dialogState.editingNameId,
+          {
+            name,
+            reference: refersTo,
+            comment: comment || undefined,
+          },
+          dialogState.editingNameScope ?? undefined,
+        );
       } else {
         // Create new name via Workbook API
         // Ensure reference starts with = for proper conversion
         const ref = refersTo.startsWith('=') ? refersTo.slice(1) : refersTo;
-        await wb.names.add(name, ref, comment || undefined);
+        const scopeName =
+          scope === 'workbook'
+            ? undefined
+            : scopeOptions.find((option) => option.value === scope)?.label;
+        await wb.names.add(name, ref, comment || undefined, scopeName);
       }
 
+      if (parentDialogId === 'name-manager-dialog') {
+        notifyNameManagerNamesChanged();
+      }
       closeDialog();
     } catch (error) {
       // Show validation error - use 'invalid_characters' as a generic error type
@@ -255,11 +277,16 @@ export function DefineNameDialog() {
     validation.valid,
     dialogState.mode,
     dialogState.editingNameId,
+    dialogState.editingNameScope,
     name,
     refersTo,
     comment,
+    scope,
+    scopeOptions,
+    parentDialogId,
     wb,
     closeDialog,
+    notifyNameManagerNamesChanged,
   ]);
 
   // Handle cancel

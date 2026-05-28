@@ -16,10 +16,44 @@
  *
  */
 
-import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type { ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 
-import { getUIStore, handled, notHandled } from './handler-utils';
+import { handled, notHandled } from './handler-utils';
 import { beginEditSessionFromAction } from './edit-entry';
+
+async function insertFormulaToken(
+  deps: Parameters<AsyncActionHandler>[0],
+  token: string,
+): Promise<void> {
+  const isEditing = deps.accessors.editor.isEditing();
+  const isFormulaEditing = deps.accessors.editor.isFormulaEditing();
+
+  if (isEditing || isFormulaEditing) {
+    const currentValue = deps.accessors.editor.getValue() || '';
+    const cursorPos = deps.accessors.editor.getCursorPosition() || 0;
+    const prefix = currentValue.startsWith('=') || isFormulaEditing ? '' : '=';
+    const adjustedCursor = cursorPos + prefix.length;
+    const before = currentValue.slice(0, cursorPos);
+    const after = currentValue.slice(cursorPos);
+    const newValue = prefix + before + token + after;
+    const newCursor = adjustedCursor + token.length;
+
+    deps.commands.editor.input(newValue, newCursor);
+    deps.commands.editor.setCursor(newCursor);
+  } else {
+    const activeCell = deps.accessors.selection.getActiveCell();
+    const sheetId = deps.getActiveSheetId();
+
+    deps.commands.selection.exitAllModes();
+
+    await beginEditSessionFromAction(deps, {
+      sheetId,
+      cell: activeCell,
+      entryMode: 'typing',
+      initialTextHint: `=${token}`,
+    });
+  }
+}
 
 // =============================================================================
 // INSERT_FUNCTION Handler
@@ -50,49 +84,22 @@ export const INSERT_FUNCTION: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
-  // The text to insert: "FUNCTION(" - user will complete the arguments
-  const insertion = `${functionName}(`;
+  await insertFormulaToken(deps, `${functionName}(`);
 
-  // Check if currently editing via accessor
-  const isEditing = deps.accessors.editor.isEditing();
-  const isFormulaEditing = deps.accessors.editor.isFormulaEditing();
+  return handled();
+};
 
-  if (isEditing || isFormulaEditing) {
-    // Already editing - insert at cursor position
-    const currentValue = deps.accessors.editor.getValue() || '';
-    const cursorPos = deps.accessors.editor.getCursorPosition() || 0;
+export const PASTE_NAME_IN_FORMULA: AsyncActionHandler = async (
+  deps,
+  payload: any,
+): Promise<ActionResult> => {
+  const { name } = payload as { name?: string };
 
-    // Split value at cursor and insert function
-    const before = currentValue.slice(0, cursorPos);
-    const after = currentValue.slice(cursorPos);
-    const newValue = before + insertion + after;
-    const newCursor = cursorPos + insertion.length;
-
-    // Update the value via commands.
-    // Pass the post-insert cursor so the machine doesn't fall back to
-    // end-of-value before the setCursor below corrects it.
-    deps.commands.editor.input(newValue, newCursor);
-
-    // Set cursor position to after the inserted function name and opening paren
-    deps.commands.editor.setCursor(newCursor);
-  } else {
-    // Not editing - start editing with the formula
-    const activeCell = deps.accessors.selection.getActiveCell();
-    const sheetId = deps.getActiveSheetId();
-
-    // Auto-deactivate selection modes on edit start (Excel behavior).
-    // routed through the selection actor.
-    deps.commands.selection.exitAllModes();
-
-    // Start editing with "=FUNCTION(" - cursor will be at end (after opening paren)
-    await beginEditSessionFromAction(deps, {
-      sheetId,
-      cell: activeCell,
-      entryMode: 'typing',
-      initialTextHint: `=${insertion}`,
-    });
+  if (!name) {
+    return notHandled('disabled');
   }
 
+  await insertFormulaToken(deps, name);
   return handled();
 };
 

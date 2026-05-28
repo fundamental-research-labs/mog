@@ -60,18 +60,24 @@ export class WorkbookNamesImpl implements WorkbookNames {
     });
   }
 
-  async add(name: string, reference: string, comment?: string): Promise<NameAddReceipt> {
+  async add(
+    name: string,
+    reference: string,
+    comment?: string,
+    scope?: string,
+  ): Promise<NameAddReceipt> {
     this._ensureWritable('names.add');
     const { ctx, getActiveSheetId } = this.deps;
+    const scopeSheetId = await this._resolveScope(scope);
 
     // Validate name format (syntax, reserved words, cell-reference collisions)
-    const validation = validateName(name, new Set(), undefined);
+    const validation = validateName(name, new Set(), scopeSheetId);
     if (!validation.valid) {
       throw new KernelError('COMPUTE_ERROR', validation.message ?? 'Invalid named range name.');
     }
 
     // Check for duplicates
-    const existing = await NamedRanges.getByName(ctx, name, undefined);
+    const existing = await NamedRanges.getByName(ctx, name, scopeSheetId);
     if (existing) {
       throw new KernelError(
         'COMPUTE_ERROR',
@@ -83,7 +89,12 @@ export class WorkbookNamesImpl implements WorkbookNames {
     const refersToA1 = reference.startsWith('=') ? reference : `=${reference}`;
     const contextSheet = getActiveSheetId();
 
-    await NamedRanges.create(ctx, { name, refersToA1, comment }, contextSheet, 'api');
+    await NamedRanges.create(
+      ctx,
+      { name, refersToA1, comment, scope: scopeSheetId },
+      contextSheet,
+      'api',
+    );
     return { kind: 'nameAdd', name, reference };
   }
 
@@ -172,12 +183,13 @@ export class WorkbookNamesImpl implements WorkbookNames {
     return { kind: 'nameRemove', name };
   }
 
-  async update(name: string, updates: NamedRangeUpdateOptions): Promise<void> {
+  async update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void> {
     const { ctx, getActiveSheetId } = this.deps;
     const contextSheet = getActiveSheetId();
+    const scopeSheetId = await this._resolveScope(scope);
 
     // Resolve name to internal ID — NamedRanges.update() expects an ID, not a name
-    const defined = await NamedRanges.getByName(ctx, name, undefined);
+    const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
     if (!defined) {
       throw new KernelError('COMPUTE_ERROR', `Named range "${name}" not found.`);
     }

@@ -695,6 +695,8 @@ export function FormulasRibbon() {
   const [removeArrowsOpen, setRemoveArrowsOpen] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [useInFormulaOpen, setUseInFormulaOpen] = useState(false);
+  const [definedNames, setDefinedNames] = useState<Array<{ name: string; scope?: string }>>([]);
 
   // function-category dropdowns lifted into the ribbonDropdowns slice
   // so the keytip chord (Alt+M,F/L/T/D/G) can open them via OPEN_RIBBON_DROPDOWN.
@@ -730,6 +732,35 @@ export function FormulasRibbon() {
       open ? openRibbonDropdown('formulas.math-trig') : closeRibbonDropdown('formulas.math-trig'),
     [openRibbonDropdown, closeRibbonDropdown],
   );
+
+  const refreshDefinedNames = useCallback(async () => {
+    try {
+      const names = await wb.names.list();
+      setDefinedNames(
+        names
+          .filter((name) => name.visible !== false)
+          .map((name) => ({ name: name.name, scope: name.scope })),
+      );
+    } catch (error) {
+      console.error('Failed to load defined names:', error);
+      setDefinedNames([]);
+    }
+  }, [wb]);
+
+  useEffect(() => {
+    if (useInFormulaOpen) {
+      void refreshDefinedNames();
+    }
+  }, [refreshDefinedNames, useInFormulaOpen]);
+
+  useEffect(() => {
+    const unsubscribe = wb.on('namedRangeChanged', () => {
+      if (useInFormulaOpen) {
+        void refreshDefinedNames();
+      }
+    });
+    return unsubscribe;
+  }, [refreshDefinedNames, useInFormulaOpen, wb]);
 
   // Handle Insert Function click - uses unified action system
   const handleInsertFunction = useCallback(() => {
@@ -812,6 +843,13 @@ export function FormulasRibbon() {
   const handleCreateFromSelection = useCallback(() => {
     dispatch('CREATE_NAMES_FROM_SELECTION', deps);
   }, [deps]);
+
+  const handleUseDefinedName = useCallback(
+    (name: string) => {
+      dispatch('PASTE_NAME_IN_FORMULA', deps, { name });
+    },
+    [deps],
+  );
 
   // Handle Trace Precedents click (F3) -
   const handleTracePrecedents = useCallback(() => {
@@ -1246,19 +1284,49 @@ export function FormulasRibbon() {
             aria-label="Define Name"
           />
 
-          {/* Use in Formula - stub for now */}
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="narrow"
-            data-testid="ribbon-dropdown-use-in-formula"
-            icon={<UseInFormulaIcon />}
-            label={'Use in\nFormula'}
-            hasDropdown
-            disabled
-            title="Use in Formula (coming soon)"
-            aria-label="Use in Formula"
-          />
+          <RibbonDropdown
+            open={useInFormulaOpen}
+            onOpenChange={setUseInFormulaOpen}
+            position="bottom-left"
+            width="md"
+            menuLabel="Use in Formula"
+            menuTestId="ribbon-dropdown-menu-use-in-formula"
+            trigger={
+              <RibbonButton
+                layout="vertical"
+                height="full"
+                width="narrow"
+                data-testid="ribbon-dropdown-use-in-formula"
+                icon={<UseInFormulaIcon />}
+                label={'Use in\nFormula'}
+                hasDropdown
+                title="Use in Formula - Insert a defined name into the formula"
+                aria-label="Use in Formula"
+              />
+            }
+          >
+            {definedNames.length === 0 ? (
+              <RibbonDropdownItem disabled>No names defined</RibbonDropdownItem>
+            ) : (
+              definedNames.map((definedName) => (
+                <RibbonDropdownItem
+                  key={`${definedName.scope ?? 'workbook'}:${definedName.name}`}
+                  onClick={() => handleUseDefinedName(definedName.name)}
+                  testId="ribbon-use-in-formula-name"
+                  dataValue={definedName.name}
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate">{definedName.name}</span>
+                    {definedName.scope && (
+                      <span className="truncate text-dropdown-header text-ss-text-tertiary">
+                        {definedName.scope}
+                      </span>
+                    )}
+                  </div>
+                </RibbonDropdownItem>
+              ))
+            )}
+          </RibbonDropdown>
 
           {/* F2: Create from Selection */}
           <RibbonButton

@@ -22,6 +22,9 @@ pub struct TableSpec {
     /// Auto-filter xr:uid for revision tracking
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_filter_xr_uid: Option<String>,
+    /// Raw direct-child `<extLst>` owned by the table autoFilter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_filter_ext_lst_raw: Option<String>,
     pub columns: Vec<TableColumnSpec>,
     // DXF formatting IDs (differential formatting for table regions)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -52,6 +55,9 @@ pub struct TableSpec {
     /// Connection ID for external data sources (query tables).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection_id: Option<u32>,
+    /// Table comment attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
     /// Whether to insert a blank row below table.
     #[serde(default)]
     pub insert_row: bool,
@@ -93,6 +99,9 @@ pub struct TableSortState {
     pub sort_method: SortMethod,
     /// Sort conditions
     pub conditions: Vec<TableSortCondition>,
+    /// Raw direct-child `<extLst>` owned by this sortState.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 /// A single sort condition within a table sort state.
@@ -137,6 +146,7 @@ impl Default for TableSpec {
             last_col_highlight: false,
             auto_filter_ref: None,
             auto_filter_xr_uid: None,
+            auto_filter_ext_lst_raw: None,
             columns: Vec::new(),
             header_row_dxf_id: None,
             data_dxf_id: None,
@@ -150,6 +160,7 @@ impl Default for TableSpec {
             table_type: None,
             totals_row_shown: None,
             connection_id: None,
+            comment: None,
             insert_row: false,
             insert_row_shift: false,
             published: false,
@@ -202,6 +213,9 @@ pub struct TableColumnSpec {
     /// Query table field ID (queryTableFieldId attribute).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_table_field_id: Option<u32>,
+    /// XML column properties for XML-mapped table columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xml_column_pr: Option<ooxml_types::tables::XmlColumnPr>,
     /// Extension UID for revision tracking (xr3:uid).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xr3_uid: Option<String>,
@@ -221,6 +235,9 @@ pub struct FilterColumnSpec {
     #[serde(default, skip_serializing_if = "is_true_default")]
     pub show_button: bool,
     pub filter: FilterSpec,
+    /// Raw direct-child `<extLst>` owned by this filterColumn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 fn is_true_default(v: &bool) -> bool {
@@ -236,6 +253,10 @@ pub enum FilterSpec {
         #[serde(default)]
         blank: bool,
         values: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        calendar_type: Option<super::filter::CalendarType>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        date_group_items: Vec<super::filter::DateGroupItem>,
     },
     /// Custom filter with 1-2 conditions (CT_CustomFilters)
     Custom {

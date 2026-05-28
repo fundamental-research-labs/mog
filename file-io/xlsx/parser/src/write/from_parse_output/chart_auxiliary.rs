@@ -93,7 +93,7 @@ pub(super) fn supported_auxiliary_relationship_targets<'a>(
     relationships: &'a [ChartRelationshipData],
 ) -> impl Iterator<Item = String> + 'a {
     relationships.iter().filter_map(move |rel| {
-        if rel.target_mode.as_deref() == Some("External") {
+        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref()) {
             return None;
         }
         let rel_type = rel.relationship_type.as_deref()?;

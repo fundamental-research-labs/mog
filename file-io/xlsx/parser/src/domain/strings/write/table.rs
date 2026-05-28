@@ -29,6 +29,7 @@ pub struct SharedStringsWriter {
     /// Next rich text index (rich text entries are always unique)
     pub(super) next_index: usize,
     pub(super) rich_index_map: HashMap<String, usize>,
+    pub(super) root_ext_lst_xml: Option<Vec<u8>>,
 }
 
 impl SharedStringsWriter {
@@ -39,6 +40,7 @@ impl SharedStringsWriter {
             index_map: HashMap::new(),
             next_index: 0,
             rich_index_map: HashMap::new(),
+            root_ext_lst_xml: None,
         }
     }
 
@@ -49,6 +51,7 @@ impl SharedStringsWriter {
             index_map: HashMap::with_capacity(capacity),
             next_index: 0,
             rich_index_map: HashMap::new(),
+            root_ext_lst_xml: None,
         }
     }
 
@@ -146,6 +149,14 @@ impl SharedStringsWriter {
     /// Check whether any entry is actually referenced by cells.
     pub fn has_referenced_entries(&self) -> bool {
         self.total_count() > 0
+    }
+
+    pub fn has_part_content(&self) -> bool {
+        self.has_referenced_entries() || self.root_ext_lst_xml.is_some()
+    }
+
+    pub fn set_root_ext_lst_xml(&mut self, ext_lst_xml: Option<Vec<u8>>) {
+        self.root_ext_lst_xml = ext_lst_xml.filter(|xml| !xml.is_empty());
     }
 
     /// Get the total reference count (sum of all string usage counts).

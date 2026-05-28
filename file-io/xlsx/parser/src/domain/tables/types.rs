@@ -15,7 +15,9 @@ use super::filter::AutoFilter;
 use super::style::{TableStyleInfo, parse_table_style_info};
 
 // Re-export canonical enum types from ooxml_types.
-pub use ooxml_types::tables::{SortOrder, TableFormula, TableType, TotalsRowFunction};
+pub use ooxml_types::tables::{
+    SortOrder, TableFormula, TableType, TotalsRowFunction, XmlColumnPr,
+};
 
 // Typed range refs: custom serde serializer for `Option<compute_parser::RangeRef>`.
 //
@@ -70,6 +72,8 @@ pub struct TableColumn {
     pub calculated_column_formula: Option<TableFormula>,
     /// Totals row formula (for custom totals)
     pub totals_row_formula: Option<TableFormula>,
+    /// XML column properties for XML-mapped tables.
+    pub xml_column_pr: Option<XmlColumnPr>,
     /// Extension UID for revision tracking (xr3:uid)
     pub xr3_uid: Option<String>,
 }
@@ -97,6 +101,7 @@ impl TableColumn {
             totals_row_cell_style: parse_string_attr(tag, b"totalsRowCellStyle=\""),
             calculated_column_formula: None,
             totals_row_formula: None,
+            xml_column_pr: None,
             xr3_uid: parse_string_attr(tag, b"xr3:uid=\""),
         };
 
@@ -135,8 +140,46 @@ impl TableColumn {
             });
         }
 
+        if let Some(xml_column_pr) = parse_xml_column_pr(content) {
+            col.xml_column_pr = Some(xml_column_pr);
+        }
+
         Some(col)
     }
+}
+
+fn parse_xml_column_pr(content: &[u8]) -> Option<XmlColumnPr> {
+    let start = find_tag_simd(content, b"xmlColumnPr", 0)?;
+    let tag_end = find_gt_simd(content, start)?;
+    let tag = &content[start..tag_end];
+    let end = if tag.len() > 1 && tag[tag.len() - 1] == b'/' {
+        tag_end + 1
+    } else {
+        find_closing_tag(content, b"xmlColumnPr", tag_end)
+            .and_then(|p| find_gt_simd(content, p).map(|g| g + 1))
+            .unwrap_or(tag_end + 1)
+    };
+    let element = &content[start..end.min(content.len())];
+
+    Some(XmlColumnPr {
+        map_id: parse_u32_attr(tag, b"mapId=\"").unwrap_or(0),
+        xpath: parse_string_attr(tag, b"xpath=\"").unwrap_or_default(),
+        denormalized: parse_bool_attr_opt(tag, b"denormalized=\"").unwrap_or(false),
+        xml_data_type: parse_string_attr(tag, b"xmlDataType=\"").unwrap_or_default(),
+        ext_lst_xml: extract_ext_lst(element),
+    })
+}
+
+fn extract_ext_lst(xml: &[u8]) -> Option<String> {
+    let start = find_tag_simd(xml, b"extLst", 0)?;
+    let open_end = find_gt_simd(xml, start)? + 1;
+    let end = if open_end >= 2 && xml[open_end - 2] == b'/' {
+        open_end
+    } else {
+        find_closing_tag(xml, b"extLst", start)
+            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))?
+    };
+    String::from_utf8(xml[start..end].to_vec()).ok()
 }
 
 // ============================================================================

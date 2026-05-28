@@ -9,7 +9,16 @@ use super::{
 /// The caller is responsible for calling `.to_xml()` on the returned writer.
 /// This keeps serialization in one place (the writer) and conversion separate.
 pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec) -> TableWriter {
+    table_writer_from_domain_with_strict(global_id, table, false)
+}
+
+pub fn table_writer_from_domain_with_strict(
+    global_id: u32,
+    table: &domain_types::TableSpec,
+    strict: bool,
+) -> TableWriter {
     let mut tw = TableWriter::new(global_id, &table.name, &table.range_ref);
+    tw.strict_ooxml = strict;
     tw.display_name = table.display_name.clone();
 
     // Header/totals row settings
@@ -20,6 +29,7 @@ pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec)
     tw.table_type = table.table_type.clone();
     tw.totals_row_shown = table.totals_row_shown;
     tw.connection_id = table.connection_id;
+    tw.comment = table.comment.clone();
     tw.insert_row = table.insert_row;
     tw.insert_row_shift = table.insert_row_shift;
     tw.published = table.published;
@@ -40,6 +50,7 @@ pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec)
     if let Some(ref af_ref) = table.auto_filter_ref {
         let mut af = AutoFilterDef::new(af_ref);
         af.xr_uid = table.auto_filter_xr_uid.clone();
+        af.ext_lst_raw = table.auto_filter_ext_lst_raw.clone();
         // Convert domain filter column specs to writer filter columns
         for fc_spec in &table.filter_columns {
             if let Some(fc) = convert_filter_column_spec_to_writer(fc_spec) {
@@ -56,6 +67,7 @@ pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec)
         let mut tc = TableColumn::new(col.id, &col.name);
         tc.unique_name = col.unique_name.clone();
         tc.query_table_field_id = col.query_table_field_id;
+        tc.xml_column_pr = col.xml_column_pr.clone();
         if let Some(ref label) = col.totals_label {
             tc.totals_row_label = Some(label.clone());
         }
@@ -92,6 +104,7 @@ pub fn table_writer_from_domain(global_id: u32, table: &domain_types::TableSpec)
         sort.column_sort = ss.column_sort;
         sort.case_sensitive = ss.case_sensitive;
         sort.sort_method = ss.sort_method;
+        sort.ext_lst_raw = ss.ext_lst_raw.clone();
         for sc in &ss.conditions {
             let mut cond = SortCondition::new(&sc.ref_range);
             cond.descending = sc.descending;
@@ -126,9 +139,16 @@ fn convert_filter_column_spec_to_writer(
     spec: &domain_types::FilterColumnSpec,
 ) -> Option<FilterColumn> {
     let filter = match &spec.filter {
-        domain_types::FilterSpec::Values { values, blank } => FilterType::Filters {
+        domain_types::FilterSpec::Values {
+            values,
+            blank,
+            calendar_type,
+            date_group_items,
+        } => FilterType::Filters {
             values: values.clone(),
             blank: *blank,
+            calendar_type: *calendar_type,
+            date_group_items: date_group_items.clone(),
         },
         domain_types::FilterSpec::Custom { filters, and } => FilterType::CustomFilters {
             filters: filters
@@ -175,5 +195,6 @@ fn convert_filter_column_spec_to_writer(
         hidden_button: spec.hidden_button,
         show_button: spec.show_button,
         filter,
+        ext_lst_raw: spec.ext_lst_raw.clone(),
     })
 }

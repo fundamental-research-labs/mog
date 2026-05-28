@@ -27,6 +27,10 @@ pub struct OleObjectProperties {
     pub r#macro: Option<String>,
     pub alt_text: Option<String>,
     pub dde: bool,
+    #[serde(default)]
+    pub ui_object: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r_id: Option<String>,
     pub anchor: Option<OleObjectAnchor>,
 }
 

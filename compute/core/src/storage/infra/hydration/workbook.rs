@@ -12,6 +12,9 @@ use cell_types::SheetId;
 
 use super::IdAllocator;
 
+const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
+const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
+
 // ===========================================================================
 // Workbook-level hydration
 // ===========================================================================
@@ -339,6 +342,29 @@ pub(super) fn hydrate_workbook_views(
     }
 }
 
+pub(super) fn hydrate_custom_workbook_views_xml(
+    workbook: &MapRef,
+    custom_workbook_views_xml: &Option<Vec<u8>>,
+    txn: &mut yrs::TransactionMut,
+) {
+    let Some(xml) = custom_workbook_views_xml else {
+        return;
+    };
+    if xml.is_empty() {
+        return;
+    }
+
+    let settings_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_SETTINGS);
+    if let Ok(json) = serde_json::to_string(xml) {
+        settings_map.insert(
+            txn,
+            KEY_CUSTOM_WORKBOOK_VIEWS_XML,
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+}
+
 /// Hydrate workbook web publishing metadata into a workbook-level Y.Map.
 pub(super) fn hydrate_workbook_web_publishing(
     workbook: &MapRef,
@@ -487,6 +513,27 @@ pub(super) fn hydrate_package_fidelity_metadata(
         crate::storage::ensure_workbook_child_map(workbook, txn, KEY_PACKAGE_FIDELITY_METADATA);
     if let Ok(json) = serde_json::to_string(package_fidelity) {
         fidelity_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
+    }
+}
+
+pub(super) fn hydrate_volatile_dependency_part(
+    workbook: &MapRef,
+    part: &Option<domain_types::VolatileDependencyPackagePart>,
+    txn: &mut yrs::TransactionMut,
+) {
+    let Some(part) = part else {
+        return;
+    };
+    if part.bytes.is_empty() {
+        return;
+    }
+    let part_map = crate::storage::ensure_workbook_child_map(
+        workbook,
+        txn,
+        KEY_VOLATILE_DEPENDENCY_PACKAGE_PART,
+    );
+    if let Ok(json) = serde_json::to_string(part) {
+        part_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
     }
 }
 

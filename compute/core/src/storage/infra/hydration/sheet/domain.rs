@@ -41,4 +41,20 @@ pub(crate) fn hydrate_worksheet_import_xml_metadata(
     {
         meta_map.insert(txn, "worksheetExtLstXml", Any::String(Arc::from(xml)));
     }
+    if let Some(dimension_ref) = sheet
+        .worksheet_dimension_ref
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        meta_map.insert(
+            txn,
+            "worksheetDimensionRef",
+            Any::String(Arc::from(dimension_ref)),
+        );
+    }
+    if let Some(sheet_calc_pr) = &sheet.sheet_calc_pr
+        && let Ok(json) = serde_json::to_string(sheet_calc_pr)
+    {
+        meta_map.insert(txn, "sheetCalcPr", Any::String(Arc::from(json.as_str())));
+    }
 }

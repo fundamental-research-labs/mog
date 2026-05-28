@@ -82,23 +82,42 @@ fn parse_metadata_types(xml: &str) -> Vec<MetadataTypeOutput> {
         if let Some(v) = extract_attr_value(tag, "minSupportedVersion") {
             mt.min_supported_version = v.parse().unwrap_or(0);
         }
-        mt.copy = extract_attr_value(tag, "copy").as_deref() == Some("1");
-        mt.paste_all = extract_attr_value(tag, "pasteAll").as_deref() == Some("1");
-        mt.paste_values = extract_attr_value(tag, "pasteValues").as_deref() == Some("1");
-        mt.merge = extract_attr_value(tag, "merge").as_deref() == Some("1");
-        mt.split_first = extract_attr_value(tag, "splitFirst").as_deref() == Some("1");
-        mt.row_col_shift = extract_attr_value(tag, "rowColShift").as_deref() == Some("1");
-        mt.clear_formats = extract_attr_value(tag, "clearFormats").as_deref() == Some("1");
-        mt.clear_comments = extract_attr_value(tag, "clearComments").as_deref() == Some("1");
-        mt.assign = extract_attr_value(tag, "assign").as_deref() == Some("1");
-        mt.coerce = extract_attr_value(tag, "coerce").as_deref() == Some("1");
-        mt.cell_meta = extract_attr_value(tag, "cellMeta").as_deref() == Some("1");
+        mt.copy = attr_bool(tag, "copy");
+        mt.paste_all = attr_bool(tag, "pasteAll");
+        mt.paste_values = attr_bool(tag, "pasteValues");
+        mt.merge = attr_bool(tag, "merge");
+        mt.split_first = attr_bool(tag, "splitFirst");
+        mt.row_col_shift = attr_bool(tag, "rowColShift");
+        mt.clear_formats = attr_bool(tag, "clearFormats");
+        mt.clear_comments = attr_bool(tag, "clearComments");
+        mt.assign = attr_bool(tag, "assign");
+        mt.coerce = attr_bool(tag, "coerce");
+        mt.cell_meta = attr_bool(tag, "cellMeta");
+        mt.ghost_row = attr_bool(tag, "ghostRow");
+        mt.ghost_col = attr_bool(tag, "ghostCol");
+        mt.edit = attr_bool(tag, "edit");
+        mt.delete = attr_bool(tag, "delete");
+        mt.paste_formulas = attr_bool(tag, "pasteFormulas");
+        mt.paste_formats = attr_bool(tag, "pasteFormats");
+        mt.paste_comments = attr_bool(tag, "pasteComments");
+        mt.paste_data_validation = attr_bool(tag, "pasteDataValidation");
+        mt.paste_borders = attr_bool(tag, "pasteBorders");
+        mt.paste_col_widths = attr_bool(tag, "pasteColWidths");
+        mt.paste_number_formats = attr_bool(tag, "pasteNumberFormats");
+        mt.split_all = attr_bool(tag, "splitAll");
+        mt.clear_all = attr_bool(tag, "clearAll");
+        mt.clear_contents = attr_bool(tag, "clearContents");
+        mt.adjust = attr_bool(tag, "adjust");
 
         result.push(mt);
         pos = tag_end;
     }
 
     result
+}
+
+fn attr_bool(tag: &str, name: &str) -> bool {
+    matches!(extract_attr_value(tag, name).as_deref(), Some("1" | "true"))
 }
 
 /// Parse `<futureMetadata>` sections.

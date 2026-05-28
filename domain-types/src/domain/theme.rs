@@ -6,6 +6,12 @@ pub struct ThemeData {
     pub colors: Vec<ThemeColor>,
     pub major_font: Option<String>,
     pub minor_font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_part_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_relationship_type: Option<String>,
     /// Original theme name (e.g., "Tema do Office", "Office Theme").
     /// Preserved for round-trip fidelity — localized names must not be clobbered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -32,6 +38,10 @@ pub struct ThemeData {
     /// Raw XML of `<a:extLst>...</a:extLst>`, including the root element.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<Vec<u8>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cust_clr_lst_xml: Option<Vec<u8>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_sibling_order: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

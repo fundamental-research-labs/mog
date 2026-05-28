@@ -14,6 +14,19 @@ use super::{
     ChartView3DData, DataLabelData, LegendData, ObjectSize,
 };
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct ChartExReplayData {
+    pub original_path: String,
+    pub original_xml: Vec<u8>,
+    pub original_position: AnchorPosition,
+    pub rels_path: Option<String>,
+    pub rels_xml: Option<Vec<u8>>,
+    pub relationships: Vec<ChartRelationshipData>,
+    pub auxiliary_files: Vec<(String, Vec<u8>)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartSpec {
@@ -154,6 +167,8 @@ pub struct ChartSpec {
     /// Typed chart-owned auxiliary package parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
+    #[serde(skip)]
+    pub chart_ex_replay: Option<ChartExReplayData>,
 
     /// Whether this chart uses ChartEx format (cx: namespace) instead of standard c: namespace.
     /// ChartEx covers modern chart types: Waterfall, Treemap, Sunburst, Funnel, etc.
@@ -285,6 +300,7 @@ impl ChartSpec {
         let chart_auxiliary_parts = ooxml
             .map(|o| o.chart_auxiliary_parts.clone())
             .unwrap_or_default();
+        let chart_ex_replay = ooxml.and_then(|o| o.chart_ex_replay.clone());
         let is_chart_ex = ooxml.map(|o| o.is_chart_ex).unwrap_or_else(|| {
             matches!(
                 ooxml.and_then(|o| o.definition.as_ref()),
@@ -417,6 +433,7 @@ impl ChartSpec {
             chart_relationships,
             chart_auxiliary_files,
             chart_auxiliary_parts,
+            chart_ex_replay,
             is_chart_ex,
             cnv_pr_name,
             cnv_pr_id,
@@ -499,6 +516,7 @@ impl ChartSpec {
             client_data_prints_with_sheet: self.client_data_prints_with_sheet,
             relationship_id: None,
             relationship_target: None,
+            raw_alternate_content: None,
         })
     }
 
@@ -517,6 +535,7 @@ impl ChartSpec {
             && self.chart_relationships.is_empty()
             && self.chart_auxiliary_files.is_empty()
             && self.chart_auxiliary_parts.is_empty()
+            && self.chart_ex_replay.is_none()
             && !self.is_chart_ex
         {
             None
@@ -527,6 +546,7 @@ impl ChartSpec {
                 chart_relationships: self.chart_relationships.clone(),
                 chart_auxiliary_files: self.chart_auxiliary_files.clone(),
                 chart_auxiliary_parts: self.chart_auxiliary_parts.clone(),
+                chart_ex_replay: self.chart_ex_replay.clone(),
                 is_chart_ex: self.is_chart_ex,
             })
         };

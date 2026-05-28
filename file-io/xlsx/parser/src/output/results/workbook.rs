@@ -24,6 +24,9 @@ pub struct HyperlinkOutput {
     pub location: String,
     pub display: String,
     pub tooltip: String,
+    /// Resolved target from a relationship-backed hyperlink when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
     /// Relationship ID for external hyperlinks (r:id), for round-trip fidelity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r_id: Option<String>,
@@ -114,6 +117,12 @@ pub struct DefinedNameOutput {
     /// Whether this is an XLM macro
     #[serde(skip_serializing_if = "is_false")]
     pub xlm: bool,
+    /// Function group ID for macro/function names
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_group_id: Option<u32>,
+    /// Shortcut key for macro/function names
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shortcut_key: Option<String>,
     /// Whether to publish this name to the server (SharePoint)
     #[serde(skip_serializing_if = "is_false")]
     pub publish_to_server: bool,
@@ -235,6 +244,9 @@ pub struct FullParsedSheet {
     /// Not serialized to TypeScript — internal round-trip data only.
     #[serde(skip)]
     pub comments_root_namespace_attrs: Vec<(String, String)>,
+    /// Safe root-level `<extLst>` from comments XML.
+    #[serde(skip)]
+    pub comments_ext_lst_xml: Option<String>,
     /// Hyperlinks
     pub hyperlinks: Vec<HyperlinkOutput>,
     /// Sheet protection settings
@@ -242,6 +254,12 @@ pub struct FullParsedSheet {
     /// Typed worksheet semantic containers that are not runtime-decomposed yet.
     #[serde(skip)]
     pub worksheet_semantic_containers: domain_types::WorksheetSemanticContainers,
+    /// Authored worksheet `<dimension ref>` value.
+    #[serde(skip)]
+    pub worksheet_dimension_ref: Option<String>,
+    /// Typed worksheet calculation properties.
+    #[serde(skip)]
+    pub sheet_calc_pr: Option<ooxml_types::worksheet::SheetCalcPr>,
     /// Print settings (structured output)
     pub print_settings: Option<PrintSettingsOutput>,
     /// Raw `<headerFooter>...</headerFooter>` XML for verbatim round-trip passthrough.
@@ -299,6 +317,9 @@ pub struct FullParsedSheet {
     /// Sheet view options (gridlines, headers visibility).
     /// Multiple `<sheetView>` elements are preserved for round-trip fidelity.
     pub view_options: Vec<SheetViewOutput>,
+    /// Direct-child `<extLst>` XML under `<sheetViews>`.
+    #[serde(skip)]
+    pub sheet_views_ext_lst_xml: Option<String>,
     /// Worksheet properties from `<sheetPr>`.
     #[serde(skip)]
     pub sheet_properties: Option<ooxml_types::worksheet::SheetProperties>,
@@ -411,6 +432,8 @@ pub struct ParsedChartEx {
     pub chart_space: ooxml_types::chart_ex::ChartExSpace,
     /// Original ZIP entry name (e.g., "xl/charts/chartEx1.xml").
     pub original_path: String,
+    /// Original chartEx XML bytes for unmodified opaque preservation.
+    pub original_xml: Vec<u8>,
     /// Raw bytes of the .rels file for this chartEx part.
     pub chart_rels_bytes: Option<(String, Vec<u8>)>,
     /// Auxiliary files referenced by the chartEx .rels (style, colors).
@@ -521,6 +544,9 @@ pub struct FullParseResult {
     /// Index-aligned with `shared_strings`. `None` = no phonetic data.
     #[serde(skip)]
     pub shared_strings_phonetic_xml: Vec<Option<Vec<u8>>>,
+    /// Safe root-level `<extLst>` XML from `xl/sharedStrings.xml`.
+    #[serde(skip)]
+    pub shared_strings_ext_lst_xml: Option<Vec<u8>>,
     /// Parsed styles (structured camelCase output)
     pub styles: StylesOutput,
     /// Theme (as JSON string for flexibility)
@@ -563,8 +589,18 @@ pub struct FullParseResult {
     /// Not serialized to TypeScript/WASM (internal round-trip data only).
     #[serde(skip)]
     pub pivot_caches: std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
+    /// Pivot-owned imported cache package facts for writer-only no-edit
+    /// preservation. Not serialized to TypeScript/WASM.
+    #[serde(skip)]
+    pub pivot_cache_packages: Vec<domain_types::PivotCachePackageFidelity>,
     /// Slicer cache definitions (workbook-level, shared across sheets)
     pub slicer_caches: Vec<ooxml_types::slicers::SlicerCacheDef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_part_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_relationship_id_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_relationship_type: Option<String>,
     /// Parsed theme name (e.g., "Office Theme")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme_name: Option<String>,
@@ -586,6 +622,10 @@ pub struct FullParseResult {
     /// Raw XML of <a:extLst>...</a:extLst> (full element) for round-trip fidelity
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme_ext_lst_xml: Option<Vec<u8>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_cust_clr_lst_xml: Option<Vec<u8>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_root_sibling_order: Option<Vec<String>>,
     /// Raw XML of <extLst>...</extLst> from xl/styles.xml for round-trip fidelity
     #[serde(skip)]
     pub styles_ext_lst_xml: Option<Vec<u8>>,
@@ -696,6 +736,9 @@ pub struct FullParseResult {
     /// Multiple `<workbookView>` elements are preserved.
     #[serde(skip)]
     pub workbook_views: Vec<ooxml_types::workbook::BookView>,
+    /// Raw workbook-level `<customWorkbookViews>` XML.
+    #[serde(skip)]
+    pub custom_workbook_views_xml: Option<Vec<u8>>,
     /// Parsed workbook properties from `<workbookPr>` for domain output.
     #[serde(skip)]
     pub workbook_properties: Option<domain_types::domain::workbook::WorkbookProperties>,
@@ -708,4 +751,16 @@ pub struct FullParseResult {
     /// Parsed workbook web publishing settings from `<webPublishing>`.
     #[serde(skip)]
     pub web_publishing: Option<domain_types::domain::workbook::WorkbookWebPublishing>,
+    /// Parsed workbook root `conformance` attribute.
+    #[serde(skip)]
+    pub workbook_conformance: Option<String>,
+    /// Workbook-level schema-known containers with no production ParseOutput owner.
+    #[serde(skip)]
+    pub unsupported_workbook_elements: Vec<String>,
+    /// Workbook-level MCE constructs that are not production-processed.
+    #[serde(skip)]
+    pub unsupported_workbook_mce: Vec<String>,
+    /// Valid workbook-owned volatile dependency part captured for safe passive export.
+    #[serde(skip)]
+    pub volatile_dependency_part: Option<domain_types::VolatileDependencyPackagePart>,
 }

@@ -11,6 +11,9 @@ pub struct Comments {
     /// Each entry is (attr_name, attr_value), e.g. ("xmlns:mc", "http://...").
     /// Also includes non-xmlns attrs like mc:Ignorable.
     pub root_namespace_attrs: Vec<(String, String)>,
+    /// Root-level `<extLst>...</extLst>` under `<comments>`, outside
+    /// `<commentList>`.
+    pub ext_lst_xml: Option<String>,
 }
 
 /// A single cell comment
@@ -28,6 +31,8 @@ pub struct Comment {
     pub shape_id: Option<u32>,
     /// Excel revision UID (xr:uid attribute, for round-trip fidelity)
     pub xr_uid: Option<String>,
+    /// Legacy `<commentPr>` display properties.
+    pub comment_pr: Option<ooxml_types::comments::CommentPr>,
 }
 
 impl Comment {

@@ -2,8 +2,8 @@ use super::outcome::ConversionStatus;
 use super::*;
 use crate::domain::drawings::{
     Connection as ReadConnection, ConnectorNonVisual, DrawingColor, Fill, NonVisualProps, Outline,
-    PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle, SolidFill, SpreadsheetConnector,
-    StyleRef as ReadStyleRef, Transform2D as ReadXf,
+    OpaqueDrawingContent, PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle, SolidFill,
+    SpreadsheetConnector, StyleRef as ReadStyleRef, Transform2D as ReadXf,
 };
 use ooxml_types::drawings as ooxml;
 use ooxml_types::drawings::{
@@ -786,12 +786,17 @@ fn test_group_shape_with_nested_children() {
             DrawingContent::Picture(inner_picture),
             DrawingContent::GraphicFrame(graphic_frame),
             DrawingContent::Unknown,
+            DrawingContent::OpaqueUnknown(OpaqueDrawingContent {
+                raw_xml: r#"<vendor:widget r:id="rIdWidget"/>"#.into(),
+                relationship_ids: vec!["rIdWidget".into()],
+                kind_hint: Some("widget".into()),
+            }),
         ],
         ..Default::default()
     };
     let props = group_shape_to_props(&g);
     assert_eq!(props.name, "Group with children");
-    assert_eq!(props.children.len(), 3);
+    assert_eq!(props.children.len(), 4);
     assert!(matches!(
         props.children[0],
         write::DrawingObject::Connector(_)
@@ -803,6 +808,10 @@ fn test_group_shape_with_nested_children() {
     assert!(matches!(
         props.children[2],
         write::DrawingObject::GraphicFrame(_)
+    ));
+    assert!(matches!(
+        props.children[3],
+        write::DrawingObject::OpaqueRaw(_)
     ));
 }
 
@@ -821,6 +830,25 @@ fn conversion_outcome_reports_unknown_as_unsupported() {
         ConversionStatus::Unsupported("unknown drawing content")
     );
     assert!(outcome.relationship_ids.is_empty());
+}
+
+#[test]
+fn conversion_outcome_reports_opaque_unknown_as_passthrough() {
+    let opaque = OpaqueDrawingContent {
+        raw_xml: r#"<vendor:widget r:id="rIdWidget" r:embed="rIdData"/>"#.into(),
+        relationship_ids: vec!["rIdWidget".into()],
+        kind_hint: Some("widget".into()),
+    };
+
+    let outcome =
+        convert_drawing_content_with_outcome(&DrawingContent::OpaqueUnknown(opaque));
+
+    assert_eq!(outcome.status, ConversionStatus::OpaquePassthrough);
+    assert_eq!(outcome.relationship_ids, ["rIdWidget", "rIdData"]);
+    assert!(matches!(
+        outcome.object,
+        Some(write::DrawingObject::OpaqueRaw(_))
+    ));
 }
 
 #[test]

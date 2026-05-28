@@ -64,6 +64,36 @@ pub struct MetadataTypeOutput {
     /// Whether this type applies to cell metadata (vs. value metadata)
     #[serde(default, skip_serializing_if = "is_false")]
     pub cell_meta: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ghost_row: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ghost_col: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub edit: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub delete: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_formulas: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_formats: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_comments: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_data_validation: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_borders: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_col_widths: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_number_formats: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub split_all: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub clear_all: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub clear_contents: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub adjust: bool,
 }
 
 /// A single block (`<bk>`) within `<futureMetadata>`.

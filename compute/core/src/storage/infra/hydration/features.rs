@@ -106,7 +106,7 @@ pub(super) fn hydrate_cells_with_ids(
         let is_empty = cell.formula.is_none() && cell.value.is_null() && cell.rich_string.is_none();
         let style_is_range_backed = range_style_positions.contains(&(cell.row, cell.col));
         let has_cell_properties = (cell.style_id.is_some() && !style_is_range_backed)
-            || cell.cm
+            || cell.cell_metadata_index.is_some()
             || cell.vm.is_some()
             || cell.formula_result_type.is_some()
             || cell.has_empty_cached_value

@@ -1,6 +1,19 @@
 use super::xml::extract_attr_value_in_range;
 use crate::infra::scanner::{find_gt_simd, find_tag_simd};
 
+/// Parse the workbook root `conformance` attribute.
+pub fn parse_workbook_conformance(xml: &[u8]) -> Option<String> {
+    let tag_start = find_tag_simd(xml, b"workbook", 0)?;
+    let tag_end = find_gt_simd(xml, tag_start)
+        .map(|p| p + 1)
+        .unwrap_or(xml.len());
+    let elem = &xml[tag_start..tag_end];
+
+    extract_attr_value_in_range(elem, b"conformance=\"")
+        .and_then(|v| std::str::from_utf8(v).ok())
+        .map(ToOwned::to_owned)
+}
+
 /// Parse the `<workbookPr>` element from workbook.xml.
 pub fn parse_workbook_properties(
     xml: &[u8],
@@ -136,6 +149,11 @@ pub fn parse_web_publishing(
             .and_then(|v| std::str::from_utf8(v).ok())
             .and_then(|s| s.parse::<u32>().ok())
     };
+    let parse_str = |attr: &[u8]| -> Option<String> {
+        extract_attr_value_in_range(elem, attr)
+            .and_then(|v| std::str::from_utf8(v).ok())
+            .map(ToOwned::to_owned)
+    };
     let target_screen_size = extract_attr_value_in_range(elem, b"targetScreenSize=\"")
         .and_then(|v| std::str::from_utf8(v).ok())
         .map(ooxml_types::web_publish::TargetScreenSize::from_ooxml);
@@ -148,6 +166,8 @@ pub fn parse_web_publishing(
         allow_png: parse_bool(b"allowPng=\""),
         target_screen_size,
         dpi: parse_u32(b"dpi=\""),
+        code_page: parse_u32(b"codePage=\""),
+        character_set: parse_str(b"characterSet=\""),
     })
 }
 
@@ -174,6 +194,12 @@ mod tests {
             Some(ooxml_types::web_publish::TargetScreenSize::Size1280x1024)
         );
         assert_eq!(web.dpi, Some(150));
+    }
+
+    #[test]
+    fn parse_workbook_root_conformance() {
+        let xml = br#"<workbook conformance="strict"><sheets/></workbook>"#;
+        assert_eq!(parse_workbook_conformance(xml).as_deref(), Some("strict"));
     }
 
     #[test]

@@ -199,6 +199,7 @@ pub fn filter_state_to_auto_filter(
         columns,
         sort: None, // TODO: convert FilterSortState back to SortState
         xr_uid: None,
+        ext_lst_raw: None,
     })
 }
 

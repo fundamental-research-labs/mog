@@ -213,6 +213,7 @@ fn convert_table_to_parsed(table: &tables::Table) -> Option<ParsedTable> {
                     },
                     unique_name: c.unique_name.clone(),
                     query_table_field_id: c.query_table_field_id,
+                    xml_column_pr: c.xml_column_pr.clone(),
                     xr3_uid: c.xr3_uid.clone(),
                 }
             })
@@ -247,6 +248,10 @@ fn convert_table_to_parsed(table: &tables::Table) -> Option<ParsedTable> {
         totals_row_cell_style: table.totals_row_cell_style.clone(),
         auto_filter_ref: table.auto_filter.as_ref().map(|af| af.ref_range.clone()),
         auto_filter_xr_uid: table.auto_filter.as_ref().and_then(|af| af.xr_uid.clone()),
+        auto_filter_ext_lst_raw: table
+            .auto_filter
+            .as_ref()
+            .and_then(|af| af.ext_lst_raw.clone()),
         table_type: if table.table_type != TableType::Worksheet {
             Some(table.table_type.to_ooxml().to_string())
         } else {
@@ -254,6 +259,7 @@ fn convert_table_to_parsed(table: &tables::Table) -> Option<ParsedTable> {
         },
         totals_row_shown: table.totals_row_shown,
         connection_id: table.connection_id,
+        comment: table.comment.clone(),
         insert_row: table.insert_row,
         insert_row_shift: table.insert_row_shift,
         published: table.published,
@@ -277,6 +283,8 @@ fn convert_filter_columns(table: &tables::Table) -> Vec<domain_types::FilterColu
                 domain_types::FilterSpec::Values {
                     blank: f.blank,
                     values: f.values.clone(),
+                    calendar_type: f.calendar_type,
+                    date_group_items: f.date_group_items.clone(),
                 }
             } else if let Some(ref cf) = fc.custom_filters {
                 domain_types::FilterSpec::Custom {
@@ -323,6 +331,7 @@ fn convert_filter_columns(table: &tables::Table) -> Vec<domain_types::FilterColu
                 hidden_button: fc.hidden_button,
                 show_button: fc.show_button,
                 filter,
+                ext_lst_raw: fc.ext_lst_raw.clone(),
             })
         })
         .collect()
@@ -365,6 +374,7 @@ fn convert_table_sort_state(table: &tables::Table) -> Option<ParsedTableSortStat
                 icon_id: sc.icon_id,
             })
             .collect(),
+        ext_lst_raw: ss.ext_lst_raw.clone(),
     })
 }
 

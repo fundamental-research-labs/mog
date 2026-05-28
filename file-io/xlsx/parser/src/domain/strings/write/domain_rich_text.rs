@@ -1,5 +1,6 @@
 use super::escape::{escape_xml_attr, escape_xml_content, needs_preserve_space};
 use domain_types::RichTextRun as DtRichTextRun;
+use ooxml_types::styles::UnderlineStyle;
 
 /// Write a rich text run from a domain-types `RichTextRun` with full attribute fidelity.
 pub(super) fn write_domain_rich_text_run(run: &DtRichTextRun, xml: &mut Vec<u8>) {
@@ -8,8 +9,13 @@ pub(super) fn write_domain_rich_text_run(run: &DtRichTextRun, xml: &mut Vec<u8>)
     // Write <rPr> if any formatting present
     let has_fmt = run.bold
         || run.italic
+        || run.underline_style.is_some()
         || run.underline
         || run.strikethrough
+        || run.outline.is_some()
+        || run.shadow.is_some()
+        || run.condense.is_some()
+        || run.extend.is_some()
         || run.font_size.is_some()
         || run.color.is_some()
         || run.color_indexed.is_some()
@@ -29,12 +35,18 @@ pub(super) fn write_domain_rich_text_run(run: &DtRichTextRun, xml: &mut Vec<u8>)
         if run.italic {
             xml.extend_from_slice(b"<i/>");
         }
-        if run.underline {
+        if let Some(style) = run.underline_style {
+            write_underline(style, xml);
+        } else if run.underline {
             xml.extend_from_slice(b"<u/>");
         }
         if run.strikethrough {
             xml.extend_from_slice(b"<strike/>");
         }
+        write_optional_bool_property(b"outline", run.outline, xml);
+        write_optional_bool_property(b"shadow", run.shadow, xml);
+        write_optional_bool_property(b"condense", run.condense, xml);
+        write_optional_bool_property(b"extend", run.extend, xml);
         if let Some(size) = run.font_size {
             xml.extend_from_slice(b"<sz val=\"");
             if size.fract() == 0.0 {
@@ -108,6 +120,30 @@ pub(super) fn write_domain_rich_text_run(run: &DtRichTextRun, xml: &mut Vec<u8>)
     escape_xml_content(&run.text, xml);
     xml.extend_from_slice(b"</t>");
     xml.extend_from_slice(b"</r>");
+}
+
+fn write_underline(style: UnderlineStyle, xml: &mut Vec<u8>) {
+    match style {
+        UnderlineStyle::Single => xml.extend_from_slice(b"<u/>"),
+        _ => {
+            xml.extend_from_slice(b"<u val=\"");
+            xml.extend_from_slice(style.to_ooxml().as_bytes());
+            xml.extend_from_slice(b"\"/>");
+        }
+    }
+}
+
+fn write_optional_bool_property(tag: &[u8], value: Option<bool>, xml: &mut Vec<u8>) {
+    let Some(value) = value else {
+        return;
+    };
+    xml.extend_from_slice(b"<");
+    xml.extend_from_slice(tag);
+    if value {
+        xml.extend_from_slice(b"/>");
+    } else {
+        xml.extend_from_slice(b" val=\"0\"/>");
+    }
 }
 
 pub(super) fn write_rich_string_phonetics(

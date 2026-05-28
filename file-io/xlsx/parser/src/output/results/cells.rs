@@ -44,13 +44,11 @@ pub struct FullCellData {
     /// Phantom cells within this range should be excluded from snapshots.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub array_ref: Option<String>,
-    /// Whether the `<c>` element has a `cm` attribute (cell metadata index).
-    /// The `cm` attribute marks cells as participating in dynamic array formulas
-    /// (XLDAPR metadata). Some Excel 365 files use ONLY `cm` without `t="array"`.
-    /// Cells with `cm` and a formula are dynamic array sources; cells with `cm`
-    /// but no formula are likely phantom (spill) cells.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub cm: bool,
+    /// Effective cell metadata index from the `cm` attribute on the `<c>` element.
+    /// `None` means no metadata reference; `Some(0)` preserves an authored
+    /// zero index exactly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     /// Whether the `<c>` element has `ph="1"` (phonetic display enabled).
     #[serde(default, skip_serializing_if = "is_false")]
     pub phonetic: bool,

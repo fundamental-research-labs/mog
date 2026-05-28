@@ -58,4 +58,7 @@ pub struct CommentOutput {
     /// Excel revision UID (xr:uid attribute), for round-trip fidelity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xr_uid: Option<String>,
+    /// Legacy `<commentPr>` display properties.
+    #[serde(skip)]
+    pub comment_pr: Option<ooxml_types::comments::CommentPr>,
 }

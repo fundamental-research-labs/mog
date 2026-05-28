@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use domain_types::{ParseOutput, RichDataPart};
 
 use super::WriteError;
@@ -13,12 +11,19 @@ pub(super) fn parts_for_export(output: &ParseOutput) -> Vec<RichDataPart> {
         return Vec::new();
     };
 
-    let referenced_vm = referenced_value_metadata_indices(output);
-    if referenced_vm.is_empty() {
+    if rich_data.parts.is_empty() {
         return Vec::new();
     }
+    if metadata_preserves_rich_data_cluster(output)
+        || output
+            .sheets
+            .iter()
+            .any(|sheet| sheet.cells.iter().any(|cell| cell.vm.is_some()))
+    {
+        return rich_data.parts.clone();
+    }
 
-    rich_data.parts.clone()
+    Vec::new()
 }
 
 pub(super) fn register_parts(
@@ -34,10 +39,13 @@ pub(super) fn register_parts(
     Ok(())
 }
 
-fn referenced_value_metadata_indices(output: &ParseOutput) -> BTreeSet<u32> {
+fn metadata_preserves_rich_data_cluster(output: &ParseOutput) -> bool {
     output
-        .sheets
-        .iter()
-        .flat_map(|sheet| sheet.cells.iter().filter_map(|cell| cell.vm))
-        .collect()
+        .metadata
+        .as_ref()
+        .is_some_and(|metadata| {
+            super::metadata::imported_metadata_xml_is_current(output, metadata)
+                || (!metadata.value_metadata.is_empty()
+                    && metadata.imported_metadata_xml.is_none())
+        })
 }

@@ -25,7 +25,12 @@ impl CustomFilter {
 #[derive(Debug, Clone)]
 pub enum FilterType {
     /// Discrete values filter
-    Filters { values: Vec<String>, blank: bool },
+    Filters {
+        values: Vec<String>,
+        blank: bool,
+        calendar_type: Option<domain_types::CalendarType>,
+        date_group_items: Vec<domain_types::DateGroupItem>,
+    },
     /// Custom filters (1 or 2 conditions)
     CustomFilters {
         filters: Vec<CustomFilter>,
@@ -82,6 +87,8 @@ pub struct FilterColumn {
     pub show_button: bool,
     /// The filter type and settings
     pub filter: FilterType,
+    /// Raw direct-child `<extLst>` owned by this filterColumn.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl FilterColumn {
@@ -94,7 +101,10 @@ impl FilterColumn {
             filter: FilterType::Filters {
                 values,
                 blank: false,
+                calendar_type: None,
+                date_group_items: Vec::new(),
             },
+            ext_lst_raw: None,
         }
     }
 
@@ -108,6 +118,7 @@ impl FilterColumn {
                 filters,
                 and: false,
             },
+            ext_lst_raw: None,
         }
     }
 
@@ -123,6 +134,7 @@ impl FilterColumn {
                 val,
                 filter_val: None,
             },
+            ext_lst_raw: None,
         }
     }
 
@@ -139,10 +151,15 @@ impl FilterColumn {
                 val_iso: None,
                 max_val_iso: None,
             },
+            ext_lst_raw: None,
         }
     }
 
     pub(crate) fn write_xml(&self, w: &mut XmlWriter) {
+        self.write_xml_with_strict(w, false);
+    }
+
+    pub(crate) fn write_xml_with_strict(&self, w: &mut XmlWriter, strict: bool) {
         w.start_element("filterColumn")
             .attr_num("colId", self.col_id);
         if self.hidden_button {
@@ -154,14 +171,43 @@ impl FilterColumn {
         w.end_attrs();
 
         match &self.filter {
-            FilterType::Filters { values, blank } => {
+            FilterType::Filters {
+                values,
+                blank,
+                calendar_type,
+                date_group_items,
+            } => {
                 w.start_element("filters");
                 if *blank {
                     w.attr("blank", "1");
                 }
+                if let Some(calendar_type) = calendar_type {
+                    w.attr("calendarType", calendar_type.to_ooxml_token());
+                }
                 w.end_attrs();
                 for val in values {
                     w.empty_element("filter", &[("val", val)]);
+                }
+                for item in date_group_items {
+                    w.start_element("dateGroupItem")
+                        .attr("year", &item.year.to_string());
+                    if let Some(month) = item.month {
+                        w.attr("month", &month.to_string());
+                    }
+                    if let Some(day) = item.day {
+                        w.attr("day", &day.to_string());
+                    }
+                    if let Some(hour) = item.hour {
+                        w.attr("hour", &hour.to_string());
+                    }
+                    if let Some(minute) = item.minute {
+                        w.attr("minute", &minute.to_string());
+                    }
+                    if let Some(second) = item.second {
+                        w.attr("second", &second.to_string());
+                    }
+                    w.attr("dateTimeGrouping", item.date_time_grouping.to_ooxml_token());
+                    w.self_close();
                 }
                 w.end_element("filters");
             }
@@ -208,8 +254,10 @@ impl FilterColumn {
                 if let Some(v) = val {
                     w.attr_num("val", *v);
                 }
-                if let Some(v) = max_val {
-                    w.attr_num("maxVal", *v);
+                if !strict {
+                    if let Some(v) = max_val {
+                        w.attr_num("maxVal", *v);
+                    }
                 }
                 if let Some(v) = val_iso {
                     w.attr("valIso", v);
@@ -238,6 +286,10 @@ impl FilterColumn {
             }
         }
 
+        if let Some(raw) = &self.ext_lst_raw {
+            w.raw_str(raw);
+        }
+
         w.end_element("filterColumn");
     }
 }
@@ -251,6 +303,8 @@ pub struct AutoFilterDef {
     pub filter_columns: Vec<FilterColumn>,
     /// Extension UID for revision tracking (xr:uid)
     pub xr_uid: Option<String>,
+    /// Raw direct-child `<extLst>` owned by this autoFilter.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl AutoFilterDef {
@@ -260,6 +314,7 @@ impl AutoFilterDef {
             range: range.to_string(),
             filter_columns: Vec::new(),
             xr_uid: None,
+            ext_lst_raw: None,
         }
     }
 
@@ -270,9 +325,13 @@ impl AutoFilterDef {
     }
 
     pub(crate) fn write_xml(&self, w: &mut XmlWriter) {
-        if self.filter_columns.is_empty() && self.xr_uid.is_none() {
+        self.write_xml_with_strict(w, false);
+    }
+
+    pub(crate) fn write_xml_with_strict(&self, w: &mut XmlWriter, strict: bool) {
+        if self.filter_columns.is_empty() && self.xr_uid.is_none() && self.ext_lst_raw.is_none() {
             w.empty_element("autoFilter", &[("ref", &self.range)]);
-        } else if self.filter_columns.is_empty() {
+        } else if self.filter_columns.is_empty() && self.ext_lst_raw.is_none() {
             let uid = self.xr_uid.as_deref().unwrap();
             w.empty_element("autoFilter", &[("ref", &self.range), ("xr:uid", uid)]);
         } else {
@@ -283,7 +342,11 @@ impl AutoFilterDef {
             w.end_attrs();
 
             for fc in &self.filter_columns {
-                fc.write_xml(w);
+                fc.write_xml_with_strict(w, strict);
+            }
+
+            if let Some(raw) = &self.ext_lst_raw {
+                w.raw_str(raw);
             }
 
             w.end_element("autoFilter");

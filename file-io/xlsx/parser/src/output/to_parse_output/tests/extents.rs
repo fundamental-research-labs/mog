@@ -28,6 +28,7 @@ fn test_compute_sheet_extent_includes_hyperlink_only_anchor() {
         location: String::new(),
         display: String::new(),
         tooltip: String::new(),
+        target: None,
         r_id: None,
         uid: None,
         target_kind: None,
@@ -47,6 +48,7 @@ fn test_compute_sheet_extent_excludes_comment_only_anchor() {
         runs: vec![],
         shape_id: None,
         xr_uid: None,
+        comment_pr: None,
     });
 
     assert_eq!(compute_sheet_extent(&sheet), (0, 0));

@@ -3,6 +3,8 @@
 //! Unified from xlsx-parser read (`read/sparklines.rs`) and write
 //! (`write/sparklines_writer.rs`) sides. These types represent the shared
 //! vocabulary; parsing and serialisation logic stays in each respective module.
+//! x14 extension payloads remain owner-scoped preservation state unless the
+//! parser/writer path explicitly models and validates them.
 
 // ============================================================================
 // SparklineType (ST_SparklineType)

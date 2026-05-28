@@ -1,13 +1,13 @@
-use domain_types::ParseOutput;
+use domain_types::{ParseOutput, WorkbookSheetKind};
 
 use super::WriteError;
 use super::external_links;
 use crate::infra::xml_namespaces::NamespaceMap;
-use crate::write::package_graph::ResolvedPackageGraph;
+use crate::write::package_graph::{PackageOwner, ResolvedPackageGraph};
 use crate::write::pivot_writer;
 use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{
-    DefinedNameDef, REL_EXTERNAL_LINK, REL_PIVOT_CACHE, REL_SLICER_CACHE, REL_WORKSHEET, SheetDef,
+    DefinedNameDef, REL_EXTERNAL_LINK, REL_SLICER_CACHE, REL_WORKSHEET, SheetDef,
     WorkbookWriter,
 };
 
@@ -27,28 +27,10 @@ pub(super) fn build_workbook_xml(
     if !output.workbook_root_namespaces.is_empty() {
         workbook_writer.set_root_namespaces(NamespaceMap::from(&output.workbook_root_namespaces));
     }
-    for (idx, sheet_data) in output.sheets.iter().enumerate() {
-        let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
-        let r_id = package_graph
-            .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                REL_WORKSHEET,
-                &sheet_target,
-            )
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing workbook relationship for sheet {}",
-                    idx + 1
-                ))
-            })?
-            .to_string();
-        let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
-        workbook_writer.add_sheet_def(SheetDef::with_state(
-            &sheet_data.name,
-            sheet_id,
-            &r_id,
-            sheet_data.visibility,
-        ));
+    if output.workbook_sheet_inventory.is_empty() {
+        add_generated_sheet_defs(output, package_graph, &mut workbook_writer)?;
+    } else {
+        add_inventory_sheet_defs(output, package_graph, &mut workbook_writer)?;
     }
 
     if !output.workbook_views.is_empty() {
@@ -59,6 +41,9 @@ pub(super) fn build_workbook_xml(
             .map(ooxml_types::workbook::BookView::from)
             .collect();
         workbook_writer.set_views(views);
+    }
+    if let Some(xml) = output.custom_workbook_views_xml.as_ref() {
+        workbook_writer.set_custom_workbook_views_xml(xml.clone());
     }
 
     // Add defined names (named ranges)
@@ -72,6 +57,8 @@ pub(super) fn build_workbook_xml(
         def.help = named_range.help.clone();
         def.status_bar = named_range.status_bar.clone();
         def.xlm = named_range.xlm;
+        def.function_group_id = named_range.function_group_id;
+        def.shortcut_key = named_range.shortcut_key.clone();
         def.function = named_range.function;
         def.vb_procedure = named_range.vb_procedure;
         def.publish_to_server = named_range.publish_to_server;
@@ -97,6 +84,7 @@ pub(super) fn build_workbook_xml(
     if let Some(ref web_publishing) = output.web_publishing {
         workbook_writer.set_web_publishing(web_publishing.clone());
     }
+    workbook_writer.set_conformance(output.workbook_conformance.clone());
 
     // ── Iterative Calc Settings ──────────────────────────────────────
     {
@@ -104,18 +92,17 @@ pub(super) fn build_workbook_xml(
         workbook_writer.set_calc_settings(calc);
     }
 
-    let workbook_rels = package_graph
-        .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
+    let workbook_rels = package_graph.relationship_manager_for_owner(&PackageOwner::Workbook);
     // Pivot cache workbook rels + pivotCaches XML for workbook.xml.
     // Pivot caches are generated from modeled pivot state; the removed legacy
     // round-trip sidecar must not contribute workbook cache entries.
     let mut pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
     for entry in &pivot_data.pivot_cache_entries {
-        let target = format!("pivotCache/pivotCacheDefinition{}.xml", entry.global_idx);
+        let target = workbook_relative_target(&entry.definition_path);
         let r_id = package_graph
             .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                REL_PIVOT_CACHE,
+                &PackageOwner::Workbook,
+                &entry.workbook_relationship_type,
                 &target,
             )
             .ok_or_else(|| {
@@ -139,7 +126,7 @@ pub(super) fn build_workbook_xml(
             let target = format!("slicerCaches/slicerCache{}.xml", idx + 1);
             package_graph
                 .relationship_id(
-                    &crate::write::package_graph::PackageOwner::Workbook,
+                    &PackageOwner::Workbook,
                     REL_SLICER_CACHE,
                     &target,
                 )
@@ -159,7 +146,7 @@ pub(super) fn build_workbook_xml(
             .filter_map(|(_, part_name)| {
                 package_graph
                     .relationship_id(
-                        &crate::write::package_graph::PackageOwner::Workbook,
+                        &PackageOwner::Workbook,
                         REL_EXTERNAL_LINK,
                         &external_links::workbook_target(part_name),
                     )
@@ -176,4 +163,94 @@ pub(super) fn build_workbook_xml(
         workbook_xml,
         workbook_rels_xml,
     })
+}
+
+fn add_generated_sheet_defs(
+    output: &ParseOutput,
+    package_graph: &ResolvedPackageGraph,
+    workbook_writer: &mut WorkbookWriter,
+) -> Result<(), WriteError> {
+    for (idx, sheet_data) in output.sheets.iter().enumerate() {
+        let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
+        let r_id = package_graph
+            .relationship_id(&PackageOwner::Workbook, REL_WORKSHEET, &sheet_target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing workbook relationship for sheet {}",
+                    idx + 1
+                ))
+            })?
+            .to_string();
+        let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
+        workbook_writer.add_sheet_def(SheetDef::with_state(
+            &sheet_data.name,
+            sheet_id,
+            &r_id,
+            sheet_data.visibility,
+        ));
+    }
+    Ok(())
+}
+
+fn add_inventory_sheet_defs(
+    output: &ParseOutput,
+    package_graph: &ResolvedPackageGraph,
+    workbook_writer: &mut WorkbookWriter,
+) -> Result<(), WriteError> {
+    let mut inventory = output.workbook_sheet_inventory.clone();
+    inventory.sort_by_key(|entry| entry.workbook_order);
+    for entry in inventory {
+        if !matches!(
+            entry.kind,
+            WorkbookSheetKind::Worksheet
+                | WorkbookSheetKind::Chartsheet
+                | WorkbookSheetKind::Dialogsheet
+        ) {
+            continue;
+        }
+        let Some(part_path) = entry.normalized_part_path.as_deref() else {
+            continue;
+        };
+        if !matches!(entry.kind, WorkbookSheetKind::Worksheet)
+            && !package_graph.contains_part(part_path)
+        {
+            continue;
+        }
+        let relationship_type = entry
+            .relationship_type
+            .as_deref()
+            .unwrap_or(REL_WORKSHEET);
+        let target = workbook_relative_target(part_path);
+        let r_id = package_graph
+            .relationship_id(&PackageOwner::Workbook, relationship_type, &target)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing workbook relationship for imported sheet target {target}"
+                ))
+            })?
+            .to_string();
+
+        let sheet_data = entry
+            .editable_sheet_index
+            .and_then(|index| output.sheets.get(index));
+        let name = sheet_data
+            .map(|sheet| sheet.name.as_str())
+            .unwrap_or(entry.name.as_str());
+        let sheet_id = sheet_data
+            .and_then(|sheet| sheet.sheet_id)
+            .or(entry.sheet_id)
+            .unwrap_or(entry.workbook_order + 1);
+        let visibility = sheet_data
+            .map(|sheet| sheet.visibility)
+            .unwrap_or(entry.visibility);
+        workbook_writer.add_sheet_def(SheetDef::with_state(name, sheet_id, &r_id, visibility));
+    }
+    Ok(())
+}
+
+fn workbook_relative_target(path: &str) -> String {
+    path.strip_prefix("xl/")
+        .unwrap_or(path)
+        .trim_start_matches('/')
+        .to_string()
 }

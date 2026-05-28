@@ -59,6 +59,13 @@ function themeDefinitionToWire(theme: ThemeDefinition): ThemeData {
   };
 }
 
+function mergeThemeDefinitionIntoWire(theme: ThemeDefinition, current: ThemeData | null): ThemeData {
+  return {
+    ...(current ?? {}),
+    ...themeDefinitionToWire(theme),
+  };
+}
+
 function wireToThemeDefinition(wire: ThemeData): ThemeDefinition {
   // Build ThemeColors from wire array. Fall back to empty string for missing slots.
   const colors = {} as Record<keyof ThemeColors, string>;
@@ -114,7 +121,8 @@ export class WorkbookThemeImpl implements WorkbookTheme {
   }
 
   async setWorkbookTheme(theme: ThemeDefinition): Promise<void> {
-    const wire = themeDefinitionToWire(theme);
+    const current = await this.ctx.computeBridge.getWorkbookTheme();
+    const wire = mergeThemeDefinitionIntoWire(theme, current);
     await this.ctx.computeBridge.setWorkbookTheme(wire);
 
     // Emit event so the shell/renderer layer can react

@@ -43,6 +43,10 @@ pub(super) const CT_CHART_EX: &str = "application/vnd.ms-office.chartex+xml";
 /// Content type for tables
 pub const CT_TABLE: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml";
 
+/// Content type for worksheet-owned single-cell XML table bindings.
+pub const CT_TABLE_SINGLE_CELLS: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.tableSingleCells+xml";
+
 /// Content type for comments
 pub const CT_COMMENTS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml";
@@ -118,6 +122,10 @@ pub const CT_METADATA: &str =
 /// Content type for the calculation chain part.
 pub const CT_CALC_CHAIN: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml";
+
+/// Content type for the volatile dependencies part.
+pub const CT_VOLATILE_DEPENDENCIES: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.volatileDependencies+xml";
 
 /// XML namespace for content types
 pub(super) const CONTENT_TYPES_NS: &str =

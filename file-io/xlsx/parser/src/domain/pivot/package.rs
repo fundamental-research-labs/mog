@@ -9,6 +9,7 @@ use crate::infra::opc::{
     OoxmlRelationshipType, PackageOwner, WorkbookRelationships, WorksheetRelationships,
     parse_owned_relationships,
 };
+use domain_types::domain::pivot::PivotTableRelationshipPreservation;
 
 pub type PivotCacheMap =
     std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>;
@@ -25,6 +26,7 @@ pub enum PivotCacheRecordsPathSource {
 pub struct PivotCacheRecordsLink {
     pub rels_path: Option<String>,
     pub relationship_id: Option<String>,
+    pub relationship_type: Option<String>,
     pub relationship_target: Option<String>,
     pub records_path: Option<String>,
     pub source: PivotCacheRecordsPathSource,
@@ -56,6 +58,7 @@ pub struct PivotPackageDiscovery {
     pub caches: PivotCacheMap,
     pub packages: Vec<PivotCachePackage>,
     pub links: Vec<PivotCachePackageLink>,
+    pub fidelity: Vec<domain_types::PivotCachePackageFidelity>,
 }
 
 impl PivotPackageDiscovery {
@@ -88,7 +91,8 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
 
     let workbook_relationships = parse_owned_relationships(PackageOwner::Workbook, &wb_rels_xml);
     let workbook_relationships = WorkbookRelationships::new(&workbook_relationships);
-    let rels_map: std::collections::HashMap<String, (String, String)> = workbook_relationships
+    let rels_map: std::collections::HashMap<String, (String, String, String)> =
+        workbook_relationships
         .pivot_cache_definitions()
         .into_iter()
         .filter_map(|rel| {
@@ -96,6 +100,7 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
                 (
                     rel.id.clone(),
                     (
+                        rel.rel_type_uri.clone(),
                         rel.target.raw().to_string(),
                         workbook_pivot_cache_definition_path(rel.target.raw(), path),
                     ),
@@ -105,7 +110,9 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
         .collect();
 
     for (cache_id, r_id) in extract_pivot_cache_entries(&workbook_xml) {
-        let Some((workbook_relationship_target, def_path)) = rels_map.get(&r_id).cloned() else {
+        let Some((workbook_relationship_type, workbook_relationship_target, def_path)) =
+            rels_map.get(&r_id).cloned()
+        else {
             continue;
         };
         let Ok(cache_xml) = archive.read_file(&def_path) else {
@@ -114,11 +121,17 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
 
         let definition = pivot_cache_to_ooxml(&cache_xml);
         let records = resolve_cache_records_link(archive, &def_path);
+        let definition_rels_xml = records
+            .rels_path
+            .as_deref()
+            .and_then(|path| archive.read_file(path).ok());
 
         let mut cache_records = ooxml_types::pivot::PivotCacheRecords::default();
+        let mut raw_records_xml = None;
         if let Some(ref rp) = records.records_path {
-            if let Ok(records_xml) = archive.read_file(rp) {
-                cache_records = pivot_cache_records_to_ooxml(&records_xml);
+            if let Ok(records_bytes) = archive.read_file(rp) {
+                cache_records = pivot_cache_records_to_ooxml(&records_bytes);
+                raw_records_xml = Some(records_bytes);
             }
         }
 
@@ -136,6 +149,34 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
 
         discovery.caches.insert(cache_id, parsed_cache.clone());
         discovery.links.push(link.clone());
+        discovery
+            .fidelity
+            .push(domain_types::PivotCachePackageFidelity {
+                cache_id,
+                definition_path: link.definition_path.clone(),
+                records_path: link.records.records_path.clone(),
+                definition_xml: cache_xml,
+                records_xml: raw_records_xml,
+                definition_rels_xml,
+                workbook_relationship_id: link.workbook_relationship_id.clone(),
+                workbook_relationship_type,
+                workbook_relationship_target: link.workbook_relationship_target.clone(),
+                records_relationship_id: link.records.relationship_id.clone(),
+                records_relationship_type: link.records.relationship_type.clone(),
+                records_relationship_target: link.records.relationship_target.clone(),
+                source_sheet: parsed_cache
+                    .definition
+                    .cache_source
+                    .worksheet_source
+                    .as_ref()
+                    .and_then(|source| source.sheet.clone()),
+                source_range: parsed_cache
+                    .definition
+                    .cache_source
+                    .worksheet_source
+                    .as_ref()
+                    .and_then(|source| source.r#ref.clone()),
+            });
         discovery
             .packages
             .push(PivotCachePackage { link, parsed_cache });
@@ -181,7 +222,9 @@ pub fn parse_pivot_tables_for_sheet_v2(
 
     for full_path in &pivot_paths {
         if let Ok(pivot_xml) = archive.read_file(full_path) {
-            let pt = parse_pivot_table(&pivot_xml);
+            let mut pt = parse_pivot_table(&pivot_xml);
+            pt.ooxml_preservation.relationship =
+                discover_pivot_table_cache_relationship(archive, full_path, pt.cache_id);
             let cache = pivot_caches
                 .get(&pt.cache_id)
                 .map(|pc| build_full_pivot_cache_for_converter(pc, pt.cache_id));
@@ -196,6 +239,50 @@ pub fn parse_pivot_tables_for_sheet_v2(
     }
 
     results
+}
+
+fn discover_pivot_table_cache_relationship(
+    archive: &crate::zip::XlsxArchive,
+    part_path: &str,
+    _cache_id: u32,
+) -> Option<PivotTableRelationshipPreservation> {
+    let (dir, file) = part_path.rsplit_once('/')?;
+    let rels_path = format!("{}/_rels/{}.rels", dir, file);
+    let Ok(rels_xml) = archive.read_file(&rels_path) else {
+        return Some(PivotTableRelationshipPreservation {
+            part_path: Some(part_path.to_string()),
+            rels_path: Some(rels_path),
+            consistency: Some("missingRelationshipPart".to_string()),
+            ..Default::default()
+        });
+    };
+
+    let relationships = parse_owned_relationships(
+        PackageOwner::PivotTable {
+            path: part_path.to_string(),
+        },
+        &rels_xml,
+    );
+    let Some(rel) = relationships
+        .iter()
+        .find(|rel| rel.rel_type == OoxmlRelationshipType::PivotCacheDefinition)
+    else {
+        return Some(PivotTableRelationshipPreservation {
+            part_path: Some(part_path.to_string()),
+            rels_path: Some(rels_path),
+            consistency: Some("missingCacheDefinitionRelationship".to_string()),
+            ..Default::default()
+        });
+    };
+
+    Some(PivotTableRelationshipPreservation {
+        part_path: Some(part_path.to_string()),
+        rels_path: Some(rels_path),
+        relationship_id: Some(rel.id.clone()),
+        relationship_target: Some(rel.target.raw().to_string()),
+        resolved_cache_definition_path: rel.target.path().map(ToOwned::to_owned),
+        consistency: Some("relationshipDiscovered".to_string()),
+    })
 }
 
 fn resolve_cache_records_link(
@@ -222,6 +309,7 @@ fn resolve_cache_records_link(
             PivotCacheRecordsLink {
                 rels_path: Some(cache_rels_path),
                 relationship_id: Some(rel.id.clone()),
+                relationship_type: Some(rel.rel_type_uri.clone()),
                 relationship_target: Some(rel.target.raw().to_string()),
                 records_path: rel.target.path().map(ToOwned::to_owned),
                 source: PivotCacheRecordsPathSource::Relationship,
@@ -230,6 +318,7 @@ fn resolve_cache_records_link(
             PivotCacheRecordsLink {
                 rels_path: Some(cache_rels_path),
                 relationship_id: None,
+                relationship_type: None,
                 relationship_target: None,
                 records_path: None,
                 source: PivotCacheRecordsPathSource::Missing,
@@ -241,6 +330,7 @@ fn resolve_cache_records_link(
             PivotCacheRecordsLink {
                 rels_path: None,
                 relationship_id: None,
+                relationship_type: None,
                 relationship_target: None,
                 records_path: Some(records_guess),
                 source: PivotCacheRecordsPathSource::Fallback,
@@ -249,6 +339,7 @@ fn resolve_cache_records_link(
             PivotCacheRecordsLink {
                 rels_path: None,
                 relationship_id: None,
+                relationship_type: None,
                 relationship_target: None,
                 records_path: None,
                 source: PivotCacheRecordsPathSource::Missing,
@@ -427,6 +518,10 @@ mod tests {
             PivotCacheRecordsLink {
                 rels_path: Some("xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels".to_string()),
                 relationship_id: Some("rId1".to_string()),
+                relationship_type: Some(
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
+                        .to_string(),
+                ),
                 relationship_target: Some("pivotCacheRecords4.xml".to_string()),
                 records_path: Some("xl/pivotCache/pivotCacheRecords4.xml".to_string()),
                 source: PivotCacheRecordsPathSource::Relationship,
@@ -484,6 +579,7 @@ mod tests {
             PivotCacheRecordsLink {
                 rels_path: None,
                 relationship_id: None,
+                relationship_type: None,
                 relationship_target: None,
                 records_path: Some("xl/pivotCache/pivotCacheRecords9.xml".to_string()),
                 source: PivotCacheRecordsPathSource::Fallback,
@@ -642,6 +738,7 @@ mod tests {
             PivotCacheRecordsLink {
                 rels_path: Some("xl/pivotCache/_rels/pivotCacheDefinition4.xml.rels".to_string()),
                 relationship_id: None,
+                relationship_type: None,
                 relationship_target: None,
                 records_path: None,
                 source: PivotCacheRecordsPathSource::Missing,

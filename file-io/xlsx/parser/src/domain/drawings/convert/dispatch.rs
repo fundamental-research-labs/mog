@@ -3,7 +3,8 @@ use super::graphic_frames::extract_chart_ref_from_graphic_frame;
 use super::groups::{group_shape_to_props, relationship_ids_for_group};
 use super::outcome::{
     DrawingConversionOutcome, relationship_ids_for_graphic_frame, relationship_ids_for_non_visual,
-    relationship_ids_for_picture, relationship_ids_for_smartart,
+    relationship_ids_for_opaque_unknown, relationship_ids_for_picture,
+    relationship_ids_for_smartart,
 };
 use super::pictures::picture_to_image_props;
 use super::shapes::shape_to_text_box;
@@ -12,7 +13,7 @@ use super::{read, write};
 
 /// Convert a read-side `DrawingContent` to a write-side `DrawingObject`.
 ///
-/// Returns `None` for `DrawingContent::Unknown` (cannot be roundtripped).
+/// Returns `None` only for payload-less `DrawingContent::Unknown` values.
 pub fn convert_drawing_content(content: &read::DrawingContent) -> Option<write::DrawingObject> {
     convert_drawing_content_with_outcome(content).object
 }
@@ -58,6 +59,22 @@ pub fn convert_drawing_content_with_outcome(
             write::DrawingObject::SmartArt(smartart_to_write_data(sa)),
             relationship_ids_for_smartart(sa),
         ),
+        read::DrawingContent::ContentPart(content_part) => DrawingConversionOutcome::emitted(
+            write::DrawingObject::ContentPart(content_part.clone()),
+            vec![content_part.r_id.clone()],
+        ),
+        read::DrawingContent::OpaqueUnknown(opaque) => {
+            if opaque.raw_xml.is_empty() {
+                DrawingConversionOutcome::unsupported("unknown drawing content without raw XML")
+            } else {
+                DrawingConversionOutcome::opaque(
+                    write::DrawingObject::OpaqueRaw(write::OpaqueDrawingObject {
+                        raw_xml: opaque.raw_xml.clone(),
+                    }),
+                    relationship_ids_for_opaque_unknown(opaque),
+                )
+            }
+        }
         read::DrawingContent::Unknown => {
             DrawingConversionOutcome::unsupported("unknown drawing content")
         }

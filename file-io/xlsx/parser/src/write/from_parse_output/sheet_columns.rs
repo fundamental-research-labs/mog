@@ -56,6 +56,7 @@ pub(super) fn apply_columns(
         has_width: bool,
         outline_level: Option<u8>,
         collapsed: bool,
+        phonetic: bool,
     }
 
     let mut col_entries: Vec<ColEntry> = Vec::new();
@@ -81,6 +82,7 @@ pub(super) fn apply_columns(
             has_width: true,
             outline_level,
             collapsed: is_collapsed,
+            phonetic: col_dim.phonetic,
         });
         emitted_cols.insert(col_dim.col);
     }
@@ -101,6 +103,7 @@ pub(super) fn apply_columns(
                 has_width: true,
                 outline_level,
                 collapsed: is_collapsed,
+                phonetic: false,
             });
             emitted_cols.insert(cs.col);
         }
@@ -120,6 +123,7 @@ pub(super) fn apply_columns(
                 has_width: true,
                 outline_level: Some(level),
                 collapsed: is_collapsed,
+                phonetic: false,
             });
             emitted_cols.insert(col);
         }
@@ -137,6 +141,7 @@ pub(super) fn apply_columns(
                 has_width: true,
                 outline_level: None,
                 collapsed: true,
+                phonetic: false,
             });
         }
     }
@@ -160,6 +165,7 @@ pub(super) fn apply_columns(
                 && next.has_width == start.has_width
                 && next.outline_level == start.outline_level
                 && next.collapsed == start.collapsed
+                && next.phonetic == start.phonetic
             {
                 max_col_0 = next.col_0;
                 i += 1;
@@ -177,6 +183,7 @@ pub(super) fn apply_columns(
         cw.style = start.style;
         cw.outline_level = start.outline_level;
         cw.collapsed = start.collapsed;
+        cw.phonetic = start.phonetic;
         if !start.has_width {
             cw.width = None;
         }
@@ -191,6 +198,7 @@ pub(super) fn apply_columns(
         cw.hidden = tcr.hidden;
         cw.best_fit = tcr.best_fit;
         cw.collapsed = tcr.collapsed;
+        cw.phonetic = tcr.phonetic;
         if let Some(sid) = tcr.style_id {
             cw.style = style_remapper.emitted_cell_xf_id(sid);
         }

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::chart::{ChartAuxiliaryPart, ChartDefinition, ChartRelationshipData};
+use crate::domain::chart::{
+    ChartAuxiliaryPart, ChartDefinition, ChartExReplayData, ChartRelationshipData,
+};
 
 // ===========================================================================
 // OOXML Prop Wrappers — typed replacements for serde_json::Value blobs
@@ -96,6 +98,46 @@ pub struct ConnectorOoxmlProps {
     pub mc_alternate_content_raw_xml: Option<String>,
 }
 
+/// OOXML round-trip properties for drawing objects that are not projected into
+/// Mog's editable picture/shape/chart models.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+#[derive(Default)]
+pub struct DrawingObjectOoxmlProps {
+    /// The parsed drawing object.
+    pub object: DrawingObjectOoxml,
+    /// Index of the anchor in the original drawing XML (for ordering).
+    pub anchor_index: Option<i32>,
+    /// Original one-cell/absolute extent width in EMUs.
+    pub extent_emu_cx: Option<i64>,
+    /// Original one-cell/absolute extent height in EMUs.
+    pub extent_emu_cy: Option<i64>,
+    /// editAs attribute from a two-cell anchor.
+    pub edit_as: Option<String>,
+    /// Client data: locks with sheet (OOXML default is true).
+    pub client_data_locks_with_sheet: Option<bool>,
+    /// Client data: prints with sheet (OOXML default is true).
+    pub client_data_prints_with_sheet: Option<bool>,
+    /// Drawing-owned relationships required by this object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<ooxml_types::shared::OpcRelationship>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[derive(Default)]
+pub enum DrawingObjectOoxml {
+    #[default]
+    Unknown,
+    ContentPart {
+        content_part: ooxml_types::drawings::ContentPartRef,
+    },
+    GraphicFrame {
+        graphic_frame: ooxml_types::drawings::SpreadsheetGraphicFrame,
+    },
+}
+
 /// OOXML round-trip properties for a chart's drawing frame.
 ///
 /// The chart part itself is owned by [`ChartDefinition`]. This sidecar owns the
@@ -124,6 +166,8 @@ pub struct ChartDrawingFrameOoxmlProps {
     pub relationship_id: Option<String>,
     /// Original drawing relationship target for the chart part.
     pub relationship_target: Option<String>,
+    #[serde(skip)]
+    pub raw_alternate_content: Option<String>,
 }
 
 /// Typed OOXML preservation contract for chart floating objects.
@@ -147,6 +191,8 @@ pub struct ChartOoxmlProps {
     /// Typed chart-owned auxiliary parts imported with the chart part.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
+    #[serde(skip)]
+    pub chart_ex_replay: Option<ChartExReplayData>,
     /// Whether this chart uses ChartEx format.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_chart_ex: bool,
@@ -160,6 +206,12 @@ pub struct ChartOoxmlProps {
 pub struct OleObjectPackageIdentity {
     /// ZIP package path, e.g. `xl/embeddings/oleObject1.bin`.
     pub path: String,
+    /// Relationship/payload kind, e.g. `oleObject` or `embeddedPackage`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Package content type if known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
     /// Imported worksheet relationship id, reused as a hint when valid.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relationship_id: Option<String>,
@@ -182,6 +234,50 @@ pub struct OleObjectPreviewIdentity {
     /// Raw preview image bytes owned by this floating object.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bytes: Vec<u8>,
+}
+
+/// Typed worksheet `<controlPr>` properties for a form control.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct FormControlWorksheetControlPr {
+    pub default_size: bool,
+    pub print: bool,
+    pub disabled: bool,
+    pub locked: bool,
+    pub recalc_always: bool,
+    pub ui_object: bool,
+    pub auto_fill: bool,
+    pub auto_line: bool,
+    pub auto_pict: bool,
+    pub macro_name: Option<String>,
+    pub alt_text: Option<String>,
+    pub linked_cell: Option<String>,
+    pub list_fill_range: Option<String>,
+    pub cf: Option<String>,
+    pub r_id: Option<String>,
+}
+
+impl Default for FormControlWorksheetControlPr {
+    fn default() -> Self {
+        Self {
+            default_size: true,
+            print: true,
+            disabled: false,
+            locked: true,
+            recalc_always: false,
+            ui_object: false,
+            auto_fill: true,
+            auto_line: true,
+            auto_pict: true,
+            macro_name: None,
+            alt_text: None,
+            linked_cell: None,
+            list_fill_range: None,
+            cf: None,
+            r_id: None,
+        }
+    }
 }
 
 /// OOXML round-trip properties for an OLE object.
@@ -287,6 +383,9 @@ pub struct FormControlOoxmlProps {
     pub vml_extras: std::collections::HashMap<String, String>,
     /// Raw attributes from worksheet `<controlPr>` element.
     pub control_pr_attrs: std::collections::HashMap<String, String>,
+    /// Typed worksheet `<controlPr>` element attributes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_pr: Option<FormControlWorksheetControlPr>,
     /// VML shape visual properties.
     ///
     /// Typed-domain replacement for the former `Option<serde_json::Value>`
@@ -339,6 +438,7 @@ impl Default for FormControlOoxmlProps {
             size_with_cells: true,
             vml_extras: std::collections::HashMap::new(),
             control_pr_attrs: std::collections::HashMap::new(),
+            control_pr: None,
             vml_shape: None,
         }
     }

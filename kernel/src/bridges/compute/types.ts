@@ -836,7 +836,7 @@ export interface CellMetadata {
   validation?: string;
   connectionId?: string;
   s?: number;
-  cm?: boolean;
+  cm?: number;
   vm?: number;
   formulaResultType?: number;
   sstIndex?: number;

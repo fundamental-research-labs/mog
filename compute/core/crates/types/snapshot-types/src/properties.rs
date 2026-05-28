@@ -75,8 +75,8 @@ pub struct CellMetadata {
     pub connection_id: Option<String>,
     #[serde(rename = "s", skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub cm: bool,
+    #[serde(rename = "cm", skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -125,8 +125,8 @@ pub struct CellProperties {
     pub connection_id: Option<String>,
     #[serde(rename = "s", skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub cm: bool,
+    #[serde(rename = "cm", skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -158,7 +158,7 @@ impl CellProperties {
             && self.validation.is_none()
             && self.connection_id.is_none()
             && self.style_id.is_none()
-            && !self.cm
+            && self.cell_metadata_index.is_none()
             && self.vm.is_none()
             && !self.phonetic
             && self.date_lexical_value.is_none()
@@ -177,7 +177,7 @@ impl CellMetadata {
             && self.validation.is_none()
             && self.connection_id.is_none()
             && self.style_id.is_none()
-            && !self.cm
+            && self.cell_metadata_index.is_none()
             && self.vm.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
@@ -198,7 +198,7 @@ impl From<domain_types::CellProperties> for CellProperties {
             validation: d.validation,
             connection_id: d.connection_id,
             style_id: d.style_id,
-            cm: d.cm,
+            cell_metadata_index: d.cell_metadata_index,
             vm: d.vm,
             phonetic: d.phonetic,
             date_lexical_value: d.date_lexical_value,
@@ -220,7 +220,7 @@ impl From<CellProperties> for domain_types::CellProperties {
             validation: s.validation,
             connection_id: s.connection_id,
             style_id: s.style_id,
-            cm: s.cm,
+            cell_metadata_index: s.cell_metadata_index,
             vm: s.vm,
             phonetic: s.phonetic,
             date_lexical_value: s.date_lexical_value,

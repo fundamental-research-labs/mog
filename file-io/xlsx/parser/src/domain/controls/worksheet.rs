@@ -4,14 +4,19 @@
 //! worksheet `<controlPr>` attributes, modern anchors, and worksheet controls
 //! XML generation.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+
+use domain_types::domain::floating_object::FormControlWorksheetControlPr;
 
 use super::form_control_props;
 use super::relationships;
 use super::types::{ControlAnchor, FormControl, ModernAnchorResult, WorksheetControlRef};
 use super::vml;
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_string_attr, parse_u32_attr, resolve_mc_alternate_content};
+use crate::infra::xml::{
+    MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, parse_string_attr, parse_u32_attr,
+    resolve_mc_alternate_content_with_namespace_context,
+};
 use crate::output::results::FormControlOutput;
 use crate::write::xml_writer::XmlWriter;
 
@@ -54,21 +59,6 @@ pub fn parse_worksheet_controls(xml: &[u8]) -> Vec<WorksheetControlRef> {
 // Slices use offsets from ASCII XML tag delimiters.
 #[allow(clippy::string_slice)]
 pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetControlRef> {
-    let has_supported_controls_choice = worksheet_xml
-        .windows(b"Requires=\"x14\"".len())
-        .any(|w| w == b"Requires=\"x14\"");
-    let all_controls = parse_worksheet_controls(worksheet_xml);
-    if has_supported_controls_choice && !all_controls.is_empty() {
-        let mut seen = HashSet::new();
-        let mut deduped = Vec::with_capacity(all_controls.len());
-        for control in all_controls {
-            if seen.insert(control.shape_id) {
-                deduped.push(control);
-            }
-        }
-        return deduped;
-    }
-
     if let Some(ac_start) = find_tag_simd(worksheet_xml, b"mc:AlternateContent", 0) {
         let ac_end = find_closing_tag(worksheet_xml, b"mc:AlternateContent", ac_start)
             .unwrap_or(worksheet_xml.len());
@@ -78,7 +68,11 @@ pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetC
         let ac_block = &worksheet_xml[ac_start..ac_close_tag_end];
 
         if find_tag_simd(ac_block, b"controls", 0).is_some() {
-            if let Some(branch) = resolve_mc_alternate_content(ac_block, None) {
+            if let Some(branch) = resolve_mc_alternate_content_with_namespace_context(
+                ac_block,
+                Some(worksheet_xml),
+                MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES,
+            ) {
                 let resolved = &ac_block[branch.start..branch.end];
                 if let Some(controls_start) = find_tag_simd(resolved, b"controls", 0) {
                     let controls_end = find_closing_tag(resolved, b"controls", controls_start)
@@ -112,7 +106,11 @@ pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetC
 pub(crate) fn extract_modern_anchor_and_attrs(
     worksheet_xml: &[u8],
     target_shape_id: u32,
-) -> Option<(ModernAnchorResult, HashMap<String, String>)> {
+) -> Option<(
+    ModernAnchorResult,
+    HashMap<String, String>,
+    FormControlWorksheetControlPr,
+)> {
     let shape_id_attr = format!("shapeId=\"{}\"", target_shape_id);
     let shape_id_bytes = shape_id_attr.as_bytes();
 
@@ -140,26 +138,33 @@ pub(crate) fn extract_modern_anchor_and_attrs(
                     for attr_name in &[
                         "defaultSize",
                         "print",
-                        "autoFill",
-                        "autoPict",
-                        "autoLine",
-                        "macro",
-                        "altText",
                         "disabled",
                         "locked",
+                        "recalcAlways",
+                        "uiObject",
+                        "autoFill",
+                        "autoLine",
+                        "autoPict",
+                        "macro",
+                        "altText",
+                        "linkedCell",
+                        "listFillRange",
+                        "cf",
+                        "r:id",
                     ] {
                         let needle = format!("{}=\"", attr_name);
                         if let Some(val) = parse_string_attr(cpr_element, needle.as_bytes()) {
                             attrs.insert(attr_name.to_string(), val);
                         }
                     }
+                    let control_pr = control_pr_from_attrs(&attrs);
 
                     let cpr_close = find_closing_tag(ctrl_body, b"controlPr", cpr_start)
                         .unwrap_or(ctrl_body.len());
                     let cpr_body = &ctrl_body[cpr_start..cpr_close];
 
                     if let Some(result) = ControlAnchor::from_modern_anchor(cpr_body) {
-                        return Some((result, attrs));
+                        return Some((result, attrs, control_pr));
                     }
                 }
             }
@@ -169,6 +174,32 @@ pub(crate) fn extract_modern_anchor_and_attrs(
     }
 
     None
+}
+
+fn control_pr_from_attrs(attrs: &HashMap<String, String>) -> FormControlWorksheetControlPr {
+    FormControlWorksheetControlPr {
+        default_size: attr_bool(attrs, "defaultSize", true),
+        print: attr_bool(attrs, "print", true),
+        disabled: attr_bool(attrs, "disabled", false),
+        locked: attr_bool(attrs, "locked", true),
+        recalc_always: attr_bool(attrs, "recalcAlways", false),
+        ui_object: attr_bool(attrs, "uiObject", false),
+        auto_fill: attr_bool(attrs, "autoFill", true),
+        auto_line: attr_bool(attrs, "autoLine", true),
+        auto_pict: attr_bool(attrs, "autoPict", true),
+        macro_name: attrs.get("macro").cloned(),
+        alt_text: attrs.get("altText").cloned(),
+        linked_cell: attrs.get("linkedCell").cloned(),
+        list_fill_range: attrs.get("listFillRange").cloned(),
+        cf: attrs.get("cf").cloned(),
+        r_id: attrs.get("r:id").cloned(),
+    }
+}
+
+fn attr_bool(attrs: &HashMap<String, String>, key: &str, default: bool) -> bool {
+    attrs.get(key).map_or(default, |value| {
+        !matches!(value.as_str(), "0" | "false" | "False" | "FALSE")
+    })
 }
 
 /// Parse form controls for a given sheet.
@@ -204,11 +235,13 @@ pub fn parse_form_controls_for_sheet(
 
     let mut modern_anchors: HashMap<u32, ModernAnchorResult> = HashMap::new();
     let mut control_pr_attrs_map: HashMap<u32, HashMap<String, String>> = HashMap::new();
+    let mut control_pr_map: HashMap<u32, FormControlWorksheetControlPr> = HashMap::new();
     for wsc in &ws_controls {
-        if let Some((anchor_result, attrs)) =
+        if let Some((anchor_result, attrs, control_pr)) =
             extract_modern_anchor_and_attrs(worksheet_xml, wsc.shape_id)
         {
             modern_anchors.insert(wsc.shape_id, anchor_result);
+            control_pr_map.insert(wsc.shape_id, control_pr);
             if !attrs.is_empty() {
                 control_pr_attrs_map.insert(wsc.shape_id, attrs);
             }
@@ -231,6 +264,7 @@ pub fn parse_form_controls_for_sheet(
                     if let Some(attrs) = control_pr_attrs_map.get(&wsc.shape_id) {
                         fc.control_pr_attrs = attrs.clone();
                     }
+                    fc.control_pr = control_pr_map.get(&wsc.shape_id).cloned();
                     controls.push((wsc.shape_id, fc));
                 }
             }
@@ -390,18 +424,26 @@ pub(crate) fn write_worksheet_controls(
 fn write_control_pr(w: &mut XmlWriter, control: &FormControl) {
     w.start_element("controlPr");
 
-    if !control.control_pr_attrs.is_empty() {
+    if let Some(ref control_pr) = control.control_pr {
+        write_typed_control_pr_attrs(w, control_pr, control);
+    } else if !control.control_pr_attrs.is_empty() {
         let attrs = &control.control_pr_attrs;
         for attr_name in &[
             "defaultSize",
             "print",
             "disabled",
             "locked",
+            "recalcAlways",
+            "uiObject",
             "autoFill",
-            "autoPict",
             "autoLine",
+            "autoPict",
             "macro",
             "altText",
+            "linkedCell",
+            "listFillRange",
+            "cf",
+            "r:id",
         ] {
             if let Some(val) = attrs.get(*attr_name) {
                 w.attr(attr_name, val);
@@ -431,6 +473,67 @@ fn write_control_pr(w: &mut XmlWriter, control: &FormControl) {
     );
 
     w.end_element("controlPr");
+}
+
+fn write_typed_control_pr_attrs(
+    w: &mut XmlWriter,
+    control_pr: &FormControlWorksheetControlPr,
+    control: &FormControl,
+) {
+    write_bool_attr(w, "defaultSize", control_pr.default_size, true);
+    write_bool_attr(w, "print", control_pr.print, true);
+    write_bool_attr(w, "disabled", control_pr.disabled, false);
+    write_bool_attr(w, "locked", control_pr.locked, true);
+    write_bool_attr(w, "recalcAlways", control_pr.recalc_always, false);
+    write_bool_attr(w, "uiObject", control_pr.ui_object, false);
+    write_bool_attr(w, "autoFill", control_pr.auto_fill, true);
+    write_bool_attr(w, "autoLine", control_pr.auto_line, true);
+    write_bool_attr(w, "autoPict", control_pr.auto_pict, true);
+
+    if let Some(value) = control
+        .properties
+        .macro_name
+        .as_ref()
+        .or(control_pr.macro_name.as_ref())
+    {
+        w.attr("macro", value);
+    }
+    if let Some(value) = control
+        .properties
+        .alt_text
+        .as_ref()
+        .or(control_pr.alt_text.as_ref())
+    {
+        w.attr("altText", value);
+    }
+    if let Some(value) = control
+        .properties
+        .linked_cell
+        .as_ref()
+        .or(control_pr.linked_cell.as_ref())
+    {
+        w.attr("linkedCell", value);
+    }
+    if let Some(value) = control
+        .properties
+        .input_range
+        .as_ref()
+        .or(control_pr.list_fill_range.as_ref())
+    {
+        w.attr("listFillRange", value);
+    }
+    if let Some(value) = control_pr.cf.as_ref() {
+        w.attr("cf", value);
+    }
+    if let Some(value) = control_pr.r_id.as_ref() {
+        w.attr("r:id", value);
+    }
+}
+
+fn write_bool_attr(w: &mut XmlWriter, name: &str, value: bool, default: bool) {
+    if value != default {
+        w.attr(name, if value { "1" } else { "0" });
+    }
 }
 
 fn write_modern_anchor(

@@ -43,8 +43,11 @@ const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
 const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
 const KEY_STYLE_REGISTRY_KNOWN_FONTS: &str = "knownFonts";
 const KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS: &str = "rootNamespaceAttrs";
+const KEY_STYLE_REGISTRY_ROOT_MCE_ATTRIBUTES: &str = "rootMceAttributes";
 const KEY_STYLE_REGISTRY_EXT_LST_XML: &str = "extLstXml";
 const KEY_STYLE_REGISTRY_COUNT: &str = "count";
+const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
+const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
 
 // -------------------------------------------------------------------
 // Workbook-level exports
@@ -216,6 +219,28 @@ pub(super) fn export_package_fidelity_metadata(
         .filter(|metadata| !metadata.is_empty())
 }
 
+pub(super) fn export_volatile_dependency_part(
+    stores: &EngineStores,
+) -> Option<domain_types::VolatileDependencyPackagePart> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let part_map = match workbook.get(&txn, KEY_VOLATILE_DEPENDENCY_PACKAGE_PART) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let json_str = match part_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return None,
+    };
+
+    serde_json::from_str::<domain_types::VolatileDependencyPackagePart>(&json_str)
+        .ok()
+        .filter(|part| !part.bytes.is_empty())
+}
+
 pub(super) fn export_workbook_connections(
     stores: &EngineStores,
 ) -> domain_types::domain::connections::WorkbookConnectionSet {
@@ -288,6 +313,12 @@ pub(super) fn export_workbook_stylesheet(
                 &map,
                 KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS,
             ),
+            root_mce_attributes: read_style_registry_value(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_ROOT_MCE_ATTRIBUTES,
+            )
+            .unwrap_or_default(),
             ext_lst_xml: read_style_registry_value(&txn, &map, KEY_STYLE_REGISTRY_EXT_LST_XML),
             dxf_registry: export_dxf_registry_from_txn(&txn, &workbook),
             stylesheet: ooxml_types::styles::Stylesheet::default(),
@@ -646,6 +677,25 @@ pub(super) fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> 
     serde_json::from_str::<Vec<WorkbookView>>(&json).unwrap_or_default()
 }
 
+pub(super) fn export_custom_workbook_views_xml(stores: &EngineStores) -> Option<Vec<u8>> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let settings_map = match workbook.get(&txn, KEY_WORKBOOK_SETTINGS) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let Some(Out::Any(Any::String(json))) =
+        settings_map.get(&txn, KEY_CUSTOM_WORKBOOK_VIEWS_XML)
+    else {
+        return None;
+    };
+
+    serde_json::from_str::<Vec<u8>>(&json).ok()
+}
+
 /// Export workbook web publishing metadata from the workbook-level Y.Map.
 pub(super) fn export_workbook_web_publishing(
     stores: &EngineStores,
@@ -860,6 +910,7 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
             result.push(ParsedPivotTable {
                 config,
                 initial_expansion_state: None,
+                ooxml_preservation: Default::default(),
             });
         }
     }

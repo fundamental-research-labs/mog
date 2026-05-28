@@ -47,11 +47,25 @@ const MC_IGNORABLE_STYLE_PREFIXES: &[&str] = &[
 #[derive(Debug, Clone, Default)]
 pub struct StyleRootNamespaces {
     attrs: Vec<(String, String)>,
+    mce_attributes: domain_types::MceAttributes,
 }
 
 impl StyleRootNamespaces {
     pub fn from_attrs(attrs: Vec<(String, String)>) -> Self {
-        Self { attrs }
+        Self {
+            attrs,
+            mce_attributes: domain_types::MceAttributes::default(),
+        }
+    }
+
+    pub fn from_attrs_and_mce(
+        attrs: Vec<(String, String)>,
+        mce_attributes: domain_types::MceAttributes,
+    ) -> Self {
+        Self {
+            attrs,
+            mce_attributes,
+        }
     }
 
     pub(super) fn has_prefix(&self, prefix: &str) -> bool {
@@ -65,6 +79,10 @@ impl StyleRootNamespaces {
             .iter()
             .map(|(prefix, _)| prefix.as_str())
             .filter(|prefix| MC_IGNORABLE_STYLE_PREFIXES.contains(prefix))
+    }
+
+    pub(super) fn mce_attributes(&self) -> &domain_types::MceAttributes {
+        &self.mce_attributes
     }
 
     pub(super) fn prefixed_attrs(&self) -> impl Iterator<Item = (&str, &str)> {

@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use domain_types::domain::floating_object::FormControlWorksheetControlPr;
 use ooxml_types::ole::{DvAspect, ObjectProperties, OleUpdate};
 
 /// Indicates how a control anchor's offsets should be interpreted.
@@ -47,6 +48,8 @@ pub struct FormControl {
     /// Raw attributes from the worksheet `<controlPr>` element for round-trip fidelity.
     /// Keys are attribute names (e.g. "print", "autoPict", "macro"), values are string values.
     pub control_pr_attrs: HashMap<String, String>,
+    /// Typed worksheet `<controlPr>` element attributes.
+    pub control_pr: Option<FormControlWorksheetControlPr>,
     /// Whether the control moves with the cells it is anchored to.
     pub move_with_cells: bool,
     /// Whether the control resizes with the cells it is anchored to.
@@ -70,6 +73,7 @@ impl FormControl {
             properties: FormControlProperties::default(),
             shape_id: None,
             control_pr_attrs: HashMap::new(),
+            control_pr: None,
             // Authored controls preserve the historical writer defaults; parsed
             // modern anchors overwrite these with the exact source attributes.
             move_with_cells: true,
@@ -86,6 +90,7 @@ impl FormControl {
             properties: FormControlProperties::default(),
             shape_id: None,
             control_pr_attrs: HashMap::new(),
+            control_pr: None,
             // Authored controls preserve the historical writer defaults; parsed
             // modern anchors overwrite these with the exact source attributes.
             move_with_cells: true,
@@ -380,6 +385,10 @@ pub struct OleObject {
     pub shape_id: u32,
     /// Path to embedded data (resolved from r:id relationship).
     pub data_path: Option<String>,
+    /// Relationship/payload kind for the embedded data.
+    pub embedding_kind: Option<String>,
+    /// Content type inferred or read for the embedded data.
+    pub embedding_content_type: Option<String>,
     /// Path to linked data (external file).
     pub link_path: Option<String>,
     /// Object name.
@@ -409,6 +418,8 @@ impl OleObject {
             prog_id,
             shape_id,
             data_path: None,
+            embedding_kind: None,
+            embedding_content_type: None,
             link_path: None,
             name: None,
             anchor: ControlAnchor::default(),

@@ -109,9 +109,9 @@ pub struct CellData {
     /// Whether the formula has `ca="1"` (calculate always / volatile).
     /// When true, the writer emits `ca="1"` on the `<f>` element.
     pub force_recalc: bool,
-    /// Whether the `<c>` element has a `cm` attribute (cell metadata index).
-    /// When true, the writer emits `cm="1"` on the `<c>` element.
-    pub cm: bool,
+    /// Cell metadata index from the `cm` attribute on the `<c>` element.
+    /// When present, the writer emits `cm="N"`.
+    pub cell_metadata_index: Option<u32>,
     /// Value metadata index from the `vm` attribute on the `<c>` element.
     /// When present, the writer emits `vm="N"` on the `<c>` element.
     pub vm: Option<u32>,
@@ -145,7 +145,7 @@ impl CellData {
             style_index: None,
             original_value: None,
             force_recalc: false,
-            cm: false,
+            cell_metadata_index: None,
             vm: None,
             preserve_space_formula: false,
             preserve_space_value: false,
@@ -165,7 +165,7 @@ impl CellData {
             style_index: Some(style),
             original_value: None,
             force_recalc: false,
-            cm: false,
+            cell_metadata_index: None,
             vm: None,
             preserve_space_formula: false,
             preserve_space_value: false,

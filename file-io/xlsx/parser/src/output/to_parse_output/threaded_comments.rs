@@ -188,6 +188,7 @@ pub(super) fn merge_threaded_comments(
                 note_height: None,
                 note_width: None,
                 note_shape_anchor: None,
+                comment_pr: None,
             };
             insert_threaded_comment_in_original_order(&mut sheet_data.comments, comment, &tc_order);
         }

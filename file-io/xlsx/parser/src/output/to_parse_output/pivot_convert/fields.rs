@@ -27,7 +27,7 @@ pub(super) fn build_fields(
                 num_fmt_id: data_field_info.and_then(|df| df.num_fmt_id),
                 base_field: data_field_info.and_then(|df| df.base_field),
                 base_item: data_field_info.and_then(|df| df.base_item),
-                show_all: pf.and_then(|f| if f.show_all { Some(true) } else { None }),
+                show_all: pf.and_then(|f| f.show_all),
                 subtotal_top: pf.and_then(|f| if f.subtotal_top { None } else { Some(false) }),
                 default_subtotal: pf.and_then(|f| {
                     if f.default_subtotal {
@@ -36,13 +36,55 @@ pub(super) fn build_fields(
                         Some(false)
                     }
                 }),
-                subtotals: Vec::new(),
+                subtotals: pf
+                    .map(|f| f.subtotals.iter().map(convert_subtotal_function).collect())
+                    .unwrap_or_default(),
                 items: pf
                     .map(|f| f.items.iter().map(convert_pivot_item).collect())
                     .unwrap_or_default(),
             }
         })
         .collect()
+}
+
+fn convert_subtotal_function(
+    subtotal: &crate::domain::pivot::model::Subtotal,
+) -> domain_types::domain::pivot::PivotFieldFunction {
+    match subtotal {
+        crate::domain::pivot::model::Subtotal::Sum => {
+            domain_types::domain::pivot::PivotFieldFunction::Sum
+        }
+        crate::domain::pivot::model::Subtotal::Count => {
+            domain_types::domain::pivot::PivotFieldFunction::Count
+        }
+        crate::domain::pivot::model::Subtotal::Average => {
+            domain_types::domain::pivot::PivotFieldFunction::Average
+        }
+        crate::domain::pivot::model::Subtotal::Max => {
+            domain_types::domain::pivot::PivotFieldFunction::Max
+        }
+        crate::domain::pivot::model::Subtotal::Min => {
+            domain_types::domain::pivot::PivotFieldFunction::Min
+        }
+        crate::domain::pivot::model::Subtotal::Product => {
+            domain_types::domain::pivot::PivotFieldFunction::Product
+        }
+        crate::domain::pivot::model::Subtotal::CountNums => {
+            domain_types::domain::pivot::PivotFieldFunction::CountNums
+        }
+        crate::domain::pivot::model::Subtotal::StdDev => {
+            domain_types::domain::pivot::PivotFieldFunction::StdDev
+        }
+        crate::domain::pivot::model::Subtotal::StdDevP => {
+            domain_types::domain::pivot::PivotFieldFunction::StdDevP
+        }
+        crate::domain::pivot::model::Subtotal::Var => {
+            domain_types::domain::pivot::PivotFieldFunction::Var
+        }
+        crate::domain::pivot::model::Subtotal::VarP => {
+            domain_types::domain::pivot::PivotFieldFunction::VarP
+        }
+    }
 }
 
 fn detect_data_type(records: &[Vec<CellValue>], col_idx: usize) -> DetectedDataType {

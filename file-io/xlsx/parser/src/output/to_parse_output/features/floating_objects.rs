@@ -391,12 +391,13 @@ pub(crate) fn convert_floating_objects(
                 let fh = xfrm.and_then(|t| t.flip_h).unwrap_or(false);
                 let fv = xfrm.and_then(|t| t.flip_v).unwrap_or(false);
                 // Extract image relationship info
-                let embed_id = pic.blip_fill.embed_id.as_deref().unwrap_or("rId1");
-                let image_path = drawing
-                    .opc_rels
-                    .iter()
-                    .find(|r| r.id == embed_id)
-                    .map(|r| r.target.clone());
+                let image_path = pic.blip_fill.embed_id.as_deref().and_then(|embed_id| {
+                    drawing
+                        .opc_rels
+                        .iter()
+                        .find(|r| r.id == embed_id)
+                        .map(|r| r.target.clone())
+                });
 
                 // Build typed ooxml props — no more JSON blob!
                 let ooxml_props = PictureOoxmlProps {
@@ -588,6 +589,83 @@ pub(crate) fn convert_floating_objects(
                     ooxml: Some(group_ooxml),
                 });
                 (data, None, 0.0, false, false, false, true)
+            }
+            DrawingContent::ContentPart(content_part) => {
+                let relationships = drawing
+                    .opc_rels
+                    .iter()
+                    .filter(|rel| rel.id == content_part.r_id)
+                    .cloned()
+                    .collect();
+                let data = FloatingObjectData::Drawing(
+                    domain_types::domain::floating_object::DrawingData {
+                        ooxml: Some(
+                            domain_types::domain::floating_object::DrawingObjectOoxmlProps {
+                                object:
+                                    domain_types::domain::floating_object::DrawingObjectOoxml::ContentPart {
+                                        content_part:
+                                        content_part.clone(),
+                                    },
+                                anchor_index: Some(idx as i32),
+                                extent_emu_cx: extent_emu.map(|(cx, _)| cx),
+                                extent_emu_cy: extent_emu.map(|(_, cy)| cy),
+                                edit_as: anchor_edit_as.clone(),
+                                client_data_locks_with_sheet: cd_locks,
+                                client_data_prints_with_sheet: cd_prints,
+                                relationships,
+                            },
+                        ),
+                        ..Default::default()
+                    },
+                );
+                (data, None, 0.0, false, false, false, true)
+            }
+            DrawingContent::GraphicFrame(gf) => {
+                let relationship_ids = gf
+                    .graphic_xml
+                    .as_deref()
+                    .map(crate::domain::drawings::reader::raw::relationship_ids_in_raw)
+                    .unwrap_or_default();
+                let relationships = drawing
+                    .opc_rels
+                    .iter()
+                    .filter(|rel| relationship_ids.contains(&rel.id))
+                    .cloned()
+                    .collect();
+                let nv = &gf.nv_graphic_frame_pr.c_nv_pr;
+                let data = FloatingObjectData::Drawing(
+                    domain_types::domain::floating_object::DrawingData {
+                        ooxml: Some(
+                            domain_types::domain::floating_object::DrawingObjectOoxmlProps {
+                                object:
+                                    domain_types::domain::floating_object::DrawingObjectOoxml::GraphicFrame {
+                                        graphic_frame:
+                                        gf.clone(),
+                                    },
+                                anchor_index: Some(idx as i32),
+                                extent_emu_cx: extent_emu.map(|(cx, _)| cx),
+                                extent_emu_cy: extent_emu.map(|(_, cy)| cy),
+                                edit_as: anchor_edit_as.clone(),
+                                client_data_locks_with_sheet: cd_locks,
+                                client_data_prints_with_sheet: cd_prints,
+                                relationships,
+                            },
+                        ),
+                        ..Default::default()
+                    },
+                );
+                (
+                    data,
+                    Some(nv.name.clone()),
+                    gf.xfrm
+                        .rotation
+                        .map(|a| a.value() as f64 / 60_000.0)
+                        .unwrap_or(0.0),
+                    gf.xfrm.flip_h.unwrap_or(false),
+                    gf.xfrm.flip_v.unwrap_or(false),
+                    false,
+                    !nv.hidden,
+                )
             }
             // Charts, connectors, graphic frames, SmartArt, and unknown content
             // are handled by their own dedicated conversions.

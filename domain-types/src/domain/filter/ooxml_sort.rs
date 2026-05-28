@@ -37,6 +37,9 @@ pub struct SortState {
     /// Zero or more child `<sortCondition>` elements.
     #[serde(default)]
     pub conditions: Vec<SortCondition>,
+    /// Raw direct-child `<extLst>` owned by this sortState.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 impl Default for SortState {
@@ -48,6 +51,7 @@ impl Default for SortState {
             case_sensitive: false,
             sort_method: SortMethod::None,
             conditions: Vec::new(),
+            ext_lst_raw: None,
         }
     }
 }

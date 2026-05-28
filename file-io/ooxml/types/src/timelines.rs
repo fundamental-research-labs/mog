@@ -1,4 +1,7 @@
 //! Timeline slicer OOXML types (Office 2013+ x15 extensions).
+//!
+//! These are shared vocabulary records. Parser/writer integration owns package
+//! relationships, cache invalidation, and any raw extension replay policy.
 
 use crate::drawings::CellAnchor;
 

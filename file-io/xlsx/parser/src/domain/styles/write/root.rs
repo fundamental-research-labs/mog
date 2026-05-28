@@ -23,11 +23,16 @@ pub(super) fn write_stylesheet(styles: &StylesWriter) -> Vec<u8> {
 
     use crate::write::mc_builder::McIgnorableBuilder;
     let mut mc_builder = McIgnorableBuilder::new();
+    if let Some(ref ignorable) = styles.root_namespaces.mce_attributes().ignorable {
+        mc_builder.add_preserved_ignorable(ignorable, None);
+    }
     if styles.known_fonts {
         mc_builder.add("x14ac");
     }
-    for prefix in styles.root_namespaces.ignorable_prefixes() {
-        mc_builder.add(prefix);
+    if styles.root_namespaces.mce_attributes().ignorable.is_none() {
+        for prefix in styles.root_namespaces.ignorable_prefixes() {
+            mc_builder.add(prefix);
+        }
     }
 
     w.start_element("styleSheet").attr("xmlns", SPREADSHEET_NS);

@@ -198,7 +198,7 @@ pub(crate) fn convert_cell_data(
         formula,
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         phonetic: false,
         vm: None,
         date_lexical_value: None,
@@ -289,9 +289,9 @@ pub(crate) fn apply_parse_extras(
         }
     }
 
-    for &cell_idx in &extras.cm_cells {
+    for &(cell_idx, cm_val) in &extras.cm_cells {
         if cell_idx < cells.len() {
-            cells[cell_idx].cm = true;
+            cells[cell_idx].cell_metadata_index = Some(cm_val);
         }
     }
     for &(cell_idx, vm_val) in &extras.vm_cells {
@@ -501,7 +501,7 @@ mod tests {
             formula: formula.map(|s| s.to_string()),
             force_recalc: false,
             array_ref: None,
-            cm: false,
+            cell_metadata_index: None,
             vm: None,
             phonetic: false,
             date_lexical_value: None,

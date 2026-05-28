@@ -62,8 +62,8 @@ use crate::storage::engine::stores::EngineStores;
 // Private imports for submodule functions used in export_single_sheet
 use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
-    export_calculation_properties, export_document_properties, export_external_links,
-    export_file_sharing, export_file_version, export_shared_string_hints,
+    export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
+    export_external_links, export_file_sharing, export_file_version, export_shared_string_hints,
     export_workbook_named_ranges, export_workbook_properties, export_workbook_style_palette,
     export_workbook_stylesheet, export_workbook_table_styles, export_workbook_views,
 };
@@ -243,6 +243,7 @@ fn export_single_sheet(
         rt_window_protection,
         rt_color_id,
         workbook_view_id,
+        sheet_view_ext_lst_xml,
     ) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
@@ -360,9 +361,13 @@ fn export_single_sheet(
                         _ => None,
                     })
                     .unwrap_or(0);
+                let view_ext = m.get(&txn, "sheetViewExtLstXml").and_then(|v| match v {
+                    Out::Any(Any::String(s)) => Some(s.to_string()),
+                    _ => None,
+                });
                 (
                     zsn, zsplv, zsslv, ts, ac, sq, etlc, fp_tlc, pane, sels, esv, vt, sos, sr, sws,
-                    dgc, wp, cid, wvid,
+                    dgc, wp, cid, wvid, view_ext,
                 )
             }
             None => (
@@ -385,6 +390,7 @@ fn export_single_sheet(
                 false,
                 None,
                 0,
+                None,
             ),
         }
     };
@@ -432,6 +438,7 @@ fn export_single_sheet(
         pane: pane_config,
         selections,
         pivot_selection: Vec::new(),
+        ext_lst_xml: sheet_view_ext_lst_xml,
     };
 
     // --- Dimensions (custom row heights, col widths) ---
@@ -606,6 +613,9 @@ fn export_single_sheet(
         worksheet_semantic_containers,
         worksheet_root_namespaces,
         worksheet_ext_lst_xml,
+        worksheet_dimension_ref,
+        sheet_calc_pr,
+        sheet_views_ext_lst_xml,
     ) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
@@ -683,6 +693,22 @@ fn export_single_sheet(
                         Out::Any(Any::String(s)) => Some(s.to_string()),
                         _ => None,
                     });
+                let worksheet_dimension_ref =
+                    m.get(&txn, "worksheetDimensionRef").and_then(|v| match v {
+                        Out::Any(Any::String(s)) => Some(s.to_string()),
+                        _ => None,
+                    });
+                let sheet_calc_pr = m.get(&txn, "sheetCalcPr").and_then(|v| match v {
+                    Out::Any(Any::String(s)) => {
+                        serde_json::from_str::<ooxml_types::worksheet::SheetCalcPr>(&s).ok()
+                    }
+                    _ => None,
+                });
+                let sheet_views_ext_lst_xml =
+                    m.get(&txn, "sheetViewsExtLstXml").and_then(|v| match v {
+                        Out::Any(Any::String(s)) => Some(s.to_string()),
+                        _ => None,
+                    });
                 (
                     osi,
                     vis,
@@ -691,6 +717,9 @@ fn export_single_sheet(
                     worksheet_semantic_containers,
                     worksheet_root_namespaces,
                     worksheet_ext_lst_xml,
+                    worksheet_dimension_ref,
+                    sheet_calc_pr,
+                    sheet_views_ext_lst_xml,
                 )
             }
             None => (
@@ -700,6 +729,9 @@ fn export_single_sheet(
                 None,
                 Default::default(),
                 Default::default(),
+                None,
+                None,
+                None,
                 None,
             ),
         }
@@ -727,6 +759,7 @@ fn export_single_sheet(
         cols,
         worksheet_root_namespaces,
         worksheet_ext_lst_xml,
+        worksheet_dimension_ref,
         sheet_id: original_sheet_id,
         visibility,
         uid: sheet_uid,
@@ -736,6 +769,7 @@ fn export_single_sheet(
         merges: merge_regions,
         frozen_pane,
         view,
+        sheet_views_ext_lst_xml,
         comments: comments_out,
         legacy_comment_authors,
         comment_package,
@@ -755,6 +789,7 @@ fn export_single_sheet(
         hf_images,
         protection,
         worksheet_semantic_containers,
+        sheet_calc_pr,
         row_styles,
         col_styles,
         charts,
@@ -898,6 +933,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         sheets: output_sheets,
         workbook_sheet_inventory: Vec::new(),
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
+        workbook_conformance: None,
         style_palette,
         workbook_stylesheet: export_workbook_stylesheet(stores),
         package_fidelity: workbook::export_package_fidelity_metadata(stores),
@@ -917,6 +953,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         calculation: export_calculation_properties(stores),
         metadata: workbook::export_xlsx_metadata(stores),
         workbook_views: export_workbook_views(stores),
+        custom_workbook_views_xml: export_custom_workbook_views_xml(stores),
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),
         file_sharing: export_file_sharing(stores),
@@ -924,6 +961,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         external_links: export_external_links(stores),
         connections,
         persons: export_workbook_threaded_comment_persons(stores),
+        volatile_dependency_part: workbook::export_volatile_dependency_part(stores),
     };
     let _data_features = output.workbook_data_features();
     output

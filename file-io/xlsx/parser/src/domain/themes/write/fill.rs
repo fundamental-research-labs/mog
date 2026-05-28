@@ -1,6 +1,8 @@
 use super::color;
 use crate::write::xml_writer::XmlWriter;
-use ooxml_types::drawings::{DrawingFill, GradientFill, GradientStop, PatternFill, RelativeRect};
+use ooxml_types::drawings::{
+    BlipFill, DrawingFill, FillMode, GradientFill, GradientStop, PatternFill, RelativeRect,
+};
 
 // ========================================================================
 // DrawingFill serializer
@@ -23,10 +25,69 @@ pub(super) fn write_drawing_fill(xml: &mut XmlWriter, fill: &DrawingFill) {
         DrawingFill::Pattern(p) => {
             write_pattern_fill(xml, p);
         }
-        DrawingFill::Blip(_) | DrawingFill::Group => {
-            // Blip and Group fills are not used in theme format schemes; skip.
+        DrawingFill::Blip(fill) => {
+            write_blip_fill(xml, fill);
+        }
+        DrawingFill::Group => {
+            xml.start_element_ns("a", "grpFill").self_close();
         }
     }
+}
+
+fn write_blip_fill(xml: &mut XmlWriter, fill: &BlipFill) {
+    let elem = xml.start_element_ns("a", "blipFill");
+    if let Some(dpi) = fill.dpi {
+        elem.attr("dpi", &dpi.to_string());
+    }
+    if let Some(rot) = fill.rot_with_shape {
+        elem.attr("rotWithShape", if rot { "1" } else { "0" });
+    }
+    elem.end_attrs();
+
+    if fill.embed_id.is_some() || fill.link_id.is_some() || fill.compression.is_some() {
+        let blip = xml.start_element_ns("a", "blip");
+        if let Some(embed) = &fill.embed_id {
+            blip.attr("r:embed", embed);
+        }
+        if let Some(link) = &fill.link_id {
+            blip.attr("r:link", link);
+        }
+        if let Some(compression) = &fill.compression {
+            blip.attr("cstate", compression.to_ooxml());
+        }
+        blip.self_close();
+    }
+
+    if let Some(rect) = &fill.source_rect {
+        let elem = xml.start_element_ns("a", "srcRect");
+        if fill.src_rect_explicit & 1 != 0 {
+            elem.attr("l", &rect.left.value().to_string());
+        }
+        if fill.src_rect_explicit & 2 != 0 {
+            elem.attr("t", &rect.top.value().to_string());
+        }
+        if fill.src_rect_explicit & 4 != 0 {
+            elem.attr("r", &rect.right.value().to_string());
+        }
+        if fill.src_rect_explicit & 8 != 0 {
+            elem.attr("b", &rect.bottom.value().to_string());
+        }
+        elem.self_close();
+    }
+
+    match &fill.fill_mode {
+        Some(FillMode::Stretch { .. }) => {
+            xml.start_element_ns("a", "stretch").end_attrs();
+            xml.start_element_ns("a", "fillRect").self_close();
+            xml.end_element_ns("a", "stretch");
+        }
+        Some(FillMode::Tile(_)) => {
+            xml.start_element_ns("a", "tile").self_close();
+        }
+        None => {}
+    }
+
+    xml.end_element_ns("a", "blipFill");
 }
 
 /// Write a gradient fill.

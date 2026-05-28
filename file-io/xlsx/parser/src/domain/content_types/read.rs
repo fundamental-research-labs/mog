@@ -29,7 +29,9 @@
 
 use std::collections::HashMap;
 
-use crate::infra::scanner::{extract_quoted_value, find_attr_simd};
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::name::{Namespace, ResolveResult};
+use quick_xml::reader::NsReader;
 
 // =============================================================================
 // Constants - XLSX Content Type URIs
@@ -76,6 +78,8 @@ pub const CONTENT_TYPE_PIVOT_TABLE: &str =
 
 /// Content type for drawings
 pub const CONTENT_TYPE_DRAWING: &str = "application/vnd.openxmlformats-officedocument.drawing+xml";
+
+const CONTENT_TYPES_NS: &str = "http://schemas.openxmlformats.org/package/2006/content-types";
 
 // =============================================================================
 // Error Types
@@ -139,44 +143,54 @@ impl ContentTypes {
     /// Parse `[Content_Types].xml` from raw bytes
     pub fn parse(xml: &[u8]) -> Result<Self, ParseError> {
         let mut content_types = ContentTypes::new();
+        let mut reader = NsReader::from_reader(xml);
+        reader.config_mut().trim_text(false);
+        reader.config_mut().expand_empty_elements = false;
+        let mut buf = Vec::new();
+        let mut saw_types = false;
 
-        // Find <Types> element
-        let types_start = match find_tag_simple(xml, b"Types", 0) {
-            Some(pos) => pos,
-            None => return Err(ParseError::MissingElement("Types")),
-        };
-
-        let mut pos = types_start;
-
-        // Parse all Default and Override elements
-        while pos < xml.len() {
-            // Look for the next '<' character
-            let next_lt = match memchr::memchr(b'<', &xml[pos..]) {
-                Some(offset) => pos + offset,
-                None => break,
-            };
-
-            pos = next_lt;
-
-            // Check what element we found
-            if matches_tag_at(xml, pos, b"Default") {
-                if let Some((ext, content_type)) = parse_default_element(xml, pos) {
-                    content_types
-                        .ordered_defaults_list
-                        .push((ext.clone(), content_type.clone()));
-                    content_types.defaults.insert(ext, content_type);
+        loop {
+            let (ns, event) = reader
+                .read_resolved_event_into(&mut buf)
+                .map_err(|_| ParseError::MalformedXml)?;
+            match event {
+                Event::Start(start) | Event::Empty(start) => {
+                    let local = start.local_name();
+                    let local = local.as_ref();
+                    if local == b"Types" && is_opc_content_types_ns(&ns) {
+                        saw_types = true;
+                    } else if local == b"Default" && is_opc_content_types_ns(&ns) {
+                        if let Some((ext, content_type)) = parse_default_element(&start) {
+                            content_types
+                                .ordered_defaults_list
+                                .push((ext.clone(), content_type.clone()));
+                            content_types.defaults.insert(ext, content_type);
+                        }
+                    } else if local == b"Override"
+                        && is_opc_content_types_ns(&ns)
+                        && let Some((part_name, content_type)) = parse_override_element(&start)
+                    {
+                        let normalized = normalize_path(&part_name);
+                        content_types
+                            .ordered_overrides_list
+                            .push((normalized.clone(), content_type.clone()));
+                        content_types.overrides.insert(normalized, content_type);
+                    }
                 }
-            } else if matches_tag_at(xml, pos, b"Override") {
-                if let Some((part_name, content_type)) = parse_override_element(xml, pos) {
-                    let normalized = normalize_path(&part_name);
-                    content_types
-                        .ordered_overrides_list
-                        .push((normalized.clone(), content_type.clone()));
-                    content_types.overrides.insert(normalized, content_type);
-                }
+                Event::Eof => break,
+                Event::End(_)
+                | Event::Text(_)
+                | Event::CData(_)
+                | Event::Comment(_)
+                | Event::Decl(_)
+                | Event::PI(_)
+                | Event::DocType(_) => {}
             }
+            buf.clear();
+        }
 
-            pos += 1;
+        if !saw_types {
+            return Err(ParseError::MissingElement("Types"));
         }
 
         Ok(content_types)
@@ -320,101 +334,37 @@ impl ContentTypes {
 // Helper Functions
 // =============================================================================
 
-/// Simple tag finder without full scanner dependency
-fn find_tag_simple(xml: &[u8], tag: &[u8], start: usize) -> Option<usize> {
-    let mut pos = start;
-
-    while pos < xml.len() {
-        let lt_pos = memchr::memchr(b'<', &xml[pos..])?;
-        let abs_pos = pos + lt_pos;
-
-        if matches_tag_at(xml, abs_pos, tag) {
-            return Some(abs_pos);
-        }
-
-        pos = abs_pos + 1;
-    }
-
-    None
-}
-
-/// Check if the XML at position starts with the given tag
-fn matches_tag_at(xml: &[u8], pos: usize, tag: &[u8]) -> bool {
-    let after_lt = pos + 1;
-    if after_lt + tag.len() > xml.len() {
-        return false;
-    }
-
-    if xml[pos] != b'<' {
-        return false;
-    }
-
-    if !xml[after_lt..].starts_with(tag) {
-        return false;
-    }
-
-    let after_tag = after_lt + tag.len();
-    if after_tag < xml.len() {
-        matches!(xml[after_tag], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/')
-    } else {
-        true
-    }
-}
-
 /// Parse a Default element and extract Extension and ContentType
-fn parse_default_element(xml: &[u8], start: usize) -> Option<(String, String)> {
-    let element_end = find_element_end_simple(xml, start)?;
-    let element = &xml[start..=element_end];
-
-    let extension = extract_attr_value_in_range(element, b"Extension=\"")
-        .map(|b| String::from_utf8_lossy(b).into_owned())?;
-
-    let content_type = extract_attr_value_in_range(element, b"ContentType=\"")
-        .map(|b| String::from_utf8_lossy(b).into_owned())?;
-
-    Some((extension, content_type))
+fn parse_default_element(start: &BytesStart<'_>) -> Option<(String, String)> {
+    Some((
+        attr_value(start, b"Extension")?,
+        attr_value(start, b"ContentType")?,
+    ))
 }
 
 /// Parse an Override element and extract PartName and ContentType
-fn parse_override_element(xml: &[u8], start: usize) -> Option<(String, String)> {
-    let element_end = find_element_end_simple(xml, start)?;
-    let element = &xml[start..=element_end];
-
-    let part_name = extract_attr_value_in_range(element, b"PartName=\"")
-        .map(|b| String::from_utf8_lossy(b).into_owned())?;
-
-    let content_type = extract_attr_value_in_range(element, b"ContentType=\"")
-        .map(|b| String::from_utf8_lossy(b).into_owned())?;
-
-    Some((part_name, content_type))
+fn parse_override_element(start: &BytesStart<'_>) -> Option<(String, String)> {
+    Some((
+        attr_value(start, b"PartName")?,
+        attr_value(start, b"ContentType")?,
+    ))
 }
 
-/// Extract attribute value within a byte slice
-fn extract_attr_value_in_range<'a>(bytes: &'a [u8], attr: &[u8]) -> Option<&'a [u8]> {
-    let attr_pos = find_attr_simd(bytes, attr, 0)?;
-    let value_start = attr_pos + attr.len();
-    let (start, end) = extract_quoted_value(bytes, value_start)?;
-    Some(&bytes[start..end])
-}
-
-/// Find the end of an XML element (the closing '>').
-fn find_element_end_simple(bytes: &[u8], start: usize) -> Option<usize> {
-    let mut pos = start;
-    let mut in_quotes = false;
-
-    while pos < bytes.len() {
-        let b = bytes[pos];
-
-        if b == b'"' {
-            in_quotes = !in_quotes;
-        } else if b == b'>' && !in_quotes {
-            return Some(pos);
+fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
+    for attr in start.attributes().flatten() {
+        if attr.key.local_name().as_ref() == name {
+            return attr.unescape_value().ok().map(|v| v.into_owned());
         }
-
-        pos += 1;
     }
-
     None
+}
+
+fn is_opc_content_types_ns(ns: &ResolveResult<'_>) -> bool {
+    match ns {
+        ResolveResult::Bound(Namespace(uri)) => uri == CONTENT_TYPES_NS.as_bytes(),
+        ResolveResult::Unbound => true,
+        ResolveResult::Unknown(_) => false,
+    }
 }
 
 /// Normalize a path by removing the leading slash
@@ -511,6 +461,18 @@ mod tests {
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 </Types>"#;
+
+        let ct = ContentTypes::parse(xml).unwrap();
+        assert_eq!(ct.get_type("xl/workbook.xml"), Some(CONTENT_TYPE_WORKBOOK));
+        assert_eq!(ct.get_type("xl/other.xml"), Some("application/xml"));
+    }
+
+    #[test]
+    fn parses_prefixed_single_quoted_content_types() {
+        let xml = br#"<ct:Types xmlns:ct="http://schemas.openxmlformats.org/package/2006/content-types">
+  <ct:Default ContentType='application/xml' Extension='xml'/>
+  <ct:Override ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml' PartName='/xl/workbook.xml'/>
+</ct:Types>"#;
 
         let ct = ContentTypes::parse(xml).unwrap();
         assert_eq!(ct.get_type("xl/workbook.xml"), Some(CONTENT_TYPE_WORKBOOK));

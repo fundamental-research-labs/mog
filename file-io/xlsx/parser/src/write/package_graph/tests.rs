@@ -4,6 +4,9 @@ fn graph_options(package_fidelity: Option<PackageFidelityMetadata>) -> ModeledWo
     ModeledWorkbookGraphOptions {
         sheet_count: 1,
         has_theme: false,
+        theme_part_path: None,
+        theme_relationship_id_hint: None,
+        theme_relationship_type: None,
         has_shared_strings: false,
         has_core_props: true,
         has_app_props: false,

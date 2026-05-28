@@ -1,4 +1,5 @@
 use crate::infra::scanner::{extract_quoted_value, find_gt_simd, find_tag_simd};
+use crate::infra::xml::extract_direct_child_element_xml;
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 
 use super::read_support::find_auto_filter_end;
@@ -37,6 +38,7 @@ fn parse_sort_state_element(
         case_sensitive,
         sort_method,
         conditions: Vec::new(),
+        ext_lst_raw: None,
     };
 
     if tag_end_offset > 0 && slice[tag_end_offset - 1] == b'/' {
@@ -44,6 +46,9 @@ fn parse_sort_state_element(
     }
 
     let closing = crate::infra::scanner::find_closing_tag(slice, b"sortState", 0)?;
+    let full_end = find_gt_simd(slice, closing).map(|p| p + 1).unwrap_or(slice.len());
+    state.ext_lst_raw =
+        extract_direct_child_element_xml(&slice[..full_end], b"sortState", b"extLst");
     let inner = &slice[tag_end_offset + 1..closing];
     let mut pos = 0;
     while let Some(sc_start) = find_tag_simd(inner, b"sortCondition", pos) {

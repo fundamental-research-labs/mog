@@ -124,6 +124,20 @@ pub(crate) fn hydrate_dimensions(
             .insert(txn, "colCollapsed", Any::String(Arc::from(json)));
     }
 
+    let phonetic_cols: Vec<u32> = sheet
+        .dimensions
+        .col_widths
+        .iter()
+        .filter(|c| c.phonetic)
+        .map(|c| c.col)
+        .collect();
+    if !phonetic_cols.is_empty()
+        && let Ok(json) = serde_json::to_string(&phonetic_cols)
+    {
+        maps.meta_map
+            .insert(txn, "colPhonetic", Any::String(Arc::from(json)));
+    }
+
     if !sheet.dimensions.trailing_col_ranges.is_empty()
         && let Ok(json) = serde_json::to_string(&sheet.dimensions.trailing_col_ranges)
     {

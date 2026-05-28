@@ -6,6 +6,7 @@
 
 use super::super::reader::attrs::attr_value;
 use super::super::reader::elements::direct_child;
+use super::super::reader::elements::direct_child_elements;
 use super::super::reader::raw::{
     contains_graphic_frame, direct_alternate_content_raw, extract_element_raw_string,
     relationship_ids_in_raw,
@@ -18,6 +19,7 @@ use super::graphic_frames::{
 use super::groups::parse_group_shape;
 use super::pictures::parse_picture;
 use super::shapes::parse_shape;
+use domain_types::domain::drawings::OpaqueDrawingContent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DispatchKind {
@@ -26,6 +28,7 @@ pub(crate) enum DispatchKind {
     AlternateContentGraphicFrame,
     Shape,
     Connector,
+    ContentPart,
     SmartArtGraphicFrame,
     ChartGraphicFrame,
     SlicerGraphicFrame,
@@ -140,6 +143,25 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
         }
     }
 
+    if let Some(content_part_child) = direct_child(xml, b"contentPart") {
+        let content_part_xml = content_part_child.full_slice(xml);
+        if let Some(r_id) = attr_value(content_part_xml, b"id=\"")
+            .or_else(|| attr_value(content_part_xml, b"r:id=\""))
+        {
+            let r_id = String::from_utf8_lossy(r_id).into_owned();
+            return DispatchedContent {
+                content: DrawingContent::ContentPart(ooxml_types::drawings::ContentPartRef {
+                    r_id: r_id.clone(),
+                }),
+                result: DrawingParseResult {
+                    kind: DispatchKind::ContentPart,
+                    preservation: Preservation::Typed,
+                    relationship_ids: vec![r_id],
+                },
+            };
+        }
+    }
+
     if let Some(gf_child) = direct_child(xml, b"graphicFrame") {
         let gf_start = gf_child.start;
         if let Some(smartart) = parse_smartart_graphic_frame(xml, gf_start) {
@@ -166,6 +188,14 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
                 result: DrawingParseResult::opaque(kind, relationship_ids),
             };
         }
+    }
+
+    if let Some(opaque) = first_opaque_object_choice(xml) {
+        let relationship_ids = opaque.relationship_ids.clone();
+        return DispatchedContent {
+            content: DrawingContent::OpaqueUnknown(opaque),
+            result: DrawingParseResult::opaque(DispatchKind::Unknown, relationship_ids),
+        };
     }
 
     DispatchedContent {
@@ -195,6 +225,31 @@ fn classify_direct_graphic_frame(raw_xml: &str) -> DispatchKind {
     }
 
     DispatchKind::OpaqueGraphicFrame
+}
+
+pub(crate) fn opaque_content_from_element(
+    element: &[u8],
+    local_name: &[u8],
+) -> Option<OpaqueDrawingContent> {
+    let raw_xml = std::str::from_utf8(element).ok()?.to_string();
+    Some(OpaqueDrawingContent {
+        relationship_ids: relationship_ids_in_raw(&raw_xml),
+        kind_hint: Some(String::from_utf8_lossy(local_name).into_owned()),
+        raw_xml,
+    })
+}
+
+fn first_opaque_object_choice(xml: &[u8]) -> Option<OpaqueDrawingContent> {
+    const ANCHOR_INFRA: &[&[u8]] = &[b"from", b"to", b"pos", b"ext", b"clientData"];
+
+    for child in direct_child_elements(xml) {
+        if ANCHOR_INFRA.contains(&child.local_name) {
+            continue;
+        }
+        return opaque_content_from_element(child.full_slice(xml), child.local_name);
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -305,5 +360,40 @@ mod tests {
                 .as_deref()
                 .is_some_and(|xml| xml.contains("custom:item"))
         );
+    }
+
+    #[test]
+    fn unsupported_direct_object_choice_preserves_raw_xml_and_relationships() {
+        let xml = br#"<xdr:twoCellAnchor>
+            <xdr:from><xdr:col>0</xdr:col></xdr:from>
+            <xdr:to><xdr:col>1</xdr:col></xdr:to>
+            <xdr:contentPart r:id="rIdContent"/>
+            <xdr:clientData/>
+        </xdr:twoCellAnchor>"#;
+
+        let dispatched = dispatch_drawing_content(xml);
+
+        assert_eq!(dispatched.result.kind, DispatchKind::ContentPart);
+        assert_eq!(dispatched.result.relationship_ids, ["rIdContent"]);
+    }
+
+    #[test]
+    fn unexpected_direct_object_preserves_raw_xml_and_relationships() {
+        let xml = br#"<xdr:twoCellAnchor>
+            <xdr:from><xdr:col>0</xdr:col></xdr:from>
+            <vendor:widget r:id="rIdWidget"><vendor:data r:embed="rIdData"/></vendor:widget>
+            <xdr:clientData/>
+        </xdr:twoCellAnchor>"#;
+
+        let dispatched = dispatch_drawing_content(xml);
+
+        assert_eq!(dispatched.result.kind, DispatchKind::Unknown);
+        assert_eq!(dispatched.result.preservation, Preservation::OpaqueRawXml);
+        assert_eq!(dispatched.result.relationship_ids, ["rIdWidget", "rIdData"]);
+        let DrawingContent::OpaqueUnknown(opaque) = dispatched.content else {
+            panic!("expected opaque unknown content");
+        };
+        assert_eq!(opaque.kind_hint.as_deref(), Some("widget"));
+        assert!(opaque.raw_xml.contains("vendor:widget"));
     }
 }

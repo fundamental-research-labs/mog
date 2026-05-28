@@ -6,6 +6,9 @@
 //!
 //! Returns `ParsedWorkbook` containing domain-typed `ParseOutput` and `ImportReport`.
 //! The internal `FullParseResult` is no longer exposed.
+//! Bridge/API output is a semantic workbook subset. Rust-internal package
+//! fidelity sidecars may preserve additional OOXML during in-process export,
+//! but those sidecars are not public editable API state.
 
 use crate::error::{XlsxApiError, from_parse_string_error};
 use crate::options::ParseOptions;

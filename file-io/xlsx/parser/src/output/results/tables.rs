@@ -69,6 +69,9 @@ pub struct ParsedTableColumn {
     /// Query table field ID (queryTableFieldId attribute)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_table_field_id: Option<u32>,
+    /// XML column properties for XML-mapped table columns
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xml_column_pr: Option<ooxml_types::tables::XmlColumnPr>,
     /// Extension UID for revision tracking (xr3:uid)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xr3_uid: Option<String>,
@@ -136,6 +139,9 @@ pub struct ParsedTable {
     /// Auto-filter xr:uid for revision tracking
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_filter_xr_uid: Option<String>,
+    /// Raw direct-child `<extLst>` owned by the table autoFilter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_filter_ext_lst_raw: Option<String>,
     /// Table type (e.g., "queryTable", "xml"). None means default "worksheet".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table_type: Option<String>,
@@ -146,6 +152,9 @@ pub struct ParsedTable {
     /// Connection ID for external data sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_id: Option<u32>,
+    /// Table comment attribute.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
     /// Whether to insert a blank row below table.
     #[serde(skip_serializing_if = "is_false")]
     pub insert_row: bool,
@@ -187,6 +196,9 @@ pub struct ParsedTableSortState {
     pub sort_method: domain_types::SortMethod,
     /// Sort conditions
     pub conditions: Vec<ParsedTableSortCondition>,
+    /// Raw direct-child `<extLst>` owned by this sortState.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 /// A single sort condition within a table sort state.

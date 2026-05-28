@@ -1,15 +1,19 @@
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
-    CT_COMMENTS, CT_CONNECTIONS, CT_DRAWING, CT_EMF, CT_GIF, CT_JPEG, CT_OLE_OBJECT,
-    CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_QUERY_TABLE, CT_SLICER,
-    CT_SLICER_CACHE, CT_TABLE, CT_THREADED_COMMENTS, CT_VML_DRAWING, CT_WMF,
-    CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind,
+    CT_COMMENTS, CT_CONNECTIONS, CT_DRAWING, CT_EMF, CT_GIF, CT_JPEG, CT_PIVOT_CACHE,
+    CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_QUERY_TABLE, CT_SLICER,
+    CT_SLICER_CACHE, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THREADED_COMMENTS, CT_VML_DRAWING,
+    CT_WMF,
+    CT_VOLATILE_DEPENDENCIES, CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner,
+    PackagePart, PackagePartKind,
     PackageRelationship, PackageRelationshipTarget, REL_CHART, REL_CHART_EX, REL_COMMENTS,
     REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK, REL_HYPERLINK, REL_IMAGE,
-    REL_OLE_OBJECT, REL_PIVOT_CACHE, REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS,
+    REL_PIVOT_CACHE, REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS,
     REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE,
-    REL_TABLE, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET_CUSTOM_PROPERTY,
-    RelationshipIdentityHint, modeled_part, normalize_external_link_part_path, normalize_part_path,
+    REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_WORKSHEET_CUSTOM_PROPERTY,
+    REL_VOLATILE_DEPENDENCIES, RelationshipIdentityHint, modeled_part,
+    is_external_target_mode, normalize_external_link_part_path, normalize_part_path,
 };
 use crate::write::write_error::WriteError;
 
@@ -57,24 +61,52 @@ pub fn register_generated_pivot_cache(
 ) -> Result<(), WriteError> {
     let definition_path = format!("xl/pivotCache/pivotCacheDefinition{global_idx}.xml");
     let records_path = format!("xl/pivotCache/pivotCacheRecords{global_idx}.xml");
-    graph.register_part(modeled_part(&definition_path, CT_PIVOT_CACHE))?;
-    graph.register_part(modeled_part(&records_path, CT_PIVOT_CACHE_RECORDS))?;
+    register_pivot_cache(
+        graph,
+        &definition_path,
+        Some(&records_path),
+        REL_PIVOT_CACHE,
+        None,
+        Some(REL_PIVOT_CACHE_RECORDS),
+        None,
+    )
+}
+
+pub fn register_pivot_cache(
+    graph: &mut PackageGraphBuilder,
+    definition_path: &str,
+    records_path: Option<&str>,
+    workbook_relationship_type: &str,
+    workbook_relationship_id_hint: Option<&str>,
+    records_relationship_type: Option<&str>,
+    records_relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(definition_path, CT_PIVOT_CACHE))?;
+    if let Some(records_path) = records_path {
+        graph.register_part(modeled_part(records_path, CT_PIVOT_CACHE_RECORDS))?;
+    }
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Workbook,
-        relationship_type: REL_PIVOT_CACHE.to_string(),
+        relationship_type: workbook_relationship_type.to_string(),
         target: PackageRelationshipTarget::InternalPart {
-            path: definition_path.clone(),
+            path: definition_path.to_string(),
         },
-        identity_hint: None,
+        identity_hint: workbook_relationship_id_hint.map(RelationshipIdentityHint::new),
     });
-    graph.add_relationship(PackageRelationship {
-        owner: PackageOwner::Part {
-            path: definition_path,
-        },
-        relationship_type: REL_PIVOT_CACHE_RECORDS.to_string(),
-        target: PackageRelationshipTarget::InternalPart { path: records_path },
-        identity_hint: None,
-    });
+    if let (Some(records_path), Some(records_relationship_type)) =
+        (records_path, records_relationship_type)
+    {
+        graph.add_relationship(PackageRelationship {
+            owner: PackageOwner::Part {
+                path: definition_path.to_string(),
+            },
+            relationship_type: records_relationship_type.to_string(),
+            target: PackageRelationshipTarget::InternalPart {
+                path: records_path.to_string(),
+            },
+            identity_hint: records_relationship_id_hint.map(RelationshipIdentityHint::new),
+        });
+    }
     Ok(())
 }
 
@@ -98,6 +130,26 @@ pub fn register_worksheet_table(
     Ok(())
 }
 
+pub fn register_worksheet_table_single_cells(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/tables/tableSingleCells{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_TABLE_SINGLE_CELLS))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        },
+        relationship_type: REL_TABLE_SINGLE_CELLS.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
 pub fn register_workbook_connections(graph: &mut PackageGraphBuilder) -> Result<(), WriteError> {
     graph.register_part(modeled_part("xl/connections.xml", CT_CONNECTIONS))?;
     graph.add_relationship(PackageRelationship {
@@ -108,6 +160,44 @@ pub fn register_workbook_connections(graph: &mut PackageGraphBuilder) -> Result<
         },
         identity_hint: None,
     });
+    Ok(())
+}
+
+pub fn register_workbook_volatile_dependencies(
+    graph: &mut PackageGraphBuilder,
+    part: &domain_types::VolatileDependencyPackagePart,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(&part.path, CT_VOLATILE_DEPENDENCIES))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: if part.relationship_type.is_empty() {
+            REL_VOLATILE_DEPENDENCIES.to_string()
+        } else {
+            part.relationship_type.clone()
+        },
+        target: PackageRelationshipTarget::InternalPart {
+            path: part.path.clone(),
+        },
+        identity_hint: part
+            .relationship_id
+            .as_deref()
+            .map(RelationshipIdentityHint::new),
+    });
+    for hint in &part.relationships {
+        if !is_external_target_mode(hint.target_mode.as_deref()) {
+            continue;
+        }
+        graph.add_relationship(PackageRelationship {
+            owner: PackageOwner::Part {
+                path: part.path.clone(),
+            },
+            relationship_type: hint.relationship_type.clone(),
+            target: PackageRelationshipTarget::External {
+                target: hint.target.clone(),
+            },
+            identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+        });
+    }
     Ok(())
 }
 
@@ -293,19 +383,21 @@ pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Resul
 pub fn register_ole_embedding_part(
     graph: &mut PackageGraphBuilder,
     path: &str,
+    content_type: &str,
 ) -> Result<(), WriteError> {
-    graph.register_part(modeled_part(path, CT_OLE_OBJECT))
+    graph.register_part(modeled_part(path, content_type))
 }
 
 pub fn register_worksheet_ole_object(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
     embedding_path: &str,
+    relationship_type: &str,
     relationship_id_hint: Option<&str>,
 ) {
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
-        relationship_type: REL_OLE_OBJECT.to_string(),
+        relationship_type: relationship_type.to_string(),
         target: PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(embedding_path),
         },
@@ -396,6 +488,34 @@ fn register_drawing_relationship(
     Ok(())
 }
 
+pub fn register_drawing_relationship_with_target_mode(
+    graph: &mut PackageGraphBuilder,
+    drawing_path: &str,
+    relationship_type: &str,
+    target: &str,
+    target_mode: Option<&str>,
+    relationship_id_hint: &str,
+) -> Result<(), WriteError> {
+    let target = if is_external_target_mode(target_mode) {
+        PackageRelationshipTarget::External {
+            target: target.to_string(),
+        }
+    } else {
+        PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(target),
+        }
+    };
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_part_path(drawing_path),
+        },
+        relationship_type: relationship_type.to_string(),
+        target,
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+    Ok(())
+}
+
 pub fn register_worksheet_hyperlink(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
@@ -403,7 +523,7 @@ pub fn register_worksheet_hyperlink(
     target_mode: Option<&str>,
     relationship_id_hint: &str,
 ) {
-    let target = if target_mode == Some("External") {
+    let target = if is_external_target_mode(target_mode) {
         PackageRelationshipTarget::External {
             target: target.to_string(),
         }
@@ -574,6 +694,21 @@ pub fn register_generated_pivot_table_cache_relationship(
     graph: &mut PackageGraphBuilder,
     pivot_table_global_idx: usize,
     cache_definition_global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) {
+    register_pivot_table_cache_relationship(
+        graph,
+        pivot_table_global_idx,
+        &format!("xl/pivotCache/pivotCacheDefinition{cache_definition_global_idx}.xml"),
+        relationship_id_hint,
+    );
+}
+
+pub fn register_pivot_table_cache_relationship(
+    graph: &mut PackageGraphBuilder,
+    pivot_table_global_idx: usize,
+    cache_definition_path: &str,
+    relationship_id_hint: Option<&str>,
 ) {
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Part {
@@ -581,9 +716,11 @@ pub fn register_generated_pivot_table_cache_relationship(
         },
         relationship_type: REL_PIVOT_CACHE_DEFINITION.to_string(),
         target: PackageRelationshipTarget::InternalPart {
-            path: format!("xl/pivotCache/pivotCacheDefinition{cache_definition_global_idx}.xml"),
+            path: cache_definition_path.to_string(),
         },
-        identity_hint: Some(RelationshipIdentityHint::new("rId1")),
+        identity_hint: Some(RelationshipIdentityHint::new(
+            relationship_id_hint.unwrap_or("rId1"),
+        )),
     });
 }
 

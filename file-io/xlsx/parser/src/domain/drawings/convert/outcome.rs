@@ -65,6 +65,14 @@ pub(crate) fn relationship_ids_for_graphic_frame(
     dedupe_relationship_ids(ids)
 }
 
+pub(crate) fn relationship_ids_for_opaque_unknown(
+    opaque: &read::OpaqueDrawingContent,
+) -> Vec<String> {
+    let mut ids = opaque.relationship_ids.clone();
+    ids.extend(relationship_ids_in_raw(&opaque.raw_xml));
+    dedupe_relationship_ids(ids)
+}
+
 pub(crate) fn relationship_ids_for_smartart(sa: &read::SmartArtGraphicFrame) -> Vec<String> {
     dedupe_relationship_ids(
         [

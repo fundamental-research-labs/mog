@@ -40,6 +40,8 @@ pub(super) fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
     let target_path = normalize_part_path(target_path);
     if owner_path.starts_with("customXml/") {
         target_path.starts_with("customXml/")
+    } else if owner_path.starts_with("xl/revisions/") {
+        target_path.starts_with("xl/revisions/")
     } else if owner_path.starts_with("xl/printerSettings/") {
         target_path.starts_with("xl/printerSettings/")
     } else if owner_path.starts_with("docProps/thumbnail.") {

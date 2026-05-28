@@ -19,6 +19,21 @@ pub(super) fn metadata_to_domain(
                 assign: mt.assign,
                 coerce: mt.coerce,
                 cell_meta: mt.cell_meta,
+                ghost_row: mt.ghost_row,
+                ghost_col: mt.ghost_col,
+                edit: mt.edit,
+                delete: mt.delete,
+                paste_formulas: mt.paste_formulas,
+                paste_formats: mt.paste_formats,
+                paste_comments: mt.paste_comments,
+                paste_data_validation: mt.paste_data_validation,
+                paste_borders: mt.paste_borders,
+                paste_col_widths: mt.paste_col_widths,
+                paste_number_formats: mt.paste_number_formats,
+                split_all: mt.split_all,
+                clear_all: mt.clear_all,
+                clear_contents: mt.clear_contents,
+                adjust: mt.adjust,
             })
             .collect(),
         future_metadata: metadata
@@ -64,6 +79,7 @@ pub(super) fn metadata_to_domain(
             })
             .collect(),
         rich_data: None,
+        imported_metadata_xml: None,
     };
 
     (!result.is_empty()).then_some(result)

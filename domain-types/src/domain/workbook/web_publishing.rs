@@ -23,4 +23,8 @@ pub struct WorkbookWebPublishing {
     pub target_screen_size: Option<ooxml_types::web_publish::TargetScreenSize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dpi: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_page: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_set: Option<String>,
 }

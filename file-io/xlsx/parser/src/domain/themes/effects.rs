@@ -4,11 +4,11 @@
 //! providing full OOXML fidelity for round-trip.
 
 use ooxml_types::drawings::{
-    Bevel, BevelPresetType, BlurEffect, Camera, EffectList, EffectProperties, Glow, InnerShadow,
-    LightRig, LightRigDirection, LightRigType, OuterShadow, PresetCameraType, PresetMaterialType,
-    PresetShadow, PresetShadowVal, RectAlignment, Reflection, Rotation3D, Scene3D, Shape3D,
-    SoftEdge, StAngle, StFixedAngle, StPercentage, StPositiveCoordinate, StPositiveFixedAngle,
-    StPositiveFixedPercentageDecimal,
+    Bevel, BevelPresetType, BlurEffect, Camera, EffectContainer, EffectContainerType, EffectList,
+    EffectProperties, Glow, InnerShadow, LightRig, LightRigDirection, LightRigType, OuterShadow,
+    PresetCameraType, PresetMaterialType, PresetShadow, PresetShadowVal, RectAlignment,
+    Reflection, Rotation3D, Scene3D, Shape3D, SoftEdge, StAngle, StFixedAngle, StPercentage,
+    StPositiveCoordinate, StPositiveFixedAngle, StPositiveFixedPercentageDecimal,
 };
 use ooxml_types::themes::EffectStyleItem;
 
@@ -45,9 +45,15 @@ pub fn parse_effect_style_list_canonical(xml: &[u8]) -> Vec<EffectStyleItem> {
             item.effect_properties = Some(EffectProperties::EffectList(parse_effect_list(lst_xml)));
         }
 
-        // Parse effectDag (if present instead of effectLst)
-        // For now, we don't parse effectDag deeply - it's rare in themes.
-        // The effectLst path covers 99%+ of real-world themes.
+        if item.effect_properties.is_none()
+            && let Some(dag_start) = find_tag_simd(eff_xml, b"effectDag", 0)
+        {
+            let dag_end =
+                find_closing_tag(eff_xml, b"effectDag", dag_start).unwrap_or(eff_xml.len());
+            let dag_xml = &eff_xml[dag_start..dag_end];
+            item.effect_properties =
+                Some(EffectProperties::EffectDag(parse_effect_container(dag_xml)));
+        }
 
         // Parse scene3d
         if let Some(scene_start) = find_tag_simd(eff_xml, b"scene3d", 0) {
@@ -69,6 +75,14 @@ pub fn parse_effect_style_list_canonical(xml: &[u8]) -> Vec<EffectStyleItem> {
     }
 
     styles
+}
+
+fn parse_effect_container(xml: &[u8]) -> EffectContainer {
+    EffectContainer {
+        container_type: get_attr(xml, b"type=\"").and_then(EffectContainerType::from_ooxml),
+        name: get_attr(xml, b"name=\"").map(str::to_string),
+        effects: Vec::new(),
+    }
 }
 
 // =============================================================================

@@ -170,12 +170,10 @@ pub struct ParseExtras {
     /// Cell indices where the `<f>` element has `aca="1"` (always calculate array).
     /// This attribute appears on array formula master cells.
     pub aca_indices: Vec<usize>,
-    /// Cell indices where the `<c>` element has a `cm` attribute.
-    /// The `cm` attribute is an index into cell metadata (XLDAPR) that marks cells
-    /// as participating in dynamic array formulas. Some modern Excel 365 files use
-    /// ONLY `cm` without `t="array"`, so this provides an additional signal for
-    /// identifying dynamic array sources and phantom cells.
-    pub cm_cells: Vec<usize>,
+    /// Cell indices and effective metadata indexes from the `<c cm="N">` attribute.
+    /// `cm="0"` is the OOXML default and is treated as no effective metadata
+    /// reference.
+    pub cm_cells: Vec<(usize, u32)>,
     /// Cell indices where the `<c>` element has a `vm` attribute (value metadata index).
     /// The `vm` attribute is a 1-based index into the value metadata (`xl/richData/`)
     /// parts, used for rich value types like linked data types and images-in-cells.

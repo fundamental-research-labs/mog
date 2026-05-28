@@ -35,6 +35,13 @@ pub(crate) fn hydrate_sheet_view_metadata(
     hydrate_page_breaks(txn, meta_map, &sheet.page_breaks);
 
     yrs_schema::helpers::write_json_vec(meta_map, txn, "extraSheetViews", &sheet.extra_sheet_views);
+    if let Some(xml) = sheet
+        .sheet_views_ext_lst_xml
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        meta_map.insert(txn, "sheetViewsExtLstXml", Any::String(Arc::from(xml)));
+    }
 
     if let Some(ref uid) = sheet.uid {
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));

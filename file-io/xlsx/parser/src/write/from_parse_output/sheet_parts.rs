@@ -202,8 +202,13 @@ pub(super) fn build_sheet_parts(
         // `SheetData.auto_filter` only. The former raw-XML sidecar
         // fallback on raw auto-filter XML is gone — the
         // domain type is lossless over CT_AutoFilter.
+        let strict_output = output
+            .workbook_conformance
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("strict"));
         if let Some(ref af) = sheet_data.auto_filter {
-            let xml = crate::domain::auto_filter::write::write_auto_filter_xml(af);
+            let xml =
+                crate::domain::auto_filter::write::write_auto_filter_xml_with_strict(af, strict_output);
             sheet_writer.set_auto_filter_xml(xml);
         }
 
@@ -275,12 +280,17 @@ pub(super) fn build_sheet_parts(
                 (!package.comments_root_namespace_attrs.is_empty())
                     .then_some(package.comments_root_namespace_attrs.as_slice())
             });
+            let root_ext_lst_xml = sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.comments_ext_lst_xml.as_deref());
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(
                     sheet_num,
                     &sheet_data.comments,
                     original_authors,
                     root_ns_attrs,
+                    root_ext_lst_xml,
                 );
             Some((comments_xml, generated_vml_xml))
         } else {
@@ -309,8 +319,12 @@ pub(super) fn build_sheet_parts(
                 global_table_idx
             };
             table_xmls.push(
-                crate::domain::tables::write::table_writer_from_domain(table_id, table_spec)
-                    .to_xml(),
+                crate::domain::tables::write::table_writer_from_domain_with_strict(
+                    table_id,
+                    table_spec,
+                    strict_output,
+                )
+                .to_xml(),
             );
         }
 
@@ -376,12 +390,14 @@ pub(super) fn build_sheet_parts(
                 _ => continue, // not a chartEx
             };
             // Preserve original chartEx number from the imported chart object when available.
-            let original_idx = chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                .then(|| {
-                    chart_auxiliary::chart_auxiliary_data(chart_spec)
-                        .and_then(|aux| chart_auxiliary::chart_ex_number(&aux))
-                })
-                .flatten();
+            let original_idx = chart_replay::chart_ex_original_number(chart_spec).or_else(|| {
+                chart_replay::chart_allows_auxiliary_replay(chart_spec)
+                    .then(|| {
+                        chart_auxiliary::chart_auxiliary_data(chart_spec)
+                            .and_then(|aux| chart_auxiliary::chart_ex_number(&aux))
+                    })
+                    .flatten()
+            });
             let idx = if let Some(orig) = original_idx {
                 if orig > global_chart_ex_idx {
                     global_chart_ex_idx = orig;
@@ -391,7 +407,19 @@ pub(super) fn build_sheet_parts(
                 global_chart_ex_idx += 1;
                 global_chart_ex_idx
             };
-            let chart_ex_xml = serialize_chart_ex_space(chart_ex_space);
+            let chart_path = format!("xl/charts/chartEx{idx}.xml");
+            let chart_ex_xml = if chart_replay::chart_ex_allows_opaque_replay(
+                chart_spec,
+                &chart_path,
+            ) {
+                chart_spec
+                    .chart_ex_replay
+                    .as_ref()
+                    .map(|replay| replay.original_xml.clone())
+                    .unwrap_or_else(|| serialize_chart_ex_space(chart_ex_space))
+            } else {
+                serialize_chart_ex_space(chart_ex_space)
+            };
             chart_ex_entries_for_sheet.push(ChartExEntry {
                 global_idx: idx,
                 source_idx,

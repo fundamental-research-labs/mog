@@ -23,6 +23,7 @@ const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
 const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
 const KEY_STYLE_REGISTRY_KNOWN_FONTS: &str = "knownFonts";
 const KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS: &str = "rootNamespaceAttrs";
+const KEY_STYLE_REGISTRY_ROOT_MCE_ATTRIBUTES: &str = "rootMceAttributes";
 const KEY_STYLE_REGISTRY_EXT_LST_XML: &str = "extLstXml";
 const KEY_STYLE_REGISTRY_COUNT: &str = "count";
 
@@ -199,6 +200,15 @@ pub(super) fn hydrate_workbook_stylesheet(
             KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS,
             &stylesheet.root_namespace_attrs,
         );
+        if !stylesheet.root_mce_attributes.is_empty() {
+            let json = serde_json::to_string(&stylesheet.root_mce_attributes)
+                .expect("style root MCE serialization should not fail");
+            map.insert(
+                txn,
+                KEY_STYLE_REGISTRY_ROOT_MCE_ATTRIBUTES,
+                Any::String(Arc::from(json.as_str())),
+            );
+        }
         hydrate_style_registry_value(
             txn,
             &map,
@@ -473,7 +483,8 @@ pub(super) fn hydrate_cell_styles(
     for cell in cells {
         let style_is_range_backed = range_style_positions.contains(&(cell.row, cell.col));
         let has_style = cell.style_id.is_some() && !style_is_range_backed;
-        let has_cm = cell.cm;
+        let cell_metadata_index = cell.cell_metadata_index;
+        let has_cm = cell_metadata_index.is_some();
         let has_vm = cell.vm.is_some();
         let has_phonetic = cell.phonetic;
         let has_date_lexical_value = cell.date_lexical_value.is_some();
@@ -536,7 +547,7 @@ pub(super) fn hydrate_cell_styles(
                 } else {
                     cell.style_id
                 },
-                cm: has_cm,
+                cell_metadata_index,
                 vm: cell.vm,
                 phonetic: cell.phonetic,
                 date_lexical_value: cell.date_lexical_value.clone(),

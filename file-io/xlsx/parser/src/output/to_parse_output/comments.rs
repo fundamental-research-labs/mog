@@ -6,6 +6,7 @@ pub(super) fn build_sheet_comment_package_info(
     let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
     let mut info = domain_types::SheetCommentPackageInfo {
         comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
+        comments_ext_lst_xml: sheet.comments_ext_lst_xml.clone(),
         ..Default::default()
     };
 

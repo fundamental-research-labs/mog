@@ -115,6 +115,8 @@ pub(super) struct WorksheetOleObjectGraphEntry {
     pub(super) sheet_idx: usize,
     pub(super) ole_idx: usize,
     pub(super) embedding_path: String,
+    pub(super) embedding_content_type: String,
+    pub(super) embedding_relationship_type: String,
     pub(super) target: String,
     pub(super) relationship_id_hint: Option<String>,
 }
@@ -143,6 +145,7 @@ pub(super) struct DrawingRelationshipGraphEntry {
     pub(super) drawing_path: String,
     pub(super) rel_type: String,
     pub(super) target_path: String,
+    pub(super) target_mode: Option<String>,
     pub(super) relationship_id_hint: String,
 }
 

@@ -13,13 +13,19 @@ use domain_types::{AutoFilter, DateTimeGrouping, OoxmlFilterType};
 
 /// Serialize an `AutoFilter` into an OOXML XML fragment.
 pub fn write_auto_filter_xml(filter: &AutoFilter) -> String {
+    write_auto_filter_xml_with_strict(filter, false)
+}
+
+/// Serialize an `AutoFilter`, optionally suppressing Transitional-only attrs.
+pub fn write_auto_filter_xml_with_strict(filter: &AutoFilter, strict: bool) -> String {
     let mut w = XmlWriter::new();
     w.start_element("autoFilter").attr("ref", &filter.range_ref);
     if let Some(uid) = &filter.xr_uid {
         w.attr("xr:uid", uid);
     }
 
-    let has_children = !filter.columns.is_empty() || filter.sort.is_some();
+    let has_children =
+        !filter.columns.is_empty() || filter.sort.is_some() || filter.ext_lst_raw.is_some();
     if !has_children {
         w.self_close();
         return String::from_utf8(w.finish()).unwrap_or_default();
@@ -37,13 +43,47 @@ pub fn write_auto_filter_xml(filter: &AutoFilter) -> String {
             // Default is true; only emit when suppressed.
             w.attr("showButton", "0");
         }
+        let has_ext = fc.ext_lst_raw.is_some();
         let Some(filter_type) = &fc.filter_type else {
-            w.self_close();
+            if let Some(raw) = &fc.ext_lst_raw {
+                w.end_attrs();
+                w.raw_str(raw);
+                w.end_element("filterColumn");
+            } else {
+                w.self_close();
+            }
             continue;
         };
         w.end_attrs();
 
-        match filter_type {
+        write_filter_type_xml(&mut w, filter_type, strict);
+
+        // CT_FilterColumn is a choice. This path only replays a source-owned
+        // extLst alongside a known child when the imported owner carried both.
+        if has_ext {
+            if let Some(raw) = &fc.ext_lst_raw {
+                w.raw_str(raw);
+            }
+        }
+
+        w.end_element("filterColumn");
+    }
+
+    // Sort state
+    if let Some(ref sort) = filter.sort {
+        write_sort_state_inner(&mut w, sort);
+    }
+
+    if let Some(raw) = &filter.ext_lst_raw {
+        w.raw_str(raw);
+    }
+
+    w.end_element("autoFilter");
+    String::from_utf8(w.finish()).unwrap_or_default()
+}
+
+fn write_filter_type_xml(w: &mut XmlWriter, filter_type: &OoxmlFilterType, strict: bool) {
+    match filter_type {
             OoxmlFilterType::Values {
                 values,
                 blanks,
@@ -133,8 +173,10 @@ pub fn write_auto_filter_xml(filter: &AutoFilter) -> String {
                 if let Some(v) = value {
                     w.attr("val", &format_f64_auto(*v));
                 }
-                if let Some(mv) = max_value {
-                    w.attr("maxVal", &format_f64_auto(*mv));
+                if !strict {
+                    if let Some(mv) = max_value {
+                        w.attr("maxVal", &format_f64_auto(*mv));
+                    }
                 }
                 if let Some(v) = value_iso {
                     w.attr("valIso", v);
@@ -167,18 +209,7 @@ pub fn write_auto_filter_xml(filter: &AutoFilter) -> String {
                 w.attr("iconId", &icon_id.to_string());
                 w.self_close();
             }
-        }
-
-        w.end_element("filterColumn");
     }
-
-    // Sort state
-    if let Some(ref sort) = filter.sort {
-        write_sort_state_inner(&mut w, sort);
-    }
-
-    w.end_element("autoFilter");
-    String::from_utf8(w.finish()).unwrap_or_default()
 }
 
 // Silence the unused-import warning when only some paths use DateTimeGrouping.
@@ -221,7 +252,7 @@ fn write_sort_state_inner(w: &mut XmlWriter, sort: &domain_types::SortState) {
         w.attr("sortMethod", sort.sort_method.to_ooxml_token());
     }
 
-    if sort.conditions.is_empty() {
+    if sort.conditions.is_empty() && sort.ext_lst_raw.is_none() {
         // Emit the self-closing form `<sortState .../>` when there are no
         // child conditions. Matches how the CT_SortState XSD permits an
         // element with just attributes.
@@ -252,6 +283,10 @@ fn write_sort_state_inner(w: &mut XmlWriter, sort: &domain_types::SortState) {
             w.attr("iconId", &icon_id.to_string());
         }
         w.self_close();
+    }
+
+    if let Some(raw) = &sort.ext_lst_raw {
+        w.raw_str(raw);
     }
 
     w.end_element("sortState");
@@ -300,9 +335,11 @@ mod tests {
                 hidden_button: true,
                 show_button: false,
                 filter_type: None,
+                ext_lst_raw: None,
             }],
             sort: None,
             xr_uid: None,
+            ext_lst_raw: None,
         };
         let xml = write_auto_filter_xml(&af);
 
@@ -326,6 +363,7 @@ mod tests {
             }],
             sort: None,
             xr_uid: None,
+            ext_lst_raw: None,
         };
         let xml = write_auto_filter_xml(&af);
 

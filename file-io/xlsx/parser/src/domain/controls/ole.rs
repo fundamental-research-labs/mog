@@ -14,7 +14,8 @@ use super::types::OleObject;
 use super::vml;
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    parse_bool_attr, parse_string_attr, parse_u32_attr, resolve_mc_alternate_content,
+    MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, parse_bool_attr, parse_string_attr, parse_u32_attr,
+    resolve_mc_alternate_content_with_namespace_context,
 };
 use crate::write::xml_writer::XmlWriter;
 
@@ -239,7 +240,16 @@ fn write_anchor_point(w: &mut XmlWriter, tag: &str, point: &CellAnchorPoint) {
 // Slices use offsets from ASCII XML tag delimiters.
 #[allow(clippy::string_slice)]
 pub fn parse_ole_objects(xml: &[u8], objects: &mut Vec<OleObject>) {
-    let resolved = resolve_mc_alternate_content_regions(xml);
+    parse_ole_objects_with_context(xml, None, objects);
+}
+
+#[allow(clippy::string_slice)]
+fn parse_ole_objects_with_context(
+    xml: &[u8],
+    containing_xml: Option<&[u8]>,
+    objects: &mut Vec<OleObject>,
+) {
+    let resolved = resolve_mc_alternate_content_regions(xml, containing_xml);
     let mut pos = 0;
 
     while let Some(ole_start) = find_tag_simd(&resolved, b"oleObject", pos) {
@@ -300,7 +310,7 @@ pub fn parse_ole_objects_for_sheet(
     };
 
     let mut ole_objects: Vec<OleObject> = Vec::new();
-    parse_ole_objects(ole_section, &mut ole_objects);
+    parse_ole_objects_with_context(ole_section, Some(worksheet_xml), &mut ole_objects);
 
     if ole_objects.is_empty() {
         return Vec::new();
@@ -343,8 +353,13 @@ fn enrich_ole_relationships(
     for obj in ole_objects.iter_mut() {
         if let Some(r_id) = &obj.r_id {
             obj.data_path = None;
-            obj.data_path =
-                relationships::ole_object_target(&relationships, r_id).map(str::to_string);
+            if let Some((path, kind)) = relationships::ole_embedding_target(&relationships, r_id) {
+                obj.data_path = Some(path.to_string());
+                obj.embedding_kind = Some(kind.as_str().to_string());
+                obj.embedding_content_type = Some(
+                    crate::infra::imported_parts::infer_content_type(path).to_string(),
+                );
+            }
         }
     }
 
@@ -397,7 +412,7 @@ fn resolve_vml_preview_paths(
 
 // Slices use offsets from ASCII XML tag delimiters.
 #[allow(clippy::string_slice)]
-fn resolve_mc_alternate_content_regions(xml: &[u8]) -> Vec<u8> {
+fn resolve_mc_alternate_content_regions(xml: &[u8], containing_xml: Option<&[u8]>) -> Vec<u8> {
     let mut result = Vec::with_capacity(xml.len());
     let mut pos = 0;
 
@@ -413,7 +428,11 @@ fn resolve_mc_alternate_content_regions(xml: &[u8]) -> Vec<u8> {
                 .unwrap_or(ac_close);
             let ac_block = &xml[abs_ac_start..ac_end];
 
-            if let Some(branch) = resolve_mc_alternate_content(ac_block, None) {
+            if let Some(branch) = resolve_mc_alternate_content_with_namespace_context(
+                ac_block,
+                containing_xml,
+                MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES,
+            ) {
                 result.extend_from_slice(&ac_block[branch.start..branch.end]);
             }
 

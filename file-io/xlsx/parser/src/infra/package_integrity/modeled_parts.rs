@@ -110,19 +110,12 @@ pub(super) fn validate_modeled_part_invariants(
         );
         require_content_type(archive, "xl/styles.xml", CT_STYLES, errors);
     }
-    if archive.contains("xl/theme/theme1.xml") {
-        require_relationship(
-            relationships_by_part,
-            workbook_rels,
-            REL_THEME,
-            "xl/theme/theme1.xml",
-            errors,
-        );
-        require_content_type(archive, "xl/theme/theme1.xml", CT_THEME, errors);
-    }
-
     for entry in archive.entries() {
         let path = entry.name.as_str();
+        if path.starts_with("xl/theme/") && path.ends_with(".xml") {
+            require_relationship(relationships_by_part, workbook_rels, REL_THEME, path, errors);
+            require_content_type(archive, path, CT_THEME, errors);
+        }
         if is_relationship_reference_part(path) && !is_worksheet_part(path) {
             validate_part_relationship_references(archive, path, relationships_by_part, errors);
         }
@@ -213,7 +206,9 @@ fn has_relationship_to_path(
         .into_iter()
         .flatten()
         .any(|rel| {
-            rel.rel_type == rel_type
+            (rel.rel_type == rel_type
+                || (rel_type == REL_THEME
+                    && crate::infra::opc::is_theme_relationship_type(&rel.rel_type)))
                 && rel.target_mode.as_deref() != Some("External")
                 && relationship_target_part(&rel.target)
                     .and_then(|target| resolve_relationship_target(owner.as_deref(), target).ok())

@@ -1,27 +1,8 @@
-//! Calculation chain parser for XLSX files.
+//! Calculation chain parser for XLSX diagnostics.
 //!
-//! This module parses the calculation chain from `xl/calcChain.xml`, which defines
-//! the order in which formulas should be calculated for optimal performance.
-//!
-//! # XLSX Calculation Chain Structure
-//!
-//! The calculation chain (`xl/calcChain.xml`) contains entries that specify:
-//! - The cell reference containing the formula
-//! - The sheet ID where the cell is located
-//! - Flags indicating array formulas, volatile functions, etc.
-//!
-//! # Example Usage
-//!
-//! ```ignore
-//! use xlsx_parser::calc::{parse_calc_chain, CalcChain};
-//!
-//! let xml = archive.read_file("xl/calcChain.xml")?;
-//! let calc_chain = parse_calc_chain(&xml);
-//!
-//! for entry in calc_chain.entries {
-//!     println!("Cell {} on sheet {}", entry.cell_ref, entry.sheet_id);
-//! }
-//! ```
+//! `xl/calcChain.xml` is an Excel recalculation cache. Production import keeps
+//! only enough parsed state to count and diagnose the intentionally dropped
+//! cache; it is never dependency truth and is never replayed on export.
 
 use crate::infra::scanner::{find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr, parse_string_attr, parse_u32_attr};
@@ -30,10 +11,10 @@ use crate::infra::xml::{parse_bool_attr, parse_string_attr, parse_u32_attr};
 // Core Data Structures
 // ============================================================================
 
-/// The complete calculation chain from a workbook
+/// Diagnostic-only calculation chain summary.
 #[derive(Debug, Clone, Default)]
 pub struct CalcChain {
-    /// Ordered list of calculation entries
+    /// Ordered list of diagnostic calculation entries.
     pub entries: Vec<CalcChainEntry>,
 }
 
@@ -50,7 +31,7 @@ impl CalcChain {
         self.entries.is_empty()
     }
 
-    /// Get entries for a specific sheet
+    /// Get entries for a specific sheet.
     pub fn entries_for_sheet(&self, sheet_id: u32) -> Vec<&CalcChainEntry> {
         self.entries
             .iter()
@@ -58,64 +39,29 @@ impl CalcChain {
             .collect()
     }
 
-    /// Get all volatile entries
-    pub fn volatile_entries(&self) -> Vec<&CalcChainEntry> {
-        self.entries.iter().filter(|e| e.volatile).collect()
-    }
-
-    /// Get all array formula entries
+    /// Get all array-formula diagnostic entries.
     pub fn array_entries(&self) -> Vec<&CalcChainEntry> {
         self.entries.iter().filter(|e| e.array).collect()
     }
 }
 
-/// A single entry in the calculation chain
+/// A single diagnostic entry from CT_CalcCell.
 #[derive(Debug, Clone, Default)]
 pub struct CalcChainEntry {
     /// Cell reference (e.g., "A1", "B3:D5" for array formulas)
     pub cell_ref: String,
-
-    /// Sheet ID (1-based index)
+    /// Sheet ID (`i`), inherited from the previous entry when omitted.
     pub sheet_id: u32,
-
-    /// Whether this entry has been calculated
-    /// When true, the formula result is up-to-date
-    pub calculated: bool,
-
-    /// Whether this is an array formula
-    /// Array formulas span multiple cells
+    /// `s`: cell starts a new dependency level.
+    pub new_dependency_level: bool,
+    /// `l`: cell starts a new thread.
+    pub new_thread: bool,
+    /// `t`: cell is an array formula.
     pub array: bool,
-
-    /// Whether this formula contains volatile functions
-    /// Volatile functions (NOW(), RAND(), etc.) recalculate on every change
-    pub volatile: bool,
-
-    /// Whether this cell is part of a shared formula
-    pub shared: bool,
-
-    /// Index of the shared formula group (if shared)
-    pub shared_index: Option<u32>,
-
-    /// Whether this is the master cell of a shared formula
-    pub shared_master: bool,
-
-    /// Whether the sheet ID is inherited from the previous entry
-    /// This is an optimization in calcChain.xml to avoid repeating sheet IDs
+    /// `a`: cell is always calculated.
+    pub always_calculate: bool,
+    /// Whether the sheet ID was inherited from the previous entry.
     pub inherited_sheet: bool,
-}
-
-impl CalcChainEntry {
-    /// Check if this entry needs recalculation
-    #[inline]
-    pub fn needs_calc(&self) -> bool {
-        !self.calculated || self.volatile
-    }
-
-    /// Check if this is a simple (non-array, non-shared) formula
-    #[inline]
-    pub fn is_simple(&self) -> bool {
-        !self.array && !self.shared
-    }
 }
 
 // ============================================================================
@@ -167,11 +113,36 @@ pub fn parse_calc_chain(xml: &[u8]) -> CalcChain {
     chain
 }
 
+/// Count diagnostic `<c>` entries in an imported calculation chain.
+///
+/// This is the production full-parse path because calc chains are dropped
+/// caches. It intentionally avoids constructing semantic formula dependency
+/// data.
+#[must_use]
+pub fn count_calc_chain_entries(xml: &[u8]) -> usize {
+    let chain_start = match find_tag_simd(xml, b"calcChain", 0) {
+        Some(pos) => pos,
+        None => return 0,
+    };
+
+    let mut count = 0;
+    let mut pos = chain_start;
+    while let Some(c_start) = find_tag_simd(xml, b"c", pos) {
+        let Some(tag_end) = find_gt_simd(xml, c_start) else {
+            break;
+        };
+        count += 1;
+        pos = tag_end + 1;
+    }
+    count
+}
+
 fn parse_calc_entry(xml: &[u8], inherited_sheet_id: u32) -> Option<CalcChainEntry> {
     let mut entry = CalcChainEntry::default();
 
-    // Parse r (ref) attribute - required
-    entry.cell_ref = parse_string_attr(xml, b"r=\"")?;
+    // `r` is Strict. Transitional packages may use `ref`; prefer `r` when both exist.
+    entry.cell_ref =
+        parse_string_attr(xml, b"r=\"").or_else(|| parse_string_attr(xml, b"ref=\""))?;
 
     // Parse i (sheetId) attribute - optional, may be inherited
     if let Some(sheet_id) = parse_u32_attr(xml, b"i=\"") {
@@ -182,25 +153,10 @@ fn parse_calc_entry(xml: &[u8], inherited_sheet_id: u32) -> Option<CalcChainEntr
         entry.inherited_sheet = true;
     }
 
-    // Parse l (calculated/stale) attribute
-    // When present, indicates the formula was calculated
-    entry.calculated = parse_bool_attr(xml, b"l=\"");
-
-    // Parse a (array) attribute
-    entry.array = parse_bool_attr(xml, b"a=\"");
-
-    // Parse s (shared) attribute
-    entry.shared = parse_bool_attr(xml, b"s=\"");
-
-    // Parse t (volatile) attribute
-    // Note: 't' stands for "transient" in the spec
-    entry.volatile = parse_bool_attr(xml, b"t=\"");
-
-    // Parse si (shared index) attribute
-    entry.shared_index = parse_u32_attr(xml, b"si=\"");
-
-    // Parse m (shared master) attribute
-    entry.shared_master = parse_bool_attr(xml, b"m=\"");
+    entry.new_dependency_level = parse_bool_attr(xml, b"s=\"");
+    entry.new_thread = parse_bool_attr(xml, b"l=\"");
+    entry.array = parse_bool_attr(xml, b"t=\"");
+    entry.always_calculate = parse_bool_attr(xml, b"a=\"");
 
     Some(entry)
 }
@@ -258,34 +214,6 @@ mod tests {
     }
 
     #[test]
-    fn test_calc_chain_volatile_entries() {
-        let chain = CalcChain {
-            entries: vec![
-                CalcChainEntry {
-                    cell_ref: "A1".to_string(),
-                    volatile: true,
-                    ..Default::default()
-                },
-                CalcChainEntry {
-                    cell_ref: "B1".to_string(),
-                    volatile: false,
-                    ..Default::default()
-                },
-                CalcChainEntry {
-                    cell_ref: "C1".to_string(),
-                    volatile: true,
-                    ..Default::default()
-                },
-            ],
-        };
-
-        let volatile = chain.volatile_entries();
-        assert_eq!(volatile.len(), 2);
-        assert_eq!(volatile[0].cell_ref, "A1");
-        assert_eq!(volatile[1].cell_ref, "C1");
-    }
-
-    #[test]
     fn test_calc_chain_array_entries() {
         let chain = CalcChain {
             entries: vec![
@@ -316,58 +244,10 @@ mod tests {
         let entry = CalcChainEntry::default();
         assert!(entry.cell_ref.is_empty());
         assert_eq!(entry.sheet_id, 0);
-        assert!(!entry.calculated);
+        assert!(!entry.new_dependency_level);
+        assert!(!entry.new_thread);
         assert!(!entry.array);
-        assert!(!entry.volatile);
-        assert!(!entry.shared);
-    }
-
-    #[test]
-    fn test_calc_entry_needs_calc() {
-        let entry = CalcChainEntry {
-            calculated: false,
-            volatile: false,
-            ..Default::default()
-        };
-        assert!(entry.needs_calc());
-
-        let entry = CalcChainEntry {
-            calculated: true,
-            volatile: false,
-            ..Default::default()
-        };
-        assert!(!entry.needs_calc());
-
-        let entry = CalcChainEntry {
-            calculated: true,
-            volatile: true,
-            ..Default::default()
-        };
-        assert!(entry.needs_calc());
-    }
-
-    #[test]
-    fn test_calc_entry_is_simple() {
-        let entry = CalcChainEntry {
-            array: false,
-            shared: false,
-            ..Default::default()
-        };
-        assert!(entry.is_simple());
-
-        let entry = CalcChainEntry {
-            array: true,
-            shared: false,
-            ..Default::default()
-        };
-        assert!(!entry.is_simple());
-
-        let entry = CalcChainEntry {
-            array: false,
-            shared: true,
-            ..Default::default()
-        };
-        assert!(!entry.is_simple());
+        assert!(!entry.always_calculate);
     }
 
     // -------------------------------------------------------------------------
@@ -437,81 +317,49 @@ mod tests {
     fn test_parse_calc_chain_with_flags() {
         let xml = br#"<?xml version="1.0"?>
 <calcChain>
-    <c r="A1" i="1" l="1"/>
-    <c r="A2" i="1" a="1"/>
+    <c r="A1" i="1" s="1"/>
+    <c r="A2" i="1" l="1"/>
     <c r="A3" i="1" t="1"/>
-    <c r="A4" i="1" s="1" si="0"/>
+    <c r="A4" i="1" a="1"/>
 </calcChain>"#;
 
         let chain = parse_calc_chain(xml);
         assert_eq!(chain.len(), 4);
 
-        // Calculated flag
-        assert!(chain.entries[0].calculated);
+        assert!(chain.entries[0].new_dependency_level);
+        assert!(chain.entries[1].new_thread);
+        assert!(chain.entries[2].array);
+        assert!(chain.entries[3].always_calculate);
+    }
 
-        // Array formula
-        assert!(chain.entries[1].array);
+    #[test]
+    fn test_parse_calc_chain_transitional_ref_fallback() {
+        let xml = br#"<calcChain><c ref="D5" i="3"/><c r="E6" ref="F7"/></calcChain>"#;
 
-        // Volatile function
-        assert!(chain.entries[2].volatile);
+        let chain = parse_calc_chain(xml);
+        assert_eq!(chain.len(), 2);
+        assert_eq!(chain.entries[0].cell_ref, "D5");
+        assert_eq!(chain.entries[0].sheet_id, 3);
+        assert_eq!(chain.entries[1].cell_ref, "E6");
+    }
 
-        // Shared formula
-        assert!(chain.entries[3].shared);
-        assert_eq!(chain.entries[3].shared_index, Some(0));
+    #[test]
+    fn test_count_calc_chain_entries() {
+        let xml = br#"<calcChain><c r="A1"/><c r="A2"/><c r="A3"/></calcChain>"#;
+        assert_eq!(count_calc_chain_entries(xml), 3);
     }
 
     #[test]
     fn test_parse_calc_chain_array_formula() {
         let xml = br#"<?xml version="1.0"?>
 <calcChain>
-    <c r="A1:A10" i="1" a="1"/>
+    <c r="A1:A10" i="1" t="1"/>
 </calcChain>"#;
 
         let chain = parse_calc_chain(xml);
         assert_eq!(chain.len(), 1);
         assert_eq!(chain.entries[0].cell_ref, "A1:A10");
         assert!(chain.entries[0].array);
-    }
-
-    #[test]
-    fn test_parse_calc_chain_shared_formula() {
-        let xml = br#"<?xml version="1.0"?>
-<calcChain>
-    <c r="A1" i="1" s="1" si="0" m="1"/>
-    <c r="A2" s="1" si="0"/>
-    <c r="A3" s="1" si="0"/>
-</calcChain>"#;
-
-        let chain = parse_calc_chain(xml);
-        assert_eq!(chain.len(), 3);
-
-        // Master cell
-        assert!(chain.entries[0].shared);
-        assert!(chain.entries[0].shared_master);
-        assert_eq!(chain.entries[0].shared_index, Some(0));
-
-        // Dependent cells
-        assert!(chain.entries[1].shared);
-        assert!(!chain.entries[1].shared_master);
-        assert_eq!(chain.entries[1].shared_index, Some(0));
-    }
-
-    #[test]
-    fn test_parse_calc_chain_volatile() {
-        let xml = br#"<?xml version="1.0"?>
-<calcChain>
-    <c r="A1" i="1" t="1"/>
-    <c r="A2" i="1"/>
-</calcChain>"#;
-
-        let chain = parse_calc_chain(xml);
-
-        // A1 has volatile function (e.g., NOW(), RAND())
-        assert!(chain.entries[0].volatile);
-        assert!(chain.entries[0].needs_calc());
-
-        // A2 is not volatile
-        assert!(!chain.entries[1].volatile);
     }
 
     #[test]
@@ -569,12 +417,10 @@ mod tests {
         let entry = &chain.entries[0];
         assert_eq!(entry.cell_ref, "A1");
         assert_eq!(entry.sheet_id, 1);
-        assert!(entry.calculated);
+        assert!(entry.new_dependency_level);
+        assert!(entry.new_thread);
         assert!(entry.array);
-        assert!(entry.shared);
-        assert!(entry.volatile);
-        assert_eq!(entry.shared_index, Some(5));
-        assert!(entry.shared_master);
+        assert!(entry.always_calculate);
     }
 
     #[test]
@@ -583,7 +429,7 @@ mod tests {
 <calcChain>
     <c r="AA100" i="1"/>
     <c r="XFD1048576" i="1"/>
-    <c r="A1:Z100" i="1" a="1"/>
+    <c r="A1:Z100" i="1" t="1"/>
 </calcChain>"#;
 
         let chain = parse_calc_chain(xml);

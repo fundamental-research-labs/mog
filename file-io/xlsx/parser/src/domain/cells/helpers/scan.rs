@@ -16,8 +16,8 @@ pub(crate) struct ScanResult {
     /// True if the element was self-closing (`<c ... />`).
     pub is_self_closing: bool,
     // --- Extras extracted during the scan (avoids re-scanning) ---
-    /// `cm="..."` attribute present on `<c>` tag (cell metadata / dynamic arrays).
-    pub has_cm: bool,
+    /// Effective `cm="N"` attribute value on `<c>` tag (cell metadata index).
+    pub cm_val: Option<u32>,
     /// `vm="N"` attribute value on `<c>` tag (value metadata index).
     pub vm_val: Option<u32>,
     /// `ph="1"` phonetic display flag on `<c>` tag.
@@ -60,7 +60,7 @@ pub(crate) fn scan_cell<'a>(
     let mut col = 0u32;
     let mut style_idx: u16 = 0;
     let mut cell_type: u8 = CELL_TYPE_NUMBER;
-    let mut has_cm = false;
+    let mut cm_val: Option<u32> = None;
     let mut vm_val: Option<u32> = None;
     let mut has_ph = false;
     let mut has_explicit_s = false;
@@ -81,12 +81,12 @@ pub(crate) fn scan_cell<'a>(
             // Self-closing <c ... />
             let end = pos + 2;
 
-            if has_explicit_s && !has_cm && vm_val.is_none() && !has_ph && !has_explicit_t {
+            if has_explicit_s && cm_val.is_none() && vm_val.is_none() && !has_ph && !has_explicit_t {
                 return Some(ScanResult {
                     cell: None,
                     end,
                     is_self_closing: true,
-                    has_cm,
+                    cm_val,
                     vm_val,
                     has_ph,
                     has_explicit_s,
@@ -113,7 +113,7 @@ pub(crate) fn scan_cell<'a>(
                 }),
                 end,
                 is_self_closing: true,
-                has_cm,
+                cm_val,
                 vm_val,
                 has_ph,
                 has_explicit_s,
@@ -201,7 +201,7 @@ pub(crate) fn scan_cell<'a>(
                         let a = xml[attr_name_start];
                         let b2 = xml[attr_name_start + 1];
                         if a == b'c' && b2 == b'm' {
-                            has_cm = true;
+                            cm_val = parse_u32(&xml[val_start..val_end]);
                         } else if a == b'v' && b2 == b'm' {
                             vm_val = parse_u32(&xml[val_start..val_end]);
                         } else if a == b'p' && b2 == b'h' {
@@ -385,7 +385,7 @@ pub(crate) fn scan_cell<'a>(
         cell,
         end: cell_end,
         is_self_closing: false,
-        has_cm,
+        cm_val,
         vm_val,
         has_ph,
         has_explicit_s,
@@ -396,7 +396,7 @@ pub(crate) fn scan_cell<'a>(
 
     if value_type == VALUE_TYPE_NONE
         && has_explicit_s
-        && !has_cm
+        && cm_val.is_none()
         && vm_val.is_none()
         && !has_ph
         && !has_explicit_t
@@ -405,7 +405,7 @@ pub(crate) fn scan_cell<'a>(
             cell: None,
             end: cell_end,
             is_self_closing: false,
-            has_cm,
+            cm_val,
             vm_val,
             has_ph,
             has_explicit_s,

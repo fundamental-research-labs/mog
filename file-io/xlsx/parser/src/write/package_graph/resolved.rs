@@ -43,7 +43,7 @@ impl ResolvedPackageGraph {
 
             validate_known_relationship_owner(rel, &self.parts, &mut errors);
 
-            if rel.target_mode.as_deref() == Some("External") {
+            if is_external_target_mode(rel.target_mode.as_deref()) {
                 continue;
             }
 

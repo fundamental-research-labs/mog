@@ -6,6 +6,9 @@ use super::super::types::{
     Anchor, Drawing, DrawingContent, McAlternateContent, OneCellAnchor, TwoCellAnchor,
 };
 use super::anchors::{parse_absolute_anchor, parse_one_cell_anchor, parse_two_cell_anchor};
+use crate::infra::xml::{
+    MC_SUPPORTED_NAMESPACES, resolve_mc_alternate_content_with_namespace_context,
+};
 
 /// Parse a drawing XML file.
 ///
@@ -23,13 +26,15 @@ pub fn parse_drawing(xml: &[u8]) -> Drawing {
     };
     let root = root_element.full_slice(xml);
 
-    if let Some(anchor) = parse_top_level_anchor(root_element.local_name, root) {
+    if let Some(anchor) = parse_top_level_anchor(root_element.local_name, root, Some(root)) {
         drawing.anchors.push(anchor);
         return drawing;
     }
 
     for child in direct_child_elements(root) {
-        if let Some(anchor) = parse_top_level_anchor(child.local_name, child.full_slice(root)) {
+        if let Some(anchor) =
+            parse_top_level_anchor(child.local_name, child.full_slice(root), Some(root))
+        {
             drawing.anchors.push(anchor);
         }
     }
@@ -37,7 +42,11 @@ pub fn parse_drawing(xml: &[u8]) -> Drawing {
     drawing
 }
 
-fn parse_top_level_anchor(local_name: &[u8], anchor_xml: &[u8]) -> Option<Anchor> {
+fn parse_top_level_anchor(
+    local_name: &[u8],
+    anchor_xml: &[u8],
+    containing_xml: Option<&[u8]>,
+) -> Option<Anchor> {
     match local_name {
         b"twoCellAnchor" => {
             let mut anchor = parse_two_cell_anchor(anchor_xml, 0)?;
@@ -50,41 +59,39 @@ fn parse_top_level_anchor(local_name: &[u8], anchor_xml: &[u8]) -> Option<Anchor
             Some(Anchor::OneCell(anchor))
         }
         b"absoluteAnchor" => parse_absolute_anchor(anchor_xml, 0).map(Anchor::Absolute),
-        b"AlternateContent" => parse_wrapped_anchor(anchor_xml),
+        b"AlternateContent" => parse_wrapped_anchor(anchor_xml, containing_xml),
         _ => None,
     }
 }
 
-fn parse_wrapped_anchor(mc_xml: &[u8]) -> Option<Anchor> {
+fn parse_wrapped_anchor(mc_xml: &[u8], containing_xml: Option<&[u8]>) -> Option<Anchor> {
     let raw_xml = std::str::from_utf8(mc_xml).ok()?.to_string();
+    let branch = resolve_mc_alternate_content_with_namespace_context(
+        mc_xml,
+        containing_xml,
+        MC_SUPPORTED_NAMESPACES,
+    )?;
+    let branch_xml = &mc_xml[branch.start..branch.end];
 
-    for branch in direct_child_elements(mc_xml) {
-        if branch.local_name != b"Choice" {
-            continue;
-        }
-        let branch_xml = branch.full_slice(mc_xml);
-        for child in direct_child_elements(branch_xml) {
-            let anchor_xml = child.full_slice(branch_xml);
-            match child.local_name {
-                b"twoCellAnchor" => {
-                    let mut anchor = parse_two_cell_anchor(anchor_xml, 0)?;
-                    anchor.mc_alternate_content = Some(McAlternateContent {
-                        raw_xml: raw_xml.clone(),
-                    });
-                    return Some(Anchor::TwoCell(anchor));
-                }
-                b"oneCellAnchor" => {
-                    let mut anchor = parse_one_cell_anchor(anchor_xml, 0)?;
-                    anchor.mc_alternate_content = Some(McAlternateContent {
-                        raw_xml: raw_xml.clone(),
-                    });
-                    return Some(Anchor::OneCell(anchor));
-                }
-                b"absoluteAnchor" => {
-                    return parse_absolute_anchor(anchor_xml, 0).map(Anchor::Absolute);
-                }
-                _ => {}
+    for child in direct_child_elements(branch_xml) {
+        let anchor_xml = child.full_slice(branch_xml);
+        match child.local_name {
+            b"twoCellAnchor" => {
+                let mut anchor = parse_two_cell_anchor(anchor_xml, 0)?;
+                anchor.mc_alternate_content = Some(McAlternateContent {
+                    raw_xml: raw_xml.clone(),
+                });
+                return Some(Anchor::TwoCell(anchor));
             }
+            b"oneCellAnchor" => {
+                let mut anchor = parse_one_cell_anchor(anchor_xml, 0)?;
+                anchor.mc_alternate_content = Some(McAlternateContent {
+                    raw_xml: raw_xml.clone(),
+                });
+                return Some(Anchor::OneCell(anchor));
+            }
+            b"absoluteAnchor" => return parse_absolute_anchor(anchor_xml, 0).map(Anchor::Absolute),
+            _ => {}
         }
     }
 

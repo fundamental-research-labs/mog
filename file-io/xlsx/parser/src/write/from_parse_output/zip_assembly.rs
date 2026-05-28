@@ -101,10 +101,16 @@ pub(super) fn write_zip_package(
 
     // Theme
     if let Some(ref theme) = theme_xml {
+        let theme_path = output
+            .theme
+            .as_ref()
+            .and_then(|theme| theme.theme_part_path.as_deref())
+            .unwrap_or("xl/theme/theme1.xml")
+            .trim_start_matches('/');
         add_registered_part(
             package_graph,
             &mut zip,
-            "xl/theme/theme1.xml",
+            theme_path,
             theme.clone(),
         )?;
     }
@@ -123,6 +129,19 @@ pub(super) fn write_zip_package(
             "docProps/custom.xml",
             custom.clone(),
         )?;
+    }
+    if let Some(part) = &output.volatile_dependency_part {
+        add_registered_part(package_graph, &mut zip, &part.path, part.bytes.clone())?;
+        let owner = crate::write::package_graph::PackageOwner::Part {
+            path: part.path.clone(),
+        };
+        let rels = package_graph.relationship_manager_for_owner(&owner);
+        if !rels.is_empty() {
+            zip.add_file(
+                &crate::write::package_graph::part_relationships_path(&part.path),
+                rels.to_xml(),
+            );
+        }
     }
 
     // Metadata passthrough
@@ -512,27 +531,21 @@ pub(super) fn write_zip_package(
         add_registered_part(
             package_graph,
             &mut zip,
-            &format!("xl/pivotCache/pivotCacheDefinition{}.xml", entry.global_idx),
+            &entry.definition_path,
             entry.definition_xml.clone(),
         )?;
-        add_registered_part(
-            package_graph,
-            &mut zip,
-            &format!("xl/pivotCache/pivotCacheRecords{}.xml", entry.global_idx),
-            entry.records_xml.clone(),
-        )?;
+        if let (Some(records_path), Some(records_xml)) = (&entry.records_path, &entry.records_xml) {
+            add_registered_part(package_graph, &mut zip, records_path, records_xml.clone())?;
+        }
         // Pivot cache definition rels (definition → records relationship).
         let cache_rels = package_graph.relationship_manager_for_owner(
             &crate::write::package_graph::PackageOwner::Part {
-                path: format!("xl/pivotCache/pivotCacheDefinition{}.xml", entry.global_idx),
+                path: entry.definition_path.clone(),
             },
         );
         if !cache_rels.is_empty() {
             zip.add_file(
-                &format!(
-                    "xl/pivotCache/_rels/pivotCacheDefinition{}.xml.rels",
-                    entry.global_idx
-                ),
+                &pivot_cache_rels_path(&entry.definition_path),
                 cache_rels.to_xml(),
             );
         }
@@ -690,6 +703,13 @@ pub(super) fn write_zip_package(
         return Err(WriteError::PackageIntegrity(message));
     }
     Ok(xlsx_bytes)
+}
+
+fn pivot_cache_rels_path(definition_path: &str) -> String {
+    let (dir, file_name) = definition_path
+        .rsplit_once('/')
+        .unwrap_or(("xl/pivotCache", definition_path));
+    format!("{dir}/_rels/{file_name}.rels")
 }
 
 fn add_registered_part(

@@ -165,6 +165,12 @@ pub struct SheetView {
     /// Selection(s) in this view.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selections: Vec<Selection>,
+    /// Direct-child `<extLst>` XML owned by this view scope.
+    ///
+    /// This is unsupported extension metadata for passive round-trip only; it
+    /// must not be promoted to root worksheet extensions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 impl Default for SheetView {
@@ -192,6 +198,7 @@ impl Default for SheetView {
             pane: None,
             pivot_selection: Vec::new(),
             selections: Vec::new(),
+            ext_lst_xml: None,
         }
     }
 }

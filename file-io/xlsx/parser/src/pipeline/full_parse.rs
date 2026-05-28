@@ -7,7 +7,10 @@ mod external_links_phase;
 mod helpers;
 mod implementation;
 mod metadata_only;
+mod non_editable_sheets;
+mod theme_discovery;
 mod timing;
+mod workbook_disposition;
 
 pub(crate) use helpers::extract_attr_value;
 

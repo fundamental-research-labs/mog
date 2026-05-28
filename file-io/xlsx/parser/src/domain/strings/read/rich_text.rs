@@ -4,6 +4,7 @@ use super::scanner::{extract_attr_in_region, find_bytes, find_t_content, needs_x
 use crate::zip::constants::MAX_RICH_TEXT_RUNS_PER_STRING;
 use domain_types::RichTextRun as DtRichTextRun;
 use memchr::memmem;
+use ooxml_types::styles::UnderlineStyle;
 
 /// Extract and concatenate all <t> elements from rich text
 fn extract_rich_text_content(xml: &[u8], si_start: usize, si_end: usize, dst: &mut Vec<u8>) {
@@ -120,60 +121,23 @@ fn parse_rpr_into_run(xml: &[u8], rpr_start: usize, rpr_end: usize, run: &mut Dt
     let region = &xml[rpr_start..rpr_end];
 
     // Boolean flags (empty elements like <b/> or <b val="1"/>)
-    if memmem::find(region, b"<b").is_some() {
-        // Check it's <b/> or <b /> or <b val="..."> (not <border> etc.)
-        if let Some(p) = memmem::find(region, b"<b") {
-            let after = p + 2;
-            if after < region.len()
-                && (region[after] == b'/' || region[after] == b'>' || region[after] == b' ')
-            {
-                // Check for val="0" which means NOT bold
-                let is_false = extract_attr_in_region(region, p, b"val")
-                    .map(|v| v == b"0" || v == b"false")
-                    .unwrap_or(false);
-                run.bold = !is_false;
-            }
-        }
+    if let Some(value) = parse_bool_property(region, b"b") {
+        run.bold = value;
     }
-    if memmem::find(region, b"<i").is_some() {
-        if let Some(p) = memmem::find(region, b"<i") {
-            let after = p + 2;
-            if after < region.len()
-                && (region[after] == b'/' || region[after] == b'>' || region[after] == b' ')
-            {
-                let is_false = extract_attr_in_region(region, p, b"val")
-                    .map(|v| v == b"0" || v == b"false")
-                    .unwrap_or(false);
-                run.italic = !is_false;
-            }
-        }
+    if let Some(value) = parse_bool_property(region, b"i") {
+        run.italic = value;
     }
-    if memmem::find(region, b"<u").is_some() {
-        if let Some(p) = memmem::find(region, b"<u") {
-            let after = p + 2;
-            if after < region.len()
-                && (region[after] == b'/' || region[after] == b'>' || region[after] == b' ')
-            {
-                let is_false = extract_attr_in_region(region, p, b"val")
-                    .map(|v| v == b"0" || v == b"none" || v == b"false")
-                    .unwrap_or(false);
-                run.underline = !is_false;
-            }
-        }
+    if let Some(style) = parse_underline_property(region) {
+        run.underline_style = Some(style);
+        run.underline = style != UnderlineStyle::None;
     }
-    if memmem::find(region, b"<strike").is_some() {
-        if let Some(p) = memmem::find(region, b"<strike") {
-            let after = p + 7;
-            if after < region.len()
-                && (region[after] == b'/' || region[after] == b'>' || region[after] == b' ')
-            {
-                let is_false = extract_attr_in_region(region, p, b"val")
-                    .map(|v| v == b"0" || v == b"false")
-                    .unwrap_or(false);
-                run.strikethrough = !is_false;
-            }
-        }
+    if let Some(value) = parse_bool_property(region, b"strike") {
+        run.strikethrough = value;
     }
+    run.outline = parse_bool_property(region, b"outline");
+    run.shadow = parse_bool_property(region, b"shadow");
+    run.condense = parse_bool_property(region, b"condense");
+    run.extend = parse_bool_property(region, b"extend");
 
     // <sz val="10.5"/>
     if let Some(p) = memmem::find(region, b"<sz") {
@@ -264,6 +228,49 @@ fn parse_rpr_into_run(xml: &[u8], rpr_start: usize, rpr_end: usize, run: &mut Dt
             }
         }
     }
+}
+
+fn find_property_tag(region: &[u8], tag: &[u8]) -> Option<usize> {
+    let mut pos = 0;
+    while let Some(rel) = memmem::find(&region[pos..], b"<") {
+        let p = pos + rel;
+        let name_start = p + 1;
+        let name_end = name_start + tag.len();
+        if name_end <= region.len()
+            && &region[name_start..name_end] == tag
+            && name_end < region.len()
+            && matches!(region[name_end], b'/' | b'>' | b' ' | b'\t' | b'\n' | b'\r')
+        {
+            return Some(p);
+        }
+        pos = name_start;
+    }
+    None
+}
+
+fn parse_bool_property(region: &[u8], tag: &[u8]) -> Option<bool> {
+    let p = find_property_tag(region, tag)?;
+    Some(
+        extract_attr_in_region(region, p, b"val")
+            .map(|val| !is_false_token(val))
+            .unwrap_or(true),
+    )
+}
+
+fn is_false_token(value: &[u8]) -> bool {
+    value == b"0" || value.eq_ignore_ascii_case(b"false")
+}
+
+fn parse_underline_property(region: &[u8]) -> Option<UnderlineStyle> {
+    let p = find_property_tag(region, b"u")?;
+    let Some(val) = extract_attr_in_region(region, p, b"val") else {
+        return Some(UnderlineStyle::Single);
+    };
+    if is_false_token(val) {
+        return Some(UnderlineStyle::None);
+    }
+    let token = std::str::from_utf8(val).ok()?;
+    UnderlineStyle::from_ooxml_token(token)
 }
 
 /// Get a string by index from the shared string table

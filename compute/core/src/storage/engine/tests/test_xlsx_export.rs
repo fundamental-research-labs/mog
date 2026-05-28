@@ -47,6 +47,7 @@ fn worksheet_sort_state_parse_output(include_nested_auto_filter_sort: bool) -> P
         columns: Vec::new(),
         sort: Some(nested_auto_filter_sort_state()),
         xr_uid: None,
+        ext_lst_raw: None,
     });
 
     ParseOutput {

@@ -139,11 +139,12 @@ impl DrawingWriter {
             // <a:blip>
             let has_effects = !image.blip_effects.is_empty();
             let has_blip_ext = image.blip_ext_lst.is_some();
-            w.start_element("a:blip").attr("r:embed", &image.r_id);
-            if !self.suppress_unregistered_relationships {
-                if let Some(ref link_id) = image.link_id {
-                    w.attr("r:link", link_id);
-                }
+            w.start_element("a:blip");
+            if !image.r_id.is_empty() {
+                w.attr("r:embed", &image.r_id);
+            }
+            if let Some(ref link_id) = image.link_id {
+                w.attr("r:link", link_id);
             }
             if let Some(ref comp) = image.compression {
                 w.attr("cstate", comp.to_ooxml());

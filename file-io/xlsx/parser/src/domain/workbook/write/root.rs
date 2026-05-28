@@ -11,6 +11,9 @@ pub(super) fn write_workbook(writer: &WorkbookWriter) -> Vec<u8> {
     w.start_element("workbook")
         .attr("xmlns", SPREADSHEET_NS)
         .attr("xmlns:r", RELATIONSHIPS_NS);
+    if let Some(conformance) = workbook_conformance_to_emit(writer) {
+        w.attr("conformance", conformance);
+    }
 
     if let Some(ref ns) = writer.root_namespaces {
         use crate::write::mc_builder::McIgnorableBuilder;
@@ -43,6 +46,9 @@ pub(super) fn write_workbook(writer: &WorkbookWriter) -> Vec<u8> {
     super::metadata::write_file_sharing(&mut w, writer.file_sharing.as_ref());
     super::metadata::write_workbook_properties(&mut w, writer.workbook_properties.as_ref());
     super::views::write_book_views(&mut w, &writer.workbook_views);
+    if let Some(xml) = writer.custom_workbook_views_xml.as_ref() {
+        w.raw_str(&String::from_utf8_lossy(xml));
+    }
     super::sheets::write_sheets(&mut w, &writer.sheets);
 
     if let Some(ref prot) = writer.workbook_protection {
@@ -72,4 +78,33 @@ pub(super) fn write_workbook(writer: &WorkbookWriter) -> Vec<u8> {
     w.end_element("workbook");
 
     w.finish()
+}
+
+fn workbook_conformance_to_emit(writer: &WorkbookWriter) -> Option<&str> {
+    let conformance = writer.conformance.as_deref()?;
+    if conformance.eq_ignore_ascii_case("strict") && has_transitional_only_workbook_markup(writer) {
+        return None;
+    }
+    Some(conformance)
+}
+
+fn has_transitional_only_workbook_markup(writer: &WorkbookWriter) -> bool {
+    writer
+        .file_sharing
+        .as_ref()
+        .and_then(|sharing| sharing.reservation_password.as_ref())
+        .is_some()
+        || writer
+            .web_publishing
+            .as_ref()
+            .map(|web| web.code_page.is_some() || web.character_set.is_some())
+            .unwrap_or(false)
+        || writer
+            .workbook_protection
+            .as_ref()
+            .map(|protection| {
+                protection.workbook_password_character_set.is_some()
+                    || protection.revisions_password_character_set.is_some()
+            })
+            .unwrap_or(false)
 }

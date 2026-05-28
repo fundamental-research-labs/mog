@@ -15,6 +15,9 @@ use crate::write::write_error::WriteError;
 pub struct ModeledWorkbookGraphOptions {
     pub sheet_count: usize,
     pub has_theme: bool,
+    pub theme_part_path: Option<String>,
+    pub theme_relationship_id_hint: Option<String>,
+    pub theme_relationship_type: Option<String>,
     pub has_shared_strings: bool,
     pub has_core_props: bool,
     pub has_app_props: bool,
@@ -94,19 +97,36 @@ fn register_modeled_workbook_graph(
     });
 
     if options.has_theme {
-        graph.register_part(modeled_part("xl/theme/theme1.xml", CT_THEME))?;
+        let theme_part_path = options
+            .theme_part_path
+            .as_deref()
+            .map(normalize_part_path)
+            .unwrap_or_else(|| "xl/theme/theme1.xml".to_string());
+        let theme_relationship_type = options
+            .theme_relationship_type
+            .as_deref()
+            .filter(|rel_type| crate::infra::opc::is_theme_relationship_type(rel_type))
+            .unwrap_or(REL_THEME);
+        graph.register_part(modeled_part(&theme_part_path, CT_THEME))?;
+        let identity_hint = options
+            .theme_relationship_id_hint
+            .as_ref()
+            .map(RelationshipIdentityHint::new)
+            .or_else(|| {
+                imported_relationship_identity_hint(
+                    options.package_fidelity.as_ref(),
+                    &PackageOwner::Workbook,
+                    REL_THEME,
+                    &theme_part_path,
+                )
+            });
         graph.add_relationship(PackageRelationship {
             owner: PackageOwner::Workbook,
-            relationship_type: REL_THEME.to_string(),
+            relationship_type: theme_relationship_type.to_string(),
             target: PackageRelationshipTarget::InternalPart {
-                path: "xl/theme/theme1.xml".to_string(),
+                path: theme_part_path.clone(),
             },
-            identity_hint: imported_relationship_identity_hint(
-                options.package_fidelity.as_ref(),
-                &PackageOwner::Workbook,
-                REL_THEME,
-                "xl/theme/theme1.xml",
-            ),
+            identity_hint,
         });
     }
 

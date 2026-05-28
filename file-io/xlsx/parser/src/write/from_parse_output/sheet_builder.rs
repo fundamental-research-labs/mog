@@ -33,6 +33,12 @@ pub(super) fn build_sheet(
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
 
+    if let Some(dimension_ref) = &sheet_data.worksheet_dimension_ref {
+        writer.set_dimension_ref(dimension_ref.clone());
+    }
+    if let Some(sheet_calc_pr) = &sheet_data.sheet_calc_pr {
+        writer.set_sheet_calc_pr(sheet_calc_pr.clone());
+    }
     apply_sheet_properties(&mut writer, sheet_data);
     apply_sheet_format(&mut writer, sheet_data);
     sheet_columns::apply_columns(&mut writer, sheet_data, style_remapper);

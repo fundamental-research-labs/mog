@@ -268,6 +268,7 @@ fn test_parsed_table_serialization() {
         totals_row_cell_style: None,
         auto_filter_ref: None,
         auto_filter_xr_uid: None,
+        auto_filter_ext_lst_raw: None,
         table_type: None,
         totals_row_shown: None,
         connection_id: None,

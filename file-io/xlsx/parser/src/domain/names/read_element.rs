@@ -42,6 +42,8 @@ impl DefinedName {
         let function = parse_bool_attr(tag_bytes, b"function=\"");
         let vb_procedure = parse_bool_attr(tag_bytes, b"vbProcedure=\"");
         let xlm = parse_bool_attr(tag_bytes, b"xlm=\"");
+        let function_group_id = parse_u32_attr(tag_bytes, b"functionGroupId=\"");
+        let shortcut_key = parse_optional_string_attr(tag_bytes, b"shortcutKey=\"");
         let publish_to_server = parse_bool_attr(tag_bytes, b"publishToServer=\"");
         let workbook_parameter = parse_bool_attr(tag_bytes, b"workbookParameter=\"");
 
@@ -66,6 +68,8 @@ impl DefinedName {
             function,
             vb_procedure,
             xlm,
+            function_group_id,
+            shortcut_key,
             publish_to_server,
             workbook_parameter,
             xml_space_preserve,

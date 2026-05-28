@@ -53,7 +53,7 @@ impl McIgnorableBuilder {
     /// Duplicates are ignored. Insertion order is preserved for round-trip fidelity.
     pub fn add(&mut self, prefix: &str) {
         // Don't add core namespaces that shouldn't be in mc:Ignorable
-        if !matches!(prefix, "r" | "mc" | "" | "xmlns") {
+        if is_ignorable_prefix_token(prefix) {
             let s = prefix.to_string();
             if !self.prefixes.contains(&s) {
                 self.prefixes.push(s);
@@ -61,11 +61,32 @@ impl McIgnorableBuilder {
         }
     }
 
+    /// Add preserved `mc:Ignorable` tokens from the imported root.
+    ///
+    /// Preserved tokens are not filtered through the generated-prefix whitelist;
+    /// they only need to remain structurally valid and, when a namespace map is
+    /// available, still declared on the root being emitted.
+    pub fn add_preserved_ignorable(&mut self, ignorable: &str, ns: Option<&NamespaceMap>) {
+        for prefix in ignorable.split_whitespace() {
+            if is_ignorable_prefix_token(prefix)
+                && ns.map_or(true, |namespaces| namespaces.has_prefix(prefix))
+            {
+                self.add(prefix);
+            }
+        }
+    }
+
     /// Add all extension prefixes from a `NamespaceMap`.
     ///
-    /// Only adds prefixes that are commonly found in `mc:Ignorable` declarations
-    /// (i.e., extension namespaces, not core SpreadsheetML or relationships).
+    /// Preserved `mc:Ignorable` tokens are authoritative. The well-known
+    /// prefix whitelist is used only for legacy namespace-only callers that did
+    /// not carry the source MCE attribute.
     pub fn add_from_namespace_map(&mut self, ns: &NamespaceMap) {
+        if let Some(ref ignorable) = ns.mce_attributes().ignorable {
+            self.add_preserved_ignorable(ignorable, Some(ns));
+            return;
+        }
+
         for decl in ns.all() {
             if let Some(ref prefix) = decl.prefix {
                 // Add if it's a known mc:Ignorable prefix
@@ -104,6 +125,19 @@ impl McIgnorableBuilder {
     pub fn prefixes(&self) -> Vec<&str> {
         self.prefixes.iter().map(|s| s.as_str()).collect()
     }
+}
+
+fn is_ignorable_prefix_token(prefix: &str) -> bool {
+    if matches!(prefix, "r" | "mc" | "" | "xmlns") {
+        return false;
+    }
+
+    let mut chars = prefix.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch == '-' || ch == '.' || ch.is_ascii_alphanumeric())
 }
 
 // ============================================================================

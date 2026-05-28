@@ -35,6 +35,7 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
                 note_height: None,
                 note_width: None,
                 note_shape_anchor: None,
+                comment_pr: c.comment_pr.clone(),
             }
         })
         .collect();

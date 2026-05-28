@@ -10,7 +10,13 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
         let tag_end = find_gt_simd(xml, tag_start)
             .map(|p| p + 1)
             .unwrap_or(xml.len());
+        let elem_end = if tag_end >= 2 && xml[tag_end - 2] == b'/' {
+            tag_end
+        } else {
+            find_workbook_view_close(xml, tag_end).unwrap_or(tag_end)
+        };
         let elem = &xml[tag_start..tag_end];
+        let full_elem = &xml[tag_start..elem_end];
 
         let parse_i32 = |attr: &[u8]| -> Option<i32> {
             find_attr_simd(elem, attr, 0).and_then(|p| {
@@ -35,8 +41,23 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
                 })
                 .unwrap_or(default)
         };
+        let parse_string = |attr: &[u8]| -> Option<String> {
+            find_attr_simd(elem, attr, 0).and_then(|p| {
+                let vs = p + attr.len();
+                extract_quoted_value(elem, vs).and_then(|(s, e)| {
+                    std::str::from_utf8(&elem[s..e])
+                        .ok()
+                        .map(ToOwned::to_owned)
+                })
+            })
+        };
 
         let mut view = WorkbookView::default();
+        view.visibility = parse_string(b"visibility=\"")
+            .as_deref()
+            .map(|value| ooxml_types::workbook::Visibility::from_bytes(value.as_bytes()))
+            .unwrap_or_default();
+        view.minimized = parse_bool(b"minimized=\"", false);
         view.x_window = parse_i32(b"xWindow=\"");
         view.y_window = parse_i32(b"yWindow=\"");
         view.window_width = parse_u32(b"windowWidth=\"");
@@ -57,12 +78,41 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
                 .and_then(|(s, e)| std::str::from_utf8(&elem[s..e]).ok().map(|s| s.to_string()))
         });
         view.auto_filter_date_grouping = parse_bool(b"autoFilterDateGrouping=\"", true);
+        view.ext_lst = extract_direct_ext_lst(full_elem).map(|raw_xml| ooxml_types::ExtensionList {
+            raw_xml: Some(raw_xml),
+        });
 
         views.push(view);
-        offset = tag_end;
+        offset = elem_end;
     }
 
     views
+}
+
+fn find_workbook_view_close(xml: &[u8], start: usize) -> Option<usize> {
+    let close = b"</workbookView>";
+    memchr::memmem::find(&xml[start..], close).map(|pos| start + pos + close.len())
+}
+
+fn extract_direct_ext_lst(xml: &[u8]) -> Option<String> {
+    let open_end = find_gt_simd(xml, 0)? + 1;
+    let close_start = xml.len().saturating_sub(b"</workbookView>".len());
+    if close_start <= open_end {
+        return None;
+    }
+    let body = &xml[open_end..close_start];
+    let ext_start_rel = find_tag_simd(body, b"extLst", 0)?;
+    let ext_start = open_end + ext_start_rel;
+    let ext_open_end = find_gt_simd(xml, ext_start)? + 1;
+    let ext_end = if ext_open_end >= 2 && xml[ext_open_end - 2] == b'/' {
+        ext_open_end
+    } else {
+        memchr::memmem::find(&xml[ext_open_end..close_start], b"</extLst>")
+            .map(|pos| ext_open_end + pos + b"</extLst>".len())?
+    };
+    std::str::from_utf8(&xml[ext_start..ext_end])
+        .ok()
+        .map(ToOwned::to_owned)
 }
 
 #[cfg(test)]
@@ -94,5 +144,20 @@ mod tests {
         assert!(views[1].show_horizontal_scroll);
         assert!(views[1].show_vertical_scroll);
         assert!(views[1].auto_filter_date_grouping);
+    }
+
+    #[test]
+    fn parses_visibility_minimized_and_child_ext_lst() {
+        let xml = br#"<workbook><bookViews>
+  <workbookView visibility="hidden" minimized="1"><extLst><ext uri="{u}"/></extLst></workbookView>
+</bookViews></workbook>"#;
+
+        let views = parse_workbook_views(xml);
+        assert_eq!(views[0].visibility, ooxml_types::workbook::Visibility::Hidden);
+        assert!(views[0].minimized);
+        assert_eq!(
+            views[0].ext_lst.as_ref().and_then(|ext| ext.raw_xml.as_deref()),
+            Some("<extLst><ext uri=\"{u}\"/></extLst>")
+        );
     }
 }

@@ -50,6 +50,8 @@ pub struct TableWriter {
     pub totals_row_shown: Option<bool>,
     /// Connection ID for external data sources.
     pub connection_id: Option<u32>,
+    /// Table comment attribute.
+    pub comment: Option<String>,
     /// Whether to insert a blank row below table.
     pub insert_row: bool,
     /// Whether insert row shifts existing rows.
@@ -59,6 +61,8 @@ pub struct TableWriter {
     /// Extension UID for revision tracking (xr:uid).
     /// When present, triggers mc:Ignorable="xr xr3" and xmlns:xr/xr3 declarations.
     pub xr_uid: Option<String>,
+    /// Whether to suppress Transitional-only attributes.
+    pub strict_ooxml: bool,
 }
 
 impl TableWriter {
@@ -93,10 +97,12 @@ impl TableWriter {
             table_type: None,
             totals_row_shown: None,
             connection_id: None,
+            comment: None,
             insert_row: false,
             insert_row_shift: false,
             published: false,
             xr_uid: None,
+            strict_ooxml: false,
         }
     }
 
@@ -234,6 +240,9 @@ impl TableWriter {
         if let Some(conn_id) = self.connection_id {
             w.attr_num("connectionId", conn_id);
         }
+        if let Some(ref comment) = self.comment {
+            w.attr_xstring("comment", comment);
+        }
         if let Some(dxf) = self.header_row_dxf_id {
             w.attr_num("headerRowDxfId", dxf);
         }
@@ -264,7 +273,7 @@ impl TableWriter {
         w.end_attrs();
 
         if let Some(ref af) = self.auto_filter {
-            af.write_xml(&mut w);
+            af.write_xml_with_strict(&mut w, self.strict_ooxml);
         }
 
         if let Some(ref ss) = self.sort_state {

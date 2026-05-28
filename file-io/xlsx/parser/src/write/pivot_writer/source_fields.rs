@@ -36,6 +36,7 @@ pub(super) fn derive_missing_fields<'a>(
             Cow::Owned(ParsedPivotTable {
                 config,
                 initial_expansion_state: pt.initial_expansion_state.clone(),
+                ooxml_preservation: pt.ooxml_preservation.clone(),
             })
         })
         .collect()

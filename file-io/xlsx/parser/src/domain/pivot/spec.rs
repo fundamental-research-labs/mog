@@ -1,7 +1,9 @@
 //! OOXML conversion boundary for pivot parser models.
 
 use crate::domain::pivot::model::{CacheField, CacheRecordValue, CacheSourceType, SharedItem};
-use crate::domain::pivot::parse::{parse_pivot_cache_definition, parse_pivot_cache_records};
+use crate::domain::pivot::parse::{
+    parse_pivot_cache_definition, parse_pivot_cache_records_with_metadata,
+};
 
 pub(crate) fn pivot_cache_to_ooxml(xml: &[u8]) -> ooxml_types::pivot::PivotCacheDefinition {
     let parsed = parse_pivot_cache_definition(xml);
@@ -133,9 +135,10 @@ pub(crate) fn convert_shared_items_to_ooxml(
 }
 
 pub(crate) fn pivot_cache_records_to_ooxml(xml: &[u8]) -> ooxml_types::pivot::PivotCacheRecords {
-    let parsed = parse_pivot_cache_records(xml);
-    let count = parsed.len() as u32;
+    let parsed = parse_pivot_cache_records_with_metadata(xml);
+    let count = parsed.count.unwrap_or(parsed.records.len() as u32);
     let records = parsed
+        .records
         .into_iter()
         .map(|rec| ooxml_types::pivot::cache::PivotRecord {
             values: rec

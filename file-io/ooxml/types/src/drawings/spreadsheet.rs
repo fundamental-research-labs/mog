@@ -2,7 +2,9 @@
 //!
 //! These types model the `xdr:wsDr` element tree for drawing objects embedded in
 //! spreadsheet worksheets. Extension lists (`extLst`) are intentionally omitted;
-//! they will be preserved as opaque XML during roundtrip.
+//! parser/writer code owns any raw preservation and relationship validation.
+//! Unsupported object choices may be preserved opaquely only when the owning
+//! anchor/group and drawing relationships remain valid.
 
 use super::{
     BlipFill, CellAnchor, ClientData, Connection, DrawingLocking, EditAs, Extent, GroupLocking,

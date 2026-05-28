@@ -130,6 +130,7 @@ pub fn full_parse_result_to_parse_output(
             &theme_colors,
             &media_data_urls,
             &binary_parts,
+            result.metadata.as_ref(),
         );
         if let Some(extensions) = result.extensions.as_ref()
             && let Some(namespaces) = extensions.sheet_namespaces.get(sheet_idx)
@@ -212,6 +213,16 @@ pub fn full_parse_result_to_parse_output(
             .get_or_insert_with(domain_types::WorkbookMetadata::default)
             .rich_data = Some(rich_data);
     }
+    if let Some(raw_metadata_xml) = result.raw_metadata_xml.as_ref() {
+        let metadata_for_import =
+            metadata.get_or_insert_with(domain_types::WorkbookMetadata::default);
+        let imported = imported_metadata_xml(
+            raw_metadata_xml,
+            metadata_for_import,
+            &sheet_data_vec,
+        );
+        metadata_for_import.imported_metadata_xml = Some(imported);
+    }
 
     // 8. Slicer caches (workbook-level) — already ooxml-types, pass through directly
     let slicer_caches = result.slicer_caches.clone();
@@ -240,6 +251,13 @@ pub fn full_parse_result_to_parse_output(
             result.styles_root_namespace_attrs.clone(),
             result.styles_ext_lst_xml.clone(),
         )
+        .with_root_mce_attributes(
+            result
+                .extensions
+                .as_ref()
+                .map(|extensions| extensions.styles_namespaces.mce_attributes().clone())
+                .unwrap_or_default(),
+        )
     });
 
     let mut parse_output = ParseOutput {
@@ -250,6 +268,7 @@ pub fn full_parse_result_to_parse_output(
             .as_ref()
             .map(|extensions| (&extensions.workbook_namespaces).into())
             .unwrap_or_default(),
+        workbook_conformance: result.workbook_conformance.clone(),
         style_palette,
         workbook_stylesheet,
         package_fidelity: build_package_fidelity_metadata(result),
@@ -274,6 +293,7 @@ pub fn full_parse_result_to_parse_output(
             .cloned()
             .map(domain_types::domain::workbook::WorkbookView::from)
             .collect(),
+        custom_workbook_views_xml: result.custom_workbook_views_xml.clone(),
         workbook_properties: result.workbook_properties.clone(),
         file_version: result.file_version.clone(),
         file_sharing: result.file_sharing.clone(),
@@ -281,6 +301,7 @@ pub fn full_parse_result_to_parse_output(
         external_links: result.external_links.clone(),
         connections: result.connections.clone(),
         persons,
+        volatile_dependency_part: result.volatile_dependency_part.clone(),
     };
     let _data_features = parse_output.workbook_data_features();
     populate_dxf_registry_owners(&mut parse_output);

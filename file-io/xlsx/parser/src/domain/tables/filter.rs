@@ -8,6 +8,7 @@
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
+    extract_direct_child_element_xml,
     parse_bool_attr_opt, parse_bytes_attr, parse_f64_attr, parse_string_attr, parse_u32_attr,
 };
 
@@ -86,8 +87,12 @@ impl CustomFilters {
 pub struct Filters {
     /// Whether to include blank values
     pub blank: bool,
+    /// Calendar type for date-grouped filters.
+    pub calendar_type: Option<domain_types::CalendarType>,
     /// List of filter values
     pub values: Vec<String>,
+    /// Date-grouped filter items.
+    pub date_group_items: Vec<domain_types::DateGroupItem>,
 }
 
 impl Filters {
@@ -98,7 +103,10 @@ impl Filters {
 
         let mut filters = Filters {
             blank: parse_bool_attr_opt(tag, b"blank=\"").unwrap_or(false),
+            calendar_type: parse_string_attr(tag, b"calendarType=\"")
+                .and_then(|s| domain_types::CalendarType::from_ooxml_token(&s)),
             values: Vec::new(),
+            date_group_items: Vec::new(),
         };
 
         // Parse child filter elements
@@ -120,7 +128,32 @@ impl Filters {
             pos = filter_end;
         }
 
+        let mut pos = tag_end + 1;
+        while let Some(item_start) = find_tag_simd(xml, b"dateGroupItem", pos) {
+            let item_end = find_gt_simd(xml, item_start)
+                .map(|p| p + 1)
+                .unwrap_or(xml.len());
+            filters
+                .date_group_items
+                .push(parse_date_group_item(&xml[item_start..item_end]));
+            pos = item_end;
+        }
+
         Some(filters)
+    }
+}
+
+fn parse_date_group_item(tag: &[u8]) -> domain_types::DateGroupItem {
+    domain_types::DateGroupItem {
+        year: parse_u32_attr(tag, b"year=\"").unwrap_or(0) as u16,
+        month: parse_u32_attr(tag, b"month=\"").map(|v| v as u16),
+        day: parse_u32_attr(tag, b"day=\"").map(|v| v as u16),
+        hour: parse_u32_attr(tag, b"hour=\"").map(|v| v as u16),
+        minute: parse_u32_attr(tag, b"minute=\"").map(|v| v as u16),
+        second: parse_u32_attr(tag, b"second=\"").map(|v| v as u16),
+        date_time_grouping: parse_string_attr(tag, b"dateTimeGrouping=\"")
+            .and_then(|s| domain_types::DateTimeGrouping::from_ooxml_token(&s))
+            .unwrap_or_default(),
     }
 }
 
@@ -257,6 +290,8 @@ pub struct FilterColumn {
     pub color_filter: Option<ColorFilter>,
     /// Icon filter
     pub icon_filter: Option<IconFilter>,
+    /// Raw direct-child `<extLst>` owned by this filterColumn.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl FilterColumn {
@@ -279,51 +314,33 @@ impl FilterColumn {
         }
 
         // Find the end of the filterColumn element
-        let col_end = find_closing_tag(xml, b"filterColumn", tag_end).unwrap_or(xml.len());
+        let _col_end = find_closing_tag(xml, b"filterColumn", tag_end).unwrap_or(xml.len());
 
-        let content = &xml[tag_end + 1..col_end];
+        col.ext_lst_raw = extract_direct_child_element_xml(xml, b"filterColumn", b"extLst");
 
-        // Parse child elements
-        if let Some(filters_start) = find_tag_simd(content, b"filters", 0) {
-            let filters_end = find_closing_tag(content, b"filters", filters_start)
-                .and_then(|p| find_gt_simd(content, p).map(|g| g + 1))
-                .unwrap_or(content.len());
-            col.filters = Filters::parse(&content[filters_start..filters_end]);
+        // Parse direct child elements only; nested extLst payload is owner metadata.
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"filters") {
+            col.filters = Filters::parse(child.as_bytes());
         }
 
-        if let Some(cf_start) = find_tag_simd(content, b"customFilters", 0) {
-            let cf_end = find_closing_tag(content, b"customFilters", cf_start)
-                .and_then(|p| find_gt_simd(content, p).map(|g| g + 1))
-                .unwrap_or(content.len());
-            col.custom_filters = CustomFilters::parse(&content[cf_start..cf_end]);
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"customFilters") {
+            col.custom_filters = CustomFilters::parse(child.as_bytes());
         }
 
-        if let Some(df_start) = find_tag_simd(content, b"dynamicFilter", 0) {
-            let df_end = find_gt_simd(content, df_start)
-                .map(|p| p + 1)
-                .unwrap_or(content.len());
-            col.dynamic_filter = DynamicFilter::parse(&content[df_start..df_end]);
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"dynamicFilter") {
+            col.dynamic_filter = DynamicFilter::parse(child.as_bytes());
         }
 
-        if let Some(t10_start) = find_tag_simd(content, b"top10", 0) {
-            let t10_end = find_gt_simd(content, t10_start)
-                .map(|p| p + 1)
-                .unwrap_or(content.len());
-            col.top10 = Top10Filter::parse(&content[t10_start..t10_end]);
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"top10") {
+            col.top10 = Top10Filter::parse(child.as_bytes());
         }
 
-        if let Some(cf_start) = find_tag_simd(content, b"colorFilter", 0) {
-            let cf_end = find_gt_simd(content, cf_start)
-                .map(|p| p + 1)
-                .unwrap_or(content.len());
-            col.color_filter = ColorFilter::parse(&content[cf_start..cf_end]);
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"colorFilter") {
+            col.color_filter = ColorFilter::parse(child.as_bytes());
         }
 
-        if let Some(if_start) = find_tag_simd(content, b"iconFilter", 0) {
-            let if_end = find_gt_simd(content, if_start)
-                .map(|p| p + 1)
-                .unwrap_or(content.len());
-            col.icon_filter = IconFilter::parse(&content[if_start..if_end]);
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"iconFilter") {
+            col.icon_filter = IconFilter::parse(child.as_bytes());
         }
 
         Some(col)
@@ -345,6 +362,8 @@ pub struct AutoFilter {
     pub sort_state: Option<SortState>,
     /// Extension UID for revision tracking (xr:uid)
     pub xr_uid: Option<String>,
+    /// Raw direct-child `<extLst>` owned by this autoFilter.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl AutoFilter {
@@ -359,6 +378,7 @@ impl AutoFilter {
             filter_columns: Vec::new(),
             sort_state: None,
             xr_uid: parse_string_attr(af_tag, b"xr:uid=\""),
+            ext_lst_raw: None,
         };
 
         // Check for self-closing tag
@@ -369,6 +389,9 @@ impl AutoFilter {
         // Find the end of autoFilter element
         let af_end = find_closing_tag(xml, b"autoFilter", af_tag_end).unwrap_or(xml.len());
         let content = &xml[af_tag_end + 1..af_end];
+        let full_end = find_gt_simd(xml, af_end).map(|p| p + 1).unwrap_or(xml.len());
+        auto_filter.ext_lst_raw =
+            extract_direct_child_element_xml(&xml[af_start..full_end], b"autoFilter", b"extLst");
 
         // Parse filterColumn elements
         let mut pos = 0;
@@ -384,12 +407,11 @@ impl AutoFilter {
             pos = fc_end;
         }
 
-        // Parse sortState
-        if let Some(ss_start) = find_tag_simd(content, b"sortState", 0) {
-            let ss_end = find_closing_tag(content, b"sortState", ss_start)
-                .and_then(|p| find_gt_simd(content, p).map(|g| g + 1))
-                .unwrap_or(content.len());
-            auto_filter.sort_state = SortState::parse(&content[ss_start..ss_end]);
+        // Parse direct child sortState.
+        if let Some(sort_xml) =
+            extract_direct_child_element_xml(&xml[af_start..full_end], b"autoFilter", b"sortState")
+        {
+            auto_filter.sort_state = SortState::parse(sort_xml.as_bytes());
         }
 
         Some(auto_filter)

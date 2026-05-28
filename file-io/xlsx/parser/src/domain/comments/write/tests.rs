@@ -530,7 +530,7 @@ fn test_dispatch_note_writes_only_to_legacy_xml() {
     };
 
     // Legacy comments XML must contain the note's author (not "tc=...").
-    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[note.clone()], None, None);
+    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[note.clone()], None, None, None);
     let legacy_str = String::from_utf8(legacy_xml).expect("utf8");
     assert!(
         legacy_str.contains("<author>Alice</author>"),
@@ -565,7 +565,7 @@ fn test_note_with_tc_author_and_stale_thread_id_stays_legacy_only() {
         ..Default::default()
     };
 
-    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[note.clone()], None, None);
+    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[note.clone()], None, None, None);
     let legacy_str = String::from_utf8(legacy_xml).expect("utf8");
 
     assert!(legacy_str.contains("<author>tc={LITERAL-AUTHOR}</author>"));
@@ -594,7 +594,7 @@ fn test_dispatch_threaded_writes_to_both() {
         ..Default::default()
     };
 
-    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[thread.clone()], None, None);
+    let (legacy_xml, _vml_xml) = comments_from_domain(1, &[thread.clone()], None, None, None);
     let legacy_str = String::from_utf8(legacy_xml).expect("utf8");
     assert!(
         legacy_str.contains("tc=thread-001"),

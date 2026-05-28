@@ -73,13 +73,166 @@ pub(super) fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec
     chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
 }
 
+pub(super) fn chart_ex_allows_opaque_replay(
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+) -> bool {
+    if !chart_spec.is_chart_ex {
+        return false;
+    }
+    if !matches!(
+        chart_spec.definition,
+        Some(domain_types::ChartDefinition::ChartEx(_))
+    ) {
+        return false;
+    }
+    let Some(replay) = chart_spec.chart_ex_replay.as_ref() else {
+        return false;
+    };
+    if replay.original_xml.is_empty() || replay.original_path.trim_start_matches('/') != chart_path {
+        return false;
+    }
+    if !chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path) {
+        return false;
+    }
+    if !chart_ex_title_matches_import(chart_spec) {
+        return false;
+    }
+    if !chart_ex_relationships_are_policy_allowed(chart_spec, chart_path) {
+        return false;
+    }
+    !has_modeled_chart_space_state_except_imported_title(chart_spec)
+}
+
+pub(super) fn chart_ex_original_number(chart_spec: &domain_types::ChartSpec) -> Option<usize> {
+    let replay = chart_spec.chart_ex_replay.as_ref()?;
+    original_chart_number(&replay.original_path, "chartEx")
+}
+
+pub(super) fn chart_ex_allows_raw_anchor_replay(
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+    relationship_id: &str,
+) -> bool {
+    chart_ex_allows_opaque_replay(chart_spec, chart_path)
+        && chart_spec
+            .chart_ex_replay
+            .as_ref()
+            .is_some_and(|replay| replay.original_position == chart_spec.position)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .is_some_and(|frame| chart_frame_props_match_spec(chart_spec, frame))
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|frame| frame.relationship_id.as_deref())
+            == Some(relationship_id)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|frame| frame.raw_alternate_content.as_deref())
+            .is_some()
+}
+
+fn chart_frame_props_match_spec(
+    chart_spec: &domain_types::ChartSpec,
+    frame: &domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps,
+) -> bool {
+    let gf = &frame.graphic_frame;
+    let nv = &gf.nv_graphic_frame_pr;
+    let cnv = &nv.c_nv_pr;
+    let name = (!cnv.name.is_empty()).then(|| cnv.name.clone());
+    let id = (cnv.id.value() != 0).then_some(cnv.id.value());
+    chart_spec.cnv_pr_name == name
+        && chart_spec.cnv_pr_id == id
+        && chart_spec.cnv_pr_descr.as_ref() == cnv.descr.as_ref()
+        && chart_spec.cnv_pr_title.as_ref() == cnv.title.as_ref()
+        && chart_spec.cnv_pr_hidden == cnv.hidden
+        && chart_spec.anchor_edit_as.as_ref() == frame.edit_as.as_ref()
+        && chart_spec.macro_name.as_ref() == gf.macro_name.as_ref()
+        && chart_spec.client_data_locks_with_sheet == frame.client_data_locks_with_sheet
+        && chart_spec.client_data_prints_with_sheet == frame.client_data_prints_with_sheet
+}
+
+fn has_modeled_chart_space_state_except_imported_title(
+    chart_spec: &domain_types::ChartSpec,
+) -> bool {
+    let mut clone = chart_spec.clone();
+    if chart_ex_title_matches_import(chart_spec) {
+        clone.title = None;
+    }
+    has_modeled_chart_space_state(&clone)
+}
+
+fn chart_ex_title_matches_import(chart_spec: &domain_types::ChartSpec) -> bool {
+    let Some(domain_types::ChartDefinition::ChartEx(chart_space)) = chart_spec.definition.as_ref()
+    else {
+        return false;
+    };
+    let imported_title = chart_space
+        .chart
+        .title
+        .as_ref()
+        .and_then(|title| title.tx.as_ref())
+        .and_then(|tx| tx.tx_data.as_ref())
+        .and_then(|tx_data| tx_data.value.as_deref());
+    chart_spec.title.as_deref() == imported_title
+}
+
+fn chart_ex_relationships_are_policy_allowed(
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+) -> bool {
+    let relationships = chart_spec
+        .chart_ex_replay
+        .as_ref()
+        .map(|replay| replay.relationships.as_slice())
+        .unwrap_or(chart_spec.chart_relationships.as_slice());
+    let auxiliary_files = chart_spec
+        .chart_ex_replay
+        .as_ref()
+        .map(|replay| replay.auxiliary_files.as_slice())
+        .unwrap_or(chart_spec.chart_auxiliary_files.as_slice());
+
+    relationships.iter().all(|rel| {
+        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref()) {
+            return false;
+        }
+        let (Some(rel_type), Some(target)) =
+            (rel.relationship_type.as_deref(), rel.target.as_deref())
+        else {
+            return false;
+        };
+        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
+            Some(chart_path),
+            target,
+        )
+        .ok()
+        .map(|path| path.trim_start_matches('/').to_string())
+        else {
+            return false;
+        };
+        chart_auxiliary::is_supported_auxiliary_relationship(rel_type, &target_path)
+            && auxiliary_files
+                .iter()
+                .any(|(path, _)| path.trim_start_matches('/') == target_path)
+    })
+}
+
+fn original_chart_number(path: &str, prefix: &str) -> Option<usize> {
+    let fname = path.rsplit('/').next()?;
+    let num_str = fname.strip_prefix(prefix)?.strip_suffix(".xml")?;
+    num_str.parse::<usize>().ok()
+}
+
 pub(super) fn register_chart_owned_external_relationships(
     package_graph_builder: &mut crate::write::package_graph::PackageGraphBuilder,
     chart_path: &str,
     chart_spec: &domain_types::ChartSpec,
 ) -> Result<(), WriteError> {
     if let Some((_, rel)) = chart_auxiliary::chart_external_data_relationship(chart_spec) {
-        if rel.target_mode.as_deref() == Some("External")
+        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
             && let (Some(rel_type), Some(target)) =
                 (rel.relationship_type.as_deref(), rel.target.as_deref())
         {

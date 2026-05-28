@@ -3,7 +3,7 @@ use super::types::SheetFormatPrParsed;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use ooxml_types::styles::ColorDef;
-use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetProperties};
+use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetCalcPr, SheetProperties};
 
 /// Parse `<sheetPr><outlinePr .../></sheetPr>` from worksheet XML.
 pub fn parse_outline_properties(xml: &[u8]) -> Option<OutlineProperties> {
@@ -97,12 +97,35 @@ fn parse_sheet_pr_color(xml: &[u8], tag: &[u8]) -> Option<ColorDef> {
 
 /// Parse the `<dimension ref="..."/>` element from the pre-sheetData region.
 pub fn parse_dimension_ref(xml: &[u8]) -> Option<(u32, u32, u32, u32)> {
+    parse_dimension_ref_with_text(xml)?.parsed_range
+}
+
+/// Imported worksheet dimension with lexical `ref` preservation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SheetDimensionImport {
+    pub ref_range: String,
+    pub parsed_range: Option<(u32, u32, u32, u32)>,
+}
+
+/// Parse the `<dimension ref="..."/>` element and preserve its exact `ref` text.
+pub fn parse_dimension_ref_with_text(xml: &[u8]) -> Option<SheetDimensionImport> {
     let elem = element_slice(xml, b"dimension", 0)?;
     let attr_pos = find_attr_simd(elem, b"ref=\"", 0)?;
     let value_start = attr_pos + b"ref=\"".len();
     let (s, e) = extract_quoted_value(elem, value_start)?;
     let ref_str = std::str::from_utf8(&elem[s..e]).ok()?;
-    crate::infra::a1::parse_a1_range(ref_str)
+    Some(SheetDimensionImport {
+        ref_range: ref_str.to_owned(),
+        parsed_range: crate::infra::a1::parse_a1_range(ref_str),
+    })
+}
+
+/// Parse typed worksheet calculation properties from `<sheetCalcPr>`.
+pub fn parse_sheet_calc_pr(xml: &[u8]) -> Option<SheetCalcPr> {
+    let elem = element_slice(xml, b"sheetCalcPr", 0)?;
+    Some(SheetCalcPr {
+        full_calc_on_load: parse_bool_attr_opt(elem, b"fullCalcOnLoad=\"").unwrap_or(false),
+    })
 }
 
 pub fn parse_sheet_format_pr(xml: &[u8]) -> SheetFormatPrParsed {

@@ -129,6 +129,7 @@ pub(super) fn convert_chart_to_chart_spec(
         chart_relationships: Vec::new(),
         chart_auxiliary_files: Vec::new(),
         chart_auxiliary_parts: Vec::new(),
+        chart_ex_replay: None,
         is_chart_ex: false,
         cnv_pr_name: anchor.cnv_pr_name.clone(),
         cnv_pr_id: anchor.cnv_pr_id,

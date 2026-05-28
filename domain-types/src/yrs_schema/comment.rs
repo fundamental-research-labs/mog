@@ -32,6 +32,7 @@ pub const KEY_VISIBLE: &str = "visible";
 pub const KEY_NOTE_HEIGHT: &str = "noteHeight";
 pub const KEY_NOTE_WIDTH: &str = "noteWidth";
 pub const KEY_NOTE_SHAPE_ANCHOR: &str = "noteShapeAnchor";
+pub const KEY_COMMENT_PR: &str = "commentPr";
 
 /// Convert a [`Comment`] to Yrs prelim entries.
 ///
@@ -125,6 +126,11 @@ pub fn to_yrs_prelim(comment: &Comment) -> Vec<(&str, Any)> {
     {
         entries.push((KEY_NOTE_SHAPE_ANCHOR, Any::String(Arc::from(json))));
     }
+    if let Some(ref comment_pr) = comment.comment_pr
+        && let Ok(json) = serde_json::to_string(comment_pr)
+    {
+        entries.push((KEY_COMMENT_PR, Any::String(Arc::from(json))));
+    }
     entries
 }
 
@@ -172,6 +178,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Comment> {
         note_height: read_number(map, txn, KEY_NOTE_HEIGHT),
         note_width: read_number(map, txn, KEY_NOTE_WIDTH),
         note_shape_anchor: read_string(map, txn, KEY_NOTE_SHAPE_ANCHOR)
+            .and_then(|s| serde_json::from_str(&s).ok()),
+        comment_pr: read_string(map, txn, KEY_COMMENT_PR)
             .and_then(|s| serde_json::from_str(&s).ok()),
     })
 }

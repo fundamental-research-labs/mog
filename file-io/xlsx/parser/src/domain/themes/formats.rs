@@ -4,11 +4,12 @@
 //! canonical `ooxml_types` types, providing full OOXML fidelity for round-trip.
 
 use ooxml_types::drawings::{
-    ColorTransform, CompoundLine, DashStyle, DrawingColor, DrawingFill, Emu, GradientFill,
-    GradientPathType, GradientStop, LineCap, LineDash, LineEndProperties, LineEndSize, LineEndType,
-    LineFill, LineJoin, Outline, PatternFill, PenAlignment, PresetColorVal, PresetPatternVal,
-    RelativeRect, SchemeColor, SolidFill, StAngle, StPercentage, StPositiveFixedPercentageDecimal,
-    SystemColorVal, TileFlipMode,
+    BlipFill, ColorTransform, CompoundLine, CompressionState, DashStyle, DrawingColor,
+    DrawingFill, Emu, FillMode, GradientFill, GradientPathType, GradientStop, LineCap, LineDash,
+    LineEndProperties, LineEndSize, LineEndType, LineFill, LineJoin, Outline, PatternFill,
+    PenAlignment, PresetColorVal, PresetPatternVal, RelativeRect, SchemeColor, SolidFill,
+    SourceRect, StAngle, StPercentage, StPositiveFixedPercentageDecimal, SystemColorVal,
+    TileFlipMode,
 };
 
 use crate::infra::scanner::{
@@ -254,10 +255,17 @@ fn parse_fill_list_children(xml: &[u8]) -> Vec<DrawingFill> {
     let mut pos = 0;
 
     while pos < xml.len() {
-        // Find the next fill element (solidFill, gradFill, noFill, pattFill)
+        // Find the next fill element in EG_FillProperties order.
         let mut earliest: Option<(usize, &str)> = None;
 
-        for tag in &["solidFill", "gradFill", "noFill", "pattFill"] {
+        for tag in &[
+            "solidFill",
+            "gradFill",
+            "noFill",
+            "pattFill",
+            "blipFill",
+            "grpFill",
+        ] {
             if let Some(start) = find_tag_simd(xml, tag.as_bytes(), pos) {
                 if earliest.is_none() || start < earliest.unwrap().0 {
                     earliest = Some((start, tag));
@@ -290,11 +298,65 @@ fn parse_fill_list_children(xml: &[u8]) -> Vec<DrawingFill> {
                 fills.push(DrawingFill::Pattern(parse_pattern_fill(fill_xml)));
                 pos = end;
             }
+            Some((start, "blipFill")) => {
+                let end = find_closing_tag(xml, b"blipFill", start).unwrap_or(xml.len());
+                let fill_xml = &xml[start..end];
+                fills.push(DrawingFill::Blip(parse_blip_fill(fill_xml)));
+                pos = end;
+            }
+            Some((start, "grpFill")) => {
+                let end = find_closing_tag(xml, b"grpFill", start).unwrap_or(xml.len());
+                fills.push(DrawingFill::Group);
+                pos = end;
+            }
             _ => break,
         }
     }
 
     fills
+}
+
+fn parse_blip_fill(xml: &[u8]) -> BlipFill {
+    let mut fill = BlipFill {
+        dpi: get_attr_u32(xml, b"dpi=\""),
+        rot_with_shape: get_attr(xml, b"rotWithShape=\"").map(|v| v == "1" || v == "true"),
+        ..BlipFill::default()
+    };
+
+    if let Some(blip_start) = find_tag_simd(xml, b"blip", 0) {
+        let blip_end = find_closing_tag(xml, b"blip", blip_start).unwrap_or(xml.len());
+        let blip_xml = &xml[blip_start..blip_end];
+        fill.embed_id = get_attr(blip_xml, b"embed=\"").map(str::to_string);
+        fill.link_id = get_attr(blip_xml, b"link=\"").map(str::to_string);
+        fill.compression = get_attr(blip_xml, b"cstate=\"").map(CompressionState::from_ooxml);
+    }
+
+    if let Some(src_start) = find_tag_simd(xml, b"srcRect", 0) {
+        let src_end = find_closing_tag(xml, b"srcRect", src_start).unwrap_or(xml.len());
+        let src_xml = &xml[src_start..src_end];
+        let left = get_attr_u32(src_xml, b"l=\"");
+        let top = get_attr_u32(src_xml, b"t=\"");
+        let right = get_attr_u32(src_xml, b"r=\"");
+        let bottom = get_attr_u32(src_xml, b"b=\"");
+        fill.src_rect_explicit = left.map_or(0, |_| 1)
+            | top.map_or(0, |_| 2)
+            | right.map_or(0, |_| 4)
+            | bottom.map_or(0, |_| 8);
+        fill.source_rect = Some(SourceRect {
+            left: StPositiveFixedPercentageDecimal::new_clamped(left.unwrap_or(0)),
+            top: StPositiveFixedPercentageDecimal::new_clamped(top.unwrap_or(0)),
+            right: StPositiveFixedPercentageDecimal::new_clamped(right.unwrap_or(0)),
+            bottom: StPositiveFixedPercentageDecimal::new_clamped(bottom.unwrap_or(0)),
+        });
+    }
+
+    if find_tag_simd(xml, b"stretch", 0).is_some() {
+        fill.fill_mode = Some(FillMode::Stretch { fill_rect: None });
+    } else if find_tag_simd(xml, b"tile", 0).is_some() {
+        fill.fill_mode = Some(FillMode::Tile(Default::default()));
+    }
+
+    fill
 }
 
 /// Parse a `<a:gradFill>` element into a canonical `GradientFill`.

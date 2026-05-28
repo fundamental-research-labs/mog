@@ -52,6 +52,7 @@ pub type RgbHexColor = String;
 
 /// DrawingML namespace URI
 const DRAWINGML_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 mod color;
 mod defaults;
@@ -147,6 +148,10 @@ pub struct ThemeWriter {
     extra_clr_scheme_lst_xml: Option<Vec<u8>>,
     /// Raw XML of <a:extLst>...</a:extLst> (full element including tags)
     ext_lst_xml: Option<Vec<u8>>,
+    /// Raw XML of <a:custClrLst>...</a:custClrLst> (full element including tags)
+    cust_clr_lst_xml: Option<Vec<u8>>,
+    /// Root sibling order after themeElements. `Some(vec![])` preserves absence.
+    root_sibling_order: Option<Vec<String>>,
 }
 
 impl Default for ThemeWriter {
@@ -166,6 +171,8 @@ impl ThemeWriter {
             object_defaults_xml: None,
             extra_clr_scheme_lst_xml: None,
             ext_lst_xml: None,
+            cust_clr_lst_xml: None,
+            root_sibling_order: None,
         }
     }
 
@@ -182,6 +189,8 @@ impl ThemeWriter {
             object_defaults_xml: None,
             extra_clr_scheme_lst_xml: None,
             ext_lst_xml: None,
+            cust_clr_lst_xml: None,
+            root_sibling_order: None,
         }
     }
 
@@ -242,6 +251,16 @@ impl ThemeWriter {
         self
     }
 
+    pub fn set_cust_clr_lst_xml(&mut self, xml: Vec<u8>) -> &mut Self {
+        self.cust_clr_lst_xml = Some(xml);
+        self
+    }
+
+    pub fn set_root_sibling_order(&mut self, order: Vec<String>) -> &mut Self {
+        self.root_sibling_order = Some(order);
+        self
+    }
+
     /// Set the major (heading) font typeface.
     pub fn set_major_font(&mut self, typeface: &str) -> &mut Self {
         self.font_scheme.major_font.latin.typeface = typeface.to_string();
@@ -266,6 +285,7 @@ impl ThemeWriter {
         // Root theme element with namespace
         xml.start_element_ns("a", "theme")
             .attr("xmlns:a", DRAWINGML_NS)
+            .attr("xmlns:r", REL_NS)
             .attr("name", &self.name)
             .end_attrs();
 
@@ -283,38 +303,64 @@ impl ThemeWriter {
 
         xml.end_element_ns("a", "themeElements");
 
-        // objectDefaults: write content if available, otherwise empty self-closing tag
-        match &self.object_defaults_xml {
-            Some(content) if !content.is_empty() => {
-                xml.start_element_ns("a", "objectDefaults").end_attrs();
-                xml.raw(content);
-                xml.end_element_ns("a", "objectDefaults");
+        if let Some(order) = &self.root_sibling_order {
+            for sibling in order {
+                self.write_root_sibling(&mut xml, sibling);
             }
-            _ => {
-                xml.start_element_ns("a", "objectDefaults").self_close();
-            }
-        }
-
-        // extraClrSchemeLst: write content if available, otherwise empty self-closing tag
-        match &self.extra_clr_scheme_lst_xml {
-            Some(content) if !content.is_empty() => {
-                xml.start_element_ns("a", "extraClrSchemeLst").end_attrs();
-                xml.raw(content);
-                xml.end_element_ns("a", "extraClrSchemeLst");
-            }
-            _ => {
-                xml.start_element_ns("a", "extraClrSchemeLst").self_close();
-            }
-        }
-
-        // extLst: write full element verbatim if available (includes its own tags)
-        if let Some(ref ext_lst) = self.ext_lst_xml {
-            xml.raw(ext_lst);
+        } else {
+            self.write_root_sibling(&mut xml, "objectDefaults");
+            self.write_root_sibling(&mut xml, "extraClrSchemeLst");
+            self.write_root_sibling(&mut xml, "custClrLst");
+            self.write_root_sibling(&mut xml, "extLst");
         }
 
         xml.end_element_ns("a", "theme");
 
         xml.finish()
+    }
+
+    fn write_root_sibling(&self, xml: &mut XmlWriter, sibling: &str) {
+        match sibling {
+            "objectDefaults" => match &self.object_defaults_xml {
+                Some(content) if !content.is_empty() => {
+                    xml.start_element_ns("a", "objectDefaults").end_attrs();
+                    xml.raw(content);
+                    xml.end_element_ns("a", "objectDefaults");
+                }
+                Some(_) | None if self.root_sibling_order.is_none() => {
+                    xml.start_element_ns("a", "objectDefaults").self_close();
+                }
+                Some(_) => {
+                    xml.start_element_ns("a", "objectDefaults").self_close();
+                }
+                None => {}
+            },
+            "extraClrSchemeLst" => match &self.extra_clr_scheme_lst_xml {
+                Some(content) if !content.is_empty() => {
+                    xml.start_element_ns("a", "extraClrSchemeLst").end_attrs();
+                    xml.raw(content);
+                    xml.end_element_ns("a", "extraClrSchemeLst");
+                }
+                Some(_) | None if self.root_sibling_order.is_none() => {
+                    xml.start_element_ns("a", "extraClrSchemeLst").self_close();
+                }
+                Some(_) => {
+                    xml.start_element_ns("a", "extraClrSchemeLst").self_close();
+                }
+                None => {}
+            },
+            "custClrLst" => {
+                if let Some(cust) = &self.cust_clr_lst_xml {
+                    xml.raw(cust);
+                }
+            }
+            "extLst" => {
+                if let Some(ext_lst) = &self.ext_lst_xml {
+                    xml.raw(ext_lst);
+                }
+            }
+            _ => {}
+        }
     }
 }
 

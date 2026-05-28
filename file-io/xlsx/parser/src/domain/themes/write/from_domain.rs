@@ -73,6 +73,12 @@ pub fn theme_writer_from_domain(theme: &domain_types::ThemeData) -> Vec<u8> {
     if let Some(ref ext_lst_xml) = theme.ext_lst_xml {
         tw.set_ext_lst_xml(ext_lst_xml.clone());
     }
+    if let Some(ref cust_clr_lst_xml) = theme.cust_clr_lst_xml {
+        tw.set_cust_clr_lst_xml(cust_clr_lst_xml.clone());
+    }
+    if let Some(ref root_sibling_order) = theme.root_sibling_order {
+        tw.set_root_sibling_order(root_sibling_order.clone());
+    }
 
     tw.to_xml()
 }

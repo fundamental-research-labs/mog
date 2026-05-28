@@ -61,7 +61,7 @@ pub(super) fn parse_worksheet_core(
                     cell: cell_opt,
                     end: cell_end,
                     is_self_closing,
-                    has_cm,
+                    cm_val,
                     vm_val,
                     has_ph,
                     has_explicit_s,
@@ -102,7 +102,7 @@ pub(super) fn parse_worksheet_core(
                             cell_data,
                             strings,
                             CellExtrasInput {
-                                has_cm,
+                                cm_val,
                                 vm_val,
                                 has_ph,
                                 has_explicit_s,

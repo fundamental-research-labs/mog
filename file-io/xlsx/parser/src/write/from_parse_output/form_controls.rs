@@ -116,6 +116,7 @@ pub(super) fn convert_unified_form_controls(
                 properties,
                 shape_id,
                 control_pr_attrs,
+                control_pr: p.control_pr.clone(),
                 move_with_cells: p.move_with_cells,
                 size_with_cells: p.size_with_cells,
                 vml_shape,

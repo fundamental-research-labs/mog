@@ -47,6 +47,15 @@ impl WorkbookProtectionWrite for WorkbookProtection {
         if let Some(ref password) = self.workbook_password {
             writer.attr("workbookPassword", password);
         }
+        if let Some(ref character_set) = self.workbook_password_character_set {
+            writer.attr("workbookPasswordCharacterSet", character_set);
+        }
+        if let Some(ref password) = self.revisions_password {
+            writer.attr("revisionsPassword", password);
+        }
+        if let Some(ref character_set) = self.revisions_password_character_set {
+            writer.attr("revisionsPasswordCharacterSet", character_set);
+        }
         if self.workbook_algorithm_name != HashAlgorithm::None {
             writer.attr(
                 "workbookAlgorithmName",
@@ -61,6 +70,21 @@ impl WorkbookProtectionWrite for WorkbookProtection {
         }
         if let Some(spin) = self.workbook_spin_count {
             writer.attr_num("workbookSpinCount", spin);
+        }
+        if self.revisions_algorithm_name != HashAlgorithm::None {
+            writer.attr(
+                "revisionsAlgorithmName",
+                self.revisions_algorithm_name.as_str(),
+            );
+        }
+        if let Some(ref hash) = self.revisions_hash_value {
+            writer.attr("revisionsHashValue", hash);
+        }
+        if let Some(ref salt) = self.revisions_salt_value {
+            writer.attr("revisionsSaltValue", salt);
+        }
+        if let Some(spin) = self.revisions_spin_count {
+            writer.attr_num("revisionsSpinCount", spin);
         }
 
         if self.lock_structure {

@@ -97,17 +97,23 @@ fn range_source_position(range: &(u32, u32, u32, u32)) -> (u32, u32) {
 pub(super) fn classify_projection_role(
     cell: &FullCellData,
     spill_ranges: &[(u32, u32, u32, u32)],
+    metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> ImportedCellProjectionRole {
+    let has_dynamic_array_metadata =
+        cell.cell_metadata_index
+            .is_some_and(|cm| metadata.is_some_and(|m| cell_metadata_is_dynamic_array(m, cm)));
+
     if cell.formula.is_some() {
-        if cell.cm && cell.array_ref.is_some() {
+        if has_dynamic_array_metadata && cell.array_ref.is_some() {
             return ImportedCellProjectionRole::DynamicArraySource;
         }
         return ImportedCellProjectionRole::Normal;
     }
 
-    if cell.cm {
+    if cell.cell_metadata_index.is_some() {
         for range in spill_ranges {
-            if cell_in_range(cell.row, cell.col, range)
+            if has_dynamic_array_metadata
+                && cell_in_range(cell.row, cell.col, range)
                 && (cell.row, cell.col) != range_source_position(range)
             {
                 return ImportedCellProjectionRole::DynamicArraySpillTarget;
@@ -121,16 +127,43 @@ pub(super) fn classify_projection_role(
 
 pub(super) fn build_projection_roles(
     cells: &[FullCellData],
+    metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> std::collections::HashMap<(u32, u32), ImportedCellProjectionRole> {
     let spill_ranges = collect_spill_ranges(cells);
     let mut roles = std::collections::HashMap::new();
     for cell in cells {
-        let role = classify_projection_role(cell, &spill_ranges);
+        let role = classify_projection_role(cell, &spill_ranges, metadata);
         if role != ImportedCellProjectionRole::Normal {
             roles.insert((cell.row, cell.col), role);
         }
     }
     roles
+}
+
+fn cell_metadata_is_dynamic_array(
+    metadata: &crate::output::results::MetadataOutput,
+    cm_index: u32,
+) -> bool {
+    let Some(block_index) = cm_index.checked_sub(1).map(|idx| idx as usize) else {
+        return false;
+    };
+    let Some(block) = metadata.cell_metadata.get(block_index) else {
+        return false;
+    };
+
+    block.records.iter().any(|record| {
+        let Some(type_index) = record.t.checked_sub(1).map(|idx| idx as usize) else {
+            return false;
+        };
+        metadata
+            .metadata_types
+            .get(type_index)
+            .is_some_and(|metadata_type| metadata_type.name.eq_ignore_ascii_case("XLDAPR"))
+            || metadata
+                .future_metadata
+                .get(type_index)
+                .is_some_and(|group| group.name.eq_ignore_ascii_case("XLDAPR"))
+    })
 }
 
 // =============================================================================
@@ -233,7 +266,7 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
             None
         },
         cell_formula: cell.cell_formula.clone(),
-        cm: cell.cm,
+        cell_metadata_index: cell.cell_metadata_index,
         formula_result_type: if has_effective_formula_result_type {
             Some(cell.cached_value_type)
         } else {

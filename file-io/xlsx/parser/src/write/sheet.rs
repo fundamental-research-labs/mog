@@ -28,7 +28,7 @@ use crate::domain::print::write::PrintWriter;
 use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers};
 pub use ooxml_types::worksheet::{
     ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
-    SheetViewType,
+    SheetCalcPr, SheetViewType,
 };
 use std::collections::BTreeMap;
 
@@ -55,11 +55,14 @@ pub use data::{CellData, CellValue, RowDef, SheetFormatPr};
 ///
 /// Worksheet `<dimension>` is semantic output: by default it is derived from
 /// the cells queued on this writer, with empty sheets emitting the canonical
-/// `A1` extent. Imported or preserved raw dimension XML is not replayed.
+/// `A1` extent. Imported dimension refs may be supplied as typed advisory
+/// metadata when the parse-output owner intentionally carries them forward.
 #[derive(Debug, Clone)]
 pub struct SheetWriter {
     /// Sheet dimension (startRow, startCol, endRow, endCol), all 0-indexed
     pub(super) dimension: Option<(u32, u32, u32, u32)>,
+    /// Authored worksheet dimension ref to emit in the canonical dimension slot.
+    pub(super) dimension_ref: Option<String>,
     /// Column definitions
     pub(super) cols: Vec<ColWidth>,
     /// Row data: row index -> (RowDef, cells)
@@ -70,6 +73,8 @@ pub struct SheetWriter {
     pub(super) merges: Vec<MergeRange>,
     /// Sheet view settings (one or more `<sheetView>` elements)
     pub(super) sheet_views: Vec<SheetView>,
+    /// Direct-child `<extLst>` under `<sheetViews>`.
+    pub(super) sheet_views_ext_lst_xml: Option<String>,
     /// Modeled worksheet properties emitted as `<sheetPr>`.
     pub(super) sheet_properties: Option<SheetProperties>,
     /// Print settings (margins, page setup, header/footer, print options, breaks)
@@ -84,6 +89,8 @@ pub struct SheetWriter {
     pub(super) auto_filter_xml: Option<String>,
     /// Typed worksheet semantic containers emitted from SheetData, not preserved XML.
     pub(super) worksheet_semantic_containers: WorksheetSemanticContainers,
+    /// Typed worksheet calculation properties emitted as `<sheetCalcPr>`.
+    pub(super) sheet_calc_pr: Option<SheetCalcPr>,
     /// Raw sortState XML for verbatim round-trip passthrough.
     pub(super) sort_state_xml: Option<String>,
     /// Raw conditionalFormatting XML for verbatim round-trip passthrough.
@@ -128,11 +135,13 @@ impl SheetWriter {
     pub fn new() -> Self {
         Self {
             dimension: None,
+            dimension_ref: None,
             cols: Vec::new(),
             rows: BTreeMap::new(),
             authored_style_runs: Vec::new(),
             merges: Vec::new(),
             sheet_views: vec![SheetView::default()],
+            sheet_views_ext_lst_xml: None,
             sheet_properties: None,
             print_writer: None,
             sheet_format_pr: SheetFormatPr::default(),
@@ -140,6 +149,7 @@ impl SheetWriter {
             root_namespaces: None,
             auto_filter_xml: None,
             worksheet_semantic_containers: WorksheetSemanticContainers::default(),
+            sheet_calc_pr: None,
             sort_state_xml: None,
             conditional_formatting_xml: None,
             data_validations_xml: None,
@@ -180,6 +190,12 @@ impl SheetWriter {
         self
     }
 
+    /// Set an authored worksheet dimension ref for passive import/export.
+    pub fn set_dimension_ref(&mut self, dimension_ref: String) -> &mut Self {
+        self.dimension_ref = Some(dimension_ref);
+        self
+    }
+
     /// Add a column width definition.
     ///
     /// If the new col is adjacent to (and has identical properties as) the last
@@ -196,6 +212,7 @@ impl SheetWriter {
                 && last.style == col.style
                 && last.outline_level == col.outline_level
                 && last.collapsed == col.collapsed
+                && last.phonetic == col.phonetic
             {
                 last.max = col.max;
                 return self;
@@ -636,6 +653,12 @@ impl SheetWriter {
         self
     }
 
+    /// Set direct-child `<sheetViews><extLst>...` XML after safety filtering.
+    pub fn set_sheet_views_ext_lst_xml(&mut self, xml: String) -> &mut Self {
+        self.sheet_views_ext_lst_xml = Some(xml);
+        self
+    }
+
     /// Set modeled worksheet outline properties.
     pub fn set_outline_properties(&mut self, outline_properties: OutlineProperties) -> &mut Self {
         let mut properties = self.sheet_properties.take().unwrap_or_default();
@@ -697,6 +720,11 @@ impl SheetWriter {
         containers: WorksheetSemanticContainers,
     ) -> &mut Self {
         self.worksheet_semantic_containers = containers;
+        self
+    }
+
+    pub fn set_sheet_calc_pr(&mut self, sheet_calc_pr: SheetCalcPr) -> &mut Self {
+        self.sheet_calc_pr = Some(sheet_calc_pr);
         self
     }
 

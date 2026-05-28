@@ -26,6 +26,13 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
     }
 
     let mut shared_strings = sheet_parts::build_shared_strings(&remapped_output);
+    shared_strings.set_root_ext_lst_xml(
+        remapped_output
+            .package_fidelity
+            .as_ref()
+            .and_then(|metadata| metadata.shared_string_table.as_ref())
+            .map(|sst| sst.ext_lst_xml.clone()),
+    );
     let sheet_parts::BuiltSheetParts {
         sheet_writers,
         sheet_extras,

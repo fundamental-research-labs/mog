@@ -82,6 +82,7 @@ pub fn parse_chart_ex_for_sheet(
         result.push(crate::output::results::ParsedChartEx {
             chart_space,
             original_path: chart_ex_path,
+            original_xml: chart_ex_xml,
             chart_rels_bytes,
             auxiliary_files,
         });

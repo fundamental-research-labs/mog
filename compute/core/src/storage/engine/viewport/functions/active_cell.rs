@@ -193,7 +193,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         validation: props.validation,
         connection_id: props.connection_id,
         style_id: props.style_id,
-        cm: props.cm,
+        cell_metadata_index: props.cell_metadata_index,
         vm: props.vm,
         phonetic: props.phonetic,
         date_lexical_value: props.date_lexical_value,

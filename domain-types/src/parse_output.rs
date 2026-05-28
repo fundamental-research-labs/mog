@@ -31,6 +31,10 @@ pub struct ParseOutput {
     /// `xl/workbook.xml`.
     #[serde(default, skip_serializing_if = "XmlNamespaceDeclarations::is_empty")]
     pub workbook_root_namespaces: XmlNamespaceDeclarations,
+    /// Imported workbook root conformance hint. Writers must drop `strict` when
+    /// current workbook markup includes known Transitional-only fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_conformance: Option<String>,
     pub style_palette: Vec<DocumentFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workbook_stylesheet: Option<WorkbookStylesheet>,
@@ -75,6 +79,10 @@ pub struct ParseOutput {
     pub metadata: Option<WorkbookMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_views: Vec<WorkbookView>,
+    /// Raw workbook-level `<customWorkbookViews>` XML captured from
+    /// `xl/workbook.xml` for unchanged package-fidelity export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_workbook_views_xml: Option<Vec<u8>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workbook_properties: Option<WorkbookProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,6 +101,35 @@ pub struct ParseOutput {
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub persons: Vec<PersonInfo>,
+    /// Workbook-owned volatile dependency sidecar from `xl/volatileDependencies.xml`.
+    ///
+    /// This is calculation/external-data import fidelity, not an editable
+    /// calculation model. Writers may preserve it only while the part is valid
+    /// and workbook calculation/external-data owners are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volatile_dependency_part: Option<VolatileDependencyPackagePart>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VolatileDependencyPackagePart {
+    /// Normalized package path without a leading slash.
+    pub path: String,
+    /// Raw `volatileDependencies.xml` bytes.
+    pub bytes: Vec<u8>,
+    /// Content type override for the part.
+    pub content_type: String,
+    /// Workbook relationship id hint, when imported through workbook.xml.rels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+    /// Workbook relationship type, Strict or Transitional.
+    pub relationship_type: String,
+    /// Original workbook relationship target, if available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_target: Option<String>,
+    /// Relationships owned by the volatile dependency part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<PackageRelationshipHint>,
 }
 
 /// Durable package metadata captured during import.
@@ -105,6 +142,8 @@ pub struct ParseOutput {
 pub struct PackageFidelityMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_profile: Option<PackageProfileHint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_string_table: Option<SharedStringTableFidelity>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_defaults: Vec<PackageContentTypeDefaultHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -118,7 +157,22 @@ pub struct PackageFidelityMetadata {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub opaque_parts: Vec<OpaquePackagePartHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_doc_props: Vec<RawDocPropsHint>,
+    /// Pivot-owned imported cache package facts for writer-only no-edit
+    /// preservation. These are not generic opaque parts: export must validate
+    /// cache identity and source binding before reusing imported bytes.
+    #[serde(skip)]
+    pub pivot_cache_packages: Vec<PivotCachePackageFidelity>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<PackageFidelityDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedStringTableFidelity {
+    /// Safe root-level `<extLst>` XML from `xl/sharedStrings.xml`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ext_lst_xml: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -179,6 +233,48 @@ pub struct OpaquePackagePartHint {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RawDocPropsHint {
+    /// Normalized docProps package part path without a leading slash.
+    pub path: String,
+    /// Imported raw XML bytes for unchanged metadata passthrough.
+    pub bytes: Vec<u8>,
+    /// XML the current domain writer produced immediately after import.
+    ///
+    /// Export may reuse `bytes` only when the current writer output still
+    /// matches this value, which conservatively detects metadata edits without
+    /// relying on a mutable dirty flag.
+    pub generated_at_import: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotCachePackageFidelity {
+    pub cache_id: u32,
+    pub definition_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_path: Option<String>,
+    pub definition_xml: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_xml: Option<Vec<u8>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_rels_xml: Option<Vec<u8>>,
+    pub workbook_relationship_id: String,
+    pub workbook_relationship_type: String,
+    pub workbook_relationship_target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_relationship_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_relationship_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub records_relationship_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sheet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_range: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct XmlNamespaceDeclaration {
     /// Namespace prefix; `None` represents the default `xmlns="..."`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -191,12 +287,41 @@ pub struct XmlNamespaceDeclaration {
 pub struct XmlNamespaceDeclarations {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub declarations: Vec<XmlNamespaceDeclaration>,
+    #[serde(default, skip_serializing_if = "MceAttributes::is_empty")]
+    pub mce: MceAttributes,
 }
 
 impl XmlNamespaceDeclarations {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.declarations.is_empty()
+        self.declarations.is_empty() && self.mce.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MceAttributes {
+    /// Original whitespace-delimited `mc:Ignorable` value from the owning root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignorable: Option<String>,
+    /// Original whitespace-delimited `mc:ProcessContent` value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_content: Option<String>,
+    /// Original whitespace-delimited `mc:MustUnderstand` value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub must_understand: Option<String>,
+    /// Structural MCE import diagnostics attached to this owner.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<String>,
+}
+
+impl MceAttributes {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ignorable.is_none()
+            && self.process_content.is_none()
+            && self.must_understand.is_none()
+            && self.diagnostics.is_empty()
     }
 }
 
@@ -214,6 +339,13 @@ pub struct SheetCommentPackageInfo {
     pub comments_relationship_id_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments_root_namespace_attrs: Vec<(String, String)>,
+    /// Safe root-level `<extLst>...</extLst>` from `xl/comments*.xml`.
+    ///
+    /// This is owner-scoped comment package metadata. Writers may replay it
+    /// only after validating that it is a single relationship-free `extLst`
+    /// fragment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comments_ext_lst_xml: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vml_path_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -232,6 +364,7 @@ impl SheetCommentPackageInfo {
         self.comments_path_hint.is_none()
             && self.comments_relationship_id_hint.is_none()
             && self.comments_root_namespace_attrs.is_empty()
+            && self.comments_ext_lst_xml.is_none()
             && self.vml_path_hint.is_none()
             && self.vml_relationship_id_hint.is_none()
             && self.threaded_comments_path_hint.is_none()
@@ -249,8 +382,11 @@ impl PackageFidelityMetadata {
             && self.workbook_relationships.is_empty()
             && self.sheet_workbook_r_ids.is_empty()
             && self.opaque_parts.is_empty()
+            && self.raw_doc_props.is_empty()
+            && self.pivot_cache_packages.is_empty()
             && self.diagnostics.is_empty()
             && self.package_profile.is_none()
+            && self.shared_string_table.is_none()
     }
 
     #[must_use]
@@ -396,6 +532,8 @@ pub struct WorkbookStylesheet {
     pub known_fonts: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_namespace_attrs: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "MceAttributes::is_empty")]
+    pub root_mce_attributes: MceAttributes,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<Vec<u8>>,
 }
@@ -430,9 +568,16 @@ impl WorkbookStylesheet {
             default_table_style: stylesheet.default_table_style,
             default_pivot_style: stylesheet.default_pivot_style,
             root_namespace_attrs,
+            root_mce_attributes: MceAttributes::default(),
             ext_lst_xml,
             stylesheet: ooxml_types::styles::Stylesheet::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_root_mce_attributes(mut self, root_mce_attributes: MceAttributes) -> Self {
+        self.root_mce_attributes = root_mce_attributes;
+        self
     }
 
     #[must_use]
@@ -474,7 +619,8 @@ impl WorkbookStylesheet {
                 self.stylesheet.clone(),
                 self.root_namespace_attrs.clone(),
                 self.ext_lst_xml.clone(),
-            );
+            )
+            .with_root_mce_attributes(self.root_mce_attributes.clone());
         }
         let mut normalized = self.clone();
         normalized.stylesheet = ooxml_types::styles::Stylesheet::default();
@@ -587,6 +733,12 @@ pub struct NamedRange {
     /// Whether this is an XLM macro name (xlm="1").
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub xlm: bool,
+    /// Function group ID (functionGroupId) for macro/function names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_group_id: Option<u32>,
+    /// Shortcut key (shortcutKey) for macro/function names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut_key: Option<String>,
     /// Whether this name is a function (function="1").
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub function: bool,
@@ -678,6 +830,12 @@ pub struct SheetData {
     /// children. Modeled extension owners are regenerated from current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worksheet_ext_lst_xml: Option<String>,
+    /// Authored worksheet `<dimension ref="...">` value.
+    ///
+    /// This is advisory used-range metadata carried through import/export. It
+    /// is not a dense grid allocation request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_dimension_ref: Option<String>,
     /// Original sheetId from workbook.xml (1-based). Preserved for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sheet_id: Option<u32>,
@@ -701,6 +859,10 @@ pub struct SheetData {
     /// Additional `<sheetView>` elements beyond the primary one (index 1+).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_sheet_views: Vec<SheetView>,
+    /// Direct-child `<extLst>` XML under `<sheetViews>`, separate from each
+    /// `<sheetView>` and root worksheet extension scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_views_ext_lst_xml: Option<String>,
     pub row_styles: Vec<RowStyleEntry>,
     pub col_styles: Vec<ColStyleEntry>,
     // Domain objects
@@ -761,6 +923,9 @@ pub struct SheetData {
     /// decomposed into smaller runtime objects.
     #[serde(default, skip_serializing_if = "WorksheetSemanticContainers::is_empty")]
     pub worksheet_semantic_containers: WorksheetSemanticContainers,
+    /// Typed worksheet calculation properties from `<sheetCalcPr>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_calc_pr: Option<ooxml_types::worksheet::SheetCalcPr>,
     pub outline_groups: Vec<OutlineGroup>,
     /// Worksheet-level `<sheetPr>` attributes and child properties.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -859,9 +1024,13 @@ pub struct CellData {
     /// so the writer can emit the correct `<f>` element structure.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_formula: Option<ooxml_types::worksheet::CellFormula>,
-    /// Whether the `<c>` element has a `cm` attribute (cell metadata / dynamic arrays).
-    #[serde(default, skip_serializing_if = "crate::is_false")]
-    pub cm: bool,
+    /// OOXML cell metadata index from the `<c cm="N">` attribute.
+    ///
+    /// This is the authored metadata-record reference. Projection/spill behavior
+    /// is represented separately by `projection_role` after parser-owned
+    /// metadata classification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     /// For formula cells with a string result, the OOXML `t` attribute value
     /// (e.g., `6` = "str", `4` = "e", `3` = "b"). Used for round-trip fidelity
     /// to emit the correct `t="str"` on cells whose formula evaluates to a string.
@@ -1026,6 +1195,9 @@ pub struct ColDimension {
     /// Whether the outline group is collapsed at this column.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// Column-level phonetic display flag (`phonetic` on `<col>`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub phonetic: bool,
 }
 
 /// A column range that extends beyond the data region, preserved for round-trip fidelity.
@@ -1050,6 +1222,8 @@ pub struct TrailingColRange {
     pub best_fit: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub phonetic: bool,
     /// Column style index into `ParseOutput.style_palette`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
@@ -1222,6 +1396,9 @@ pub struct SheetView {
     /// by the pivot/data-feature layer; worksheet core preserves the view pointer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_selection: Vec<ooxml_types::worksheet::PivotSelection>,
+    /// Direct-child `<extLst>` XML owned by this sheet view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 impl Default for SheetView {
@@ -1253,6 +1430,7 @@ impl Default for SheetView {
             pane: None,
             selections: Vec::new(),
             pivot_selection: Vec::new(),
+            ext_lst_xml: None,
         }
     }
 }
@@ -1308,6 +1486,7 @@ impl SheetView {
             pane: sv.pane.as_ref().map(SheetPaneConfig::from_ooxml),
             selections: sv.selections.clone(),
             pivot_selection: sv.pivot_selection.clone(),
+            ext_lst_xml: sv.ext_lst_xml.clone(),
         }
     }
 }

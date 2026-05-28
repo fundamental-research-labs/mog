@@ -7,8 +7,8 @@ use super::{
     PackageRelationshipTarget, RelationshipIdentityHint, ResolvedPackageGraph,
     ResolvedPackageRelationship, allocate_relationship_id, current_relationship_hint_id,
     imported_internal_target, imported_opaque_part, imported_order_eligible_by_owner,
-    imported_relationship_order, normalize_part_path, owner_rels_path, resolve_target,
-    same_inert_cluster, validate_internal_target_is_registered,
+    imported_relationship_order, is_external_target_mode, normalize_part_path, owner_rels_path,
+    resolve_target, same_inert_cluster, validate_internal_target_is_registered,
 };
 use crate::write::write_error::WriteError;
 
@@ -78,14 +78,21 @@ impl PackageGraphBuilder {
         let Some(metadata) = self.package_fidelity.clone() else {
             return Ok(());
         };
+        let non_editable_sheet_cluster = non_editable_sheet_cluster_paths(&metadata);
 
         for part in &metadata.opaque_parts {
-            if crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
-                != Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary)
-            {
+            let is_non_editable_sheet_cluster =
+                non_editable_sheet_cluster.contains(&normalize_part_path(&part.path));
+            let is_inert_auxiliary =
+                crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
+                    == Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary);
+            if !is_inert_auxiliary && !is_non_editable_sheet_cluster {
                 continue;
             }
-            if crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(&part.path)
+            if !is_non_editable_sheet_cluster
+                && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
+                    &part.path,
+                )
             {
                 continue;
             }
@@ -100,7 +107,7 @@ impl PackageGraphBuilder {
         }
 
         self.register_imported_root_and_workbook_opaque_relationships(&metadata);
-        self.register_imported_opaque_sidecar_relationships(&metadata);
+        self.register_imported_opaque_sidecar_relationships(&metadata, &non_editable_sheet_cluster);
 
         Ok(())
     }
@@ -131,6 +138,7 @@ impl PackageGraphBuilder {
     fn register_imported_opaque_sidecar_relationships(
         &mut self,
         metadata: &PackageFidelityMetadata,
+        non_editable_sheet_cluster: &HashSet<String>,
     ) {
         for part in &metadata.opaque_parts {
             if !self.is_opaque_part(&part.path) {
@@ -140,7 +148,7 @@ impl PackageGraphBuilder {
                 path: part.path.clone(),
             };
             for hint in &part.relationships {
-                if hint.target_mode.as_deref() == Some("External") {
+                if is_external_target_mode(hint.target_mode.as_deref()) {
                     self.add_relationship(PackageRelationship {
                         owner: owner.clone(),
                         relationship_type: hint.relationship_type.clone(),
@@ -155,7 +163,13 @@ impl PackageGraphBuilder {
                 let Some(target_path) = imported_internal_target(Some(&part.path), hint) else {
                     continue;
                 };
-                if self.is_opaque_part(&target_path) && same_inert_cluster(&part.path, &target_path)
+                if self.is_opaque_part(&target_path)
+                    && (same_inert_cluster(&part.path, &target_path)
+                        || same_non_editable_sheet_cluster(
+                            &part.path,
+                            &target_path,
+                            non_editable_sheet_cluster,
+                        ))
                 {
                     self.add_imported_hint_relationship(owner.clone(), hint, target_path);
                 }
@@ -254,4 +268,66 @@ impl PackageGraphBuilder {
             package_fidelity: self.package_fidelity,
         })
     }
+}
+
+fn non_editable_sheet_cluster_paths(metadata: &PackageFidelityMetadata) -> HashSet<String> {
+    let opaque_paths: HashSet<String> = metadata
+        .opaque_parts
+        .iter()
+        .map(|part| normalize_part_path(&part.path))
+        .collect();
+    let mut cluster = HashSet::new();
+    for hint in &metadata.workbook_relationships {
+        if !is_non_editable_sheet_relationship(&hint.relationship_type) {
+            continue;
+        }
+        let Some(path) = imported_internal_target(Some("xl/workbook.xml"), hint) else {
+            continue;
+        };
+        let path = normalize_part_path(&path);
+        if opaque_paths.contains(&path) {
+            cluster.insert(path);
+        }
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for part in &metadata.opaque_parts {
+            let source = normalize_part_path(&part.path);
+            if !cluster.contains(&source) {
+                continue;
+            }
+            for hint in &part.relationships {
+                if is_external_target_mode(hint.target_mode.as_deref()) {
+                    continue;
+                }
+                let Some(target) = imported_internal_target(Some(&source), hint) else {
+                    continue;
+                };
+                let target = normalize_part_path(&target);
+                if opaque_paths.contains(&target) && cluster.insert(target) {
+                    changed = true;
+                }
+            }
+        }
+    }
+    cluster
+}
+
+fn is_non_editable_sheet_relationship(relationship_type: &str) -> bool {
+    matches!(
+        relationship_type,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet"
+            | "http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet"
+    )
+}
+
+fn same_non_editable_sheet_cluster(
+    owner_path: &str,
+    target_path: &str,
+    cluster: &HashSet<String>,
+) -> bool {
+    cluster.contains(&normalize_part_path(owner_path))
+        && cluster.contains(&normalize_part_path(target_path))
 }

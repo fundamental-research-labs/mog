@@ -176,6 +176,7 @@ fn test_auto_filter_to_filter_state() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
@@ -220,6 +221,7 @@ fn test_auto_filter_to_filter_state_skips_childless_columns() {
         ],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
@@ -258,6 +260,7 @@ fn test_filter_state_to_auto_filter_roundtrip() {
         ],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("c-{}-{}", row, col)) };
     let state = auto_filter_to_filter_state(&af, &resolver).unwrap();

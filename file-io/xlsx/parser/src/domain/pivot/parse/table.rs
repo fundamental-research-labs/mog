@@ -4,6 +4,7 @@ use crate::domain::pivot::model::{PivotLocation, PivotStyleInfo, PivotTable};
 use crate::domain::pivot::parse::table_fields::{
     parse_data_fields, parse_field_refs, parse_page_fields, parse_pivot_fields, parse_row_col_items,
 };
+use crate::domain::pivot::preservation::capture_root_preservation;
 use crate::domain::pivot::reader::elements::{child_slice, first_element_span, opening_tag};
 use crate::infra::xml::{
     parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
@@ -17,6 +18,7 @@ pub fn parse_pivot_table(xml: &[u8]) -> PivotTable {
     };
 
     let element = &xml[root.start..root.tag_end];
+    pivot.ooxml_preservation = capture_root_preservation(xml, root);
     pivot.name = parse_string_attr(element, b"name=\"").unwrap_or_default();
     pivot.cache_id = parse_u32_attr(element, b"cacheId=\"").unwrap_or(0);
     pivot.data_on_rows = parse_bool_attr(element, b"dataOnRows=\"");

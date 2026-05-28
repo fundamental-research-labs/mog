@@ -11,6 +11,10 @@
 //! This is a SEPARATE type system from standard ECMA-376 charts (`c:chart`).
 //! The `cx:` model is cleaner: unified axes, data-driven series via `layoutId`,
 //! simpler hierarchy.
+//!
+//! This module describes the Microsoft extension vocabulary only. It does not
+//! by itself guarantee editable ChartEx support; package relationship policy and
+//! raw replay decisions live in the parser/writer integration layer.
 
 use crate::drawings::{ShapeProperties, TextBody};
 

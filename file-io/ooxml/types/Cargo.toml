@@ -3,7 +3,7 @@ name = "ooxml-types"
 version = "0.1.0"
 publish = false
 edition.workspace = true
-description = "Pure OOXML vocabulary types — enums, structs, constants. Zero required deps."
+description = "Curated shared OOXML vocabulary types and typed preservation helpers."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

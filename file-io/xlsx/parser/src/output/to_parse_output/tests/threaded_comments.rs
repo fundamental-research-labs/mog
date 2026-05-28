@@ -15,6 +15,7 @@ fn legacy_tc_author_without_threaded_relationship_stays_note() {
             runs: vec![comment_run("literal note")],
             shape_id: Some(42),
             xr_uid: Some("{LEGACY-XR-UID}".to_string()),
+            comment_pr: None,
         }],
         comment_authors: vec!["tc={LITERAL-AUTHOR}".to_string()],
         ..Default::default()

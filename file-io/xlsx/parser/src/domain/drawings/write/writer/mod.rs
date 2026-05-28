@@ -8,7 +8,7 @@
 //! - `text` — Rich text body, paragraphs, run properties, bullets
 //! - `styling` — Fills, outlines, effects, hyperlinks, style references
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod objects;
 mod styling;
@@ -40,6 +40,7 @@ pub struct DrawingWriter {
     /// When set, these are emitted instead of the hardcoded defaults.
     root_namespace_attrs: Vec<(String, String)>,
     suppress_unregistered_relationships: bool,
+    registered_relationship_ids: HashSet<String>,
 }
 
 impl DrawingWriter {
@@ -53,6 +54,15 @@ impl DrawingWriter {
 
     pub(super) fn write_raw_xml(&self, w: &mut XmlWriter, raw_xml: &str) -> bool {
         if self.suppress_unregistered_relationships {
+            let relationship_ids = crate::infra::xml::relationship_attr_values(raw_xml);
+            if !relationship_ids.is_empty()
+                && relationship_ids
+                    .iter()
+                    .all(|id| self.registered_relationship_ids.contains(id))
+            {
+                w.raw_str(raw_xml);
+                return true;
+            }
             return Self::write_raw_xml_if_relationship_safe(w, raw_xml);
         }
         w.raw_str(raw_xml);
@@ -65,6 +75,7 @@ impl DrawingWriter {
             anchors: Vec::new(),
             root_namespace_attrs: Vec::new(),
             suppress_unregistered_relationships: false,
+            registered_relationship_ids: HashSet::new(),
         }
     }
 
@@ -204,6 +215,7 @@ impl DrawingWriter {
 
     /// Remap embedded relationship IDs after package graph resolution.
     pub fn remap_relationship_ids(&mut self, resolved_ids: &HashMap<String, String>) {
+        self.registered_relationship_ids = resolved_ids.values().cloned().collect();
         for anchor in &mut self.anchors {
             let obj = match anchor {
                 DrawingAnchor::TwoCell(_, obj)
@@ -220,9 +232,28 @@ impl DrawingWriter {
     ) {
         match obj {
             DrawingObject::Picture(image) => {
-                if let Some(resolved) = resolved_ids.get(&image.r_id) {
-                    image.r_id = resolved.clone();
+                if !image.r_id.is_empty() {
+                    if let Some(resolved) = resolved_ids.get(&image.r_id) {
+                        image.r_id = resolved.clone();
+                    }
                 }
+                if let Some(link_id) = &mut image.link_id {
+                    if let Some(resolved) = resolved_ids.get(link_id) {
+                        *link_id = resolved.clone();
+                    }
+                }
+                image.blip_ext_lst = image
+                    .blip_ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
+                image.nv_ext_lst = image
+                    .nv_ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
+                image.sp_pr_ext_lst = image
+                    .sp_pr_ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
             }
             DrawingObject::Chart(chart) => {
                 if let Some(resolved) = resolved_ids.get(&chart.r_id) {
@@ -239,7 +270,26 @@ impl DrawingWriter {
                     *r_id = resolved.clone();
                 }
             }
+            DrawingObject::GraphicFrame(gf) => {
+                gf.raw_xml = crate::infra::xml::remap_relationship_attrs(&gf.raw_xml, resolved_ids);
+            }
+            DrawingObject::OpaqueRaw(raw) => {
+                raw.raw_xml = crate::infra::xml::remap_relationship_attrs(&raw.raw_xml, resolved_ids);
+            }
+            DrawingObject::ContentPart(content_part) => {
+                if let Some(resolved) = resolved_ids.get(&content_part.r_id) {
+                    content_part.r_id = resolved.clone();
+                }
+            }
             DrawingObject::GroupShape(group) => {
+                group.nv_ext_lst = group
+                    .nv_ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
+                group.ext_lst = group
+                    .ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
                 for child in &mut group.children {
                     Self::remap_object_relationship_ids(child, resolved_ids);
                 }
@@ -299,6 +349,8 @@ impl DrawingWriter {
             DrawingObject::ChartEx(_) => true,
             DrawingObject::SmartArt(_) => true,
             DrawingObject::GraphicFrame(_) => true,
+            DrawingObject::OpaqueRaw(_) => true,
+            DrawingObject::ContentPart(_) => true,
             // Group shapes need r: if any child does
             DrawingObject::GroupShape(g) => g.children.iter().any(Self::object_needs_r_namespace),
             // Shapes, TextBoxes, Connectors, Slicers don't inherently use r:
@@ -530,6 +582,14 @@ impl DrawingWriter {
             DrawingObject::Connector(props) => self.write_connector(w, props, object_id),
             DrawingObject::GroupShape(props) => self.write_group_shape(w, props, object_id),
             DrawingObject::GraphicFrame(gf) => self.write_graphic_frame(w, gf),
+            DrawingObject::OpaqueRaw(raw) => {
+                self.write_raw_xml(w, &raw.raw_xml);
+            }
+            DrawingObject::ContentPart(content_part) => {
+                w.start_element("xdr:contentPart")
+                    .attr("r:id", &content_part.r_id)
+                    .self_close();
+            }
             DrawingObject::SmartArt(sa) => self.write_smartart(w, sa, object_id),
             DrawingObject::Slicer {
                 original_id,

@@ -24,6 +24,7 @@
 //! - `xml_writer` - XML writing utilities
 
 pub mod from_parse_output;
+pub(crate) mod legacy_vml_ownership;
 pub mod mc_builder;
 
 pub mod drawing_writer_helpers;
@@ -50,8 +51,10 @@ pub use crate::domain::content_types::write::{
     CT_DIAGRAM_COLORS, CT_DIAGRAM_DATA, CT_DIAGRAM_DRAWING, CT_DIAGRAM_LAYOUT, CT_DIAGRAM_STYLE,
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
     CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS, CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_SLICER,
-    CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_THEME, CT_VBA, CT_WMF, CT_WORKBOOK, CT_WORKSHEET,
-    CT_XML, ContentTypeDefault, ContentTypeOverride, ContentTypesManager,
+    CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME, CT_VBA,
+    CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, CT_XML, ContentTypeDefault,
+    ContentTypeOverride,
+    ContentTypesManager,
     create_xlsx_content_types,
 };
 pub use crate::domain::controls::write::{
@@ -109,10 +112,10 @@ pub use relationships::{
     REL_DIAGRAM_LAYOUT, REL_DIAGRAM_QUICK_STYLE, REL_DRAWING, REL_EXTENDED_PROPERTIES,
     REL_EXTERNAL_LINK, REL_HYPERLINK, REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT,
     REL_PERSON, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS,
-    REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE, REL_THEME, REL_THREADED_COMMENT,
-    REL_VML_DRAWING, REL_WORKSHEET, RELATIONSHIPS_NS, Relationship, RelationshipManager,
-    create_root_rels, create_root_rels_full, create_root_rels_full_with_custom, create_sheet_rels,
-    create_workbook_rels,
+    REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THEME,
+    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET, RELATIONSHIPS_NS, Relationship,
+    RelationshipManager, create_root_rels, create_root_rels_full, create_root_rels_full_with_custom,
+    create_sheet_rels, create_workbook_rels,
 };
 pub use sheet::{
     CellData, CellValue, ColWidth, MergeRange, RowDef, Selection, SheetFormatPr, SheetPane,

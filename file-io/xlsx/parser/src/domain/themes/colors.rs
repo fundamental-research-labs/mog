@@ -11,6 +11,7 @@ use crate::infra::scanner::{
 };
 use crate::infra::xml::decode_xml_entities;
 
+use super::formats::parse_drawing_color;
 use super::types::{RgbColor, ThemeColor};
 
 use ooxml_types::drawings::{DrawingColor, SystemColorVal};
@@ -213,6 +214,50 @@ impl RuntimeColorScheme {
             },
         }
     }
+}
+
+pub fn parse_color_scheme_canonical(xml: &[u8]) -> ColorScheme {
+    let mut scheme = ColorScheme::office_default();
+
+    let Some(clr_start) = find_tag_simd(xml, b"clrScheme", 0) else {
+        return scheme;
+    };
+    let clr_end = find_closing_tag(xml, b"clrScheme", clr_start).unwrap_or(xml.len());
+    let clr_xml = &xml[clr_start..clr_end];
+
+    if let Some(name_pos) = find_attr_simd(clr_xml, b"name=\"", 0) {
+        let value_start = name_pos + 6;
+        if let Some((start, end)) = extract_quoted_value(clr_xml, value_start) {
+            scheme.name = decode_xml_entities(&clr_xml[start..end]);
+        }
+    }
+
+    for (index, tag) in [
+        (0, b"dk1".as_slice()),
+        (1, b"lt1".as_slice()),
+        (2, b"dk2".as_slice()),
+        (3, b"lt2".as_slice()),
+        (4, b"accent1".as_slice()),
+        (5, b"accent2".as_slice()),
+        (6, b"accent3".as_slice()),
+        (7, b"accent4".as_slice()),
+        (8, b"accent5".as_slice()),
+        (9, b"accent6".as_slice()),
+        (10, b"hlink".as_slice()),
+        (11, b"folHlink".as_slice()),
+    ] {
+        if let Some(color) = parse_slot_drawing_color(clr_xml, tag) {
+            scheme.set_by_index(index, color);
+        }
+    }
+
+    scheme
+}
+
+fn parse_slot_drawing_color(xml: &[u8], tag: &[u8]) -> Option<DrawingColor> {
+    let tag_start = find_tag_simd(xml, tag, 0)?;
+    let tag_end = find_closing_tag(xml, tag, tag_start).unwrap_or(xml.len());
+    parse_drawing_color(&xml[tag_start..tag_end])
 }
 
 #[cfg(test)]

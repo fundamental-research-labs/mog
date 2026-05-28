@@ -1,50 +1,23 @@
-use super::xml::{
-    checked_xml_text, decode_xml_entities, extract_attr_value_in_range, find_element_end_simple,
-};
-use crate::infra::scanner::find_tag_simd;
 use crate::zip::constants::MAX_RELATIONSHIPS_PER_PART;
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::name::{Namespace, ResolveResult};
+use quick_xml::reader::NsReader;
+
+const RELATIONSHIPS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 
 /// Parse workbook.xml.rels to map relationship IDs to worksheet paths.
 ///
 /// Returns a vector of (relationship_id, target_path) pairs.
 /// Only includes relationships of type "worksheet".
 pub fn parse_workbook_rels(xml: &[u8]) -> Vec<(String, String)> {
-    let mut relationships = Vec::new();
-    let mut pos = 0;
-
-    while pos < xml.len() {
-        let rel_pos = match find_tag_simd(xml, b"Relationship", pos) {
-            Some(p) => p,
-            None => break,
-        };
-
-        let element_end = find_element_end_simple(xml, rel_pos).unwrap_or(xml.len());
-        let element = &xml[rel_pos..element_end.min(xml.len())];
-        let type_value = extract_attr_value_in_range(element, b"Type=\"");
-        let is_worksheet = type_value
-            .map(|t| memchr::memmem::find(t, b"worksheet").is_some())
-            .unwrap_or(false);
-
-        if is_worksheet {
-            let id = extract_attr_value_in_range(element, b"Id=\"")
-                .map(checked_xml_text)
-                .unwrap_or_default();
-            let target = extract_attr_value_in_range(element, b"Target=\"")
-                .map(checked_xml_text)
-                .unwrap_or_default();
-
-            if !id.is_empty() && !target.is_empty() {
-                relationships.push((id, target));
-                if relationships.len() >= MAX_RELATIONSHIPS_PER_PART {
-                    break;
-                }
-            }
-        }
-
-        pos = element_end + 1;
-    }
-
-    relationships
+    parse_all_rels(xml)
+        .into_iter()
+        .filter(|rel| rel.rel_type.contains("worksheet"))
+        .filter_map(|rel| {
+            (!rel.id.is_empty() && !rel.target.is_empty()).then_some((rel.id, rel.target))
+        })
+        .take(MAX_RELATIONSHIPS_PER_PART)
+        .collect()
 }
 
 /// Parse all relationships from any `.rels` file, preserving IDs, types,
@@ -54,51 +27,72 @@ pub fn parse_workbook_rels(xml: &[u8]) -> Vec<(String, String)> {
 /// read for legacy compatibility.
 pub fn parse_all_rels(xml: &[u8]) -> Vec<ooxml_types::shared::OpcRelationship> {
     let mut relationships = Vec::new();
-    let mut pos = 0;
+    let mut reader = NsReader::from_reader(xml);
+    reader.config_mut().trim_text(false);
+    reader.config_mut().expand_empty_elements = false;
+    let mut buf = Vec::new();
 
-    while pos < xml.len() {
-        let rel_pos = match find_tag_simd(xml, b"Relationship", pos) {
-            Some(p) => p,
-            None => break,
+    loop {
+        let Ok((ns, event)) = reader.read_resolved_event_into(&mut buf) else {
+            break;
         };
-
-        let after = rel_pos + b"<Relationship".len();
-        if after < xml.len() && xml[after] == b's' {
-            pos = after;
-            continue;
-        }
-
-        let element_end = find_element_end_simple(xml, rel_pos).unwrap_or(xml.len());
-        let element = &xml[rel_pos..element_end.min(xml.len())];
-
-        let id = extract_attr_value_in_range(element, b"Id=\"")
-            .map(checked_xml_text)
-            .unwrap_or_default();
-        let rel_type = extract_attr_value_in_range(element, b"Type=\"")
-            .map(checked_xml_text)
-            .unwrap_or_default();
-        let target = extract_attr_value_in_range(element, b"Target=\"")
-            .map(decode_xml_entities)
-            .unwrap_or_default();
-        let target_mode =
-            extract_attr_value_in_range(element, b"TargetMode=\"").map(checked_xml_text);
-
-        if !id.is_empty() && !rel_type.is_empty() {
-            relationships.push(ooxml_types::shared::OpcRelationship {
-                id,
-                rel_type,
-                target,
-                target_mode,
-            });
-            if relationships.len() >= MAX_RELATIONSHIPS_PER_PART {
-                break;
+        match event {
+            Event::Start(start) | Event::Empty(start) => {
+                if start.local_name().as_ref() == b"Relationship"
+                    && is_opc_relationships_ns(&ns)
+                    && let Some(rel) = parse_relationship_element(&start)
+                {
+                    relationships.push(rel);
+                    if relationships.len() >= MAX_RELATIONSHIPS_PER_PART {
+                        break;
+                    }
+                }
             }
+            Event::Eof => break,
+            Event::End(_)
+            | Event::Text(_)
+            | Event::CData(_)
+            | Event::Comment(_)
+            | Event::Decl(_)
+            | Event::PI(_)
+            | Event::DocType(_) => {}
         }
-
-        pos = element_end + 1;
+        buf.clear();
     }
 
     relationships
+}
+
+fn parse_relationship_element(
+    start: &BytesStart<'_>,
+) -> Option<ooxml_types::shared::OpcRelationship> {
+    let id = attr_value(start, b"Id").unwrap_or_default();
+    let rel_type = attr_value(start, b"Type").unwrap_or_default();
+    let target = attr_value(start, b"Target").unwrap_or_default();
+    let target_mode = attr_value(start, b"TargetMode");
+    (!id.is_empty() && !rel_type.is_empty()).then_some(ooxml_types::shared::OpcRelationship {
+        id,
+        rel_type,
+        target,
+        target_mode,
+    })
+}
+
+fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
+    for attr in start.attributes().flatten() {
+        if attr.key.local_name().as_ref() == name {
+            return attr.unescape_value().ok().map(|v| v.into_owned());
+        }
+    }
+    None
+}
+
+fn is_opc_relationships_ns(ns: &ResolveResult<'_>) -> bool {
+    match ns {
+        ResolveResult::Bound(Namespace(uri)) => uri == RELATIONSHIPS_NS.as_bytes(),
+        ResolveResult::Unbound => true,
+        ResolveResult::Unknown(_) => false,
+    }
 }
 
 #[cfg(test)]
@@ -234,5 +228,18 @@ mod tests {
         assert_eq!(rels[0].rel_type, "http://example.test/type");
         assert_eq!(rels[0].target, "");
         assert_eq!(rels[0].target_mode, None);
+    }
+
+    #[test]
+    fn parse_all_rels_accepts_prefixed_single_quoted_relationships() {
+        let xml = br#"<r:Relationships xmlns:r="http://schemas.openxmlformats.org/package/2006/relationships">
+  <r:Relationship TargetMode='External' Target='https://example.com?a=1&amp;b=2' Type='hyperlink' Id='rId1'/>
+</r:Relationships>"#;
+
+        let rels = parse_all_rels(xml);
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].id, "rId1");
+        assert_eq!(rels[0].target, "https://example.com?a=1&b=2");
+        assert_eq!(rels[0].target_mode, Some("External".to_string()));
     }
 }

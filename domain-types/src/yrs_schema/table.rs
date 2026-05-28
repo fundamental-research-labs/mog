@@ -49,6 +49,7 @@ pub const KEY_TOTALS_ROW_CELL_STYLE: &str = "totalsRowCellStyle";
 pub const KEY_TABLE_TYPE: &str = "tableType";
 pub const KEY_TOTALS_ROW_SHOWN: &str = "totalsRowShown";
 pub const KEY_CONNECTION_ID: &str = "connectionId";
+pub const KEY_COMMENT: &str = "comment";
 pub const KEY_INSERT_ROW: &str = "insertRow";
 pub const KEY_INSERT_ROW_SHIFT: &str = "insertRowShift";
 pub const KEY_PUBLISHED: &str = "published";
@@ -91,6 +92,9 @@ pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
     }
     if let Some(s) = &table.auto_filter_xr_uid {
         entries.push(("autoFilterXrUid", Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(s) = &table.auto_filter_ext_lst_raw {
+        entries.push(("autoFilterExtLstRaw", Any::String(Arc::from(s.as_str()))));
     }
 
     // DXF formatting IDs
@@ -139,6 +143,9 @@ pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
     }
     if let Some(v) = table.connection_id {
         entries.push((KEY_CONNECTION_ID, Any::Number(v as f64)));
+    }
+    if let Some(s) = &table.comment {
+        entries.push((KEY_COMMENT, Any::String(Arc::from(s.as_str()))));
     }
     if table.insert_row {
         entries.push((KEY_INSERT_ROW, Any::Bool(true)));
@@ -268,6 +275,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
         last_col_highlight: read_bool(map, txn, KEY_SHOW_LAST_COL).unwrap_or(false),
         auto_filter_ref: read_string(map, txn, KEY_AUTO_FILTER_REF),
         auto_filter_xr_uid: read_string(map, txn, "autoFilterXrUid"),
+        auto_filter_ext_lst_raw: read_string(map, txn, "autoFilterExtLstRaw"),
         columns,
         header_row_dxf_id: read_u32(map, txn, KEY_HEADER_ROW_DXF_ID),
         data_dxf_id: read_u32(map, txn, KEY_DATA_DXF_ID),
@@ -281,6 +289,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
         table_type: read_string(map, txn, KEY_TABLE_TYPE),
         totals_row_shown: read_bool(map, txn, KEY_TOTALS_ROW_SHOWN),
         connection_id: read_u32(map, txn, KEY_CONNECTION_ID),
+        comment: read_string(map, txn, KEY_COMMENT),
         insert_row: read_bool(map, txn, KEY_INSERT_ROW).unwrap_or(false),
         insert_row_shift: read_bool(map, txn, KEY_INSERT_ROW_SHIFT).unwrap_or(false),
         published: read_bool(map, txn, KEY_PUBLISHED).unwrap_or(false),

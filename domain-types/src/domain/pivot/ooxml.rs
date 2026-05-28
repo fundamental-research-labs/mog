@@ -50,6 +50,10 @@ pub struct PivotTableDef {
     /// Whether to show missing caption (OOXML `showMissing`). Default: true.
     #[serde(default = "default_true")]
     pub show_missing: bool,
+    /// Writer-only OOXML preservation state for imported pivot table details
+    /// that are not modeled as editable pivot semantics.
+    #[serde(default, skip_serializing_if = "PivotTableOoxmlPreservation::is_empty")]
+    pub ooxml_preservation: PivotTableOoxmlPreservation,
 }
 
 /// Pivot table output location within the sheet.
@@ -80,8 +84,8 @@ pub struct PivotFieldDef {
     pub compact: bool,
     #[serde(default = "default_true")]
     pub outline: bool,
-    #[serde(default)]
-    pub show_all: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_all: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sort_type: Option<String>,
     /// When present, the field is sorted by the aggregated values of the data field
@@ -162,6 +166,92 @@ pub struct PivotRowColItem {
     pub x_values: Vec<Option<u32>>,
 }
 
+/// Raw XML attribute captured as owner-scoped writer preservation state.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotRawXmlAttribute {
+    pub name: String,
+    pub value: String,
+}
+
+/// Raw XML child block captured under a pivot-owned element.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotPreservedXmlBlock {
+    pub local_name: String,
+    pub xml: String,
+}
+
+/// Per-field writer preservation state for unmodeled `pivotField` XML.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotFieldOoxmlPreservation {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<PivotRawXmlAttribute>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<PivotPreservedXmlBlock>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
+}
+
+impl PivotFieldOoxmlPreservation {
+    pub fn is_empty(&self) -> bool {
+        self.attributes.is_empty()
+            && self.children.is_empty()
+            && self.item_attributes.iter().all(Vec::is_empty)
+    }
+}
+
+/// Pivot table relationship identity discovered from the pivotTable part `.rels`.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotTableRelationshipPreservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rels_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_cache_definition_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consistency: Option<String>,
+}
+
+/// Writer-only OOXML preservation sidecar for imported pivotTableDefinition XML.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotTableOoxmlPreservation {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub root_namespace_declarations: Vec<PivotRawXmlAttribute>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub root_attributes: Vec<PivotRawXmlAttribute>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<PivotPreservedXmlBlock>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<PivotFieldOoxmlPreservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub col_item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship: Option<PivotTableRelationshipPreservation>,
+}
+
+impl PivotTableOoxmlPreservation {
+    pub fn is_empty(&self) -> bool {
+        self.root_namespace_declarations.is_empty()
+            && self.root_attributes.is_empty()
+            && self.children.is_empty()
+            && self.fields.iter().all(PivotFieldOoxmlPreservation::is_empty)
+            && self.row_item_attributes.iter().all(Vec::is_empty)
+            && self.col_item_attributes.iter().all(Vec::is_empty)
+            && self.relationship.is_none()
+    }
+}
+
 /// Pivot table style configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +308,9 @@ pub struct ParsedPivotTable {
     /// render so that the pivot matches the file's collapsed state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_expansion_state: Option<super::expansion::PivotExpansionState>,
+    /// Writer-only pivotTableDefinition preservation state. Compute ignores this.
+    #[serde(default, skip_serializing_if = "PivotTableOoxmlPreservation::is_empty")]
+    pub ooxml_preservation: PivotTableOoxmlPreservation,
 }
 
 // ============================================================================

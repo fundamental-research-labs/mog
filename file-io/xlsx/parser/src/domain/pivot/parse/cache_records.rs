@@ -6,11 +6,23 @@ use crate::infra::xml::{parse_bool_attr, parse_f64_attr, parse_string_attr, pars
 
 /// Parse pivot cache records from pivotCacheRecords*.xml.
 pub fn parse_pivot_cache_records(xml: &[u8]) -> Vec<CacheRecord> {
+    parse_pivot_cache_records_with_metadata(xml).records
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ParsedPivotCacheRecords {
+    pub count: Option<u32>,
+    pub records: Vec<CacheRecord>,
+}
+
+pub fn parse_pivot_cache_records_with_metadata(xml: &[u8]) -> ParsedPivotCacheRecords {
     let mut records = Vec::new();
     let records_start = match find_tag_simd(xml, b"pivotCacheRecords", 0) {
         Some(pos) => pos,
-        None => return records,
+        None => return ParsedPivotCacheRecords::default(),
     };
+    let root_end = find_gt_simd(xml, records_start).unwrap_or(records_start);
+    let count = parse_u32_attr(&xml[records_start..=root_end], b"count=\"");
     let records_end =
         find_closing_tag(xml, b"pivotCacheRecords", records_start).unwrap_or(xml.len());
 
@@ -28,7 +40,9 @@ pub fn parse_pivot_cache_records(xml: &[u8]) -> Vec<CacheRecord> {
                 let tag_end = find_gt_simd(xml, r_start).unwrap_or(r_end);
                 let is_self_closing = tag_end > 0 && xml.get(tag_end - 1) == Some(&b'/');
 
-                if !is_self_closing && r_end > r_start {
+                if is_self_closing {
+                    records.push(CacheRecord::default());
+                } else if r_end > r_start {
                     records.push(parse_cache_record(&xml[r_start..r_end]));
                 }
 
@@ -44,7 +58,7 @@ pub fn parse_pivot_cache_records(xml: &[u8]) -> Vec<CacheRecord> {
         pos = r_start + 1;
     }
 
-    records
+    ParsedPivotCacheRecords { count, records }
 }
 
 pub(crate) fn parse_cache_record(xml: &[u8]) -> CacheRecord {
@@ -159,15 +173,26 @@ mod tests {
     }
 
     #[test]
-    fn self_closing_record_is_currently_ignored() {
+    fn self_closing_record_is_parsed_as_empty_record() {
         let xml = br#"<pivotCacheRecords count="2"><r/><r><s v="kept"/></r></pivotCacheRecords>"#;
 
         let records = parse_pivot_cache_records(xml);
 
-        assert_eq!(records.len(), 1);
+        assert_eq!(records.len(), 2);
+        assert!(records[0].values.is_empty());
         assert_eq!(
-            records[0].values,
+            records[1].values,
             vec![CacheRecordValue::String("kept".to_string())]
         );
+    }
+
+    #[test]
+    fn parses_source_record_count() {
+        let xml = br#"<pivotCacheRecords count="7"><r/></pivotCacheRecords>"#;
+
+        let parsed = parse_pivot_cache_records_with_metadata(xml);
+
+        assert_eq!(parsed.count, Some(7));
+        assert_eq!(parsed.records.len(), 1);
     }
 }

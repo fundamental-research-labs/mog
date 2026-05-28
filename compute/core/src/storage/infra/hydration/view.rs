@@ -142,6 +142,9 @@ pub(super) fn hydrate_view_options(
     }
     // Store multi-pane selections as JSON for round-trip fidelity
     yrs_schema::helpers::write_json_vec(meta_map, txn, "selections", &view.selections);
+    if let Some(xml) = view.ext_lst_xml.as_deref().filter(|value| !value.is_empty()) {
+        meta_map.insert(txn, "sheetViewExtLstXml", Any::String(Arc::from(xml)));
+    }
 }
 
 /// Hydrate sheet protection using structured Y.Map entries via

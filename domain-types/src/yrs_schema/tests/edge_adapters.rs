@@ -78,6 +78,7 @@ fn auto_filter_smoke_round_trips_active_adapter() {
         ],
         sort: None,
         xr_uid: Some("{auto-filter-uid}".to_string()),
+        ext_lst_raw: None,
     };
 
     assert_eq!(

@@ -25,7 +25,7 @@ use crate::domain::cond_format::read::parse_conditional_formats;
 use crate::domain::controls::read::{parse_form_controls_for_sheet, parse_ole_objects_for_sheet};
 use crate::domain::hyperlinks;
 use crate::domain::names;
-use crate::domain::pivot::read::parse_all_pivot_caches;
+use crate::domain::pivot::read::parse_pivot_cache_packages;
 use crate::domain::print;
 use crate::domain::protection::read as protection;
 use crate::domain::protection::read::{SheetProtectionParse, WorkbookProtectionParse};
@@ -39,11 +39,12 @@ use crate::domain::validation::read::{parse_data_validations, parse_x14_data_val
 use crate::domain::workbook::read as workbook;
 use crate::domain::workbook::read::{SheetPackageContext, parse_calc_settings};
 use crate::domain::worksheet::read::{
-    parse_col_widths, parse_frozen_pane, parse_merge_cells, parse_sheet_format_pr,
-    parse_sheet_views,
+    parse_col_widths, parse_dimension_ref_with_text, parse_frozen_pane, parse_merge_cells,
+    parse_sheet_calc_pr, parse_sheet_format_pr, parse_sheet_views, parse_sheet_views_ext_lst,
 };
 use crate::infra::error::{ParseContext, ParseMode};
 use crate::infra::opc::opc_target_to_zip_path;
+use crate::infra::opc::REL_HYPERLINK;
 #[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
 use crate::output::results::{
     CommentOutput, ConnectorOutput, FormControlOutput, OleObjectOutput, ParsedTable,
@@ -68,9 +69,53 @@ use crate::pipeline::metadata::parse_metadata;
 use crate::infra::xml_namespaces::NamespaceMap;
 use crate::pipeline::import_extensions::ImportExtensionParts;
 
+fn build_hyperlinks_output(
+    worksheet_xml: &[u8],
+    sheet_opc_rels: &[ooxml_types::shared::OpcRelationship],
+) -> Vec<HyperlinkOutput> {
+    let Some(mut hl) = hyperlinks::Hyperlinks::parse(worksheet_xml) else {
+        return Vec::new();
+    };
+
+    let relationships: Vec<hyperlinks::HyperlinkRelationship> = sheet_opc_rels
+        .iter()
+        .filter(|rel| rel.rel_type == REL_HYPERLINK)
+        .map(|rel| hyperlinks::HyperlinkRelationship {
+            id: rel.id.clone(),
+            target: rel.target.clone(),
+            target_mode: rel
+                .target_mode
+                .as_deref()
+                .map(|mode| hyperlinks::TargetMode::from_bytes(mode.as_bytes()))
+                .unwrap_or_default(),
+            raw_target_mode: rel.target_mode.clone(),
+        })
+        .collect();
+
+    for hyperlink in &mut hl.hyperlinks {
+        hyperlink.resolve_target(&relationships);
+    }
+
+    hl.hyperlinks
+        .iter()
+        .map(|h| HyperlinkOutput {
+            cell_ref: h.cell_ref.clone(),
+            location: h.location.as_deref().unwrap_or("").to_string(),
+            display: h.display.as_deref().unwrap_or("").to_string(),
+            tooltip: h.tooltip.as_deref().unwrap_or("").to_string(),
+            target: h.target.clone(),
+            r_id: h.r_id.clone(),
+            uid: h.uid.clone(),
+            target_kind: h.target_kind,
+            target_mode: h.target_mode.clone(),
+        })
+        .collect()
+}
+
 use super::external_links_phase::parse_external_links;
 use super::helpers::*;
 use super::metadata_only::append_metadata_only_sheets;
+use super::theme_discovery::discover_workbook_theme_part;
 use super::timing::WorksheetTimingAccumulators;
 
 // =============================================================================
@@ -140,6 +185,12 @@ fn content_type_for_part<'a>(
         .iter()
         .find(|(part_name, _)| part_name.trim_start_matches('/') == normalized)
         .map(|(_, content_type)| content_type.as_str())
+}
+
+fn raw_workbook_custom_views_xml(workbook_xml: &[u8]) -> Option<Vec<u8>> {
+    let start = crate::infra::scanner::find_tag_simd(workbook_xml, b"customWorkbookViews", 0)?;
+    let end = crate::infra::scanner::find_closing_tag(workbook_xml, b"customWorkbookViews", start)?;
+    Some(workbook_xml[start..end + b"</customWorkbookViews>".len()].to_vec())
 }
 
 fn collect_imported_binary_parts(
@@ -287,6 +338,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         shared_strings_rich_runs.push(shared_strings_parser.get_rich_text_runs(i));
         shared_strings_phonetic_xml.push(shared_strings_parser.get_phonetic_xml(i));
     }
+    let shared_strings_ext_lst_xml = shared_strings_parser.root_ext_lst_xml();
     let t2 = tick(&timings);
 
     // Parse styles
@@ -314,9 +366,21 @@ pub(super) fn parse_xlsx_full_native_impl(
     styles_output.raw_cell_style_xfs = styles.cell_style_xfs.clone();
     let t3 = tick(&timings);
 
+    let wb_rels_xml = archive
+        .read_file("xl/_rels/workbook.xml.rels")
+        .map_err(|e| format!("Failed to read xl/_rels/workbook.xml.rels: {}", e))?;
+    let workbook_relationships = workbook::parse_all_rels(&wb_rels_xml);
+
+    let parsed_content_types = archive
+        .get_content_types()
+        .ok()
+        .and_then(|xml| crate::domain::content_types::read::ContentTypes::parse(&xml).ok());
+
     // Parse theme (optional)
-    ctx.set_current_part("xl/theme/theme1.xml");
     let (
+        theme_part_path,
+        theme_relationship_id_hint,
+        theme_relationship_type,
         theme_name,
         theme_color_scheme,
         theme_font_scheme,
@@ -324,9 +388,20 @@ pub(super) fn parse_xlsx_full_native_impl(
         theme_object_defaults_xml,
         theme_extra_clr_scheme_lst_xml,
         theme_ext_lst_xml,
-    ) = if let Ok(theme_xml) = archive.read_file("xl/theme/theme1.xml") {
+        theme_cust_clr_lst_xml,
+        theme_root_sibling_order,
+    ) = if let Some(theme_part) =
+        discover_workbook_theme_part(&archive, &workbook_relationships, parsed_content_types.as_ref())
+    {
+        ctx.set_current_part(&theme_part.path);
+        let theme_xml = archive
+            .read_file(&theme_part.path)
+            .map_err(|e| format!("Failed to read {}: {}", theme_part.path, e))?;
         let theme = themes::Theme::parse(&theme_xml);
         (
+            Some(theme_part.path),
+            theme_part.relationship_id_hint,
+            theme_part.relationship_type,
             Some(theme.name.clone()),
             Some(theme.color_scheme.clone()),
             Some(theme.font_scheme.clone()),
@@ -334,9 +409,11 @@ pub(super) fn parse_xlsx_full_native_impl(
             theme.object_defaults_xml.clone(),
             theme.extra_clr_scheme_lst_xml.clone(),
             theme.ext_lst_xml.clone(),
+            theme.cust_clr_lst_xml.clone(),
+            theme.root_sibling_order.clone(),
         )
     } else {
-        (None, None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None, None, None, None, None)
     };
     ensure_no_archive_safety_error(&archive)?;
 
@@ -364,18 +441,9 @@ pub(super) fn parse_xlsx_full_native_impl(
         Err(e) => return Err(format!("Failed to read _rels/.rels: {}", e)),
     };
     let root_relationships = workbook::parse_all_rels(&root_rels_xml);
-    let wb_rels_xml = archive
-        .read_file("xl/_rels/workbook.xml.rels")
-        .map_err(|e| format!("Failed to read xl/_rels/workbook.xml.rels: {}", e))?;
-    let workbook_relationships = workbook::parse_all_rels(&wb_rels_xml);
-
     // Parse [Content_Types].xml before worksheet parsing so workbook sheet
     // identity is relationship/content-type driven instead of physical path
     // driven.
-    let parsed_content_types = archive
-        .get_content_types()
-        .ok()
-        .and_then(|xml| crate::domain::content_types::read::ContentTypes::parse(&xml).ok());
     let content_type_defaults = parsed_content_types
         .as_ref()
         .map(|ct| {
@@ -422,6 +490,8 @@ pub(super) fn parse_xlsx_full_native_impl(
             function: dn.function,
             vb_procedure: dn.vb_procedure,
             xlm: dn.xlm,
+            function_group_id: dn.function_group_id,
+            shortcut_key: dn.shortcut_key.clone(),
             publish_to_server: dn.publish_to_server,
             workbook_parameter: dn.workbook_parameter,
             xml_space_preserve: dn.xml_space_preserve,
@@ -435,14 +505,23 @@ pub(super) fn parse_xlsx_full_native_impl(
     // Parse calculation settings (iterative calc support)
     let calc_settings = parse_calc_settings(&workbook_xml);
     let workbook_views = crate::domain::workbook::read::parse_workbook_views(&workbook_xml);
+    let custom_workbook_views_xml = raw_workbook_custom_views_xml(&workbook_xml);
     let workbook_properties =
         crate::domain::workbook::read::parse_workbook_properties(&workbook_xml);
     let file_version = crate::domain::workbook::read::parse_file_version(&workbook_xml);
     let file_sharing = crate::domain::workbook::read::parse_file_sharing(&workbook_xml);
     let web_publishing = crate::domain::workbook::read::parse_web_publishing(&workbook_xml);
+    let workbook_conformance =
+        crate::domain::workbook::read::parse_workbook_conformance(&workbook_xml);
+    let unsupported_workbook_elements =
+        super::workbook_disposition::unsupported_workbook_elements(&workbook_xml);
+    let unsupported_workbook_mce =
+        super::workbook_disposition::unsupported_workbook_mce(&workbook_xml);
 
     // Parse all pivot cache definitions (workbook-level, needed before per-sheet pivot tables)
-    let pivot_caches = parse_all_pivot_caches(&archive);
+    let pivot_cache_discovery = parse_pivot_cache_packages(&archive);
+    let pivot_cache_packages = pivot_cache_discovery.fidelity.clone();
+    let pivot_caches = pivot_cache_discovery.caches;
 
     // Parse all slicer cache definitions (workbook-level)
     let slicer_caches = parse_all_slicer_caches(&archive);
@@ -480,6 +559,7 @@ pub(super) fn parse_xlsx_full_native_impl(
             comments: Vec<CommentOutput>,
             comment_authors: Vec<String>,
             comments_root_namespace_attrs: Vec<(String, String)>,
+            comments_ext_lst_xml: Option<String>,
             tables: Vec<ParsedTable>,
             table_xml_passthroughs: Vec<(String, Vec<u8>)>,
             parsed_pivot_configs: Vec<domain_types::domain::pivot::ParsedPivotTable>,
@@ -518,7 +598,12 @@ pub(super) fn parse_xlsx_full_native_impl(
                 MAX_WORKSHEET_CELLS,
             )?;
 
-            let (comments, comment_authors, comments_root_namespace_attrs) =
+            let (
+                comments,
+                comment_authors,
+                comments_root_namespace_attrs,
+                comments_ext_lst_xml,
+            ) =
                 parse_comments_for_sheet(&archive, sheet_num);
             let (tables, table_xml_passthroughs) = parse_tables_for_sheet(&archive, sheet_num);
             ensure_count_limit("table", tables.len(), MAX_TABLES)?;
@@ -583,6 +668,7 @@ pub(super) fn parse_xlsx_full_native_impl(
                 comments,
                 comment_authors,
                 comments_root_namespace_attrs,
+                comments_ext_lst_xml,
                 tables,
                 table_xml_passthroughs,
                 parsed_pivot_configs,
@@ -616,6 +702,7 @@ pub(super) fn parse_xlsx_full_native_impl(
                     ps.comments,
                     ps.comment_authors,
                     ps.comments_root_namespace_attrs,
+                    ps.comments_ext_lst_xml,
                     ps.tables,
                     ps.table_xml_passthroughs,
                     ps.charts,
@@ -795,8 +882,10 @@ pub(super) fn parse_xlsx_full_native_impl(
     let imported_calc_chain_entry_count = archive
         .read_file("xl/calcChain.xml")
         .ok()
-        .map(|xml| crate::domain::calc::parse_calc_chain(&xml).len())
+        .map(|xml| crate::domain::calc::count_calc_chain_entries(&xml))
         .unwrap_or(0);
+    let volatile_dependency_part =
+        collect_workbook_volatile_dependency_part(&archive, &workbook_relationships, &content_type_overrides);
     let connections = crate::domain::connections::parse_connections(&archive);
 
     // Build result
@@ -805,6 +894,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         shared_strings,
         shared_strings_rich_runs,
         shared_strings_phonetic_xml,
+        shared_strings_ext_lst_xml,
         styles: styles_output,
         theme: None,
         defined_names,
@@ -826,7 +916,11 @@ pub(super) fn parse_xlsx_full_native_impl(
         calc_pr_settings: Some(calc_settings),
         imported_calc_chain_entry_count,
         pivot_caches,
+        pivot_cache_packages,
         slicer_caches,
+        theme_part_path,
+        theme_relationship_id_hint,
+        theme_relationship_type,
         theme_name,
         theme_color_scheme,
         theme_font_scheme,
@@ -834,6 +928,8 @@ pub(super) fn parse_xlsx_full_native_impl(
         theme_object_defaults_xml,
         theme_extra_clr_scheme_lst_xml,
         theme_ext_lst_xml,
+        theme_cust_clr_lst_xml,
+        theme_root_sibling_order,
         styles_ext_lst_xml,
         styles_root_namespace_attrs,
         parsed_stylesheet: Some(styles),
@@ -858,14 +954,19 @@ pub(super) fn parse_xlsx_full_native_impl(
         raw_doc_metadata_label_info,
         external_links,
         connections,
+        volatile_dependency_part,
         custom_xml_parts,
         raw_persons_xml,
         raw_threaded_comments,
         workbook_views,
+        custom_workbook_views_xml,
         workbook_properties,
         file_version,
         file_sharing,
         web_publishing,
+        workbook_conformance,
+        unsupported_workbook_elements,
+        unsupported_workbook_mce,
         extensions: {
             let mut imported_parts = crate::infra::imported_parts::ImportedPackageParts::new();
             if let Some(parts) = web_extension_parts {
@@ -876,12 +977,16 @@ pub(super) fn parse_xlsx_full_native_impl(
             // Capture remaining opaque package bytes still owned by older
             // feature-specific conversion paths. Floating-object media and OLE
             // bytes are captured above as typed imported owner inputs.
+            super::non_editable_sheets::capture_non_editable_sheet_clusters(
+                &archive,
+                &workbook_sheet_inventory,
+                &mut imported_parts,
+            );
             for entry in archive.entries() {
                 if entry.name.starts_with("xl/printerSettings/")
                     || entry.name.starts_with("xl/featurePropertyBag/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
-                    || entry.name == "xl/volatileDependencies.xml"
                     || entry.name.starts_with("xl/timelineCaches/")
                     || entry.name.starts_with("xl/timelines/")
                     // Pivots and slicers are modeled features. Do not capture
@@ -899,6 +1004,7 @@ pub(super) fn parse_xlsx_full_native_impl(
             }
             let ext = ImportExtensionParts {
                 workbook_namespaces,
+                styles_namespaces,
                 sheet_namespaces: sheet_ext_namespaces,
                 imported_parts,
             };
@@ -951,6 +1057,7 @@ fn process_sheet_core(
     comments_json: Vec<CommentOutput>,
     comment_authors: Vec<String>,
     comments_root_namespace_attrs: Vec<(String, String)>,
+    comments_ext_lst_xml: Option<String>,
     tables: Vec<ParsedTable>,
     table_xml_passthroughs: Vec<(String, Vec<u8>)>,
     charts: Vec<domain_types::ChartSpec>,
@@ -979,6 +1086,7 @@ fn process_sheet_core(
     let pre_sd = memchr::memmem::find(worksheet_xml, b"<sheetData")
         .map(|p| &worksheet_xml[..p])
         .unwrap_or(worksheet_xml);
+    let worksheet_dimension_ref = parse_dimension_ref_with_text(pre_sd).map(|d| d.ref_range);
     let col_widths = parse_col_widths(pre_sd);
     let fmt_pr = parse_sheet_format_pr(pre_sd);
     let default_row_height = fmt_pr.default_row_height;
@@ -1106,23 +1214,7 @@ fn process_sheet_core(
     // Extract full <extLst>...</extLst> from post-sheetData for round-trip passthrough
     let ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
 
-    let hyperlinks_parsed: Vec<HyperlinkOutput> = hyperlinks::Hyperlinks::parse(post_sd)
-        .map(|hl| {
-            hl.hyperlinks
-                .iter()
-                .map(|h| HyperlinkOutput {
-                    cell_ref: h.cell_ref.clone(),
-                    location: h.location.as_deref().unwrap_or("").to_string(),
-                    display: h.display.as_deref().unwrap_or("").to_string(),
-                    tooltip: h.tooltip.as_deref().unwrap_or("").to_string(),
-                    r_id: h.r_id.clone(),
-                    uid: h.uid.clone(),
-                    target_kind: h.target_kind,
-                    target_mode: h.target_mode.clone(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let hyperlinks_parsed = build_hyperlinks_output(post_sd, &sheet_opc_rels);
 
     let protection_output =
         protection::SheetProtection::parse(post_sd).map(|sp| ProtectionOutput {
@@ -1153,6 +1245,7 @@ fn process_sheet_core(
         });
     let worksheet_semantic_containers =
         crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd);
+    let sheet_calc_pr = parse_sheet_calc_pr(post_sd);
 
     let mut ps = print::PrintSettings::parse(post_sd);
     ps.page_setup_properties = sheet_properties
@@ -1167,6 +1260,7 @@ fn process_sheet_core(
         .into_iter()
         .map(crate::output::results::SheetViewOutput::from)
         .collect();
+    let sheet_views_ext_lst_xml = parse_sheet_views_ext_lst(pre_sd);
 
     let sparkline_groups = sparklines::parse_sparklines(post_sd);
     let sparklines_output: Vec<SparklineSummary> = sparkline_groups
@@ -1229,9 +1323,12 @@ fn process_sheet_core(
         comments: comments_json,
         comment_authors,
         comments_root_namespace_attrs,
+        comments_ext_lst_xml,
         hyperlinks: hyperlinks_parsed,
         protection: protection_output,
         worksheet_semantic_containers,
+        worksheet_dimension_ref,
+        sheet_calc_pr,
         print_settings,
         header_footer_xml,
         page_breaks,
@@ -1253,6 +1350,7 @@ fn process_sheet_core(
         row_heights,
         frozen_pane,
         view_options,
+        sheet_views_ext_lst_xml,
         sheet_properties,
         outline_properties,
         charts,
@@ -1293,6 +1391,7 @@ fn process_sheet_parallel(
     comments_json: Vec<CommentOutput>,
     comment_authors: Vec<String>,
     comments_root_namespace_attrs: Vec<(String, String)>,
+    comments_ext_lst_xml: Option<String>,
     tables: Vec<ParsedTable>,
     table_xml_passthroughs: Vec<(String, Vec<u8>)>,
     charts: Vec<domain_types::ChartSpec>,
@@ -1313,6 +1412,7 @@ fn process_sheet_parallel(
         comments_json,
         comment_authors,
         comments_root_namespace_attrs,
+        comments_ext_lst_xml,
         tables,
         table_xml_passthroughs,
         charts,
@@ -1382,6 +1482,8 @@ fn parse_sheets_sequential(
         let pre_sd_early = memchr::memmem::find(&worksheet_xml, b"<sheetData")
             .map(|p| &worksheet_xml[..p])
             .unwrap_or(&worksheet_xml);
+        let worksheet_dimension_ref =
+            parse_dimension_ref_with_text(pre_sd_early).map(|d| d.ref_range);
         let col_widths = parse_col_widths(pre_sd_early);
         let fmt_pr_seq = parse_sheet_format_pr(pre_sd_early);
         let default_row_height = fmt_pr_seq.default_row_height;
@@ -1511,25 +1613,19 @@ fn parse_sheets_sequential(
         let custom_properties_xml =
             crate::domain::worksheet::read::extract_custom_properties_xml(post_sd);
         let ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
+        let worksheet_semantic_containers =
+            crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd);
+        let sheet_calc_pr = parse_sheet_calc_pr(post_sd);
         let aux_t3 = tick(timings);
 
-        let hyperlinks_parsed: Vec<HyperlinkOutput> = hyperlinks::Hyperlinks::parse(post_sd)
-            .map(|hl| {
-                hl.hyperlinks
-                    .iter()
-                    .map(|h| HyperlinkOutput {
-                        cell_ref: h.cell_ref.clone(),
-                        location: h.location.as_deref().unwrap_or("").to_string(),
-                        display: h.display.as_deref().unwrap_or("").to_string(),
-                        tooltip: h.tooltip.as_deref().unwrap_or("").to_string(),
-                        r_id: h.r_id.clone(),
-                        uid: h.uid.clone(),
-                        target_kind: h.target_kind,
-                        target_mode: h.target_mode.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let sheet_rels_for_hyperlinks = {
+            let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
+            archive
+                .read_file(&rels_path)
+                .map(|xml| workbook::parse_all_rels(&xml))
+                .unwrap_or_default()
+        };
+        let hyperlinks_parsed = build_hyperlinks_output(post_sd, &sheet_rels_for_hyperlinks);
         let aux_t4 = tick(timings);
 
         let protection_output =
@@ -1580,6 +1676,7 @@ fn parse_sheets_sequential(
             .into_iter()
             .map(crate::output::results::SheetViewOutput::from)
             .collect();
+        let sheet_views_ext_lst_xml = parse_sheet_views_ext_lst(pre_sd);
         let aux_t8 = tick(timings);
 
         let sparkline_groups = sparklines::parse_sparklines(post_sd);
@@ -1600,7 +1697,12 @@ fn parse_sheets_sequential(
 
         // Parse comments (requires ZIP reads for comment XML files)
         let az_t0 = tick(timings);
-        let (comments_output, comment_authors, comments_root_namespace_attrs) =
+        let (
+            comments_output,
+            comment_authors,
+            comments_root_namespace_attrs,
+            comments_ext_lst_xml,
+        ) =
             parse_comments_for_sheet(archive, sheet_num);
 
         // Parse tables (requires ZIP reads for table XML files and .rels)
@@ -1760,10 +1862,12 @@ fn parse_sheets_sequential(
             comments: comments_output,
             comment_authors,
             comments_root_namespace_attrs,
+            comments_ext_lst_xml,
             hyperlinks: hyperlinks_parsed,
             protection: protection_output,
-            worksheet_semantic_containers:
-                crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd),
+            worksheet_semantic_containers,
+            worksheet_dimension_ref,
+            sheet_calc_pr,
             print_settings,
             header_footer_xml,
             page_breaks,
@@ -1785,6 +1889,7 @@ fn parse_sheets_sequential(
             row_heights,
             frozen_pane,
             view_options,
+            sheet_views_ext_lst_xml,
             sheet_properties,
             outline_properties,
             charts,
@@ -1813,4 +1918,62 @@ fn parse_sheets_sequential(
     }
 
     Ok(sheets)
+}
+
+fn collect_workbook_volatile_dependency_part(
+    archive: &crate::XlsxArchive<'_>,
+    workbook_relationships: &[ooxml_types::shared::OpcRelationship],
+    content_type_overrides: &[(String, String)],
+) -> Option<domain_types::VolatileDependencyPackagePart> {
+    let relationship = workbook_relationships.iter().find(|rel| {
+        rel.target_mode.as_deref() != Some("External")
+            && (rel.rel_type == crate::infra::opc::REL_VOLATILE_DEPENDENCIES
+                || rel.rel_type == crate::infra::opc::REL_VOLATILE_DEPENDENCIES_STRICT)
+    });
+    let resolved_path = relationship
+        .and_then(|rel| {
+            crate::infra::opc::resolve_relationship_target(Some("xl/workbook.xml"), &rel.target)
+                .ok()
+        })
+        .unwrap_or_else(|| "xl/volatileDependencies.xml".to_string());
+    if resolved_path != "xl/volatileDependencies.xml" {
+        return None;
+    }
+
+    let bytes = archive.read_file(&resolved_path).ok()?;
+    if crate::infra::scanner::find_tag_simd(&bytes, b"volTypes", 0).is_none() {
+        return None;
+    }
+
+    let relationships = archive
+        .read_file("xl/_rels/volatileDependencies.xml.rels")
+        .ok()
+        .map(|bytes| {
+            crate::domain::workbook::read::parse_all_rels(&bytes)
+                .into_iter()
+                .map(domain_types::PackageRelationshipHint::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    let content_type = content_type_overrides
+        .iter()
+        .find_map(|(part_name, content_type)| {
+            (domain_types::normalize_package_path(part_name) == resolved_path)
+                .then(|| content_type.clone())
+        })
+        .unwrap_or_else(|| {
+            crate::domain::content_types::write::CT_VOLATILE_DEPENDENCIES.to_string()
+        });
+
+    Some(domain_types::VolatileDependencyPackagePart {
+        path: resolved_path,
+        bytes,
+        content_type,
+        relationship_id: relationship.map(|rel| rel.id.clone()),
+        relationship_type: relationship
+            .map(|rel| rel.rel_type.clone())
+            .unwrap_or_else(|| crate::infra::opc::REL_VOLATILE_DEPENDENCIES.to_string()),
+        relationship_target: relationship.map(|rel| rel.target.clone()),
+        relationships,
+    })
 }

@@ -1,4 +1,4 @@
-use super::{RELATIONSHIPS_NS, manager::RelationshipManager};
+use super::{RELATIONSHIPS_NS, manager::RelationshipManager, types::canonical_target_mode};
 
 impl RelationshipManager {
     /// Generate the .rels XML content
@@ -27,11 +27,14 @@ impl RelationshipManager {
             xml.extend_from_slice(&escape_xml_attr(&rel.target));
             xml.push(b'"');
 
-            // Add TargetMode if present
+            // Add only OPC-legal TargetMode values. Import diagnostics retain
+            // invalid raw tokens; normal export must not re-emit them.
             if let Some(ref mode) = rel.target_mode {
-                xml.extend_from_slice(b" TargetMode=\"");
-                xml.extend_from_slice(mode.as_bytes());
-                xml.push(b'"');
+                if let Some(mode) = canonical_target_mode(mode) {
+                    xml.extend_from_slice(b" TargetMode=\"");
+                    xml.extend_from_slice(mode.as_bytes());
+                    xml.push(b'"');
+                }
             }
 
             xml.extend_from_slice(b"/>");

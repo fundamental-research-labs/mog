@@ -151,6 +151,9 @@ pub struct AutoFilter {
     /// Sort state applied within the auto filter.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_state: Option<SortState>,
+    /// Extension list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_lst: Option<crate::ExtensionList>,
 }
 
 // ============================================================================
@@ -174,6 +177,9 @@ pub struct FilterColumn {
     /// The type of filter applied to this column.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter_type: Option<FilterColumnType>,
+    /// Extension list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_lst: Option<crate::ExtensionList>,
 }
 
 impl Default for FilterColumn {
@@ -183,6 +189,7 @@ impl Default for FilterColumn {
             hidden_button: false,
             show_button: true,
             filter_type: None,
+            ext_lst: None,
         }
     }
 }
@@ -429,6 +436,9 @@ pub struct SortState {
     /// Individual sort conditions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sort_condition: Vec<SortCondition>,
+    /// Extension list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_lst: Option<crate::ExtensionList>,
 }
 
 impl Default for SortState {
@@ -439,6 +449,7 @@ impl Default for SortState {
             sort_method: SortMethod::None,
             ref_range: String::new(),
             sort_condition: Vec::new(),
+            ext_lst: None,
         }
     }
 }

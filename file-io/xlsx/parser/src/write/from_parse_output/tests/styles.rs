@@ -353,6 +353,8 @@ fn test_named_ranges() {
             help: Some("help text".to_string()),
             status_bar: Some("status text".to_string()),
             xlm: true,
+            function_group_id: Some(6),
+            shortcut_key: Some("K".to_string()),
             function: true,
             vb_procedure: true,
             publish_to_server: true,
@@ -370,6 +372,8 @@ fn test_named_ranges() {
     assert!(workbook_xml.contains("description=\"description text\""));
     assert!(workbook_xml.contains("help=\"help text\""));
     assert!(workbook_xml.contains("statusBar=\"status text\""));
+    assert!(workbook_xml.contains("functionGroupId=\"6\""));
+    assert!(workbook_xml.contains("shortcutKey=\"K\""));
     assert!(workbook_xml.contains("function=\"1\""));
     assert!(workbook_xml.contains("vbProcedure=\"1\""));
     assert!(workbook_xml.contains("xlm=\"1\""));

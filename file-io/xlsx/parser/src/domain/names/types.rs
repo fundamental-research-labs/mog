@@ -138,6 +138,12 @@ pub struct DefinedName {
     /// Whether this is an XLM macro
     pub xlm: bool,
 
+    /// Function group ID for XLM function categorisation
+    pub function_group_id: Option<u32>,
+
+    /// Keyboard shortcut key for macro/function names
+    pub shortcut_key: Option<String>,
+
     /// Whether to publish this name to the server (SharePoint)
     pub publish_to_server: bool,
 

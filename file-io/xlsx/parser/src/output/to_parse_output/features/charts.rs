@@ -319,7 +319,7 @@ fn chart_drawing_frame_from_anchor(
     anchor_index: usize,
     chart_ex: bool,
 ) -> Option<(AnchorPosition, ChartDrawingFrameOoxmlProps)> {
-    let (position, content, extent_emu, edit_as, client_data) = match anchor {
+    let (position, content, extent_emu, edit_as, client_data, raw_alternate_content) = match anchor {
         DrawingAnchor::TwoCell(tc) => (
             AnchorPosition {
                 anchor_row: tc.from.row,
@@ -339,6 +339,9 @@ fn chart_drawing_frame_from_anchor(
             None,
             tc.edit_as.as_ref().map(|e| e.to_ooxml().to_string()),
             &tc.client_data,
+            tc.mc_alternate_content
+                .as_ref()
+                .map(|mc| mc.raw_xml.clone()),
         ),
         DrawingAnchor::OneCell(oc) => (
             AnchorPosition {
@@ -359,6 +362,9 @@ fn chart_drawing_frame_from_anchor(
             Some((oc.extent.cx, oc.extent.cy)),
             None,
             &oc.client_data,
+            oc.mc_alternate_content
+                .as_ref()
+                .map(|mc| mc.raw_xml.clone()),
         ),
         DrawingAnchor::Absolute(abs) => (
             AnchorPosition {
@@ -379,6 +385,7 @@ fn chart_drawing_frame_from_anchor(
             Some((abs.extent.cx, abs.extent.cy)),
             Some("absolute".to_string()),
             &abs.client_data,
+            None,
         ),
     };
 
@@ -415,6 +422,7 @@ fn chart_drawing_frame_from_anchor(
             client_data_prints_with_sheet,
             relationship_id,
             relationship_target,
+            raw_alternate_content,
         },
     ))
 }
@@ -534,6 +542,7 @@ pub(crate) fn build_fallback_chart_spec(
         chart_relationships: Vec::new(),
         chart_auxiliary_files: Vec::new(),
         chart_auxiliary_parts: Vec::new(),
+        chart_ex_replay: None,
         is_chart_ex: false,
         cnv_pr_name: None,
         cnv_pr_id: None,
@@ -567,6 +576,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
     }
 
     let chartex_frames = chart_drawing_frames(sheet, true);
+    let chartex_frames_by_target = chart_frames_by_relationship_target(&chartex_frames);
 
     sheet
         .parsed_chart_ex
@@ -598,8 +608,11 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 .unwrap_or_else(|| "chartEx:unknown".to_string());
 
             // Position from matched drawing anchor, or default.
-            let position = chartex_frames
-                .get(idx)
+            let matched_frame = chartex_frames_by_target
+                .get(cx.original_path.as_str())
+                .copied()
+                .or_else(|| chartex_frames.get(idx));
+            let position = matched_frame
                 .map(|(position, _)| position.clone())
                 .unwrap_or_default();
             let chart_relationships = cx
@@ -668,6 +681,19 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 chart_relationships,
                 chart_auxiliary_files: cx.auxiliary_files.clone(),
                 chart_auxiliary_parts,
+                chart_ex_replay: Some(domain_types::chart::ChartExReplayData {
+                    original_path: cx.original_path.clone(),
+                    original_xml: cx.original_xml.clone(),
+                    original_position: position.clone(),
+                    rels_path: cx.chart_rels_bytes.as_ref().map(|(path, _)| path.clone()),
+                    rels_xml: cx.chart_rels_bytes.as_ref().map(|(_, xml)| xml.clone()),
+                    relationships: cx
+                        .chart_rels_bytes
+                        .as_ref()
+                        .map(|(_, rels_xml)| chart_owned_relationships(rels_xml))
+                        .unwrap_or_default(),
+                    auxiliary_files: cx.auxiliary_files.clone(),
+                }),
                 is_chart_ex: true,
                 cnv_pr_name: None,
                 cnv_pr_id: None,
@@ -688,7 +714,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 anchor_index: None,
                 import_status: None,
             };
-            if let Some((_, frame)) = chartex_frames.get(idx) {
+            if let Some((_, frame)) = matched_frame {
                 apply_chart_frame_to_spec(&mut spec, frame);
             }
             spec

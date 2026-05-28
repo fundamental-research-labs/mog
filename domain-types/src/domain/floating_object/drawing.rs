@@ -204,4 +204,8 @@ pub struct DrawingData {
     /// Background color (CSS color string), None = transparent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<String>,
+
+    /// Imported OOXML drawing object payload for writer-owned round-trip.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ooxml: Option<super::ooxml::DrawingObjectOoxmlProps>,
 }

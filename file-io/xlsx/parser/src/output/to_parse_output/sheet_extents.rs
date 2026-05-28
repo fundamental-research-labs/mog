@@ -29,7 +29,7 @@ pub(super) fn is_style_only_cell(cell: &CellData) -> bool {
         && cell.formula.is_none()
         && cell.style_id.is_some()
         && cell.cell_formula.is_none()
-        && !cell.cm
+        && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
@@ -48,7 +48,7 @@ pub(super) fn is_styleless_blank_cell(cell: &CellData) -> bool {
         && cell.rich_string.is_none()
         && cell.style_id.is_none()
         && cell.cell_formula.is_none()
-        && !cell.cm
+        && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
@@ -68,7 +68,7 @@ pub(super) fn explicit_blank_cell(row: u32, col: u32) -> CellData {
         array_ref: None,
         style_id: None,
         cell_formula: None,
-        cm: false,
+        cell_metadata_index: None,
         formula_result_type: None,
         has_empty_cached_value: false,
         vm: None,

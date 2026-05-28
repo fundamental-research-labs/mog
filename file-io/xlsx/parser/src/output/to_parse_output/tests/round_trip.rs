@@ -18,6 +18,8 @@ fn convert_named_ranges_preserves_ct_defined_name_metadata() {
         function: true,
         vb_procedure: true,
         xlm: true,
+        function_group_id: Some(6),
+        shortcut_key: Some("K".to_string()),
         publish_to_server: true,
         workbook_parameter: true,
         xml_space_preserve: true,
@@ -36,6 +38,8 @@ fn convert_named_ranges_preserves_ct_defined_name_metadata() {
     assert!(nr.function);
     assert!(nr.vb_procedure);
     assert!(nr.xlm);
+    assert_eq!(nr.function_group_id, Some(6));
+    assert_eq!(nr.shortcut_key.as_deref(), Some("K"));
     assert!(nr.publish_to_server);
     assert!(nr.workbook_parameter);
     assert!(nr.xml_space_preserve);

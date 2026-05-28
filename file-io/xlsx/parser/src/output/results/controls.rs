@@ -122,6 +122,9 @@ pub struct FormControlOutput {
     // --- Worksheet-level controlPr attributes ---
     /// Raw attributes from the worksheet `<controlPr>` element for round-trip fidelity.
     pub control_pr_attrs: std::collections::HashMap<String, String>,
+    /// Typed worksheet `<controlPr>` element attributes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_pr: Option<domain_types::domain::floating_object::FormControlWorksheetControlPr>,
 
     // --- Anchor positioning policy ---
     /// Whether the control moves with the cells it is anchored to.
@@ -212,6 +215,7 @@ impl FormControlOutput {
             properties,
             shape_id: Some(self.shape_id),
             control_pr_attrs: self.control_pr_attrs.clone(),
+            control_pr: self.control_pr.clone(),
             move_with_cells: self.move_with_cells,
             size_with_cells: self.size_with_cells,
             vml_shape: self.vml_shape.clone(),
@@ -287,6 +291,7 @@ impl FormControlOutput {
             anchor_source,
             vml_extras: fc.properties.vml_extras.clone(),
             control_pr_attrs: fc.control_pr_attrs.clone(),
+            control_pr: fc.control_pr.clone(),
             move_with_cells: fc.move_with_cells,
             size_with_cells: fc.size_with_cells,
             vml_shape: fc.vml_shape.clone(),

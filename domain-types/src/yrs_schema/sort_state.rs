@@ -105,6 +105,7 @@ mod tests {
                     icon_id: Some(1),
                 },
             ],
+            ext_lst_raw: None,
         }
     }
 

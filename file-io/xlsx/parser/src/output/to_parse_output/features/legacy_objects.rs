@@ -68,6 +68,7 @@ pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<Float
                 size_with_cells: fc.size_with_cells,
                 vml_extras: fc.vml_extras.clone(),
                 control_pr_attrs: fc.control_pr_attrs.clone(),
+                control_pr: fc.control_pr.clone(),
                 vml_shape: Some(fc.vml_shape.clone()),
             };
             let object_id = format!("form-control-shape-{}", fc.shape_id);
@@ -162,6 +163,11 @@ pub(crate) fn convert_ole_objects(
             let embedding = o.data_path.as_ref().and_then(|path| {
                 resolve_binary_part(binary_parts, path).map(|bytes| OleObjectPackageIdentity {
                     path: path.clone(),
+                    kind: o
+                        .embedding_kind
+                        .clone()
+                        .unwrap_or_else(|| "oleObject".to_string()),
+                    content_type: o.embedding_content_type.clone(),
                     relationship_id: o.r_id.clone(),
                     bytes,
                 })

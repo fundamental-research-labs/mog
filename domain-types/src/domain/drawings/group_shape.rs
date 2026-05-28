@@ -12,9 +12,27 @@
 use serde::{Deserialize, Serialize};
 
 use ooxml_types::drawings::{
-    GroupShapeNonVisual, GroupShapeProperties, SpreadsheetConnector, SpreadsheetGraphicFrame,
-    SpreadsheetPicture, SpreadsheetShape,
+    ContentPartRef, GroupShapeNonVisual, GroupShapeProperties, SpreadsheetConnector,
+    SpreadsheetGraphicFrame, SpreadsheetPicture, SpreadsheetShape,
 };
+
+/// Internal opaque payload for unsupported spreadsheet drawing object choices.
+///
+/// The raw XML is the direct object-choice element, not the surrounding anchor.
+/// Anchor geometry and client data remain owned by the parsed anchor. This is
+/// writer-only preservation state: public bridge/API shapes should continue to
+/// treat it as unsupported unless an explicit opaque-handle contract exists.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct OpaqueDrawingContent {
+    /// Complete raw XML for the unsupported direct object element.
+    pub raw_xml: String,
+    /// Relationship ids discovered in the raw object XML.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationship_ids: Vec<String>,
+    /// Stable hint derived from the local element name or prefix-qualified name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind_hint: Option<String>,
+}
 
 /// Group of shapes (CT_GroupShape, `dml-spreadsheetDrawing.xsd:93-105`).
 ///
@@ -72,7 +90,11 @@ pub enum DrawingContent {
     GraphicFrame(SpreadsheetGraphicFrame),
     /// SmartArt diagram (parsed graphicFrame with relationship IDs).
     SmartArt(SmartArtGraphicFrame),
-    /// Unknown or unsupported content.
+    /// Content part reference (`xdr:contentPart`).
+    ContentPart(ContentPartRef),
+    /// Unsupported content with raw writer-only preservation state.
+    OpaqueUnknown(OpaqueDrawingContent),
+    /// Unknown or unsupported content without a safe preservation payload.
     #[default]
     Unknown,
 }

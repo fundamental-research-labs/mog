@@ -176,13 +176,16 @@ fn rewrite_chart_ex_external_refs(
     use ooxml_types::chart_ex::ChartExDimension;
 
     for part in chart_ex_parts.iter_mut() {
+        let mut changed = false;
         // Dimension formulas: chart_space.chart_data.data[*].dimensions[*]
         for data in &mut part.chart_space.chart_data.data {
             for dim in &mut data.dimensions {
                 match dim {
                     ChartExDimension::String { formula, .. }
                     | ChartExDimension::Numeric { formula, .. } => {
+                        let before = formula.content.clone();
                         rewrite_in_place(&mut formula.content, local_sheets, ext_links);
+                        changed |= formula.content != before;
                     }
                 }
             }
@@ -193,10 +196,16 @@ fn rewrite_chart_ex_external_refs(
             if let Some(ref mut tx) = title.tx {
                 if let Some(ref mut tx_data) = tx.tx_data {
                     if let Some(ref mut f) = tx_data.formula {
+                        let before = f.clone();
                         rewrite_in_place(f, local_sheets, ext_links);
+                        changed |= *f != before;
                     }
                 }
             }
+        }
+
+        if changed {
+            part.original_xml.clear();
         }
     }
 }

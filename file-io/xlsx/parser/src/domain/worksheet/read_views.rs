@@ -14,6 +14,10 @@ pub fn parse_frozen_pane(xml: &[u8]) -> Option<SheetPane> {
 
 /// Parse all sheet view options from worksheet XML.
 pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
+    let Some(sheet_views_block) = first_element_block(xml, b"sheetViews") else {
+        return Vec::new();
+    };
+    let xml = sheet_views_block;
     let mut views = Vec::new();
     let mut search_offset = 0;
 
@@ -43,6 +47,7 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
         sv.pane = parse_first_pane(block);
         parse_pivot_selections(block, &mut sv);
         parse_selections(block, &mut sv);
+        sv.ext_lst_xml = direct_child_element_xml(block, b"extLst");
         views.push(sv);
 
         search_offset = if is_self_closing {
@@ -53,6 +58,19 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
     }
 
     views
+}
+
+/// Parse direct-child `<extLst>` XML under the `<sheetViews>` container.
+pub fn parse_sheet_views_ext_lst(xml: &[u8]) -> Option<String> {
+    let block = first_element_block(xml, b"sheetViews")?;
+    let open_end = find_gt_simd(block, 0)? + 1;
+    let close_start = block
+        .len()
+        .saturating_sub(b"</sheetViews>".len());
+    if open_end > close_start {
+        return None;
+    }
+    direct_child_element_xml(&block[open_end..close_start], b"extLst")
 }
 
 /// Parse sheet view options from worksheet XML (convenience wrapper).
@@ -277,4 +295,54 @@ fn attr_value(element: &[u8], attr: &[u8]) -> Option<String> {
     std::str::from_utf8(&element[start..end])
         .ok()
         .map(|s| s.to_string())
+}
+
+fn first_element_block<'a>(xml: &'a [u8], tag: &[u8]) -> Option<&'a [u8]> {
+    let start = find_tag_simd(xml, tag, 0)?;
+    let (_, end) = crate::infra::xml_fragment::extract_element_bounds(xml, start)?;
+    Some(&xml[start..end])
+}
+
+fn direct_child_element_xml(xml: &[u8], tag: &[u8]) -> Option<String> {
+    let mut pos = 0;
+    while let Some(start) = find_tag_simd(xml, tag, pos) {
+        if element_depth_before(xml, start) == 0 {
+            let (_, end) = crate::infra::xml_fragment::extract_element_bounds(xml, start)?;
+            return std::str::from_utf8(&xml[start..end])
+                .ok()
+                .map(str::to_string);
+        }
+        pos = start + 1;
+    }
+    None
+}
+
+fn element_depth_before(xml: &[u8], end: usize) -> i32 {
+    let mut depth = 0i32;
+    let mut pos = 0usize;
+    while pos < end {
+        let Some(rel) = memchr::memchr(b'<', &xml[pos..end]) else {
+            break;
+        };
+        let start = pos + rel;
+        if start + 1 >= end {
+            break;
+        }
+        if matches!(xml[start + 1], b'?' | b'!') {
+            pos = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(end);
+            continue;
+        }
+        if xml[start + 1] == b'/' {
+            depth = (depth - 1).max(0);
+            pos = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(end);
+            continue;
+        }
+        let tag_end = find_gt_simd(xml, start).unwrap_or(end);
+        let self_closing = tag_end > start && xml[tag_end.saturating_sub(1)] == b'/';
+        if !self_closing {
+            depth += 1;
+        }
+        pos = tag_end + 1;
+    }
+    depth
 }

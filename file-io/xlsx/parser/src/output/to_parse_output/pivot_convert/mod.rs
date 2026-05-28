@@ -173,5 +173,6 @@ pub(crate) fn parsed_pivot_to_config(
     Some(ParsedPivotTable {
         config,
         initial_expansion_state,
+        ooxml_preservation: pivot.ooxml_preservation.clone(),
     })
 }

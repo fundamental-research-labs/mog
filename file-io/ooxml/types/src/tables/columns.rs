@@ -17,6 +17,9 @@ pub struct XmlColumnPr {
     pub denormalized: bool,
     /// XML data type string.
     pub xml_data_type: String,
+    /// Unsupported extension-list payload owned by this XML-column mapping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 // --- TableColumn ---

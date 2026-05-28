@@ -36,7 +36,7 @@ pub fn parse_shared_strings_fast(xml: &[u8]) -> Vec<StringRef> {
         };
 
         // Check if this is a simple string or rich text (bounded search within <si>)
-        let has_rich_text = memmem::find(&xml[si_start..si_end], b"<r").is_some();
+        let has_rich_text = has_rich_text_run(&xml[si_start..si_end]);
 
         if has_rich_text {
             // Rich text: concatenate all <t> elements
@@ -93,12 +93,13 @@ pub fn parse_shared_strings_fast(xml: &[u8]) -> Vec<StringRef> {
 pub fn parse_shared_strings_with_context(
     xml: &[u8],
     context: &mut ParseContext,
-) -> (Vec<StringRef>, Vec<Option<Vec<u8>>>) {
+) -> (Vec<StringRef>, Vec<Option<Vec<u8>>>, Option<Vec<u8>>) {
     // Handle empty XML
     if xml.is_empty() {
         context.report_warning(ErrorCode::MissingPart, "Empty shared strings XML");
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), None);
     }
+    let root_ext_lst_xml = extract_safe_root_ext_lst_xml(xml, context);
 
     // Try to get uniqueCount for pre-allocation
     let unique_count = parse_unique_count(xml);
@@ -115,7 +116,7 @@ pub fn parse_shared_strings_with_context(
             )
             .with_location(ErrorLocation::new("xl/sharedStrings.xml")),
         );
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), root_ext_lst_xml);
     }
     let capacity = unique_count.unwrap_or_else(|| {
         if context.mode != ParseMode::Strict {
@@ -147,7 +148,7 @@ pub fn parse_shared_strings_with_context(
                         ErrorCode::MalformedXml,
                         "Truncated <sst> element - missing closing '>'",
                     );
-                    return (strings, phonetic_xml);
+                    return (strings, phonetic_xml, root_ext_lst_xml);
                 }
                 context.report_warning(
                     ErrorCode::MalformedXml,
@@ -203,7 +204,7 @@ pub fn parse_shared_strings_with_context(
         }
 
         // Check if this is a simple string or rich text (bounded search within <si>)
-        let has_rich_text = memmem::find(&xml[si_start..si_end], b"<r").is_some();
+        let has_rich_text = has_rich_text_run(&xml[si_start..si_end]);
 
         if has_rich_text {
             // Rich text: concatenate all <t> elements
@@ -279,5 +280,88 @@ pub fn parse_shared_strings_with_context(
         }
     }
 
-    (strings, phonetic_xml)
+    (strings, phonetic_xml, root_ext_lst_xml)
+}
+
+fn extract_safe_root_ext_lst_xml(xml: &[u8], context: &mut ParseContext) -> Option<Vec<u8>> {
+    let sst_start = find_bytes(xml, b"<sst", 0)?;
+    let sst_open_end = find_byte(xml, b'>', sst_start)?;
+    let sst_close = find_bytes(xml, b"</sst>", sst_open_end).unwrap_or(xml.len());
+    let mut pos = sst_open_end + 1;
+
+    while pos < sst_close {
+        let Some(next_si) = find_bytes(xml, b"<si", pos).filter(|p| *p < sst_close) else {
+            break;
+        };
+        let Some(next_ext) = find_bytes(xml, b"<extLst", pos).filter(|p| *p < sst_close) else {
+            break;
+        };
+        if next_ext < next_si {
+            return extract_ext_lst_at(xml, next_ext, sst_close, context);
+        }
+        let Some(si_end) = find_bytes(xml, b"</si>", next_si).filter(|p| *p < sst_close) else {
+            break;
+        };
+        pos = si_end + 5;
+    }
+
+    if let Some(next_ext) = find_bytes(xml, b"<extLst", pos).filter(|p| *p < sst_close) {
+        return extract_ext_lst_at(xml, next_ext, sst_close, context);
+    }
+
+    None
+}
+
+fn extract_ext_lst_at(
+    xml: &[u8],
+    ext_start: usize,
+    sst_close: usize,
+    context: &mut ParseContext,
+) -> Option<Vec<u8>> {
+    let open_end = find_byte(xml, b'>', ext_start)?;
+    let ext_end = if open_end > ext_start && xml[open_end.saturating_sub(1)] == b'/' {
+        open_end + 1
+    } else {
+        find_bytes(xml, b"</extLst>", open_end)
+            .filter(|p| *p < sst_close)
+            .map(|p| p + b"</extLst>".len())?
+    };
+    let bytes = xml[ext_start..ext_end].to_vec();
+    if has_unsafe_ext_lst_reference(&bytes) {
+        context.report_warning(
+            ErrorCode::UnsupportedFeature,
+            "Dropped shared string table extLst because it contains relationship or active references",
+        );
+        return None;
+    }
+    Some(bytes)
+}
+
+fn has_unsafe_ext_lst_reference(bytes: &[u8]) -> bool {
+    let lower = bytes
+        .iter()
+        .map(|b| b.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    [
+        b"r:id".as_slice(),
+        b"relationship".as_slice(),
+        b" target=".as_slice(),
+        b" ref=".as_slice(),
+        b" sqref=".as_slice(),
+        b"formula".as_slice(),
+    ]
+    .iter()
+    .any(|needle| memmem::find(&lower, needle).is_some())
+}
+
+fn has_rich_text_run(bytes: &[u8]) -> bool {
+    let mut pos = 0;
+    while let Some(rel) = memmem::find(&bytes[pos..], b"<r") {
+        let p = pos + rel + 2;
+        if p < bytes.len() && matches!(bytes[p], b'>' | b' ' | b'\t' | b'\n' | b'\r') {
+            return true;
+        }
+        pos += rel + 2;
+    }
+    false
 }

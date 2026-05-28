@@ -53,6 +53,9 @@ pub struct SheetViewOutput {
     /// Preserved pivotSelection elements for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_selection: Vec<ooxml_types::worksheet::PivotSelection>,
+    /// Direct-child `<extLst>` XML owned by this view scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 impl From<ooxml_types::worksheet::SheetView> for SheetViewOutput {
@@ -85,6 +88,7 @@ impl From<ooxml_types::worksheet::SheetView> for SheetViewOutput {
             pane: sv.pane,
             pivot_selection: sv.pivot_selection,
             selections: sv.selections,
+            ext_lst_xml: sv.ext_lst_xml,
         }
     }
 }
@@ -119,6 +123,7 @@ impl From<SheetViewOutput> for ooxml_types::worksheet::SheetView {
             pane: sv.pane,
             pivot_selection: sv.pivot_selection,
             selections: sv.selections,
+            ext_lst_xml: sv.ext_lst_xml,
         }
     }
 }

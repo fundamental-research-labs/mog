@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "description": "Coarse OOXML vocabulary and XLSX parser/writer coverage inventory. This manifest is a contract map, not a declaration-by-declaration completeness claim.",
+  "allowed_categories": [
+    "typed_in_ooxml_types",
+    "typed_in_domain_types",
+    "parser_sidecar",
+    "raw_package_passthrough",
+    "known_dropped_unsupported",
+    "mce_helper",
+    "relationship_infrastructure"
+  ],
+  "rows": [
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "workbook root, sheets, names, views",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/workbook",
+      "parser_writer": "typed parser and typed writer with package-fidelity diagnostics for unsupported children",
+      "bridge_visibility": "semantic subset",
+      "notes": "Workbook structure is regenerated from typed state; raw workbook core replay is not the support contract."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "worksheet root, dimensions, views, sheet properties",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/worksheet",
+      "parser_writer": "typed parser and writer with targeted sidecars",
+      "bridge_visibility": "semantic subset",
+      "notes": "Worksheet/view extension payloads are owner-scoped and must be invalidated on conflicting edits."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "styles",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/styles",
+      "parser_writer": "typed style import/export plus extension-list preservation where owner policy allows",
+      "bridge_visibility": "semantic subset",
+      "notes": "Shared ExtensionList is a storage helper, not blanket edit-safe extLst support."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "shared strings and rich text",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/strings",
+      "parser_writer": "typed rich-text parser and shared-string writer",
+      "bridge_visibility": "semantic subset",
+      "notes": "SST root extensions do not force SST part emission unless classified safe by the owner."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "comments and threaded comments",
+      "category": "typed_in_domain_types",
+      "owner": "file-io/xlsx/parser/src/domain/comments",
+      "parser_writer": "typed comments plus VML/threaded sidecar handling",
+      "bridge_visibility": "semantic subset",
+      "notes": "Relationship-bearing legacy payloads require package graph validation."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "tables, table filters, sort state",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/tables",
+      "parser_writer": "typed parser/writer",
+      "bridge_visibility": "semantic subset",
+      "notes": "XML map bindings are not generic opaque table support."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "connections and external links",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/pipeline/external_refs.rs",
+      "parser_writer": "typed records with security-sensitive export policy",
+      "bridge_visibility": "semantic subset",
+      "notes": "Active refresh behavior and credentials are policy-gated."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "metadata and rich data",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/metadata",
+      "parser_writer": "partial typed model and package diagnostics",
+      "bridge_visibility": "semantic subset",
+      "notes": "Unsupported metadata subtrees are owner-bound, not whole-part correctness support."
+    },
+    {
+      "schema_module": "sml.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "pivot caches and pivot tables",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/pivot",
+      "parser_writer": "typed table/cache records with preservation policy",
+      "bridge_visibility": "semantic subset",
+      "notes": "Cache export is valid only when source binding and identity remain valid."
+    },
+    {
+      "schema_module": "dml-chart.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "classic charts",
+      "category": "typed_in_domain_types",
+      "owner": "file-io/xlsx/parser/src/domain/charts",
+      "parser_writer": "typed chart model plus opaque package preservation for unedited imports",
+      "bridge_visibility": "semantic subset",
+      "notes": "Raw chart replay is package preservation, not support for every chart feature."
+    },
+    {
+      "schema_module": "dml-chartDrawing.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "chart user shapes",
+      "category": "raw_package_passthrough",
+      "owner": "file-io/xlsx/parser/src/domain/charts",
+      "parser_writer": "package graph relationship closure where present",
+      "bridge_visibility": "not exposed",
+      "notes": "Preserved only as owner-scoped inert package content."
+    },
+    {
+      "schema_module": "dml-spreadsheetDrawing.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "spreadsheet drawings anchors and object choices",
+      "category": "typed_in_domain_types",
+      "owner": "file-io/xlsx/parser/src/domain/drawings",
+      "parser_writer": "typed known objects plus opaque unknown direct object preservation",
+      "bridge_visibility": "semantic subset",
+      "notes": "Opaque unknown objects replay only when anchor/group ownership and drawing relationships remain valid."
+    },
+    {
+      "schema_module": "dml-main.xsd",
+      "dialect": "ECMA Strict",
+      "feature": "DrawingML geometry, fills, text, nonvisual properties",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain/drawings",
+      "parser_writer": "curated vocabulary used by drawing/chart/theme code",
+      "bridge_visibility": "semantic subset",
+      "notes": "Closed enum completeness is documented per enum, not as whole-schema coverage."
+    },
+    {
+      "schema_module": "vml-main.xsd",
+      "dialect": "ECMA Transitional",
+      "feature": "VML shapes",
+      "category": "parser_sidecar",
+      "owner": "file-io/xlsx/parser/src/domain/comments and controls",
+      "parser_writer": "legacy comments, form controls, and header/footer image paths only",
+      "bridge_visibility": "semantic subset",
+      "notes": "ActiveX is not preserved by this coverage row."
+    },
+    {
+      "schema_module": "vml-officeDrawing.xsd",
+      "dialect": "ECMA Transitional",
+      "feature": "VML office extensions",
+      "category": "known_dropped_unsupported",
+      "owner": "file-io/xlsx/parser/src/domain/controls",
+      "parser_writer": "targeted controls/OLE handling with active-content drops",
+      "bridge_visibility": "diagnostics only",
+      "notes": "Active content requires a separate explicit security-reviewed feature."
+    },
+    {
+      "schema_module": "vml-spreadsheetDrawing.xsd",
+      "dialect": "ECMA Transitional",
+      "feature": "VML spreadsheet drawing/client data",
+      "category": "parser_sidecar",
+      "owner": "file-io/xlsx/parser/src/domain/comments and controls",
+      "parser_writer": "owner-scoped legacy object handling",
+      "bridge_visibility": "semantic subset",
+      "notes": "Relationships are emitted from package graph records, not raw rels bytes."
+    },
+    {
+      "schema_module": "x14/x15 extensions",
+      "dialect": "MS x14/x15",
+      "feature": "sparklines, slicers, timelines, data validation and conditional formatting extensions",
+      "category": "typed_in_ooxml_types",
+      "owner": "file-io/xlsx/parser/src/domain",
+      "parser_writer": "targeted typed support and owner-local extension preservation",
+      "bridge_visibility": "semantic subset",
+      "notes": "Extension URI precedence and dirty invalidation are owned by each feature writer."
+    },
+    {
+      "schema_module": "MCE",
+      "dialect": "MCE helper",
+      "feature": "mc:AlternateContent and ignorable namespace handling",
+      "category": "mce_helper",
+      "owner": "file-io/xlsx/parser/src/infra/xml/mc.rs",
+      "parser_writer": "targeted branch selection and raw preservation for known drawing contexts",
+      "bridge_visibility": "not exposed",
+      "notes": "Unsupported MustUnderstand behavior is diagnosed rather than treated as semantic support."
+    },
+    {
+      "schema_module": "OPC relationships",
+      "dialect": "OPC",
+      "feature": "package relationships and content types",
+      "category": "relationship_infrastructure",
+      "owner": "file-io/xlsx/parser/src/write/package_graph",
+      "parser_writer": "modeled relationship graph with deterministic id resolution",
+      "bridge_visibility": "not exposed",
+      "notes": "Opaque raw XML may reference only registered/remapped relationships."
+    }
+  ]
+}

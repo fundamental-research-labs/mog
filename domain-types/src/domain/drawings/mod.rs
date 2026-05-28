@@ -54,7 +54,9 @@ pub use drawing_fill::{
 pub use effect_properties::{EffectListSpec, EffectProperties};
 pub use effects::{BlurEffect, GlowEffect, InnerShadowEffect, ReflectionEffect, SoftEdgeEffect};
 pub use fill_mode::{FillMode, TileAlign, TileFlip};
-pub use group_shape::{DrawingContent, GroupShapeData, SmartArtGraphicFrame};
+pub use group_shape::{
+    DrawingContent, GroupShapeData, OpaqueDrawingContent, SmartArtGraphicFrame,
+};
 pub use hyperlink::HyperlinkRef;
 pub use locking::DrawingLocking;
 pub use manual_layout::{LayoutMode, LayoutTarget, ManualLayout};

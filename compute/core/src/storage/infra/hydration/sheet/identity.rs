@@ -11,7 +11,7 @@ pub(crate) fn cell_keeps_import_identity(cell: &domain_types::CellData) -> bool 
     cell.formula.is_some()
         || !cell.value.is_null()
         || cell.style_id.is_some()
-        || cell.cm
+        || cell.cell_metadata_index.is_some()
         || cell.vm.is_some()
         || cell.formula_result_type.is_some()
         || cell.has_empty_cached_value

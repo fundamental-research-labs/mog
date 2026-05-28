@@ -163,26 +163,22 @@ pub(super) fn capture_ext_lst_raw(xml: &[u8]) -> Option<Vec<u8>> {
 ///
 /// This captures extension elements like `<x14:dataValidations>`,
 /// `<x14:conditionalFormattings>`, etc. that live inside `<extLst>`.
-/// Only captures the non-empty `<extLst>...</extLst>`; empty `<extLst/>`
-/// is lexical compatibility and is not preserved.
+/// Captures both non-empty `<extLst>...</extLst>` and self-closing
+/// `<extLst/>` root worksheet children.
 pub(super) fn extract_worksheet_ext_lst_xml(post_sd: &[u8]) -> Option<String> {
     use crate::infra::scanner::find_tag_simd;
 
-    // Find <extLst in the post-sheetData region (NOT <extLst/> which is empty)
+    // Find <extLst in the post-sheetData region.
     let tag_pos = find_tag_simd(post_sd, b"extLst", 0)?;
 
-    // Check if it's self-closing (empty <extLst/>)
-    let gt_pos = memchr::memchr(b'>', &post_sd[tag_pos..])?;
-    if post_sd[tag_pos + gt_pos - 1] == b'/' {
-        return None;
+    if let Some((_, end)) = extract_element_bounds(post_sd, tag_pos) {
+        return std::str::from_utf8(&post_sd[tag_pos..end])
+            .ok()
+            .map(|s| s.to_string());
     }
 
-    // Find the matching </extLst>
-    let close_tag = b"</extLst>";
-    let close_pos = memchr::memmem::find(&post_sd[tag_pos..], close_tag)?;
-    let end = tag_pos + close_pos + close_tag.len();
-
-    std::str::from_utf8(&post_sd[tag_pos..end])
+    let gt_pos = memchr::memchr(b'>', &post_sd[tag_pos..])?;
+    std::str::from_utf8(&post_sd[tag_pos..tag_pos + gt_pos + 1])
         .ok()
         .map(|s| s.to_string())
 }

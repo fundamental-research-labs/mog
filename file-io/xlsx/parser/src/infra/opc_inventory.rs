@@ -20,6 +20,7 @@ pub struct OpcPackageEntry {
     pub normalized_path: String,
     pub content_type: Option<String>,
     pub is_relationship_sidecar: bool,
+    pub bytes: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -69,10 +70,14 @@ pub fn build_opc_package_inventory(
     let package_paths: HashSet<String> = archive
         .entries()
         .iter()
+        .filter(|entry| !entry.name.ends_with('/'))
         .map(|entry| normalize_inventory_path(&entry.name))
         .collect();
 
     for entry in archive.entries() {
+        if entry.name.ends_with('/') {
+            continue;
+        }
         let normalized_path = normalize_inventory_path(&entry.name);
         let is_relationship_sidecar = normalized_path == "_rels/.rels"
             || (normalized_path.ends_with(".rels") && normalized_path.contains("/_rels/"));
@@ -85,6 +90,12 @@ pub fn build_opc_package_inventory(
                 content_type_overrides,
             ),
             is_relationship_sidecar,
+            bytes: imported_inert_part_bytes(
+                archive,
+                &entry.name,
+                &normalized_path,
+                is_relationship_sidecar,
+            ),
         });
 
         if is_relationship_sidecar {
@@ -103,6 +114,17 @@ pub fn build_opc_package_inventory(
 }
 
 fn collect_disposition_diagnostic(inventory: &mut OpcPackageInventory, path: &str) {
+    if is_digital_signature_path(path) {
+        inventory.diagnostics.push(OpcInventoryDiagnostic {
+            code: "digital_signature_dropped",
+            message: format!(
+                "digital signature package content is invalidated by rewrite: {path}"
+            ),
+            part: Some(path.to_string()),
+            relationship_id: None,
+        });
+        return;
+    }
     match crate::write::package_ownership::auxiliary_package_part_policy(path) {
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden) => {
             inventory.diagnostics.push(OpcInventoryDiagnostic {
@@ -207,6 +229,17 @@ fn collect_relationship_sidecar(
                 }
             }
         };
+        if is_digital_signature_relationship(&rel.rel_type) {
+            inventory.diagnostics.push(OpcInventoryDiagnostic {
+                code: "digital_signature_dropped",
+                message: format!(
+                    "digital signature relationship {} is invalidated by rewrite",
+                    rel.id
+                ),
+                part: Some(rels_path.to_string()),
+                relationship_id: Some(rel.id.clone()),
+            });
+        }
         inventory.relationships.push(OpcInventoryRelationship {
             owner: owner.clone(),
             id: rel.id,
@@ -216,6 +249,35 @@ fn collect_relationship_sidecar(
             resolved_target,
         });
     }
+}
+
+fn imported_inert_part_bytes(
+    archive: &XlsxArchive<'_>,
+    original_path: &str,
+    normalized_path: &str,
+    is_relationship_sidecar: bool,
+) -> Option<Vec<u8>> {
+    if normalized_path == "[Content_Types].xml" || is_relationship_sidecar {
+        return None;
+    }
+    if crate::write::package_ownership::auxiliary_package_part_policy(normalized_path)
+        != Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary)
+    {
+        return None;
+    }
+    archive.read_file_verbatim(original_path).ok()
+}
+
+fn is_digital_signature_path(path: &str) -> bool {
+    path == "_xmlsignatures/origin.sigs" || path.starts_with("_xmlsignatures/sig")
+}
+
+fn is_digital_signature_relationship(rel_type: &str) -> bool {
+    rel_type
+        == "http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin"
+        || rel_type
+            == "http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/signature"
+        || rel_type.contains("/digital-signature/")
 }
 
 fn collect_content_type_diagnostics(

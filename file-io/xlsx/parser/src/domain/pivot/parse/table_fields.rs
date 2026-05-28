@@ -1,7 +1,7 @@
 //! Pivot table field parsing.
 
 use crate::domain::pivot::model::{
-    DataField, PageField, PivotField, PivotFieldRef, PivotItem, PivotRowColItem,
+    DataField, PageField, PivotField, PivotFieldRef, PivotItem, PivotRowColItem, Subtotal,
 };
 use crate::domain::pivot::reader::attrs::{
     parse_axis_attr, parse_data_field_sentinel, parse_item_type_attr, parse_sort_attr,
@@ -9,7 +9,7 @@ use crate::domain::pivot::reader::attrs::{
 };
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    parse_bool_attr, parse_bool_attr_with_default, parse_i32_attr, parse_string_attr,
+    parse_bool_attr, parse_bool_attr_opt, parse_bool_attr_with_default, parse_i32_attr, parse_string_attr,
     parse_u32_attr,
 };
 
@@ -28,12 +28,13 @@ pub(crate) fn parse_pivot_fields(xml: &[u8]) -> Vec<PivotField> {
             name: parse_string_attr(element, b"name=\""),
             axis: parse_axis_attr(element),
             subtotal_top: parse_bool_attr_with_default(element, b"subtotalTop=\"", true),
-            show_all: parse_bool_attr(element, b"showAll=\""),
+            show_all: parse_bool_attr_opt(element, b"showAll=\""),
             sort_type: parse_sort_attr(element),
             data_field: parse_bool_attr(element, b"dataField=\""),
             default_subtotal: parse_bool_attr_with_default(element, b"defaultSubtotal=\"", true),
             compact: parse_bool_attr_with_default(element, b"compact=\"", true),
             outline: parse_bool_attr_with_default(element, b"outline=\"", true),
+            subtotals: parse_field_subtotals(element),
             ..Default::default()
         };
 
@@ -58,6 +59,29 @@ pub(crate) fn parse_pivot_fields(xml: &[u8]) -> Vec<PivotField> {
     }
 
     fields
+}
+
+fn parse_field_subtotals(element: &[u8]) -> Vec<Subtotal> {
+    let mut subtotals = Vec::new();
+    let subtotal_attrs = [
+        (b"sumSubtotal=\"" as &[u8], Subtotal::Sum),
+        (b"countASubtotal=\"" as &[u8], Subtotal::CountNums),
+        (b"avgSubtotal=\"" as &[u8], Subtotal::Average),
+        (b"maxSubtotal=\"" as &[u8], Subtotal::Max),
+        (b"minSubtotal=\"" as &[u8], Subtotal::Min),
+        (b"productSubtotal=\"" as &[u8], Subtotal::Product),
+        (b"countSubtotal=\"" as &[u8], Subtotal::Count),
+        (b"stdDevSubtotal=\"" as &[u8], Subtotal::StdDev),
+        (b"stdDevPSubtotal=\"" as &[u8], Subtotal::StdDevP),
+        (b"varSubtotal=\"" as &[u8], Subtotal::Var),
+        (b"varPSubtotal=\"" as &[u8], Subtotal::VarP),
+    ];
+    for (attr, subtotal) in subtotal_attrs {
+        if parse_bool_attr(element, attr) {
+            subtotals.push(subtotal);
+        }
+    }
+    subtotals
 }
 
 fn parse_auto_sort_scope(field: &mut PivotField, field_body: &[u8]) {

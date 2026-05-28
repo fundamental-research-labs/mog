@@ -13,8 +13,9 @@ use super::write_error::{PackageIntegrityIssue, WriteError};
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
-    CT_PIVOT_TABLE, CT_PNG, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WMF, CT_WORKBOOK,
-    CT_WORKSHEET, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
+    CT_PIVOT_TABLE, CT_PNG, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME,
+    CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, REL_CHART,
+    REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
     REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_HYPERLINK,
     REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
     REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME,
@@ -89,3 +90,9 @@ const CT_CONNECTIONS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml";
 const CT_QUERY_TABLE: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml";
+const REL_VOLATILE_DEPENDENCIES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/volatileDependencies";
+
+pub(crate) fn is_external_target_mode(mode: Option<&str>) -> bool {
+    mode.is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
+}

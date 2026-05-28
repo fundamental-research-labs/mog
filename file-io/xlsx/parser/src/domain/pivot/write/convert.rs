@@ -117,8 +117,10 @@ fn convert_pivot_field(f: &read::PivotField) -> PivotFieldDef {
         auto_sort_data_field: f.auto_sort_data_field,
         subtotal_top: f.subtotal_top,
         default_subtotal: f.default_subtotal,
-        subtotals: Vec::new(), // Subtotals are encoded as pivotField attributes in the original
+        subtotals: f.subtotals.iter().map(|s| convert_subtotal(*s)).collect(),
         items: f.items.iter().map(convert_pivot_item).collect(),
+        preserved_attributes: Vec::new(),
+        preserved_children: Vec::new(),
     }
 }
 
@@ -138,6 +140,7 @@ fn convert_pivot_item(item: &read::PivotItem) -> PivotFieldItem {
         hidden: item.hidden,
         show_details: item.show_details,
         s: item.s.clone(),
+        preserved_attributes: Vec::new(),
     }
 }
 
@@ -318,9 +321,20 @@ pub fn pivot_table_def_to_writer(
     writer.show_error = def.show_error;
     writer.missing_caption = def.missing_caption.clone();
     writer.show_missing = def.show_missing;
+    writer.ooxml_preservation = def.ooxml_preservation.clone();
 
-    for f in &def.fields {
-        writer.add_field(convert_domain_field(f));
+    for (idx, f) in def.fields.iter().enumerate() {
+        let mut field = convert_domain_field(f);
+        if let Some(preserved) = def.ooxml_preservation.fields.get(idx) {
+            field.preserved_attributes = preserved.attributes.clone();
+            field.preserved_children = preserved.children.clone();
+            for (item_idx, item) in field.items.iter_mut().enumerate() {
+                if let Some(attrs) = preserved.item_attributes.get(item_idx) {
+                    item.preserved_attributes = attrs.clone();
+                }
+            }
+        }
+        writer.add_field(field);
     }
 
     writer.row_fields = def.row_fields.clone();
@@ -350,11 +364,19 @@ pub fn pivot_table_def_to_writer(
     }
 
     // Row items / column items
-    for ri in &def.row_items {
-        writer.add_row_item(convert_domain_row_col_item(ri));
+    for (idx, ri) in def.row_items.iter().enumerate() {
+        let mut item = convert_domain_row_col_item(ri);
+        if let Some(attrs) = def.ooxml_preservation.row_item_attributes.get(idx) {
+            item.preserved_attributes = attrs.clone();
+        }
+        writer.add_row_item(item);
     }
-    for ci in &def.col_items {
-        writer.add_col_item(convert_domain_row_col_item(ci));
+    for (idx, ci) in def.col_items.iter().enumerate() {
+        let mut item = convert_domain_row_col_item(ci);
+        if let Some(attrs) = def.ooxml_preservation.col_item_attributes.get(idx) {
+            item.preserved_attributes = attrs.clone();
+        }
+        writer.add_col_item(item);
     }
 
     // Data caption
@@ -407,8 +429,11 @@ fn convert_domain_field(f: &domain_types::PivotFieldDef) -> PivotFieldDef {
                 hidden: item.hidden,
                 show_details: item.show_details,
                 s: item.s.clone(),
+                preserved_attributes: Vec::new(),
             })
             .collect(),
+        preserved_attributes: Vec::new(),
+        preserved_children: Vec::new(),
     }
 }
 
@@ -432,6 +457,7 @@ fn convert_domain_row_col_item(item: &domain_types::PivotRowColItem) -> RowColIt
     RowColItem {
         item_type: item.item_type.map(convert_domain_item_type),
         x_values: item.x_values.clone(),
+        preserved_attributes: Vec::new(),
     }
 }
 

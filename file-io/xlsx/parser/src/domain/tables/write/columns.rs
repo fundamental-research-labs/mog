@@ -1,6 +1,6 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::{TableFormula, TotalsRowFunction};
+use super::{TableFormula, TotalsRowFunction, XmlColumnPr};
 
 /// Table column definition (CT_TableColumn)
 #[derive(Debug, Clone, Default)]
@@ -30,6 +30,8 @@ pub struct TableColumn {
     pub totals_row_cell_style: Option<String>,
     /// Query table field ID (queryTableFieldId attribute)
     pub query_table_field_id: Option<u32>,
+    /// XML column properties for XML-mapped tables.
+    pub xml_column_pr: Option<XmlColumnPr>,
     /// Extension UID for revision tracking (xr3:uid)
     pub xr3_uid: Option<String>,
 }
@@ -52,6 +54,7 @@ impl TableColumn {
             data_cell_style: None,
             totals_row_cell_style: None,
             query_table_field_id: None,
+            xml_column_pr: None,
             xr3_uid: None,
         }
     }
@@ -104,7 +107,10 @@ pub(crate) fn write_table_column_xml(w: &mut XmlWriter, col: &TableColumn) {
         w.attr("totalsRowCellStyle", s);
     }
 
-    if col.calculated_column_formula.is_some() || col.totals_row_formula.is_some() {
+    if col.calculated_column_formula.is_some()
+        || col.totals_row_formula.is_some()
+        || col.xml_column_pr.is_some()
+    {
         w.end_attrs();
 
         if let Some(ref formula) = col.calculated_column_formula {
@@ -131,7 +137,32 @@ pub(crate) fn write_table_column_xml(w: &mut XmlWriter, col: &TableColumn) {
             }
         }
 
+        if let Some(ref xml_column_pr) = col.xml_column_pr {
+            write_xml_column_pr_xml(w, xml_column_pr);
+        }
+
         w.end_element("tableColumn");
+    } else {
+        w.self_close();
+    }
+}
+
+fn write_xml_column_pr_xml(w: &mut XmlWriter, xml_column_pr: &XmlColumnPr) {
+    w.start_element("xmlColumnPr")
+        .attr_num("mapId", xml_column_pr.map_id)
+        .attr("xpath", &xml_column_pr.xpath);
+    if !xml_column_pr.xml_data_type.is_empty() {
+        w.attr("xmlDataType", &xml_column_pr.xml_data_type);
+    }
+    if xml_column_pr.denormalized {
+        w.attr("denormalized", "1");
+    }
+    if let Some(ref ext_lst_xml) = xml_column_pr.ext_lst_xml {
+        w.end_attrs();
+        if !crate::infra::xml::raw_xml_contains_relationship_attr(ext_lst_xml) {
+            w.raw_str(ext_lst_xml);
+        }
+        w.end_element("xmlColumnPr");
     } else {
         w.self_close();
     }

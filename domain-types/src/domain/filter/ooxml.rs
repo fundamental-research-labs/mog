@@ -24,6 +24,9 @@ pub struct AutoFilter {
     /// collaborative-edit tracking; runtime-created filters leave this `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xr_uid: Option<String>,
+    /// Raw direct-child `<extLst>` owned by this autoFilter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 /// OOXML `<filterColumn>` element (CT_FilterColumn, §18.3.2.7).
@@ -44,6 +47,9 @@ pub struct FilterColumn {
     /// Defaults to true per ECMA-376.
     #[serde(default = "default_true")]
     pub show_button: bool,
+    /// Raw direct-child `<extLst>` owned by this filterColumn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_raw: Option<String>,
 }
 
 impl Default for FilterColumn {
@@ -53,6 +59,7 @@ impl Default for FilterColumn {
             filter_type: None,
             hidden_button: false,
             show_button: true,
+            ext_lst_raw: None,
         }
     }
 }

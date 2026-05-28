@@ -12,6 +12,8 @@ pub(super) struct OleObjectExport {
     pub(super) object: OleObject,
     pub(super) embedding_path: String,
     pub(super) embedding_bytes: Vec<u8>,
+    pub(super) embedding_content_type: String,
+    pub(super) embedding_relationship_type: String,
     pub(super) embedding_relationship_id_hint: Option<String>,
     pub(super) preview_path: Option<String>,
     pub(super) preview_bytes: Option<Vec<u8>>,
@@ -58,6 +60,12 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         shape_id,
     );
     ole.data_path = Some(embedding.path.clone());
+    ole.embedding_kind = if embedding.kind.is_empty() {
+        Some("oleObject".to_string())
+    } else {
+        Some(embedding.kind.clone())
+    };
+    ole.embedding_content_type = embedding.content_type.clone();
     ole.r_id = embedding
         .relationship_id
         .clone()
@@ -87,6 +95,13 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         object: ole,
         embedding_path: embedding.path.clone(),
         embedding_bytes: embedding.bytes.clone(),
+        embedding_content_type: embedding
+            .content_type
+            .clone()
+            .unwrap_or_else(|| {
+                crate::infra::imported_parts::infer_content_type(&embedding.path).to_string()
+            }),
+        embedding_relationship_type: embedding_relationship_type(&embedding.kind).to_string(),
         embedding_relationship_id_hint: embedding
             .relationship_id
             .clone()
@@ -99,6 +114,14 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
             .and_then(|preview| preview.relationship_id.clone())
             .or_else(|| ooxml.preview_image_rel_id.clone()),
     })
+}
+
+fn embedding_relationship_type(kind: &str) -> &'static str {
+    if kind == "embeddedPackage" {
+        crate::infra::opc::REL_EMBEDDED_PACKAGE
+    } else {
+        crate::infra::opc::REL_OLE_OBJECT
+    }
 }
 
 fn first_non_empty<'a>(primary: &'a str, fallback: &'a str) -> &'a str {
@@ -184,8 +207,8 @@ fn convert_object_properties(props: &OleObjectProperties) -> ObjectProperties {
         r#macro: props.r#macro.clone(),
         alt_text: props.alt_text.clone(),
         dde: props.dde,
-        ui_object: false,
-        r_id: None,
+        ui_object: props.ui_object,
+        r_id: props.r_id.clone(),
         anchor: props.anchor.as_ref().map(convert_object_anchor),
     }
 }

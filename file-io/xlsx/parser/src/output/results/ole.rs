@@ -15,6 +15,12 @@ pub struct OleObjectOutput {
     pub r_id: Option<String>,
     /// Resolved path to the embedded binary blob (e.g., "xl/embeddings/oleObject1.bin")
     pub data_path: Option<String>,
+    /// Relationship/payload kind: "oleObject" or "embeddedPackage".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_kind: Option<String>,
+    /// Content type inferred or read for the embedded payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_content_type: Option<String>,
     /// Object name
     pub name: Option<String>,
     /// Path to linked data (external file)
@@ -76,6 +82,8 @@ impl OleObjectOutput {
                 r#macro: pr.r#macro.clone(),
                 alt_text: pr.alt_text.clone(),
                 dde: pr.dde,
+                ui_object: pr.ui_object,
+                r_id: pr.r_id.clone(),
                 anchor,
             }
         });
@@ -85,6 +93,8 @@ impl OleObjectOutput {
             shape_id: obj.shape_id,
             r_id: obj.r_id.clone(),
             data_path: obj.data_path.clone(),
+            embedding_kind: obj.embedding_kind.clone(),
+            embedding_content_type: obj.embedding_content_type.clone(),
             name: obj.name.clone(),
             link: obj.link_path.clone(),
             dv_aspect: obj.dv_aspect.to_ooxml().to_string(),

@@ -2,7 +2,7 @@ use super::super::types::{CELL_TYPE_DATE, CellData, ParseExtras};
 use super::xml_text::validated_xml_text;
 
 pub(super) struct CellExtrasInput {
-    pub(super) has_cm: bool,
+    pub(super) cm_val: Option<u32>,
     pub(super) vm_val: Option<u32>,
     pub(super) has_ph: bool,
     pub(super) has_explicit_s: bool,
@@ -17,8 +17,8 @@ pub(super) fn collect_cell_extras(
     strings: &[u8],
     input: CellExtrasInput,
 ) {
-    if input.has_cm {
-        extras.cm_cells.push(last_idx);
+    if let Some(cm) = input.cm_val {
+        extras.cm_cells.push((last_idx, cm));
     }
     if let Some(vm) = input.vm_val {
         extras.vm_cells.push((last_idx, vm));

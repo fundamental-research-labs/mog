@@ -1,19 +1,23 @@
 //! # ooxml-types
 //!
-//! Pure OOXML vocabulary types for the Shortcut Data OS.
+//! Shared OOXML vocabulary types for the Shortcut Data OS.
 //!
-//! This crate contains **only** type definitions — enums, structs, and constants
-//! that represent ECMA-376 (Office Open XML) concepts. It has zero required
-//! dependencies and serves as the canonical source of truth for OOXML vocabulary
-//! shared across `xlsx-parser` (read + write), `compute-types`, and other crates.
+//! This crate contains curated enums, structs, and constants for OOXML concepts
+//! used by Mog import/export code. It is a shared vocabulary and typed
+//! preservation helper crate, not a complete ECMA-376 schema object model and
+//! not an XML parser or writer by itself. The production parser/writer contract
+//! is the source of truth for XLSX round-trip coverage.
 //!
 //! ## Design Principles
 //!
 //! - **Serde always on** — `serde` derive is unconditional (feature kept as no-op for compat)
 //! - **Attribute-level conversion** — `from_ooxml(&str)` / `to_ooxml(&self)` for
 //!   string↔enum conversion. No XML tree parsing.
-//! - **Spec-complete** — `ShapePreset` covers all 187 OOXML ST_ShapeType values
+//! - **Scoped completeness** — verified closed enums may document complete ECMA coverage
+//!   individually; for example, `ShapePreset` covers all 187 OOXML ST_ShapeType values.
 //! - **Shared vocabulary** — types used by both read and write paths live here
+//! - **Coverage manifest** — `docs/ooxml-coverage/manifest.json` records coarse schema/dialect
+//!   ownership and parser/writer integration status for audited modules.
 
 // OOXML choice groups are represented as direct schema enums. Boxing large
 // variants would leak allocation policy into the shared vocabulary API.
@@ -60,15 +64,17 @@ pub mod xml_map;
 // ExtensionList — CT_ExtensionList (shared across SML types)
 // =============================================================================
 
-/// Extension list for forward-compatible round-tripping (ECMA-376 CT_ExtensionList).
+/// Extension list for owner-scoped forward-compatible round-tripping
+/// (ECMA-376 CT_ExtensionList).
 ///
 /// Many SML complex types (CT_Workbook, CT_BookView, CT_Xf, CT_CellStyle,
 /// CT_Dxf, CT_Stylesheet, CT_Sst, etc.) include an optional `<extLst>` child
 /// element that carries vendor-specific extension data (e.g., x14/x15 slicer
 /// styles, sparklines, data validations).
 ///
-/// This type preserves the raw XML so that extensions survive a read→write
-/// round-trip even when the application does not understand them.
+/// This type stores raw XML for feature owners that explicitly validate and
+/// replay extension payloads. Its presence is not a blanket guarantee that any
+/// `extLst` is edit-safe or semantically supported.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExtensionList {
     /// Raw XML string of the `<extLst>` element contents.

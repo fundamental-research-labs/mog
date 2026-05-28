@@ -12,6 +12,7 @@
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_f64_attr, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::extract_direct_child_element_xml;
 use domain_types::{
     AutoFilter, CalendarType, DateGroupItem, DateTimeGrouping, FilterColumn, OoxmlFilterCondition,
     OoxmlFilterType,
@@ -34,6 +35,7 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
         columns: Vec::new(),
         sort: None,
         xr_uid: parse_string_attr(af_tag, b"xr:uid=\""),
+        ext_lst_raw: None,
     };
 
     // Self-closing `<autoFilter .../>` — attributes only.
@@ -44,6 +46,11 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
     // Find the end of the autoFilter element so we parse children only.
     let af_end = find_closing_tag(slice, b"autoFilter", 0).unwrap_or(slice.len());
     let content = &slice[af_tag_end_local + 1..af_end];
+    auto_filter.ext_lst_raw = extract_direct_child_element_xml(
+        &slice[..af_end + b"</autoFilter>".len().min(slice.len().saturating_sub(af_end))],
+        b"autoFilter",
+        b"extLst",
+    );
 
     // Parse filterColumn elements
     let mut pos = 0;
@@ -69,14 +76,19 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
     // Parse nested sortState (if present). Unlike the worksheet-level
     // parser in `worksheet::read`, this one intentionally scans inside the
     // autoFilter element — the two parsers are complementary.
-    if let Some(ss_start) = find_tag_simd(content, b"sortState", 0) {
-        if let Some(ss_tag_end) = find_gt_simd(content, ss_start) {
+    if let Some(sort_xml) = extract_direct_child_element_xml(
+        &slice[..af_end + b"</autoFilter>".len().min(slice.len().saturating_sub(af_end))],
+        b"autoFilter",
+        b"sortState",
+    ) {
+        let sort_bytes = sort_xml.as_bytes();
+        if let Some(ss_tag_end) = find_gt_simd(sort_bytes, 0) {
             // Reuse the typed sort-state parser from the worksheet module
             // so behavior stays consistent. We pass the slice starting at
             // `<sortState`.
             auto_filter.sort = super::super::worksheet::read::parse_sort_state_slice(
-                &content[ss_start..],
-                ss_tag_end - ss_start,
+                sort_bytes,
+                ss_tag_end,
             );
         }
     }
@@ -103,31 +115,31 @@ fn parse_filter_column(xml: &[u8]) -> Option<FilterColumn> {
         filter_type,
         hidden_button,
         show_button,
+        ext_lst_raw: extract_direct_child_element_xml(xml, b"filterColumn", b"extLst"),
     })
 }
 
 /// Pick the single child of a `<filterColumn>` and parse it.
 fn parse_filter_column_type(xml: &[u8], tag_end: usize) -> Option<OoxmlFilterType> {
-    let content = &xml[tag_end + 1..];
+    let _ = tag_end;
 
-    if let Some(f_start) = find_tag_simd(content, b"filters", 0) {
-        // Make sure we matched `<filters` as a distinct tag (not the child `<filter`).
-        return Some(parse_filters(content, f_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"filters") {
+        return Some(parse_filters(child.as_bytes(), 0));
     }
-    if let Some(cf_start) = find_tag_simd(content, b"customFilters", 0) {
-        return Some(parse_custom_filters(content, cf_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"customFilters") {
+        return Some(parse_custom_filters(child.as_bytes(), 0));
     }
-    if let Some(t_start) = find_tag_simd(content, b"top10", 0) {
-        return Some(parse_top10(content, t_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"top10") {
+        return Some(parse_top10(child.as_bytes(), 0));
     }
-    if let Some(d_start) = find_tag_simd(content, b"dynamicFilter", 0) {
-        return Some(parse_dynamic_filter(content, d_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"dynamicFilter") {
+        return Some(parse_dynamic_filter(child.as_bytes(), 0));
     }
-    if let Some(c_start) = find_tag_simd(content, b"colorFilter", 0) {
-        return Some(parse_color_filter(content, c_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"colorFilter") {
+        return Some(parse_color_filter(child.as_bytes(), 0));
     }
-    if let Some(i_start) = find_tag_simd(content, b"iconFilter", 0) {
-        return Some(parse_icon_filter(content, i_start));
+    if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"iconFilter") {
+        return Some(parse_icon_filter(child.as_bytes(), 0));
     }
 
     None

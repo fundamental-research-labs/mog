@@ -15,7 +15,8 @@ pub use super::types::{CalcPrSettings, SheetInfo};
 pub use calc::parse_calc_settings;
 pub use inventory::{SheetPackageContext, build_workbook_sheet_inventory, sheet_package_contexts};
 pub use properties::{
-    parse_file_sharing, parse_file_version, parse_web_publishing, parse_workbook_properties,
+    parse_file_sharing, parse_file_version, parse_web_publishing, parse_workbook_conformance,
+    parse_workbook_properties,
 };
 pub use rels::{parse_all_rels, parse_workbook_rels};
 pub use sheets::parse_workbook;
@@ -40,5 +41,6 @@ mod tests {
             parse_file_sharing(b"");
         let _web_publishing: Option<domain_types::domain::workbook::WorkbookWebPublishing> =
             parse_web_publishing(b"");
+        let _conformance: Option<String> = parse_workbook_conformance(b"");
     }
 }

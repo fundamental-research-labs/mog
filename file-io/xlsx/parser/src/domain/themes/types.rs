@@ -298,6 +298,10 @@ pub struct Theme {
     pub extra_clr_scheme_lst_xml: Option<Vec<u8>>,
     /// Raw XML of <a:extLst>...</a:extLst> (full element including tags)
     pub ext_lst_xml: Option<Vec<u8>>,
+    /// Raw XML of <a:custClrLst>...</a:custClrLst> (full element including tags)
+    pub cust_clr_lst_xml: Option<Vec<u8>>,
+    /// Root sibling order after themeElements. `Some(vec![])` means preserve absence.
+    pub root_sibling_order: Option<Vec<String>>,
 }
 
 impl Theme {
@@ -328,8 +332,9 @@ impl Theme {
             // Parse runtime color scheme (preserves ThemeColor variants)
             theme.runtime_colors = RuntimeColorScheme::parse(elements_xml);
 
-            // Also produce the canonical color scheme (hex strings)
-            theme.color_scheme = theme.runtime_colors.to_canonical();
+            // Also produce the canonical color scheme, preserving every
+            // DrawingML color choice variant and transform where supported.
+            theme.color_scheme = super::colors::parse_color_scheme_canonical(elements_xml);
 
             // Parse font scheme (using canonical type directly)
             theme.font_scheme = parse_font_scheme(elements_xml);
@@ -348,8 +353,11 @@ impl Theme {
                     xml.len()
                 };
 
+            let mut root_sibling_positions: Vec<(usize, String)> = Vec::new();
+
             // Extract objectDefaults (inner content only)
             if let Some(od_start) = find_tag_simd(xml, b"objectDefaults", after_elements) {
+                root_sibling_positions.push((od_start, "objectDefaults".to_string()));
                 // Check if it's a self-closing tag
                 let mut is_self_closing = false;
                 if let Some(gt_pos) = xml[od_start..].iter().position(|&b| b == b'>') {
@@ -357,7 +365,9 @@ impl Theme {
                         is_self_closing = true;
                     }
                 }
-                if !is_self_closing {
+                if is_self_closing {
+                    theme.object_defaults_xml = Some(Vec::new());
+                } else {
                     // Find the end of the opening tag '>'
                     if let Some(gt_offset) = xml[od_start..].iter().position(|&b| b == b'>') {
                         let inner_start = od_start + gt_offset + 1;
@@ -374,13 +384,16 @@ impl Theme {
 
             // Extract extraClrSchemeLst (inner content only)
             if let Some(ecsl_start) = find_tag_simd(xml, b"extraClrSchemeLst", after_elements) {
+                root_sibling_positions.push((ecsl_start, "extraClrSchemeLst".to_string()));
                 let mut is_self_closing = false;
                 if let Some(gt_pos) = xml[ecsl_start..].iter().position(|&b| b == b'>') {
                     if gt_pos > 0 && xml[ecsl_start + gt_pos - 1] == b'/' {
                         is_self_closing = true;
                     }
                 }
-                if !is_self_closing {
+                if is_self_closing {
+                    theme.extra_clr_scheme_lst_xml = Some(Vec::new());
+                } else {
                     if let Some(gt_offset) = xml[ecsl_start..].iter().position(|&b| b == b'>') {
                         let inner_start = ecsl_start + gt_offset + 1;
                         if let Some(close_pos) =
@@ -395,8 +408,15 @@ impl Theme {
                 }
             }
 
+            // Extract custClrLst (full element including tags)
+            if let Some(cust_start) = find_tag_simd(xml, b"custClrLst", after_elements) {
+                root_sibling_positions.push((cust_start, "custClrLst".to_string()));
+                theme.cust_clr_lst_xml = extract_full_element(xml, b"custClrLst", cust_start);
+            }
+
             // Extract extLst (full element including tags)
             if let Some(ext_start) = find_tag_simd(xml, b"extLst", after_elements) {
+                root_sibling_positions.push((ext_start, "extLst".to_string()));
                 // Check if it's a self-closing tag
                 let mut is_self_closing = false;
                 if let Some(gt_pos) = xml[ext_start..].iter().position(|&b| b == b'>') {
@@ -416,6 +436,13 @@ impl Theme {
                     }
                 }
             }
+            root_sibling_positions.sort_by_key(|(pos, _)| *pos);
+            theme.root_sibling_order = Some(
+                root_sibling_positions
+                    .into_iter()
+                    .map(|(_, name)| name)
+                    .collect(),
+            );
         }
 
         theme
@@ -503,6 +530,16 @@ impl Theme {
         };
         Some(RgbColor::new(rgb.0, rgb.1, rgb.2))
     }
+}
+
+fn extract_full_element(xml: &[u8], tag: &[u8], start: usize) -> Option<Vec<u8>> {
+    let gt_pos = xml[start..].iter().position(|&b| b == b'>')?;
+    if gt_pos > 0 && xml[start + gt_pos - 1] == b'/' {
+        return Some(xml[start..start + gt_pos + 1].to_vec());
+    }
+    let close_pos = find_closing_tag(xml, tag, start)?;
+    let close_gt = xml[close_pos..].iter().position(|&b| b == b'>')?;
+    Some(xml[start..close_pos + close_gt + 1].to_vec())
 }
 
 #[cfg(test)]

@@ -59,8 +59,7 @@ pub(super) fn write_worksheet_start(w: &mut XmlWriter, sheet: &SheetWriter) {
         .map_or(false, |ns| ns.has_prefix("mc"));
 
     let ignorable_value = mc_builder.build();
-    let is_fresh_write = sheet.root_namespaces.is_none();
-    if !mc_builder.is_empty() && !preserved_has_mc && is_fresh_write {
+    if !mc_builder.is_empty() && !preserved_has_mc {
         w.attr("xmlns:mc", MC_NS);
     }
 
@@ -100,7 +99,7 @@ pub(super) fn write_worksheet_start(w: &mut XmlWriter, sheet: &SheetWriter) {
         w.attr("xr:uid", uid);
     }
 
-    if is_fresh_write {
+    if !preserved_has_mc {
         if let Some(ref ignorable) = ignorable_value {
             w.attr("mc:Ignorable", ignorable);
         }

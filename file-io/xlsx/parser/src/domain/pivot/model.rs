@@ -47,6 +47,8 @@ pub struct PivotTable {
     pub missing_caption: Option<String>,
     /// Whether to show missing caption (OOXML `showMissing`). Default: true.
     pub show_missing: bool,
+    /// Writer-only OOXML preservation state for imported pivot table details.
+    pub ooxml_preservation: domain_types::domain::pivot::PivotTableOoxmlPreservation,
 }
 
 impl Default for PivotTable {
@@ -74,6 +76,7 @@ impl Default for PivotTable {
             show_error: false,
             missing_caption: None,
             show_missing: true,
+            ooxml_preservation: Default::default(),
         }
     }
 }
@@ -116,7 +119,7 @@ pub struct PivotField {
     /// Whether subtotals appear at top
     pub subtotal_top: bool,
     /// Whether to show all items
-    pub show_all: bool,
+    pub show_all: Option<bool>,
     /// Sort type
     pub sort_type: Option<SortType>,
     /// When present, sort is by aggregated values of this data field index.
@@ -133,6 +136,8 @@ pub struct PivotField {
     pub compact: bool,
     /// Outline display
     pub outline: bool,
+    /// Explicit subtotal functions represented by pivotField subtotal attributes.
+    pub subtotals: Vec<Subtotal>,
 }
 
 /// Axis types for pivot fields

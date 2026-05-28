@@ -50,7 +50,7 @@ pub(super) fn build_cell_data_for_cell_id(
     let cell_props = all_props.get(cell_id);
     let style_id = cell_style_id(cell_props, palette);
 
-    let cm = cell_props.map(|props| props.cm).unwrap_or(false);
+    let cell_metadata_index = cell_props.and_then(|props| props.cell_metadata_index);
     let vm = cell_props.and_then(|props| props.vm);
     let formula_result_type = cell_props.and_then(|props| props.formula_result_type);
     let has_empty_cached_value = cell_props
@@ -69,7 +69,7 @@ pub(super) fn build_cell_data_for_cell_id(
     let is_empty = value.is_null() && formula.is_none() && rich_string.is_none();
     if is_empty
         && style_id.is_none()
-        && !cm
+        && cell_metadata_index.is_none()
         && vm.is_none()
         && formula_result_type.is_none()
         && !has_empty_cached_value
@@ -85,7 +85,7 @@ pub(super) fn build_cell_data_for_cell_id(
         && is_imported_style_only_blank(
             style_id,
             cell_props,
-            cm,
+            cell_metadata_index,
             vm,
             formula_result_type,
             has_empty_cached_value,
@@ -109,7 +109,7 @@ pub(super) fn build_cell_data_for_cell_id(
         array_ref: array_refs.get(cell_id).cloned(),
         style_id,
         cell_formula: formula_metadata.get(cell_id).cloned(),
-        cm,
+        cell_metadata_index,
         formula_result_type,
         has_empty_cached_value,
         vm,
@@ -124,7 +124,7 @@ pub(super) fn build_cell_data_for_cell_id(
 fn is_imported_style_only_blank(
     style_id: Option<u32>,
     cell_props: Option<&CellProperties>,
-    cm: bool,
+    cell_metadata_index: Option<u32>,
     vm: Option<u32>,
     formula_result_type: Option<u8>,
     has_empty_cached_value: bool,
@@ -135,7 +135,7 @@ fn is_imported_style_only_blank(
 ) -> bool {
     style_id.is_some()
         && cell_props.is_some_and(|props| props.format.is_none() && props.style_id.is_some())
-        && !cm
+        && cell_metadata_index.is_none()
         && vm.is_none()
         && formula_result_type.is_none()
         && !has_empty_cached_value
@@ -166,7 +166,7 @@ pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellDa
         array_ref: None,
         style_id: None,
         cell_formula: None,
-        cm: false,
+        cell_metadata_index: None,
         formula_result_type: None,
         has_empty_cached_value: false,
         vm: None,
@@ -184,7 +184,7 @@ pub(super) fn is_plain_blank_cell(cell: &CellData) -> bool {
         && cell.rich_string.is_none()
         && cell.style_id.is_none()
         && cell.cell_formula.is_none()
-        && !cell.cm
+        && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
@@ -203,7 +203,7 @@ pub(super) fn is_imported_style_only_blank_cell(cell: &CellData) -> bool {
         && cell.rich_string.is_none()
         && cell.style_id.is_some()
         && cell.cell_formula.is_none()
-        && !cell.cm
+        && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()

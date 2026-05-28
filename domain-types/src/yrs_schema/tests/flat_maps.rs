@@ -216,6 +216,8 @@ fn web_publishing_round_trips_optional_scalars() {
         allow_png: Some(true),
         target_screen_size: Some(TargetScreenSize::Size1280x1024),
         dpi: Some(144),
+        code_page: Some(65001),
+        character_set: Some("UTF-8".to_string()),
     };
     assert_eq!(
         web,

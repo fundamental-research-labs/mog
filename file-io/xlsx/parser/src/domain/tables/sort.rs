@@ -4,7 +4,10 @@
 //! according to ECMA-376 Part 1.
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr_opt, parse_bytes_attr, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    extract_direct_child_element_xml, parse_bool_attr_opt, parse_bytes_attr, parse_string_attr,
+    parse_u32_attr,
+};
 
 use ooxml_types::cond_format::IconSetType;
 use ooxml_types::tables::SortBy;
@@ -70,6 +73,8 @@ pub struct SortState {
     pub sort_method: domain_types::SortMethod,
     /// Sort conditions
     pub sort_conditions: Vec<SortCondition>,
+    /// Raw direct-child `<extLst>` owned by this sortState.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl SortState {
@@ -86,10 +91,14 @@ impl SortState {
                 .and_then(|s| domain_types::SortMethod::from_ooxml_token(&s))
                 .unwrap_or_default(),
             sort_conditions: Vec::new(),
+            ext_lst_raw: None,
         };
 
         // Parse child sortCondition elements
         let sort_end = find_closing_tag(xml, b"sortState", tag_end).unwrap_or(xml.len());
+        let full_end = find_gt_simd(xml, sort_end).map(|p| p + 1).unwrap_or(xml.len());
+        sort_state.ext_lst_raw =
+            extract_direct_child_element_xml(&xml[..full_end], b"sortState", b"extLst");
         let content = &xml[tag_end + 1..sort_end];
 
         let mut pos = 0;

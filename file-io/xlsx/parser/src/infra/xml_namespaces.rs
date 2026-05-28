@@ -184,6 +184,8 @@ pub struct NamespaceMap {
     uri_to_prefix: HashMap<String, String>,
     /// Default namespace URI (if any)
     default_namespace: Option<String>,
+    /// Root-level markup compatibility attributes captured with the namespaces.
+    mce_attributes: domain_types::MceAttributes,
 }
 
 impl NamespaceMap {
@@ -252,6 +254,16 @@ impl NamespaceMap {
         &self.declarations
     }
 
+    /// Get captured root-level MCE attributes.
+    pub fn mce_attributes(&self) -> &domain_types::MceAttributes {
+        &self.mce_attributes
+    }
+
+    /// Replace captured root-level MCE attributes.
+    pub fn set_mce_attributes(&mut self, attrs: domain_types::MceAttributes) {
+        self.mce_attributes = attrs;
+    }
+
     /// Get only standard namespace declarations.
     pub fn standard(&self) -> Vec<&NamespaceDeclaration> {
         self.declarations.iter().filter(|d| d.is_standard).collect()
@@ -277,7 +289,7 @@ impl NamespaceMap {
 
     /// Check if empty.
     pub fn is_empty(&self) -> bool {
-        self.declarations.is_empty()
+        self.declarations.is_empty() && self.mce_attributes.is_empty()
     }
 
     /// Get the number of declarations.
@@ -315,6 +327,46 @@ impl NamespaceMap {
             }
 
             pos = abs_pos + 5;
+        }
+
+        self.capture_mce_attributes_from_element(element_str);
+    }
+
+    /// Capture root-level MCE attributes from an XML element start tag.
+    pub fn capture_mce_attributes_from_element(&mut self, element_str: &str) {
+        let mc_prefix = self.get_prefix(NS_MC).unwrap_or("mc");
+        let ignorable_name = format!("{}:Ignorable", mc_prefix);
+        let process_content_name = format!("{}:ProcessContent", mc_prefix);
+        let must_understand_name = format!("{}:MustUnderstand", mc_prefix);
+
+        let mut attrs = domain_types::MceAttributes {
+            ignorable: parse_xml_attr_value(element_str, &ignorable_name),
+            process_content: parse_xml_attr_value(element_str, &process_content_name),
+            must_understand: parse_xml_attr_value(element_str, &must_understand_name),
+            diagnostics: Vec::new(),
+        };
+
+        validate_mce_prefix_list(
+            attrs.ignorable.as_deref(),
+            "Ignorable",
+            self,
+            &mut attrs.diagnostics,
+        );
+        validate_mce_prefix_list(
+            attrs.process_content.as_deref(),
+            "ProcessContent",
+            self,
+            &mut attrs.diagnostics,
+        );
+        validate_mce_prefix_list(
+            attrs.must_understand.as_deref(),
+            "MustUnderstand",
+            self,
+            &mut attrs.diagnostics,
+        );
+
+        if !attrs.is_empty() {
+            self.mce_attributes = attrs;
         }
     }
 
@@ -389,6 +441,7 @@ impl From<&NamespaceMap> for domain_types::XmlNamespaceDeclarations {
                     uri: decl.uri.clone(),
                 })
                 .collect(),
+            mce: map.mce_attributes().clone(),
         }
     }
 }
@@ -402,8 +455,66 @@ impl From<&domain_types::XmlNamespaceDeclarations> for NamespaceMap {
                 decl.uri.clone(),
             ));
         }
+        map.set_mce_attributes(value.mce.clone());
         map
     }
+}
+
+fn parse_xml_attr_value(element: &str, attr_name: &str) -> Option<String> {
+    let mut pos = 0;
+    while let Some(found) = element[pos..].find(attr_name) {
+        let abs = pos + found;
+        let before_ok = abs == 0
+            || element.as_bytes()[abs - 1].is_ascii_whitespace()
+            || element.as_bytes()[abs - 1] == b'<';
+        let after_name = abs + attr_name.len();
+        let rest = &element[after_name..];
+        if before_ok && rest.trim_start().starts_with('=') {
+            let after_eq = rest.trim_start()[1..].trim_start();
+            let quote = after_eq.chars().next()?;
+            if quote != '"' && quote != '\'' {
+                return None;
+            }
+            let value = &after_eq[1..];
+            let end = value.find(quote)?;
+            return Some(value[..end].to_string());
+        }
+        pos = after_name;
+    }
+    None
+}
+
+fn validate_mce_prefix_list(
+    value: Option<&str>,
+    attr_name: &str,
+    namespaces: &NamespaceMap,
+    diagnostics: &mut Vec<String>,
+) {
+    let Some(value) = value else {
+        return;
+    };
+
+    for token in value.split_whitespace() {
+        if token == "mc" || token == "xmlns" || token.is_empty() {
+            diagnostics.push(format!("mc:{} contains reserved prefix '{}'", attr_name, token));
+        } else if !is_xml_prefix_token(token) {
+            diagnostics.push(format!("mc:{} contains invalid prefix '{}'", attr_name, token));
+        } else if !namespaces.has_prefix(token) {
+            diagnostics.push(format!(
+                "mc:{} references undeclared prefix '{}'",
+                attr_name, token
+            ));
+        }
+    }
+}
+
+fn is_xml_prefix_token(token: &str) -> bool {
+    let mut chars = token.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch == '-' || ch == '.' || ch.is_ascii_alphanumeric())
 }
 
 // ============================================================================

@@ -303,6 +303,7 @@ fn serde_roundtrip_workbook_view_all_fields() {
         window_height: Some(1440),
         tab_ratio: Some(800.0),
         uid: Some("{12345678-1234-1234-1234-123456789ABC}".into()),
+        ext_lst_raw: None,
     };
     let json = serde_json::to_string(&wv).unwrap();
     let deserialized: WorkbookView = serde_json::from_str(&json).unwrap();
@@ -556,6 +557,8 @@ fn workbook_web_publishing_target_screen_size_roundtrip() {
         allow_png: Some(true),
         target_screen_size: Some(ooxml_types::web_publish::TargetScreenSize::Size1280x1024),
         dpi: Some(144),
+        code_page: Some(65001),
+        character_set: Some("UTF-8".to_string()),
     };
 
     let json = serde_json::to_string(&web_publishing).unwrap();

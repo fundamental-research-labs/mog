@@ -10,6 +10,7 @@ use super::super::types::{
     SpreadsheetGraphicFrame,
 };
 use super::connectors::parse_connector;
+use super::content::opaque_content_from_element;
 use super::graphic_frames::{parse_graphic_frame_nv, parse_graphic_frame_xfrm};
 use super::non_visual::parse_nv_props;
 use super::pictures::parse_picture;
@@ -28,6 +29,10 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
         if let Some(cnv_el) = direct_child_slice(nv_element, b"cNvGrpSpPr") {
             if let Some(locks) = direct_child_slice(cnv_el, b"grpSpLocks") {
                 group.nv_grp_sp_pr.c_nv_grp_sp_pr = Some(parse_group_locking(locks));
+            }
+            if let Some(ext_lst) = direct_child_slice(cnv_el, b"extLst") {
+                group.nv_grp_sp_pr.c_nv_grp_sp_pr_ext_lst =
+                    std::str::from_utf8(ext_lst).ok().map(ToOwned::to_owned);
             }
         }
     }
@@ -75,6 +80,17 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
                     group.children.push(DrawingContent::Connector(connector));
                 }
             }
+            b"contentPart" => {
+                if let Some(r_id) = extract_attr_value_in_element(child_xml, b"id=\"")
+                    .or_else(|| extract_attr_value_in_element(child_xml, b"r:id=\""))
+                {
+                    group.children.push(DrawingContent::ContentPart(
+                        ooxml_types::drawings::ContentPartRef {
+                            r_id: String::from_utf8_lossy(r_id).into_owned(),
+                        },
+                    ));
+                }
+            }
             b"grpSp" => {
                 if let Some(nested_group) = parse_group_shape(child_xml, 0) {
                     group
@@ -98,7 +114,11 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
                         }));
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(opaque) = opaque_content_from_element(child_xml, child.local_name) {
+                    group.children.push(DrawingContent::OpaqueUnknown(opaque));
+                }
+            }
         }
     }
 
@@ -307,6 +327,24 @@ mod tests {
                 .as_deref()
                 .is_some_and(|xml| xml.contains("group-locks"))
         );
+    }
+
+    #[test]
+    fn group_unknown_child_preserves_raw_xml_and_relationships() {
+        let xml = br#"<xdr:grpSp>
+            <xdr:nvGrpSpPr><xdr:cNvPr id="1" name="Group"/></xdr:nvGrpSpPr>
+            <xdr:grpSpPr/>
+            <vendor:widget r:id="rIdWidget"/>
+        </xdr:grpSp>"#;
+
+        let group = parse_group_shape(xml, 0).unwrap();
+
+        let DrawingContent::OpaqueUnknown(opaque) = &group.children[0] else {
+            panic!("expected opaque unknown child");
+        };
+        assert_eq!(opaque.relationship_ids, ["rIdWidget"]);
+        assert_eq!(opaque.kind_hint.as_deref(), Some("widget"));
+        assert!(opaque.raw_xml.contains("vendor:widget"));
     }
 
     #[test]

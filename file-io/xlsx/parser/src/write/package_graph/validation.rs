@@ -5,14 +5,17 @@ use super::{
     CT_COMMENTS, CT_CONNECTIONS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DOC_METADATA_LABEL_INFO, CT_DRAWING, CT_EXTENDED_PROPERTIES, CT_METADATA, CT_OLE_OBJECT,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_QUERY_TABLE, CT_SHARED_STRINGS,
-    CT_SLICER, CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_THEME, CT_THREADED_COMMENTS, CT_WORKBOOK,
-    CT_WORKSHEET, CT_WORKSHEET_CUSTOM_PROPERTY, PackageIntegrityIssue, PackagePart,
+    CT_SLICER, CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME,
+    CT_THREADED_COMMENTS, CT_VOLATILE_DEPENDENCIES, CT_WORKBOOK, CT_WORKSHEET,
+    CT_WORKSHEET_CUSTOM_PROPERTY,
+    PackageIntegrityIssue, PackagePart,
     PackagePartKind, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS, REL_CORE_PROPERTIES,
     REL_CTRL_PROP, REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK,
     REL_IMAGE, REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
     REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS,
     REL_QUERY_TABLE, REL_SHARED_STRINGS, REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE,
-    REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET, REL_WORKSHEET_CUSTOM_PROPERTY,
+    REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
+    REL_WORKSHEET_CUSTOM_PROPERTY,
     ResolvedPackageRelationship, owner_part_path_from_rels_path, relationship_target_part_path,
 };
 use crate::infra::opc::OoxmlRelationshipType;
@@ -120,6 +123,7 @@ fn relationship_type_allowed_for_owner(
         | Rel::SlicerCache
         | Rel::TimelineCache
         | Rel::Metadata
+        | Rel::VolatileDependencies
         | Rel::Person
         | Rel::VbaProject => owner == RelationshipOwnerKind::Workbook,
         Rel::ExternalLink => {
@@ -139,14 +143,18 @@ fn relationship_type_allowed_for_owner(
         | Rel::VmlDrawing
         | Rel::Drawing
         | Rel::Table
+        | Rel::TableSingleCells
         | Rel::PivotTable
         | Rel::Hyperlink
         | Rel::PrinterSettings
         | Rel::CtrlProp
         | Rel::CustomProperty
         | Rel::OleObject
+        | Rel::EmbeddedPackage
+        | Rel::ActiveXControl
         | Rel::Slicer
         | Rel::Timeline => owner == RelationshipOwnerKind::Worksheet,
+        Rel::ActiveXControlBinary => true,
         Rel::Image => matches!(
             owner,
             RelationshipOwnerKind::Drawing
@@ -190,6 +198,7 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::SlicerCache
         | Rel::TimelineCache
         | Rel::Metadata
+        | Rel::VolatileDependencies
         | Rel::Person
         | Rel::VbaProject => "workbook relationships",
         Rel::ExternalLink => "workbook or chart relationships",
@@ -199,14 +208,18 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::VmlDrawing
         | Rel::Drawing
         | Rel::Table
+        | Rel::TableSingleCells
         | Rel::PivotTable
         | Rel::Hyperlink
         | Rel::PrinterSettings
         | Rel::CtrlProp
         | Rel::CustomProperty
         | Rel::OleObject
+        | Rel::EmbeddedPackage
+        | Rel::ActiveXControl
         | Rel::Slicer
         | Rel::Timeline => "worksheet relationships",
+        Rel::ActiveXControlBinary => "ActiveX control relationships",
         Rel::Image => "drawing, chart, or VML drawing relationships",
         Rel::Chart
         | Rel::ChartEx
@@ -247,8 +260,12 @@ pub(super) fn validate_modeled_part_owner_relationship(
             .rels_path
             .as_deref()
             .is_none_or(|rels_path| rel.owner_rels_path == rels_path)
-            && rel.relationship_type == required.relationship_type
-            && rel.target_mode.as_deref() != Some("External")
+            && (rel.relationship_type == required.relationship_type
+                || (required.relationship_type == REL_THEME
+                    && crate::infra::opc::is_theme_relationship_type(&rel.relationship_type))
+                || OoxmlRelationshipType::from_uri(&rel.relationship_type)
+                    == OoxmlRelationshipType::from_uri(required.relationship_type))
+            && !is_external_target_mode(rel.target_mode.as_deref())
             && relationship_target_part_path(&rel.owner_rels_path, &rel.target)
                 .ok()
                 .flatten()
@@ -314,7 +331,7 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
             relationship_type: REL_STYLES,
         });
     }
-    if path == "xl/theme/theme1.xml" {
+    if path.starts_with("xl/theme/") && path.ends_with(".xml") {
         return Some(RequiredRelationship {
             rels_path: Some(workbook_rels.to_string()),
             relationship_type: REL_THEME,
@@ -342,6 +359,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
         return Some(RequiredRelationship {
             rels_path: Some(workbook_rels.to_string()),
             relationship_type: REL_CONNECTIONS,
+        });
+    }
+    if path == "xl/volatileDependencies.xml" {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: crate::infra::opc::REL_VOLATILE_DEPENDENCIES,
         });
     }
     if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
@@ -399,13 +422,8 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
         });
     }
     if path.starts_with("xl/pivotCache/pivotCacheRecords") && path.ends_with(".xml") {
-        let idx = path
-            .trim_start_matches("xl/pivotCache/pivotCacheRecords")
-            .trim_end_matches(".xml");
         return Some(RequiredRelationship {
-            rels_path: Some(format!(
-                "xl/pivotCache/_rels/pivotCacheDefinition{idx}.xml.rels"
-            )),
+            rels_path: None,
             relationship_type: REL_PIVOT_CACHE_RECORDS,
         });
     }
@@ -422,7 +440,7 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_SHARED_STRINGS)
     } else if path == "xl/styles.xml" {
         Some(CT_STYLES)
-    } else if path == "xl/theme/theme1.xml" {
+    } else if path.starts_with("xl/theme/") && path.ends_with(".xml") {
         Some(CT_THEME)
     } else if path == "docProps/core.xml" {
         Some(CT_CORE_PROPERTIES)
@@ -432,10 +450,14 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_CUSTOM_PROPERTIES)
     } else if path == "xl/metadata.xml" {
         Some(CT_METADATA)
+    } else if path.starts_with("xl/tables/tableSingleCells") && path.ends_with(".xml") {
+        Some(CT_TABLE_SINGLE_CELLS)
     } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
         Some(CT_TABLE)
     } else if path == "xl/connections.xml" {
         Some(CT_CONNECTIONS)
+    } else if path == "xl/volatileDependencies.xml" {
+        Some(CT_VOLATILE_DEPENDENCIES)
     } else if path.starts_with("xl/queryTables/queryTable") && path.ends_with(".xml") {
         Some(CT_QUERY_TABLE)
     } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
@@ -476,7 +498,9 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
 }
 
 fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
-    if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
+    if path.starts_with("xl/tables/tableSingleCells") && path.ends_with(".xml") {
+        Some(REL_TABLE_SINGLE_CELLS)
+    } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
         Some(REL_TABLE)
     } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
         Some(REL_SLICER)

@@ -4,7 +4,7 @@ use domain_types::PackageFidelityMetadata;
 
 use super::{
     PackageOwner, PackageRelationship, PackageRelationshipTarget, RelationshipIdentityHint,
-    RelationshipOwnerPath, normalize_part_path, owner_rels_path,
+    RelationshipOwnerPath, is_external_target_mode, normalize_part_path, owner_rels_path,
 };
 
 pub(super) fn imported_relationship_identity_hint(
@@ -51,7 +51,7 @@ pub(super) fn imported_relationship_hint<'a>(
     let normalized_target = normalize_part_path(target_path);
     hints.iter().find(|hint| {
         hint.relationship_type == relationship_type
-            && hint.target_mode.as_deref() != Some("External")
+            && !is_external_target_mode(hint.target_mode.as_deref())
             && imported_internal_target(owner_part, hint)
                 .is_some_and(|target| target == normalized_target)
     })
@@ -89,7 +89,7 @@ pub(super) fn imported_relationship_order(
         .iter()
         .position(|hint| {
             hint.relationship_type == relationship.relationship_type
-                && hint.target_mode.as_deref() != Some("External")
+                && !is_external_target_mode(hint.target_mode.as_deref())
                 && imported_internal_target(owner_part, hint)
                     .is_some_and(|target| target == normalized_target)
         })
@@ -144,7 +144,7 @@ pub(super) fn imported_owner_set_matches_current(
         .collect();
     let imported_set: HashSet<(String, String)> = imported
         .iter()
-        .filter(|hint| hint.target_mode.as_deref() != Some("External"))
+        .filter(|hint| !is_external_target_mode(hint.target_mode.as_deref()))
         .filter_map(|hint| {
             imported_internal_target(owner_part, hint)
                 .map(|target| (hint.relationship_type.clone(), normalize_part_path(&target)))
@@ -157,7 +157,7 @@ pub(super) fn imported_internal_target(
     owner_part: Option<&str>,
     hint: &domain_types::PackageRelationshipHint,
 ) -> Option<String> {
-    if hint.target_mode.as_deref() == Some("External") {
+    if is_external_target_mode(hint.target_mode.as_deref()) {
         return None;
     }
     crate::infra::opc::resolve_relationship_target(owner_part, &hint.target).ok()

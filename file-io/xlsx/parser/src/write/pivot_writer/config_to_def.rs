@@ -63,7 +63,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 data_field: is_data_field,
                 compact,
                 outline,
-                show_all: field.show_all.unwrap_or(false),
+                show_all: field.show_all,
                 sort_type: axis_placement.and_then(|p| {
                     p.sort_order.map(|sort| match sort {
                         domain_types::domain::analytics::SortDirection::Asc => {
@@ -254,6 +254,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
         show_error: layout.and_then(|l| l.show_error).unwrap_or(false),
         missing_caption: layout.and_then(|l| l.missing_caption.clone()),
         show_missing: layout.and_then(|l| l.show_missing).unwrap_or(true),
+        ooxml_preservation: pt.ooxml_preservation.clone(),
     }
 }
 

@@ -32,6 +32,8 @@ use crate::infra::xml_namespaces::NamespaceMap;
 pub struct ImportExtensionParts {
     /// Namespace declarations from the `<workbook>` root element.
     pub workbook_namespaces: NamespaceMap,
+    /// Namespace declarations from the `<styleSheet>` root element.
+    pub styles_namespaces: NamespaceMap,
     /// Per-sheet namespace declarations from `<worksheet>` root elements.
     /// Indexed by sheet order (0-based), aligned with `FullParseResult.sheets`.
     pub sheet_namespaces: Vec<NamespaceMap>,
@@ -56,6 +58,7 @@ impl ImportExtensionParts {
     /// Check if there is any preserved data at all.
     pub fn is_empty(&self) -> bool {
         self.workbook_namespaces.is_empty()
+            && self.styles_namespaces.is_empty()
             && self.sheet_namespaces.iter().all(|ns| ns.is_empty())
             && self.imported_parts.is_empty()
     }

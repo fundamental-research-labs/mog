@@ -23,6 +23,7 @@ pub fn comments_from_domain(
     comments: &[domain_types::Comment],
     original_authors: Option<&[String]>,
     root_namespace_attrs: Option<&[(String, String)]>,
+    root_ext_lst_xml: Option<&str>,
 ) -> (Vec<u8>, Vec<u8>) {
     let mut cw = CommentsWriter::new();
 
@@ -30,6 +31,7 @@ pub fn comments_from_domain(
     if let Some(attrs) = root_namespace_attrs {
         cw.set_root_namespace_attrs(attrs.to_vec());
     }
+    cw.set_root_ext_lst_xml(root_ext_lst_xml.map(ToOwned::to_owned));
 
     // Pre-populate the author list from the original file for round-trip fidelity.
     // This preserves unused authors and the original author ordering.
@@ -151,6 +153,7 @@ pub fn comments_from_domain(
             visible,
             shape_id: comment.shape_id,
             xr_uid,
+            comment_pr: comment.comment_pr.clone(),
         };
         let mut shape = CommentShape::for_cell(&comment.cell_ref);
         shape.visible = visible;

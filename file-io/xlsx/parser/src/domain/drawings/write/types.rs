@@ -15,6 +15,7 @@ pub use ooxml_types::drawings::{
 };
 // Re-export geometry/anchor types from ooxml-types.
 pub use ooxml_types::drawings::{CellAnchor, Connection, Extent, Position, Transform2D};
+pub use ooxml_types::drawings::ContentPartRef;
 
 // Re-export shared text types from ooxml-types.
 pub use ooxml_types::drawings::{
@@ -505,6 +506,16 @@ pub struct OpaqueGraphicFrame {
     pub raw_xml: String,
 }
 
+/// Opaque unsupported spreadsheet drawing object.
+///
+/// Stores the complete direct object-choice XML. It is emitted only through the
+/// drawing relationship safety policy, so stale relationship attributes are
+/// suppressed unless their ids remain registered for the drawing part.
+#[derive(Debug, Clone, Default)]
+pub struct OpaqueDrawingObject {
+    pub raw_xml: String,
+}
+
 /// Group shape properties for writing `<xdr:grpSp>` elements (CT_GroupShape).
 #[derive(Debug, Clone)]
 pub struct GroupShapeProps {
@@ -613,6 +624,10 @@ pub enum DrawingObject {
     GroupShape(GroupShapeProps),
     /// Opaque graphic frame (roundtrip passthrough)
     GraphicFrame(OpaqueGraphicFrame),
+    /// Opaque unsupported direct drawing object (roundtrip passthrough).
+    OpaqueRaw(OpaqueDrawingObject),
+    /// Content part reference.
+    ContentPart(ContentPartRef),
     /// SmartArt diagram (opaque roundtrip with separate XML parts)
     SmartArt(SmartArtWriteData),
     /// Slicer (mc:AlternateContent with sle:slicer in graphicFrame)

@@ -4,6 +4,8 @@ use super::namespaces::{MC_NS, SPREADSHEETML_NS, XR_NS};
 use super::types::{CommentAuthor, CommentShape, CommentTextRun, LegacyComment};
 use super::vml;
 
+const XDR_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+
 // ============================================================================
 // Legacy Comments Writer
 // ============================================================================
@@ -18,6 +20,8 @@ pub struct CommentsWriter {
     /// Each entry is (attr_name, attr_value), e.g. ("xmlns:mc", "http://...").
     /// When set, these are emitted instead of the hardcoded defaults.
     root_namespace_attrs: Vec<(String, String)>,
+    /// Safe root-level `<extLst>...</extLst>` from imported comments XML.
+    root_ext_lst_xml: Option<String>,
 }
 
 impl CommentsWriter {
@@ -33,6 +37,12 @@ impl CommentsWriter {
     /// and declaration order.
     pub fn set_root_namespace_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.root_namespace_attrs = attrs;
+    }
+
+    /// Set a preserved root-level `<extLst>` for owner-scoped comment package
+    /// metadata. Relationship-bearing fragments are rejected at emission.
+    pub fn set_root_ext_lst_xml(&mut self, ext_lst_xml: Option<String>) {
+        self.root_ext_lst_xml = ext_lst_xml;
     }
 
     /// Add an author and return their ID
@@ -90,6 +100,7 @@ impl CommentsWriter {
             visible: false,
             shape_id: None,
             xr_uid: None,
+            comment_pr: None,
         };
         self.add_comment(comment)
     }
@@ -122,6 +133,10 @@ impl CommentsWriter {
         // to maintain round-trip fidelity (preserving prefixes and order).
         w.start_element("comments");
 
+        let has_comment_pr_anchor = self
+            .comments
+            .iter()
+            .any(|c| c.comment_pr.as_ref().and_then(|pr| pr.anchor).is_some());
         if !self.root_namespace_attrs.is_empty() {
             // Emit root namespace declarations from the original file.
             for (attr_name, attr_value) in &self.root_namespace_attrs {
@@ -140,6 +155,14 @@ impl CommentsWriter {
                     .attr("xmlns:xr", XR_NS);
             }
         }
+        if has_comment_pr_anchor
+            && !self
+                .root_namespace_attrs
+                .iter()
+                .any(|(name, _)| name == "xmlns:xdr")
+        {
+            w.attr("xmlns:xdr", XDR_NS);
+        }
         w.end_attrs();
 
         // Write authors
@@ -155,6 +178,12 @@ impl CommentsWriter {
             self.write_comment(&mut w, comment);
         }
         w.end_element("commentList");
+
+        if let Some(ref ext_lst_xml) = self.root_ext_lst_xml {
+            if !crate::infra::xml::raw_xml_contains_relationship_attr(ext_lst_xml) {
+                w.raw_str(ext_lst_xml);
+            }
+        }
 
         w.end_element("comments");
 
@@ -201,7 +230,87 @@ impl CommentsWriter {
         }
 
         w.end_element("text");
+        if let Some(ref comment_pr) = comment.comment_pr
+            && comment_pr.anchor.is_some()
+        {
+            self.write_comment_pr(w, comment_pr);
+        }
         w.end_element("comment");
+    }
+
+    fn write_comment_pr(&self, w: &mut XmlWriter, comment_pr: &ooxml_types::comments::CommentPr) {
+        w.start_element("commentPr");
+        if !comment_pr.locked {
+            w.attr("locked", "0");
+        }
+        if !comment_pr.default_size {
+            w.attr("defaultSize", "0");
+        }
+        if !comment_pr.print {
+            w.attr("print", "0");
+        }
+        if comment_pr.disabled {
+            w.attr("disabled", "1");
+        }
+        if !comment_pr.auto_fill {
+            w.attr("autoFill", "0");
+        }
+        if !comment_pr.auto_line {
+            w.attr("autoLine", "0");
+        }
+        if let Some(ref alt_text) = comment_pr.alt_text {
+            w.attr("altText", alt_text);
+        }
+        if let Some(text_h_align) = comment_pr.text_h_align {
+            w.attr("textHAlign", text_h_align.to_ooxml());
+        }
+        if let Some(text_v_align) = comment_pr.text_v_align {
+            w.attr("textVAlign", text_v_align.to_ooxml());
+        }
+        if !comment_pr.lock_text {
+            w.attr("lockText", "0");
+        }
+        if comment_pr.just_last_x {
+            w.attr("justLastX", "1");
+        }
+        if comment_pr.auto_scale {
+            w.attr("autoScale", "1");
+        }
+        w.end_attrs();
+
+        if let Some(anchor) = comment_pr.anchor {
+            self.write_object_anchor(w, anchor);
+        }
+
+        w.end_element("commentPr");
+    }
+
+    fn write_object_anchor(&self, w: &mut XmlWriter, anchor: ooxml_types::ole::ObjectAnchor) {
+        w.start_element("anchor");
+        if anchor.move_with_cells {
+            w.attr("moveWithCells", "1");
+        }
+        if anchor.size_with_cells {
+            w.attr("sizeWithCells", "1");
+        }
+        w.end_attrs();
+        self.write_anchor_point(w, "xdr:from", anchor.from);
+        self.write_anchor_point(w, "xdr:to", anchor.to);
+        w.end_element("anchor");
+    }
+
+    fn write_anchor_point(
+        &self,
+        w: &mut XmlWriter,
+        element_name: &str,
+        point: ooxml_types::ole::CellAnchorPoint,
+    ) {
+        w.start_element(element_name).end_attrs();
+        w.element_with_text("xdr:col", &point.col.to_string());
+        w.element_with_text("xdr:colOff", &point.col_offset.to_string());
+        w.element_with_text("xdr:row", &point.row.to_string());
+        w.element_with_text("xdr:rowOff", &point.row_offset.to_string());
+        w.end_element(element_name);
     }
 
     /// Check if a text run has any formatting

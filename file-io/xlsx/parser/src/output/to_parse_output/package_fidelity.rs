@@ -10,6 +10,11 @@ pub(super) fn build_package_fidelity_metadata(
                 evidence: inventory.profile_evidence.clone(),
             }
         }),
+        shared_string_table: result.shared_strings_ext_lst_xml.as_ref().map(|xml| {
+            domain_types::SharedStringTableFidelity {
+                ext_lst_xml: xml.clone(),
+            }
+        }),
         content_type_defaults: result
             .content_type_defaults
             .iter()
@@ -45,6 +50,8 @@ pub(super) fn build_package_fidelity_metadata(
             .collect(),
         sheet_workbook_r_ids: result.sheet_workbook_r_ids.clone(),
         opaque_parts: Vec::new(),
+        raw_doc_props: build_raw_doc_props_hints(result),
+        pivot_cache_packages: result.pivot_cache_packages.clone(),
         diagnostics: result
             .package_inventory
             .as_ref()
@@ -64,6 +71,14 @@ pub(super) fn build_package_fidelity_metadata(
     };
 
     let mut raw_parts = Vec::<(String, Vec<u8>)>::new();
+    if let Some(inventory) = result.package_inventory.as_ref() {
+        raw_parts.extend(inventory.entries.iter().filter_map(|entry| {
+            entry
+                .bytes
+                .as_ref()
+                .map(|bytes| (entry.normalized_path.clone(), bytes.clone()))
+        }));
+    }
     if let Some(extensions) = result.extensions.as_ref() {
         raw_parts.extend(
             extensions
@@ -141,6 +156,77 @@ fn build_opaque_package_part_hints(
             }
         })
         .collect()
+}
+
+fn build_raw_doc_props_hints(result: &FullParseResult) -> Vec<domain_types::RawDocPropsHint> {
+    let mut hints = Vec::new();
+    let properties = document_properties_from_result(result);
+    if let (Some(bytes), Some(properties)) =
+        (result.raw_doc_props_core_xml.clone(), properties.as_ref())
+    {
+        hints.push(domain_types::RawDocPropsHint {
+            path: "docProps/core.xml".to_string(),
+            bytes,
+            generated_at_import: crate::domain::metadata::write::write_core_props_xml(properties),
+        });
+    }
+    if let Some(bytes) = result.raw_doc_props_app_xml.clone()
+        && (result.doc_props_app.is_some() || properties.is_some())
+    {
+        hints.push(domain_types::RawDocPropsHint {
+            path: "docProps/app.xml".to_string(),
+            bytes,
+            generated_at_import: crate::domain::metadata::write::write_app_props_xml(
+                result.doc_props_app.as_ref(),
+            ),
+        });
+    }
+    if let (Some(bytes), Some(properties)) =
+        (result.raw_doc_props_custom_xml.clone(), properties.as_ref())
+    {
+        if !properties.custom.is_empty() || !properties.typed_custom.is_empty() {
+            hints.push(domain_types::RawDocPropsHint {
+                path: "docProps/custom.xml".to_string(),
+                bytes,
+                generated_at_import: crate::domain::metadata::write::write_custom_props_xml(
+                    properties,
+                ),
+            });
+        }
+    }
+    hints
+}
+
+fn document_properties_from_result(
+    result: &FullParseResult,
+) -> Option<domain_types::DocumentProperties> {
+    (result.doc_props_core.is_some() || result.doc_props_custom.is_some()).then(|| {
+        let core = result.doc_props_core.as_ref();
+        let typed_custom: Vec<_> = result.doc_props_custom.clone().unwrap_or_default();
+        domain_types::DocumentProperties {
+            title: core.and_then(|core| core.title.clone()),
+            creator: core.and_then(|core| core.creator.clone()),
+            description: core.and_then(|core| core.description.clone()),
+            identifier: core.and_then(|core| core.identifier.clone()),
+            language: core.and_then(|core| core.language.clone()),
+            subject: core.and_then(|core| core.subject.clone()),
+            created: core.and_then(|core| core.created.clone()),
+            modified: core.and_then(|core| core.modified.clone()),
+            last_modified_by: core.and_then(|core| core.last_modified_by.clone()),
+            category: core.and_then(|core| core.category.clone()),
+            keywords: core.and_then(|core| core.keywords.clone()),
+            content_status: core.and_then(|core| core.content_status.clone()),
+            content_type: core.and_then(|core| core.content_type.clone()),
+            last_printed: core.and_then(|core| core.last_printed.clone()),
+            revision: core.and_then(|core| core.revision.clone()),
+            version: core.and_then(|core| core.version.clone()),
+            custom: typed_custom
+                .iter()
+                .map(|prop| (prop.name.clone(), prop.value.as_legacy_string()))
+                .collect(),
+            typed_custom,
+        }
+    })
 }
 
 fn package_content_type_for_path(result: &FullParseResult, path: &str) -> Option<String> {

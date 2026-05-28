@@ -59,7 +59,7 @@ pub struct PivotFieldFacts {
     pub sort_type: Option<String>,
     pub auto_sort_data_field: Option<u32>,
     pub data_field: bool,
-    pub show_all: bool,
+    pub show_all: Option<bool>,
     pub items: Vec<PivotItemFacts>,
 }
 

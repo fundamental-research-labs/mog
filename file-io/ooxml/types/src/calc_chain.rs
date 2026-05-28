@@ -30,6 +30,12 @@ pub struct CalcChain {
 pub struct CalcCell {
     /// Cell reference in A1 notation (e.g. "A1", "B12"). Required.
     pub r: String,
+    /// Transitional compatibility cell reference (`ref`).
+    ///
+    /// Strict packages use `r`; import adapters should prefer `r` when both are
+    /// present and use this only as a fallback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
     /// Sheet index (1-based). When omitted, same sheet as previous entry.
     /// XSD type: `xsd:int` (signed), default: 0.
     pub i: Option<i32>,
@@ -69,6 +75,7 @@ mod tests {
     fn calc_cell_defaults() {
         let c = CalcCell::default();
         assert!(c.r.is_empty());
+        assert!(c.reference.is_none());
         assert!(c.i.is_none());
         assert!(!c.s);
         assert!(!c.l);
@@ -80,6 +87,7 @@ mod tests {
     fn calc_cell_with_values() {
         let c = CalcCell {
             r: "B2".to_string(),
+            reference: None,
             i: Some(1),
             s: true,
             l: false,

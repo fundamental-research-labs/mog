@@ -15,6 +15,8 @@ pub const KEY_VML: &str = "vml";
 pub const KEY_ALLOW_PNG: &str = "allowPng";
 pub const KEY_TARGET_SCREEN_SIZE: &str = "targetScreenSize";
 pub const KEY_DPI: &str = "dpi";
+pub const KEY_CODE_PAGE: &str = "codePage";
+pub const KEY_CHARACTER_SET: &str = "characterSet";
 
 pub fn to_yrs_prelim(web: &WorkbookWebPublishing) -> Vec<(&str, Any)> {
     let mut entries = Vec::new();
@@ -42,6 +44,12 @@ pub fn to_yrs_prelim(web: &WorkbookWebPublishing) -> Vec<(&str, Any)> {
     if let Some(value) = web.dpi {
         entries.push((KEY_DPI, Any::Number(value as f64)));
     }
+    if let Some(value) = web.code_page {
+        entries.push((KEY_CODE_PAGE, Any::Number(value as f64)));
+    }
+    if let Some(value) = web.character_set.as_ref() {
+        entries.push((KEY_CHARACTER_SET, Any::String(Arc::from(value.as_str()))));
+    }
     entries
 }
 
@@ -55,6 +63,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> WorkbookWebPublishing 
         target_screen_size: read_string(map, txn, KEY_TARGET_SCREEN_SIZE)
             .map(|value| ooxml_types::web_publish::TargetScreenSize::from_ooxml(&value)),
         dpi: read_u32(map, txn, KEY_DPI),
+        code_page: read_u32(map, txn, KEY_CODE_PAGE),
+        character_set: read_string(map, txn, KEY_CHARACTER_SET),
     }
 }
 

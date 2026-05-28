@@ -38,6 +38,8 @@ pub struct SheetDrawingData {
     /// The provisional id is remapped after `PackageGraphBuilder` resolves the
     /// final drawing relationship ids.
     pub image_rels: Vec<(String, String)>,
+    /// Non-image drawing relationship entries imported with OOXML drawing objects.
+    pub drawing_rels: Vec<ooxml_types::shared::OpcRelationship>,
 }
 
 /// Assemble all floating objects for a sheet into drawing anchors suitable for `DrawingWriter`.
@@ -51,6 +53,7 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
     let mut anchors = Vec::new();
     let mut image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
     let mut image_rels: Vec<(String, String)> = Vec::new();
+    let mut drawing_rels: Vec<ooxml_types::shared::OpcRelationship> = Vec::new();
 
     for obj in floating_objects {
         let anchor_index = ooxml_props::get_anchor_index(&obj.data);
@@ -65,7 +68,53 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                     anchors.push((anchor_index, anchor));
                 }
             }
-            FloatingObjectData::Drawing(_) => {}
+            FloatingObjectData::Drawing(drawing_data) => {
+                if let Some(ref ooxml) = drawing_data.ooxml {
+                    drawing_rels.extend(ooxml.relationships.clone());
+                    let drawing_obj = match &ooxml.object {
+                        domain_types::domain::floating_object::DrawingObjectOoxml::ContentPart {
+                            content_part,
+                        } => crate::domain::drawings::write::DrawingObject::ContentPart(
+                            content_part.clone(),
+                        ),
+                        domain_types::domain::floating_object::DrawingObjectOoxml::GraphicFrame {
+                            graphic_frame,
+                        } => crate::domain::drawings::write::DrawingObject::GraphicFrame(
+                            crate::domain::drawings::write::OpaqueGraphicFrame {
+                                raw_xml: graphic_frame.graphic_xml.clone().unwrap_or_default(),
+                            },
+                        ),
+                        domain_types::domain::floating_object::DrawingObjectOoxml::Unknown => {
+                            continue;
+                        }
+                    };
+                    let position = anchors::anchor_to_legacy_position(&obj.common.anchor);
+                    let size = domain_types::domain::chart::ObjectSize {
+                        width: obj.common.width,
+                        height: obj.common.height,
+                        ..Default::default()
+                    };
+                    let mut anchor = anchors::wrap_in_anchor(
+                        &position,
+                        &size,
+                        ooxml.edit_as.as_deref(),
+                        ooxml
+                            .extent_emu_cx
+                            .zip(ooxml.extent_emu_cy),
+                        drawing_obj,
+                    );
+                    let restored_client_data = crate::domain::drawings::write::ClientData {
+                        locks_with_sheet: ooxml.client_data_locks_with_sheet.unwrap_or(true),
+                        prints_with_sheet: ooxml.client_data_prints_with_sheet.unwrap_or(true),
+                    };
+                    match &mut anchor {
+                        DrawingAnchor::TwoCell(tc, _) => tc.client_data = restored_client_data,
+                        DrawingAnchor::OneCell(oc, _) => oc.client_data = restored_client_data,
+                        DrawingAnchor::Absolute(abs, _) => abs.client_data = restored_client_data,
+                    }
+                    anchors.push((ooxml.anchor_index.map(|idx| idx as usize), anchor));
+                }
+            }
             FloatingObjectData::Connector(conn_data) => {
                 let anchor =
                     connectors::convert_unified_connector_to_anchor(&obj.common, conn_data);
@@ -84,5 +133,6 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
         anchors,
         image_blobs,
         image_rels,
+        drawing_rels,
     }
 }

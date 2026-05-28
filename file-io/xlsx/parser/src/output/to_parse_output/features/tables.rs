@@ -22,6 +22,7 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
             last_col_highlight: t.show_last_column,
             auto_filter_ref: t.auto_filter_ref.clone(),
             auto_filter_xr_uid: t.auto_filter_xr_uid.clone(),
+            auto_filter_ext_lst_raw: t.auto_filter_ext_lst_raw.clone(),
             columns: t
                 .columns
                 .iter()
@@ -45,6 +46,7 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
                     totals_row_cell_style: c.totals_row_cell_style.clone(),
                     unique_name: c.unique_name.clone(),
                     query_table_field_id: c.query_table_field_id,
+                    xml_column_pr: c.xml_column_pr.clone(),
                     xr3_uid: c.xr3_uid.clone(),
                 })
                 .collect(),
@@ -60,6 +62,7 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
             table_type: t.table_type.clone(),
             totals_row_shown: t.totals_row_shown,
             connection_id: t.connection_id,
+            comment: t.comment.clone(),
             insert_row: t.insert_row,
             insert_row_shift: t.insert_row_shift,
             published: t.published,
@@ -85,6 +88,7 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
                             icon_id: sc.icon_id,
                         })
                         .collect(),
+                    ext_lst_raw: ss.ext_lst_raw.clone(),
                 }
             }),
         })

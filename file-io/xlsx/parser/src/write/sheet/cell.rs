@@ -6,8 +6,8 @@ pub(super) fn write_cell(w: &mut XmlWriter, cell: &CellData) {
     let cell_ref = to_a1(cell.row, cell.col);
 
     w.start_element("c");
-    if cell.cm {
-        w.attr("cm", "1");
+    if let Some(cm) = cell.cell_metadata_index {
+        w.attr_num("cm", cm);
     }
     if cell.phonetic {
         w.attr("ph", "1");

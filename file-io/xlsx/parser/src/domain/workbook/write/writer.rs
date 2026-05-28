@@ -23,6 +23,8 @@ pub struct WorkbookWriter {
     pub(super) defined_names: Vec<DefinedNameDef>,
     /// Workbook views.
     pub(super) workbook_views: Vec<WorkbookView>,
+    /// Raw XML for the <customWorkbookViews> element.
+    pub(super) custom_workbook_views_xml: Option<Vec<u8>>,
     /// Calculation settings.
     pub(super) calc_settings: Option<CalcSettings>,
     /// Structured workbook protection (converted to XML on write).
@@ -35,6 +37,8 @@ pub struct WorkbookWriter {
     pub(super) external_reference_r_ids: Vec<String>,
     /// Captured namespace declarations for round-trip fidelity.
     pub(super) root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
+    /// Workbook root `conformance` attribute from import/domain state.
+    pub(super) conformance: Option<String>,
 }
 
 impl WorkbookWriter {
@@ -116,6 +120,12 @@ impl WorkbookWriter {
         self
     }
 
+    /// Set raw workbook-level custom views XML.
+    pub fn set_custom_workbook_views_xml(&mut self, xml: Vec<u8>) -> &mut Self {
+        self.custom_workbook_views_xml = Some(xml);
+        self
+    }
+
     /// Set workbook protection from a domain type.
     ///
     /// The protection is converted to XML on write using the `WorkbookProtectionWrite` trait.
@@ -185,6 +195,12 @@ impl WorkbookWriter {
         ns: crate::infra::xml_namespaces::NamespaceMap,
     ) -> &mut Self {
         self.root_namespaces = Some(ns);
+        self
+    }
+
+    /// Set workbook root conformance.
+    pub fn set_conformance(&mut self, conformance: Option<String>) -> &mut Self {
+        self.conformance = conformance;
         self
     }
 

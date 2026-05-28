@@ -139,5 +139,8 @@ pub(super) fn write_web_publishing(
     if let Some(value) = web_publishing.target_screen_size {
         elem = elem.attr("targetScreenSize", value.to_ooxml());
     }
-    elem.attr_num_if("dpi", web_publishing.dpi).self_close();
+    elem = elem.attr_num_if("dpi", web_publishing.dpi);
+    elem = elem.attr_num_if("codePage", web_publishing.code_page);
+    elem.attr_if("characterSet", web_publishing.character_set.as_deref())
+        .self_close();
 }

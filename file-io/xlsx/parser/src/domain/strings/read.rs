@@ -39,6 +39,8 @@ pub struct SharedStrings {
     /// Per-entry phonetic XML (`<rPh>...</rPh>` + `<phoneticPr .../>`) extracted during parsing.
     /// Index-aligned with `refs`. `None` = no phonetic data in this `<si>` entry.
     phonetic_xml: Vec<Option<Vec<u8>>>,
+    /// Safe root-level `<extLst>` XML from the shared string table.
+    root_ext_lst_xml: Option<Vec<u8>>,
 }
 
 impl SharedStrings {
@@ -56,12 +58,14 @@ impl SharedStrings {
     /// A `SharedStrings` instance with as much data as could be recovered
     pub fn parse_with_context(xml: Vec<u8>, context: &mut ParseContext) -> Self {
         context.set_current_part("xl/sharedStrings.xml");
-        let (refs, phonetic_xml) = parse_shared_strings_with_context(&xml, context);
+        let (refs, phonetic_xml, root_ext_lst_xml) =
+            parse_shared_strings_with_context(&xml, context);
         Self {
             xml,
             refs,
             decode_buffer: Vec::with_capacity(256),
             phonetic_xml,
+            root_ext_lst_xml,
         }
     }
 
@@ -189,6 +193,11 @@ impl SharedStrings {
     /// Returns `None` if the entry has no phonetic data.
     pub fn get_phonetic_xml(&self, index: usize) -> Option<Vec<u8>> {
         self.phonetic_xml.get(index)?.clone()
+    }
+
+    /// Get safe root-level `<extLst>` XML from the shared string table.
+    pub fn root_ext_lst_xml(&self) -> Option<Vec<u8>> {
+        self.root_ext_lst_xml.clone()
     }
 }
 

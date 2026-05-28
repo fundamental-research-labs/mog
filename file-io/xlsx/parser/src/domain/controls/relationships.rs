@@ -9,6 +9,21 @@ use crate::infra::opc::{
     WorksheetRelationships, parse_owned_relationships,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OleEmbeddingKind {
+    OleBinary,
+    EmbeddedPackage,
+}
+
+impl OleEmbeddingKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::OleBinary => "oleObject",
+            Self::EmbeddedPackage => "embeddedPackage",
+        }
+    }
+}
+
 pub(crate) fn parse_worksheet_relationships(
     sheet_num: usize,
     rels_xml: &[u8],
@@ -29,11 +44,22 @@ pub(crate) fn ctrl_prop_target<'a>(
     typed_worksheet_target(relationships, r_id, OoxmlRelationshipType::CtrlProp)
 }
 
-pub(crate) fn ole_object_target<'a>(
+pub(crate) fn ole_embedding_target<'a>(
     relationships: &'a [OwnedRelationship],
     r_id: &str,
-) -> Option<&'a str> {
-    typed_worksheet_target(relationships, r_id, OoxmlRelationshipType::OleObject)
+) -> Option<(&'a str, OleEmbeddingKind)> {
+    WorksheetRelationships::new(relationships)
+        .by_id(r_id)
+        .and_then(|rel| match rel.rel_type {
+            OoxmlRelationshipType::OleObject => {
+                rel.target.path().map(|path| (path, OleEmbeddingKind::OleBinary))
+            }
+            OoxmlRelationshipType::EmbeddedPackage => rel
+                .target
+                .path()
+                .map(|path| (path, OleEmbeddingKind::EmbeddedPackage)),
+            _ => None,
+        })
 }
 
 pub(crate) fn legacy_vml_drawing_targets(

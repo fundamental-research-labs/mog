@@ -18,6 +18,14 @@ pub const REL_STYLES: &str =
 pub const REL_THEME: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
 
+/// Strict relationship type for theme.
+pub const REL_THEME_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/theme";
+
+pub fn is_theme_relationship_type(rel_type: &str) -> bool {
+    rel_type == REL_THEME || rel_type == REL_THEME_STRICT
+}
+
 /// Relationship type for shared strings.
 pub const REL_SHARED_STRINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
@@ -50,6 +58,10 @@ pub const REL_COMMENTS: &str =
 pub const REL_TABLE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
 
+/// Relationship type for worksheet-owned single-cell XML table bindings.
+pub const REL_TABLE_SINGLE_CELLS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableSingleCells";
+
 /// Relationship type for charts.
 pub const REL_CHART: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
@@ -64,10 +76,23 @@ pub const REL_HYPERLINK: &str =
 /// Relationship type for OLE objects.
 pub const REL_OLE_OBJECT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
+/// Relationship type for embedded package objects.
+pub const REL_EMBEDDED_PACKAGE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package";
+/// Relationship type for worksheet ActiveX control XML parts.
+pub const REL_ACTIVE_X_CONTROL: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/activeXControl";
+/// Relationship type for ActiveX binary persistence parts.
+pub const REL_ACTIVE_X_CONTROL_BINARY: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary";
 
 /// Relationship type for pivot cache definitions.
 pub const REL_PIVOT_CACHE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
+
+/// Strict relationship type for pivot cache definitions.
+pub const REL_PIVOT_CACHE_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/pivotCacheDefinition";
 
 /// Relationship type for pivot tables.
 pub const REL_PIVOT_TABLE: &str =
@@ -161,9 +186,37 @@ pub const REL_TIMELINE_CACHE: &str =
 pub const REL_METADATA: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata";
 
+/// Relationship type for custom XML map definitions (xl/xmlMaps.xml).
+pub const REL_XML_MAPS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/xmlMaps";
+
+/// Relationship type for shared-workbook revision headers.
+pub const REL_REVISION_HEADERS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/revisionHeaders";
+
+/// Relationship type for shared-workbook revision log parts.
+pub const REL_REVISION_LOG: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/revisionLog";
+
+/// Relationship type for shared-workbook user-name data.
+pub const REL_REVISION_USER_NAMES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/usernames";
+
 /// Relationship type for the calculation chain (xl/calcChain.xml).
 pub const REL_CALC_CHAIN: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
+
+/// Strict relationship type for the calculation chain.
+pub const REL_CALC_CHAIN_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/calcChain";
+
+/// Relationship type for workbook volatile dependencies.
+pub const REL_VOLATILE_DEPENDENCIES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/volatileDependencies";
+
+/// Strict relationship type for workbook volatile dependencies.
+pub const REL_VOLATILE_DEPENDENCIES_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/volatileDependencies";
 
 /// Relationship type for threaded comments (modern Excel 365 comments).
 pub const REL_THREADED_COMMENT: &str =
@@ -191,6 +244,10 @@ pub const REL_IMAGE: &str =
 /// Relationship type for pivot cache records.
 pub const REL_PIVOT_CACHE_RECORDS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
+
+/// Strict relationship type for pivot cache records.
+pub const REL_PIVOT_CACHE_RECORDS_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/pivotCacheRecords";
 
 /// Relationship type for form control property parts.
 pub const REL_CTRL_PROP: &str =
@@ -255,6 +312,7 @@ pub enum OoxmlRelationshipType {
     ChartColorStyle,
     Image,
     Table,
+    TableSingleCells,
     PivotTable,
     PivotCacheDefinition,
     PivotCacheRecords,
@@ -283,7 +341,11 @@ pub enum OoxmlRelationshipType {
     Timeline,
     TimelineCache,
     Metadata,
+    VolatileDependencies,
     OleObject,
+    EmbeddedPackage,
+    ActiveXControl,
+    ActiveXControlBinary,
     Person,
     VbaProject,
     Unknown(String),
@@ -298,9 +360,12 @@ impl OoxmlRelationshipType {
             REL_CUSTOM_PROPERTIES => Self::CustomProperties,
             REL_WORKSHEET => Self::Worksheet,
             REL_STYLES => Self::Styles,
-            REL_THEME => Self::Theme,
+            REL_THEME | REL_THEME_STRICT => Self::Theme,
             REL_SHARED_STRINGS => Self::SharedStrings,
-            REL_CALC_CHAIN => Self::CalcChain,
+            REL_CALC_CHAIN | REL_CALC_CHAIN_STRICT => Self::CalcChain,
+            REL_VOLATILE_DEPENDENCIES | REL_VOLATILE_DEPENDENCIES_STRICT => {
+                Self::VolatileDependencies
+            }
             REL_COMMENTS => Self::Comments,
             REL_THREADED_COMMENT => Self::ThreadedComments,
             REL_VML_DRAWING => Self::VmlDrawing,
@@ -311,9 +376,10 @@ impl OoxmlRelationshipType {
             REL_CHART_COLOR_STYLE => Self::ChartColorStyle,
             REL_IMAGE => Self::Image,
             REL_TABLE => Self::Table,
+            REL_TABLE_SINGLE_CELLS => Self::TableSingleCells,
             REL_PIVOT_TABLE => Self::PivotTable,
-            REL_PIVOT_CACHE => Self::PivotCacheDefinition,
-            REL_PIVOT_CACHE_RECORDS => Self::PivotCacheRecords,
+            REL_PIVOT_CACHE | REL_PIVOT_CACHE_STRICT => Self::PivotCacheDefinition,
+            REL_PIVOT_CACHE_RECORDS | REL_PIVOT_CACHE_RECORDS_STRICT => Self::PivotCacheRecords,
             REL_HYPERLINK => Self::Hyperlink,
             REL_PRINTER_SETTINGS => Self::PrinterSettings,
             REL_CTRL_PROP => Self::CtrlProp,
@@ -340,6 +406,9 @@ impl OoxmlRelationshipType {
             REL_TIMELINE_CACHE => Self::TimelineCache,
             REL_METADATA => Self::Metadata,
             REL_OLE_OBJECT => Self::OleObject,
+            REL_EMBEDDED_PACKAGE => Self::EmbeddedPackage,
+            REL_ACTIVE_X_CONTROL => Self::ActiveXControl,
+            REL_ACTIVE_X_CONTROL_BINARY => Self::ActiveXControlBinary,
             REL_PERSON => Self::Person,
             REL_VBA_PROJECT => Self::VbaProject,
             other => Self::Unknown(other.to_string()),
@@ -367,6 +436,7 @@ impl OoxmlRelationshipType {
             Self::ChartColorStyle => REL_CHART_COLOR_STYLE,
             Self::Image => REL_IMAGE,
             Self::Table => REL_TABLE,
+            Self::TableSingleCells => REL_TABLE_SINGLE_CELLS,
             Self::PivotTable => REL_PIVOT_TABLE,
             Self::PivotCacheDefinition => REL_PIVOT_CACHE,
             Self::PivotCacheRecords => REL_PIVOT_CACHE_RECORDS,
@@ -395,7 +465,11 @@ impl OoxmlRelationshipType {
             Self::Timeline => REL_TIMELINE,
             Self::TimelineCache => REL_TIMELINE_CACHE,
             Self::Metadata => REL_METADATA,
+            Self::VolatileDependencies => REL_VOLATILE_DEPENDENCIES,
             Self::OleObject => REL_OLE_OBJECT,
+            Self::EmbeddedPackage => REL_EMBEDDED_PACKAGE,
+            Self::ActiveXControl => REL_ACTIVE_X_CONTROL,
+            Self::ActiveXControlBinary => REL_ACTIVE_X_CONTROL_BINARY,
             Self::Person => REL_PERSON,
             Self::VbaProject => REL_VBA_PROJECT,
             Self::Unknown(uri) => uri,
@@ -640,6 +714,13 @@ impl<'a> WorksheetRelationships<'a> {
         self.relationships
             .iter()
             .filter(|rel| rel.rel_type == OoxmlRelationshipType::Table)
+            .collect()
+    }
+
+    pub fn table_single_cells(&self) -> Vec<&'a OwnedRelationship> {
+        self.relationships
+            .iter()
+            .filter(|rel| rel.rel_type == OoxmlRelationshipType::TableSingleCells)
             .collect()
     }
 
@@ -1028,6 +1109,7 @@ mod tests {
             OoxmlRelationshipType::ChartColorStyle,
             OoxmlRelationshipType::Image,
             OoxmlRelationshipType::Table,
+            OoxmlRelationshipType::TableSingleCells,
             OoxmlRelationshipType::PivotTable,
             OoxmlRelationshipType::PivotCacheDefinition,
             OoxmlRelationshipType::PivotCacheRecords,

@@ -1,7 +1,7 @@
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::output::results::{ColWidth, RowHeight};
 
-use super::read_support::{attr_bool, attr_parse, attr_str, section_slice};
+use super::read_support::{attr_bool, attr_parse, attr_str};
 
 /// Parse column widths from the `<cols>` section of worksheet XML.
 pub fn parse_col_widths(xml: &[u8]) -> Vec<ColWidth> {
@@ -14,18 +14,28 @@ pub fn parse_dimensions(xml: &[u8]) -> (Vec<ColWidth>, Vec<RowHeight>) {
 }
 
 fn parse_cols(xml: &[u8]) -> Vec<ColWidth> {
-    let Some(cols_section) = section_slice(xml, b"cols") else {
-        return Vec::new();
-    };
-
     let mut col_widths = Vec::new();
     let mut pos = 0;
-    while let Some(col_start) = find_tag_simd(cols_section, b"col", pos) {
-        let col_end = find_gt_simd(cols_section, col_start)
-            .map(|p| p + 1)
-            .unwrap_or(cols_section.len());
-        col_widths.push(parse_col_element(&cols_section[col_start..col_end]));
-        pos = col_end;
+    while let Some(cols_start) = find_tag_simd(xml, b"cols", pos) {
+        let Some((_, cols_end)) = crate::infra::xml_fragment::extract_element_bounds(xml, cols_start)
+        else {
+            break;
+        };
+        let cols_section = &xml[cols_start..cols_end];
+        let mut col_pos = 0;
+        while let Some(col_start) = find_tag_simd(cols_section, b"col", col_pos) {
+            let after_tag = col_start + b"<col".len();
+            if after_tag < cols_section.len() && cols_section[after_tag] == b's' {
+                col_pos = after_tag;
+                continue;
+            }
+            let col_end = find_gt_simd(cols_section, col_start)
+                .map(|p| p + 1)
+                .unwrap_or(cols_section.len());
+            col_widths.push(parse_col_element(&cols_section[col_start..col_end]));
+            col_pos = col_end;
+        }
+        pos = cols_end;
     }
     col_widths
 }
@@ -40,6 +50,7 @@ fn parse_col_element(col_elem: &[u8]) -> ColWidth {
     let best_fit = attr_bool(col_elem, b"bestFit=\"").unwrap_or(false);
     let outline_level = attr_parse::<u8>(col_elem, b"outlineLevel=\"");
     let collapsed = attr_bool(col_elem, b"collapsed=\"").unwrap_or(false);
+    let phonetic = attr_bool(col_elem, b"phonetic=\"").unwrap_or(false);
 
     let mut cw = ColWidth::range(min, max, width);
     if let Some(s) = style {
@@ -56,6 +67,7 @@ fn parse_col_element(col_elem: &[u8]) -> ColWidth {
     }
     cw.outline_level = outline_level;
     cw.collapsed = collapsed;
+    cw.phonetic = phonetic;
     cw
 }
 

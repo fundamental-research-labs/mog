@@ -119,6 +119,7 @@ impl From<ooxml_types::workbook::BookView> for WorkbookView {
             window_height: v.window_height,
             tab_ratio: v.tab_ratio,
             uid: v.xr_uid,
+            ext_lst_raw: v.ext_lst.and_then(|ext| ext.raw_xml),
         }
     }
 }
@@ -288,7 +289,9 @@ impl From<WorkbookView> for ooxml_types::workbook::BookView {
             active_tab: v.active_tab,
             auto_filter_date_grouping: v.auto_filter_date_grouping,
             xr_uid: v.uid,
-            ext_lst: None,
+            ext_lst: v
+                .ext_lst_raw
+                .map(|raw_xml| ooxml_types::ExtensionList { raw_xml: Some(raw_xml) }),
         }
     }
 }

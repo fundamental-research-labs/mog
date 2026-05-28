@@ -116,7 +116,10 @@ fn styles_writer_from_workbook_stylesheet(stylesheet: WorkbookStylesheet) -> Sty
     writer.default_table_style = stylesheet.default_table_style;
     writer.default_pivot_style = stylesheet.default_pivot_style;
     writer.known_fonts = stylesheet.known_fonts;
-    writer.root_namespaces = StyleRootNamespaces::from_attrs(stylesheet.root_namespace_attrs);
+    writer.root_namespaces = StyleRootNamespaces::from_attrs_and_mce(
+        stylesheet.root_namespace_attrs,
+        stylesheet.root_mce_attributes,
+    );
     writer.ext_lst_raw = stylesheet.ext_lst_xml;
 
     if writer.fonts.is_empty()

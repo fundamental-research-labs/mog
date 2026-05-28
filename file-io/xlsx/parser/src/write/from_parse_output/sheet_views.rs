@@ -40,9 +40,15 @@ pub(super) fn apply_sheet_views(writer: &mut SheetWriter, sheet_data: &SheetData
         || view.zoom_scale_page_layout_view.is_some()
         || view.zoom_scale_sheet_layout_view.is_some()
         || view.has_explicit_top_left_cell
+        || view.ext_lst_xml.is_some()
+        || sheet_data.sheet_views_ext_lst_xml.is_some()
         || !sheet_data.extra_sheet_views.is_empty();
 
     if !has_view_settings {
+        if let Some(ext_lst_xml) = safe_view_ext_lst(sheet_data.sheet_views_ext_lst_xml.as_deref())
+        {
+            writer.set_sheet_views_ext_lst_xml(ext_lst_xml.to_owned());
+        }
         return;
     }
 
@@ -103,6 +109,7 @@ pub(super) fn apply_sheet_views(writer: &mut SheetWriter, sheet_data: &SheetData
     if let Some(cid) = view.color_id {
         sheet_view.color_id = cid;
     }
+    sheet_view.ext_lst_xml = safe_view_ext_lst(view.ext_lst_xml.as_deref()).map(str::to_owned);
 
     sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
 
@@ -173,6 +180,9 @@ pub(super) fn apply_sheet_views(writer: &mut SheetWriter, sheet_data: &SheetData
                 .map(|view| normalize_extra_sheet_view(&view, current_pane.as_ref())),
         );
         writer.set_views(all_views);
+    }
+    if let Some(ext_lst_xml) = safe_view_ext_lst(sheet_data.sheet_views_ext_lst_xml.as_deref()) {
+        writer.set_sheet_views_ext_lst_xml(ext_lst_xml.to_owned());
     }
 }
 
@@ -245,7 +255,22 @@ fn domain_view_to_ooxml(view: &DomainSheetView) -> SheetView {
     sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
     sheet_view.selections = view.selections.clone();
     sheet_view.pivot_selection = view.pivot_selection.clone();
+    sheet_view.ext_lst_xml = safe_view_ext_lst(view.ext_lst_xml.as_deref()).map(str::to_owned);
     sheet_view
+}
+
+fn safe_view_ext_lst(ext_lst_xml: Option<&str>) -> Option<&str> {
+    let xml = ext_lst_xml?;
+    let lowered = xml.to_ascii_lowercase();
+    let has_relationship = lowered.contains("r:id")
+        || lowered.contains("r:embed")
+        || lowered.contains("r:link")
+        || lowered.contains("relationshipid");
+    let has_address_like_ref = lowered.contains(" sqref=")
+        || lowered.contains(" ref=")
+        || lowered.contains(" activecell=")
+        || lowered.contains(" range=");
+    (!has_relationship && !has_address_like_ref).then_some(xml)
 }
 
 fn compatible_selections_for_pane(

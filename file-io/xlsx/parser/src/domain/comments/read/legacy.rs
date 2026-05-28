@@ -2,7 +2,12 @@ use super::rich_text::parse_rich_text;
 use super::support::parse_root_attrs;
 use crate::domain::comments::types::{Comment, Comments};
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{decode_xml_entities, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    decode_xml_entities, extract_direct_child_element_xml, parse_bool_attr_with_default,
+    parse_string_attr, parse_u32_attr,
+};
+use ooxml_types::comments::{CommentHAlign, CommentPr, CommentVAlign};
+use ooxml_types::ole::{CellAnchorPoint, ObjectAnchor};
 
 /// Parse comments from comments*.xml.
 pub fn parse_comments(xml: &[u8]) -> Comments {
@@ -12,6 +17,9 @@ pub fn parse_comments(xml: &[u8]) -> Comments {
         Some(pos) => pos,
         None => return comments,
     };
+    let comments_end = find_closing_tag(xml, b"comments", comments_start).unwrap_or(xml.len());
+    let comments_close_end = find_gt_simd(xml, comments_end).map_or(xml.len(), |pos| pos + 1);
+    let comments_xml = &xml[comments_start..comments_close_end];
 
     comments.root_namespace_attrs = parse_comments_root_attrs(xml);
 
@@ -24,6 +32,9 @@ pub fn parse_comments(xml: &[u8]) -> Comments {
         let list_end = find_closing_tag(xml, b"commentList", list_start).unwrap_or(xml.len());
         comments.comments = parse_comment_list(&xml[list_start..list_end]);
     }
+
+    comments.ext_lst_xml = extract_direct_child_element_xml(comments_xml, b"comments", b"extLst")
+        .filter(|raw| !crate::infra::xml::raw_xml_contains_relationship_attr(raw));
 
     comments
 }
@@ -102,7 +113,88 @@ fn parse_single_comment(xml: &[u8]) -> Option<Comment> {
         comment.rich_text = parse_rich_text(&xml[text_start..text_end]);
     }
 
+    if let Some(comment_pr_start) = find_tag_simd(xml, b"commentPr", 0) {
+        let comment_pr_end =
+            find_closing_tag(xml, b"commentPr", comment_pr_start).unwrap_or(xml.len());
+        comment.comment_pr = parse_comment_pr(&xml[comment_pr_start..comment_pr_end]);
+    }
+
     Some(comment)
+}
+
+fn parse_comment_pr(xml: &[u8]) -> Option<CommentPr> {
+    let tag_end = find_gt_simd(xml, 0)?;
+    let tag = &xml[..tag_end + 1];
+    let mut comment_pr = CommentPr {
+        locked: parse_bool_attr_with_default(tag, b"locked=\"", true),
+        default_size: parse_bool_attr_with_default(tag, b"defaultSize=\"", true),
+        print: parse_bool_attr_with_default(tag, b"print=\"", true),
+        disabled: parse_bool_attr_with_default(tag, b"disabled=\"", false),
+        auto_fill: parse_bool_attr_with_default(tag, b"autoFill=\"", true),
+        auto_line: parse_bool_attr_with_default(tag, b"autoLine=\"", true),
+        alt_text: parse_string_attr(tag, b"altText=\""),
+        text_h_align: parse_string_attr(tag, b"textHAlign=\"")
+            .map(|value| CommentHAlign::from_ooxml(&value)),
+        text_v_align: parse_string_attr(tag, b"textVAlign=\"")
+            .map(|value| CommentVAlign::from_ooxml(&value)),
+        lock_text: parse_bool_attr_with_default(tag, b"lockText=\"", true),
+        just_last_x: parse_bool_attr_with_default(tag, b"justLastX=\"", false),
+        auto_scale: parse_bool_attr_with_default(tag, b"autoScale=\"", false),
+        ..Default::default()
+    };
+
+    if let Some(anchor_start) = find_tag_simd(xml, b"anchor", 0) {
+        let anchor_end = find_closing_tag(xml, b"anchor", anchor_start).unwrap_or(xml.len());
+        let anchor_xml = &xml[anchor_start..anchor_end];
+        comment_pr.anchor = parse_object_anchor(anchor_xml);
+    }
+
+    Some(comment_pr)
+}
+
+fn parse_object_anchor(xml: &[u8]) -> Option<ObjectAnchor> {
+    let tag_end = find_gt_simd(xml, 0)?;
+    let tag = &xml[..tag_end + 1];
+    let move_with_cells = parse_bool_attr_with_default(tag, b"moveWithCells=\"", false);
+    let size_with_cells = parse_bool_attr_with_default(tag, b"sizeWithCells=\"", false);
+
+    let from = parse_anchor_point(xml, b"from")?;
+    let to = parse_anchor_point(xml, b"to")?;
+
+    Some(ObjectAnchor {
+        move_with_cells,
+        size_with_cells,
+        from,
+        to,
+    })
+}
+
+fn parse_anchor_point(xml: &[u8], tag_name: &[u8]) -> Option<CellAnchorPoint> {
+    let start = find_tag_simd(xml, tag_name, 0)?;
+    let end = find_closing_tag(xml, tag_name, start).unwrap_or(xml.len());
+    let point_xml = &xml[start..end];
+    Some(CellAnchorPoint {
+        col: parse_child_u32(point_xml, b"col").unwrap_or(0),
+        col_offset: parse_child_i64(point_xml, b"colOff").unwrap_or(0),
+        row: parse_child_u32(point_xml, b"row").unwrap_or(0),
+        row_offset: parse_child_i64(point_xml, b"rowOff").unwrap_or(0),
+    })
+}
+
+fn parse_child_u32(xml: &[u8], tag_name: &[u8]) -> Option<u32> {
+    parse_child_text(xml, tag_name)?.trim().parse().ok()
+}
+
+fn parse_child_i64(xml: &[u8], tag_name: &[u8]) -> Option<i64> {
+    parse_child_text(xml, tag_name)?.trim().parse().ok()
+}
+
+fn parse_child_text(xml: &[u8], tag_name: &[u8]) -> Option<String> {
+    let start = find_tag_simd(xml, tag_name, 0)?;
+    let open_end = find_gt_simd(xml, start)?;
+    let close_start = find_closing_tag(xml, tag_name, start)?;
+    (open_end < close_start)
+        .then(|| decode_xml_entities(&xml[open_end + 1..close_start]))
 }
 
 #[cfg(test)]

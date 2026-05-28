@@ -51,7 +51,7 @@ pub use ooxml_types::drawings::{PresetGeometry, ShapeGeometry, ShapeProperties};
 // to `domain-types` (typed OOXML preservation) — alias them back to their historical
 // names here so the rest of the parser compiles unchanged.
 pub use domain_types::domain::drawings::{
-    DrawingContent, GroupShapeData as GroupShape, SmartArtGraphicFrame,
+    DrawingContent, GroupShapeData as GroupShape, OpaqueDrawingContent, SmartArtGraphicFrame,
 };
 pub use ooxml_types::drawings::{
     ConnectorNonVisual, GraphicFrameNonVisual, GroupShapeNonVisual, PictureNonVisual,

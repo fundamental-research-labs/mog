@@ -1,5 +1,8 @@
 use crate::domain::workbook::read::SheetInfo;
-use crate::domain::worksheet::read::{parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views};
+use crate::domain::worksheet::read::{
+    parse_dimension_ref_with_text, parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views,
+    parse_sheet_views_ext_lst,
+};
 use crate::output::results::FullParsedSheet;
 use crate::zip::{XlsxArchive, ZipError};
 
@@ -40,6 +43,9 @@ pub(super) fn append_metadata_only_sheets(
                 .into_iter()
                 .map(crate::output::results::SheetViewOutput::from)
                 .collect();
+            empty_sheet.sheet_views_ext_lst_xml = parse_sheet_views_ext_lst(pre_sd);
+            empty_sheet.worksheet_dimension_ref =
+                parse_dimension_ref_with_text(pre_sd).map(|dimension| dimension.ref_range);
             empty_sheet.frozen_pane = parse_frozen_pane(pre_sd);
             let fmt_pr = parse_sheet_format_pr(pre_sd);
             empty_sheet.default_row_height = fmt_pr.default_row_height;

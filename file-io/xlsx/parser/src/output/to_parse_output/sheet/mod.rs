@@ -27,9 +27,10 @@ pub(super) fn convert_sheet(
     theme_colors: &[String],
     media_data_urls: &HashMap<String, String>,
     binary_parts: &HashMap<String, Vec<u8>>,
+    metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> SheetData {
     // --- Cells ---
-    let projection_roles = build_projection_roles(&sheet.cells);
+    let projection_roles = build_projection_roles(&sheet.cells, metadata);
     let compact_sst_provenance = env_flag_default_true("MOG_XLSX_COMPACT_SST_PROVENANCE");
     let compact_numeric_provenance = env_flag_default_true("MOG_XLSX_COMPACT_NUMERIC_PROVENANCE");
     let compact_non_formula_cached_type =
@@ -215,6 +216,7 @@ pub(super) fn convert_sheet(
                     hidden: cw.hidden,
                     best_fit: cw.best_fit,
                     collapsed: cw.collapsed,
+                    phonetic: cw.phonetic,
                 });
             }
         }
@@ -229,6 +231,7 @@ pub(super) fn convert_sheet(
                 hidden: cw.hidden,
                 best_fit: cw.best_fit,
                 collapsed: cw.collapsed,
+                phonetic: cw.phonetic,
                 style_id: cw.style.filter(|&s| s > 0).map(|s| s as u32),
             });
         }
@@ -314,7 +317,10 @@ pub(super) fn convert_sheet(
             let tooltip = non_empty(&h.tooltip);
             // Resolve external URL from the relationship ID via sheet OPC rels.
             let rel = h.r_id.as_deref().and_then(|rid| rel_map.get(rid).copied());
-            let target = rel.map(|(target, _)| target.to_string());
+            let target = h
+                .target
+                .clone()
+                .or_else(|| rel.map(|(target, _)| target.to_string()));
             let target_kind = h.target_kind.or_else(|| {
                 if h.r_id.is_some() {
                     Some(HyperlinkTargetKind::Relationship)
@@ -450,6 +456,7 @@ pub(super) fn convert_sheet(
         cols,
         worksheet_root_namespaces: Default::default(),
         worksheet_ext_lst_xml: None,
+        worksheet_dimension_ref: sheet.worksheet_dimension_ref.clone(),
         sheet_id: sheet.sheet_id,
         visibility: sheet.state,
         uid: sheet.uid.clone(),
@@ -459,6 +466,7 @@ pub(super) fn convert_sheet(
         merges,
         frozen_pane,
         view,
+        sheet_views_ext_lst_xml: sheet.sheet_views_ext_lst_xml.clone(),
         row_styles,
         col_styles,
         // Domain objects
@@ -481,6 +489,7 @@ pub(super) fn convert_sheet(
         hf_images,
         protection,
         worksheet_semantic_containers: sheet.worksheet_semantic_containers.clone(),
+        sheet_calc_pr: sheet.sheet_calc_pr.clone(),
         auto_filter: sheet.auto_filter.clone(),
         sort_state: sheet.sort_state.clone(),
         data_validations_declared_count: sheet.data_validations_declared_count,

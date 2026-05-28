@@ -109,6 +109,7 @@ fn object_fact(content: &DrawingContent, rel_targets: &HashMap<&str, &str>) -> O
                 rel_targets,
             ),
         }),
+        DrawingContent::OpaqueUnknown(_) => ObjectFact::Unknown,
         DrawingContent::Unknown => ObjectFact::Unknown,
     }
 }

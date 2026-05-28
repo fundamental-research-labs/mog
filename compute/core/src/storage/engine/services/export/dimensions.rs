@@ -350,6 +350,15 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
             .collect()
     };
 
+    let phonetic_cols: std::collections::HashSet<u32> = {
+        let txn = stores.storage.doc().transact();
+        get_meta_for_export(&txn, stores.storage.sheets(), sheet_id)
+            .map(|m| yrs_schema::helpers::read_json_vec::<_, u32>(&m, &txn, "colPhonetic"))
+            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    };
+
     // Read custom column widths.
     // Use get_col_width_explicit to distinguish "no stored width" (returns None)
     // from "explicitly stored width". Without this, columns with no stored width
@@ -367,6 +376,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
             stores.grid_indexes.get(sheet_id),
         );
         let is_best_fit = best_fit_cols.contains(&col);
+        let is_phonetic = phonetic_cols.contains(&col);
 
         // Only emit a <col> entry if there's an explicit stored width, or the
         // column is hidden/bestFit. Columns with no stored width inherit the
@@ -377,7 +387,13 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                 let width_differs = (width.0 - default_col_width.0).abs() > 0.01;
                 let custom = is_custom_width || width_differs;
                 let is_collapsed = collapsed_cols.contains(&col);
-                if custom || width_differs || is_hidden || is_best_fit || is_collapsed {
+                if custom
+                    || width_differs
+                    || is_hidden
+                    || is_best_fit
+                    || is_collapsed
+                    || is_phonetic
+                {
                     col_widths.push(ColDimension {
                         col,
                         width: width.0,
@@ -385,13 +401,14 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                         hidden: is_hidden,
                         best_fit: is_best_fit,
                         collapsed: is_collapsed,
+                        phonetic: is_phonetic,
                     });
                 }
             }
             None => {
                 // No explicit width stored — only emit if hidden, bestFit, or collapsed
                 let is_collapsed = collapsed_cols.contains(&col);
-                if is_hidden || is_best_fit || is_collapsed {
+                if is_hidden || is_best_fit || is_collapsed || is_phonetic {
                     col_widths.push(ColDimension {
                         col,
                         width: default_col_width.0,
@@ -399,6 +416,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                         hidden: is_hidden,
                         best_fit: is_best_fit,
                         collapsed: is_collapsed,
+                        phonetic: is_phonetic,
                     });
                 }
             }

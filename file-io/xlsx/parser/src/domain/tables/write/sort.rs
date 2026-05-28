@@ -93,6 +93,8 @@ pub struct SortState {
     pub sort_method: domain_types::SortMethod,
     /// Sort conditions
     pub conditions: Vec<SortCondition>,
+    /// Raw direct-child `<extLst>` owned by this sortState.
+    pub ext_lst_raw: Option<String>,
 }
 
 impl SortState {
@@ -104,6 +106,7 @@ impl SortState {
             column_sort: false,
             sort_method: domain_types::SortMethod::None,
             conditions: Vec::new(),
+            ext_lst_raw: None,
         }
     }
 
@@ -130,6 +133,10 @@ impl SortState {
 
         for condition in &self.conditions {
             condition.write_xml(w);
+        }
+
+        if let Some(raw) = &self.ext_lst_raw {
+            w.raw_str(raw);
         }
 
         w.end_element("sortState");

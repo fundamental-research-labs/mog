@@ -8,6 +8,10 @@
 //! - **x14** (`http://schemas.microsoft.com/office/spreadsheetml/2009/9/main`) — CT_Slicer, CT_SlicerCacheDefinition
 //! - **x15** (`http://schemas.microsoft.com/office/spreadsheetml/2010/11/main`) — CT_TableSlicerCache
 //! - **sle** (`http://schemas.microsoft.com/office/drawing/2010/slicer`) — slicer anchor in drawing XML
+//!
+//! These are shared vocabulary types for targeted x14/x15 support. Parser and
+//! writer modules own relationship closure, dirty invalidation, and any opaque
+//! extension payload replay.
 
 use crate::drawings::CellAnchor;
 

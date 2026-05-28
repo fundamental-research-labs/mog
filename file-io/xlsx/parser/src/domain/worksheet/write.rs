@@ -23,7 +23,7 @@ use crate::write::xml_writer::XmlWriter;
 use ooxml_types::styles::ColorDef;
 use ooxml_types::worksheet::{
     ColWidth, MergeRange, OutlineProperties, PageSetupProperties, Selection, SheetPane,
-    SheetProperties, SheetView,
+    SheetCalcPr, SheetProperties, SheetView,
 };
 
 // ============================================================================
@@ -46,6 +46,13 @@ pub fn write_dimensions(w: &mut XmlWriter, dimension: Option<(u32, u32, u32, u32
     };
     w.start_element("dimension")
         .attr("ref", &ref_str)
+        .self_close();
+}
+
+/// Write the `<dimension>` element from an already-authored `ref` value.
+pub fn write_dimension_ref(w: &mut XmlWriter, dimension_ref: &str) {
+    w.start_element("dimension")
+        .attr("ref", dimension_ref)
         .self_close();
 }
 
@@ -160,7 +167,7 @@ fn write_color(w: &mut XmlWriter, element_name: &str, color: &ColorDef) {
 ///
 /// Accepts a slice of `SheetView` to support multiple `<sheetView>` elements for
 /// round-trip fidelity. If the slice is empty, a single default view is emitted.
-pub fn write_sheet_views(w: &mut XmlWriter, views: &[SheetView]) {
+pub fn write_sheet_views(w: &mut XmlWriter, views: &[SheetView], ext_lst_xml: Option<&str>) {
     let default_view = SheetView::default();
     let effective_views: &[SheetView] = if views.is_empty() {
         std::slice::from_ref(&default_view)
@@ -172,6 +179,10 @@ pub fn write_sheet_views(w: &mut XmlWriter, views: &[SheetView]) {
 
     for sv in effective_views {
         write_single_sheet_view(w, sv);
+    }
+
+    if let Some(ext_lst_xml) = ext_lst_xml {
+        w.raw_str(ext_lst_xml);
     }
 
     w.end_element("sheetViews");
@@ -244,8 +255,10 @@ fn write_single_sheet_view(w: &mut XmlWriter, sv: &SheetView) {
     w.attr_num("workbookViewId", sv.workbook_view_id);
 
     // Determine whether there are any child elements.
-    let has_children =
-        sv.pane.is_some() || !sv.pivot_selection.is_empty() || !sv.selections.is_empty();
+    let has_children = sv.pane.is_some()
+        || !sv.pivot_selection.is_empty()
+        || !sv.selections.is_empty()
+        || sv.ext_lst_xml.is_some();
 
     if !has_children {
         // No children — emit self-closing form to match Excel's output.
@@ -269,8 +282,21 @@ fn write_single_sheet_view(w: &mut XmlWriter, sv: &SheetView) {
             }
         }
 
+        if let Some(ext_lst_xml) = &sv.ext_lst_xml {
+            w.raw_str(ext_lst_xml);
+        }
+
         w.end_element("sheetView");
     }
+}
+
+/// Write typed worksheet calculation properties.
+pub fn write_sheet_calc_pr(w: &mut XmlWriter, sheet_calc_pr: &SheetCalcPr) {
+    w.start_element("sheetCalcPr");
+    if sheet_calc_pr.full_calc_on_load {
+        w.attr("fullCalcOnLoad", "1");
+    }
+    w.self_close();
 }
 
 /// Write the `<sheetFormatPr>` element.
@@ -330,7 +356,7 @@ pub fn write_cols(w: &mut XmlWriter, cols: &[ColWidth]) {
             .attr("width", &format_f64(col.width.unwrap_or(0.0)));
 
         // Emit attributes in Excel's canonical order:
-        // min, max, width, style, hidden, bestFit, customWidth, outlineLevel, collapsed
+        // min, max, width, style, hidden, bestFit, customWidth, phonetic, outlineLevel, collapsed
         if let Some(style) = col.style {
             w.attr_num("style", style);
         }
@@ -342,6 +368,9 @@ pub fn write_cols(w: &mut XmlWriter, cols: &[ColWidth]) {
         }
         if col.custom_width {
             w.attr("customWidth", "1");
+        }
+        if col.phonetic {
+            w.attr("phonetic", "1");
         }
         if let Some(lvl) = col.outline_level {
             if lvl > 0 {

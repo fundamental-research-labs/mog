@@ -232,6 +232,7 @@ fn pivot_package_output(pivots: Vec<pivot_types::PivotTableConfig>) -> ParseOutp
         .map(|config| domain_types::domain::pivot::ParsedPivotTable {
             config,
             initial_expansion_state: None,
+            ooxml_preservation: Default::default(),
         })
         .collect();
     output
@@ -370,6 +371,7 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         chart_relationships: Vec::new(),
         chart_auxiliary_files: Vec::new(),
         chart_auxiliary_parts: Vec::new(),
+        chart_ex_replay: None,
         is_chart_ex: false,
         cnv_pr_name: Some("Revenue Chart".to_string()),
         cnv_pr_id: Some(2),

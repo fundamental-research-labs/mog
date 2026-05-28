@@ -37,6 +37,10 @@ impl SharedStringsWriter {
             write_string_item(entry, &mut xml);
         }
 
+        if let Some(ext_lst_xml) = &self.root_ext_lst_xml {
+            xml.extend_from_slice(ext_lst_xml);
+        }
+
         xml.extend_from_slice(b"</sst>");
         xml
     }
@@ -45,7 +49,13 @@ impl SharedStringsWriter {
     fn write_empty_xml(&self) -> Vec<u8> {
         let mut xml = Vec::with_capacity(256);
         xml.extend_from_slice(b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n");
-        xml.extend_from_slice(b"<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"/>");
+        if let Some(ext_lst_xml) = &self.root_ext_lst_xml {
+            xml.extend_from_slice(b"<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\">");
+            xml.extend_from_slice(ext_lst_xml);
+            xml.extend_from_slice(b"</sst>");
+        } else {
+            xml.extend_from_slice(b"<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"/>");
+        }
         xml
     }
 }

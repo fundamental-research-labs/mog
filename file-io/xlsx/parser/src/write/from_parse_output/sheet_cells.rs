@@ -181,7 +181,9 @@ fn convert_cell_with_metadata_refs(
             authored_numeric_value
         },
         force_recalc: false,
-        cm: emit_cell_metadata_refs && cell.cm,
+        cell_metadata_index: emit_cell_metadata_refs
+            .then_some(cell.cell_metadata_index)
+            .flatten(),
         vm: emit_cell_metadata_refs.then_some(cell.vm).flatten(),
         preserve_space_formula: false,
         preserve_space_value: false,

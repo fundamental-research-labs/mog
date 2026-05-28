@@ -33,10 +33,10 @@ pub struct CellMetadata {
     /// inline `CellFormat` and drop this index.
     #[serde(rename = "s", skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
-    /// Cell-metadata-record flag (`<c cm="1">`). Paired with an entry
-    /// in `metadata.xml`'s cellMetadata block, addressed by row/col.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub cm: bool,
+    /// Cell-metadata-record index (`<c cm="N">`). Paired with an entry
+    /// in `metadata.xml`'s cellMetadata block.
+    #[serde(rename = "cm", skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     /// Value-metadata-record index (`<c vm="N">`). Paired with entry
     /// `N` in `metadata.xml`'s valueMetadata block.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -101,9 +101,9 @@ pub struct CellProperties {
     /// XLSX style palette index. See [`CellMetadata::style_id`].
     #[serde(rename = "s", skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
-    /// Cell-metadata-record flag. See [`CellMetadata::cm`].
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub cm: bool,
+    /// Cell-metadata-record index. See [`CellMetadata::cell_metadata_index`].
+    #[serde(rename = "cm", skip_serializing_if = "Option::is_none")]
+    pub cell_metadata_index: Option<u32>,
     /// Value-metadata-record index. See [`CellMetadata::vm`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
@@ -150,7 +150,7 @@ impl CellProperties {
             && self.validation.is_none()
             && self.connection_id.is_none()
             && self.style_id.is_none()
-            && !self.cm
+            && self.cell_metadata_index.is_none()
             && self.vm.is_none()
             && !self.phonetic
             && self.date_lexical_value.is_none()
@@ -170,7 +170,7 @@ impl CellMetadata {
             && self.validation.is_none()
             && self.connection_id.is_none()
             && self.style_id.is_none()
-            && !self.cm
+            && self.cell_metadata_index.is_none()
             && self.vm.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value

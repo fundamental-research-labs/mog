@@ -113,6 +113,8 @@ pub struct LegacyComment {
     pub shape_id: Option<u32>,
     /// Excel revision UID (xr:uid attribute)
     pub xr_uid: Option<String>,
+    /// Legacy `<commentPr>` display properties.
+    pub comment_pr: Option<ooxml_types::comments::CommentPr>,
 }
 
 impl Default for LegacyComment {
@@ -124,6 +126,7 @@ impl Default for LegacyComment {
             visible: false,
             shape_id: None,
             xr_uid: None,
+            comment_pr: None,
         }
     }
 }

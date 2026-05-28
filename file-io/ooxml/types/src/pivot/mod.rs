@@ -10,6 +10,8 @@
 //!
 //! All public types are re-exported from this module so that existing consumers
 //! using `ooxml_types::pivot::XYZ` continue to work without changes.
+//! The types are not a cache-correctness guarantee; parser/writer code owns
+//! source validity, relationship closure, and edit invalidation.
 
 pub mod cache;
 pub mod field;

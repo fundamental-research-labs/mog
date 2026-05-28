@@ -17,7 +17,7 @@ pub fn group_shape_to_props(g: &read::GroupShape) -> write::GroupShapeProps {
         hlink_hover: g.nv_grp_sp_pr.c_nv_pr.hlink_hover.clone(),
 
         group_locking: g.nv_grp_sp_pr.c_nv_grp_sp_pr.clone(),
-        nv_ext_lst: None,
+        nv_ext_lst: g.nv_grp_sp_pr.c_nv_grp_sp_pr_ext_lst.clone(),
 
         transform: g.grp_sp_pr.xfrm.clone(),
         fill: g.grp_sp_pr.fill.clone(),

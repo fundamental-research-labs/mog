@@ -45,6 +45,8 @@ pub struct WorkbookView {
     // Round-trip
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
+    #[serde(default, skip)]
+    pub ext_lst_raw: Option<String>,
 }
 
 impl Default for WorkbookView {
@@ -64,6 +66,7 @@ impl Default for WorkbookView {
             window_height: None,
             tab_ratio: None,
             uid: None,
+            ext_lst_raw: None,
         }
     }
 }

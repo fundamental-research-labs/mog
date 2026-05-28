@@ -153,9 +153,10 @@ pub use zip::{XlsxArchive, ZipEntry, ZipError};
 pub use write::{
     CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING, CT_EMF,
     CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE, CT_PIVOT_TABLE, CT_PNG,
-    CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_VBA, CT_WMF,
-    CT_WORKBOOK, CT_WORKSHEET, CT_XML, CompressionMethod, ContentTypeDefault, ContentTypeOverride,
-    ContentTypesManager, ZipWriteEntry, ZipWriteError, ZipWriter, create_xlsx_content_types,
+    CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME,
+    CT_VBA, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, CT_XML, CompressionMethod, ContentTypeDefault,
+    ContentTypeOverride, ContentTypesManager, ZipWriteEntry, ZipWriteError, ZipWriter,
+    create_xlsx_content_types,
 };
 
 // =============================================================================

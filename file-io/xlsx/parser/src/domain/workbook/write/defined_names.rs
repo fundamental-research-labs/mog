@@ -7,7 +7,8 @@ use super::DefinedNameDef;
 /// Emits all OOXML CT_DefinedName attributes for full round-trip fidelity.
 /// Attribute order follows the XSD sequence: name, comment, customMenu,
 /// description, help, statusBar, localSheetId, hidden, function,
-/// vbProcedure, xlm, publishToServer, workbookParameter.
+/// vbProcedure, xlm, functionGroupId, shortcutKey, publishToServer,
+/// workbookParameter.
 pub(super) fn write_defined_names(w: &mut XmlWriter, defined_names: &[DefinedNameDef]) {
     if defined_names.is_empty() {
         return;
@@ -47,6 +48,12 @@ pub(super) fn write_defined_names(w: &mut XmlWriter, defined_names: &[DefinedNam
         }
         if def.xlm {
             w.attr_bool("xlm", true);
+        }
+        if let Some(function_group_id) = def.function_group_id {
+            w.attr_num("functionGroupId", function_group_id);
+        }
+        if let Some(shortcut_key) = &def.shortcut_key {
+            w.attr("shortcutKey", shortcut_key);
         }
         if def.publish_to_server {
             w.attr_bool("publishToServer", true);

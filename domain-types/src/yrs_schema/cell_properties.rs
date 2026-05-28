@@ -79,8 +79,8 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
     if let Some(sid) = props.style_id {
         entries.push((KEY_STYLE_ID, Any::Number(sid as f64)));
     }
-    if props.cm {
-        entries.push((KEY_CM, Any::Bool(true)));
+    if let Some(cm) = props.cell_metadata_index {
+        entries.push((KEY_CM, Any::Number(cm as f64)));
     }
     if let Some(vm) = props.vm {
         entries.push((KEY_VM, Any::Number(vm as f64)));
@@ -141,7 +141,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
 
     // Read typed round-trip bookkeeping
     let style_id = read_u32(map, txn, KEY_STYLE_ID);
-    let cm = read_bool(map, txn, KEY_CM).unwrap_or(false);
+    let cell_metadata_index = read_u32(map, txn, KEY_CM)
+        .or_else(|| read_bool(map, txn, KEY_CM).and_then(|present| present.then_some(1)));
     let vm = read_u32(map, txn, KEY_VM);
     let phonetic = read_bool(map, txn, KEY_PHONETIC).unwrap_or(false);
     let date_lexical_value = read_string(map, txn, KEY_DATE_LEXICAL_VALUE);
@@ -156,7 +157,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
         validation,
         connection_id,
         style_id,
-        cm,
+        cell_metadata_index,
         vm,
         phonetic,
         date_lexical_value,

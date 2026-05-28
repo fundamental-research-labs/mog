@@ -14,6 +14,7 @@ pub(super) fn format_hyperlinks(xml: &[u8]) -> Vec<HyperlinkOutput> {
                     location: h.location.as_deref().unwrap_or("").to_string(),
                     display: h.display.as_deref().unwrap_or("").to_string(),
                     tooltip: h.tooltip.as_deref().unwrap_or("").to_string(),
+                    target: h.target.clone(),
                     r_id: h.r_id.clone(),
                     uid: h.uid.clone(),
                     target_kind: h.target_kind,

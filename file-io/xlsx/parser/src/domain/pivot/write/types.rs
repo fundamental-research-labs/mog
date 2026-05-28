@@ -4,6 +4,7 @@
 //! enums, shared items, field definitions, and style settings.
 
 use crate::write::xml_writer::XmlWriter;
+use domain_types::domain::pivot::PivotRawXmlAttribute;
 
 // ============================================================================
 // Enums
@@ -212,6 +213,8 @@ pub struct PivotFieldItem {
     pub show_details: bool,
     /// Calculated item string/formula (s attribute)
     pub s: Option<String>,
+    /// Unmodeled item attributes preserved from imported OOXML.
+    pub preserved_attributes: Vec<PivotRawXmlAttribute>,
 }
 
 impl PivotFieldItem {
@@ -223,6 +226,7 @@ impl PivotFieldItem {
             hidden: false,
             show_details: true,
             s: None,
+            preserved_attributes: Vec::new(),
         }
     }
 
@@ -234,6 +238,7 @@ impl PivotFieldItem {
             hidden: false,
             show_details: true,
             s: None,
+            preserved_attributes: Vec::new(),
         }
     }
 
@@ -245,6 +250,7 @@ impl PivotFieldItem {
             hidden: false,
             show_details: true,
             s: None,
+            preserved_attributes: Vec::new(),
         }
     }
 
@@ -273,6 +279,8 @@ impl PivotFieldItem {
             w.attr("s", s);
         }
 
+        write_preserved_attrs(w, &self.preserved_attributes, &["t", "x", "h", "sd", "s"]);
+
         w.self_close();
     }
 }
@@ -295,7 +303,7 @@ pub struct PivotFieldDef {
     /// Outline display
     pub outline: bool,
     /// Whether to show all items
-    pub show_all: bool,
+    pub show_all: Option<bool>,
     /// Sort type for this field (ascending, descending, or none/manual)
     pub sort_type: Option<String>,
     /// Data field index for value-based sorting (autoSortScope). When present,
@@ -309,6 +317,10 @@ pub struct PivotFieldDef {
     pub subtotals: Vec<DataFieldFunction>,
     /// Items in this field
     pub items: Vec<PivotFieldItem>,
+    /// Unmodeled pivotField attributes preserved from imported OOXML.
+    pub preserved_attributes: Vec<PivotRawXmlAttribute>,
+    /// Unmodeled pivotField child XML preserved from imported OOXML.
+    pub preserved_children: Vec<domain_types::domain::pivot::PivotPreservedXmlBlock>,
 }
 
 impl PivotFieldDef {
@@ -351,7 +363,9 @@ impl PivotFieldDef {
             w.attr_bool("defaultSubtotal", false);
         }
 
-        w.attr_bool("showAll", self.show_all);
+        if let Some(show_all) = self.show_all {
+            w.attr_bool("showAll", show_all);
+        }
 
         // Write subtotals as attributes if present
         for subtotal in &self.subtotals {
@@ -370,46 +384,94 @@ impl PivotFieldDef {
             };
         }
 
-        if self.items.is_empty() {
+        write_preserved_attrs(
+            w,
+            &self.preserved_attributes,
+            &[
+                "name",
+                "axis",
+                "dataField",
+                "compact",
+                "outline",
+                "sortType",
+                "subtotalTop",
+                "defaultSubtotal",
+                "showAll",
+                "sumSubtotal",
+                "countSubtotal",
+                "avgSubtotal",
+                "maxSubtotal",
+                "minSubtotal",
+                "productSubtotal",
+                "countASubtotal",
+                "stdDevSubtotal",
+                "stdDevPSubtotal",
+                "varSubtotal",
+                "varPSubtotal",
+            ],
+        );
+
+        if self.items.is_empty() && self.preserved_children.is_empty() {
             w.self_close();
         } else {
             w.end_attrs();
 
-            // Write items
-            w.start_element("items")
-                .attr_num("count", self.items.len())
-                .end_attrs();
+            if !self.items.is_empty() {
+                w.start_element("items")
+                    .attr_num("count", self.items.len())
+                    .end_attrs();
 
-            for item in &self.items {
-                item.write_xml(w);
+                for item in &self.items {
+                    item.write_xml(w);
+                }
+
+                w.end_element("items");
             }
 
-            w.end_element("items");
-
             // Write autoSortScope if this field uses value-based sorting
+            let has_preserved_auto_sort = self
+                .preserved_children
+                .iter()
+                .any(|child| child.local_name == "autoSortScope");
+            let mut wrote_preserved_auto_sort = false;
             if let Some(data_field_idx) = self.auto_sort_data_field {
-                w.start_element("autoSortScope").end_attrs();
-                w.start_element("pivotArea")
-                    .attr_bool("dataOnly", false)
-                    .attr_bool("outline", false)
-                    .attr_num("fieldPosition", 0u32)
-                    .end_attrs();
-                w.start_element("references")
-                    .attr_num("count", 1u32)
-                    .end_attrs();
-                // field="4294967294" is the data-fields sentinel (0xFFFFFFFE)
-                w.start_element("reference")
-                    .attr_num("field", 4294967294u32)
-                    .attr_num("count", 1u32)
-                    .attr_bool("selected", false)
-                    .end_attrs();
-                w.start_element("x")
-                    .attr_num("v", data_field_idx)
-                    .self_close();
-                w.end_element("reference");
-                w.end_element("references");
-                w.end_element("pivotArea");
-                w.end_element("autoSortScope");
+                if has_preserved_auto_sort {
+                    for child in &self.preserved_children {
+                        if child.local_name == "autoSortScope" {
+                            w.raw_str(&child.xml);
+                            wrote_preserved_auto_sort = true;
+                        }
+                    }
+                } else {
+                    w.start_element("autoSortScope").end_attrs();
+                    w.start_element("pivotArea")
+                        .attr_bool("dataOnly", false)
+                        .attr_bool("outline", false)
+                        .attr_num("fieldPosition", 0u32)
+                        .end_attrs();
+                    w.start_element("references")
+                        .attr_num("count", 1u32)
+                        .end_attrs();
+                    // field="4294967294" is the data-fields sentinel (0xFFFFFFFE)
+                    w.start_element("reference")
+                        .attr_num("field", 4294967294u32)
+                        .attr_num("count", 1u32)
+                        .attr_bool("selected", false)
+                        .end_attrs();
+                    w.start_element("x")
+                        .attr_num("v", data_field_idx)
+                        .self_close();
+                    w.end_element("reference");
+                    w.end_element("references");
+                    w.end_element("pivotArea");
+                    w.end_element("autoSortScope");
+                }
+            }
+
+            for child in &self.preserved_children {
+                if child.local_name != "autoSortScope" || !wrote_preserved_auto_sort {
+                    w.raw_str(&child.xml);
+                }
             }
 
             w.end_element("pivotField");
@@ -847,6 +909,8 @@ pub struct RowColItem {
     pub item_type: Option<PivotItemType>,
     /// Field references (x values)
     pub x_values: Vec<Option<u32>>,
+    /// Unmodeled row/column item attributes preserved from imported OOXML.
+    pub preserved_attributes: Vec<PivotRawXmlAttribute>,
 }
 
 impl RowColItem {
@@ -855,6 +919,7 @@ impl RowColItem {
         Self {
             item_type: None,
             x_values,
+            preserved_attributes: Vec::new(),
         }
     }
 
@@ -863,6 +928,7 @@ impl RowColItem {
         Self {
             item_type: Some(PivotItemType::Grand),
             x_values: vec![None],
+            preserved_attributes: Vec::new(),
         }
     }
 
@@ -873,6 +939,7 @@ impl RowColItem {
         if let Some(ref t) = self.item_type {
             w.attr("t", t.as_str());
         }
+        write_preserved_attrs(w, &self.preserved_attributes, &["t"]);
 
         w.end_attrs();
 
@@ -887,6 +954,23 @@ impl RowColItem {
         }
 
         w.end_element("i");
+    }
+}
+
+fn write_preserved_attrs(
+    w: &mut XmlWriter,
+    attrs: &[PivotRawXmlAttribute],
+    typed_local_names: &[&str],
+) {
+    for attr in attrs {
+        let local = attr
+            .name
+            .rsplit_once(':')
+            .map(|(_, local)| local)
+            .unwrap_or(attr.name.as_str());
+        if !typed_local_names.contains(&local) {
+            w.attr(&attr.name, &attr.value);
+        }
     }
 }
 

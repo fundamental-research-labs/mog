@@ -117,6 +117,7 @@ mod tests {
                             },
                         ],
                     }),
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 1,
@@ -128,6 +129,7 @@ mod tests {
                         value: 25.0,
                         filter_val: Some(73.5),
                     }),
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 2,
@@ -148,6 +150,7 @@ mod tests {
                         ],
                         and_logic: true,
                     }),
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 3,
@@ -160,6 +163,7 @@ mod tests {
                         value_iso: Some("2025-04-23T10:00:00Z".to_string()),
                         max_value_iso: Some("2025-12-31T23:59:59Z".to_string()),
                     }),
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 4,
@@ -169,6 +173,7 @@ mod tests {
                         dxf_id: Some(7),
                         cell_color: false,
                     }),
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 5,
@@ -178,6 +183,7 @@ mod tests {
                         icon_set: Some("3TrafficLights1".to_string()),
                         icon_id: 2,
                     }),
+                    ext_lst_raw: None,
                 },
             ],
             sort: Some(SortState {
@@ -208,6 +214,7 @@ mod tests {
                 ..Default::default()
             }),
             xr_uid: Some("{12345678-1234-5678-1234-567812345678}".to_string()),
+            ext_lst_raw: None,
         }
     }
 
@@ -225,6 +232,7 @@ mod tests {
             columns: Vec::new(),
             sort: None,
             xr_uid: None,
+            ext_lst_raw: None,
         };
         let rt = roundtrip(&af);
         assert_eq!(af, rt);
@@ -240,6 +248,7 @@ mod tests {
                     hidden_button: true,
                     show_button: false,
                     filter_type: None,
+                    ext_lst_raw: None,
                 },
                 FilterColumn {
                     col_index: 1,
@@ -254,6 +263,7 @@ mod tests {
             ],
             sort: None,
             xr_uid: None,
+            ext_lst_raw: None,
         };
 
         let rt = roundtrip(&af);

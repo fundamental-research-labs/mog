@@ -977,6 +977,8 @@ fn process_sheet_core(
     let outline_level_col = fmt_pr.outline_level_col;
     let custom_height = fmt_pr.custom_height;
     let zero_height = fmt_pr.zero_height;
+    let thick_top = fmt_pr.thick_top;
+    let thick_bottom = fmt_pr.thick_bottom;
 
     let sheet_properties = crate::domain::worksheet::read::parse_sheet_properties(pre_sd);
     let outline_properties = sheet_properties
@@ -1229,6 +1231,8 @@ fn process_sheet_core(
         outline_level_col,
         custom_height,
         zero_height,
+        thick_top,
+        thick_bottom,
         uid,
         row_descents: row_descents_map,
         row_spans: row_spans_map,
@@ -1374,6 +1378,8 @@ fn parse_sheets_sequential(
         let outline_level_col = fmt_pr_seq.outline_level_col;
         let custom_height = fmt_pr_seq.custom_height;
         let zero_height = fmt_pr_seq.zero_height;
+        let thick_top = fmt_pr_seq.thick_top;
+        let thick_bottom = fmt_pr_seq.thick_bottom;
 
         let sheet_properties = crate::domain::worksheet::read::parse_sheet_properties(pre_sd_early);
         let outline_properties = sheet_properties
@@ -1756,6 +1762,8 @@ fn parse_sheets_sequential(
             outline_level_col,
             custom_height,
             zero_height,
+            thick_top,
+            thick_bottom,
             uid,
             row_descents: row_descents_map,
             row_spans: row_spans_map,

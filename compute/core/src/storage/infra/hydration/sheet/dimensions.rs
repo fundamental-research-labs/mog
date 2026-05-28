@@ -67,6 +67,12 @@ pub(crate) fn hydrate_dimensions(
     if sheet.dimensions.zero_height {
         maps.meta_map.insert(txn, "zeroHeight", Any::Bool(true));
     }
+    if sheet.dimensions.thick_top {
+        maps.meta_map.insert(txn, "thickTop", Any::Bool(true));
+    }
+    if sheet.dimensions.thick_bottom {
+        maps.meta_map.insert(txn, "thickBottom", Any::Bool(true));
+    }
     if let Some(olr) = sheet.dimensions.outline_level_row {
         maps.meta_map
             .insert(txn, "outlineLevelRow", Any::Number(olr as f64));
@@ -194,6 +200,7 @@ fn hydrate_row_metadata(txn: &mut yrs::TransactionMut, meta_map: &MapRef, sheet:
                 || r.collapsed.is_some()
                 || r.thick_top
                 || r.thick_bot
+                || r.phonetic
                 || !r.xml_hints.is_empty()
         })
         .collect();
@@ -262,6 +269,16 @@ fn hydrate_row_metadata(txn: &mut yrs::TransactionMut, meta_map: &MapRef, sheet:
         && let Ok(json) = serde_json::to_string(&row_thick_bot)
     {
         meta_map.insert(txn, "rowThickBot", Any::String(Arc::from(json)));
+    }
+    let row_phonetic: Vec<u32> = row_metadata
+        .iter()
+        .filter(|r| r.phonetic)
+        .map(|r| r.row)
+        .collect();
+    if !row_phonetic.is_empty()
+        && let Ok(json) = serde_json::to_string(&row_phonetic)
+    {
+        meta_map.insert(txn, "rowPhonetic", Any::String(Arc::from(json)));
     }
     let row_spans: Vec<(u32, String)> = row_metadata
         .iter()

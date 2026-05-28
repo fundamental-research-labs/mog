@@ -60,6 +60,10 @@ pub(super) fn build_cell_data_for_cell_id(
     let original_value = cell_props
         .and_then(|props| props.original_value.as_ref())
         .cloned();
+    let phonetic = cell_props.map(|props| props.phonetic).unwrap_or(false);
+    let date_lexical_value = cell_props
+        .and_then(|props| props.date_lexical_value.as_ref())
+        .cloned();
 
     let rich_string = rich_strings.get(cell_id).cloned();
     let is_empty = value.is_null() && formula.is_none() && rich_string.is_none();
@@ -71,6 +75,8 @@ pub(super) fn build_cell_data_for_cell_id(
         && !has_empty_cached_value
         && original_sst_index.is_none()
         && original_value.is_none()
+        && !phonetic
+        && date_lexical_value.is_none()
         && !preserve_blank
     {
         return None;
@@ -85,6 +91,8 @@ pub(super) fn build_cell_data_for_cell_id(
             has_empty_cached_value,
             original_sst_index,
             original_value.as_ref(),
+            phonetic,
+            date_lexical_value.as_ref(),
         )
     {
         return None;
@@ -105,6 +113,8 @@ pub(super) fn build_cell_data_for_cell_id(
         formula_result_type,
         has_empty_cached_value,
         vm,
+        phonetic,
+        date_lexical_value,
         original_sst_index,
         original_value,
         projection_role: ImportedCellProjectionRole::Normal,
@@ -120,6 +130,8 @@ fn is_imported_style_only_blank(
     has_empty_cached_value: bool,
     original_sst_index: Option<u32>,
     original_value: Option<&String>,
+    phonetic: bool,
+    date_lexical_value: Option<&String>,
 ) -> bool {
     style_id.is_some()
         && cell_props.is_some_and(|props| props.format.is_none() && props.style_id.is_some())
@@ -129,6 +141,8 @@ fn is_imported_style_only_blank(
         && !has_empty_cached_value
         && original_sst_index.is_none()
         && original_value.is_none_or(|value| value.is_empty())
+        && !phonetic
+        && date_lexical_value.is_none()
 }
 
 fn cell_style_id(cell_props: Option<&CellProperties>, palette: &impl PaletteOps) -> Option<u32> {
@@ -156,6 +170,8 @@ pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellDa
         formula_result_type: None,
         has_empty_cached_value: false,
         vm: None,
+        phonetic: false,
+        date_lexical_value: None,
         original_sst_index: None,
         original_value: None,
         projection_role: ImportedCellProjectionRole::Normal,
@@ -172,6 +188,8 @@ pub(super) fn is_plain_blank_cell(cell: &CellData) -> bool {
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
+        && !cell.phonetic
+        && cell.date_lexical_value.is_none()
         && cell.original_sst_index.is_none()
         && cell
             .original_value

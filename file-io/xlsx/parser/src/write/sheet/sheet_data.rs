@@ -126,6 +126,7 @@ fn write_row(
         && row_def.collapsed.is_none()
         && !row_def.thick_top
         && !row_def.thick_bot
+        && !row_def.phonetic
         && row_def.spans.is_none()
         && !row_def.bare_empty
     {
@@ -179,6 +180,9 @@ fn write_row(
     }
     if row_def.thick_bot {
         w.attr("thickBot", "1");
+    }
+    if row_def.phonetic {
+        w.attr("ph", "1");
     }
     if let Some(descent) = row_def.descent {
         w.attr("x14ac:dyDescent", &format_f64(descent));

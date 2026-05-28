@@ -10,6 +10,8 @@ pub const CELL_TYPE_FORMULA: u8 = 5;
 /// Inline formula string result (t="str"). The <v> contains the literal string,
 /// NOT a shared string index. Distinct from CELL_TYPE_STRING (t="s").
 pub const CELL_TYPE_FORMULA_STRING: u8 = 6;
+/// OOXML date lexical cell (`t="d"`). The <v> contains an ISO/date string.
+pub const CELL_TYPE_DATE: u8 = 7;
 
 /// Value type enumeration (for value_type field)
 pub const VALUE_TYPE_NONE: u8 = 0;
@@ -179,6 +181,10 @@ pub struct ParseExtras {
     /// parts, used for rich value types like linked data types and images-in-cells.
     /// Stored as (cell_index, vm_value).
     pub vm_cells: Vec<(usize, u32)>,
+    /// Cell indices where the `<c>` element has `ph="1"`.
+    pub phonetic_cells: Vec<usize>,
+    /// Cell indices and lexical values for OOXML date cells (`t="d"`).
+    pub date_cells: Vec<(usize, String)>,
     /// Per-row x14ac:dyDescent values: (0-based row index, descent value).
     /// Collected during row parsing for roundtrip fidelity.
     pub row_descents: Vec<(u32, f64)>,

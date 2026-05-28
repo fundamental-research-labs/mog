@@ -762,6 +762,16 @@ pub struct CellData {
     /// Used for rich value types (linked data types, images-in-cells).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    /// Worksheet-level phonetic display flag from `ph` on the `<c>` element.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub phonetic: bool,
+    /// Original ISO/date lexical value from OOXML `t="d"` cells.
+    ///
+    /// This is distinct from numeric serial dates with date number formats.
+    /// Writers emit `t="d"` only while this lexical value still matches the
+    /// current cell value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_lexical_value: Option<String>,
     /// Original shared string table index for imported `t="s"` cells.
     ///
     /// Import provenance only. Writers must derive SST indices from current
@@ -812,6 +822,12 @@ pub struct SheetDimensions {
     /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
     #[serde(default)]
     pub zero_height: bool,
+    /// Whether default rows have a thick top border (`thickTop` on sheetFormatPr).
+    #[serde(default)]
+    pub thick_top: bool,
+    /// Whether default rows have a thick bottom border (`thickBottom` on sheetFormatPr).
+    #[serde(default)]
+    pub thick_bottom: bool,
     /// Outline level for rows (outlineLevelRow on sheetFormatPr) — roundtrip only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline_level_row: Option<u8>,
@@ -860,6 +876,9 @@ pub struct RowDimension {
     /// Per-row text baseline descent (x14ac:dyDescent attribute).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub descent: Option<f64>,
+    /// Row-level phonetic display flag (`ph` attribute).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub phonetic: bool,
     /// Typed lexical hints owned by this row.
     #[serde(default, skip_serializing_if = "RowXmlHints::is_empty")]
     pub xml_hints: RowXmlHints,
@@ -1086,6 +1105,10 @@ pub struct SheetView {
     /// multi-pane selections (frozen pane sheets have up to 4 selection elements).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selections: Vec<ooxml_types::worksheet::Selection>,
+    /// Pivot table selections in this view. Pivot identity validation is owned
+    /// by the pivot/data-feature layer; worksheet core preserves the view pointer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_selection: Vec<ooxml_types::worksheet::PivotSelection>,
 }
 
 impl Default for SheetView {
@@ -1116,6 +1139,7 @@ impl Default for SheetView {
             sqref: None,
             pane: None,
             selections: Vec::new(),
+            pivot_selection: Vec::new(),
         }
     }
 }
@@ -1170,6 +1194,7 @@ impl SheetView {
             sqref: primary_selection.and_then(|s| s.sqref.clone()),
             pane: sv.pane.as_ref().map(SheetPaneConfig::from_ooxml),
             selections: sv.selections.clone(),
+            pivot_selection: sv.pivot_selection.clone(),
         }
     }
 }

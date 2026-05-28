@@ -210,6 +210,10 @@ pub struct SheetRoundtripMeta {
     pub custom_height: bool,
     /// Whether zero-height rows are the default (zeroHeight="1" on sheetFormatPr).
     pub zero_height: bool,
+    /// Whether default rows use thick top borders.
+    pub thick_top: bool,
+    /// Whether default rows use thick bottom borders.
+    pub thick_bottom: bool,
     /// Outline level for rows (outlineLevelRow on sheetFormatPr).
     pub outline_level_row: Option<u8>,
     /// Outline level for columns (outlineLevelCol on sheetFormatPr).
@@ -238,6 +242,8 @@ pub(crate) fn get_roundtrip_meta(
             zoom_scale_normal: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE_NORMAL),
             custom_height: meta_bool(&txn, &meta, KEY_CUSTOM_HEIGHT, false),
             zero_height: meta_bool(&txn, &meta, KEY_ZERO_HEIGHT, false),
+            thick_top: meta_bool(&txn, &meta, "thickTop", false),
+            thick_bottom: meta_bool(&txn, &meta, "thickBottom", false),
             outline_level_row: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_ROW)
                 .map(|v| v as u8),
             outline_level_col: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_COL)
@@ -258,6 +264,8 @@ pub(crate) fn get_roundtrip_meta(
             zoom_scale_normal: None,
             custom_height: false,
             zero_height: false,
+            thick_top: false,
+            thick_bottom: false,
             outline_level_row: None,
             outline_level_col: None,
             trailing_col_ranges: Vec::new(),

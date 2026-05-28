@@ -387,6 +387,16 @@ impl SheetWriter {
         self
     }
 
+    /// Set row phonetic display flag.
+    pub fn set_row_phonetic(&mut self, row: u32, phonetic: bool) -> &mut Self {
+        let entry = self
+            .rows
+            .entry(row)
+            .or_insert_with(|| (RowDef::default(), Vec::new()));
+        entry.0.phonetic = phonetic;
+        self
+    }
+
     /// Set row style index (also sets `custom_format = true`).
     pub fn set_row_style(&mut self, row: u32, style: u32) -> &mut Self {
         let entry = self

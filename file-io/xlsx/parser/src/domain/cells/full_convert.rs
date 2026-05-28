@@ -170,6 +170,9 @@ pub(crate) fn convert_cell_data(
                 CELL_TYPE_EMPTY => CELL_TYPE_VAL_EMPTY,
                 CELL_TYPE_NUMBER => CELL_TYPE_VAL_NUMBER,
                 CELL_TYPE_STRING | CELL_TYPE_FORMULA_STRING => CELL_TYPE_VAL_STRING,
+                crate::domain::cells::types::CELL_TYPE_DATE => {
+                    crate::output::results::CELL_TYPE_VAL_DATE
+                }
                 CELL_TYPE_BOOL => CELL_TYPE_VAL_BOOL,
                 CELL_TYPE_ERROR => CELL_TYPE_VAL_ERROR,
                 CELL_TYPE_FORMULA => CELL_TYPE_VAL_FORMULA,
@@ -196,7 +199,9 @@ pub(crate) fn convert_cell_data(
         force_recalc: false,
         array_ref: None,
         cm: false,
+        phonetic: false,
         vm: None,
+        date_lexical_value: None,
         cached_value_type,
         cell_formula: None,
         preserve_space_formula: false,
@@ -292,6 +297,16 @@ pub(crate) fn apply_parse_extras(
     for &(cell_idx, vm_val) in &extras.vm_cells {
         if cell_idx < cells.len() {
             cells[cell_idx].vm = Some(vm_val);
+        }
+    }
+    for &cell_idx in &extras.phonetic_cells {
+        if cell_idx < cells.len() {
+            cells[cell_idx].phonetic = true;
+        }
+    }
+    for (cell_idx, date_value) in &extras.date_cells {
+        if *cell_idx < cells.len() {
+            cells[*cell_idx].date_lexical_value = Some(date_value.clone());
         }
     }
     for &cell_idx in &extras.aca_indices {
@@ -488,6 +503,8 @@ mod tests {
             array_ref: None,
             cm: false,
             vm: None,
+            phonetic: false,
+            date_lexical_value: None,
             cached_value_type: 0,
             cell_formula: None,
             preserve_space_formula: false,

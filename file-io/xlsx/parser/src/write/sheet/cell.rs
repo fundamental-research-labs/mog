@@ -9,6 +9,9 @@ pub(super) fn write_cell(w: &mut XmlWriter, cell: &CellData) {
     if cell.cm {
         w.attr("cm", "1");
     }
+    if cell.phonetic {
+        w.attr("ph", "1");
+    }
     w.attr("r", &cell_ref);
     if let Some(style) = cell.style_index {
         w.attr_num("s", style);
@@ -36,6 +39,9 @@ fn write_type_attr(w: &mut XmlWriter, cell: &CellData) {
             }
         }
         CellValue::Number(_) => {}
+        _ if cell.date_lexical_value.is_some() => {
+            w.attr("t", "d");
+        }
         CellValue::String(_) => {
             w.attr("t", "s");
         }
@@ -83,6 +89,11 @@ fn write_cell_value(w: &mut XmlWriter, cell: &CellData) {
         CellValue::Number(n) => {
             let formatted = formatted_number(cell, *n);
             w.element_with_text("v", &formatted);
+        }
+        _ if cell.date_lexical_value.is_some() => {
+            if let Some(date_value) = &cell.date_lexical_value {
+                w.element_with_text("v", date_value);
+            }
         }
         CellValue::String(idx) => {
             w.element_with_text("v", &idx.to_string());

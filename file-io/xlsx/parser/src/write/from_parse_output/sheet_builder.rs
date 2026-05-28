@@ -89,6 +89,8 @@ pub(super) fn build_sheet(
         }
         fmt.base_col_width = dims.base_col_width;
         fmt.zero_height = dims.zero_height;
+        fmt.thick_top = dims.thick_top;
+        fmt.thick_bottom = dims.thick_bottom;
         fmt.outline_level_row = dims.outline_level_row;
         fmt.outline_level_col = dims.outline_level_col;
         writer.set_sheet_format_pr(fmt);
@@ -348,6 +350,9 @@ pub(super) fn build_sheet(
         }
         if row_dim.thick_bot {
             writer.set_row_thick_bot(row_dim.row, true);
+        }
+        if row_dim.phonetic {
+            writer.set_row_phonetic(row_dim.row, true);
         }
         if let Some(spans) = &row_dim.xml_hints.spans {
             writer.set_row_spans(row_dim.row, spans.clone());
@@ -713,6 +718,7 @@ fn domain_view_to_ooxml(view: &DomainSheetView) -> SheetView {
     sheet_view.workbook_view_id = view.workbook_view_id;
     sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
     sheet_view.selections = view.selections.clone();
+    sheet_view.pivot_selection = view.pivot_selection.clone();
     sheet_view
 }
 
@@ -981,6 +987,9 @@ fn convert_cell_with_metadata_refs(
         }
         // Plain value cells
         (DomainValue::Number(n), None) => CellValue::Number(n.get()),
+        (DomainValue::Text(s), None) if compatible_date_lexical_value(cell).is_some() => {
+            CellValue::FormulaString(s.as_ref().to_string())
+        }
         (DomainValue::Text(s), None) => {
             // Preserve t="str" (inline/formula string) during round-trip.
             // CELL_TYPE_FORMULA_STRING (6) means the original cell had t="str",
@@ -1015,6 +1024,7 @@ fn convert_cell_with_metadata_refs(
         6 => Some("str".to_string()), // CELL_TYPE_FORMULA_STRING
         4 => Some("e".to_string()),   // CELL_TYPE_ERROR
         3 => Some("b".to_string()),   // CELL_TYPE_BOOL
+        7 => Some("d".to_string()),   // CELL_TYPE_DATE
         _ => None,
     });
 
@@ -1037,6 +1047,16 @@ fn convert_cell_with_metadata_refs(
         preserve_space_value: false,
         explicit_type: None,
         formula_type_hint,
+        phonetic: cell.phonetic,
+        date_lexical_value: compatible_date_lexical_value(cell),
+    }
+}
+
+fn compatible_date_lexical_value(cell: &DomainCellData) -> Option<String> {
+    let date = cell.date_lexical_value.as_ref()?;
+    match &cell.value {
+        DomainValue::Text(s) if s.as_ref() == date => Some(date.clone()),
+        _ => None,
     }
 }
 

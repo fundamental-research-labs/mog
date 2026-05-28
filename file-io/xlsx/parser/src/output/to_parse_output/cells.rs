@@ -7,9 +7,9 @@ use value_types::{CellError, CellValue};
 
 use crate::output::results::{
     CELL_TYPE_VAL_BOOL as CELL_TYPE_BOOL, CELL_TYPE_VAL_EMPTY as CELL_TYPE_EMPTY,
-    CELL_TYPE_VAL_ERROR as CELL_TYPE_ERROR, CELL_TYPE_VAL_FORMULA as CELL_TYPE_FORMULA,
-    CELL_TYPE_VAL_NUMBER as CELL_TYPE_NUMBER, CELL_TYPE_VAL_STRING as CELL_TYPE_STRING,
-    FullCellData,
+    CELL_TYPE_VAL_DATE as CELL_TYPE_DATE, CELL_TYPE_VAL_ERROR as CELL_TYPE_ERROR,
+    CELL_TYPE_VAL_FORMULA as CELL_TYPE_FORMULA, CELL_TYPE_VAL_NUMBER as CELL_TYPE_NUMBER,
+    CELL_TYPE_VAL_STRING as CELL_TYPE_STRING, FullCellData,
 };
 
 // Cell type constants for cached formula values
@@ -241,6 +241,8 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
         },
         has_empty_cached_value,
         vm: cell.vm,
+        phonetic: cell.phonetic,
+        date_lexical_value: cell.date_lexical_value.clone(),
         original_sst_index: if can_drop_sst_provenance {
             None
         } else {
@@ -338,6 +340,11 @@ pub(super) fn resolve_cell_value(cell: &FullCellData, _shared_strings: &[String]
             .as_ref()
             .map(|v| CellValue::Text(Arc::from(v.as_str())))
             .unwrap_or(CellValue::Text(Arc::from(""))),
+        CELL_TYPE_DATE => cell
+            .value
+            .as_ref()
+            .map(|v| CellValue::Text(Arc::from(v.as_str())))
+            .unwrap_or(CellValue::Null),
         CELL_TYPE_BOOL => {
             let b = cell
                 .value

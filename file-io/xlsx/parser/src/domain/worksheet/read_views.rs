@@ -1,7 +1,7 @@
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use crate::output::results::{Pane, PaneState, SheetPane};
-use ooxml_types::worksheet::{Selection, SheetView, SheetViewType};
+use ooxml_types::worksheet::{PivotAxis, PivotSelection, Selection, SheetView, SheetViewType};
 
 /// Parse pane settings from worksheet XML.
 pub fn parse_frozen_pane(xml: &[u8]) -> Option<SheetPane> {
@@ -42,6 +42,7 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
         };
 
         sv.pane = parse_first_pane(block);
+        parse_pivot_selections(block, &mut sv);
         parse_selections(block, &mut sv);
         views.push(sv);
 
@@ -162,6 +163,84 @@ fn parse_pane_element(pane: &[u8]) -> SheetPane {
     )
 }
 
+fn parse_pivot_selections(block: &[u8], sv: &mut SheetView) {
+    let mut pos = 0;
+    while let Some(sel_start) = find_tag_simd(block, b"pivotSelection", pos) {
+        let open_end = find_gt_simd(block, sel_start)
+            .map(|p| p + 1)
+            .unwrap_or(block.len());
+        let sel_elem = &block[sel_start..open_end];
+        let is_self_closing = open_end >= 2 && block[open_end - 2] == b'/';
+        let close_start = if is_self_closing {
+            open_end
+        } else {
+            crate::infra::scanner::find_closing_tag(block, b"pivotSelection", sel_start)
+                .unwrap_or(open_end)
+        };
+        let pivot_area = if is_self_closing || close_start <= open_end {
+            None
+        } else {
+            let inner = &block[open_end..close_start];
+            if find_tag_simd(inner, b"pivotArea", 0).is_some() {
+                std::str::from_utf8(inner).ok().map(|s| s.to_string())
+            } else {
+                None
+            }
+        };
+
+        sv.pivot_selection.push(PivotSelection {
+            pane: attr_value(sel_elem, b"pane=\"")
+                .as_deref()
+                .map(Pane::from_ooxml),
+            show_header: attr_bool(sel_elem, b"showHeader=\""),
+            label: attr_bool(sel_elem, b"label=\""),
+            data: attr_bool(sel_elem, b"data=\""),
+            extendable: attr_bool(sel_elem, b"extendable=\""),
+            count: attr_value(sel_elem, b"count=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            axis: attr_value(sel_elem, b"axis=\"")
+                .as_deref()
+                .and_then(PivotAxis::from_ooxml),
+            dimension: attr_value(sel_elem, b"dimension=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            start: attr_value(sel_elem, b"start=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            min: attr_value(sel_elem, b"min=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            max: attr_value(sel_elem, b"max=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            active_row: attr_value(sel_elem, b"activeRow=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            active_col: attr_value(sel_elem, b"activeCol=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            previous_row: attr_value(sel_elem, b"previousRow=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            previous_col: attr_value(sel_elem, b"previousCol=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            click: attr_value(sel_elem, b"click=\"")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0),
+            id: attr_value(sel_elem, b"r:id=\"").or_else(|| attr_value(sel_elem, b"id=\"")),
+            pivot_area,
+        });
+
+        pos = if is_self_closing {
+            open_end
+        } else {
+            close_start + b"</pivotSelection>".len()
+        };
+    }
+}
+
 fn parse_selections(block: &[u8], sv: &mut SheetView) {
     let mut pos = 0;
     while let Some(sel_start) = find_tag_simd(block, b"selection", pos) {
@@ -187,6 +266,10 @@ fn parse_selections(block: &[u8], sv: &mut SheetView) {
 
         pos = sel_end;
     }
+}
+
+fn attr_bool(element: &[u8], attr: &[u8]) -> bool {
+    matches!(attr_value(element, attr).as_deref(), Some("1" | "true"))
 }
 
 fn attr_value(element: &[u8], attr: &[u8]) -> Option<String> {

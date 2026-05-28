@@ -116,6 +116,8 @@ pub fn parse_sheet_format_pr(xml: &[u8]) -> SheetFormatPrParsed {
             outline_level_col: None,
             custom_height: false,
             zero_height: false,
+            thick_top: false,
+            thick_bottom: false,
         };
     };
 
@@ -131,5 +133,9 @@ pub fn parse_sheet_format_pr(xml: &[u8]) -> SheetFormatPrParsed {
             || find_attr_simd(elem, b"customHeight=\"true\"", 0).is_some(),
         zero_height: find_attr_simd(elem, b"zeroHeight=\"1\"", 0).is_some()
             || find_attr_simd(elem, b"zeroHeight=\"true\"", 0).is_some(),
+        thick_top: find_attr_simd(elem, b"thickTop=\"1\"", 0).is_some()
+            || find_attr_simd(elem, b"thickTop=\"true\"", 0).is_some(),
+        thick_bottom: find_attr_simd(elem, b"thickBottom=\"1\"", 0).is_some()
+            || find_attr_simd(elem, b"thickBottom=\"true\"", 0).is_some(),
     }
 }

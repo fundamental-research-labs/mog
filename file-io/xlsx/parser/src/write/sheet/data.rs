@@ -20,6 +20,10 @@ pub struct SheetFormatPr {
     pub custom_height: bool,
     /// Whether zero-height rows are the default (zeroHeight="1").
     pub zero_height: bool,
+    /// Whether default rows use thick top borders (thickTop="1").
+    pub thick_top: bool,
+    /// Whether default rows use thick bottom borders (thickBottom="1").
+    pub thick_bottom: bool,
     /// Outline level for rows.
     pub outline_level_row: Option<u8>,
     /// Outline level for columns.
@@ -36,6 +40,8 @@ impl Default for SheetFormatPr {
             base_col_width: None,
             custom_height: false,
             zero_height: false,
+            thick_top: false,
+            thick_bottom: false,
             outline_level_row: None,
             outline_level_col: None,
             default_row_descent: None,
@@ -123,6 +129,10 @@ pub struct CellData {
     /// When the original XML had `t="str"` (or `t="e"`, `t="b"`) on a formula cell
     /// but no `<v>` element, this field preserves that type hint.
     pub formula_type_hint: Option<String>,
+    /// Whether to emit the cell-level phonetic display flag (`ph="1"`).
+    pub phonetic: bool,
+    /// OOXML `t="d"` lexical date value to emit as a plain `<v>` value.
+    pub date_lexical_value: Option<String>,
 }
 
 impl CellData {
@@ -141,6 +151,8 @@ impl CellData {
             preserve_space_value: false,
             explicit_type: None,
             formula_type_hint: None,
+            phonetic: false,
+            date_lexical_value: None,
         }
     }
 
@@ -159,6 +171,8 @@ impl CellData {
             preserve_space_value: false,
             explicit_type: None,
             formula_type_hint: None,
+            phonetic: false,
+            date_lexical_value: None,
         }
     }
 }
@@ -199,6 +213,8 @@ pub struct RowDef {
     pub spans: Option<String>,
     /// Whether this is a bare empty row (`<row r="N"/>`) that must survive round-trip
     pub bare_empty: bool,
+    /// Whether this row has phonetic display enabled (`ph="1"`).
+    pub phonetic: bool,
 }
 
 impl RowDef {

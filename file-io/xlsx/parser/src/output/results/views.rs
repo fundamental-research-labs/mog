@@ -50,6 +50,9 @@ pub struct SheetViewOutput {
     /// Preserved selection elements for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selections: Vec<ooxml_types::worksheet::Selection>,
+    /// Preserved pivotSelection elements for round-trip fidelity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_selection: Vec<ooxml_types::worksheet::PivotSelection>,
 }
 
 impl From<ooxml_types::worksheet::SheetView> for SheetViewOutput {
@@ -80,6 +83,7 @@ impl From<ooxml_types::worksheet::SheetView> for SheetViewOutput {
             workbook_view_id: sv.workbook_view_id,
             view,
             pane: sv.pane,
+            pivot_selection: sv.pivot_selection,
             selections: sv.selections,
         }
     }
@@ -113,7 +117,7 @@ impl From<SheetViewOutput> for ooxml_types::worksheet::SheetView {
             workbook_view_id: sv.workbook_view_id,
             view,
             pane: sv.pane,
-            pivot_selection: Vec::new(),
+            pivot_selection: sv.pivot_selection,
             selections: sv.selections,
         }
     }

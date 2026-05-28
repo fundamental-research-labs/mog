@@ -449,8 +449,8 @@ pub(super) fn hydrate_authored_style_runs(
 /// references the workbook-level `stylePalette` map written by
 /// `hydrate_style_palette`.
 ///
-/// Round-trip bookkeeping (cm, vm, formulaResultType, sstIndex,
-/// originalValue) is emitted as sibling keys on the same compact JSON
+/// Round-trip bookkeeping (cm, vm, ph/date lexical hints, formulaResultType,
+/// sstIndex, originalValue) is emitted as sibling keys on the same compact JSON
 /// — the wire shape matches the typed `CellProperties` serde layout so
 /// `properties::resolve_compact_props` can deserialize it directly.
 pub(super) fn hydrate_cell_styles(
@@ -475,6 +475,8 @@ pub(super) fn hydrate_cell_styles(
         let has_style = cell.style_id.is_some() && !style_is_range_backed;
         let has_cm = cell.cm;
         let has_vm = cell.vm.is_some();
+        let has_phonetic = cell.phonetic;
+        let has_date_lexical_value = cell.date_lexical_value.is_some();
         let has_formula_result_type = cell.formula_result_type.is_some();
         let has_empty_cached_value = cell.has_empty_cached_value;
         let has_original_sst_index = cell.original_sst_index.is_some();
@@ -483,6 +485,8 @@ pub(super) fn hydrate_cell_styles(
         if !has_style
             && !has_cm
             && !has_vm
+            && !has_phonetic
+            && !has_date_lexical_value
             && !has_formula_result_type
             && !has_empty_cached_value
             && !has_original_sst_index
@@ -502,6 +506,8 @@ pub(super) fn hydrate_cell_styles(
         let is_style_only = has_style
             && !has_cm
             && !has_vm
+            && !has_phonetic
+            && !has_date_lexical_value
             && !has_formula_result_type
             && !has_empty_cached_value
             && !has_original_sst_index
@@ -532,6 +538,8 @@ pub(super) fn hydrate_cell_styles(
                 },
                 cm: has_cm,
                 vm: cell.vm,
+                phonetic: cell.phonetic,
+                date_lexical_value: cell.date_lexical_value.clone(),
                 formula_result_type: cell.formula_result_type,
                 has_empty_cached_value,
                 original_sst_index: cell.original_sst_index,

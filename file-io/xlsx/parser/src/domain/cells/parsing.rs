@@ -63,6 +63,7 @@ struct RowAttrs<'a> {
     style: Option<u32>,
     dy_descent: Option<f64>,
     spans: Option<&'a [u8]>,
+    ph: bool,
 }
 
 /// Parse all row attributes from `tag_bytes` (the slice between `<row` and `>`)
@@ -165,6 +166,13 @@ fn parse_row_attrs<'a>(tag_bytes: &'a [u8]) -> RowAttrs<'a> {
                         i = qe + 1;
                         continue;
                     }
+                }
+            }
+            b'p' => {
+                if i + 4 <= len && &tag_bytes[i..i + 4] == b"ph=\"" {
+                    attrs.ph = tag_bytes.get(i + 4) == Some(&b'1');
+                    i += 6;
+                    continue;
                 }
             }
             b's' => {
@@ -356,6 +364,7 @@ fn parse_worksheet_core(
                             || ra.collapsed.is_some()
                             || ra.thick_top
                             || ra.thick_bot
+                            || ra.ph
                             || ra.outline_level.is_some();
                         if has_attrs {
                             let mut rh = RowHeight::new(current_row, ra.height.unwrap_or(0.0));
@@ -368,6 +377,7 @@ fn parse_worksheet_core(
                             rh.collapsed = ra.collapsed;
                             rh.thick_top = ra.thick_top;
                             rh.thick_bot = ra.thick_bot;
+                            rh.ph = ra.ph;
                             rh.outline_level = ra.outline_level;
                             rh.spans = ra
                                 .spans
@@ -438,6 +448,7 @@ fn parse_worksheet_core(
                             && ra.outline_level.is_none()
                             && !ra.thick_top
                             && !ra.thick_bot
+                            && !ra.ph
                             && !ra.custom_format
                         {
                             ext.bare_empty_rows.push(current_row);
@@ -463,6 +474,7 @@ fn parse_worksheet_core(
                     is_self_closing,
                     has_cm,
                     vm_val,
+                    has_ph,
                     has_explicit_s,
                     has_xml_space_v,
                     sst_raw_idx,
@@ -507,6 +519,17 @@ fn parse_worksheet_core(
                         }
                         if let Some(vm) = vm_val {
                             ext.vm_cells.push((last_idx, vm));
+                        }
+                        if has_ph {
+                            ext.phonetic_cells.push(last_idx);
+                        }
+                        if cd.cell_type == super::types::CELL_TYPE_DATE {
+                            let start = cd.value_offset as usize;
+                            let end = (start + cd.value_len as usize).min(strings.len());
+                            if start <= strings.len() {
+                                ext.date_cells
+                                    .push((last_idx, validated_xml_text(&strings[start..end])));
+                            }
                         }
                         if has_explicit_s {
                             ext.explicit_style_cells.push(last_idx);

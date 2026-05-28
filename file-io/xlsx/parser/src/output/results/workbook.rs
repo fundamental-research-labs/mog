@@ -269,6 +269,12 @@ pub struct FullParsedSheet {
     /// Whether zero-height rows are the default (zeroHeight on sheetFormatPr) — roundtrip only.
     #[serde(skip_serializing_if = "is_false")]
     pub zero_height: bool,
+    /// Whether default rows use thick top borders (thickTop on sheetFormatPr).
+    #[serde(skip_serializing_if = "is_false")]
+    pub thick_top: bool,
+    /// Whether default rows use thick bottom borders (thickBottom on sheetFormatPr).
+    #[serde(skip_serializing_if = "is_false")]
+    pub thick_bottom: bool,
     /// Stable sheet identity for co-authoring (xr:uid on <worksheet> root).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,

@@ -81,6 +81,7 @@ fn parse_row_element(row_elem: &[u8]) -> Option<RowHeight> {
     let hidden_val = attr_bool(row_elem, b"hidden=\"");
     let has_thick_top = find_attr_simd(row_elem, b"thickTop=\"1\"", 0).is_some();
     let has_thick_bot = find_attr_simd(row_elem, b"thickBot=\"1\"", 0).is_some();
+    let has_ph = find_attr_simd(row_elem, b"ph=\"1\"", 0).is_some();
     let collapsed_val = attr_bool(row_elem, b"collapsed=\"");
     let outline_level = attr_parse::<u8>(row_elem, b"outlineLevel=\"");
     let has_custom_format = find_attr_simd(row_elem, b"customFormat=\"1\"", 0).is_some();
@@ -97,6 +98,7 @@ fn parse_row_element(row_elem: &[u8]) -> Option<RowHeight> {
         || collapsed_val.is_some()
         || has_thick_top
         || has_thick_bot
+        || has_ph
         || outline_level.is_some()
         || spans.is_some()
         || style.is_some()
@@ -112,6 +114,7 @@ fn parse_row_element(row_elem: &[u8]) -> Option<RowHeight> {
     rh.hidden = hidden_val;
     rh.thick_top = has_thick_top;
     rh.thick_bot = has_thick_bot;
+    rh.ph = has_ph;
     rh.collapsed = collapsed_val;
     rh.outline_level = outline_level;
     rh.spans = spans;

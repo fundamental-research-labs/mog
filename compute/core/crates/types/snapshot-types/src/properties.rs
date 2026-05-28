@@ -79,6 +79,10 @@ pub struct CellMetadata {
     pub cm: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub phonetic: bool,
+    #[serde(rename = "dateLexicalValue", skip_serializing_if = "Option::is_none")]
+    pub date_lexical_value: Option<String>,
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
     #[serde(
@@ -152,6 +156,8 @@ impl CellProperties {
             && self.style_id.is_none()
             && !self.cm
             && self.vm.is_none()
+            && !self.phonetic
+            && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
             && self.original_sst_index.is_none()
@@ -190,6 +196,8 @@ impl From<domain_types::CellProperties> for CellProperties {
             style_id: d.style_id,
             cm: d.cm,
             vm: d.vm,
+            phonetic: d.phonetic,
+            date_lexical_value: d.date_lexical_value,
             formula_result_type: d.formula_result_type,
             has_empty_cached_value: d.has_empty_cached_value,
             original_sst_index: d.original_sst_index,
@@ -210,6 +218,8 @@ impl From<CellProperties> for domain_types::CellProperties {
             style_id: s.style_id,
             cm: s.cm,
             vm: s.vm,
+            phonetic: s.phonetic,
+            date_lexical_value: s.date_lexical_value,
             formula_result_type: s.formula_result_type,
             has_empty_cached_value: s.has_empty_cached_value,
             original_sst_index: s.original_sst_index,

@@ -1,7 +1,8 @@
 use super::super::adapters::{find_byte, find_sequence};
 use super::super::types::{
-    AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING,
-    CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_INLINE, VALUE_TYPE_NONE,
+    AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR,
+    CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_INLINE,
+    VALUE_TYPE_NONE,
     VALUE_TYPE_SHARED_STRING,
 };
 use super::a1::parse_a1_reference;
@@ -20,6 +21,8 @@ pub(crate) struct ScanResult {
     pub has_cm: bool,
     /// `vm="N"` attribute value on `<c>` tag (value metadata index).
     pub vm_val: Option<u32>,
+    /// `ph="1"` phonetic display flag on `<c>` tag.
+    pub has_ph: bool,
     /// Explicit `s="..."` attribute present on `<c>` tag.
     pub has_explicit_s: bool,
     /// `xml:space="preserve"` on `<v>` element.
@@ -60,6 +63,7 @@ pub(crate) fn scan_cell<'a>(
     let mut cell_type: u8 = CELL_TYPE_NUMBER;
     let mut has_cm = false;
     let mut vm_val: Option<u32> = None;
+    let mut has_ph = false;
     let mut has_explicit_s = false;
     let mut has_explicit_t = false;
 
@@ -78,13 +82,14 @@ pub(crate) fn scan_cell<'a>(
             // Self-closing <c ... />
             let end = pos + 2;
 
-            if has_explicit_s && !has_cm && vm_val.is_none() && !has_explicit_t {
+            if has_explicit_s && !has_cm && vm_val.is_none() && !has_ph && !has_explicit_t {
                 return Some(ScanResult {
                     cell: None,
                     end,
                     is_self_closing: true,
                     has_cm,
                     vm_val,
+                    has_ph,
                     has_explicit_s,
                     has_xml_space_v: false,
                     sst_raw_idx: None,
@@ -111,6 +116,7 @@ pub(crate) fn scan_cell<'a>(
                 is_self_closing: true,
                 has_cm,
                 vm_val,
+                has_ph,
                 has_explicit_s,
                 has_xml_space_v: false,
                 sst_raw_idx: None,
@@ -165,6 +171,7 @@ pub(crate) fn scan_cell<'a>(
                             }
                             b'i' => CELL_TYPE_STRING,
                             b'b' => CELL_TYPE_BOOL,
+                            b'd' => CELL_TYPE_DATE,
                             b'e' => CELL_TYPE_ERROR,
                             _ => CELL_TYPE_NUMBER,
                         };
@@ -198,6 +205,8 @@ pub(crate) fn scan_cell<'a>(
                             has_cm = true;
                         } else if a == b'v' && b2 == b'm' {
                             vm_val = parse_u32(&xml[val_start..val_end]);
+                        } else if a == b'p' && b2 == b'h' {
+                            has_ph = matches!(&xml[val_start..val_end], b"1" | b"true");
                         }
                     }
 
@@ -379,6 +388,7 @@ pub(crate) fn scan_cell<'a>(
         is_self_closing: false,
         has_cm,
         vm_val,
+        has_ph,
         has_explicit_s,
         has_xml_space_v,
         sst_raw_idx,
@@ -389,6 +399,7 @@ pub(crate) fn scan_cell<'a>(
         && has_explicit_s
         && !has_cm
         && vm_val.is_none()
+        && !has_ph
         && !has_explicit_t
     {
         return Some(ScanResult {
@@ -397,6 +408,7 @@ pub(crate) fn scan_cell<'a>(
             is_self_closing: false,
             has_cm,
             vm_val,
+            has_ph,
             has_explicit_s,
             has_xml_space_v,
             sst_raw_idx,

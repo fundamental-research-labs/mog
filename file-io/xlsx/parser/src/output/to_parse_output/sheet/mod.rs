@@ -102,6 +102,7 @@ pub(super) fn convert_sheet(
             collapsed: rh.collapsed,
             thick_top: rh.thick_top,
             thick_bot: rh.thick_bot,
+            phonetic: rh.ph,
             descent: sheet.row_descents.get(&rh.row).copied(),
             xml_hints: RowXmlHints {
                 spans: rh
@@ -131,6 +132,7 @@ pub(super) fn convert_sheet(
                     collapsed: None,
                     thick_top: false,
                     thick_bot: false,
+                    phonetic: false,
                     descent: None,
                     xml_hints: RowXmlHints {
                         spans: Some(spans.clone()),
@@ -155,6 +157,7 @@ pub(super) fn convert_sheet(
                     collapsed: None,
                     thick_top: false,
                     thick_bot: false,
+                    phonetic: false,
                     descent: None,
                     xml_hints: RowXmlHints {
                         spans: None,
@@ -181,6 +184,7 @@ pub(super) fn convert_sheet(
                     collapsed: None,
                     thick_top: false,
                     thick_bot: false,
+                    phonetic: false,
                     descent: Some(d),
                     xml_hints: RowXmlHints::default(),
                 });
@@ -237,6 +241,8 @@ pub(super) fn convert_sheet(
         base_col_width: sheet.base_col_width,
         custom_height: sheet.custom_height,
         zero_height: sheet.zero_height,
+        thick_top: sheet.thick_top,
+        thick_bottom: sheet.thick_bottom,
         outline_level_row: sheet.outline_level_row,
         outline_level_col: sheet.outline_level_col,
         row_heights,

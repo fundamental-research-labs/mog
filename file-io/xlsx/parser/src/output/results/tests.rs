@@ -118,6 +118,8 @@ fn test_full_cell_data_serialize() {
         array_ref: None,
         cm: false,
         vm: None,
+        phonetic: false,
+        date_lexical_value: None,
         cached_value_type: 0,
         cell_formula: None,
         preserve_space_formula: false,

@@ -46,6 +46,14 @@ pub(super) fn append_metadata_only_sheets(
             let fmt_pr = parse_sheet_format_pr(pre_sd);
             empty_sheet.default_row_height = fmt_pr.default_row_height;
             empty_sheet.default_col_width = fmt_pr.default_col_width;
+            empty_sheet.base_col_width = fmt_pr.base_col_width;
+            empty_sheet.default_row_descent = fmt_pr.default_row_descent;
+            empty_sheet.outline_level_row = fmt_pr.outline_level_row;
+            empty_sheet.outline_level_col = fmt_pr.outline_level_col;
+            empty_sheet.custom_height = fmt_pr.custom_height;
+            empty_sheet.zero_height = fmt_pr.zero_height;
+            empty_sheet.thick_top = fmt_pr.thick_top;
+            empty_sheet.thick_bottom = fmt_pr.thick_bottom;
         }
 
         sheets.push(empty_sheet);

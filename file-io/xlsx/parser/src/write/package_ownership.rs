@@ -488,7 +488,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         semantic_references: &["cell/range refs", "dxf ids", "table ids", "metadata cm/vm"],
         user_visible_behavior: "worksheet layout, filtering, validation, print, protection, and visible cell semantics",
-        fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 02",
+        fixture_coverage: "plan 02 typed slice covers sheetFormatPr thickTop/thickBottom, row/cell ph, t=d lexical cells, and sheetView pivotSelection; broader gates still owned by plan 02",
     },
     OoxmlOwnershipRow {
         surface: "styles, shared strings, rich text, and theme registries",

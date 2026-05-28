@@ -33,6 +33,8 @@ pub(super) fn is_style_only_cell(cell: &CellData) -> bool {
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
+        && !cell.phonetic
+        && cell.date_lexical_value.is_none()
         && cell.original_sst_index.is_none()
         && cell
             .original_value
@@ -50,6 +52,8 @@ pub(super) fn is_styleless_blank_cell(cell: &CellData) -> bool {
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
         && cell.vm.is_none()
+        && !cell.phonetic
+        && cell.date_lexical_value.is_none()
         && cell.original_sst_index.is_none()
         && cell.original_value.is_none()
 }
@@ -68,6 +72,8 @@ pub(super) fn explicit_blank_cell(row: u32, col: u32) -> CellData {
         formula_result_type: None,
         has_empty_cached_value: false,
         vm: None,
+        phonetic: false,
+        date_lexical_value: None,
         original_sst_index: None,
         original_value: Some(String::new()),
         projection_role: domain_types::ImportedCellProjectionRole::Normal,

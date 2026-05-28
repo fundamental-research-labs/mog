@@ -244,7 +244,8 @@ fn write_single_sheet_view(w: &mut XmlWriter, sv: &SheetView) {
     w.attr_num("workbookViewId", sv.workbook_view_id);
 
     // Determine whether there are any child elements.
-    let has_children = sv.pane.is_some() || !sv.selections.is_empty();
+    let has_children =
+        sv.pane.is_some() || !sv.pivot_selection.is_empty() || !sv.selections.is_empty();
 
     if !has_children {
         // No children — emit self-closing form to match Excel's output.
@@ -255,6 +256,10 @@ fn write_single_sheet_view(w: &mut XmlWriter, sv: &SheetView) {
         // Pane child element
         if let Some(ref pane) = sv.pane {
             write_pane(w, pane);
+        }
+
+        for sel in &sv.pivot_selection {
+            write_pivot_selection(w, sel);
         }
 
         // Selection child elements
@@ -285,6 +290,12 @@ pub fn write_sheet_format_pr(w: &mut XmlWriter, fmt: &SheetFormatPr) {
     }
     if fmt.zero_height {
         w.attr("zeroHeight", "1");
+    }
+    if fmt.thick_top {
+        w.attr("thickTop", "1");
+    }
+    if fmt.thick_bottom {
+        w.attr("thickBottom", "1");
     }
     if let Some(lvl) = fmt.outline_level_row {
         if lvl > 0 {
@@ -399,6 +410,68 @@ fn write_pane(w: &mut XmlWriter, pane: &SheetPane) {
     w.attr("activePane", pane.effective_active_pane().to_ooxml());
     w.attr("state", pane.effective_state().to_ooxml());
     w.self_close();
+}
+
+fn write_pivot_selection(w: &mut XmlWriter, sel: &ooxml_types::worksheet::PivotSelection) {
+    w.start_element("pivotSelection");
+    if let Some(pane) = sel.pane {
+        w.attr("pane", pane.to_ooxml());
+    }
+    if sel.show_header {
+        w.attr("showHeader", "1");
+    }
+    if sel.label {
+        w.attr("label", "1");
+    }
+    if sel.data {
+        w.attr("data", "1");
+    }
+    if sel.extendable {
+        w.attr("extendable", "1");
+    }
+    if sel.count != 0 {
+        w.attr_num("count", sel.count);
+    }
+    if let Some(axis) = sel.axis {
+        w.attr("axis", axis.to_ooxml());
+    }
+    if sel.dimension != 0 {
+        w.attr_num("dimension", sel.dimension);
+    }
+    if sel.start != 0 {
+        w.attr_num("start", sel.start);
+    }
+    if sel.min != 0 {
+        w.attr_num("min", sel.min);
+    }
+    if sel.max != 0 {
+        w.attr_num("max", sel.max);
+    }
+    if sel.active_row != 0 {
+        w.attr_num("activeRow", sel.active_row);
+    }
+    if sel.active_col != 0 {
+        w.attr_num("activeCol", sel.active_col);
+    }
+    if sel.previous_row != 0 {
+        w.attr_num("previousRow", sel.previous_row);
+    }
+    if sel.previous_col != 0 {
+        w.attr_num("previousCol", sel.previous_col);
+    }
+    if sel.click != 0 {
+        w.attr_num("click", sel.click);
+    }
+    if let Some(id) = &sel.id {
+        w.attr("r:id", id);
+    }
+    if let Some(pivot_area) = &sel.pivot_area {
+        w.end_attrs();
+        w.raw_str(pivot_area);
+        w.end_element("pivotSelection");
+    } else {
+        w.self_close();
+    }
 }
 
 /// Write a single `<selection>` element inside `<sheetView>`.

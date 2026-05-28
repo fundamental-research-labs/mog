@@ -12,6 +12,8 @@ pub const CELL_TYPE_VAL_BOOL: u8 = 3;
 pub const CELL_TYPE_VAL_ERROR: u8 = 4;
 /// Formula cell type value
 pub const CELL_TYPE_VAL_FORMULA: u8 = 5;
+/// OOXML date lexical cell (`t="d"`)
+pub const CELL_TYPE_VAL_DATE: u8 = 7;
 
 /// Cell data for full parse result (serializable version)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,11 +51,17 @@ pub struct FullCellData {
     /// but no formula are likely phantom (spill) cells.
     #[serde(default, skip_serializing_if = "is_false")]
     pub cm: bool,
+    /// Whether the `<c>` element has `ph="1"` (phonetic display enabled).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub phonetic: bool,
     /// Value metadata index from the `vm` attribute on the `<c>` element.
     /// A 1-based index into `xl/richData/` parts (linked data types, images-in-cells).
     /// `None` means no `vm` attribute was present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    /// Original lexical value for OOXML date cells (`t="d"`).
+    #[serde(skip)]
+    pub date_lexical_value: Option<String>,
     /// For formula cells (cell_type == 5), the original XLSX `t` attribute that
     /// indicates the cached value type. Uses the internal cell-parser type codes:
     ///   6 = CELL_TYPE_FORMULA_STRING (t="str", cached value is a literal string)

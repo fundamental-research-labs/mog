@@ -125,6 +125,14 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
             .into_iter()
             .collect()
     };
+    let row_phonetic: std::collections::HashSet<u32> = {
+        let txn = stores.storage.doc().transact();
+        get_meta_for_export(&txn, stores.storage.sheets(), sheet_id)
+            .map(|m| yrs_schema::helpers::read_json_vec::<_, u32>(&m, &txn, "rowPhonetic"))
+            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    };
     let row_spans: std::collections::HashMap<u32, String> = {
         let txn = stores.storage.doc().transact();
         get_meta_for_export(&txn, stores.storage.sheets(), sheet_id)
@@ -186,6 +194,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     || row_collapsed.contains_key(&row)
                     || row_thick_top.contains(&row)
                     || row_thick_bot.contains(&row)
+                    || row_phonetic.contains(&row)
                     || row_spans.contains_key(&row)
                     || bare_empty_rows.contains(&row);
                 if differs || is_hidden || is_custom_height || is_custom_format || has_metadata {
@@ -209,6 +218,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                         collapsed: row_collapsed.get(&row).copied(),
                         thick_top: row_thick_top.contains(&row),
                         thick_bot: row_thick_bot.contains(&row),
+                        phonetic: row_phonetic.contains(&row),
                         descent: None,
                         xml_hints: RowXmlHints {
                             spans: row_spans.get(&row).cloned(),
@@ -228,6 +238,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     || row_collapsed.contains_key(&row)
                     || row_thick_top.contains(&row)
                     || row_thick_bot.contains(&row)
+                    || row_phonetic.contains(&row)
                     || row_spans.contains_key(&row)
                     || bare_empty_rows.contains(&row);
                 if is_hidden || is_custom_height || is_custom_format || has_metadata {
@@ -252,6 +263,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                         collapsed: row_collapsed.get(&row).copied(),
                         thick_top: row_thick_top.contains(&row),
                         thick_bot: row_thick_bot.contains(&row),
+                        phonetic: row_phonetic.contains(&row),
                         descent: None,
                         xml_hints: RowXmlHints {
                             spans: row_spans.get(&row).cloned(),
@@ -296,6 +308,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     collapsed: row_collapsed.get(&row).copied(),
                     thick_top: row_thick_top.contains(&row),
                     thick_bot: row_thick_bot.contains(&row),
+                    phonetic: row_phonetic.contains(&row),
                     descent: Some(descent),
                     xml_hints: RowXmlHints {
                         spans: row_spans.get(&row).cloned(),
@@ -426,6 +439,8 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
         base_col_width: rt_meta.base_col_width,
         custom_height: rt_meta.custom_height,
         zero_height: rt_meta.zero_height,
+        thick_top: rt_meta.thick_top,
+        thick_bottom: rt_meta.thick_bottom,
         outline_level_row: rt_meta.outline_level_row,
         outline_level_col: rt_meta.outline_level_col,
         row_heights,

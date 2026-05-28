@@ -19,4 +19,8 @@ pub struct SheetFormatPrParsed {
     pub custom_height: bool,
     /// Whether zero-height rows are the default (zeroHeight="1").
     pub zero_height: bool,
+    /// Whether default rows use thick top borders.
+    pub thick_top: bool,
+    /// Whether default rows use thick bottom borders.
+    pub thick_bottom: bool,
 }

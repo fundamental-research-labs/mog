@@ -107,6 +107,12 @@ pub struct CellProperties {
     /// Value-metadata-record index. See [`CellMetadata::vm`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    /// Cell-level phonetic display flag (`ph`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub phonetic: bool,
+    /// Original lexical value for OOXML date cells (`t="d"`).
+    #[serde(rename = "dateLexicalValue", skip_serializing_if = "Option::is_none")]
+    pub date_lexical_value: Option<String>,
     /// Formula-result type code. See [`CellMetadata::formula_result_type`].
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
@@ -146,6 +152,8 @@ impl CellProperties {
             && self.style_id.is_none()
             && !self.cm
             && self.vm.is_none()
+            && !self.phonetic
+            && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
             && self.original_sst_index.is_none()

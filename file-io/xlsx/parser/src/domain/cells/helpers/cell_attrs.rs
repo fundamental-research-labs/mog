@@ -1,6 +1,9 @@
 use super::super::adapters::{find_byte, find_sequence};
 use super::a1::parse_a1_reference;
-use super::super::types::{CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING};
+use super::super::types::{
+    CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER,
+    CELL_TYPE_STRING,
+};
 
 /// Parse A1-style cell reference without allocation.
 ///
@@ -53,6 +56,7 @@ pub fn parse_cell_type(xml: &[u8]) -> u8 {
                     CELL_TYPE_STRING
                 }
                 b'b' => CELL_TYPE_BOOL,
+                b'd' => CELL_TYPE_DATE,
                 b'e' => CELL_TYPE_ERROR,
                 b'"' => CELL_TYPE_NUMBER, // Empty t="" defaults to number
                 _ => CELL_TYPE_NUMBER,
@@ -93,4 +97,3 @@ pub fn parse_style_idx(xml: &[u8]) -> u16 {
 
     0 // Default style
 }
-

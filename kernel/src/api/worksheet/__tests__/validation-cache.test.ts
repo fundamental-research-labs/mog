@@ -68,6 +68,14 @@ function createCtx(initialSchemas: RangeSchema[] = []): TestDocumentContext {
         schemas.delete(schemaId);
         return { success: true };
       }),
+      queryRange: jest.fn(async () => ({
+        cells: [],
+        merges: [],
+      })),
+      validateCellValueInDoc: jest.fn(async () => ({
+        valid: true,
+        enforcement: 'none',
+      })),
     },
   } as unknown as TestDocumentContext;
 }
@@ -198,5 +206,135 @@ describe('WorksheetValidationImpl sheet cache', () => {
     expect(newCache.peekSchemaForCell(SHEET_ID, 0, 0)).toBeUndefined();
     await expect(newCache.getSchemaForCell(SHEET_ID, 0, 0)).resolves.toBeNull();
     expect(ctx.computeBridge.getRangeSchemasForSheet).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('WorksheetValidationImpl list validation', () => {
+  function makeRangeBackedListSchema(overrides: Partial<RangeSchema> = {}): RangeSchema {
+    return makeSchema({
+      id: 'list-range',
+      ranges: [{ startId: '4:4', endId: '4:4' }],
+      schema: {
+        constraints: {
+          enumSource: { startId: '0:0', endId: '1:0' },
+          allowBlank: false,
+        },
+      },
+      enforcement: 'strict',
+      ui: {
+        errorMessage: {
+          title: 'Choose from list',
+          message: 'Use one of the allowed values.',
+        },
+      },
+      ...overrides,
+    });
+  }
+
+  function createRangeListCtx(schema: RangeSchema = makeRangeBackedListSchema()) {
+    const ctx = createCtx([schema]);
+    (ctx.computeBridge.queryRange as jest.Mock).mockResolvedValue({
+      cells: [
+        { row: 0, col: 0, value: { type: 'Text', value: 'Alpha' }, formatted: 'Alpha' },
+        { row: 1, col: 0, value: { type: 'Text', value: 'Beta' }, formatted: 'Beta' },
+      ],
+      merges: [],
+    });
+    return ctx;
+  }
+
+  it('rejects values outside a resolved range-backed list and preserves alert metadata', async () => {
+    const ctx = createRangeListCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.validate(4, 4, 'BAD')).resolves.toEqual({
+      valid: false,
+      errorStyle: 'stop',
+      errorTitle: 'Choose from list',
+      errorMessage: 'Use one of the allowed values.',
+    });
+    expect(ctx.computeBridge.validateCellValueInDoc).not.toHaveBeenCalled();
+  });
+
+  it('accepts resolved range-backed list values case-insensitively', async () => {
+    const ctx = createRangeListCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.validate(4, 4, 'Alpha')).resolves.toMatchObject({
+      valid: true,
+      errorStyle: 'stop',
+    });
+    await expect(validations.validate(4, 4, 'alpha')).resolves.toMatchObject({
+      valid: true,
+      errorStyle: 'stop',
+    });
+    expect(ctx.computeBridge.validateCellValueInDoc).not.toHaveBeenCalled();
+  });
+
+  it('honors allowBlank for resolved list validation', async () => {
+    const allowBlankCtx = createRangeListCtx(
+      makeRangeBackedListSchema({
+        id: 'blank-allowed',
+        schema: {
+          constraints: {
+            enumSource: { startId: '0:0', endId: '1:0' },
+            allowBlank: true,
+          },
+        },
+      }),
+    );
+    const rejectBlankCtx = createRangeListCtx();
+
+    await expect(new WorksheetValidationImpl(allowBlankCtx, SHEET_ID).validate(4, 4, '')).resolves
+      .toMatchObject({
+        valid: true,
+        errorStyle: 'stop',
+      });
+    await expect(new WorksheetValidationImpl(rejectBlankCtx, SHEET_ID).validate(4, 4, '')).resolves
+      .toMatchObject({
+        valid: false,
+        errorStyle: 'stop',
+      });
+  });
+
+  it('falls back to document validation when no rule covers the cell', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.validate(9, 9, 'anything')).resolves.toEqual({
+      valid: true,
+      errorMessage: undefined,
+      errorTitle: undefined,
+      errorStyle: 'none',
+    });
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenCalledWith(
+      SHEET_ID,
+      9,
+      9,
+      'anything',
+    );
+  });
+
+  it('falls back to document validation for unresolved formula list sources', async () => {
+    const ctx = createCtx([
+      makeRangeBackedListSchema({
+        id: 'formula-list',
+        schema: {
+          constraints: {
+            enumSourceFormula: 'NamedRange',
+            allowBlank: false,
+          },
+        },
+      }),
+    ]);
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.validate(4, 4, 'BAD')).resolves.toEqual({
+      valid: true,
+      errorMessage: undefined,
+      errorTitle: undefined,
+      errorStyle: 'none',
+    });
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenCalledWith(SHEET_ID, 4, 4, 'BAD');
   });
 });

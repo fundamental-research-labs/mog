@@ -28,8 +28,35 @@ import {
   validationRuleToConstraints,
   validationTypeToSchemaType,
 } from './operations/validation-helpers';
-import { getDropdownItems } from './operations/validation-operations';
+import { getDropdownItems, resolveDropdownItems } from './operations/validation-operations';
 import { getWorksheetValidationCache } from './validation-cache';
+
+function enforcementToValidationErrorStyle(
+  enforcement?: RangeSchema['enforcement'],
+): ValidationCheckResult['errorStyle'] {
+  switch (enforcement) {
+    case 'strict':
+      return 'stop';
+    case 'warning':
+      return 'warning';
+    case 'info':
+      return 'information';
+    case 'none':
+      return 'none';
+    default:
+      return 'stop';
+  }
+}
+
+function isListValidationSchema(schema: RangeSchema): boolean {
+  const constraints = schema.schema.constraints;
+  return (
+    (schema.schema.type as string | undefined) === 'list' ||
+    constraints?.enum != null ||
+    constraints?.enumSource != null ||
+    constraints?.enumSourceFormula != null
+  );
+}
 
 export class WorksheetValidationImpl implements WorksheetValidation {
   constructor(
@@ -317,6 +344,9 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       value = String(c);
     }
 
+    const listResult = await this.validateResolvedListValue(row, col, value);
+    if (listResult) return listResult;
+
     const result = await this.ctx.computeBridge.validateCellValueInDoc(
       this.sheetId,
       row,
@@ -324,30 +354,41 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       value,
     );
 
-    // Map internal enforcement vocabulary to the public errorStyle vocabulary.
-    // "none" means no rule covers the cell (trivially valid).
-    let errorStyle: ValidationCheckResult['errorStyle'];
-    switch (result.enforcement) {
-      case 'strict':
-        errorStyle = 'stop';
-        break;
-      case 'warning':
-        errorStyle = 'warning';
-        break;
-      case 'info':
-        errorStyle = 'information';
-        break;
-      case 'none':
-      default:
-        errorStyle = 'none';
-        break;
-    }
-
     return {
       valid: result.valid,
       errorMessage: result.errorMessage,
       errorTitle: result.errorTitle,
-      errorStyle,
+      errorStyle: enforcementToValidationErrorStyle(result.enforcement),
+    };
+  }
+
+  private async validateResolvedListValue(
+    row: number,
+    col: number,
+    value: string,
+  ): Promise<ValidationCheckResult | undefined> {
+    const schema = await getWorksheetValidationCache(this.ctx).getSchemaForCell(
+      this.sheetId,
+      row,
+      col,
+    );
+    if (!schema || !isListValidationSchema(schema)) return undefined;
+
+    const constraints = schema.schema.constraints ?? {};
+    const { items, resolved } = await resolveDropdownItems(this.ctx, this.sheetId, row, col);
+    if (!resolved) return undefined;
+
+    const isBlank = value === '';
+    const valid =
+      (isBlank && constraints.allowBlank !== false) ||
+      items.some((item) => item.toLowerCase() === value.toLowerCase());
+    const errorMessage = schema.ui?.errorMessage;
+
+    return {
+      valid,
+      errorStyle: enforcementToValidationErrorStyle(schema.enforcement),
+      errorTitle: valid ? undefined : errorMessage?.title,
+      errorMessage: valid ? undefined : errorMessage?.message,
     };
   }
 

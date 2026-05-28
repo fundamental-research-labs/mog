@@ -28,6 +28,11 @@ import {
   invalidateWorksheetValidationCache,
 } from '../validation-cache';
 
+export interface DropdownItemResolution {
+  items: string[];
+  resolved: boolean;
+}
+
 // =============================================================================
 // Range Schema Viewport Filtering
 // =============================================================================
@@ -304,6 +309,15 @@ export async function getDropdownItems(
   row: number,
   col: number,
 ): Promise<string[]> {
+  return (await resolveDropdownItems(ctx, sheetId, row, col)).items;
+}
+
+export async function resolveDropdownItems(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+): Promise<DropdownItemResolution> {
   const allSchemas = await getWorksheetValidationCache(ctx).getSchemasForSheet(sheetId);
 
   for (const schema of allSchemas) {
@@ -319,7 +333,7 @@ export async function getDropdownItems(
 
       // Static enum values
       if (constraints.enum && Array.isArray(constraints.enum)) {
-        return constraints.enum.map(String);
+        return { items: constraints.enum.map(String), resolved: true };
       }
 
       // Range source — query the range data from CB
@@ -340,11 +354,14 @@ export async function getDropdownItems(
               srcEnd.col,
             );
             if (rangeData?.cells) {
-              return rangeData.cells
-                .filter(
-                  (c) => c.value !== null && !isNullCellValue(c.value) && !isCellError(c.value),
-                )
-                .map((c) => c.formatted ?? String(c.value ?? ''));
+              return {
+                items: rangeData.cells
+                  .filter(
+                    (c) => c.value !== null && !isNullCellValue(c.value) && !isCellError(c.value),
+                  )
+                  .map((c) => c.formatted ?? String(c.value ?? '')),
+                resolved: true,
+              };
             }
           } catch {
             // Fall through
@@ -354,7 +371,7 @@ export async function getDropdownItems(
     }
   }
 
-  return [];
+  return { items: [], resolved: false };
 }
 
 // =============================================================================

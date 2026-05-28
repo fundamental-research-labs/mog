@@ -21,7 +21,7 @@ import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { RichTextSegment, TextFormat } from '@mog-sdk/contracts/rich-text';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import { resolveThemeFonts } from '@mog/spreadsheet-utils/formatting/theme';
-import { buildFontFamilyWithFallbacks } from '../shared/font-utils';
+import { buildFontFamilyWithFallbacks, getIntrinsicFontWeight } from '../shared/font-utils';
 import { computeBaselineY, mapHorizontalAlign, mapVerticalAlign } from './text';
 
 // =============================================================================
@@ -63,6 +63,9 @@ export function buildSegmentFont(
   baseStyle: CellTextStyle,
 ): string {
   const parts: string[] = [];
+  const rawFamily = segmentFormat?.fontFamily ?? baseStyle.fontFamily;
+  const primaryFont = rawFamily.split(',')[0].trim().replace(/["']/g, '');
+  const intrinsicWeight = getIntrinsicFontWeight(primaryFont);
 
   // Italic: segment overrides base
   const isItalic = segmentFormat?.italic ?? baseStyle.fontStyle === 'italic';
@@ -72,7 +75,9 @@ export function buildSegmentFont(
 
   // Bold: segment overrides base
   const isBold = segmentFormat?.bold ?? baseStyle.fontWeight === 'bold';
-  if (isBold) {
+  if (intrinsicWeight != null) {
+    parts.push(String(intrinsicWeight));
+  } else if (isBold) {
     parts.push('bold');
   }
 
@@ -84,8 +89,6 @@ export function buildSegmentFont(
   parts.push(`${fontSize}px`);
 
   // Font family: segment overrides base
-  const rawFamily = segmentFormat?.fontFamily ?? baseStyle.fontFamily;
-  const primaryFont = rawFamily.split(',')[0].trim().replace(/["']/g, '');
   const fontFamily = buildFontFamilyWithFallbacks(primaryFont);
   parts.push(fontFamily);
 

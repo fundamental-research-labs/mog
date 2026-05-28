@@ -18,6 +18,7 @@ import {
   buildFontFamilyWithFallbacks,
   getCachedCJKInfo,
   getCJKFallbackChain,
+  getIntrinsicFontWeight,
 } from '../shared/font-utils';
 import { OFFICE_THEME } from '../shared/theme-constants';
 import type { CellRenderInfo } from './types';
@@ -165,11 +166,14 @@ export function buildCellFont(
   if (cached) return cached;
 
   const parts: string[] = [];
+  const intrinsicWeight = getIntrinsicFontWeight(fontFamily);
 
   if (style.fontStyle === 'italic') {
     parts.push('italic');
   }
-  if (style.fontWeight === 'bold') {
+  if (intrinsicWeight != null) {
+    parts.push(String(intrinsicWeight));
+  } else if (style.fontWeight === 'bold') {
     parts.push('bold');
   }
 

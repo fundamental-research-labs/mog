@@ -68,3 +68,63 @@ fn make_key(font_id: u16, font_size: f32, text: &str) -> CacheKey {
         text_hash: hasher.finish(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_miss_returns_none() {
+        let cache = MeasurementCache::new();
+        assert_eq!(cache.get(0, 11.0, "anything"), None);
+    }
+
+    #[test]
+    fn cache_hit_returns_stored_value() {
+        let mut cache = MeasurementCache::new();
+        cache.put(0, 11.0, "Hello", 42.5);
+        assert_eq!(cache.get(0, 11.0, "Hello"), Some(42.5));
+    }
+
+    #[test]
+    fn cache_distinguishes_font_id_and_size() {
+        let mut cache = MeasurementCache::new();
+        cache.put(0, 11.0, "Hello", 42.5);
+        assert_eq!(cache.get(1, 11.0, "Hello"), None, "different font_id");
+        assert_eq!(cache.get(0, 12.0, "Hello"), None, "different font_size");
+        assert_eq!(cache.get(0, 11.0, "World"), None, "different text");
+    }
+
+    #[test]
+    fn cache_eviction_at_capacity() {
+        let mut cache = MeasurementCache::new();
+        for i in 0..MAX_CACHE_SIZE as u16 {
+            cache.put(i, 11.0, "x", i as f32);
+        }
+        assert_eq!(cache.get(0, 11.0, "x"), Some(0.0), "entry 0 before evict");
+
+        cache.put(0, 99.0, "trigger", 999.0);
+        assert_eq!(
+            cache.get(0, 99.0, "trigger"),
+            Some(999.0),
+            "new entry exists"
+        );
+        assert_eq!(cache.get(0, 11.0, "x"), None, "old entry 0 was evicted");
+    }
+
+    #[test]
+    fn cache_clear_removes_all() {
+        let mut cache = MeasurementCache::new();
+        cache.put(0, 11.0, "A", 1.0);
+        cache.put(1, 12.0, "B", 2.0);
+        cache.clear();
+        assert_eq!(cache.get(0, 11.0, "A"), None);
+        assert_eq!(cache.get(1, 12.0, "B"), None);
+    }
+
+    #[test]
+    fn cache_default_is_empty() {
+        let cache = MeasurementCache::default();
+        assert_eq!(cache.get(0, 11.0, "anything"), None);
+    }
+}

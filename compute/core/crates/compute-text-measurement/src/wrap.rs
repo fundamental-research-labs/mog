@@ -121,3 +121,140 @@ fn find_break_opportunities(text: &str) -> Vec<usize> {
     breaks.dedup();
     breaks
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font_db::FontDb;
+
+    fn face_for(family: &str) -> rustybuzz::Face<'static> {
+        let db = FontDb::with_defaults();
+        let (_, entry) = db.resolve(family).unwrap();
+        let data = entry.data().to_vec();
+        let leaked = Box::leak(data.into_boxed_slice());
+        rustybuzz::Face::from_slice(leaked, entry.index()).unwrap()
+    }
+
+    #[test]
+    fn wrap_empty_text_returns_one_line() {
+        let face = face_for("Carlito");
+        assert_eq!(wrap_text(&face, 16.0, "", 100.0), 1);
+    }
+
+    #[test]
+    fn wrap_zero_width_returns_one_line() {
+        let face = face_for("Carlito");
+        assert_eq!(wrap_text(&face, 16.0, "Hello", 0.0), 1);
+        assert_eq!(wrap_text(&face, 16.0, "Hello", -10.0), 1);
+    }
+
+    #[test]
+    fn wrap_short_text_fits_in_one_line() {
+        let face = face_for("Carlito");
+        let w = crate::shaper::measure_text_width(&face, 16.0, "Hi");
+        assert_eq!(wrap_text(&face, 16.0, "Hi", w + 50.0), 1);
+    }
+
+    #[test]
+    fn wrap_explicit_newlines_produce_lines() {
+        let face = face_for("Carlito");
+
+        assert_eq!(
+            wrap_text(&face, 16.0, "A\nB", 1000.0),
+            2,
+            "One newline should produce 2 lines"
+        );
+        assert_eq!(
+            wrap_text(&face, 16.0, "A\nB\nC", 1000.0),
+            3,
+            "Two newlines should produce 3 lines"
+        );
+        assert_eq!(
+            wrap_text(&face, 16.0, "\n", 1000.0),
+            2,
+            "Single newline should produce two empty paragraphs"
+        );
+    }
+
+    #[test]
+    fn wrap_two_words_forced_to_two_lines() {
+        let face = face_for("Liberation Mono");
+
+        let word_w = crate::shaper::measure_text_width(&face, 16.0, "AAAA");
+        let space_w = crate::shaper::measure_text_width(&face, 16.0, " ");
+        let total = word_w * 2.0 + space_w;
+
+        let max_width = word_w + space_w + 1.0;
+        assert!(
+            max_width < total,
+            "Sanity: max_width {max_width} < total {total}"
+        );
+
+        let lines = wrap_text(&face, 16.0, "AAAA AAAA", max_width);
+        assert_eq!(lines, 2, "Two words exceeding width should wrap to 2 lines");
+    }
+
+    #[test]
+    fn wrap_force_break_unbreakable_token() {
+        let face = face_for("Liberation Mono");
+
+        let char_w = crate::shaper::measure_text_width(&face, 16.0, "A");
+        let max_width = char_w * 5.0;
+
+        assert_eq!(
+            wrap_text(&face, 16.0, "AAAAAAAAAA", max_width),
+            1,
+            "Unbreakable word should be 1 line"
+        );
+        assert_eq!(
+            wrap_text(&face, 16.0, "AAAAAAAAAA AAAAAAAAAA", max_width),
+            2,
+            "Two overflowing words should force-break to 2 lines"
+        );
+    }
+
+    #[test]
+    fn wrap_cjk_characters_break_individually() {
+        let face = face_for("Carlito");
+
+        let cjk_w = crate::shaper::measure_text_width(&face, 16.0, "你");
+        let max_width = cjk_w * 1.5;
+
+        let lines = wrap_text(&face, 16.0, "你好世", max_width);
+        assert_eq!(lines, 3, "3 CJK chars in narrow column should be 3 lines");
+    }
+
+    #[test]
+    fn wrap_mixed_latin_and_cjk() {
+        let face = face_for("Carlito");
+
+        let hi_w = crate::shaper::measure_text_width(&face, 16.0, "Hi");
+        let cjk_w = crate::shaper::measure_text_width(&face, 16.0, "你");
+        let max_width = hi_w + cjk_w * 1.5;
+
+        let lines = wrap_text(&face, 16.0, "Hi你好", max_width);
+        assert_eq!(lines, 2, "Should break between CJK chars: 'Hi你' + '好'");
+    }
+
+    #[test]
+    fn wrap_newlines_and_wrapping_combined() {
+        let face = face_for("Liberation Mono");
+
+        let char_w = crate::shaper::measure_text_width(&face, 16.0, "A");
+        let max_width = char_w * 6.5;
+
+        let lines = wrap_text(&face, 16.0, "AAA AAA\nBBB BBB", max_width);
+        assert_eq!(lines, 4, "2 paragraphs each wrapping to 2 lines = 4 total");
+    }
+
+    #[test]
+    fn wrap_multiple_words_counts_lines_correctly() {
+        let face = face_for("Liberation Mono");
+
+        let char_w = crate::shaper::measure_text_width(&face, 16.0, "A");
+        let max_width = char_w * 10.5;
+
+        let lines = wrap_text(&face, 16.0, "AAAA AAAA AAAA AAAA", max_width);
+        assert_eq!(lines, 2, "4 words fitting 2-per-line should be 2 lines");
+    }
+}

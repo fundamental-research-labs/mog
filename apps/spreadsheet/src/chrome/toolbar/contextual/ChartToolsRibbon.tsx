@@ -11,7 +11,7 @@
  * - Arrange: Z-order controls (Bring Forward, Send Backward, etc.)
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { dispatch, useDocumentContext } from '../../../internal-api';
 
@@ -63,6 +63,13 @@ const CHART_TYPES: ChartTypeOption[] = [
   { type: 'combo', label: 'Combo' },
 ];
 
+const DEFAULT_CHART_TITLE = 'Chart Title';
+
+interface OptimisticTitleToggle {
+  chartId: string;
+  checked: boolean;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -74,14 +81,36 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   const { selectedChartId, deleteSelectedChart } = useChartUI();
   const { charts, updateChart } = useCharts({ sheetId: activeSheetId });
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [optimisticTitleToggle, setOptimisticTitleToggle] =
+    useState<OptimisticTitleToggle | null>(null);
 
   // Get the selected chart
   const selectedChart = charts.find((c) => c.id === selectedChartId);
   const currentType = selectedChart?.type ?? 'column';
 
   // Check if chart has title/legend
-  const hasTitle = Boolean(selectedChart?.config.title);
+  const observedHasTitle =
+    selectedChart?.config.autoTitleDeleted === true ? false : Boolean(selectedChart?.config.title);
+  const hasTitle =
+    optimisticTitleToggle && optimisticTitleToggle.chartId === selectedChartId
+      ? optimisticTitleToggle.checked
+      : observedHasTitle;
   const hasLegend = selectedChart?.config.legend?.show !== false;
+
+  useEffect(() => {
+    if (!optimisticTitleToggle) {
+      return;
+    }
+
+    if (!selectedChart || !selectedChartId || optimisticTitleToggle.chartId !== selectedChartId) {
+      setOptimisticTitleToggle(null);
+      return;
+    }
+
+    if (optimisticTitleToggle.checked === observedHasTitle) {
+      setOptimisticTitleToggle(null);
+    }
+  }, [optimisticTitleToggle, observedHasTitle, selectedChart, selectedChartId]);
 
   // ==========================================================================
   // Handlers
@@ -97,13 +126,21 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
     [selectedChartId, deps],
   );
 
-  const handleToggleTitle = useCallback(() => {
+  const handleToggleTitle = useCallback((checked: boolean) => {
     if (selectedChartId && selectedChart) {
-      // `null` explicitly clears title; `undefined` means no title update.
-      const newTitle = hasTitle ? null : 'Chart Title';
-      updateChart(selectedChartId, { title: newTitle });
+      setOptimisticTitleToggle({ chartId: selectedChartId, checked });
+
+      if (checked) {
+        updateChart(selectedChartId, {
+          title: selectedChart.config.title || DEFAULT_CHART_TITLE,
+          autoTitleDeleted: false,
+        });
+      } else {
+        // `null` explicitly clears title; `undefined` means no title update.
+        updateChart(selectedChartId, { title: null, autoTitleDeleted: true });
+      }
     }
-  }, [selectedChartId, selectedChart, hasTitle, updateChart]);
+  }, [selectedChartId, selectedChart, updateChart]);
 
   const handleToggleLegend = useCallback(() => {
     if (selectedChartId && selectedChart) {

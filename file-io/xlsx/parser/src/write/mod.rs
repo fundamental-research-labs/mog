@@ -71,7 +71,7 @@ pub use crate::domain::protection::write::{
     WorkbookProtectionWrite, generate_salt, hash_password_legacy, hash_password_sha512,
 };
 pub use crate::domain::slicers::write::{
-    EXT_URI_SLICER_CACHES, EXT_URI_SLICER_LIST, EXT_URI_TABLE_SLICER_CACHE, NS_X14, NS_X15,
+    EXT_URI_SLICER_CACHES, EXT_URI_SLICER_LIST, EXT_URI_TABLE_SLICER_CACHE, NS_MC, NS_X14, NS_X15,
     NS_XR10, write_slicer_cache, write_slicer_part, write_workbook_slicer_caches_ext,
     write_worksheet_slicer_ext,
 };

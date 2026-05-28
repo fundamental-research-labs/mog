@@ -1,384 +1,9 @@
-//! Slicer write module for XLSX files.
-//!
-//! This module serializes slicer definitions and slicer cache definitions
-//! to OOXML XML for the write path:
-//! - `xl/slicers/slicer{N}.xml` — slicer part (x14:slicers container)
-//! - `xl/slicerCaches/slicerCache{N}.xml` — slicer cache definition
-//!
-//! It also provides helpers for writing slicer-related extLst entries
-//! in worksheet and workbook XML.
-//!
-//! # OOXML Namespaces
-//!
-//! - **x14**: `http://schemas.microsoft.com/office/spreadsheetml/2009/9/main`
-//! - **x15**: `http://schemas.microsoft.com/office/spreadsheetml/2010/11/main`
-//! - **xr10**: `http://schemas.microsoft.com/office/spreadsheetml/2024/richdata2`
-//! - **mc**: `http://schemas.openxmlformats.org/markup-compatibility/2006`
-
+use super::*;
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::slicers::{
-    SlicerCacheDef, SlicerCrossFilter, SlicerDef, SlicerSortOrder, SlicerTabularData,
-    TableSlicerCache,
+    SlicerCacheDef, SlicerCrossFilter, SlicerDef, SlicerPivotTableRef, SlicerSortOrder,
+    SlicerTabularItem, TableSlicerCache,
 };
-
-// =============================================================================
-// Namespace Constants
-// =============================================================================
-
-/// x14 namespace (slicers, slicer caches — Office 2010)
-pub const NS_X14: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
-
-/// x15 namespace (table slicer caches — Office 2013)
-pub const NS_X15: &str = "http://schemas.microsoft.com/office/spreadsheetml/2010/11/main";
-
-/// xr10 namespace (uid attributes)
-pub const NS_XR10: &str = "http://schemas.microsoft.com/office/spreadsheetml/2024/richdata2";
-
-/// mc namespace (markup compatibility)
-pub const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
-
-/// Extension URI for x15:tableSlicerCache in extLst
-pub const EXT_URI_TABLE_SLICER_CACHE: &str = "{2F2917AC-EB37-4324-AD4E-5DD8C200BD13}";
-
-/// Extension URI for x14:slicerList in worksheet extLst
-pub const EXT_URI_SLICER_LIST: &str = "{A8765BA9-456A-4dab-B4F3-ACF838C121DE}";
-
-/// Extension URI for x14:slicerCaches in workbook extLst
-pub const EXT_URI_SLICER_CACHES: &str = "{BBE1A952-AA13-448e-AADC-164F8A28A991}";
-
-/// Main spreadsheetml namespace (used as "x" prefix inside slicer parts)
-const NS_X: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-
-// =============================================================================
-// 5a: write_slicer_part — serializes Vec<SlicerDef> to slicer XML
-// =============================================================================
-
-/// Serialize a vector of slicer definitions to an `xl/slicers/slicer{N}.xml` part.
-///
-/// Produces XML matching Excel's output format — using the x14 namespace as the
-/// default namespace (not as a prefix), with additional namespace declarations for
-/// markup compatibility and extensions:
-/// ```xml
-/// <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-/// <slicers xmlns="..." xmlns:mc="..." mc:Ignorable="x xr10" xmlns:x="..." xmlns:xr10="...">
-///   <slicer name="..." xr10:uid="{...}" cache="..." .../>
-/// </slicers>
-/// ```
-///
-/// Optional attributes that match their defaults are omitted.
-pub fn write_slicer_part(slicers: &[SlicerDef]) -> Vec<u8> {
-    let mut w = XmlWriter::new();
-    w.write_declaration();
-
-    let has_uid = slicers.iter().any(|s| s.uid.is_some());
-
-    w.start_element("slicers")
-        .attr("xmlns", NS_X14)
-        .attr("xmlns:mc", NS_MC);
-
-    // Build mc:Ignorable — always include "x", add "xr10" if any slicer has uid
-    if has_uid {
-        w.attr("mc:Ignorable", "x xr10");
-    } else {
-        w.attr("mc:Ignorable", "x");
-    }
-    w.attr("xmlns:x", NS_X);
-    if has_uid {
-        w.attr("xmlns:xr10", NS_XR10);
-    }
-
-    w.end_attrs();
-
-    for slicer in slicers {
-        write_slicer_element(&mut w, slicer);
-    }
-
-    w.end_element("slicers");
-    w.finish()
-}
-
-/// Write a single `<slicer ... />` element (unprefixed — in the default x14 namespace).
-fn write_slicer_element(w: &mut XmlWriter, s: &SlicerDef) {
-    w.start_element("slicer").attr("name", &s.name);
-
-    // xr10:uid comes right after name (matching Excel attribute order)
-    if let Some(ref uid) = s.uid {
-        w.attr("xr10:uid", uid);
-    }
-
-    w.attr("cache", &s.cache);
-
-    // Optional attributes — omit when matching defaults
-    if let Some(ref caption) = s.caption {
-        w.attr("caption", caption);
-    }
-    if let Some(start_item) = s.start_item {
-        w.attr("startItem", &start_item.to_string());
-    }
-    // columnCount default is 1
-    if s.column_count != 1 {
-        w.attr("columnCount", &s.column_count.to_string());
-    }
-    // showCaption default is true (1)
-    if !s.show_caption {
-        w.attr("showCaption", "0");
-    }
-    // level default is 0
-    if s.level != 0 {
-        w.attr("level", &s.level.to_string());
-    }
-    if let Some(ref style) = s.style {
-        w.attr("style", style);
-    }
-    // lockedPosition default is false (0)
-    if s.locked_position {
-        w.attr("lockedPosition", "1");
-    }
-    if let Some(row_height) = s.row_height {
-        w.attr("rowHeight", &row_height.to_string());
-    }
-
-    w.self_close();
-}
-
-// =============================================================================
-// 5b: write_slicer_cache — serializes SlicerCacheDef to slicer cache XML
-// =============================================================================
-
-/// Serialize a slicer cache definition to an `xl/slicerCaches/slicerCache{N}.xml` part.
-///
-/// Uses the x14 namespace as the default namespace (matching Excel's output).
-/// For table-based slicers (x15 path): writes extLst with `x15:tableSlicerCache`.
-/// For pivot-backed slicers (x14 path): writes `data/tabular` with items.
-pub fn write_slicer_cache(cache: &SlicerCacheDef) -> Vec<u8> {
-    let mut w = XmlWriter::new();
-    w.write_declaration();
-
-    // Root element: <slicerCacheDefinition xmlns="...x14...">
-    w.start_element("slicerCacheDefinition")
-        .attr("xmlns", NS_X14)
-        .attr("xmlns:mc", NS_MC)
-        .attr("mc:Ignorable", "x xr10")
-        .attr("xmlns:x", NS_X)
-        .attr("xmlns:xr10", NS_XR10);
-
-    // Add x15 namespace if table slicer cache is present
-    if cache.table_slicer_cache.is_some() {
-        w.attr("xmlns:x15", NS_X15);
-    }
-
-    w.attr("name", &cache.name);
-
-    if let Some(ref uid) = cache.uid {
-        w.attr("xr10:uid", uid);
-    }
-
-    w.attr("sourceName", &cache.source_name).end_attrs();
-
-    // Write pivotTables section if present
-    if !cache.pivot_tables.is_empty() {
-        w.start_element("pivotTables").end_attrs();
-        for pt in &cache.pivot_tables {
-            w.start_element("pivotTable")
-                .attr("tabId", &pt.tab_id.to_string())
-                .attr("name", &pt.name)
-                .self_close();
-        }
-        w.end_element("pivotTables");
-    }
-
-    // Write tabular data (x14 path) if present
-    if let Some(ref tabular) = cache.tabular_data {
-        write_tabular_data(&mut w, tabular);
-    }
-
-    // Write extLst with x15:tableSlicerCache if present
-    if let Some(ref tsc) = cache.table_slicer_cache {
-        write_table_slicer_cache_ext(&mut w, tsc);
-    }
-
-    // Write opaque extLst passthrough if present and no table slicer cache
-    // (table slicer cache generates its own extLst)
-    if cache.table_slicer_cache.is_none() {
-        if let Some(ref ext_xml) = cache.ext_lst {
-            if !crate::infra::xml::raw_xml_contains_relationship_attr(ext_xml) {
-                w.raw_str(ext_xml);
-            }
-        }
-    }
-
-    w.end_element("slicerCacheDefinition");
-    w.finish()
-}
-
-/// Write `<data><tabular ...>` section with items (unprefixed — in the default x14 namespace).
-fn write_tabular_data(w: &mut XmlWriter, data: &SlicerTabularData) {
-    w.start_element("data").end_attrs();
-
-    w.start_element("tabular")
-        .attr("pivotCacheId", &data.pivot_cache_id.to_string());
-
-    // sortOrder — default is "ascending", omit if default
-    if data.sort_order != SlicerSortOrder::Ascending {
-        w.attr("sortOrder", sort_order_str(data.sort_order));
-    }
-    // customListSort — default is false
-    if data.custom_list_sort {
-        w.attr("customListSort", "1");
-    }
-    // showMissing — default is false
-    if data.show_missing {
-        w.attr("showMissing", "1");
-    }
-    // crossFilter — default is "showItemsWithDataAtTop"
-    if data.cross_filter != SlicerCrossFilter::ShowItemsWithDataAtTop {
-        w.attr("crossFilter", cross_filter_str(data.cross_filter));
-    }
-
-    w.end_attrs();
-
-    // Write items
-    if !data.items.is_empty() {
-        w.start_element("items")
-            .attr("count", &data.items.len().to_string())
-            .end_attrs();
-
-        for item in &data.items {
-            w.start_element("i").attr("x", &item.x.to_string());
-            // s — default is false, only write when true
-            if item.s {
-                w.attr("s", "1");
-            }
-            // nd — default is false, only write when true
-            if item.nd {
-                w.attr("nd", "1");
-            }
-            w.self_close();
-        }
-
-        w.end_element("items");
-    }
-
-    w.end_element("tabular");
-    w.end_element("data");
-}
-
-/// Write `<extLst><x:ext uri="..."><x15:tableSlicerCache .../></x:ext></extLst>`.
-///
-/// Uses `x:ext` because `ext` is in the main spreadsheetml namespace (not x14),
-/// and x14 is the default namespace in slicer cache parts.
-fn write_table_slicer_cache_ext(w: &mut XmlWriter, tsc: &TableSlicerCache) {
-    w.start_element("extLst").end_attrs();
-    w.start_element("x:ext")
-        .attr("uri", EXT_URI_TABLE_SLICER_CACHE)
-        .end_attrs();
-
-    w.start_element("x15:tableSlicerCache")
-        .attr("tableId", &tsc.table_id.to_string())
-        .attr("column", &tsc.column.to_string());
-
-    // sortOrder — default is "ascending"
-    if tsc.sort_order != SlicerSortOrder::Ascending {
-        w.attr("sortOrder", sort_order_str(tsc.sort_order));
-    }
-    // customListSort — default is false
-    if tsc.custom_list_sort {
-        w.attr("customListSort", "1");
-    }
-    // crossFilter — default is "showItemsWithDataAtTop"
-    if tsc.cross_filter != SlicerCrossFilter::ShowItemsWithDataAtTop {
-        w.attr("crossFilter", cross_filter_str(tsc.cross_filter));
-    }
-
-    w.self_close();
-
-    w.end_element("x:ext");
-    w.end_element("extLst");
-}
-
-// =============================================================================
-// 5e: Write extLst references for worksheet and workbook
-// =============================================================================
-
-/// Write a worksheet extLst entry that references a slicer part.
-///
-/// Produces:
-/// ```xml
-/// <ext uri="{A8765BA9-...}" xmlns:x14="...">
-///   <x14:slicerList>
-///     <x14:slicer r:id="rId{N}"/>
-///   </x14:slicerList>
-/// </ext>
-/// ```
-///
-/// The caller is responsible for wrapping this in an `<extLst>` container.
-pub fn write_worksheet_slicer_ext(w: &mut XmlWriter, r_id: &str) {
-    w.start_element("ext")
-        .attr("uri", EXT_URI_SLICER_LIST)
-        .attr("xmlns:x14", NS_X14)
-        .end_attrs();
-
-    w.start_element("x14:slicerList").end_attrs();
-    w.start_element("x14:slicer")
-        .attr("r:id", r_id)
-        .self_close();
-    w.end_element("x14:slicerList");
-
-    w.end_element("ext");
-}
-
-/// Write a workbook extLst entry that references slicer caches.
-///
-/// Produces:
-/// ```xml
-/// <ext uri="{BBE1A952-...}" xmlns:x14="...">
-///   <x14:slicerCaches>
-///     <x14:slicerCache r:id="rId{N}"/>
-///     ...
-///   </x14:slicerCaches>
-/// </ext>
-/// ```
-///
-/// The caller is responsible for wrapping this in an `<extLst>` container.
-pub fn write_workbook_slicer_caches_ext(w: &mut XmlWriter, r_ids: &[&str]) {
-    w.start_element("ext")
-        .attr("uri", EXT_URI_SLICER_CACHES)
-        .attr("xmlns:x14", NS_X14)
-        .end_attrs();
-
-    w.start_element("x14:slicerCaches").end_attrs();
-    for r_id in r_ids {
-        w.start_element("x14:slicerCache")
-            .attr("r:id", r_id)
-            .self_close();
-    }
-    w.end_element("x14:slicerCaches");
-
-    w.end_element("ext");
-}
-
-// =============================================================================
-// Helper functions
-// =============================================================================
-
-/// Convert SlicerSortOrder to OOXML string.
-fn sort_order_str(order: SlicerSortOrder) -> &'static str {
-    order.to_ooxml()
-}
-
-/// Convert SlicerCrossFilter to OOXML string.
-fn cross_filter_str(cf: SlicerCrossFilter) -> &'static str {
-    cf.to_ooxml()
-}
-
-// =============================================================================
-// 5h: Unit Tests
-// =============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ooxml_types::slicers::{SlicerPivotTableRef, SlicerTabularItem};
 
     // -------------------------------------------------------------------------
     // 5a: write_slicer_part tests
@@ -541,6 +166,46 @@ mod tests {
         assert!(xml_str.contains("columnCount=\"3\""));
     }
 
+    #[test]
+    fn test_write_slicer_part_uid_namespace_behavior() {
+        let without_uid = vec![SlicerDef {
+            name: "S1".to_string(),
+            cache: "SC1".to_string(),
+            caption: None,
+            start_item: None,
+            column_count: 1,
+            show_caption: true,
+            level: 0,
+            style: None,
+            locked_position: false,
+            row_height: None,
+            uid: None,
+            ext_lst: None,
+        }];
+
+        let xml_without_uid = String::from_utf8(write_slicer_part(&without_uid)).unwrap();
+        assert!(xml_without_uid.contains("mc:Ignorable=\"x\""));
+        assert!(!xml_without_uid.contains("xmlns:xr10="));
+        assert!(!xml_without_uid.contains("xr10:uid="));
+
+        let with_uid = vec![SlicerDef {
+            uid: Some("{11111111-2222-3333-4444-555555555555}".to_string()),
+            ..without_uid[0].clone()
+        }];
+
+        let xml_with_uid = String::from_utf8(write_slicer_part(&with_uid)).unwrap();
+        assert!(xml_with_uid.contains("mc:Ignorable=\"x xr10\""));
+        assert!(xml_with_uid.contains("xmlns:xr10="));
+
+        let name_pos = xml_with_uid.find("name=\"S1\"").unwrap();
+        let uid_pos = xml_with_uid
+            .find("xr10:uid=\"{11111111-2222-3333-4444-555555555555}\"")
+            .unwrap();
+        let cache_pos = xml_with_uid.find("cache=\"SC1\"").unwrap();
+        assert!(name_pos < uid_pos);
+        assert!(uid_pos < cache_pos);
+    }
+
     // -------------------------------------------------------------------------
     // 5b: write_slicer_cache tests
     // -------------------------------------------------------------------------
@@ -588,6 +253,44 @@ mod tests {
 
         // xr10 namespace is always declared in default-namespace mode
         assert!(xml_str.contains("xmlns:xr10="));
+    }
+
+    #[test]
+    fn test_write_slicer_cache_root_namespace_gating() {
+        let pivot_cache = SlicerCacheDef {
+            name: "SC_Pivot".to_string(),
+            uid: None,
+            source_name: "Col".to_string(),
+            pivot_tables: vec![],
+            tabular_data: None,
+            table_slicer_cache: None,
+            ext_lst: None,
+        };
+
+        let pivot_xml = String::from_utf8(write_slicer_cache(&pivot_cache)).unwrap();
+        assert!(pivot_xml.contains("xmlns:xr10="));
+        assert!(!pivot_xml.contains("xmlns:x15="));
+
+        let table_cache = SlicerCacheDef {
+            name: "SC_Table".to_string(),
+            table_slicer_cache: Some(TableSlicerCache {
+                table_id: 1,
+                column: 1,
+                sort_order: SlicerSortOrder::Ascending,
+                custom_list_sort: false,
+                cross_filter: SlicerCrossFilter::ShowItemsWithDataAtTop,
+                ext_lst: None,
+            }),
+            ..pivot_cache
+        };
+
+        let table_xml = String::from_utf8(write_slicer_cache(&table_cache)).unwrap();
+        assert!(table_xml.contains("xmlns:xr10="));
+        assert!(table_xml.contains("xmlns:x15="));
+
+        let name_pos = table_xml.find("name=\"SC_Table\"").unwrap();
+        let source_name_pos = table_xml.find("sourceName=\"Col\"").unwrap();
+        assert!(name_pos < source_name_pos);
     }
 
     #[test]
@@ -726,6 +429,49 @@ mod tests {
         assert!(xml_str.contains("sortOrder=\"descending\""));
         assert!(xml_str.contains("customListSort=\"1\""));
         assert!(xml_str.contains("crossFilter=\"showItemsWithNoData\""));
+    }
+
+    #[test]
+    fn test_write_slicer_cache_raw_ext_lst_passthrough_filtering() {
+        let base_cache = SlicerCacheDef {
+            name: "SC1".to_string(),
+            uid: None,
+            source_name: "Col".to_string(),
+            pivot_tables: vec![],
+            tabular_data: None,
+            table_slicer_cache: None,
+            ext_lst: Some("<extLst><ext uri=\"safe\"><safe/></ext></extLst>".to_string()),
+        };
+
+        let safe_xml = String::from_utf8(write_slicer_cache(&base_cache)).unwrap();
+        assert!(safe_xml.contains("<extLst><ext uri=\"safe\"><safe/></ext></extLst>"));
+
+        let unsafe_cache = SlicerCacheDef {
+            ext_lst: Some(
+                "<extLst><ext uri=\"unsafe\"><node r:id=\"rId1\"/></ext></extLst>".to_string(),
+            ),
+            ..base_cache.clone()
+        };
+
+        let unsafe_xml = String::from_utf8(write_slicer_cache(&unsafe_cache)).unwrap();
+        assert!(!unsafe_xml.contains("uri=\"unsafe\""));
+        assert!(!unsafe_xml.contains("r:id=\"rId1\""));
+
+        let table_cache = SlicerCacheDef {
+            table_slicer_cache: Some(TableSlicerCache {
+                table_id: 1,
+                column: 1,
+                sort_order: SlicerSortOrder::Ascending,
+                custom_list_sort: false,
+                cross_filter: SlicerCrossFilter::ShowItemsWithDataAtTop,
+                ext_lst: None,
+            }),
+            ..base_cache
+        };
+
+        let table_xml = String::from_utf8(write_slicer_cache(&table_cache)).unwrap();
+        assert!(!table_xml.contains("uri=\"safe\""));
+        assert!(table_xml.contains(EXT_URI_TABLE_SLICER_CACHE));
     }
 
     // -------------------------------------------------------------------------
@@ -1607,4 +1353,3 @@ mod tests {
         assert!(tab.items[2].s, "Item 2 should be selected");
         assert!(tab.items[2].nd, "Item 2 nd should be true");
     }
-}

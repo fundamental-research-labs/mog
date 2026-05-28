@@ -67,6 +67,7 @@ pub(in crate::eval) fn is_cacheable(node: &ASTNode) -> bool {
         | ASTNode::CellReference(_)
         | ASTNode::Range(_)
         | ASTNode::StructuredRef(_)
+        | ASTNode::OptionalLambdaParam(_)
         | ASTNode::Omitted => return false,
         _ => {}
     }
@@ -187,16 +188,17 @@ fn hash_node(node: &ASTNode, h: &mut FxHasher) {
         ASTNode::Function { .. } => 11,
         ASTNode::Paren(_) => 12,
         ASTNode::Identifier(_) => 13,
-        ASTNode::Array { .. } => 14,
-        ASTNode::CallExpression { .. } => 15,
-        ASTNode::Omitted => 16,
-        ASTNode::RangeOp { .. } => 17,
-        ASTNode::Union { .. } => 18,
-        ASTNode::ThreeDRef { .. } => 19,
-        ASTNode::UnresolvedThreeDRef { .. } => 20,
-        ASTNode::ExternalSheetRef { .. } => 21,
-        ASTNode::ExternalThreeDRef { .. } => 22,
-        ASTNode::ExternalNameRef { .. } => 23,
+        ASTNode::OptionalLambdaParam(_) => 14,
+        ASTNode::Array { .. } => 15,
+        ASTNode::CallExpression { .. } => 16,
+        ASTNode::Omitted => 17,
+        ASTNode::RangeOp { .. } => 18,
+        ASTNode::Union { .. } => 19,
+        ASTNode::ThreeDRef { .. } => 20,
+        ASTNode::UnresolvedThreeDRef { .. } => 21,
+        ASTNode::ExternalSheetRef { .. } => 22,
+        ASTNode::ExternalThreeDRef { .. } => 23,
+        ASTNode::ExternalNameRef { .. } => 24,
     };
     tag.hash(h);
 
@@ -263,6 +265,7 @@ fn hash_node(node: &ASTNode, h: &mut FxHasher) {
 
         ASTNode::Paren(inner) => hash_node(inner, h),
         ASTNode::Identifier(name) => name.hash(h),
+        ASTNode::OptionalLambdaParam(name) => name.hash(h),
 
         ASTNode::Array { rows } => {
             rows.len().hash(h);

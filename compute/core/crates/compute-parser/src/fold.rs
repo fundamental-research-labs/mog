@@ -89,6 +89,7 @@ pub trait AstFold {
             ASTNode::Function { name, args } => self.fold_function(name, args),
             ASTNode::Paren(inner) => self.fold_paren(*inner),
             ASTNode::Identifier(name) => self.fold_identifier(name),
+            ASTNode::OptionalLambdaParam(name) => self.fold_optional_lambda_param(name),
             ASTNode::Array { rows } => self.fold_array(rows),
             ASTNode::CallExpression { callee, args } => self.fold_call_expr(*callee, args),
             ASTNode::Omitted => self.fold_omitted(),
@@ -122,6 +123,9 @@ pub trait AstFold {
     }
     fn fold_identifier(&mut self, name: String) -> ASTNode {
         ASTNode::Identifier(name)
+    }
+    fn fold_optional_lambda_param(&mut self, name: String) -> ASTNode {
+        ASTNode::OptionalLambdaParam(name)
     }
     fn fold_omitted(&mut self) -> ASTNode {
         ASTNode::Omitted

@@ -1020,7 +1020,9 @@ fn convert_sheet(
     let view = sheet
         .view_options
         .first()
-        .map(SheetView::from_ooxml)
+        .cloned()
+        .map(ooxml_types::worksheet::SheetView::from)
+        .map(|view| SheetView::from_ooxml(&view))
         .unwrap_or_default();
 
     // Extra sheet views (index 1+) for round-trip fidelity of multiple <sheetView> elements.
@@ -1028,7 +1030,9 @@ fn convert_sheet(
         .view_options
         .iter()
         .skip(1)
-        .map(SheetView::from_ooxml)
+        .cloned()
+        .map(ooxml_types::worksheet::SheetView::from)
+        .map(|view| SheetView::from_ooxml(&view))
         .collect();
 
     // --- Comments ---

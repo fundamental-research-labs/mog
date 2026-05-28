@@ -20,8 +20,6 @@ sidecar; it is not semantic authority.
 | Field | Disposition | Destination / owner | Yrs | Writer entrypoint | Package graph path | Test owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | `sheets` | persisted typed metadata | `SheetRoundTripContext` per worksheet | round_trip | sheet feature writers | per-sheet modeled registrations | domain serde tests |
-| `styles_ext_lst_xml` | persisted typed metadata | style extension metadata | round_trip | styles writer | styles part registration | style writer tests |
-| `styles_namespace_attrs` | persisted typed metadata | style root lexical metadata | round_trip | styles writer | styles part registration | style writer tests |
 | `opaque_package_subgraphs` | persisted opaque sidecar | `OpaquePackageSubgraph`; never modeled feature subgraphs | round_trip | `write::opaque_subgraph` filters modeled feature subgraphs | clean subgraph registration | opaque subgraph tests |
 | `workbook_namespace_attrs` | persisted typed metadata | workbook lexical metadata | round_trip | workbook writer | workbook XML | unknown element tests |
 | `workbook_preserved_elements` | persisted typed metadata | workbook unknown element metadata | round_trip | workbook writer after modeled filtering | workbook XML | unknown element tests |
@@ -36,13 +34,6 @@ sidecar; it is not semantic authority.
 | `legacy_drawing_hf_r_id` | persisted typed metadata | header/footer drawing rel hint | round_trip | header/footer writer after owner match | generated sheet rel | header/footer tests |
 | `comments_root_namespace_attrs` | persisted typed metadata | comments lexical metadata | round_trip | comments writer | comments part registration | comments tests |
 | `comment_authors` | persisted typed metadata | comments author metadata | round_trip | comments writer | comments part registration | comments tests |
-| `row_spans` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `bare_empty_rows` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `row_thick_bot` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `row_thick_top` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `row_collapsed` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `row_hidden_explicit_false` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
-| `row_outline_level_zero` | persisted typed metadata | worksheet row lexical hints | round_trip | sheet writer for existing rows | worksheet XML | row metadata tests |
 | `ext_lst_xml` | persisted opaque sidecar | unknown worksheet extensions | round_trip | worksheet writer after modeled filtering | worksheet XML only | extension tests |
 | `preserved_namespace_attrs` | persisted typed metadata | worksheet lexical metadata | round_trip | sheet writer | worksheet XML | namespace tests |
 | `ChartSpec.rt.auxiliary_files` | persisted chart-owned sidecar | chart style/color parts for imported chart identity | chart domain storage | chart writer | chart aux registrations | chart tests |

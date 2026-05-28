@@ -8,7 +8,7 @@ use domain_types::{
     CellData as DomainCellData, CellValue as DomainValue, ChartSpec, ChartType, ColDimension,
     ColStyleEntry, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentFormat,
     FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ObjectSize, ParseOutput,
-    RoundTripContext, RowDimension, SheetData, SheetDimensions, WorkbookStylesheet,
+    RowDimension, SheetData, SheetDimensions, WorkbookStylesheet,
 };
 use formula_types::CellRef;
 use std::sync::Arc;

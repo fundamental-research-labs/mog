@@ -59,22 +59,23 @@ fn workbook_stylesheet_dxfs_export_without_round_trip_context() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         conditional_formats: vec![ConditionalFormat {
-            ranges: vec![CFCellRange {
-                start_row: 0,
-                start_col: 0,
-                end_row: 0,
-                end_col: 0,
-            }],
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![CFCellRange::single(0, 0)],
+            range_identities: None,
             rules: vec![CFRule::CellValue {
-                operator: "greaterThan".to_string(),
-                formula1: "1".to_string(),
-                formula2: None,
+                id: "rule-1".to_string(),
+                operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                value1: serde_json::json!("1"),
+                value2: None,
                 style: CFStyle {
                     dxf_id: Some(0),
                     ..Default::default()
                 },
                 priority: 1,
-                stop_if_true: false,
+                stop_if_true: Some(false),
+                text: None,
             }],
         }],
         ..Default::default()
@@ -206,7 +207,7 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
         }],
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
-            cells: vec![CellData {
+            cells: vec![DomainCellData {
                 row: 0,
                 col: 0,
                 value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),

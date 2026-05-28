@@ -195,8 +195,10 @@ pub fn build_print_settings_output(
 
     let settings = PrintSettingsOutput {
         paper_size: page_setup.and_then(|p| p.paper_size.map(|ps| ps.as_u32() as u8)),
-        paper_width: page_setup.and_then(|p| p.paper_width.as_ref().map(|v| v.to_ooxml())),
-        paper_height: page_setup.and_then(|p| p.paper_height.as_ref().map(|v| v.to_ooxml())),
+        paper_width: page_setup
+            .and_then(|p| p.paper_width.as_ref().map(|v| v.to_ooxml().to_string())),
+        paper_height: page_setup
+            .and_then(|p| p.paper_height.as_ref().map(|v| v.to_ooxml().to_string())),
         orientation: page_setup
             .map(|p| p.orientation.to_ooxml().to_string())
             .unwrap_or_else(|| "default".to_string()),

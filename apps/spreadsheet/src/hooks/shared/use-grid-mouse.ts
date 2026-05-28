@@ -67,6 +67,15 @@ export type {
 
 type SelectionBorderEdge = 'left' | 'right' | 'up' | 'down';
 
+interface NativeHandledCellDoubleClick {
+  row: number;
+  col: number;
+  sheetId: string;
+  clientX: number;
+  clientY: number;
+  time: number;
+}
+
 /**
  * Get mouse position relative to container.
  */
@@ -104,6 +113,26 @@ function dispatchMoveToSelectionEdge(
   else if (edge === 'left') dispatch('MOVE_TO_EDGE_LEFT');
   else if (edge === 'up') dispatch('MOVE_TO_EDGE_UP');
   else dispatch('MOVE_TO_EDGE_DOWN');
+}
+
+function isMatchingNativeCellDoubleClick(
+  handled: NativeHandledCellDoubleClick | null,
+  cell: { row: number; col: number },
+  sheetId: string,
+  event: GridMouseEvent,
+): boolean {
+  if (!handled) return false;
+  const maxAgeMs = 1000;
+  const coordinateTolerancePx = 2;
+
+  return (
+    Date.now() - handled.time <= maxAgeMs &&
+    handled.sheetId === sheetId &&
+    handled.row === cell.row &&
+    handled.col === cell.col &&
+    Math.abs(handled.clientX - event.clientX) <= coordinateTolerancePx &&
+    Math.abs(handled.clientY - event.clientY) <= coordinateTolerancePx
+  );
 }
 
 // =============================================================================
@@ -304,6 +333,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     edge: SelectionBorderEdge;
     time: number;
   } | null>(null);
+  const nativeHandledCellDoubleClickRef = useRef<NativeHandledCellDoubleClick | null>(null);
   const pendingFormatPainterTargetRef = useRef(false);
 
   // Page break dragging state
@@ -413,6 +443,65 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     onEditSparkline,
     onCommentIndicatorClick,
   });
+
+  const handleCellDoubleClickAtViewportPoint = useCallback(
+    (
+      cell: { row: number; col: number },
+      point: { x: number; y: number },
+      geometry: {
+        getCellRect(
+          cell: { row: number; col: number },
+        ): { x: number; y: number; width: number; height: number } | null;
+      },
+    ): boolean => {
+      const dblCellRect = geometry.getCellRect(cell);
+      if (!dblCellRect) return false;
+
+      const clickPos = {
+        x: point.x - dblCellRect.x,
+        y: point.y - dblCellRect.y,
+        width: dblCellRect.width,
+        height: dblCellRect.height,
+      };
+
+      if (clickPos.x >= clickPos.width - COLUMN_RESIZE_EDGE_WIDTH) {
+        void (async () => {
+          const ws = wb.getSheetById(activeSheetId);
+          const tableHitResult = await getTableHitRegion(ws, cell.row, cell.col, {
+            clickXInCell: clickPos.x,
+            clickYInCell: clickPos.y,
+            cellWidth: clickPos.width,
+            cellHeight: clickPos.height,
+          });
+
+          if (tableHitResult.region === 'column-resize-edge') {
+            const [{ autoFitColumns }, { getTextMeasurementService }] = await Promise.all([
+              import('../../systems/grid-editing/features/autofit'),
+              import('@mog/grid-renderer'),
+            ]);
+            const textMeasurement = getTextMeasurementService();
+            await autoFitColumns(
+              activeSheetId,
+              [cell.col],
+              textMeasurement,
+              (entries) => ws.formatValues(entries),
+              wb ?? undefined,
+            );
+          }
+        })();
+      }
+
+      const clickPosition: CellClickPosition = {
+        clickInCellX: clickPos.x,
+        clickInCellY: clickPos.y,
+        cellWidth: clickPos.width,
+        cellHeight: clickPos.height,
+      };
+      void cellInteraction.handleCellDoubleClick(cell, clickPosition);
+      return true;
+    },
+    [activeSheetId, wb, cellInteraction],
+  );
 
   const applyPendingFormatPainterTarget = useCallback(() => {
     if (!pendingFormatPainterTargetRef.current) {
@@ -1612,50 +1701,19 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       if (hit.type === 'cell') {
         const cell = { row: hit.row, col: hit.col };
 
-        // Get click position within cell
-        const dblCellRect = geometry.getCellRect(cell);
-        if (!dblCellRect) return; // Cell not visible, shouldn't happen
-        const clickPos = {
-          x: x - dblCellRect.x,
-          y: y - dblCellRect.y,
-          width: dblCellRect.width,
-          height: dblCellRect.height,
-        };
+        if (
+          isMatchingNativeCellDoubleClick(
+            nativeHandledCellDoubleClickRef.current,
+            cell,
+            activeSheetId,
+            e,
+          )
+        ) {
+          nativeHandledCellDoubleClickRef.current = null;
+          return;
+        }
 
-        // Table header column edge auto-fit (async)
-        void (async () => {
-          const ws = wb.getSheetById(activeSheetId);
-          const tableHitResult = await getTableHitRegion(ws, cell.row, cell.col, {
-            clickXInCell: clickPos.x,
-            clickYInCell: clickPos.y,
-            cellWidth: clickPos.width,
-            cellHeight: clickPos.height,
-          });
-
-          if (tableHitResult.region === 'column-resize-edge') {
-            const [{ autoFitColumns }, { getTextMeasurementService }] = await Promise.all([
-              import('../../systems/grid-editing/features/autofit'),
-              import('@mog/grid-renderer'),
-            ]);
-            const textMeasurement = getTextMeasurementService();
-            await autoFitColumns(
-              activeSheetId,
-              [cell.col],
-              textMeasurement,
-              (entries) => ws.formatValues(entries),
-              wb ?? undefined,
-            );
-          }
-        })();
-
-        // Use cell interaction hook for double-click handling
-        const clickPosition: CellClickPosition = {
-          clickInCellX: clickPos.x,
-          clickInCellY: clickPos.y,
-          cellWidth: clickPos.width,
-          cellHeight: clickPos.height,
-        };
-        cellInteraction.handleCellDoubleClick(cell, clickPosition);
+        handleCellDoubleClickAtViewportPoint(cell, { x, y }, geometry);
       }
     },
     [
@@ -1668,7 +1726,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       selection,
       wb,
       dispatch,
-      cellInteraction,
+      handleCellDoubleClickAtViewportPoint,
     ],
   );
 
@@ -1741,6 +1799,45 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       }
 
       if (e.button !== 0) return;
+
+      if (e.detail === 2) {
+        const geometry = getGeometry();
+        const hitTest = getHitTest();
+        if (geometry && hitTest) {
+          const hit = hitTest.atViewportPoint({ x: relX, y: relY });
+          if (hit.type === 'cell') {
+            const cell = { row: hit.row, col: hit.col };
+            const point = { x: relX, y: relY };
+            const lastRange = selection.ranges[selection.ranges.length - 1];
+            const lastRangeRect = lastRange ? geometry.getRangeRects(lastRange)[0] : null;
+            const firstRange = selection.ranges[0];
+            const firstRangeRect = firstRange ? geometry.getRangeRects(firstRange)[0] : null;
+            const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
+            const isReservedSelectionGesture =
+              (lastRangeRect && isOnFillHandle(point, lastRangeRect)) ||
+              (firstRangeRect && isOnSelectionBorder(point, firstRangeRect, borderTolerance));
+
+            if (
+              !isReservedSelectionGesture &&
+              handleCellDoubleClickAtViewportPoint(cell, point, geometry)
+            ) {
+              const now = Date.now();
+              clickCountRef.current = 2;
+              lastClickTimeRef.current = now;
+              lastClickCellRef.current = { ...cell, sheetId: activeSheetId };
+              nativeHandledCellDoubleClickRef.current = {
+                ...cell,
+                sheetId: activeSheetId,
+                clientX: e.clientX,
+                clientY: e.clientY,
+                time: now,
+              };
+              return;
+            }
+          }
+        }
+      }
+
       coordinator.input.setActivePointerId(e.pointerId);
       handleMouseDown(e);
     };
@@ -1806,6 +1903,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     formulaRangeDrag,
     selection,
     getGeometry,
+    getHitTest,
+    activeSheetId,
+    handleCellDoubleClickAtViewportPoint,
   ]);
 
   // ==========================================================================

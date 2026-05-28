@@ -249,6 +249,69 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
 }
 
 #[test]
+fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
+    let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
+    imported_styles.cell_xfs.push(ooxml_types::styles::CellXfDef {
+        num_fmt_id: Some(49),
+        font_id: Some(0),
+        fill_id: Some(0),
+        border_id: Some(0),
+        xf_id: Some(0),
+        apply_number_format: Some(true),
+        ..Default::default()
+    });
+
+    let output = ParseOutput {
+        workbook_stylesheet: Some(WorkbookStylesheet::from_stylesheet(
+            ooxml_types::styles::Stylesheet {
+                num_fmts: imported_styles.num_fmts,
+                fonts: imported_styles.fonts,
+                fills: imported_styles.fills,
+                borders: imported_styles.borders,
+                cell_style_xfs: imported_styles.cell_style_xfs,
+                cell_xfs: imported_styles.cell_xfs,
+                cell_styles: imported_styles.cell_styles,
+                ..Default::default()
+            },
+            Vec::new(),
+            None,
+        )),
+        style_palette: vec![DocumentFormat {
+            number_format: Some("this palette must not be export authority".to_string()),
+            ..Default::default()
+        }],
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+                style_id: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"<cellXfs count="2">"#), "{styles_xml}");
+    assert!(
+        styles_xml.contains(r#"<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>"#),
+        "{styles_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
+        "workbook style ID 1 must emit as s=\"1\", got: {sheet_xml}"
+    );
+}
+
+#[test]
 fn test_style_mapping_border() {
     let palette = vec![DocumentFormat {
         border: Some(BorderFormat {
@@ -343,12 +406,15 @@ fn test_col_styles_roundtrip() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
+    let style_remapper =
+        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,
         &no_dt_bodies,
         &no_dt_regions,
         true,
+        &style_remapper,
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(

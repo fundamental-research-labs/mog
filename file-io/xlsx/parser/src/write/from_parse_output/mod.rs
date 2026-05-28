@@ -27,6 +27,7 @@ mod rich_data;
 mod sheet_builder;
 mod sheet_parts;
 mod sheet_preservation;
+mod style_remap;
 mod styles;
 mod threaded_comments;
 mod vml_merge;

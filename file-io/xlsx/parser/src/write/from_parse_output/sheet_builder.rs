@@ -14,6 +14,8 @@ use crate::write::{Selection, SheetView};
 use ooxml_types::worksheet::Pane;
 use value_types::CellError;
 
+use super::style_remap::StyleExportRemapper;
+
 /// Build a `SheetWriter` from a `SheetData`.
 ///
 /// `data_table_body_positions` is the set of `(row, col)` body-cell positions
@@ -31,6 +33,7 @@ pub(super) fn build_sheet(
     data_table_body_positions: &HashSet<(u32, u32)>,
     data_table_regions: &[DataTableRegion],
     emit_cell_metadata_refs: bool,
+    style_remapper: &StyleExportRemapper,
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
     if let Some(sheet_properties) = &sheet_data.sheet_properties {
@@ -96,7 +99,11 @@ pub(super) fn build_sheet(
     let col_style_map: std::collections::HashMap<u32, u32> = sheet_data
         .col_styles
         .iter()
-        .map(|cs| (cs.col, cs.style_id + 1))
+        .filter_map(|cs| {
+            style_remapper
+                .emitted_cell_xf_id(cs.style_id)
+                .map(|style_id| (cs.col, style_id))
+        })
         .collect();
 
     // Build per-column outline level lookup from outline groups so that
@@ -192,7 +199,7 @@ pub(super) fn build_sheet(
                 custom_width: false,
                 hidden,
                 best_fit: false,
-                style: Some(cs.style_id + 1),
+                style: style_remapper.emitted_cell_xf_id(cs.style_id),
                 has_width: true,
                 outline_level,
                 collapsed: is_collapsed,
@@ -300,7 +307,7 @@ pub(super) fn build_sheet(
         cw.best_fit = tcr.best_fit;
         cw.collapsed = tcr.collapsed;
         if let Some(sid) = tcr.style_id {
-            cw.style = Some(sid + 1);
+            cw.style = style_remapper.emitted_cell_xf_id(sid);
         }
         writer.add_col(cw);
     }
@@ -350,7 +357,9 @@ pub(super) fn build_sheet(
         }
     }
     for rs in &sheet_data.row_styles {
-        writer.set_row_style(rs.row, rs.style_id + 1);
+        if let Some(style_id) = style_remapper.emitted_cell_xf_id(rs.style_id) {
+            writer.set_row_style(rs.row, style_id);
+        }
     }
 
     // ── Cells ───────────────────────────────────────────────────────────
@@ -389,7 +398,12 @@ pub(super) fn build_sheet(
             if sanitized.style_id.is_none() {
                 sanitized.style_id = authored_style_at(sanitized.row, sanitized.col);
             }
-            convert_cell_with_metadata_refs(&sanitized, shared_strings, emit_cell_metadata_refs)
+            convert_cell_with_metadata_refs(
+                &sanitized,
+                shared_strings,
+                emit_cell_metadata_refs,
+                style_remapper,
+            )
         } else {
             let mut canonical = cell.clone();
             if canonical.style_id.is_none() {
@@ -402,18 +416,25 @@ pub(super) fn build_sheet(
                     canonical.formula = Some(data_table_formula_text(cell_formula));
                 }
             }
-            convert_cell_with_metadata_refs(&canonical, shared_strings, emit_cell_metadata_refs)
+            convert_cell_with_metadata_refs(
+                &canonical,
+                shared_strings,
+                emit_cell_metadata_refs,
+                style_remapper,
+            )
         };
         writer.add_cell(writer_cell);
     }
     for run in &sheet_data.authored_style_runs {
-        writer.add_authored_style_run(AuthoredStyleRun {
-            start_row: run.start_row,
-            start_col: run.start_col,
-            end_row: run.end_row,
-            end_col: run.end_col,
-            style_id: run.style_id + 1,
-        });
+        if let Some(style_id) = style_remapper.emitted_cell_xf_id(run.style_id) {
+            writer.add_authored_style_run(AuthoredStyleRun {
+                start_row: run.start_row,
+                start_col: run.start_col,
+                end_row: run.end_row,
+                end_col: run.end_col,
+                style_id,
+            });
+        }
     }
 
     // ── Apply default descent to all data rows ─────────────────────────
@@ -907,15 +928,19 @@ pub(super) fn convert_cell(
     cell: &DomainCellData,
     shared_strings: &mut SharedStringsWriter,
 ) -> CellData {
-    convert_cell_with_metadata_refs(cell, shared_strings, true)
+    let style_remapper = StyleExportRemapper::palette_projection(u32::MAX);
+    convert_cell_with_metadata_refs(cell, shared_strings, true, &style_remapper)
 }
 
 fn convert_cell_with_metadata_refs(
     cell: &DomainCellData,
     shared_strings: &mut SharedStringsWriter,
     emit_cell_metadata_refs: bool,
+    style_remapper: &StyleExportRemapper,
 ) -> CellData {
-    let style_index = cell.style_id.map(|id| id + 1);
+    let style_index = cell
+        .style_id
+        .and_then(|id| style_remapper.emitted_cell_xf_id(id));
 
     let authored_numeric_value = matching_authored_numeric_value(cell);
     let value = match (&cell.value, &cell.formula) {

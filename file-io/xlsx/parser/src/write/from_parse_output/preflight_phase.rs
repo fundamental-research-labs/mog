@@ -3,20 +3,14 @@ use domain_types::ParseOutput;
 use super::differential_formats;
 use super::export_context::WorkbookPreflight;
 use super::sheet_parts;
-use super::styles::{build_styles, output_references_style_ids};
+use super::style_remap::build_style_export_plan;
 use crate::write::pivot_writer;
 
 pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
     let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
 
-    let has_style_references = output_references_style_ids(&remapped_output);
-    let style_palette_for_export = if has_style_references {
-        remapped_output.style_palette.as_slice()
-    } else {
-        &[]
-    };
-
-    let mut styles_writer = build_styles(style_palette_for_export);
+    let style_export = build_style_export_plan(&remapped_output);
+    let mut styles_writer = style_export.writer;
     styles_writer.dxfs = registry_dxfs;
     if styles_writer.dxfs.is_empty() {
         styles_writer.dxfs = differential_formats::collect(&remapped_output);
@@ -37,7 +31,11 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
-    } = sheet_parts::build_sheet_parts(&remapped_output, &mut shared_strings);
+    } = sheet_parts::build_sheet_parts(
+        &remapped_output,
+        &mut shared_strings,
+        &style_export.remapper,
+    );
 
     let pivot_data = pivot_writer::build_pivot_data(&remapped_output);
 
@@ -53,4 +51,3 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
         all_image_blobs: Vec::new(),
     }
 }
-

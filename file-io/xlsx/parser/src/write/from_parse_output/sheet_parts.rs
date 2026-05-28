@@ -5,6 +5,7 @@ use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
 use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
+use super::style_remap::StyleExportRemapper;
 use super::{chart_replay, sheet_preservation};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
@@ -30,6 +31,7 @@ pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> Shared
 pub(super) fn build_sheet_parts(
     output: &domain_types::ParseOutput,
     shared_strings: &mut SharedStringsWriter,
+    style_remapper: &StyleExportRemapper,
 ) -> BuiltSheetParts {
     let mut sheet_writers = Vec::with_capacity(output.sheets.len());
     let mut sheet_extras = Vec::with_capacity(output.sheets.len());
@@ -101,6 +103,7 @@ pub(super) fn build_sheet_parts(
             &data_table_body_positions,
             &sheet_data_table_regions,
             emit_cell_metadata_refs,
+            style_remapper,
         );
         if !sheet_data.worksheet_root_namespaces.is_empty() {
             sheet_writer.set_root_namespaces(NamespaceMap::from(

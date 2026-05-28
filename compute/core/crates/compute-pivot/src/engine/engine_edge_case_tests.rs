@@ -494,3 +494,77 @@ fn mixed_types_sum_skips_text_values() {
         "Banking sum (numerics only, text skipped)",
     );
 }
+
+// ============================================================================
+// Aggregation: COUNT (numeric only) vs COUNTA (non-blank, all types)
+// ============================================================================
+//
+// The wire-format `AggregateFunction` enum keeps the engine-neutral split
+// between `Count` (Excel COUNT — numeric only) and `CountA` (Excel COUNTA
+// — non-blank including text). This makes the contract crisp at the
+// bridge: enum values map 1:1 to engine semantics; the user-facing TS
+// `PivotAggregation` vocabulary handles the Excel UI conventions
+// (where Count = COUNTA) without any reverse-mapping table on the wire.
+
+#[test]
+fn aggregate_count_vs_counta_distinct_semantics() {
+    // OrderId column has 4 numbers, 1 text, 1 blank.
+    //   COUNTA (non-blank) => 5
+    //   COUNT  (numeric)   => 4
+    let fields = vec![
+        PivotField {
+            id: FieldId::from("col0"),
+            name: "Region".to_string(),
+            source_column: 0,
+            data_type: DetectedDataType::String,
+            ..Default::default()
+        },
+        PivotField {
+            id: FieldId::from("col1"),
+            name: "OrderId".to_string(),
+            source_column: 1,
+            data_type: DetectedDataType::String,
+            ..Default::default()
+        },
+    ];
+
+    let data = vec![
+        vec![cv_text("Region"), cv_text("OrderId")],
+        vec![cv_text("North"), cv_num(1.0)],
+        vec![cv_text("North"), cv_num(2.0)],
+        vec![cv_text("North"), cv_text("A3")],
+        vec![cv_text("South"), cv_num(4.0)],
+        vec![cv_text("South"), cv_num(5.0)],
+        vec![cv_text("North"), CellValue::Null],
+    ];
+
+    // COUNTA — counts all 5 non-blank cells (4 numbers + 1 text).
+    let placements_a = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::CountA),
+        ),
+    ];
+    let config_a = make_base_config(fields.clone(), placements_a, vec![]);
+    let result_a = compute(&config_a, &data, Some(&expand_all()));
+    let gt_a = result_a.grand_totals.row.as_ref().expect("counta gt");
+    assert_eq!(gt_a[0], cv_num(5.0), "COUNTA grand total = 5 (non-blank)");
+
+    // COUNT — counts only the 4 numeric cells.
+    let placements_c = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::Count),
+        ),
+    ];
+    let config_c = make_base_config(fields, placements_c, vec![]);
+    let result_c = compute(&config_c, &data, Some(&expand_all()));
+    let gt_c = result_c.grand_totals.row.as_ref().expect("count gt");
+    assert_eq!(gt_c[0], cv_num(4.0), "COUNT grand total = 4 (numbers only)");
+}

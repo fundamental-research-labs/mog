@@ -424,3 +424,228 @@ fn sensitivity_show_items_with_no_data() {
         result_show.rows.len(),
     );
 }
+
+// ============================================================================
+// Filter type coercion at the engine boundary
+// ============================================================================
+
+#[test]
+fn filter_include_text_value_matches_number_cells() {
+    // Cell values stored as Number(2024.0); filter typed by user as "2024".
+    // The relational engine should treat the textual filter value as
+    // matching numeric cells with the same value, without the kernel having
+    // to pre-coerce strings to numbers.
+    let fields = vec![
+        PivotField {
+            id: FieldId::from("col0"),
+            name: "Year".to_string(),
+            source_column: 0,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+        PivotField {
+            id: FieldId::from("col1"),
+            name: "Revenue".to_string(),
+            source_column: 1,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+    ];
+
+    let placements = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::Sum),
+        ),
+        make_placement("col0", PivotFieldArea::Filter, 0, None),
+    ];
+
+    let filters = vec![PivotFilter {
+        field_id: FieldId::from("col0"),
+        // Textual filter value — must match Number cells.
+        include_values: Some(vec![cv_text("2024")]),
+        exclude_values: None,
+        condition: None,
+        top_bottom: None,
+        show_items_with_no_data: None,
+    }];
+
+    let config = make_base_config(fields, placements, filters);
+
+    let data = vec![
+        vec![cv_text("Year"), cv_text("Revenue")],
+        vec![cv_num(2023.0), cv_num(100.0)],
+        vec![cv_num(2024.0), cv_num(300.0)],
+        vec![cv_num(2024.0), cv_num(50.0)],
+    ];
+
+    let result = compute(&config, &data, Some(&expand_all()));
+    assert!(result.errors.is_none(), "errors: {:?}", result.errors);
+
+    // Only 2024 rows survive; group total is 350.
+    assert_eq!(result.rows.len(), 1, "exactly one surviving Year group");
+    let row = &result.rows[0];
+    assert_eq!(row.values[0], cv_num(350.0));
+}
+
+#[test]
+fn filter_include_number_value_matches_text_cells() {
+    // Inverse direction: numeric filter value should also match text cells
+    // whose content parses to the same number.
+    let fields = vec![
+        PivotField {
+            id: FieldId::from("col0"),
+            name: "Code".to_string(),
+            source_column: 0,
+            data_type: DetectedDataType::String,
+            ..Default::default()
+        },
+        PivotField {
+            id: FieldId::from("col1"),
+            name: "Revenue".to_string(),
+            source_column: 1,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+    ];
+
+    let placements = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::Sum),
+        ),
+        make_placement("col0", PivotFieldArea::Filter, 0, None),
+    ];
+
+    let filters = vec![PivotFilter {
+        field_id: FieldId::from("col0"),
+        include_values: Some(vec![cv_num(100.0)]),
+        exclude_values: None,
+        condition: None,
+        top_bottom: None,
+        show_items_with_no_data: None,
+    }];
+
+    let config = make_base_config(fields, placements, filters);
+    let data = vec![
+        vec![cv_text("Code"), cv_text("Revenue")],
+        vec![cv_text("100"), cv_num(50.0)],
+        vec![cv_text("200"), cv_num(75.0)],
+    ];
+
+    let result = compute(&config, &data, Some(&expand_all()));
+    assert!(result.errors.is_none());
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].values[0], cv_num(50.0));
+}
+
+#[test]
+fn filter_exclude_text_value_excludes_number_cells() {
+    // Exclude `"2023"` (text) should drop Number(2023.0) cells too.
+    let fields = vec![
+        PivotField {
+            id: FieldId::from("col0"),
+            name: "Year".to_string(),
+            source_column: 0,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+        PivotField {
+            id: FieldId::from("col1"),
+            name: "Revenue".to_string(),
+            source_column: 1,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+    ];
+
+    let placements = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::Sum),
+        ),
+        make_placement("col0", PivotFieldArea::Filter, 0, None),
+    ];
+
+    let filters = vec![PivotFilter {
+        field_id: FieldId::from("col0"),
+        include_values: None,
+        exclude_values: Some(vec![cv_text("2023")]),
+        condition: None,
+        top_bottom: None,
+        show_items_with_no_data: None,
+    }];
+
+    let config = make_base_config(fields, placements, filters);
+    let data = vec![
+        vec![cv_text("Year"), cv_text("Revenue")],
+        vec![cv_num(2023.0), cv_num(100.0)],
+        vec![cv_num(2024.0), cv_num(300.0)],
+    ];
+
+    let result = compute(&config, &data, Some(&expand_all()));
+    assert_eq!(result.rows.len(), 1, "2023 must be excluded");
+    assert_eq!(result.rows[0].values[0], cv_num(300.0));
+}
+
+#[test]
+fn filter_strings_with_same_textual_value_still_match() {
+    // Sanity check that the type-tolerant matching does not break ordinary
+    // text-vs-text filtering: include `"North"` against text cells.
+    let fields = vec![
+        PivotField {
+            id: FieldId::from("col0"),
+            name: "Region".to_string(),
+            source_column: 0,
+            data_type: DetectedDataType::String,
+            ..Default::default()
+        },
+        PivotField {
+            id: FieldId::from("col1"),
+            name: "Revenue".to_string(),
+            source_column: 1,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        },
+    ];
+
+    let placements = vec![
+        make_placement("col0", PivotFieldArea::Row, 0, None),
+        make_placement(
+            "col1",
+            PivotFieldArea::Value,
+            0,
+            Some(AggregateFunction::Sum),
+        ),
+        make_placement("col0", PivotFieldArea::Filter, 0, None),
+    ];
+
+    let filters = vec![PivotFilter {
+        field_id: FieldId::from("col0"),
+        include_values: Some(vec![cv_text("North")]),
+        exclude_values: None,
+        condition: None,
+        top_bottom: None,
+        show_items_with_no_data: None,
+    }];
+
+    let config = make_base_config(fields, placements, filters);
+    let data = vec![
+        vec![cv_text("Region"), cv_text("Revenue")],
+        vec![cv_text("North"), cv_num(100.0)],
+        vec![cv_text("South"), cv_num(200.0)],
+    ];
+
+    let result = compute(&config, &data, Some(&expand_all()));
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].values[0], cv_num(100.0));
+}

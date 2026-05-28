@@ -19,8 +19,24 @@ import { getUIStore } from './handler-utils';
 /**
  * Open Goal Seek dialog
  */
-export const OPEN_GOAL_SEEK_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().openGoalSeekDialog();
+export const OPEN_GOAL_SEEK_DIALOG: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  let setCell: string | undefined;
+  const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
+  const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
+  if (
+    activeCell &&
+    ranges.length === 1 &&
+    ranges[0].startRow === ranges[0].endRow &&
+    ranges[0].startCol === ranges[0].endCol
+  ) {
+    const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
+    const cell = await ws.getCell(activeCell.row, activeCell.col);
+    if (typeof cell?.formula === 'string' && cell.formula.length > 0) {
+      setCell = toA1(activeCell.row, activeCell.col);
+    }
+  }
+
+  getUIStore(deps).getState().openGoalSeekDialog(setCell ? { setCell } : undefined);
   return { handled: true };
 };
 
@@ -59,10 +75,21 @@ export const EXECUTE_GOAL_SEEK: AsyncActionHandler = async (deps): Promise<Actio
   try {
     const ws = deps.workbook.getSheetById(state.activeSheetId);
     const result = await ws.whatIf.goalSeek(setCell, targetValue, byChangingCell);
+    let achievedValue = result.value;
+    try {
+      const setPos = parseA1(setCell.toUpperCase());
+      const displayValue = await ws.getDisplayValue(setPos.row, setPos.col);
+      const numericDisplayValue = Number(displayValue);
+      if (Number.isFinite(numericDisplayValue)) {
+        achievedValue = numericDisplayValue;
+      }
+    } catch {
+      // Keep the solver result if the formula cell cannot be read back.
+    }
     state.setGoalSeekResult({
       found: result.found,
       solutionValue: result.value,
-      achievedValue: result.value,
+      achievedValue,
       iterations: result.iterations ?? 0,
     });
   } catch (err) {
@@ -122,6 +149,24 @@ export const CANCEL_GOAL_SEEK: ActionHandler = (deps): ActionResult => {
   const state = getUIStore(deps).getState();
   state.setGoalSeekStatus('idle');
   state.setGoalSeekResult(null);
+  return { handled: true };
+};
+
+export const OPEN_FORECAST_SHEET_DIALOG: ActionHandler = (deps): ActionResult => {
+  const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
+  const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
+  const rangeLabel =
+    ranges.length === 1
+      ? `${toA1(ranges[0].startRow, ranges[0].startCol)}:${toA1(ranges[0].endRow, ranges[0].endCol)}`
+      : activeCell
+        ? toA1(activeCell.row, activeCell.col)
+        : 'the selected range';
+
+  if (typeof window !== 'undefined') {
+    window.alert(
+      `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${rangeLabel}.`,
+    );
+  }
   return { handled: true };
 };
 

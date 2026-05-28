@@ -16,6 +16,7 @@ use compute_document::cell_serde::{
 
 use super::IdAllocator;
 use super::helpers::get_or_create_cell_id_for_pos;
+use crate::storage::sheet::schemas;
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
 };
@@ -674,10 +675,12 @@ pub(super) fn hydrate_conditional_formats(
 
 /// Hydrate data validations using structured Y.Map entries via `yrs_schema::validation`.
 ///
-/// Validations live solely in `properties/dataValidations` as a `Y.Array<Y.Map>`.
-/// The runtime schemas API is a view over the same store.
+/// Validations are preserved in `properties/dataValidations` for lossless
+/// export and written through to the live range-backed validation store.
 pub(super) fn hydrate_data_validations(
     txn: &mut yrs::TransactionMut,
+    sheets_root: &MapRef,
+    sheet_id: &cell_types::SheetId,
     meta_map: &MapRef,
     data_validations: &[domain_types::domain::validation::ValidationSpec],
     disable_prompts: bool,
@@ -695,6 +698,8 @@ pub(super) fn hydrate_data_validations(
     }
 
     if !data_validations.is_empty() {
+        schemas::write_imported_validation_specs(txn, sheets_root, sheet_id, data_validations, "");
+
         let dv_arr: yrs::ArrayRef =
             meta_map.insert(txn, "dataValidations", yrs::ArrayPrelim::default());
 
@@ -724,6 +729,8 @@ pub(super) fn hydrate_data_validations(
 
 pub(super) fn hydrate_x14_data_validations(
     txn: &mut yrs::TransactionMut,
+    sheets_root: &MapRef,
+    sheet_id: &cell_types::SheetId,
     meta_map: &MapRef,
     data_validations: &[domain_types::domain::validation::ValidationSpec],
     disable_prompts: bool,
@@ -741,6 +748,14 @@ pub(super) fn hydrate_x14_data_validations(
     }
 
     if !data_validations.is_empty() {
+        schemas::write_imported_validation_specs(
+            txn,
+            sheets_root,
+            sheet_id,
+            data_validations,
+            "x14-",
+        );
+
         let dv_arr: yrs::ArrayRef =
             meta_map.insert(txn, "x14DataValidations", yrs::ArrayPrelim::default());
 

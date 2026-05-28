@@ -16,13 +16,18 @@
 
 import { useCallback, useEffect } from 'react';
 import { useUIStore } from '../../../internal-api';
-import { useSpreadsheetHostCommandsOptional } from '../../../infra/context';
+import {
+  useActiveSheetId,
+  useSpreadsheetHostCommandsOptional,
+  useWorkbook,
+} from '../../../infra/context';
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  useShellService,
 } from '@mog/shell';
 import {
   DATA_TOOLS_COLLAPSE_CONFIG,
@@ -60,6 +65,47 @@ import {
   TextToColumnsIcon,
   UngroupIcon,
 } from '../primitives/ToolbarIcons';
+
+type JsonRow = Record<string, unknown>;
+
+function isPlainObject(value: unknown): value is JsonRow {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function flattenJsonValue(value: unknown, prefix = '', out: JsonRow = {}): JsonRow {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      flattenJsonValue(item, prefix ? `${prefix}.${index}` : `${index}`, out),
+    );
+    return out;
+  }
+  if (isPlainObject(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      flattenJsonValue(child, prefix ? `${prefix}.${key}` : key, out);
+    }
+    return out;
+  }
+  out[prefix || 'value'] = value;
+  return out;
+}
+
+function jsonToRows(value: unknown): { headers: string[]; rows: JsonRow[] } {
+  const rows = (Array.isArray(value) ? value : [value]).map((item) => flattenJsonValue(item));
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).sort();
+  return { headers: headers.length > 0 ? headers : ['value'], rows };
+}
+
+function cellValueFromJson(value: unknown): string | number | boolean | null {
+  if (
+    value == null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  return JSON.stringify(value);
+}
 
 // =============================================================================
 // Inline Icons for Get Data dropdown
@@ -152,6 +198,9 @@ export function DataRibbon({
   // Get dispatch for action handling
   const dispatch = useDispatch();
   const hostCommands = useSpreadsheetHostCommandsOptional();
+  const shellService = useShellService();
+  const workbook = useWorkbook();
+  const activeSheetId = useActiveSheetId();
 
   // F1: Validation circles state
   const validationCirclesVisible = useUIStore((s) => s.validationCirclesVisible);
@@ -199,13 +248,14 @@ export function DataRibbon({
         if (onImportCsv) {
           onImportCsv(file);
         } else {
-          // Default behavior: log for now (parent component should handle)
-          console.log('CSV file selected:', file.name);
+          void file.arrayBuffer().then((buffer) =>
+            shellService.loadDocument(file.name, new Uint8Array(buffer), { kind: 'csv' }),
+          );
         }
       }
     };
     input.click();
-  }, [hostCommands, onImportCsv, setIsGetDataDropdownOpen]);
+  }, [hostCommands, onImportCsv, setIsGetDataDropdownOpen, shellService]);
 
   const handleImportJson = useCallback(() => {
     setIsGetDataDropdownOpen(false);
@@ -227,13 +277,24 @@ export function DataRibbon({
         if (onImportJson) {
           onImportJson(file);
         } else {
-          // Default behavior: log for now (parent component should handle)
-          console.log('JSON file selected:', file.name);
+          void file.text().then(async (text) => {
+            const parsed = JSON.parse(text);
+            const { headers, rows } = jsonToRows(parsed);
+            const ws = workbook.getSheetById(activeSheetId);
+            await Promise.all(headers.map((header, col) => ws.setCell(0, col, header)));
+            for (const [rowIndex, row] of rows.entries()) {
+              await Promise.all(
+                headers.map((header, col) =>
+                  ws.setCell(rowIndex + 1, col, cellValueFromJson(row[header])),
+                ),
+              );
+            }
+          });
         }
       }
     };
     input.click();
-  }, [hostCommands, onImportJson, setIsGetDataDropdownOpen]);
+  }, [activeSheetId, hostCommands, onImportJson, setIsGetDataDropdownOpen, workbook]);
 
   const handleImportFromWeb = useCallback(() => {
     setIsGetDataDropdownOpen(false);
@@ -575,6 +636,12 @@ export function DataRibbon({
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                id="data-whatif-forecast-sheet"
+                onSelect={() => dispatch('OPEN_FORECAST_SHEET_DIALOG')}
+              >
+                Forecast Sheet...
+              </DropdownMenuItem>
               <DropdownMenuItem
                 id="data-whatif-goal-seek"
                 onSelect={() => dispatch('OPEN_GOAL_SEEK_DIALOG')}

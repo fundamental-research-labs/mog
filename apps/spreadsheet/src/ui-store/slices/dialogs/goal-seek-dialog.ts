@@ -66,7 +66,7 @@ export interface GoalSeekDialogSlice {
   goalSeekDialog: GoalSeekDialogState;
 
   /** Open the Goal Seek dialog */
-  openGoalSeekDialog: () => void;
+  openGoalSeekDialog: (initial?: Partial<Pick<GoalSeekDialogState, 'setCell'>>) => void;
 
   /** Close the Goal Seek dialog */
   closeGoalSeekDialog: () => void;
@@ -117,10 +117,11 @@ export const createGoalSeekDialogSlice: StateCreator<
 > = (set, _get) => ({
   goalSeekDialog: initialGoalSeekDialogState,
 
-  openGoalSeekDialog: () => {
+  openGoalSeekDialog: (initial) => {
     set({
       goalSeekDialog: {
         ...initialGoalSeekDialogState,
+        ...initial,
         isOpen: true,
       },
     });

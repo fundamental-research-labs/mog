@@ -874,6 +874,8 @@ pub(crate) fn hydrate_sheet(
     // --- Data validations (yrs_schema::validation) ---
     hydrate_data_validations(
         txn,
+        sheets_map,
+        &sheet_id,
         &meta_map,
         &sheet.data_validations,
         sheet.data_validations_disable_prompts,
@@ -883,6 +885,8 @@ pub(crate) fn hydrate_sheet(
     );
     hydrate_x14_data_validations(
         txn,
+        sheets_map,
+        &sheet_id,
         &meta_map,
         &sheet.x14_data_validations,
         sheet.x14_data_validations_disable_prompts,
@@ -1516,6 +1520,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     hydrate_conditional_formats(txn, &cf_map, &sheet.conditional_formats);
     hydrate_data_validations(
         txn,
+        sheets_map,
+        &alloc.sheet_id,
         &meta_map,
         &sheet.data_validations,
         sheet.data_validations_disable_prompts,
@@ -1525,6 +1531,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     );
     hydrate_x14_data_validations(
         txn,
+        sheets_map,
+        &alloc.sheet_id,
         &meta_map,
         &sheet.x14_data_validations,
         sheet.x14_data_validations_disable_prompts,

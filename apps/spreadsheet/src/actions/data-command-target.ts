@@ -138,3 +138,19 @@ export async function resolveDataDialogTarget(
     }
   );
 }
+
+/**
+ * Text to Columns operates on the selected source cells, not the surrounding
+ * current region. A single-cell selection therefore remains a single-cell
+ * source, avoiding accidental horizontal expansion into adjacent data.
+ */
+export async function resolveTextToColumnsTarget(
+  _ws: Worksheet,
+  userRange: CellRange,
+): Promise<DataCommandTarget> {
+  return {
+    range: normalizeCommandRange(userRange),
+    hasHeaders: false,
+    wasExpanded: false,
+  };
+}

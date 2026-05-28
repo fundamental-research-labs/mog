@@ -57,7 +57,11 @@ import {
 import { useKeyboardShortcutsDialogStore } from '../../../dialogs/settings/keyboard-shortcuts-dialog-store';
 import type { QuickRuleDialogType } from '../../../ui-store/slices/dialogs/cf-dialog';
 
-import { getRelativeCommandColumn, resolveDataDialogTarget } from '../../data-command-target';
+import {
+  getRelativeCommandColumn,
+  resolveDataDialogTarget,
+  resolveTextToColumnsTarget,
+} from '../../data-command-target';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 import { beginEditSessionFromAction } from '../edit-entry';
 import {
@@ -1378,7 +1382,7 @@ export const OPEN_TEXT_TO_COLUMNS_DIALOG: AsyncActionHandler = async (
     return notHandled('disabled');
   }
   const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
-  const target = await resolveDataDialogTarget(ws, ranges[0]);
+  const target = await resolveTextToColumnsTarget(ws, ranges[0]);
   getUIStore(deps).getState().openTextToColumnsDialog({ range: target.range });
   return handled();
 };

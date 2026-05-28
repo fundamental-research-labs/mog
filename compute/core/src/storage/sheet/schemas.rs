@@ -632,6 +632,27 @@ fn create_validation_ranges(
     }
 }
 
+/// Write imported XLSX validation specs into the live range-backed validation
+/// store while preserving the lossless `properties/dataValidations` metadata
+/// for export.
+pub(crate) fn write_imported_validation_specs(
+    txn: &mut yrs::TransactionMut,
+    sheets_root: &MapRef,
+    sheet_id: &SheetId,
+    specs: &[ValidationSpec],
+    anonymous_id_prefix: &str,
+) {
+    for (idx, spec) in specs.iter().enumerate() {
+        let base_id = range_schema_id_for(spec, idx);
+        let rule_id = if spec.uid.as_deref().unwrap_or_default().is_empty() {
+            format!("{anonymous_id_prefix}{base_id}")
+        } else {
+            base_id
+        };
+        create_validation_ranges(txn, sheets_root, sheet_id, &rule_id, spec, idx as u64);
+    }
+}
+
 /// Delete all `RangeKind::Validation` Range entries whose binding references
 /// `rule_id`. Performs orphan GC on the rule body afterward.
 fn delete_validation_ranges_for_rule(
@@ -798,6 +819,95 @@ fn validate_with_optional_formula(
     })
 }
 
+fn validation_cell_value_to_string(value: &CellValue) -> Option<String> {
+    match value {
+        CellValue::Null => None,
+        CellValue::Text(s) => Some(s.to_string()),
+        CellValue::Number(n) => {
+            let value = n.get();
+            if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
+                Some(format!("{}", value as i64))
+            } else {
+                Some(format!("{value}"))
+            }
+        }
+        CellValue::Boolean(b) => Some(b.to_string()),
+        CellValue::Error(..) => None,
+        CellValue::Array(arr) => arr.get(0, 0).and_then(validation_cell_value_to_string),
+        CellValue::Control(control) => Some(control.value.to_string()),
+    }
+}
+
+fn resolve_enum_source_values(
+    source: &IdentityRangeSchemaRef,
+    default_sheet_id: &SheetId,
+    mirror: &CellMirror,
+) -> Option<Vec<String>> {
+    let sheet_id = match source.sheet_id.as_deref() {
+        Some(raw) => SheetId::from_uuid_str(raw).ok()?,
+        None => *default_sheet_id,
+    };
+    let ((sr, sc), (er, ec)) = parse_range_corners(source)?;
+    let min_row = sr.min(er);
+    let max_row = sr.max(er);
+    let min_col = sc.min(ec);
+    let max_col = sc.max(ec);
+    let mut values = Vec::new();
+    for row in min_row..=max_row {
+        for col in min_col..=max_col {
+            if let Some(value) = mirror.get_cell_value_at(&sheet_id, SheetPos::new(row, col))
+                && let Some(display) = validation_cell_value_to_string(value)
+            {
+                values.push(display);
+            }
+        }
+    }
+    Some(values)
+}
+
+fn with_resolved_enum_source(
+    schema: &ColumnSchema,
+    sheet_id: &SheetId,
+    mirror: &CellMirror,
+) -> ColumnSchema {
+    let mut schema = schema.clone();
+    let Some(constraints) = schema.constraints.as_mut() else {
+        return schema;
+    };
+    if constraints.enum_values.is_none()
+        && let Some(source) = constraints.enum_source.as_ref()
+        && let Some(values) = resolve_enum_source_values(source, sheet_id, mirror)
+    {
+        constraints.enum_values = Some(values);
+    }
+    schema
+}
+
+fn validate_with_resolved_constraints(
+    cell_value: &CellValue,
+    schema: &ColumnSchema,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    anchor_row: u32,
+    anchor_col: u32,
+    grid_index: Option<&GridIndex>,
+) -> compute_schema::types::ValidationResult {
+    let resolved_schema = with_resolved_enum_source(schema, sheet_id, mirror);
+    validate_with_optional_formula(
+        cell_value,
+        &resolved_schema,
+        mirror,
+        sheet_id,
+        row,
+        col,
+        anchor_row,
+        anchor_col,
+        grid_index,
+    )
+}
+
 /// Validate a cell value against any applicable schema (column or range).
 ///
 /// Resolution order:
@@ -824,7 +934,7 @@ pub(crate) fn validate_cell_value(
 
     // 1. Try column schema
     if let Some(cs) = get_column_schema(doc, sheets, sheet_id, col, grid_index) {
-        let result = validate_with_optional_formula(
+        let result = validate_with_resolved_constraints(
             &cell_value,
             &cs,
             mirror,
@@ -875,7 +985,7 @@ pub(crate) fn validate_cell_value(
             distribution: None,
             description: None,
         };
-        let result = validate_with_optional_formula(
+        let result = validate_with_resolved_constraints(
             &cell_value,
             &col_schema,
             mirror,
@@ -984,7 +1094,7 @@ pub(crate) fn validate_cell_value_against_data_validations(
             distribution: None,
             description: None,
         };
-        let result = validate_with_optional_formula(
+        let result = validate_with_resolved_constraints(
             value,
             &col_schema,
             mirror,

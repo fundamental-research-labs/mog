@@ -844,6 +844,7 @@ export function isDataAnalysisDialogAction(action: string): action is DataAnalys
     'CLOSE_GOAL_SEEK_DIALOG',
     'EXECUTE_GOAL_SEEK',
     'CANCEL_GOAL_SEEK',
+    'OPEN_FORECAST_SHEET_DIALOG',
     'OPEN_CONSOLIDATE_DIALOG',
     'CLOSE_CONSOLIDATE_DIALOG',
     'EXECUTE_CONSOLIDATE',

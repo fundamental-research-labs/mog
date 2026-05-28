@@ -67,6 +67,10 @@ pub fn update_conditional_format(
         for (k, v) in updates_obj {
             existing_obj.insert(k.clone(), v.clone());
         }
+        existing_obj.insert(
+            "id".to_string(),
+            serde_json::Value::String(format_id.to_string()),
+        );
     } else {
         return false;
     }
@@ -108,6 +112,7 @@ pub fn update_conditional_format(
         Ok(c) => c,
         Err(_) => return false,
     };
+    cf.id = format_id.to_string();
     // Remove old entry and write new structured Y.Map
     cf_map.remove(&mut txn, format_id);
     write_cf_to_yrs(&mut txn, &cf_map, &cf);

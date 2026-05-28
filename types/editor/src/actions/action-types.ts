@@ -1208,6 +1208,7 @@ export type DataAnalysisDialogActionType =
   | 'EXECUTE_GOAL_SEEK'
   | 'APPLY_GOAL_SEEK_RESULT'
   | 'CANCEL_GOAL_SEEK'
+  | 'OPEN_FORECAST_SHEET_DIALOG'
   // Consolidate Dialog
   | 'OPEN_CONSOLIDATE_DIALOG'
   | 'CLOSE_CONSOLIDATE_DIALOG'

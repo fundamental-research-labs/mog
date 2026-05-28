@@ -32,15 +32,6 @@ import type { EditingChangingCell, OriginalValueEntry } from '../../ui-store/sli
 // =============================================================================
 
 /**
- * Format a CellId to display notation (placeholder - needs position lookup).
- * In a real implementation, this would look up the cell's current position.
- */
-function formatCellIdForDisplay(cellId: CellId): string {
-  // For now, just show the cellId - in production would show A1 notation
-  return cellId.substring(0, 8) + '...';
-}
-
-/**
  * Format cell value for display.
  */
 function formatValue(value: CellValue): string {
@@ -149,6 +140,29 @@ interface ChangingCellsDisplayProps {
  * Display changing cells and their values for a scenario.
  */
 function ChangingCellsDisplay({ changingCells, values }: ChangingCellsDisplayProps) {
+  const workbook = useWorkbook();
+  const activeSheetId = useActiveSheetId();
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const changingCellsKey = changingCells.join('\0');
+
+  useEffect(() => {
+    let cancelled = false;
+    const ws = workbook.getSheetById(activeSheetId);
+    void Promise.all(
+      changingCells.map(async (cellId) => {
+        const pos = await ws._internal.getCellPosition(cellId);
+        return [cellId, pos ? toA1(pos.row, pos.col) : '(deleted)'] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) {
+        setLabels(Object.fromEntries(entries));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSheetId, changingCellsKey, workbook]);
+
   if (changingCells.length === 0) {
     return <span className="text-ss-text-secondary">None</span>;
   }
@@ -157,7 +171,7 @@ function ChangingCellsDisplay({ changingCells, values }: ChangingCellsDisplayPro
     <div className="flex flex-col gap-1 max-h-20 overflow-y-auto">
       {changingCells.map((cellId, index) => (
         <div key={cellId} className="flex justify-between text-body-sm">
-          <span className="text-ss-text-secondary">{formatCellIdForDisplay(cellId)}:</span>
+          <span className="text-ss-text-secondary">{labels[cellId] ?? 'Resolving...'}:</span>
           <span>{formatValue(values[index])}</span>
         </div>
       ))}

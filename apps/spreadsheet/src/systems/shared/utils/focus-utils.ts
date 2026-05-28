@@ -51,6 +51,11 @@ export const GLOBAL_SHORTCUTS: readonly KeyboardShortcut[] = [
   // Formula view
   { ctrl: true, key: '`' },
   { meta: true, key: '`' },
+  // Ribbon visibility
+  { ctrl: true, shift: true, key: 'f1' },
+  { meta: true, shift: true, key: 'f1' },
+  { ctrl: true, key: 'f1' },
+  { meta: true, key: 'f1' },
 ] as const;
 
 /**

@@ -77,7 +77,19 @@ export const createRibbonSlice: StateCreator<RibbonSlice, [], [], RibbonSlice> =
   keyTipActiveTabId: null,
 
   toggleRibbon: () => {
-    set((s) => ({ ribbonCollapsed: !s.ribbonCollapsed }));
+    set((s) => {
+      if (s.ribbonCollapsed) {
+        return {
+          ribbonCollapsed: false,
+          temporaryShow: s.displayMode !== 'full',
+        };
+      }
+
+      return {
+        ribbonCollapsed: true,
+        temporaryShow: false,
+      };
+    });
   },
 
   setDisplayMode: (mode: RibbonDisplayMode) => {
@@ -92,7 +104,11 @@ export const createRibbonSlice: StateCreator<RibbonSlice, [], [], RibbonSlice> =
 
     const newMode: RibbonDisplayMode = displayMode === 'full' ? 'tabs-only' : 'full';
     saveDisplayMode(newMode);
-    set({ displayMode: newMode, temporaryShow: false });
+    set({
+      ribbonCollapsed: false,
+      displayMode: newMode,
+      temporaryShow: newMode !== 'full',
+    });
   },
 
   showTemporarily: () => {

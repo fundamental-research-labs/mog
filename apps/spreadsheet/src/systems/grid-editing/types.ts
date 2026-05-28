@@ -859,6 +859,8 @@ export interface EditorDependencies {
   validateFormulaSyntax?: (
     sheetId: SheetId,
     formula: string,
+    row: number,
+    col: number,
   ) =>
     | string
     | { errorMessage: string; errorPosition?: number }

@@ -27,6 +27,11 @@ import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
 import type { EditorDependencies } from '../coordinator/types';
 import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
+import {
+  hasImplicitRowStructuredReference,
+  qualifyImplicitRowStructuredReferences,
+  resolveCalculatedColumnCellContext,
+} from '../coordinator/tables/calculated-column-context';
 import { CircularReferenceDialog, useCircularReferenceDialog } from '../dialogs/formulas';
 import {
   CoordinatorProvider as BaseCoordinatorProvider,
@@ -645,8 +650,28 @@ export function SpreadsheetCoordinatorProvider({
       // commit reaches the mutation path. The mutation path intentionally still
       // normalizes formulas for import/programmatic writes; interactive commits
       // must reject raw incomplete syntax first.
-      validateFormulaSyntax: async (sheetId, formula) => {
-        return workbook.getSheetById(sheetId).validateFormulaSyntax(formula);
+      validateFormulaSyntax: async (sheetId, formula, row, col) => {
+        const ws = workbook.getSheetById(sheetId);
+        const syntaxResult = await ws.validateFormulaSyntax(formula);
+        if (!syntaxResult) return null;
+
+        if (!hasImplicitRowStructuredReference(formula)) {
+          return syntaxResult;
+        }
+
+        const context = await resolveCalculatedColumnCellContext(sheetId, row, col, workbook, {
+          requireAutoCalculatedColumns: true,
+        });
+        if (!context) {
+          return syntaxResult;
+        }
+
+        const qualifiedFormula = qualifyImplicitRowStructuredReferences(
+          formula,
+          context.tableName,
+        );
+        const qualifiedSyntaxResult = await ws.validateFormulaSyntax(qualifiedFormula);
+        return qualifiedSyntaxResult ? syntaxResult : null;
       },
       // Show validation error dialog for strict enforcement
       onValidationError: (message, title, onRetry, onCancel) => {

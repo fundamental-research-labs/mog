@@ -227,6 +227,8 @@ export interface EditorCommitCoordinationConfig {
   validateFormulaSyntax?: (
     sheetId: SheetId,
     formula: string,
+    row: number,
+    col: number,
   ) => FormulaSyntaxValidationResult | Promise<FormulaSyntaxValidationResult>;
 }
 
@@ -314,7 +316,12 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
       // formulas never reach the cell mutation path.
       void (async () => {
         if (shouldValidateFormulaSyntax(value) && validateFormulaSyntax) {
-          const syntaxResult = await validateFormulaSyntax(toSheetId(sheetId), value);
+          const syntaxResult = await validateFormulaSyntax(
+            toSheetId(sheetId),
+            value,
+            editingCell.row,
+            editingCell.col,
+          );
           if (syntaxResult) {
             // G.2: Handle both legacy string format and new object format
             const errorMessage =

@@ -15,37 +15,10 @@
 
 import type { Workbook } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-/**
- * Convert Excel-style column letters (A, B, ..., Z, AA, ...) to a 0-based column index.
- */
-function letterToCol(letters: string): number {
-  let col = 0;
-  for (let i = 0; i < letters.length; i++) {
-    col = col * 26 + (letters.toUpperCase().charCodeAt(i) - 64);
-  }
-  return col - 1; // 0-based
-}
-
-/**
- * Parse an A1 range string (e.g., "A1:D10") into numeric bounds (0-based).
- */
-function parseA1Range(
-  range: string,
-): { startRow: number; startCol: number; endRow: number; endCol: number } | null {
-  const match = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
-  if (!match) return null;
-  return {
-    startCol: letterToCol(match[1]),
-    startRow: parseInt(match[2], 10) - 1, // 1-based to 0-based
-    endCol: letterToCol(match[3]),
-    endRow: parseInt(match[4], 10) - 1,
-  };
-}
+import {
+  parseTableA1Range,
+  resolveCalculatedColumnCellContext,
+} from '../tables/calculated-column-context';
 
 // =============================================================================
 // Calculated Column Mutations (Excel Parity: Tables)
@@ -153,29 +126,14 @@ export async function checkCalculatedColumnAutoFill(
   // Only applies to formulas
   if (!value.startsWith('=')) return undefined;
 
-  // Use Workbook API — ws.tables.getAtCell returns TableInfo | null
-  const ws = workbook.getSheetById(sheetId);
-  const table = await ws.tables.getAtCell(row, col);
-  if (!table) return undefined;
-  if (!table.autoCalculatedColumns) return undefined;
-
-  // Parse the A1 range string to get numeric bounds
-  const parsed = parseA1Range(table.range);
-  if (!parsed) return undefined;
-
-  // Only apply to data rows (not header or total)
-  const dataStartRow = table.hasHeaderRow ? parsed.startRow + 1 : parsed.startRow;
-  const dataEndRow = table.hasTotalsRow ? parsed.endRow - 1 : parsed.endRow;
-
-  if (row < dataStartRow || row > dataEndRow) return undefined;
-
-  // Get column index within table
-  const columnIndex = col - parsed.startCol;
-  if (columnIndex < 0 || columnIndex >= (table.columns?.length ?? 0)) return undefined;
+  const context = await resolveCalculatedColumnCellContext(sheetId, row, col, workbook, {
+    requireAutoCalculatedColumns: true,
+  });
+  if (!context) return undefined;
 
   return {
-    tableId: table.name,
-    columnIndex,
+    tableId: context.tableId,
+    columnIndex: context.columnIndex,
     isFormula: true,
   };
 }
@@ -205,7 +163,7 @@ export function applyCalculatedFormulasToNewRow(
       const found = tables.find((t) => t.name === tableId);
       if (!found) continue;
 
-      const tableRange = parseA1Range(found.range);
+      const tableRange = parseTableA1Range(found.range);
       if (!tableRange) return;
 
       // Build batch formula updates for calculated columns

@@ -267,7 +267,7 @@ describe('commitCellValue invoke awaits bridge call', () => {
 
     await flushMicrotasks();
 
-    expect(validateFormulaSyntax).toHaveBeenCalledWith(sheetId, '-A1');
+    expect(validateFormulaSyntax).toHaveBeenCalledWith(sheetId, '-A1', 0, 0);
     expect(editorActor.getSnapshot().matches('error')).toBe(true);
 
     cleanup();

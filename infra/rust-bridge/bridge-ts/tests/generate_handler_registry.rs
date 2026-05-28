@@ -123,6 +123,11 @@ fn bridge_source_files() -> Vec<String> {
     vec![
         // Compute engine (stateful — YrsComputeEngine)
         format!("{}/compute/core/src/storage/engine/mod.rs", base),
+        format!("{}/compute/core/src/storage/engine/bridge_imports.rs", base),
+        format!("{}/compute/core/src/storage/engine/workbook_theme.rs", base),
+        format!("{}/compute/core/src/storage/engine/cell_bridge.rs", base),
+        format!("{}/compute/core/src/storage/engine/undo_bridge.rs", base),
+        format!("{}/compute/core/src/storage/engine/sync_bridge.rs", base),
         format!("{}/compute/core/src/storage/engine/delegations.rs", base),
         format!("{}/compute/core/src/storage/engine/viewport/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/queries.rs", base),

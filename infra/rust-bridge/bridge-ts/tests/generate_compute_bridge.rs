@@ -15,6 +15,11 @@ fn generate_compute_bridge() {
 
     let source_files = vec![
         format!("{}/compute/core/src/storage/engine/mod.rs", base),
+        format!("{}/compute/core/src/storage/engine/bridge_imports.rs", base),
+        format!("{}/compute/core/src/storage/engine/workbook_theme.rs", base),
+        format!("{}/compute/core/src/storage/engine/cell_bridge.rs", base),
+        format!("{}/compute/core/src/storage/engine/undo_bridge.rs", base),
+        format!("{}/compute/core/src/storage/engine/sync_bridge.rs", base),
         format!("{}/compute/core/src/bridge_pure.rs", base),
         format!("{}/compute/core/src/storage/engine/delegations.rs", base),
         format!("{}/compute/core/src/storage/engine/viewport/mod.rs", base),

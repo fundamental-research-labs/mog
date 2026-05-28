@@ -52,15 +52,3 @@ pub use z_order::{
     get_floating_objects_in_z_order, get_max_z_index_all, get_min_z_index_all,
     send_floating_object_backward, send_floating_object_to_back,
 };
-
-#[cfg(test)]
-use codec::{
-    json_value_to_any, read_all_entries_as_json, read_all_typed, read_object_structured,
-    update_object_fields, write_object_from_json,
-};
-#[cfg(test)]
-use compute_document::schema::KEY_FLOATING_OBJECTS;
-#[cfg(test)]
-use keys::{FO_FILL, FO_HEIGHT, FO_LOCKED, FO_WIDTH};
-#[cfg(test)]
-use sheet_map::get_sheet_submap;

@@ -198,20 +198,19 @@ export class ViewportFetchManager {
    */
   private markForceRefreshedViewportFresh(
     coordinator: ViewportCoordinator,
-    fallbackBufferBounds: ViewportBounds,
-    previousVisibleBounds: PrefetchBounds | null,
   ): void {
     const vpState = this.perViewportState.get(coordinator.viewportId);
     if (!vpState) return;
 
-    const refreshedBufferBounds = coordinator.base.getBounds() ?? fallbackBufferBounds;
-    const refreshedPrefetchBounds = this.stripSheetId(refreshedBufferBounds);
+    const refreshedBufferBounds = coordinator.base.getBounds();
     const visibleWindow = coordinator.base.getVisibleWindow();
 
-    vpState.prefetchBounds = refreshedPrefetchBounds;
-    vpState.lastVisibleBounds = visibleWindow
-      ? this.stripSheetId(visibleWindow)
-      : (previousVisibleBounds ?? refreshedPrefetchBounds);
+    if (refreshedBufferBounds) {
+      vpState.prefetchBounds = this.stripSheetId(refreshedBufferBounds);
+    }
+    if (visibleWindow) {
+      vpState.lastVisibleBounds = this.stripSheetId(visibleWindow);
+    }
     vpState.prefetchDirtyState = { staleCells: new Set(), dirtyRegion: null };
   }
 
@@ -434,8 +433,6 @@ export class ViewportFetchManager {
       // Use the coordinator's current buffer bounds to know what region to re-fetch.
       const bounds = coordinator.base.getBounds();
       if (!bounds || !coordinator.base.hasBuffer()) continue;
-      const previousVisibleBounds =
-        this.perViewportState.get(coordinator.viewportId)?.lastVisibleBounds ?? null;
 
       refreshes.push(
         (async () => {
@@ -456,7 +453,7 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
-          this.markForceRefreshedViewportFresh(coordinator, bounds, previousVisibleBounds);
+          this.markForceRefreshedViewportFresh(coordinator);
         })(),
       );
     }
@@ -477,8 +474,6 @@ export class ViewportFetchManager {
     for (const coordinator of coordinators) {
       const bounds = coordinator.base.getBounds();
       if (!bounds || !coordinator.base.hasBuffer() || bounds.sheetId !== sheetId) continue;
-      const previousVisibleBounds =
-        this.perViewportState.get(coordinator.viewportId)?.lastVisibleBounds ?? null;
 
       refreshes.push(
         (async () => {
@@ -498,7 +493,7 @@ export class ViewportFetchManager {
             },
           );
           coordinator.commitFetch(buffer, fetchEpoch);
-          this.markForceRefreshedViewportFresh(coordinator, bounds, previousVisibleBounds);
+          this.markForceRefreshedViewportFresh(coordinator);
         })(),
       );
     }

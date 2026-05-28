@@ -1047,19 +1047,18 @@ export class ComputeCore {
    * Handle a structural change with prefetch invalidation.
    * Called by the structureChange passthrough method.
    *
-   * After this method returns, the viewport buffer is renderable for all
-   * registered viewports. Rust produces complete structural patches via
-   * `produce_structural_viewport_patches()` — no async follow-up is needed
-   * or permitted. The fetch manager's prefetch cache is invalidated so the
-   * next *scroll* fetches fresh data, but no deferred refresh is triggered.
+   * Structural changes invalidate old per-viewport prefetch state before the
+   * Rust mutation runs. After Rust confirms the mutation, forced refresh
+   * commits fresh buffers and re-synchronizes per-viewport bounds before this
+   * method returns, so registered viewports remain renderable and observable.
    */
   async structureChangeWithInvalidation(
     sheetId: SheetId,
     change: StructureChange,
   ): Promise<MutationResult> {
     this.ensureInitialized();
-    // Structural changes always invalidate per-viewport prefetch — marks cache
-    // stale so the next scroll fetches fresh data. This is NOT triggering a fetch.
+    // Mark old prefetch state stale before Rust shifts row/column structure.
+    // The awaited forced refresh below restores fresh buffers and bounds.
     this.invalidateAllViewportPrefetch();
 
     let result: MutationResult;

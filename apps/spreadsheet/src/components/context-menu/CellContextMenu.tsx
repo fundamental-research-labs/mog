@@ -183,11 +183,20 @@ const READ_ONLY_ALLOWED_IDS = new Set([
 
 export function CellContextMenu({
   target,
-  targetRow: _targetRow,
-  targetCol: _targetCol,
+  targetRow,
+  targetCol,
   onClose,
 }: CellContextMenuProps) {
-  const actions = useContextMenuActions();
+  const contextMenuCell = useMemo(
+    () =>
+      (target === 'cell' || target === 'selection') &&
+      targetRow !== undefined &&
+      targetCol !== undefined
+        ? { row: targetRow, col: targetCol }
+        : null,
+    [target, targetRow, targetCol],
+  );
+  const actions = useContextMenuActions(contextMenuCell);
   const readOnly = useReadOnly();
 
   // Build menu items based on target type

@@ -33,10 +33,61 @@ import { useSelectionActions } from '../selection/use-selection-actions';
 import { useSheetViewOptions } from '../view/use-sheet-view-options';
 import { useActionDependencies } from './use-action-dependencies';
 import { isPickerBackedValidation } from '../../systems/grid-editing/coordination/editor-validation-resolution';
+import { clipboardSelectors } from '../../selectors';
+import { useCoordinator } from '../shared/use-coordinator';
+import type { ClipboardState } from '@mog-sdk/contracts/actors';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 // =============================================================================
 // Types
 // =============================================================================
+
+type ContextMenuCell = CellCoord | null;
+
+interface ClipboardActorLike {
+  getSnapshot(): ClipboardState;
+  subscribe(listener: (state: ClipboardState) => void): { unsubscribe: () => void };
+}
+
+function isClipboardPastePending(state: ClipboardState): boolean {
+  return clipboardSelectors.isPastePreview(state) || clipboardSelectors.isPasting(state);
+}
+
+function waitForClipboardPasteIdle(
+  actor: ClipboardActorLike,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.resolve();
+  }
+  if (!isClipboardPastePending(actor.getSnapshot())) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    let subscription: { unsubscribe: () => void } | null = null;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      subscription?.unsubscribe();
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+
+    signal?.addEventListener('abort', finish, { once: true });
+
+    subscription = actor.subscribe((state) => {
+      if (!isClipboardPastePending(state)) {
+        finish();
+      }
+    });
+
+    if (!isClipboardPastePending(actor.getSnapshot())) {
+      finish();
+    }
+  });
+}
 
 export interface UseContextMenuActionsReturn {
   // Clipboard actions
@@ -272,7 +323,11 @@ export interface UseContextMenuActionsReturn {
 // Hook Implementation
 // =============================================================================
 
-export function useContextMenuActions(): UseContextMenuActionsReturn {
+export function useContextMenuActions(
+  contextMenuCell: ContextMenuCell = null,
+): UseContextMenuActionsReturn {
+  const coordinator = useCoordinator();
+  const clipboardActor = coordinator.grid.access.actors.clipboard as ClipboardActorLike;
   const clipboard = useClipboard();
   // Use granular hooks for better performance - only subscribe to what's needed
   const ranges = useSelectionRanges();
@@ -283,6 +338,20 @@ export function useContextMenuActions(): UseContextMenuActionsReturn {
   const ws = wb.getSheetById(activeSheetId);
   const groupingActions = useGroupingActions();
   const { sparklineManager } = useSparklineManager();
+  const resolvedContextCell = contextMenuCell ?? activeCell;
+  const selectResolvedContextCell = useCallback(() => {
+    setSelection(
+      [
+        {
+          startRow: resolvedContextCell.row,
+          startCol: resolvedContextCell.col,
+          endRow: resolvedContextCell.row,
+          endCol: resolvedContextCell.col,
+        },
+      ],
+      resolvedContextCell,
+    );
+  }, [resolvedContextCell, setSelection]);
 
   // Merge state derivation — inlined from the deleted use-merge hook
   // (Text formatting dispatch). Same logic as the ribbon AlignmentGroup
@@ -872,16 +941,23 @@ export function useContextMenuActions(): UseContextMenuActionsReturn {
 
   // Sync check via viewport buffer (threaded comments only; legacy notes return false here)
   const hasCommentViewport = useMemo(() => {
-    return ws.viewport.hasComment(activeCell.row, activeCell.col);
-  }, [ws.viewport, activeCell.row, activeCell.col]);
+    return ws.viewport.hasComment(resolvedContextCell.row, resolvedContextCell.col);
+  }, [ws.viewport, resolvedContextCell.row, resolvedContextCell.col]);
 
   // Async check via Comments domain (covers all types, including legacy notes)
   const [hasCommentAsync, setHasCommentAsync] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    const abortController = new AbortController();
+    setHasCommentAsync(false);
     void (async () => {
       try {
-        const present = await ws.comments.hasComment(activeCell.row, activeCell.col);
+        await waitForClipboardPasteIdle(clipboardActor, abortController.signal);
+        if (cancelled) return;
+        const present = await ws.comments.hasComment(
+          resolvedContextCell.row,
+          resolvedContextCell.col,
+        );
         if (!cancelled) setHasCommentAsync(present);
       } catch {
         if (!cancelled) setHasCommentAsync(false);
@@ -889,31 +965,36 @@ export function useContextMenuActions(): UseContextMenuActionsReturn {
     })();
     return () => {
       cancelled = true;
+      abortController.abort();
     };
-  }, [ws, activeCell.row, activeCell.col]);
+  }, [ws, clipboardActor, resolvedContextCell.row, resolvedContextCell.col]);
 
   const hasCommentAtActiveCell = hasCommentViewport || hasCommentAsync;
 
   const insertComment = useCallback(() => {
+    selectResolvedContextCell();
     dispatch('INSERT_COMMENT', actionDeps);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   const editComment = useCallback(() => {
+    selectResolvedContextCell();
     dispatch('EDIT_COMMENT', actionDeps);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   const deleteComment = useCallback(() => {
+    selectResolvedContextCell();
     dispatch('DELETE_COMMENT', actionDeps);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   // Show/Hide Comment
   const showHideComment = useCallback(() => {
+    selectResolvedContextCell();
     dispatch('SHOW_HIDE_COMMENTS', actionDeps);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   // ==========================================================================
   // Sort/Filter Actions

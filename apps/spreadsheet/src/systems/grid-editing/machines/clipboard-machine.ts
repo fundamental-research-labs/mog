@@ -1050,6 +1050,10 @@ export const clipboardMachine = setup({
           // Update preview target
           actions: 'setPastePreviewTarget',
         },
+        EXTERNAL_PASTE: {
+          target: 'pasting',
+          actions: 'storeExternalPasteData',
+        },
         CLEAR: {
           target: 'empty',
           actions: 'clearAll',

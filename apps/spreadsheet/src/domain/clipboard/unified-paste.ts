@@ -132,6 +132,19 @@ export async function unifiedPaste(
   deps: UnifiedPasteDeps,
   options?: PasteSpecialOptions,
 ): Promise<void> {
+  const initialClipboardState = deps.getClipboardSnapshot();
+  const initialClipboardData = clipboardSelectors.data(initialClipboardState);
+  let pendingPreviewShown = false;
+  if (initialClipboardData) {
+    deps.commands.showPastePreview(activeCell);
+    pendingPreviewShown = true;
+  }
+  const hidePendingPreview = () => {
+    if (!pendingPreviewShown) return;
+    deps.commands.hidePastePreview();
+    pendingPreviewShown = false;
+  };
+
   // 1. Read system clipboard (async operation).
   // Prefer the full Clipboard API (navigator.clipboard.read) so we can pick
   // up the `text/html` payload alongside `text/plain`. The HTML payload
@@ -195,6 +208,7 @@ export async function unifiedPaste(
         sourceKind: 'external-image',
       },
     );
+    hidePendingPreview();
     await deps.pasteImage(imageBlob, activeCell);
     return;
   }
@@ -217,7 +231,10 @@ export async function unifiedPaste(
           sourceKind: 'external-text',
           hasExternalText: true,
         });
-      if (shouldNoopExternalFormatsPaste(resolvedOptions)) return;
+      if (shouldNoopExternalFormatsPaste(resolvedOptions)) {
+        hidePendingPreview();
+        return;
+      }
       deps.commands.externalPaste({
         text: clipboardData.textSignature ?? systemText,
         targetCell: activeCell,
@@ -261,7 +278,10 @@ export async function unifiedPaste(
         hasExternalHtml: Boolean(systemHTML),
         hasExternalText: Boolean(systemText),
       });
-    if (shouldNoopExternalFormatsPaste(resolvedOptions, systemHTML)) return;
+    if (shouldNoopExternalFormatsPaste(resolvedOptions, systemHTML)) {
+      hidePendingPreview();
+      return;
+    }
     deps.commands.externalPaste({
       text: systemText,
       targetCell: activeCell,
@@ -282,7 +302,10 @@ export async function unifiedPaste(
           sourceKind: 'external-text',
           hasExternalText: true,
         });
-      if (shouldNoopExternalFormatsPaste(resolvedOptions)) return;
+      if (shouldNoopExternalFormatsPaste(resolvedOptions)) {
+        hidePendingPreview();
+        return;
+      }
       deps.commands.externalPaste({
         text: clipboardData.textSignature ?? '',
         targetCell: activeCell,

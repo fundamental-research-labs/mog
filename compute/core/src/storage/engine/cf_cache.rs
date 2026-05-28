@@ -180,6 +180,12 @@ fn convert_color_point_to_wire(pt: &cf::CFColorPoint) -> CFColorPointWire {
     }
 }
 
+fn normalize_data_bar_color(color: &str) -> Option<String> {
+    value_types::Color::from_hex(color.trim())
+        .ok()
+        .map(|color| color.to_string())
+}
+
 // =============================================================================
 // Domain CFColorScale -> wire CFColorScaleWire
 // =============================================================================
@@ -195,6 +201,12 @@ fn convert_color_scale_to_wire(cs: &cf::CFColorScale) -> CFColorScaleWire {
 // =============================================================================
 // Domain CFDataBar -> wire CFDataBarWire
 // =============================================================================
+
+fn convert_data_bar_point_to_wire(pt: &cf::CFColorPoint, fallback_color: &str) -> CFColorPointWire {
+    let mut wire = convert_color_point_to_wire(pt);
+    wire.color = normalize_data_bar_color(&pt.color).unwrap_or_else(|| fallback_color.to_string());
+    wire
+}
 
 fn convert_data_bar_to_wire(db: &cf::CFDataBar) -> CFDataBarWire {
     use ooxml_types::cond_format::{DataBarAxisPosition, DataBarDirection};
@@ -213,10 +225,13 @@ fn convert_data_bar_to_wire(db: &cf::CFDataBar) -> CFDataBarWire {
         None => CFDataBarAxisPosition::default(),
     };
 
+    let positive_color =
+        normalize_data_bar_color(&db.positive_color).unwrap_or_else(|| db.positive_color.clone());
+
     CFDataBarWire {
-        min_point: convert_color_point_to_wire(&db.min_point),
-        max_point: convert_color_point_to_wire(&db.max_point),
-        positive_color: db.positive_color.clone(),
+        min_point: convert_data_bar_point_to_wire(&db.min_point, &positive_color),
+        max_point: convert_data_bar_point_to_wire(&db.max_point, &positive_color),
+        positive_color,
         negative_color: db.negative_color.clone(),
         border_color: db.border_color.clone(),
         negative_border_color: None, // Domain type doesn't carry this field
@@ -1115,6 +1130,72 @@ mod tests {
             result[0].kind,
             crate::cf::types::CFRuleKind::ColorScale(_)
         ));
+    }
+
+    #[test]
+    fn test_convert_data_bar_rule_accepts_ooxml_blank_threshold_colors() {
+        use cell_types::SheetRange;
+        use crate::cf::types::CFRuleKind;
+        use value_types::Color;
+
+        let blank_min = cf::CFColorPoint {
+            value: cf::CFValueRef::Min,
+            color: String::new(),
+            ..Default::default()
+        };
+        let invalid_max = cf::CFColorPoint {
+            value: cf::CFValueRef::Max,
+            color: "not-a-color".to_string(),
+            ..Default::default()
+        };
+        let rule = cf::CFRule::DataBar {
+            id: "r1".to_string(),
+            priority: 1,
+            stop_if_true: None,
+            data_bar: cf::CFDataBar {
+                min_point: blank_min,
+                max_point: invalid_max,
+                min_length: None,
+                max_length: None,
+                positive_color: "004472C4".to_string(),
+                negative_color: None,
+                border_color: None,
+                show_border: None,
+                gradient: None,
+                direction: None,
+                axis_position: None,
+                axis_color: None,
+                show_value: None,
+                match_positive_fill_color: None,
+                match_positive_border_color: None,
+                ext_id: None,
+            },
+        };
+        let format = ConditionalFormat {
+            id: "fmt1".to_string(),
+            sheet_id: TEST_SHEET_UUID.to_string(),
+            pivot: None,
+            range_identities: None,
+            ranges: vec![SheetRange::new(1, 0, 10, 0)],
+            rules: vec![rule],
+        };
+
+        let result = convert_cf_formats_to_rules(&[format], no_resolve, None);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].ranges[0].start_row(), 1);
+        assert_eq!(result[0].ranges[0].start_col(), 0);
+        assert_eq!(result[0].ranges[0].end_row(), 10);
+        assert_eq!(result[0].ranges[0].end_col(), 0);
+        match &result[0].kind {
+            CFRuleKind::DataBar(data_bar) => {
+                let expected = Color::from_hex("004472C4").unwrap();
+                assert_eq!(data_bar.positive_color, expected);
+                assert_eq!(data_bar.min_point.color, expected);
+                assert_eq!(data_bar.max_point.color, expected);
+            }
+            other => panic!("expected data bar rule, got {other:?}"),
+        }
     }
 
     #[test]

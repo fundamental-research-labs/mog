@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 
-import { EXECUTE_DATA_TABLE } from '../data-analysis';
+import { EXECUTE_DATA_TABLE, EXECUTE_GOAL_SEEK } from '../data-analysis';
 
 function createDeps(overrides?: {
   ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
@@ -65,7 +65,95 @@ function createDeps(overrides?: {
   } as unknown as ActionDependencies;
 }
 
+function createGoalSeekDeps(overrides?: {
+  goalSeek?: jest.Mock;
+  getCell?: jest.Mock;
+  getDisplayValue?: jest.Mock;
+}): ActionDependencies {
+  const goalSeek =
+    overrides?.goalSeek ??
+    jest.fn().mockResolvedValue({
+      found: true,
+      value: 10,
+      iterations: 4,
+    });
+  const getCell =
+    overrides?.getCell ?? jest.fn().mockResolvedValue({ value: 20, formatted: '$20.00' });
+  const getDisplayValue = overrides?.getDisplayValue ?? jest.fn().mockResolvedValue('$20.00');
+  const state = {
+    activeSheetId: 'sheet-1',
+    goalSeekDialog: {
+      setCell: 'B1',
+      toValue: '20',
+      byChangingCell: 'A1',
+    },
+    setGoalSeekStatus: jest.fn(),
+    setGoalSeekResult: jest.fn(),
+  };
+
+  return {
+    uiStore: {
+      getState: () => state,
+    },
+    workbook: {
+      getSheetById: jest.fn().mockReturnValue({
+        getCell,
+        getDisplayValue,
+        whatIf: {
+          goalSeek,
+        },
+      }),
+    },
+  } as unknown as ActionDependencies;
+}
+
 describe('data analysis actions', () => {
+  it('reports raw target-cell goal seek result separately from the changing-cell solution', async () => {
+    const goalSeek = jest.fn().mockResolvedValue({
+      found: true,
+      value: 10,
+      iterations: 5,
+    });
+    const getCell = jest.fn().mockResolvedValue({ value: 20, formatted: '$20.00' });
+    const getDisplayValue = jest.fn().mockResolvedValue('$20.00');
+    const deps = createGoalSeekDeps({ goalSeek, getCell, getDisplayValue });
+
+    const result = await EXECUTE_GOAL_SEEK(deps);
+    const state = deps.uiStore.getState() as {
+      setGoalSeekStatus: jest.Mock;
+      setGoalSeekResult: jest.Mock;
+    };
+
+    expect(result).toEqual({ handled: true });
+    expect(goalSeek).toHaveBeenCalledWith('B1', 20, 'A1');
+    expect(getCell).toHaveBeenCalledWith(0, 1);
+    expect(getDisplayValue).not.toHaveBeenCalled();
+    expect(state.setGoalSeekStatus).toHaveBeenCalledWith('running');
+    expect(state.setGoalSeekResult).toHaveBeenCalledWith({
+      found: true,
+      solutionValue: 10,
+      achievedValue: 20,
+      iterations: 5,
+    });
+  });
+
+  it('falls back to the solver goal seek value when raw target-cell readback is unavailable', async () => {
+    const getCell = jest.fn().mockResolvedValue({ value: 'not numeric', formatted: '$20.00' });
+    const deps = createGoalSeekDeps({ getCell });
+
+    await EXECUTE_GOAL_SEEK(deps);
+    const state = deps.uiStore.getState() as {
+      setGoalSeekResult: jest.Mock;
+    };
+
+    expect(state.setGoalSeekResult).toHaveBeenCalledWith({
+      found: true,
+      solutionValue: 10,
+      achievedValue: 10,
+      iterations: 4,
+    });
+  });
+
   it('calculates a two-variable data table and writes body results', async () => {
     const dataTable = jest.fn().mockResolvedValue({
       results: [

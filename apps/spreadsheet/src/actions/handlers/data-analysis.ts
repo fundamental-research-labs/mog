@@ -80,13 +80,13 @@ export const EXECUTE_GOAL_SEEK: AsyncActionHandler = async (deps): Promise<Actio
     let achievedValue = result.value;
     try {
       const setPos = parseA1(setCell.toUpperCase());
-      const displayValue = await ws.getDisplayValue(setPos.row, setPos.col);
-      const numericDisplayValue = Number(displayValue);
-      if (Number.isFinite(numericDisplayValue)) {
-        achievedValue = numericDisplayValue;
+      const targetCell = await ws.getCell(setPos.row, setPos.col);
+      const targetCellValue = targetCell?.value;
+      if (typeof targetCellValue === 'number' && Number.isFinite(targetCellValue)) {
+        achievedValue = targetCellValue;
       }
     } catch {
-      // Keep the solver result if the formula cell cannot be read back.
+      // Keep the solver result if the target cell cannot be read as a finite raw numeric value.
     }
     state.setGoalSeekResult({
       found: result.found,

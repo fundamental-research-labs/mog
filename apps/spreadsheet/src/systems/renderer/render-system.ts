@@ -59,7 +59,7 @@ import {
   type SelectionActor as ViewportFollowSelectionActor,
 } from './coordination/viewport-follow-coordination';
 import { getSelectionSnapshot } from '../grid-editing/machines/selection/derived-state';
-import { clampZoom } from '../../infra/utils/zoom-utils';
+import { calculateZoomToSelection } from '../../infra/utils/zoom-to-selection';
 import { lifecycleDebug } from './debug/debug-lifecycle';
 import type { PageBreakDragState } from './execution/render-context-coordination';
 import {
@@ -392,54 +392,48 @@ export class RenderSystem implements IRenderSystem {
     if (!geometry || !viewport || !this.selectionActor) return;
 
     const selection = getSelectionSnapshot(this.selectionActor.getSnapshot());
-    const range = selection.ranges[0] ?? {
+    const selectionRange = selection.ranges[0] ?? {
       startRow: selection.activeCell.row,
       startCol: selection.activeCell.col,
       endRow: selection.activeCell.row,
       endCol: selection.activeCell.col,
+    };
+    const range = {
+      startRow: Math.min(selectionRange.startRow, selectionRange.endRow),
+      startCol: Math.min(selectionRange.startCol, selectionRange.endCol),
+      endRow: Math.max(selectionRange.startRow, selectionRange.endRow),
+      endCol: Math.max(selectionRange.startCol, selectionRange.endCol),
     };
 
     let rects = geometry.getRangeRects(range);
     if (rects.length === 0) {
       const scrollTarget = viewport.getScrollToCell(selection.activeCell);
       if (scrollTarget) {
-        viewport.setScrollPosition(scrollTarget);
+        this.rendererExecution?.setScrollPosition(scrollTarget);
         this.rendererExecution?.getDependencies()?.onScrollPositionReset?.(scrollTarget);
         rects = geometry.getRangeRects(range);
       }
     }
     if (rects.length === 0) return;
 
-    const bounds = rects.reduce(
-      (acc, rect) => ({
-        left: Math.min(acc.left, rect.x),
-        top: Math.min(acc.top, rect.y),
-        right: Math.max(acc.right, rect.x + rect.width),
-        bottom: Math.max(acc.bottom, rect.y + rect.height),
-      }),
-      {
-        left: rects[0].x,
-        top: rects[0].y,
-        right: rects[0].x + rects[0].width,
-        bottom: rects[0].y + rects[0].height,
-      },
-    );
-    const selectionWidth = Math.max(1, bounds.right - bounds.left);
-    const selectionHeight = Math.max(1, bounds.bottom - bounds.top);
     const viewportBounds = viewport.getViewportBounds();
-    const padding = 32;
-    const availableWidth = Math.max(1, viewportBounds.width - padding * 2);
-    const availableHeight = Math.max(1, viewportBounds.height - padding * 2);
-    const currentZoom = this.getZoom();
-    const targetZoom = clampZoom(
-      currentZoom * Math.min(availableWidth / selectionWidth, availableHeight / selectionHeight),
-    );
+    const target = calculateZoomToSelection({
+      selection: range,
+      viewportWidth: viewportBounds.width,
+      viewportHeight: viewportBounds.height,
+      positionDimensions: geometry.getPositionDimensions(),
+      padding: 32,
+      headerVisibility: geometry.getHeaderVisibility(),
+    });
 
-    this.setZoom(targetZoom);
+    this.setZoom(target.zoom);
     const sheetId = this.getRenderCapability()?.getCurrentSheetId();
     if (sheetId) {
-      this.config.sheetSwitchDeps?.uiStoreApi.getState().setZoomLevel?.(sheetId, targetZoom);
+      this.config.sheetSwitchDeps?.uiStoreApi.getState().setZoomLevel?.(sheetId, target.zoom);
     }
+    const targetScroll = viewport.clampScrollPosition({ x: target.scrollX, y: target.scrollY });
+    this.rendererExecution?.setScrollPosition(targetScroll);
+    this.rendererExecution?.getDependencies()?.onScrollPositionReset?.(targetScroll);
   }
 
   applyCellLevelScroll(topRow: number, leftCol: number): void {
@@ -745,6 +739,9 @@ export class RenderSystem implements IRenderSystem {
         },
         setFrozenPanes: (panes) => {
           this.rendererExecution?.setFrozenPanes(panes);
+        },
+        setViewportConfig: (config) => {
+          this.rendererExecution?.setViewportConfig(config);
         },
       });
     }

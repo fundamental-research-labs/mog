@@ -8,9 +8,8 @@
  */
 
 import type { CellRange } from '@mog-sdk/contracts/core';
-import type { HeaderVisibility } from '@mog-sdk/contracts/rendering';
+import type { HeaderVisibility as RendererHeaderVisibility } from '@mog-sdk/contracts/rendering';
 import { getEffectiveHeaderDimensions } from '@mog/spreadsheet-utils/rendering/constants';
-import type { ViewportPositionIndexLike } from '@mog-sdk/contracts/rendering';
 import { clampZoom } from './zoom-utils';
 
 // =============================================================================
@@ -24,12 +23,12 @@ export interface ZoomToSelectionParams {
   viewportWidth: number;
   /** Viewport height in screen pixels */
   viewportHeight: number;
-  /** Position index for row/column measurements */
-  positionIndex: ViewportPositionIndexLike;
+  /** Position dimensions for row/column measurements */
+  positionDimensions: ZoomToSelectionPositionDimensions;
   /** Extra padding around selection in screen pixels (default: 20) */
   padding?: number;
   /** Optional header visibility settings (defaults to both visible) */
-  headerVisibility?: HeaderVisibility;
+  headerVisibility?: ZoomToSelectionHeaderVisibility;
 }
 
 export interface ZoomToSelectionResult {
@@ -39,6 +38,38 @@ export interface ZoomToSelectionResult {
   scrollX: number;
   /** Scroll Y position in document coordinates */
   scrollY: number;
+}
+
+export interface ZoomToSelectionPositionDimensions {
+  readonly totalRows: number;
+  readonly totalCols: number;
+  getRowTop(row: number): number;
+  getRowHeight(row: number): number;
+  getColLeft(col: number): number;
+  getColWidth(col: number): number;
+}
+
+export type ZoomToSelectionHeaderVisibility =
+  | RendererHeaderVisibility
+  | {
+      readonly rowHeaders?: boolean;
+      readonly colHeaders?: boolean;
+    };
+
+function toRendererHeaderVisibility(
+  headerVisibility: ZoomToSelectionHeaderVisibility | undefined,
+): RendererHeaderVisibility | undefined {
+  if (!headerVisibility) return undefined;
+  return {
+    showRowHeaders:
+      'showRowHeaders' in headerVisibility
+        ? headerVisibility.showRowHeaders
+        : headerVisibility.rowHeaders,
+    showColumnHeaders:
+      'showColumnHeaders' in headerVisibility
+        ? headerVisibility.showColumnHeaders
+        : headerVisibility.colHeaders,
+  };
 }
 
 // =============================================================================
@@ -65,41 +96,39 @@ export function calculateZoomToSelection(params: ZoomToSelectionParams): ZoomToS
     selection,
     viewportWidth,
     viewportHeight,
-    positionIndex,
+    positionDimensions,
     padding = 20,
     headerVisibility,
   } = params;
 
+  const normalized = normalizeSelection(selection, positionDimensions);
+
   // Get effective header dimensions based on visibility
-  const { rowHeaderWidth, colHeaderHeight } = getEffectiveHeaderDimensions(headerVisibility);
+  const { rowHeaderWidth, colHeaderHeight } = getEffectiveHeaderDimensions(
+    toRendererHeaderVisibility(headerVisibility),
+  );
 
   // Calculate selection bounds in document coordinates
-  const startX = positionIndex.getColLeft(selection.startCol);
-  const startY = positionIndex.getRowTop(selection.startRow);
-  const endX = positionIndex.getColLeft(selection.endCol + 1);
-  const endY = positionIndex.getRowTop(selection.endRow + 1);
+  const startX = positionDimensions.getColLeft(normalized.startCol);
+  const startY = positionDimensions.getRowTop(normalized.startRow);
+  const endX =
+    positionDimensions.getColLeft(normalized.endCol) +
+    positionDimensions.getColWidth(normalized.endCol);
+  const endY =
+    positionDimensions.getRowTop(normalized.endRow) +
+    positionDimensions.getRowHeight(normalized.endRow);
 
-  const selectionWidth = endX - startX;
-  const selectionHeight = endY - startY;
-
-  // Guard against zero-size selections (shouldn't happen, but be safe)
-  if (selectionWidth <= 0 || selectionHeight <= 0) {
-    return { zoom: 1, scrollX: 0, scrollY: 0 };
-  }
+  const selectionWidth = Math.max(1, endX - startX);
+  const selectionHeight = Math.max(1, endY - startY);
 
   // Available viewport area for content (excluding headers)
   // Note: Frozen panes support can be added here later by subtracting frozen dimensions
-  const contentWidth = viewportWidth - rowHeaderWidth;
-  const contentHeight = viewportHeight - colHeaderHeight;
-
-  // Guard against too-small viewport
-  if (contentWidth <= padding * 2 || contentHeight <= padding * 2) {
-    return { zoom: 1, scrollX: startX, scrollY: startY };
-  }
+  const contentWidth = Math.max(1, viewportWidth - rowHeaderWidth);
+  const contentHeight = Math.max(1, viewportHeight - colHeaderHeight);
 
   // Calculate zoom to fit selection with padding (padding is in screen pixels)
-  const availableWidth = contentWidth - padding * 2;
-  const availableHeight = contentHeight - padding * 2;
+  const availableWidth = Math.max(1, contentWidth - padding * 2);
+  const availableHeight = Math.max(1, contentHeight - padding * 2);
 
   const zoomX = availableWidth / selectionWidth;
   const zoomY = availableHeight / selectionHeight;
@@ -121,4 +150,23 @@ export function calculateZoomToSelection(params: ZoomToSelectionParams): ZoomToS
     scrollX: Math.max(0, scrollX),
     scrollY: Math.max(0, scrollY),
   };
+}
+
+function normalizeSelection(
+  selection: CellRange,
+  positionDimensions: ZoomToSelectionPositionDimensions,
+): CellRange {
+  const maxRow = Math.max(0, positionDimensions.totalRows - 1);
+  const maxCol = Math.max(0, positionDimensions.totalCols - 1);
+  const startRow = clampIndex(Math.min(selection.startRow, selection.endRow), maxRow);
+  const endRow = clampIndex(Math.max(selection.startRow, selection.endRow), maxRow);
+  const startCol = clampIndex(Math.min(selection.startCol, selection.endCol), maxCol);
+  const endCol = clampIndex(Math.max(selection.startCol, selection.endCol), maxCol);
+
+  return { startRow, startCol, endRow, endCol };
+}
+
+function clampIndex(value: number, max: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(max, Math.trunc(value)));
 }

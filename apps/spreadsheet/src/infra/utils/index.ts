@@ -82,7 +82,9 @@ export {
 
 export {
   calculateZoomToSelection,
+  type ZoomToSelectionHeaderVisibility,
   type ZoomToSelectionParams,
+  type ZoomToSelectionPositionDimensions,
   type ZoomToSelectionResult,
 } from './zoom-to-selection';
 

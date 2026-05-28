@@ -208,6 +208,9 @@ fn test_hyperlink_yrs_roundtrip() {
         location: Some("Sheet2!A1".to_string()),
         display: Some("Click here".to_string()),
         tooltip: Some("Opens example.com".to_string()),
+        uid: None,
+        target_kind: Some(crate::domain::hyperlink::HyperlinkTargetKind::Relationship),
+        target_mode: Some("External".to_string()),
     };
 
     let restored = yrs_roundtrip!(hyperlink::to_yrs_prelim(&original), hyperlink::from_yrs_map);
@@ -222,6 +225,9 @@ fn test_hyperlink_minimal_roundtrip() {
         location: None,
         display: None,
         tooltip: None,
+        uid: None,
+        target_kind: None,
+        target_mode: None,
     };
 
     let restored = yrs_roundtrip!(hyperlink::to_yrs_prelim(&original), hyperlink::from_yrs_map);

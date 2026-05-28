@@ -12,7 +12,7 @@ use domain_types::{
     domain::filter::{AutoFilter, SortState},
     domain::floating_object::FloatingObject,
     domain::grouping::SheetGroupingConfig,
-    domain::hyperlink::Hyperlink,
+    domain::hyperlink::{Hyperlink, HyperlinkTargetKind},
     domain::outline::OutlineGroup,
     domain::print::PageBreaks,
     domain::protection::SheetProtection,
@@ -116,6 +116,14 @@ pub(in crate::storage::engine) fn export_hyperlinks_for_sheet(
                 .get("uid")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
+            let target_kind = entry
+                .get("targetKind")
+                .and_then(|v| v.as_str())
+                .and_then(target_kind_from_str);
+            let target_mode = entry
+                .get("targetMode")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             result.push(Hyperlink {
                 cell_ref,
                 target,
@@ -123,11 +131,21 @@ pub(in crate::storage::engine) fn export_hyperlinks_for_sheet(
                 display,
                 tooltip,
                 uid,
+                target_kind,
+                target_mode,
             });
         }
     }
 
     result
+}
+
+fn target_kind_from_str(value: &str) -> Option<HyperlinkTargetKind> {
+    match value {
+        "inlineLocation" => Some(HyperlinkTargetKind::InlineLocation),
+        "relationship" => Some(HyperlinkTargetKind::Relationship),
+        _ => None,
+    }
 }
 
 // -------------------------------------------------------------------

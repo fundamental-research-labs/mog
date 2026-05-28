@@ -17,6 +17,7 @@ use super::helpers::get_or_create_cell_id_for_pos;
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
 };
+use domain_types::domain::hyperlink::HyperlinkTargetKind;
 use formula_types::CellRef;
 
 // ===========================================================================
@@ -451,6 +452,12 @@ pub(super) fn hydrate_hyperlinks(
                 if let Some(uid) = &link.uid {
                     entry["uid"] = serde_json::json!(uid);
                 }
+                if let Some(target_kind) = hyperlink_target_kind(link) {
+                    entry["targetKind"] = serde_json::json!(hyperlink_target_kind_str(target_kind));
+                }
+                if let Some(target_mode) = &link.target_mode {
+                    entry["targetMode"] = serde_json::json!(target_mode);
+                }
                 extra_range_hyperlinks.push(entry);
                 continue;
             }
@@ -475,6 +482,18 @@ pub(super) fn hydrate_hyperlinks(
             {
                 cell_map.insert(txn, "hu", Any::String(Arc::from(uid.as_str())));
             }
+            if let Some(target_kind) = hyperlink_target_kind(link) {
+                cell_map.insert(
+                    txn,
+                    "hk",
+                    Any::String(Arc::from(hyperlink_target_kind_str(target_kind))),
+                );
+            }
+            if let Some(target_mode) = &link.target_mode
+                && !target_mode.is_empty()
+            {
+                cell_map.insert(txn, "hm", Any::String(Arc::from(target_mode.as_str())));
+            }
             // Store original cell_ref for range hyperlinks (e.g., "A1:B2")
             // so the export can reconstruct the original range ref. The
             // typed `HyperlinkAnchor::Range` branch is the discriminator —
@@ -491,6 +510,27 @@ pub(super) fn hydrate_hyperlinks(
 
     // Store extra range hyperlinks in the sheet meta for roundtrip fidelity
     yrs_schema::helpers::write_json_vec(meta_map, txn, "rangeHyperlinks", &extra_range_hyperlinks);
+}
+
+fn hyperlink_target_kind(
+    link: &domain_types::domain::hyperlink::Hyperlink,
+) -> Option<HyperlinkTargetKind> {
+    link.target_kind.or_else(|| {
+        if link.target.is_some() {
+            Some(HyperlinkTargetKind::Relationship)
+        } else if link.location.is_some() {
+            Some(HyperlinkTargetKind::InlineLocation)
+        } else {
+            None
+        }
+    })
+}
+
+fn hyperlink_target_kind_str(kind: HyperlinkTargetKind) -> &'static str {
+    match kind {
+        HyperlinkTargetKind::InlineLocation => "inlineLocation",
+        HyperlinkTargetKind::Relationship => "relationship",
+    }
 }
 
 /// Extract the top-left `(row, col)` position from a typed [`HyperlinkAnchor`].

@@ -32,6 +32,7 @@ mod zip_assembly;
 
 use domain_types::ParseOutput;
 use domain_types::RoundTripContext;
+use domain_types::domain::hyperlink::HyperlinkTargetKind;
 // ChartSpec / AnchorPosition are re-exported from domain_types::domain::chart via domain_types::*
 // but we don't need them as standalone imports — they're accessed via sheet_data.charts.
 
@@ -304,10 +305,19 @@ pub fn write_xlsx_from_parse_output(
                         tooltip: hl.tooltip.clone().unwrap_or_default(),
                         r_id: None,
                         uid: hl.uid.clone(),
+                        target_kind: hl.target_kind,
+                        target_mode: hl.target_mode.clone(),
                     });
                     continue;
                 };
-                if !hyperlink_targets::needs_relationship(&target) {
+                let target_kind = hl.target_kind.or_else(|| {
+                    if hyperlink_targets::needs_relationship(&target) {
+                        Some(HyperlinkTargetKind::Relationship)
+                    } else {
+                        Some(HyperlinkTargetKind::InlineLocation)
+                    }
+                });
+                if target_kind == Some(HyperlinkTargetKind::InlineLocation) {
                     hyperlink_outputs.push(crate::output::results::HyperlinkOutput {
                         cell_ref: hl.cell_ref.clone(),
                         location: hl.location.clone().unwrap_or(target),
@@ -315,15 +325,20 @@ pub fn write_xlsx_from_parse_output(
                         tooltip: hl.tooltip.clone().unwrap_or_default(),
                         r_id: None,
                         uid: hl.uid.clone(),
+                        target_kind,
+                        target_mode: hl.target_mode.clone(),
                     });
                     continue;
                 }
 
-                let r_id = if target.starts_with('#') {
-                    rels.add(REL_HYPERLINK, &target)
-                } else {
-                    rels.add_external(REL_HYPERLINK, &target)
-                };
+                let target_mode = hl.target_mode.clone().or_else(|| {
+                    if target.starts_with('#') {
+                        None
+                    } else {
+                        Some("External".to_string())
+                    }
+                });
+                let r_id = rels.add_with_target_mode(REL_HYPERLINK, &target, target_mode.clone());
                 let hyperlink_idx = hyperlink_outputs.len();
                 let is_internal_rel = target.starts_with('#');
                 let location = if is_internal_rel {
@@ -338,11 +353,14 @@ pub fn write_xlsx_from_parse_output(
                     tooltip: hl.tooltip.clone().unwrap_or_default(),
                     r_id: Some(r_id),
                     uid: hl.uid.clone(),
+                    target_kind,
+                    target_mode: target_mode.clone(),
                 });
                 worksheet_hyperlink_relationships.push(WorksheetHyperlinkGraphEntry {
                     sheet_idx,
                     hyperlink_idx,
                     target,
+                    target_mode,
                     relationship_id_hint: hyperlink_outputs[hyperlink_idx]
                         .r_id
                         .clone()
@@ -998,6 +1016,7 @@ pub fn write_xlsx_from_parse_output(
             &mut package_graph_builder,
             entry.sheet_idx,
             &entry.target,
+            entry.target_mode.as_deref(),
             &entry.relationship_id_hint,
         );
     }
@@ -1371,13 +1390,12 @@ pub fn write_xlsx_from_parse_output(
         }
     }
     for entry in &worksheet_hyperlink_relationships {
-        let target_mode = if entry.target.starts_with('#') {
-            None
-        } else {
-            Some("External".to_string())
-        };
         let r_id = resolved_hyperlink_ids_by_sheet_target
-            .get_mut(&(entry.sheet_idx, entry.target.clone(), target_mode))
+            .get_mut(&(
+                entry.sheet_idx,
+                entry.target.clone(),
+                entry.target_mode.clone(),
+            ))
             .and_then(|ids| ids.pop_front())
             .ok_or_else(|| {
                 WriteError::PackageIntegrity(format!(

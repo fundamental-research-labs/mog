@@ -1907,6 +1907,64 @@ fn fragment_hyperlink_relationship_is_not_marked_external() {
 }
 
 #[test]
+fn fragment_hyperlink_relationship_preserves_explicit_external_target_mode() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![Hyperlink {
+            cell_ref: "A1".to_string(),
+            target: Some("#Sheet2!A1".to_string()),
+            display: Some("Jump".to_string()),
+            target_kind: Some(domain_types::HyperlinkTargetKind::Relationship),
+            target_mode: Some("External".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" r:id=\""));
+    assert!(sheet_rels.contains("Target=\"#Sheet2!A1\""));
+    assert!(sheet_rels.contains("TargetMode=\"External\""));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn inline_location_hyperlink_emits_no_relationship_even_for_location_like_target() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        hyperlinks: vec![Hyperlink {
+            cell_ref: "A1".to_string(),
+            target: Some("Sheet2!A1".to_string()),
+            location: Some("Sheet2!A1".to_string()),
+            display: Some("Jump".to_string()),
+            target_kind: Some(domain_types::HyperlinkTargetKind::InlineLocation),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<hyperlink ref=\"A1\" location=\"Sheet2!A1\""));
+    assert!(!sheet_xml.contains("r:id="));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn generated_control_property_relationship_uses_graph_registered_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

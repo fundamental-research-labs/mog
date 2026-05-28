@@ -135,6 +135,26 @@ impl RelationshipManager {
         id
     }
 
+    /// Add a relationship with an explicit target mode.
+    pub fn add_with_target_mode(
+        &mut self,
+        rel_type: &str,
+        target: &str,
+        target_mode: Option<String>,
+    ) -> String {
+        let id = format!("rId{}", self.next_id);
+        self.next_id += 1;
+
+        self.relationships.push(Relationship {
+            id: id.clone(),
+            rel_type: rel_type.to_string(),
+            target: target.to_string(),
+            target_mode,
+        });
+
+        id
+    }
+
     /// Add a relationship with a specific ID (for round-trip fidelity).
     ///
     /// Also bumps `next_id` past the given ID to prevent future `add()` calls

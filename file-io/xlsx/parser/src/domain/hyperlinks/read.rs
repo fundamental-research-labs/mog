@@ -49,6 +49,7 @@ use crate::infra::opc::{
 };
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;
+use domain_types::domain::hyperlink::HyperlinkTargetKind;
 
 // ============================================================================
 // Type Definitions
@@ -154,6 +155,9 @@ pub struct HyperlinkRelationship {
 
     /// Target mode (Internal or External)
     pub target_mode: TargetMode,
+
+    /// Raw target mode from the relationship XML.
+    pub raw_target_mode: Option<String>,
 }
 
 impl HyperlinkRelationship {
@@ -163,6 +167,7 @@ impl HyperlinkRelationship {
             id,
             target,
             target_mode,
+            raw_target_mode: Some(target_mode.as_str().to_string()),
         }
     }
 
@@ -190,6 +195,10 @@ impl HyperlinkRelationship {
                 target_mode: match rel.target_mode {
                     RelationshipTargetMode::External => TargetMode::External,
                     RelationshipTargetMode::Internal => TargetMode::Internal,
+                },
+                raw_target_mode: match rel.target_mode {
+                    RelationshipTargetMode::External => Some("External".to_string()),
+                    RelationshipTargetMode::Internal => None,
                 },
             })
             .collect()
@@ -235,6 +244,12 @@ pub struct Hyperlink {
 
     /// Extension UID for revision tracking (xr:uid)
     pub uid: Option<String>,
+
+    /// Authored target representation.
+    pub target_kind: Option<HyperlinkTargetKind>,
+
+    /// Raw relationship TargetMode when the hyperlink uses r:id.
+    pub target_mode: Option<String>,
 }
 
 impl Hyperlink {
@@ -292,6 +307,7 @@ impl Hyperlink {
         if let Some(ref loc) = hyperlink.location {
             hyperlink.target = Some(loc.clone());
             hyperlink.link_type = HyperlinkType::Internal;
+            hyperlink.target_kind = Some(HyperlinkTargetKind::InlineLocation);
         }
 
         Some(hyperlink)
@@ -321,12 +337,15 @@ impl Hyperlink {
 
                 self.target = Some(full_target.clone());
                 self.link_type = HyperlinkType::from_target(&full_target);
+                self.target_kind = Some(HyperlinkTargetKind::Relationship);
+                self.target_mode = rel.raw_target_mode.clone();
             }
         } else if self.target.is_none() {
             // No r:id and no target yet - check if we have just a location
             if let Some(ref location) = self.location {
                 self.target = Some(location.clone());
                 self.link_type = HyperlinkType::Internal;
+                self.target_kind = Some(HyperlinkTargetKind::InlineLocation);
             }
         }
     }
@@ -1122,9 +1141,40 @@ mod tests {
             Some("https://google.com".to_string())
         );
         assert_eq!(hls.hyperlinks[0].link_type, HyperlinkType::Url);
+        assert_eq!(
+            hls.hyperlinks[0].target_kind,
+            Some(HyperlinkTargetKind::Relationship)
+        );
+        assert_eq!(hls.hyperlinks[0].target_mode.as_deref(), Some("External"));
 
         assert_eq!(hls.hyperlinks[1].target, Some("Sheet2!A1".to_string()));
         assert_eq!(hls.hyperlinks[1].link_type, HyperlinkType::Internal);
+        assert_eq!(
+            hls.hyperlinks[1].target_kind,
+            Some(HyperlinkTargetKind::InlineLocation)
+        );
+        assert_eq!(hls.hyperlinks[1].target_mode, None);
+    }
+
+    #[test]
+    fn test_relationship_backed_fragment_preserves_representation_and_target_mode() {
+        let worksheet_xml = br#"<worksheet>
+            <hyperlinks>
+                <hyperlink ref="C17" r:id="rId1" display="Cover"/>
+            </hyperlinks>
+        </worksheet>"#;
+
+        let rels_xml = br##"<Relationships>
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#Cover!B2" TargetMode="External"/>
+        </Relationships>"##;
+
+        let hls = Hyperlinks::parse_with_rels(worksheet_xml, rels_xml).unwrap();
+        let link = hls.get("C17").unwrap();
+
+        assert_eq!(link.target.as_deref(), Some("#Cover!B2"));
+        assert_eq!(link.location, None);
+        assert_eq!(link.target_kind, Some(HyperlinkTargetKind::Relationship));
+        assert_eq!(link.target_mode.as_deref(), Some("External"));
     }
 
     #[test]

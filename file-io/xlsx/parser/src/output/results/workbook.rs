@@ -17,6 +17,10 @@ pub struct HyperlinkOutput {
     /// Extension UID for revision tracking (xr:uid), for round-trip fidelity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_kind: Option<domain_types::domain::hyperlink::HyperlinkTargetKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
 }
 
 /// Sheet protection output for parse result.

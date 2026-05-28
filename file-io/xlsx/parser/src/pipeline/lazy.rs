@@ -1046,6 +1046,8 @@ fn format_hyperlinks(xml: &[u8]) -> Vec<HyperlinkOutput> {
                     tooltip: h.tooltip.as_deref().unwrap_or("").to_string(),
                     r_id: h.r_id.clone(),
                     uid: h.uid.clone(),
+                    target_kind: h.target_kind,
+                    target_mode: h.target_mode.clone(),
                 })
                 .collect()
         })

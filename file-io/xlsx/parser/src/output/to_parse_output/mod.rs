@@ -49,6 +49,7 @@ use domain_types::{
     Comment,
     FrozenPane,
     Hyperlink,
+    HyperlinkTargetKind,
     MergeRegion,
     OpcRelationship as DtOpcRelationship,
     // Diagnostics types
@@ -1035,10 +1036,10 @@ fn convert_sheet(
 
     // --- Hyperlinks ---
     // Build a lookup from relationship ID to target URL for resolving external hyperlinks.
-    let rel_map: HashMap<&str, &str> = sheet
+    let rel_map: HashMap<&str, (&str, Option<&str>)> = sheet
         .sheet_opc_rels
         .iter()
-        .map(|r| (r.id.as_str(), r.target.as_str()))
+        .map(|r| (r.id.as_str(), (r.target.as_str(), r.target_mode.as_deref())))
         .collect();
 
     let hyperlinks: Vec<Hyperlink> = sheet
@@ -1049,11 +1050,21 @@ fn convert_sheet(
             let display = non_empty(&h.display);
             let tooltip = non_empty(&h.tooltip);
             // Resolve external URL from the relationship ID via sheet OPC rels.
-            let target = h
-                .r_id
-                .as_deref()
-                .and_then(|rid| rel_map.get(rid).copied())
-                .map(|s| s.to_string());
+            let rel = h.r_id.as_deref().and_then(|rid| rel_map.get(rid).copied());
+            let target = rel.map(|(target, _)| target.to_string());
+            let target_kind = h.target_kind.or_else(|| {
+                if h.r_id.is_some() {
+                    Some(HyperlinkTargetKind::Relationship)
+                } else if location.is_some() {
+                    Some(HyperlinkTargetKind::InlineLocation)
+                } else {
+                    None
+                }
+            });
+            let target_mode = h
+                .target_mode
+                .clone()
+                .or_else(|| rel.and_then(|(_, target_mode)| target_mode.map(str::to_string)));
             Hyperlink {
                 cell_ref: h.cell_ref.clone(),
                 target,
@@ -1061,6 +1072,8 @@ fn convert_sheet(
                 display,
                 tooltip,
                 uid: h.uid.clone(),
+                target_kind,
+                target_mode,
             }
         })
         .collect();

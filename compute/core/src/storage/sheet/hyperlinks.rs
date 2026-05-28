@@ -32,7 +32,7 @@ use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
 use compute_document::schema::{KEY_FORMULA, KEY_VALUE};
-use domain_types::domain::hyperlink::Hyperlink;
+use domain_types::domain::hyperlink::{Hyperlink, HyperlinkTargetKind};
 
 use crate::range_manager::pos_to_a1;
 
@@ -46,6 +46,10 @@ const KEY_HYPERLINK_DISPLAY: &str = "hd";
 const KEY_HYPERLINK_TOOLTIP: &str = "ht";
 /// The Yrs map key for hyperlink uid (xr:uid revision tracking).
 const KEY_HYPERLINK_UID: &str = "hu";
+/// The Yrs map key for hyperlink target representation.
+const KEY_HYPERLINK_TARGET_KIND: &str = "hk";
+/// The Yrs map key for hyperlink relationship target mode.
+const KEY_HYPERLINK_TARGET_MODE: &str = "hm";
 
 // =============================================================================
 // Internal Helpers
@@ -217,6 +221,8 @@ pub fn get_hyperlink_full(
         Some(Out::Any(Any::String(s))) => Some(s.to_string()),
         _ => None,
     };
+    let target_kind = read_target_kind(&txn, &cell_map);
+    let target_mode = read_string_key(&txn, &cell_map, KEY_HYPERLINK_TARGET_MODE);
 
     Some(Hyperlink {
         cell_ref: String::new(), // Caller must set this
@@ -225,6 +231,8 @@ pub fn get_hyperlink_full(
         display,
         tooltip,
         uid,
+        target_kind,
+        target_mode,
     })
 }
 
@@ -271,14 +279,21 @@ pub fn get_all_hyperlinks(
         // Distinguish internal (#location) from external (URL) hyperlinks.
         // During hydration, internal links are stored as "#<location>".
         // Empty string means uid-only marker hyperlink (no target, no location).
-        let (target, location_from_url) = if raw_url.is_empty() {
-            (None, None)
-        } else if let Some(location) = raw_url.strip_prefix('#') {
-            // Internal link: no external target, location is the part after "#"
-            (None, Some(location.to_string()))
-        } else {
-            (Some(raw_url), None)
-        };
+        let stored_target_kind = read_target_kind(&txn, &cell_map);
+        let target_kind = stored_target_kind.or_else(|| {
+            if raw_url.is_empty() {
+                None
+            } else if raw_url.starts_with('#') {
+                Some(HyperlinkTargetKind::InlineLocation)
+            } else {
+                Some(HyperlinkTargetKind::Relationship)
+            }
+        });
+        let (target, location_from_url) = target_and_location_from_stored_url(
+            &raw_url,
+            target_kind,
+            stored_target_kind.is_some(),
+        );
 
         // Prefer the explicitly stored location field, fall back to the one derived from URL
         let location = match cell_map.get(&txn, KEY_HYPERLINK_LOCATION) {
@@ -297,6 +312,7 @@ pub fn get_all_hyperlinks(
             Some(Out::Any(Any::String(s))) => Some(s.to_string()),
             _ => None,
         };
+        let target_mode = read_string_key(&txn, &cell_map, KEY_HYPERLINK_TARGET_MODE);
 
         // Read original range ref for range hyperlinks (e.g., "A1:B2")
         let final_cell_ref = match cell_map.get(&txn, "hr") {
@@ -319,6 +335,8 @@ pub fn get_all_hyperlinks(
                 display,
                 tooltip,
                 uid,
+                target_kind,
+                target_mode,
             },
         ));
     }
@@ -326,6 +344,57 @@ pub fn get_all_hyperlinks(
     // Sort by original document order if available, then by cell_ref as tiebreaker
     result.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cell_ref.cmp(&b.1.cell_ref)));
     result.into_iter().map(|(_, h)| h).collect()
+}
+
+fn target_and_location_from_stored_url(
+    raw_url: &str,
+    target_kind: Option<HyperlinkTargetKind>,
+    has_explicit_kind: bool,
+) -> (Option<String>, Option<String>) {
+    if raw_url.is_empty() {
+        return (None, None);
+    }
+
+    match target_kind {
+        Some(HyperlinkTargetKind::Relationship) => (Some(raw_url.to_string()), None),
+        Some(HyperlinkTargetKind::InlineLocation) => {
+            if let Some(location) = raw_url.strip_prefix('#') {
+                (None, Some(location.to_string()))
+            } else {
+                (None, Some(raw_url.to_string()))
+            }
+        }
+        None if !has_explicit_kind => {
+            if let Some(location) = raw_url.strip_prefix('#') {
+                (None, Some(location.to_string()))
+            } else {
+                (Some(raw_url.to_string()), None)
+            }
+        }
+        None => (Some(raw_url.to_string()), None),
+    }
+}
+
+fn read_target_kind<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef) -> Option<HyperlinkTargetKind> {
+    match cell_map.get(txn, KEY_HYPERLINK_TARGET_KIND) {
+        Some(Out::Any(Any::String(s))) => target_kind_from_str(&s),
+        _ => None,
+    }
+}
+
+fn target_kind_from_str(value: &str) -> Option<HyperlinkTargetKind> {
+    match value {
+        "inlineLocation" => Some(HyperlinkTargetKind::InlineLocation),
+        "relationship" => Some(HyperlinkTargetKind::Relationship),
+        _ => None,
+    }
+}
+
+fn read_string_key<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef, key: &str) -> Option<String> {
+    match cell_map.get(txn, key) {
+        Some(Out::Any(Any::String(s))) => Some(s.to_string()),
+        _ => None,
+    }
 }
 
 /// Remove the hyperlink from a cell at the given position.
@@ -365,6 +434,9 @@ pub fn remove_hyperlink(
     cell_map.remove(&mut txn, KEY_HYPERLINK_LOCATION);
     cell_map.remove(&mut txn, KEY_HYPERLINK_DISPLAY);
     cell_map.remove(&mut txn, KEY_HYPERLINK_TOOLTIP);
+    cell_map.remove(&mut txn, KEY_HYPERLINK_UID);
+    cell_map.remove(&mut txn, KEY_HYPERLINK_TARGET_KIND);
+    cell_map.remove(&mut txn, KEY_HYPERLINK_TARGET_MODE);
 
     // Check if cell is now empty (no value, no formula, no note)
     if !cell_has_data(&txn, &cell_map) {
@@ -458,6 +530,35 @@ mod tests {
         }
 
         cell_hex.to_string()
+    }
+
+    fn seed_hyperlink_cell(
+        storage: &YrsStorage,
+        grid: &mut GridIndex,
+        sheet_id: SheetId,
+        row: u32,
+        col: u32,
+        entries: Vec<(&'static str, Any)>,
+    ) {
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        let cell_id = grid.ensure_cell_id(row, col);
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        let mut txn = storage
+            .doc()
+            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+
+        if let Some(cells_map) = get_cells_map(&txn, &storage.sheets_ref(), &sheet_hex) {
+            cells_map.insert(
+                &mut txn,
+                &*cell_hex,
+                MapPrelim::from([(KEY_VALUE, Any::Null)]),
+            );
+            if let Some(Out::YMap(cell_map)) = cells_map.get(&txn, &cell_hex) {
+                for (key, value) in entries {
+                    cell_map.insert(&mut txn, key, value);
+                }
+            }
+        }
     }
 
     /// Check if a cell exists in the cells map.
@@ -758,6 +859,67 @@ mod tests {
         );
         assert!(
             get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none()
+        );
+    }
+
+    #[test]
+    fn test_get_all_hyperlinks_preserves_relationship_backed_fragment_metadata() {
+        let (storage, sheet_id, mut grid) = storage_with_sheet();
+        seed_hyperlink_cell(
+            &storage,
+            &mut grid,
+            sheet_id,
+            0,
+            0,
+            vec![
+                (KEY_VALUE, Any::Null),
+                (KEY_HYPERLINK, Any::String(Arc::from("#Sheet2!A1"))),
+                (
+                    KEY_HYPERLINK_TARGET_KIND,
+                    Any::String(Arc::from("relationship")),
+                ),
+                (
+                    KEY_HYPERLINK_TARGET_MODE,
+                    Any::String(Arc::from("External")),
+                ),
+            ],
+        );
+
+        let links = get_all_hyperlinks(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid);
+
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target.as_deref(), Some("#Sheet2!A1"));
+        assert_eq!(links[0].location, None);
+        assert_eq!(
+            links[0].target_kind,
+            Some(HyperlinkTargetKind::Relationship)
+        );
+        assert_eq!(links[0].target_mode.as_deref(), Some("External"));
+    }
+
+    #[test]
+    fn test_get_all_hyperlinks_old_fragment_storage_remains_inline_location() {
+        let (storage, sheet_id, mut grid) = storage_with_sheet();
+        seed_hyperlink_cell(
+            &storage,
+            &mut grid,
+            sheet_id,
+            0,
+            0,
+            vec![
+                (KEY_VALUE, Any::Null),
+                (KEY_HYPERLINK, Any::String(Arc::from("#Sheet2!A1"))),
+            ],
+        );
+
+        let links = get_all_hyperlinks(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid);
+
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, None);
+        assert_eq!(links[0].location.as_deref(), Some("Sheet2!A1"));
+        assert_eq!(
+            links[0].target_kind,
+            Some(HyperlinkTargetKind::InlineLocation)
         );
     }
 

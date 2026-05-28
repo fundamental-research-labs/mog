@@ -70,6 +70,7 @@ pub(super) struct WorksheetHyperlinkGraphEntry {
     pub(super) sheet_idx: usize,
     pub(super) hyperlink_idx: usize,
     pub(super) target: String,
+    pub(super) target_mode: Option<String>,
     pub(super) relationship_id_hint: String,
 }
 

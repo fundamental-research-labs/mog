@@ -468,6 +468,8 @@ fn test_compute_sheet_extent_includes_hyperlink_only_anchor() {
         tooltip: String::new(),
         r_id: None,
         uid: None,
+        target_kind: None,
+        target_mode: None,
     });
 
     assert_eq!(compute_sheet_extent(&sheet), (4, 2));

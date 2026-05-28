@@ -975,9 +975,14 @@ pub fn register_worksheet_hyperlink(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
     target: &str,
+    target_mode: Option<&str>,
     relationship_id_hint: &str,
 ) {
-    let target = if target.starts_with('#') {
+    let target = if target_mode == Some("External") {
+        PackageRelationshipTarget::External {
+            target: target.to_string(),
+        }
+    } else if target.starts_with('#') {
         PackageRelationshipTarget::InternalPath {
             target: target.to_string(),
         }

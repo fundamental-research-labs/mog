@@ -31,13 +31,6 @@
 //! </v:shape>
 //! ```
 //!
-//! UTF-8 boundary guard: every `&s[n..]` / `&s[..n]` in this file slices
-//! form-control XML / VML content at byte offsets produced by
-//! ASCII-only XML/VML syntax (`<`, `>`, `"`, `=`, `,`). Char-boundary
-//! by construction. File-scope allow documented here.
-
-#![allow(clippy::string_slice)]
-
 use std::collections::HashMap;
 
 use super::active_x;

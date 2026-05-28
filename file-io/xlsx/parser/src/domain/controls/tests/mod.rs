@@ -12,6 +12,7 @@ mod anchors;
 mod form_control_props;
 mod ole;
 mod ole_writer;
+mod read_facade;
 mod roundtrip;
 mod vml_controls;
 mod worksheet_controls;

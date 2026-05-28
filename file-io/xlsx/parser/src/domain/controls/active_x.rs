@@ -4,6 +4,8 @@ use super::types::ActiveXControl;
 use crate::infra::scanner::{find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_activex(xml: &[u8]) -> Option<ActiveXControl> {
     let start = find_tag_simd(xml, b"ax:ocx", 0).or_else(|| find_tag_simd(xml, b"ocx", 0))?;
 

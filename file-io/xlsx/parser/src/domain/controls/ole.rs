@@ -239,6 +239,8 @@ fn write_anchor_point(w: &mut XmlWriter, tag: &str, point: &CellAnchorPoint) {
     w.end_element(tag);
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_ole_objects(xml: &[u8], objects: &mut Vec<OleObject>) {
     let resolved = resolve_mc_alternate_content_regions(xml);
     let mut pos = 0;
@@ -280,6 +282,8 @@ pub fn parse_ole_objects(xml: &[u8], objects: &mut Vec<OleObject>) {
     }
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_ole_objects_for_sheet(
     archive: &crate::zip::XlsxArchive,
     sheet_num: usize,
@@ -394,6 +398,8 @@ fn resolve_vml_preview_paths(
     }
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn resolve_mc_alternate_content_regions(xml: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(xml.len());
     let mut pos = 0;
@@ -424,6 +430,8 @@ fn resolve_mc_alternate_content_regions(xml: &[u8]) -> Vec<u8> {
     result
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_object_pr(ole_body: &[u8]) -> Option<ObjectProperties> {
     let pr_start = find_tag_simd(ole_body, b"objectPr", 0)?;
     let pr_tag_end = find_gt_simd(ole_body, pr_start)
@@ -468,6 +476,8 @@ fn parse_object_pr(ole_body: &[u8]) -> Option<ObjectProperties> {
     Some(props)
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_object_anchor(pr_body: &[u8]) -> Option<ObjectAnchor> {
     let anchor_start = find_tag_simd(pr_body, b"anchor", 0)?;
     let anchor_tag_end = find_gt_simd(pr_body, anchor_start)
@@ -489,6 +499,8 @@ fn parse_object_anchor(pr_body: &[u8]) -> Option<ObjectAnchor> {
     })
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_anchor_point(body: &[u8], tag: &[u8]) -> Option<CellAnchorPoint> {
     let start = find_tag_simd(body, tag, 0)?;
     let close = find_closing_tag(body, tag, start)?;

@@ -21,6 +21,8 @@ use crate::write::xml_writer::XmlWriter;
 /// Namespace for form control properties (Office 2010+).
 const NS_X14: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_ctrl_prop(xml: &[u8]) -> Option<FormControl> {
     let start = find_tag_simd(xml, b"formControlPr", 0)?;
     let element_end = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(xml.len());
@@ -218,6 +220,8 @@ pub(crate) fn write_ctrl_prop_xml(control: &FormControl) -> Vec<u8> {
     w.finish()
 }
 
+// Slices use offsets from ASCII XML attribute delimiters.
+#[allow(clippy::string_slice)]
 fn parse_i32_attr(xml: &[u8], attr: &[u8]) -> Option<i32> {
     let attr_pos = find_attr_simd(xml, attr, 0)?;
     let value_start = attr_pos + attr.len();

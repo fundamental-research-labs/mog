@@ -20,6 +20,8 @@ const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006
 const NS_XDR: &str = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
 
 /// Parse `<control>` elements from a `<controls>` block.
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_worksheet_controls(xml: &[u8]) -> Vec<WorksheetControlRef> {
     let mut controls = Vec::new();
     let mut pos = 0;
@@ -49,6 +51,8 @@ pub fn parse_worksheet_controls(xml: &[u8]) -> Vec<WorksheetControlRef> {
 
 /// Parse worksheet-level controls from worksheet XML that may be wrapped in
 /// `mc:AlternateContent`.
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetControlRef> {
     let has_supported_controls_choice = worksheet_xml
         .windows(b"Requires=\"x14\"".len())
@@ -103,6 +107,8 @@ pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetC
 }
 
 /// Extract a modern anchor and worksheet `<controlPr>` attributes for a shapeId.
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub(crate) fn extract_modern_anchor_and_attrs(
     worksheet_xml: &[u8],
     target_shape_id: u32,

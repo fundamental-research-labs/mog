@@ -47,6 +47,8 @@ const VML_ONLY_TAGS: &[&str] = &[
     "LCT",
 ];
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_vml_drawing(xml: &[u8], controls: &mut Vec<FormControl>) {
     let mut pos = 0;
 
@@ -87,6 +89,8 @@ pub fn parse_vml_drawing(xml: &[u8], controls: &mut Vec<FormControl>) {
     }
 }
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_vml_imagedata(xml: &[u8]) -> HashMap<String, String> {
     let mut result = HashMap::new();
     let mut pos = 0;
@@ -604,6 +608,8 @@ pub(crate) fn escape_xml_text(s: &str) -> String {
     result
 }
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_vml_shape_props(
     full_xml: &[u8],
     shape_start: usize,
@@ -695,6 +701,8 @@ fn parse_mapped_client_data(cd: &[u8], control: &mut FormControl) {
     }
 }
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_vml_anchor(cd: &[u8], control: &mut FormControl) {
     if let Some(anchor_start) = find_tag_simd(cd, b"x:Anchor", 0) {
         let anchor_end = find_closing_tag(cd, b"x:Anchor", anchor_start).unwrap_or(cd.len());
@@ -718,6 +726,8 @@ fn parse_vml_linked_properties(cd: &[u8], control: &mut FormControl) {
     }
 }
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn parse_vml_only_extras(cd: &[u8], control: &mut FormControl) {
     for tag_name in VML_ONLY_TAGS {
         let prefixed = format!("x:{}", tag_name);
@@ -754,6 +764,8 @@ fn client_data_text(cd: &[u8], tag: &[u8]) -> Option<String> {
     }
 }
 
+// Slices use offsets from ASCII VML/XML tag delimiters.
+#[allow(clippy::string_slice)]
 fn client_data_text_preserve(cd: &[u8], tag: &[u8]) -> Option<String> {
     let tag_start = find_tag_simd(cd, tag, 0)?;
     let content_start = find_gt_simd(cd, tag_start)
@@ -764,6 +776,8 @@ fn client_data_text_preserve(cd: &[u8], tag: &[u8]) -> Option<String> {
 }
 
 /// Parse a VML attribute value, handling both single and double quotes.
+// Slices use offsets from ASCII VML/XML attribute delimiters.
+#[allow(clippy::string_slice)]
 fn parse_vml_attr(xml: &[u8], attr_name: &[u8]) -> Option<String> {
     let attr_pos = find_attr_simd(xml, attr_name, 0)?;
     let value_start = attr_pos + attr_name.len();

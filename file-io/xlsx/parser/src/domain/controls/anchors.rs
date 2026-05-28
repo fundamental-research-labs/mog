@@ -38,6 +38,8 @@ pub fn parse_vml_anchor(anchor: &str) -> Option<ControlAnchor> {
 ///
 /// Offsets are EMU values (`a:ST_Coordinate` = `xsd:long`), and policy flags
 /// come from the `<anchor>` element attributes.
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub fn parse_modern_anchor(xml: &[u8]) -> Option<ModernAnchorResult> {
     let anchor_start = find_tag_simd(xml, b"anchor", 0)?;
     let anchor_end = find_closing_tag(xml, b"anchor", anchor_start)?;
@@ -95,6 +97,8 @@ pub fn vml_offset(offset: i64, source: &AnchorSource) -> i64 {
     }
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub(crate) fn parse_child_element_u32(xml: &[u8], tag: &[u8]) -> Option<u32> {
     let start = find_tag_simd(xml, tag, 0)?;
     let end = find_closing_tag(xml, tag, start)?;
@@ -113,6 +117,8 @@ pub(crate) fn parse_child_element_u32(xml: &[u8], tag: &[u8]) -> Option<u32> {
     text.trim().parse().ok()
 }
 
+// Slices use offsets from ASCII XML tag delimiters.
+#[allow(clippy::string_slice)]
 pub(crate) fn parse_child_element_i64(xml: &[u8], tag: &[u8]) -> Option<i64> {
     let start = find_tag_simd(xml, tag, 0)?;
     let end = find_closing_tag(xml, tag, start)?;

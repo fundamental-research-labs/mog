@@ -373,6 +373,53 @@ fn test_add_chart() {
 }
 
 #[test]
+fn chart_ex_preserves_cnvpr_ext_lst() {
+    let mut writer = DrawingWriter::new();
+    writer.add_anchor(DrawingAnchor::TwoCell(
+        TwoCellAnchor {
+            from: CellAnchor {
+                col: 1,
+                col_off: 0,
+                row: 1,
+                row_off: 0,
+            },
+            to: CellAnchor {
+                col: 8,
+                col_off: 0,
+                row: 20,
+                row_off: 0,
+            },
+            client_data: ClientData::default(),
+            ..Default::default()
+        },
+        DrawingObject::ChartEx(ChartExRef {
+            r_id: "rId1".to_string(),
+            name: "Waterfall".to_string(),
+            id: 4,
+            fallback_off_x: 0,
+            fallback_off_y: 0,
+            fallback_ext_cx: 0,
+            fallback_ext_cy: 0,
+            macro_name: Some(String::new()),
+            nv_ext_lst: Some(
+                r#"<a:extLst><a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}"><a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{747C816B-D48A-63FE-35C7-CC1AE1ADA584}"/></a:ext></a:extLst>"#
+                    .to_string(),
+            ),
+        }),
+    ));
+
+    let xml = writer.to_xml();
+    let xml_str = String::from_utf8(xml).unwrap();
+
+    assert!(xml_str.contains("<mc:AlternateContent>"));
+    assert!(xml_str.contains(&format!("uri=\"{}\"", NS_CX)));
+    assert!(xml_str.contains("<xdr:cNvPr id=\"4\" name=\"Waterfall\">"));
+    assert!(xml_str.contains("<a16:creationId"));
+    assert!(xml_str.contains("id=\"{747C816B-D48A-63FE-35C7-CC1AE1ADA584}\""));
+    assert!(xml_str.contains("</xdr:cNvPr>"));
+}
+
+#[test]
 fn test_add_text_box() {
     let mut writer = DrawingWriter::new();
     writer.add_text_box(

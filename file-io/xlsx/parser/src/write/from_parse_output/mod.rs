@@ -690,6 +690,9 @@ pub fn write_xlsx_from_parse_output(
                         macro_name: chart_frame
                             .and_then(|frame| frame.graphic_frame.macro_name.clone())
                             .or_else(|| chart_spec.macro_name.clone()),
+                        nv_ext_lst: frame_cnv
+                            .and_then(|cnv| cnv.ext_lst.clone())
+                            .or_else(|| chart_spec.cnv_pr_ext_lst.clone()),
                     };
                     let edit_as = chart_frame
                         .and_then(|frame| frame.edit_as.as_deref())

@@ -1,11 +1,11 @@
 pub(super) use crate::domain::drawings::write::{
-    AbsoluteAnchor, CellAnchor, ChartRef, ClientData, CompoundLine, Connection, ConnectorProps,
-    DashStyle, DrawingAnchor, DrawingColor, DrawingFill, DrawingLocking, DrawingObject,
-    DrawingWriter, EditAs, Extent, GradientFill, GradientStop, Hyperlink, ImageProps, LineCap,
-    LineEndProperties, LineEndSize, LineEndType, LineJoin, NS_C, Outline, PatternFill,
-    PenAlignment, Position, PresetGeometry, ShapePreset, ShapeProps, ShapeStyle, SolidFill,
-    StyleRef, TextBox, Transform2D, cm_to_emu, emu_to_cm, emu_to_inches, inches_to_emu,
-    pixels_to_emu, points_to_emu,
+    AbsoluteAnchor, CellAnchor, ChartExRef, ChartRef, ClientData, CompoundLine, Connection,
+    ConnectorProps, DashStyle, DrawingAnchor, DrawingColor, DrawingFill, DrawingLocking,
+    DrawingObject, DrawingWriter, EditAs, Extent, GradientFill, GradientStop, Hyperlink,
+    ImageProps, LineCap, LineEndProperties, LineEndSize, LineEndType, LineJoin, NS_C, NS_CX,
+    Outline, PatternFill, PenAlignment, Position, PresetGeometry, ShapePreset, ShapeProps,
+    ShapeStyle, SolidFill, StyleRef, TextBox, Transform2D, TwoCellAnchor, cm_to_emu, emu_to_cm,
+    emu_to_inches, inches_to_emu, pixels_to_emu, points_to_emu,
 };
 pub(super) use ooxml_types::drawings::{
     LineDash, LineFill, StAngle, StPercentage, StPitchFamily, StPositiveFixedPercentageDecimal,

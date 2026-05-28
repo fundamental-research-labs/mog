@@ -268,6 +268,8 @@ pub struct ChartExRef {
     /// `Some("")` preserves `macro=""` for round-trip fidelity.
     /// `None` means the attribute was absent and should not be emitted.
     pub macro_name: Option<String>,
+    /// Extension list on cNvPr — opaque XML passthrough (CT_NonVisualDrawingProps extLst).
+    pub nv_ext_lst: Option<String>,
 }
 
 /// Chart reference in drawing

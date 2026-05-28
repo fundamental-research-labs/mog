@@ -25,6 +25,7 @@ mod charts;
 mod data_tables;
 mod package_graph_ownership;
 mod pivot_package;
+mod round7_search_gates;
 mod smoke_and_formulas;
 mod sparklines;
 mod styles;

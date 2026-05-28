@@ -93,6 +93,140 @@ fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComputeEngine {
     assemble_engine_from_parse_output_storage(storage, workbook_snap)
 }
 
+fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
+    xlsx_parser::zip::XlsxArchive::new(bytes)
+        .expect("exported XLSX should be readable")
+        .entries()
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect()
+}
+
+fn archive_text(bytes: &[u8], path: &str) -> Option<String> {
+    let archive =
+        xlsx_parser::zip::XlsxArchive::new(bytes).expect("exported XLSX should be readable");
+    archive
+        .read_file(path)
+        .ok()
+        .map(|bytes| String::from_utf8(bytes).expect("XML part should be UTF-8"))
+}
+
+fn assert_archive_has_entry_prefix(bytes: &[u8], prefix: &str) {
+    let names = archive_entry_names(bytes);
+    assert!(
+        names.iter().any(|name| name.starts_with(prefix)),
+        "expected an XLSX part under {prefix}; entries were {names:?}"
+    );
+}
+
+fn assert_archive_has_no_entry_prefix(bytes: &[u8], prefix: &str) {
+    let names = archive_entry_names(bytes);
+    assert!(
+        names.iter().all(|name| !name.starts_with(prefix)),
+        "no XLSX part under {prefix} should remain; entries were {names:?}"
+    );
+}
+
+fn picture_source_xlsx() -> Vec<u8> {
+    let (mut source, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let source_sheet_id = sheet_id();
+    let picture_config = serde_json::json!({
+        "type": "picture",
+        "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=",
+        "anchor": {
+            "anchorRow": 0,
+            "anchorCol": 0,
+            "anchorRowOffsetEmu": 0,
+            "anchorColOffsetEmu": 0,
+            "anchorMode": "oneCell",
+            "extentCxEmu": 1905000,
+            "extentCyEmu": 1428750
+        },
+        "width": 200.0,
+        "height": 150.0,
+        "visible": true,
+        "printable": true,
+        "flipH": false,
+        "flipV": false,
+        "opacity": 1.0,
+        "rotation": 0.0,
+        "name": "Owned Picture"
+    });
+    source
+        .create_floating_object(&source_sheet_id, &picture_config)
+        .expect("picture creation should succeed");
+    source
+        .export_to_xlsx_bytes()
+        .expect("source workbook with picture should export")
+}
+
+fn ole_owner_parse_output() -> ParseOutput {
+    use domain_types::domain::floating_object::{
+        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
+        OleObjectData, OleObjectOoxmlProps, OleObjectPackageIdentity, OleObjectPreviewIdentity,
+    };
+
+    ParseOutput {
+        sheets: vec![SheetData {
+            name: "Ole".to_string(),
+            rows: 2,
+            cols: 2,
+            floating_objects: vec![FloatingObject {
+                common: FloatingObjectCommon {
+                    id: "ole-1".to_string(),
+                    sheet_id: "sheet-1".to_string(),
+                    anchor: FloatingObjectAnchor {
+                        anchor_mode: AnchorMode::TwoCell,
+                        end_row: Some(1),
+                        end_col: Some(1),
+                        ..Default::default()
+                    },
+                    width: 120.0,
+                    height: 80.0,
+                    name: "Owned OLE".to_string(),
+                    ..Default::default()
+                },
+                data: FloatingObjectData::OleObject(OleObjectData {
+                    prog_id: "Package".to_string(),
+                    dv_aspect: "DVASPECT_CONTENT".to_string(),
+                    is_linked: false,
+                    is_embedded: true,
+                    preview_image_src: Some("data:image/png;base64,iVBORw0KGgo=".to_string()),
+                    alt_text: Some("Owned OLE object".to_string()),
+                    ooxml: Some(OleObjectOoxmlProps {
+                        shape_id: 1025,
+                        r_id: Some("rIdOle1".to_string()),
+                        data_path: Some("xl/embeddings/oleObject1.bin".to_string()),
+                        name: Some("Owned OLE".to_string()),
+                        dv_aspect: "DVASPECT_CONTENT".to_string(),
+                        prog_id: "Package".to_string(),
+                        ole_update: "OLEUPDATE_ALWAYS".to_string(),
+                        preview_image_rel_id: Some("rIdPreview1".to_string()),
+                        preview_image_path: Some("xl/media/image1.png".to_string()),
+                        embedding: Some(OleObjectPackageIdentity {
+                            path: "xl/embeddings/oleObject1.bin".to_string(),
+                            relationship_id: Some("rIdOle1".to_string()),
+                            bytes: b"owned ole bytes".to_vec(),
+                        }),
+                        preview: Some(OleObjectPreviewIdentity {
+                            path: "xl/media/image1.png".to_string(),
+                            relationship_id: Some("rIdPreview1".to_string()),
+                            bytes: vec![
+                                0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n',
+                            ],
+                        }),
+                        vml_drawing_path: Some("xl/drawings/vmlDrawing1.vml".to_string()),
+                        vml_relationship_id: Some("rIdVml1".to_string()),
+                        ..Default::default()
+                    }),
+                }),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
 #[test]
 fn shared_string_hints_survive_yrs_hydration_export() {
     let input = ParseOutput {
@@ -127,6 +261,83 @@ fn shared_string_hints_survive_yrs_hydration_export() {
     let exported = engine.export_to_parse_output().unwrap().parse_output;
 
     assert_eq!(exported.shared_string_hints, input.shared_string_hints);
+}
+
+#[test]
+fn imported_picture_survives_context_stripped_hydration_export_and_deletion_removes_parts() {
+    let source_xlsx = picture_source_xlsx();
+    let parsed = xlsx_api::parse(&source_xlsx)
+        .expect("source XLSX should parse")
+        .output;
+    assert_eq!(parsed.sheets[0].floating_objects.len(), 1);
+
+    let mut engine = engine_from_parse_output_normal(&parsed);
+    let hydrated_export = engine
+        .export_to_xlsx_bytes_context_stripped()
+        .expect("context-stripped export should succeed");
+    assert_archive_has_entry_prefix(&hydrated_export, "xl/media/");
+    assert_archive_has_entry_prefix(&hydrated_export, "xl/drawings/");
+    xlsx_parser::infra::package_integrity::validate_archive_package_integrity(
+        &xlsx_parser::zip::XlsxArchive::new(&hydrated_export).unwrap(),
+    )
+    .expect("hydrated picture export package graph should be valid");
+
+    let exported_parse = engine
+        .export_to_parse_output()
+        .expect("production parse output export should succeed")
+        .parse_output;
+    let object_id = exported_parse.sheets[0].floating_objects[0].common.id.clone();
+    let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
+    engine
+        .delete_floating_object(&sheet_id_after_hydration, &object_id)
+        .expect("picture owner deletion should succeed");
+
+    let deleted_export = engine
+        .export_to_xlsx_bytes_context_stripped()
+        .expect("context-stripped export after deletion should succeed");
+    assert_archive_has_no_entry_prefix(&deleted_export, "xl/media/");
+    assert_archive_has_no_entry_prefix(&deleted_export, "xl/drawings/");
+    let content_types = archive_text(&deleted_export, "[Content_Types].xml").unwrap();
+    assert!(!content_types.contains("/xl/media/"));
+    assert!(!content_types.contains("/xl/drawings/"));
+}
+
+#[test]
+fn modeled_ole_survives_context_stripped_hydration_export_and_deletion_removes_parts() {
+    let input = ole_owner_parse_output();
+    let mut engine = engine_from_parse_output_normal(&input);
+
+    let hydrated_export = engine
+        .export_to_xlsx_bytes_context_stripped()
+        .expect("context-stripped OLE export should succeed");
+    assert_archive_has_entry_prefix(&hydrated_export, "xl/embeddings/");
+    assert_archive_has_entry_prefix(&hydrated_export, "xl/drawings/");
+    assert_archive_has_entry_prefix(&hydrated_export, "xl/media/");
+    xlsx_parser::infra::package_integrity::validate_archive_package_integrity(
+        &xlsx_parser::zip::XlsxArchive::new(&hydrated_export).unwrap(),
+    )
+    .expect("hydrated OLE export package graph should be valid");
+
+    let exported_parse = engine
+        .export_to_parse_output()
+        .expect("production parse output export should succeed")
+        .parse_output;
+    let object_id = exported_parse.sheets[0].floating_objects[0].common.id.clone();
+    let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
+    engine
+        .delete_floating_object(&sheet_id_after_hydration, &object_id)
+        .expect("OLE owner deletion should succeed");
+
+    let deleted_export = engine
+        .export_to_xlsx_bytes_context_stripped()
+        .expect("context-stripped export after OLE deletion should succeed");
+    assert_archive_has_no_entry_prefix(&deleted_export, "xl/embeddings/");
+    assert_archive_has_no_entry_prefix(&deleted_export, "xl/media/");
+    assert_archive_has_no_entry_prefix(&deleted_export, "xl/drawings/");
+    let content_types = archive_text(&deleted_export, "[Content_Types].xml").unwrap();
+    assert!(!content_types.contains("/xl/embeddings/"));
+    assert!(!content_types.contains("/xl/media/"));
+    assert!(!content_types.contains("/xl/drawings/"));
 }
 
 #[test]

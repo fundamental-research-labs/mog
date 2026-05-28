@@ -31,12 +31,11 @@ pub struct ParseOutput {
     /// for current emitted graph nodes, never as an export manifest.
     #[serde(default, skip)]
     pub package_fidelity: Option<PackageFidelityMetadata>,
-    /// Typed import hints for shared-string entries that cannot be regenerated
-    /// from plain cell text alone, such as rich text and phonetic metadata.
+    /// Legacy import hints for shared-string entries.
     ///
-    /// This is deliberately sparse: canonical plain strings are generated from
-    /// current modeled cells during export and do not need a workbook-level
-    /// copy of the original SST.
+    /// Export correctness is based on current cell-owned string state only.
+    /// These hints are not an SST identity model and must not influence emitted
+    /// shared-string slots or cell `<v>` indices.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_string_hints: Vec<SharedStringHint>,
     pub named_ranges: Vec<NamedRange>,
@@ -318,8 +317,11 @@ impl WorkbookStylesheet {
 #[serde(rename_all = "camelCase")]
 pub struct SharedStringHint {
     /// Original SST index from `xl/sharedStrings.xml`.
+    ///
+    /// Import provenance only. Export derives `xl/sharedStrings.xml` from
+    /// current cell values and must not use this as emitted table identity.
     pub index: u32,
-    /// Plain text content. Export uses this to reject stale hints after edits.
+    /// Plain text content captured with the imported hint.
     pub text: String,
     /// Rich text runs for this SST entry, when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -676,9 +678,10 @@ pub struct CellData {
     /// Used for rich value types (linked data types, images-in-cells).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
-    /// Original shared string table index for `t="s"` cells.
-    /// Used for round-trip fidelity when the SST contains both plain and rich text
-    /// entries for the same text content (they have different indices).
+    /// Original shared string table index for imported `t="s"` cells.
+    ///
+    /// Import provenance only. Writers must derive SST indices from current
+    /// cell values/rich-string state instead of consulting this field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     /// Original raw value string from the `<v>` element for round-trip fidelity.

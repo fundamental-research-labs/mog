@@ -7,7 +7,7 @@
 //! # Design goals
 //!
 //! 1. **Deduplication** — each unique plain string is stored only once.
-//! 2. **Insertion-order emission** — the index returned by `add()` / `seed()`
+//! 2. **Insertion-order emission** — the index returned by `add()`
 //!    is the slot at which the entry is emitted in `<sst>`. Cells store
 //!    SST indices positionally (`<c t="s"><v>N</v>`), so any reorder
 //!    between `add()` and emission silently corrupts text cells. Matches
@@ -134,20 +134,15 @@ struct StringEntry {
     phonetic_xml: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone)]
-struct ImportedStringHint {
-    value: SharedStringValue,
-    phonetic_xml: Option<Vec<u8>>,
-}
-
 // ============================================================================
 // SharedStringsWriter
 // ============================================================================
 
 /// Writer for the shared strings table (xl/sharedStrings.xml).
 ///
-/// Provides deduplication, reference counting, and frequency-based ordering
-/// for optimal compression.
+/// Export derives the table from the current workbook cells for each write.
+/// Imported SST slots and original cell SST indices are provenance only; they
+/// must not seed this writer or influence emitted indices.
 ///
 /// # Example
 ///
@@ -170,13 +165,6 @@ pub struct SharedStringsWriter {
     index_map: HashMap<String, usize>,
     /// Next rich text index (rich text entries are always unique)
     next_index: usize,
-    /// For seeded SSTs with duplicate strings: maps string → list of all SST indices.
-    /// Used in round-trip mode to cycle through duplicate indices in order.
-    dup_indices: HashMap<String, Vec<usize>>,
-    /// Imported per-entry hints keyed by original SST index. Hints are not emitted
-    /// until a current cell proves it still references the same text.
-    imported_hints: HashMap<usize, ImportedStringHint>,
-    imported_hint_indices: HashMap<usize, usize>,
     rich_index_map: HashMap<String, usize>,
 }
 
@@ -187,9 +175,6 @@ impl SharedStringsWriter {
             entries: Vec::new(),
             index_map: HashMap::new(),
             next_index: 0,
-            dup_indices: HashMap::new(),
-            imported_hints: HashMap::new(),
-            imported_hint_indices: HashMap::new(),
             rich_index_map: HashMap::new(),
         }
     }
@@ -200,125 +185,7 @@ impl SharedStringsWriter {
             entries: Vec::with_capacity(capacity),
             index_map: HashMap::with_capacity(capacity),
             next_index: 0,
-            dup_indices: HashMap::new(),
-            imported_hints: HashMap::new(),
-            imported_hint_indices: HashMap::new(),
             rich_index_map: HashMap::new(),
-        }
-    }
-
-    /// Register an imported SST entry as a non-authoritative hint.
-    ///
-    /// The hint is emitted only via `add_imported_hint_if_text_matches`, after a
-    /// current cell proves that its original SST index still resolves to the
-    /// current text. This lets unchanged rich text and phonetic metadata survive
-    /// without replaying raw sharedStrings.xml or stale unused entries.
-    pub fn add_imported_hint(
-        &mut self,
-        original_index: usize,
-        text: &str,
-        rich_runs: Option<Vec<DtRichTextRun>>,
-        phonetic_xml: Option<Vec<u8>>,
-    ) {
-        let value = rich_runs.map_or_else(
-            || SharedStringValue::Plain(text.to_string()),
-            SharedStringValue::DomainRichText,
-        );
-        self.imported_hints.insert(
-            original_index,
-            ImportedStringHint {
-                value,
-                phonetic_xml,
-            },
-        );
-    }
-
-    /// Emit and reference an imported hint if its plain text still matches the cell.
-    pub fn add_imported_hint_if_text_matches(
-        &mut self,
-        original_index: usize,
-        text: &str,
-    ) -> Option<usize> {
-        let hint = self.imported_hints.get(&original_index)?;
-        if hint.value.to_plain_text() != text {
-            return None;
-        }
-
-        if let Some(&idx) = self.imported_hint_indices.get(&original_index) {
-            self.entries[idx].count += 1;
-            return Some(idx);
-        }
-
-        let idx = self.next_index;
-        self.entries.push(StringEntry {
-            value: hint.value.clone(),
-            count: 1,
-            phonetic_xml: hint.phonetic_xml.clone(),
-        });
-        self.imported_hint_indices.insert(original_index, idx);
-        self.next_index += 1;
-        Some(idx)
-    }
-
-    /// Seed a plain string with count=0 and return its index.
-    ///
-    /// Use this to pre-populate the SST from a parsed file's shared strings
-    /// without inflating the reference count. Subsequent `add()` calls from
-    /// cell processing will find the string and increment count correctly,
-    /// so `total_count()` reflects only actual cell references.
-    ///
-    /// If the string already exists, returns the existing index without
-    /// changing its count.
-    pub fn seed(&mut self, text: &str) -> usize {
-        // Always create an entry at the next sequential index, even for duplicate
-        // text values. The original XLSX SST may contain the same string at multiple
-        // indices (e.g., once as rich text and once as plain text). Collapsing
-        // duplicates here would shift all subsequent indices and corrupt cell <v>
-        // references.
-        //
-        // The index_map still maps to the FIRST occurrence so that `add()` lookups
-        // return a valid index for new strings added during cell processing.
-        let idx = self.next_index;
-        self.entries.push(StringEntry {
-            value: SharedStringValue::Plain(text.to_string()),
-            count: 0,
-            phonetic_xml: None,
-        });
-        // Track all indices for each string (for round-trip duplicate cycling)
-        self.dup_indices
-            .entry(text.to_string())
-            .or_default()
-            .push(idx);
-        if !self.index_map.contains_key(text) {
-            self.index_map.insert(text.to_string(), idx);
-        }
-        self.next_index += 1;
-        idx
-    }
-
-    /// Seed a rich text entry with domain-type runs (full round-trip fidelity).
-    pub fn seed_rich(&mut self, runs: Vec<DtRichTextRun>) -> usize {
-        let idx = self.next_index;
-        // Build plain text key for dedup lookups
-        let plain_text: String = runs.iter().map(|r| r.text.as_str()).collect();
-        self.entries.push(StringEntry {
-            value: SharedStringValue::DomainRichText(runs),
-            count: 0,
-            phonetic_xml: None,
-        });
-        self.dup_indices
-            .entry(plain_text.clone())
-            .or_default()
-            .push(idx);
-        self.index_map.entry(plain_text).or_insert(idx);
-        self.next_index += 1;
-        idx
-    }
-
-    /// Set phonetic XML for the entry at the given index.
-    pub fn set_phonetic_xml(&mut self, index: usize, phonetic_xml: Vec<u8>) {
-        if let Some(entry) = self.entries.get_mut(index) {
-            entry.phonetic_xml = Some(phonetic_xml);
         }
     }
 
@@ -403,25 +270,6 @@ impl SharedStringsWriter {
         self.index_map.get(text).copied()
     }
 
-    /// Check whether an entry exists at the given index.
-    pub fn has_entry(&self, index: usize) -> bool {
-        index < self.entries.len()
-    }
-
-    /// Check whether an entry exists at the given index and resolves to `text`.
-    pub fn entry_text_matches(&self, index: usize, text: &str) -> bool {
-        self.entries
-            .get(index)
-            .is_some_and(|entry| entry.value.to_plain_text() == text)
-    }
-
-    /// Mark an entry at the given index as used (increment its reference count).
-    pub fn mark_used(&mut self, index: usize) {
-        if let Some(entry) = self.entries.get_mut(index) {
-            entry.count += 1;
-        }
-    }
-
     /// Get the total count of unique strings.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -448,7 +296,7 @@ impl SharedStringsWriter {
     ///
     /// Cells reference SST entries by position (`<c t="s"><v>N</v>`),
     /// so the slot emitted here must equal the index returned by
-    /// `add()` / `seed()` for every entry. Emitting in insertion order
+    /// `add()` for every entry. Emitting in insertion order
     /// makes that invariant structural: the entry at `entries[i]` is
     /// emitted at slot `i`, which is the index its insertion returned.
     /// Any reorder on this path silently corrupts text cells, because

@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// The metadata block carries both editorial provenance (provenance /
 /// validation / connection_id) and XLSX round-trip bookkeeping fields
-/// required to reconstruct the original workbook (style palette index,
-/// cellMeta flag, valueMeta index, formula-result type, SST index,
-/// original value). Typed OOXML preservation: eliminated the `extra: HashMap<String,
+/// required to reconstruct modeled workbook state (style palette index,
+/// cellMeta flag, valueMeta index, formula-result type, import-only SST
+/// provenance, original value). Typed OOXML preservation: eliminated the `extra: HashMap<String,
 /// serde_json::Value>` escape hatch; every former bag key is now a
 /// typed named field.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -56,9 +56,9 @@ pub struct CellMetadata {
         skip_serializing_if = "is_false"
     )]
     pub has_empty_cached_value: bool,
-    /// Original shared-string-table index for `t="s"` cells. Preserves
-    /// SST ordering on write even when the cached value has been
-    /// recomputed.
+    /// Original shared-string-table index for imported `t="s"` cells.
+    /// Import provenance only; XLSX export derives shared-string indices from
+    /// current cell values and must not use this field as SST identity.
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     /// Original `<v>` text preserved verbatim to survive float-

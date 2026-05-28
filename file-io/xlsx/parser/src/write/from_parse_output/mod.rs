@@ -209,13 +209,6 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     };
 
     let mut styles_writer = build_styles(style_palette_for_export);
-    if has_style_references && let Some(workbook_stylesheet) = &output.workbook_stylesheet {
-        apply_workbook_stylesheet(
-            &mut styles_writer,
-            workbook_stylesheet,
-            has_style_references,
-        );
-    }
     styles_writer.dxfs = registry_dxfs;
     if styles_writer.dxfs.is_empty() {
         styles_writer.dxfs = differential_formats::collect(output);
@@ -1922,9 +1915,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
     // ── 6. Generate XML parts ───────────────────────────────────────────
     let styles_xml = styles_writer.to_xml();
-    // SST entries are emitted in insertion order; the index returned by
-    // `add()` / `seed()` is the slot at which the entry lands in <sst>.
-    // This is load-bearing for cells, which carry positional SST indices.
+    // SST entries are derived from current cells and emitted in insertion order;
+    // the index returned by `add()` is the slot at which the entry lands in
+    // <sst>. This is load-bearing for cells, which carry positional SST indices.
     let has_referenced_shared_strings = shared_strings.has_referenced_entries();
     let shared_strings_xml = shared_strings.to_xml();
 
@@ -1959,7 +1952,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     )
 }
 
-use styles::{apply_workbook_stylesheet, build_styles, output_references_style_ids};
+use styles::{build_styles, output_references_style_ids};
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');

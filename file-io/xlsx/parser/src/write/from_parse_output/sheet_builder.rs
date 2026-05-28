@@ -917,7 +917,6 @@ fn convert_cell_with_metadata_refs(
 ) -> CellData {
     let style_index = cell.style_id.map(|id| id + 1);
 
-    let mut is_empty_string_cell = false;
     let authored_numeric_value = matching_authored_numeric_value(cell);
     let value = match (&cell.value, &cell.formula) {
         // Formula cells
@@ -965,26 +964,11 @@ fn convert_cell_with_metadata_refs(
             // t="str" to t="s" and put the value in the SST — breaking round-trip.
             if cell.formula_result_type == Some(6) {
                 CellValue::FormulaString(s.as_ref().to_string())
-            } else if s.is_empty() && cell.original_sst_index.is_none() {
-                // Cell originally had t="s" but no <v> element (self-closing).
-                // Emit as Empty with explicit_type="s" to preserve the original form.
-                // We set explicit_type below after the match.
-                is_empty_string_cell = true;
-                CellValue::Empty
             } else if let Some(rich) = current_rich_string(cell, s.as_ref()) {
                 let sst_idx = shared_strings.add_rich_shared_string(rich);
                 CellValue::String(sst_idx)
             } else {
-                // Use the original SST index when it still resolves to this text
-                // in the seeded SST. If the cell was edited after import, the
-                // stale index must not override the current resolved value.
-                let sst_idx = if let Some(orig_idx) = cell.original_sst_index {
-                    shared_strings
-                        .add_imported_hint_if_text_matches(orig_idx as usize, s.as_ref())
-                        .unwrap_or_else(|| shared_strings.add(s.as_ref()))
-                } else {
-                    shared_strings.add(s.as_ref())
-                };
+                let sst_idx = shared_strings.add(s.as_ref());
                 CellValue::String(sst_idx)
             }
         }
@@ -1026,11 +1010,7 @@ fn convert_cell_with_metadata_refs(
         vm: emit_cell_metadata_refs.then_some(cell.vm).flatten(),
         preserve_space_formula: false,
         preserve_space_value: false,
-        explicit_type: if is_empty_string_cell {
-            Some("s".to_string())
-        } else {
-            None
-        },
+        explicit_type: None,
         formula_type_hint,
     }
 }
@@ -1140,9 +1120,8 @@ mod tests {
     }
 
     #[test]
-    fn original_sst_index_preserves_empty_shared_string_cell() {
+    fn empty_text_cell_derives_shared_string_entry() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.add_imported_hint(0, "", None, None);
         let converted = convert_cell(&text_cell("", Some(0)), &mut shared_strings);
 
         assert!(matches!(&converted.value, CellValue::String(0)));
@@ -1151,9 +1130,8 @@ mod tests {
     }
 
     #[test]
-    fn original_sst_index_out_of_range_falls_back() {
+    fn original_sst_index_is_ignored_for_current_text_export() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.add_imported_hint(0, "old", None, None);
         let converted = convert_cell(&text_cell("current", Some(99)), &mut shared_strings);
 
         assert!(matches!(&converted.value, CellValue::String(0)));
@@ -1161,9 +1139,8 @@ mod tests {
     }
 
     #[test]
-    fn original_sst_index_text_mismatch_falls_back() {
+    fn stale_original_sst_index_does_not_seed_shared_strings() {
         let mut shared_strings = SharedStringsWriter::with_capacity(1);
-        shared_strings.add_imported_hint(0, "old", None, None);
         let converted = convert_cell(&text_cell("new", Some(0)), &mut shared_strings);
 
         assert!(matches!(&converted.value, CellValue::String(0)));

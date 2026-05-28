@@ -18,16 +18,12 @@ pub(super) struct BuiltSheetParts {
 }
 
 pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> SharedStringsWriter {
-    let mut shared_strings = SharedStringsWriter::new();
-    for hint in &output.shared_string_hints {
-        shared_strings.add_imported_hint(
-            hint.index as usize,
-            &hint.text,
-            hint.rich_text.clone(),
-            hint.phonetic_xml.clone(),
-        );
-    }
-    shared_strings
+    let capacity = output
+        .sheets
+        .iter()
+        .map(|sheet| sheet.cells.len())
+        .sum::<usize>();
+    SharedStringsWriter::with_capacity(capacity)
 }
 
 pub(super) fn build_sheet_parts(

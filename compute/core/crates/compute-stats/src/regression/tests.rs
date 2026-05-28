@@ -1,0 +1,10 @@
+mod dispatch_tests;
+mod fixtures;
+mod format_tests;
+mod linear_tests;
+mod metrics_tests;
+mod moving_average_tests;
+mod points_tests;
+mod polynomial_tests;
+mod solver_tests;
+mod transformed_tests;

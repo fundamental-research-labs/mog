@@ -802,7 +802,7 @@ fn parse_xlsx_full_native_impl(
     let raw_metadata_xml: Option<Vec<u8>> = archive.read_file("xl/metadata.xml").ok();
     let metadata = raw_metadata_xml.as_deref().map(|xml| parse_metadata(xml));
 
-    // Read docMetadata/LabelInfo.xml if present — store raw bytes for verbatim passthrough
+    // Read docMetadata/LabelInfo.xml if present for inert package-part export.
     let raw_doc_metadata_label_info: Option<Vec<u8>> =
         archive.read_file("docMetadata/LabelInfo.xml").ok();
 
@@ -910,10 +910,10 @@ fn parse_xlsx_full_native_impl(
         }
     }
 
-    // Capture xl/persons/person.xml for verbatim round-trip passthrough (modern threaded comments metadata)
+    // Capture xl/persons/person.xml as typed threaded-comment author input.
     let raw_persons_xml: Option<Vec<u8>> = archive.read_file("xl/persons/person.xml").ok();
 
-    // Capture xl/threadedComments/ parts for verbatim round-trip passthrough
+    // Capture xl/threadedComments/ parts as typed threaded-comment merge input.
     let mut raw_threaded_comments: Vec<(String, Vec<u8>)> = Vec::new();
     for entry in archive.entries() {
         if entry.name.starts_with("xl/threadedComments/") {
@@ -923,8 +923,8 @@ fn parse_xlsx_full_native_impl(
         }
     }
 
-    // Collect web extension parts (xl/webextensions/) for round-trip fidelity.
-    // These are stored as raw bytes in ImportedPackageParts so they are written back verbatim.
+    // Collect web extension parts for classification and diagnostics. Export
+    // policy decides whether these active parts can be emitted.
     let web_extension_parts =
         crate::domain::web_extensions::read::parse_web_extensions(&archive).map(|(_, parts)| parts);
     ensure_no_archive_safety_error(&archive)?;

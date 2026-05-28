@@ -654,8 +654,8 @@ pub struct FullParseResult {
     /// Avoids namespace rewriting issues (e.g., `xda` vs `xlrd`).
     #[serde(skip)]
     pub raw_metadata_xml: Option<Vec<u8>>,
-    /// Raw bytes of `docMetadata/LabelInfo.xml` for verbatim round-trip passthrough.
-    /// This part is entirely missing from the structured write path, so we store and write it verbatim.
+    /// Raw bytes of `docMetadata/LabelInfo.xml` for inert package-part export.
+    /// This part has no semantic model, so export may emit it only through inert package policy.
     #[serde(skip)]
     pub raw_doc_metadata_label_info: Option<Vec<u8>>,
     /// Parsed external link definitions for domain-based round-tripping.

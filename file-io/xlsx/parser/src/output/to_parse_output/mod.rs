@@ -320,10 +320,6 @@ fn build_package_fidelity_metadata(
     if let Some(bytes) = result.raw_doc_metadata_label_info.clone() {
         raw_parts.push(("docMetadata/LabelInfo.xml".to_string(), bytes));
     }
-    if let Some(bytes) = result.raw_persons_xml.clone() {
-        raw_parts.push(("xl/persons/person.xml".to_string(), bytes));
-    }
-    raw_parts.extend(result.raw_threaded_comments.iter().cloned());
 
     metadata.opaque_parts = build_opaque_package_part_hints(result, raw_parts);
 

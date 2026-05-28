@@ -24,6 +24,7 @@ use crate::domain::content_types::write::{
     CT_CHART_COLOR_STYLE, CT_CHART_STYLE, ContentTypesManager,
 };
 use crate::infra::opc::OoxmlRelationshipType;
+use crate::write::package_ownership::AuxiliaryPackagePartPolicy;
 
 pub type PackagePartPath = String;
 pub type RelationshipOwnerPath = String;
@@ -404,7 +405,9 @@ impl PackageGraphBuilder {
         };
 
         for part in &metadata.opaque_parts {
-            if !is_inert_opaque_candidate(&part.path) {
+            if crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
+                != Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary)
+            {
                 continue;
             }
             if crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(&part.path)
@@ -961,17 +964,6 @@ fn imported_internal_target(
         return None;
     }
     crate::infra::opc::resolve_relationship_target(owner_part, &hint.target).ok()
-}
-
-fn is_inert_opaque_candidate(path: &str) -> bool {
-    let normalized = normalize_part_path(path);
-    normalized.starts_with("customXml/")
-        || (normalized.starts_with("xl/printerSettings/") && normalized.ends_with(".bin"))
-        || normalized.starts_with("docProps/thumbnail.")
-        || normalized == "docMetadata/LabelInfo.xml"
-        || (normalized.starts_with("xl/customProperty")
-            && normalized.ends_with(".bin")
-            && !normalized.starts_with("xl/customProperty/"))
 }
 
 fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {

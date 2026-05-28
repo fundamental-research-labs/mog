@@ -36,6 +36,16 @@ pub struct PackageOwnershipContract {
     pub opaque_policy: &'static str,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuxiliaryPackagePartPolicy {
+    InertOpaqueAuxiliary,
+    TypedOwned,
+    ActiveForbidden,
+    ExternalCapable,
+    UnsupportedNeedsModel,
+    DiagnosticsOnly,
+}
+
 pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::CoreWorkbook,
@@ -222,23 +232,13 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::DocumentProperties,
         owner_domain: "docProps",
-        parts: &[
-            "docProps/core.xml",
-            "docProps/app.xml",
-            "docProps/custom.xml",
-            "docMetadata/LabelInfo.xml",
-        ],
+        parts: &["docProps/core.xml", "docProps/app.xml", "docProps/custom.xml"],
         relationships: &[
             "root -> core-properties",
             "root -> extended-properties",
             "root -> custom-properties",
         ],
-        content_types: &[
-            "core properties",
-            "extended properties",
-            "custom properties",
-            "label info",
-        ],
+        content_types: &["core properties", "extended properties", "custom properties"],
         relationship_id_hints: &["root docProps r:id allocation"],
         dirty_invalidation_triggers: &[
             "document properties mutation",
@@ -309,7 +309,6 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
         "docProps/core.xml"
             | "docProps/app.xml"
             | "docProps/custom.xml"
-            | "docMetadata/LabelInfo.xml"
     ) {
         Some(PackageFeatureOwner::DocumentProperties)
     } else {
@@ -319,6 +318,39 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
 
 pub fn modeled_feature_part_must_not_be_opaque(path: &str) -> bool {
     modeled_owner_for_part(path).is_some()
+}
+
+pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartPolicy> {
+    let path = path.trim_start_matches('/').replace('\\', "/");
+    if path.starts_with("customXml/")
+        || (path.starts_with("xl/printerSettings/") && path.ends_with(".bin"))
+        || path.starts_with("docProps/thumbnail.")
+        || path == "docMetadata/LabelInfo.xml"
+        || (path.starts_with("xl/customProperty")
+            && path.ends_with(".bin")
+            && !path.starts_with("xl/customProperty/"))
+    {
+        Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary)
+    } else if path == "xl/persons/person.xml"
+        || path.starts_with("xl/threadedComments/")
+        || path == "xl/connections.xml"
+        || path.starts_with("xl/queryTables/")
+    {
+        Some(AuxiliaryPackagePartPolicy::TypedOwned)
+    } else if path == "xl/vbaProject.bin" {
+        Some(AuxiliaryPackagePartPolicy::ActiveForbidden)
+    } else if path.starts_with("xl/webextensions/") {
+        Some(AuxiliaryPackagePartPolicy::ExternalCapable)
+    } else if path == "xl/volatileDependencies.xml" {
+        Some(AuxiliaryPackagePartPolicy::UnsupportedNeedsModel)
+    } else if path.starts_with("xl/timelineCaches/")
+        || path.starts_with("xl/timelines/")
+        || path.starts_with("xl/featurePropertyBag/")
+    {
+        Some(AuxiliaryPackagePartPolicy::DiagnosticsOnly)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

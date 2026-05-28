@@ -189,7 +189,10 @@ fn roundtrip_x14_data_validation_survives_l2_hydration_export() {
         .expect("export_to_parse_output")
         .parse_output;
 
-    assert_eq!(exported.sheets[0].x14_data_validations_declared_count, Some(1));
+    assert_eq!(
+        exported.sheets[0].x14_data_validations_declared_count,
+        Some(1)
+    );
     assert_eq!(exported.sheets[0].x14_data_validations.len(), 1);
     assert_eq!(
         exported.sheets[0].x14_data_validations[0].ranges,

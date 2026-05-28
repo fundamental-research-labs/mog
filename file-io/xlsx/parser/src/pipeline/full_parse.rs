@@ -1517,8 +1517,7 @@ fn parse_sheets_sequential(
         let custom_height = fmt_pr_seq.custom_height;
         let zero_height = fmt_pr_seq.zero_height;
 
-        let sheet_properties =
-            crate::domain::worksheet::read::parse_sheet_properties(pre_sd_early);
+        let sheet_properties = crate::domain::worksheet::read::parse_sheet_properties(pre_sd_early);
         let outline_properties = sheet_properties
             .as_ref()
             .and_then(|properties| properties.outline_pr.clone());

@@ -24,10 +24,7 @@ pub(super) fn preserved_elements_for_export(
         .then(|| crate::roundtrip::unknown_elements::PreservedElements::from_position_pairs(&pairs))
 }
 
-pub(super) fn apply_visible_row_hints_for_export(
-    writer: &mut SheetWriter,
-    sheet_data: &SheetData,
-) {
+pub(super) fn apply_visible_row_hints_for_export(writer: &mut SheetWriter, sheet_data: &SheetData) {
     for row_dim in &sheet_data.dimensions.row_heights {
         if row_dim.explicit_hidden && !row_dim.hidden {
             writer.set_row_hidden(row_dim.row, false);

@@ -501,12 +501,6 @@ pub fn to_yrs_prelim(obj: &FloatingObject) -> Vec<(String, Any)> {
             if let Some(v) = d.height_cells {
                 entries.push(("heightCells".into(), Any::Number(v)));
             }
-            if let Some(ref v) = d.preserved_chart_xml {
-                entries.push((
-                    "preservedChartXml".into(),
-                    Any::String(Arc::from(v.as_str())),
-                ));
-            }
             if let Some(a) = option_sub_object(&d.ooxml) {
                 entries.push(("ooxml".into(), a));
             }
@@ -802,7 +796,6 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<FloatingObject>
             table_column_names: read_sub_object::<Vec<String>, _>(map, txn, "tableColumnNames"),
             width_cells: read_number(map, txn, "widthCells"),
             height_cells: read_number(map, txn, "heightCells"),
-            preserved_chart_xml: read_string(map, txn, "preservedChartXml"),
             ooxml: read_sub_object(map, txn, "ooxml"),
         }),
         "camera" => FloatingObjectData::Camera(CameraData {
@@ -1035,7 +1028,6 @@ pub fn known_fields(object_type: &str) -> (Vec<&'static str>, Vec<&'static str>)
                 "titleHAlign",
                 "titleVAlign",
                 "titleShowShadow",
-                "preservedChartXml",
             ]);
             sub_objects.extend_from_slice(&[
                 "dataRangeIdentity",

@@ -25,11 +25,6 @@ pub struct ChartSpec {
     pub z_index: i32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub definition: Option<ChartDefinition>,
-    /// Original chart XML part for imported charts. This bypasses deep
-    /// ChartSpace JSON rehydration in the L2 export path.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub preserved_chart_xml: Option<String>,
-
     // -- Typed chart data (populated by XLSX parser, used by to_floating_object) --
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub series: Vec<ChartSeriesData>,
@@ -328,18 +323,13 @@ impl ChartSpec {
             )
         };
 
-        // Chart definition is typed inside the chart OOXML contract.
-        let definition = if chart_data.preserved_chart_xml.is_some() {
-            None
-        } else {
-            ooxml.and_then(|o| o.definition.clone()).or_else(|| {
-                Some(if is_chart_ex {
-                    ChartDefinition::ChartEx(ooxml_types::chart_ex::ChartExSpace::default())
-                } else {
-                    ChartDefinition::Chart(ooxml_types::charts::ChartSpace::default())
-                })
+        let definition = ooxml.and_then(|o| o.definition.clone()).or_else(|| {
+            Some(if is_chart_ex {
+                ChartDefinition::ChartEx(ooxml_types::chart_ex::ChartExSpace::default())
+            } else {
+                ChartDefinition::Chart(ooxml_types::charts::ChartSpace::default())
             })
-        };
+        });
 
         Some(ChartSpec {
             chart_type: chart_data.chart_type.clone(),
@@ -353,7 +343,6 @@ impl ChartSpec {
             size,
             z_index: common.z_index,
             definition,
-            preserved_chart_xml: chart_data.preserved_chart_xml.clone(),
             series: chart_data.series.clone().unwrap_or_default(),
             sub_type: chart_data.sub_type.clone(),
             legend: chart_data.legend.clone(),
@@ -503,11 +492,7 @@ impl ChartSpec {
             .chart_frame
             .clone()
             .or_else(|| self.legacy_chart_frame_ooxml_props());
-        let definition = if self.preserved_chart_xml.is_some() {
-            None
-        } else {
-            self.definition.clone()
-        };
+        let definition = self.definition.clone();
         let ooxml_val = if definition.is_none() && drawing_frame.is_none() && !self.is_chart_ex {
             None
         } else {
@@ -631,7 +616,6 @@ impl ChartSpec {
             width_pt: self.size.width_pt,
             left_pt: self.size.left_pt,
             top_pt: self.size.top_pt,
-            preserved_chart_xml: self.preserved_chart_xml.clone(),
             // API-exposed fields
             style: self.style,
             rounded_corners: self.rounded_corners,

@@ -102,27 +102,10 @@ fn workbook_stylesheet_dxfs_export_without_round_trip_context() {
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
 
     assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
-    assert!(styles_xml.contains(r#"<color rgb="FFFF0000"/>"#), "{styles_xml}");
-}
-
-#[test]
-fn stale_round_trip_styles_ext_lst_is_ignored_without_typed_stylesheet() {
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        ..Default::default()
-    }]);
-    let ctx = RoundTripContext {
-        styles_ext_lst_xml: Some(br#"<extLst><ext uri="{stale}"/></extLst>"#.to_vec()),
-        styles_namespace_attrs: vec![("x14".to_string(), "urn:stale".to_string())],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
-
-    assert!(!styles_xml.contains("{stale}"), "{styles_xml}");
-    assert!(!styles_xml.contains("urn:stale"), "{styles_xml}");
+    assert!(
+        styles_xml.contains(r#"<color rgb="FFFF0000"/>"#),
+        "{styles_xml}"
+    );
 }
 
 #[test]

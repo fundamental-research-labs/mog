@@ -681,7 +681,8 @@ fn source_records_match(
         return false;
     };
     let sheet = &sheets[sheet_idx];
-    let source_records = extract_source_record_values(sheet, start_row, start_col, end_row, end_col);
+    let source_records =
+        extract_source_record_values(sheet, start_row, start_col, end_row, end_col);
     source_records == imported_records
 }
 
@@ -711,12 +712,8 @@ fn imported_cache_records_to_write_data(
 
     let fields = (0..num_cols)
         .map(|idx| {
-            let mut field = CacheFieldDef::new(
-                field_names
-                    .get(idx)
-                    .map(String::as_str)
-                    .unwrap_or("Column"),
-            );
+            let mut field =
+                CacheFieldDef::new(field_names.get(idx).map(String::as_str).unwrap_or("Column"));
             field.shared_items = field_shared_items[idx].clone();
             field
         })
@@ -864,7 +861,13 @@ fn extract_source_record_values(
     (data_start..=end_row)
         .map(|row| {
             (start_col..=end_col)
-                .map(|col| cell_map.get(&(row, col)).copied().cloned().unwrap_or_default())
+                .map(|col| {
+                    cell_map
+                        .get(&(row, col))
+                        .copied()
+                        .cloned()
+                        .unwrap_or_default()
+                })
                 .collect()
         })
         .collect()

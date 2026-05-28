@@ -88,13 +88,12 @@ pub(crate) fn convert_print_settings(
         has_print_options: ps.has_print_options,
         has_page_setup: ps.has_page_setup,
         copies,
-        page_setup_properties: ps
-            .page_setup_properties
-            .as_ref()
-            .map(|props| domain_types::PageSetupProperties {
+        page_setup_properties: ps.page_setup_properties.as_ref().map(|props| {
+            domain_types::PageSetupProperties {
                 fit_to_page: props.fit_to_page,
                 auto_page_breaks: props.auto_page_breaks,
-            }),
+            }
+        }),
         cell_comments: ps.cell_comments.clone(),
         print_errors: ps.print_errors.clone(),
         imported_printer_settings: None,

@@ -139,10 +139,7 @@ impl CustomFilter {
 #[derive(Debug, Clone)]
 pub enum FilterType {
     /// Discrete values filter
-    Filters {
-        values: Vec<String>,
-        blank: bool,
-    },
+    Filters { values: Vec<String>, blank: bool },
     /// Custom filters (1 or 2 conditions)
     CustomFilters {
         filters: Vec<CustomFilter>,
@@ -1491,7 +1488,9 @@ mod tests {
         let xml = writer.to_xml();
         let xml_str = String::from_utf8(xml).unwrap();
 
-        assert!(xml_str.contains("<sortState ref=\"A2:D10\" columnSort=\"1\" sortMethod=\"pinYin\">"));
+        assert!(
+            xml_str.contains("<sortState ref=\"A2:D10\" columnSort=\"1\" sortMethod=\"pinYin\">")
+        );
         assert!(xml_str.contains("<sortCondition ref=\"B:B\"/>"));
         assert!(xml_str.contains("descending=\"1\""));
         assert!(xml_str.contains("ref=\"C:C\""));

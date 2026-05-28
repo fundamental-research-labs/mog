@@ -1023,10 +1023,8 @@ mod tests {
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
         let workbook = engine.stores.storage.workbook_map();
-        let styles_map = match workbook.get(
-            &txn,
-            compute_document::schema::KEY_CUSTOM_TABLE_STYLES,
-        ) {
+        let styles_map = match workbook.get(&txn, compute_document::schema::KEY_CUSTOM_TABLE_STYLES)
+        {
             Some(yrs::Out::YMap(map)) => map,
             _ => panic!("custom table styles map should exist"),
         };

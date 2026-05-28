@@ -64,7 +64,6 @@ mod tests {
             size: ObjectSize::default(),
             z_index: 0,
             definition: None,
-            preserved_chart_xml: None,
             series: Vec::new(),
             sub_type: None,
             legend: None,

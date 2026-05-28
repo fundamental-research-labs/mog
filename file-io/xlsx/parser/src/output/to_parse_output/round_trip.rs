@@ -896,21 +896,6 @@ pub(super) fn build_round_trip_context(
 
     RoundTripContext {
         sheets: sheet_contexts,
-        styles_ext_lst_xml: result.styles_ext_lst_xml.clone(),
-        styles_namespace_attrs: result
-            .extensions
-            .as_ref()
-            .map(|ext| {
-                ext.styles_namespaces
-                    .all()
-                    .iter()
-                    .map(|decl| {
-                        let prefix = decl.prefix.clone().unwrap_or_default();
-                        (prefix, decl.uri.clone())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
         opaque_package_subgraphs,
 
         // Workbook-level namespace + preserved element preservation

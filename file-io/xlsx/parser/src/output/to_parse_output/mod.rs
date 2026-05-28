@@ -56,8 +56,8 @@ use domain_types::{
     PersonInfo,
     RoundTripContext,
     RowDimension,
-    RowXmlHints,
     RowStyleEntry,
+    RowXmlHints,
     SheetData,
     SheetDimensions,
     SheetRoundTripContext,
@@ -1329,37 +1329,6 @@ fn convert_sheet(
         legacy_drawing_hf_r_id: sheet.legacy_drawing_hf_r_id.clone(),
         comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
         comment_authors: sheet.comment_authors.clone(),
-        row_spans: sheet.row_spans.clone(),
-        bare_empty_rows: sheet.bare_empty_rows.clone(),
-        row_thick_bot: sheet
-            .row_heights
-            .iter()
-            .filter(|rh| rh.thick_bot)
-            .map(|rh| rh.row)
-            .collect(),
-        row_thick_top: sheet
-            .row_heights
-            .iter()
-            .filter(|rh| rh.thick_top)
-            .map(|rh| rh.row)
-            .collect(),
-        row_collapsed: sheet
-            .row_heights
-            .iter()
-            .filter_map(|rh| rh.collapsed.map(|c| (rh.row, c)))
-            .collect(),
-        row_hidden_explicit_false: sheet
-            .row_heights
-            .iter()
-            .filter(|rh| rh.hidden == Some(false))
-            .map(|rh| rh.row)
-            .collect(),
-        row_outline_level_zero: sheet
-            .row_heights
-            .iter()
-            .filter(|rh| rh.outline_level == Some(0))
-            .map(|rh| rh.row)
-            .collect(),
         ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
         custom_properties_xml: sheet.custom_properties_xml.clone(),

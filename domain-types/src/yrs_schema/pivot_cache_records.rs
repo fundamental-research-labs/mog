@@ -24,10 +24,7 @@ pub fn to_yrs_prelim(records: &PivotCacheRecords) -> Vec<(String, Any)> {
         .collect()
 }
 
-pub fn from_yrs_map<T: ReadTxn>(
-    map: &yrs::types::map::MapRef,
-    txn: &T,
-) -> PivotCacheRecords {
+pub fn from_yrs_map<T: ReadTxn>(map: &yrs::types::map::MapRef, txn: &T) -> PivotCacheRecords {
     let mut records = HashMap::new();
     for (key, value) in map.iter(txn) {
         let Ok(cache_id) = key.parse::<u32>() else {

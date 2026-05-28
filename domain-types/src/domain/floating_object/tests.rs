@@ -208,7 +208,6 @@ fn test_chart_round_trip() {
             table_column_names: None,
             width_cells: Some(8.0),
             height_cells: Some(15.0),
-            preserved_chart_xml: None,
             ooxml: None,
         }),
     };
@@ -647,7 +646,6 @@ fn test_field_name_uniqueness() {
         table_column_names: None,
         width_cells: None,
         height_cells: None,
-        preserved_chart_xml: None,
         ooxml: None,
     };
     let chart_val = serde_json::to_value(&FloatingObjectData::Chart(chart)).unwrap();

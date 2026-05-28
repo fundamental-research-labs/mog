@@ -65,8 +65,8 @@ use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_document_properties, export_external_links,
     export_file_sharing, export_file_version, export_shared_string_hints,
-    export_workbook_named_ranges, export_workbook_properties, export_workbook_table_styles,
-    export_workbook_stylesheet, export_workbook_views,
+    export_workbook_named_ranges, export_workbook_properties, export_workbook_stylesheet,
+    export_workbook_table_styles, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -287,12 +287,10 @@ fn export_single_sheet(
                     Out::Any(Any::String(s)) => Some(s.to_string()),
                     _ => None,
                 });
-                let pane = m
-                    .get(&txn, "sheetPaneConfig")
-                    .and_then(|v| match v {
-                        Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
-                        _ => None,
-                    });
+                let pane = m.get(&txn, "sheetPaneConfig").and_then(|v| match v {
+                    Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
+                    _ => None,
+                });
                 let sels = m
                     .get(&txn, "selections")
                     .and_then(|v| match v {
@@ -628,7 +626,10 @@ fn export_single_sheet(
                     _ => None,
                 });
                 let mut sheet_properties = m
-                    .get(&txn, domain_types::yrs_schema::sheet_properties::PROPERTY_KEY)
+                    .get(
+                        &txn,
+                        domain_types::yrs_schema::sheet_properties::PROPERTY_KEY,
+                    )
                     .and_then(|v| match v {
                         Out::YMap(map) => {
                             domain_types::yrs_schema::sheet_properties::from_yrs_map(&map, &txn)

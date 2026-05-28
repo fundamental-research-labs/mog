@@ -125,9 +125,10 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.floor_format.is_some()
         || chart_spec.side_wall_format.is_some()
         || chart_spec.back_wall_format.is_some()
-        || chart_spec.rt.as_ref().is_some_and(|rt| {
-            rt.external_data.is_some() || rt.user_shapes.is_some()
-        })
+        || chart_spec
+            .rt
+            .as_ref()
+            .is_some_and(|rt| rt.external_data.is_some() || rt.user_shapes.is_some())
 }
 
 fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {

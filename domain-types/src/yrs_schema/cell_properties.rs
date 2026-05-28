@@ -133,8 +133,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
     let cm = read_bool(map, txn, KEY_CM).unwrap_or(false);
     let vm = read_u32(map, txn, KEY_VM);
     let formula_result_type = read_u32(map, txn, KEY_FORMULA_RESULT_TYPE).map(|n| n as u8);
-    let has_empty_cached_value =
-        read_bool(map, txn, KEY_HAS_EMPTY_CACHED_VALUE).unwrap_or(false);
+    let has_empty_cached_value = read_bool(map, txn, KEY_HAS_EMPTY_CACHED_VALUE).unwrap_or(false);
     let original_sst_index = read_u32(map, txn, KEY_ORIGINAL_SST_INDEX);
     let original_value = read_string(map, txn, KEY_ORIGINAL_VALUE);
 

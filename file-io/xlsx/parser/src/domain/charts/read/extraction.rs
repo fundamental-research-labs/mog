@@ -684,7 +684,6 @@ pub fn extract_chart_spec_from_chart_space(
         },
         z_index: 0,
         definition: Some(domain_types::ChartDefinition::Chart(cs.clone())),
-        preserved_chart_xml: None,
         series,
         sub_type,
         legend,

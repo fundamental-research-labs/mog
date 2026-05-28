@@ -212,20 +212,18 @@ pub(super) fn export_workbook_table_styles(
             styles = serde_json::from_str::<Vec<ooxml_types::styles::TableStyleDef>>(&json)
                 .unwrap_or_default();
         }
-        if let Some(Out::Any(Any::String(value))) =
-            styles_map.get(&txn, "defaultTableStyle")
-        {
+        if let Some(Out::Any(Any::String(value))) = styles_map.get(&txn, "defaultTableStyle") {
             default_table_style = Some(value.to_string());
         }
-        if let Some(Out::Any(Any::String(value))) =
-            styles_map.get(&txn, "defaultPivotStyle")
-        {
+        if let Some(Out::Any(Any::String(value))) = styles_map.get(&txn, "defaultPivotStyle") {
             default_pivot_style = Some(value.to_string());
         }
     }
 
-    let mut existing_names: std::collections::HashSet<String> =
-        styles.iter().map(|style| style.name.to_lowercase()).collect();
+    let mut existing_names: std::collections::HashSet<String> = styles
+        .iter()
+        .map(|style| style.name.to_lowercase())
+        .collect();
     for style in stores.custom_table_styles.values() {
         if existing_names.insert(style.name.to_lowercase()) {
             styles.push(ooxml_types::styles::TableStyleDef {

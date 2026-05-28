@@ -192,15 +192,24 @@ pub(super) fn hydrate_workbook_table_styles(
         return;
     }
 
-    let styles_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_XLSX_TABLE_STYLES);
+    let styles_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_XLSX_TABLE_STYLES);
     if let Ok(json) = serde_json::to_string(table_styles) {
         styles_map.insert(txn, "styles", Any::String(Arc::from(json.as_str())));
     }
     if let Some(style) = default_table_style {
-        styles_map.insert(txn, "defaultTableStyle", Any::String(Arc::from(style.as_str())));
+        styles_map.insert(
+            txn,
+            "defaultTableStyle",
+            Any::String(Arc::from(style.as_str())),
+        );
     }
     if let Some(style) = default_pivot_style {
-        styles_map.insert(txn, "defaultPivotStyle", Any::String(Arc::from(style.as_str())));
+        styles_map.insert(
+            txn,
+            "defaultPivotStyle",
+            Any::String(Arc::from(style.as_str())),
+        );
     }
 }
 
@@ -311,8 +320,7 @@ pub(super) fn hydrate_workbook_web_publishing(
         return;
     }
 
-    let web_map =
-        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WEB_PUBLISHING);
+    let web_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WEB_PUBLISHING);
     for (key, value) in entries {
         web_map.insert(txn, key, value);
     }

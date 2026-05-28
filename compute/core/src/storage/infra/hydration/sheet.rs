@@ -782,7 +782,12 @@ pub(crate) fn hydrate_sheet(
         }
         let row_spans: Vec<(u32, String)> = row_metadata
             .iter()
-            .filter_map(|r| r.xml_hints.spans.as_ref().map(|spans| (r.row, spans.clone())))
+            .filter_map(|r| {
+                r.xml_hints
+                    .spans
+                    .as_ref()
+                    .map(|spans| (r.row, spans.clone()))
+            })
             .collect();
         if !row_spans.is_empty()
             && let Ok(json) = serde_json::to_string(&row_spans)
@@ -1429,7 +1434,12 @@ pub(crate) fn hydrate_sheet_with_allocation(
         }
         let row_spans: Vec<(u32, String)> = row_metadata
             .iter()
-            .filter_map(|r| r.xml_hints.spans.as_ref().map(|spans| (r.row, spans.clone())))
+            .filter_map(|r| {
+                r.xml_hints
+                    .spans
+                    .as_ref()
+                    .map(|spans| (r.row, spans.clone()))
+            })
             .collect();
         if !row_spans.is_empty()
             && let Ok(json) = serde_json::to_string(&row_spans)

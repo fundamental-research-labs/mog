@@ -240,13 +240,12 @@ pub fn build_print_settings_output(
             }
         }),
         copies: page_setup.and_then(|p| p.copies),
-        page_setup_properties: ps
-            .page_setup_properties
-            .as_ref()
-            .map(|props| PageSetupPropertiesOutput {
+        page_setup_properties: ps.page_setup_properties.as_ref().map(|props| {
+            PageSetupPropertiesOutput {
                 fit_to_page: props.fit_to_page,
                 auto_page_breaks: props.auto_page_breaks,
-            }),
+            }
+        }),
     };
 
     let row_breaks: Vec<PageBreakOutput> = ps

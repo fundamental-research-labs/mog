@@ -3,9 +3,8 @@
 use std::collections::HashSet;
 
 use domain_types::{
-    AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue,
-    SheetPaneConfig as DomainSheetPaneConfig, SheetData, SheetRoundTripContext,
-    SheetView as DomainSheetView,
+    AuthoredStyleRun, CellData as DomainCellData, CellValue as DomainValue, SheetData,
+    SheetPaneConfig as DomainSheetPaneConfig, SheetRoundTripContext, SheetView as DomainSheetView,
 };
 use domain_types::{DataTableRegion, OutlineGroup};
 

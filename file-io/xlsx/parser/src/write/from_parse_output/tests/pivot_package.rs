@@ -240,9 +240,12 @@ fn pivot_cache_records_xml_uses_typed_records_when_source_matches() {
 
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
-    let records_xml =
-        String::from_utf8(archive.read_file("xl/pivotCache/pivotCacheRecords1.xml").unwrap())
-            .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
 
     assert!(records_xml.contains("count=\"2\""));
     assert!(records_xml.contains("<x v=\"0\"/>"));
@@ -275,9 +278,12 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
 
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
-    let records_xml =
-        String::from_utf8(archive.read_file("xl/pivotCache/pivotCacheRecords1.xml").unwrap())
-            .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
 
     assert!(records_xml.contains("<n v=\"10\"/>"));
     assert!(!records_xml.contains("<n v=\"999\"/>"));

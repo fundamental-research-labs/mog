@@ -57,11 +57,6 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             // Also store the ChartSpace blob in definition for backward compatibility
             // during the transition. This can be removed once all consumers use typed fields.
             spec.definition = Some(ChartDefinition::Chart(chart_space.clone()));
-            spec.preserved_chart_xml = chart
-                .raw_chart_xml
-                .as_ref()
-                .map(|xml| String::from_utf8_lossy(xml).into_owned());
-
             // Preserve auxiliary files for round-trip (stored on Chart, not ChartSpace)
             if let Some(ref mut rt) = spec.rt {
                 rt.auxiliary_files = chart.auxiliary_files.clone();
@@ -430,10 +425,6 @@ pub(crate) fn build_fallback_chart_spec(
         definition: Some(ChartDefinition::Chart(
             ooxml_types::charts::ChartSpace::default(),
         )),
-        preserved_chart_xml: chart
-            .raw_chart_xml
-            .as_ref()
-            .map(|xml| String::from_utf8_lossy(xml).into_owned()),
         series: vec![],
         sub_type: None,
         legend: None,
@@ -559,7 +550,6 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 },
                 z_index: 0,
                 definition,
-                preserved_chart_xml: None,
                 series: vec![],
                 sub_type: None,
                 legend: None,

@@ -34,10 +34,6 @@ fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
         ooxml_types::charts::ChartSpace::default(),
     ));
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -163,8 +159,12 @@ fn reconstructed_chart_exports_typed_chart_owned_relationships() {
     let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
-    let chart_rels =
-        String::from_utf8(archive.read_file("xl/charts/_rels/chart1.xml.rels").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
 
     assert!(chart_xml.contains(r#"<c:externalData r:id="rIdExternalData">"#));
     assert!(chart_xml.contains(r#"<c:autoUpdate val="0"/>"#));
@@ -331,10 +331,6 @@ fn modeled_chart_ignores_stale_chart_frame_relationship_target() {
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
         ooxml_types::charts::ChartSpace::default(),
     ));
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let imported_chart = with_chart_identity(imported_chart, "../charts/chart9.xml");
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
@@ -375,10 +371,6 @@ fn imported_chart_with_modeled_chart_property_does_not_replay_stale_raw_chart_xm
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
         ooxml_types::charts::ChartSpace::default(),
     ));
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:gapWidth val="222"/></c:barChart></c:plotArea></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -405,10 +397,6 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let imported_chart = with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
@@ -454,10 +442,6 @@ fn reconstructed_imported_chart_replays_stored_auxiliary_parts() {
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
         ooxml_types::charts::ChartSpace::default(),
     ));
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:title><c:tx><c:rich><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Stale Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let imported_chart = with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
@@ -496,10 +480,6 @@ fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let mut imported_chart = with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
@@ -538,10 +518,6 @@ fn imported_chart_auxiliary_part_requires_chart_auxiliary_path() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let mut imported_chart = with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
@@ -584,10 +560,6 @@ fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    imported_chart.preserved_chart_xml = Some(
-        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea/></c:chart></c:chartSpace>"#
-            .to_string(),
-    );
     let imported_chart = with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,

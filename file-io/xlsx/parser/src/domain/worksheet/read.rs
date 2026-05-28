@@ -119,9 +119,7 @@ pub fn parse_sheet_properties(xml: &[u8]) -> Option<SheetProperties> {
     if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"filterMode=\"") {
         props.filter_mode = v;
     }
-    if let Some(v) =
-        parse_bool_attr_opt(sheet_pr_tag, b"enableFormatConditionsCalculation=\"")
-    {
+    if let Some(v) = parse_bool_attr_opt(sheet_pr_tag, b"enableFormatConditionsCalculation=\"") {
         props.enable_format_conditions_calculation = v;
     }
 

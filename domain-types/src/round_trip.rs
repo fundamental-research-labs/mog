@@ -4,7 +4,6 @@
 //! `round_trip_field_inventory.md` next to this module.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Opaque XLSX preservation data for import/export round-tripping.
 ///
@@ -25,17 +24,6 @@ use std::collections::HashMap;
 #[serde(rename_all = "camelCase")]
 pub struct RoundTripContext {
     pub sheets: Vec<SheetRoundTripContext>,
-
-    /// Raw XML of `<extLst>...</extLst>` from `xl/styles.xml` for round-trip fidelity.
-    /// Extension lists contain vendor-specific data that Stylesheet doesn't model.
-    #[serde(default, with = "option_bytes")]
-    pub styles_ext_lst_xml: Option<Vec<u8>>,
-
-    /// Namespace declarations from the `<styleSheet>` root element.
-    /// Each entry is (prefix, uri). Used to reconstruct `mc:Ignorable`, `xmlns:x14ac`,
-    /// and other namespace attrs for round-trip fidelity.
-    #[serde(default)]
-    pub styles_namespace_attrs: Vec<(String, String)>,
 
     /// Explicit clean opaque package subgraphs that may be emitted verbatim.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -79,36 +67,6 @@ pub struct SheetRoundTripContext {
     /// only includes authors referenced by actual comments, dropping unused authors.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comment_authors: Vec<String>,
-    /// Compatibility identity hints for lexical row attributes.
-    /// Export may use them only to decorate rows that still exist in modeled
-    /// worksheet state; these hints must not create deleted rows by themselves.
-    #[serde(default)]
-    pub row_spans: HashMap<u32, String>,
-    #[serde(default)]
-    pub bare_empty_rows: Vec<u32>,
-    /// Rows with thickBot="1" attribute for round-trip fidelity.
-    /// Compatibility identity hint; does not create rows by itself.
-    #[serde(default)]
-    pub row_thick_bot: Vec<u32>,
-    /// Rows with thickTop="1" attribute for round-trip fidelity.
-    /// Compatibility identity hint; does not create rows by itself.
-    #[serde(default)]
-    pub row_thick_top: Vec<u32>,
-    /// Rows with an explicit `collapsed` attribute for round-trip fidelity.
-    /// Maps row index → collapsed value. Preserves both `collapsed="0"` and `collapsed="1"`.
-    /// Compatibility identity hint; does not create rows by itself.
-    #[serde(default)]
-    pub row_collapsed: HashMap<u32, bool>,
-    /// Rows with explicit `hidden="0"` for round-trip fidelity.
-    /// Normally `hidden="0"` (the default) is omitted; these rows had it explicitly.
-    /// Compatibility identity hint; does not create rows by itself.
-    #[serde(default)]
-    pub row_hidden_explicit_false: Vec<u32>,
-    /// Rows with explicit `outlineLevel="0"` for round-trip fidelity.
-    /// Normally `outlineLevel="0"` (the default) is omitted; these rows had it explicitly.
-    /// Compatibility identity hint; does not create rows by itself.
-    #[serde(default)]
-    pub row_outline_level_zero: Vec<u32>,
     /// Raw `<extLst>...</extLst>` XML from the worksheet.
     /// Unknown worksheet extensions only. Known modeled extension owners such
     /// as x14 data validations, conditional formatting, and sparklines are not
@@ -295,18 +253,6 @@ mod bytes_serde {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         Vec::<u8>::deserialize(d)
-    }
-}
-
-mod option_bytes {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<S: Serializer>(val: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
-        val.serialize(s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
-        Option::<Vec<u8>>::deserialize(d)
     }
 }
 

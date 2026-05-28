@@ -298,7 +298,6 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         },
         z_index: 0,
         definition: None,
-        preserved_chart_xml: None,
         series: Vec::new(),
         sub_type: None,
         legend: None,

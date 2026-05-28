@@ -1242,38 +1242,6 @@ fn unknown_raw_worksheet_ext_lst_is_preserved_without_modeled_owner() {
 }
 
 #[test]
-fn stale_row_roundtrip_hints_do_not_create_deleted_rows() {
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        ..Default::default()
-    }]);
-    let ctx = domain_types::RoundTripContext {
-        sheets: vec![domain_types::SheetRoundTripContext {
-            row_spans: [(9, "1:99".to_string())].into_iter().collect(),
-            row_thick_bot: vec![9],
-            row_thick_top: vec![9],
-            row_collapsed: [(9, true)].into_iter().collect(),
-            row_hidden_explicit_false: vec![9],
-            row_outline_level_zero: vec![9],
-            bare_empty_rows: vec![9],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let sheet_xml =
-        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
-
-    assert!(!sheet_xml.contains(r#"<row r="10""#));
-    assert!(!sheet_xml.contains("spans=\"1:99\""));
-    assert!(!sheet_xml.contains("thickBot"));
-    assert!(!sheet_xml.contains("thickTop"));
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
 fn typed_row_metadata_decorates_current_modeled_rows() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -818,12 +818,14 @@ pub fn parse_x14_data_validations(
                 validation_type: dv.validation_type.as_str().to_string(),
                 operator: dv.operator.as_str().to_string(),
                 allow_blank: dv.allow_blank,
-                formula1: dv.formula1_raw.clone().or_else(|| {
-                    dv.formula1.as_ref().map(|p| p.to_a1_string().into_owned())
-                }),
-                formula2: dv.formula2_raw.clone().or_else(|| {
-                    dv.formula2.as_ref().map(|p| p.to_a1_string().into_owned())
-                }),
+                formula1: dv
+                    .formula1_raw
+                    .clone()
+                    .or_else(|| dv.formula1.as_ref().map(|p| p.to_a1_string().into_owned())),
+                formula2: dv
+                    .formula2_raw
+                    .clone()
+                    .or_else(|| dv.formula2.as_ref().map(|p| p.to_a1_string().into_owned())),
                 show_dropdown,
                 error_style: dv.error_style.as_str().to_string(),
                 show_error: dv.show_error_message,

@@ -45,10 +45,16 @@ pub fn to_yrs_prelim(settings: &PrintSettings) -> Vec<(&str, Any)> {
         entries.push((KEY_PAPER_SIZE, Any::Number(paper_size as f64)));
     }
     if let Some(paper_width) = &settings.paper_width {
-        entries.push((KEY_PAPER_WIDTH, Any::String(Arc::from(paper_width.as_str()))));
+        entries.push((
+            KEY_PAPER_WIDTH,
+            Any::String(Arc::from(paper_width.as_str())),
+        ));
     }
     if let Some(paper_height) = &settings.paper_height {
-        entries.push((KEY_PAPER_HEIGHT, Any::String(Arc::from(paper_height.as_str()))));
+        entries.push((
+            KEY_PAPER_HEIGHT,
+            Any::String(Arc::from(paper_height.as_str())),
+        ));
     }
     if let Some(orientation) = &settings.orientation {
         entries.push((

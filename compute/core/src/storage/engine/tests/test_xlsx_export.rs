@@ -359,9 +359,7 @@ fn editing_formula_clears_explicit_empty_cached_value_metadata() {
             cell_id,
             0,
             0,
-            crate::bridge_types::CellInput::Parse {
-                text: "=A3".into(),
-            },
+            crate::bridge_types::CellInput::Parse { text: "=A3".into() },
         )
         .expect("formula edit should succeed");
 

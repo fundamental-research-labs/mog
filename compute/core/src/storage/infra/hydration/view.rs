@@ -108,7 +108,11 @@ pub(super) fn hydrate_view_options(
     if let Some(ref pane) = view.pane {
         let json = serde_json::to_string(pane).unwrap_or_default();
         if !json.is_empty() {
-            meta_map.insert(txn, "sheetPaneConfig", Any::String(Arc::from(json.as_str())));
+            meta_map.insert(
+                txn,
+                "sheetPaneConfig",
+                Any::String(Arc::from(json.as_str())),
+            );
         }
     }
     if view.has_explicit_top_left_cell {

@@ -207,11 +207,6 @@ pub struct ChartData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_cells: Option<f64>,
 
-    // -- OOXML round-trip --
-    /// Original imported chart XML part. Used by XLSX export to avoid
-    /// rehydrating deeply nested ChartSpace JSON for unedited charts.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preserved_chart_xml: Option<String>,
     /// Typed OOXML preservation data for chart parts and drawing frames.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ooxml: Option<ChartOoxmlProps>,

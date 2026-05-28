@@ -80,7 +80,6 @@ pub(super) fn convert_chart_to_chart_spec(
         definition: Some(ChartDefinition::Chart(
             ooxml_types::charts::ChartSpace::default(),
         )),
-        preserved_chart_xml: None,
         series,
         sub_type,
         legend,

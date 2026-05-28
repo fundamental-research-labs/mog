@@ -477,7 +477,6 @@ fn test_chart_roundtrip() {
             table_column_names: None,
             width_cells: Some(8.0),
             height_cells: Some(15.0),
-            preserved_chart_xml: None,
             ooxml: None,
         }),
     };

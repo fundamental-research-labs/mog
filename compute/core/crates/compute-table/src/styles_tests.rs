@@ -770,6 +770,26 @@ fn unknown_style_falls_back_to_medium2() {
     assert_eq!(fmt.font_color, Some(hex("#FFFFFF")));
 }
 
+#[test]
+fn header_fill_resolves_short_contract_style_ids() {
+    let short_style_table = make_table(Some(TableOverrides {
+        style: Some("medium4".to_string()),
+        ..Default::default()
+    }));
+    let canonical_style_table = make_table(Some(TableOverrides {
+        style: Some("TableStyleMedium4".to_string()),
+        ..Default::default()
+    }));
+
+    let short_fmt = resolve_table_cell_format(&short_style_table, 2, 1).unwrap();
+    let canonical_fmt = resolve_table_cell_format(&canonical_style_table, 2, 1).unwrap();
+
+    assert_eq!(short_fmt.fill, canonical_fmt.fill);
+    assert_eq!(short_fmt.font_color, canonical_fmt.font_color);
+    assert_eq!(short_fmt.font_bold, canonical_fmt.font_bold);
+    assert_eq!(short_fmt.fill, Some(hex("#A5A5A5")));
+}
+
 // -----------------------------------------------------------------------
 // edge cases
 // -----------------------------------------------------------------------

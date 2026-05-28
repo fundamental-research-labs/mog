@@ -45,6 +45,7 @@ import type { ColumnFilterCriteria } from '@mog-sdk/contracts/filter';
 import type { TableConfig, TableStylePreset } from '@mog-sdk/contracts/tables';
 
 import type { DocumentContext } from '../context/types';
+import { tableStyleIdForTableEngine } from '../domain/tables/style-normalization';
 
 // =============================================================================
 // Type Conversion: Style Preset Mapping
@@ -56,19 +57,7 @@ import type { DocumentContext } from '../context/types';
  * Contracts stores short forms like 'light1', table-engine uses full form 'TableStyleLight1'.
  */
 function mapStylePreset(preset: TableStylePreset | undefined): string {
-  if (!preset || preset === 'none') {
-    return 'TableStyleMedium2'; // Default style
-  }
-
-  // Parse the preset string: 'light1' -> 'TableStyleLight1'
-  const match = preset.match(/^(light|medium|dark)(\d+)$/);
-  if (!match) {
-    return 'TableStyleMedium2'; // Fallback for unrecognized
-  }
-
-  const [, category, number] = match;
-  const capitalized = category.charAt(0).toUpperCase() + category.slice(1);
-  return `TableStyle${capitalized}${number}`;
+  return tableStyleIdForTableEngine(preset);
 }
 
 // =============================================================================

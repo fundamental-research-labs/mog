@@ -16,6 +16,10 @@ import { colToLetter, letterToCol } from '../../internal/utils';
 import type { DocumentContext, OperationResult } from './shared';
 import { invalidRange, operationFailed, wrapOp } from './shared';
 import { toCellInput } from './cell-input';
+import {
+  publicTableStyleId,
+  tableStyleIdForCompute,
+} from '../../../domain/tables/style-normalization';
 
 // Re-export TableInfo so consumers can import from this module
 export type { TableInfo } from '@mog-sdk/contracts/api';
@@ -42,8 +46,8 @@ function parseA1Range(
 
 /**
  * Convert a bridge Table (from Rust via compute-table) into a TableInfo.
- * The ONLY conversion is range: SheetRange → A1 notation string.
- * All other fields pass through directly (Rust names are now the API names).
+ * Converts range from SheetRange to A1 notation and built-in style IDs to
+ * public table style presets. Other fields pass through directly.
  */
 export function bridgeTableToTableInfo(table: Table): TableInfo {
   const startLetter = colToLetter(table.range.startCol);
@@ -57,6 +61,7 @@ export function bridgeTableToTableInfo(table: Table): TableInfo {
     displayName: table.displayName || table.name,
     columns: table.columns.map((col) => ({ ...col })),
     range,
+    style: publicTableStyleId(table.style) ?? table.style,
   };
 }
 
@@ -202,7 +207,10 @@ export async function setTableStyle(
   styleName: string,
 ): Promise<OperationResult<void>> {
   return wrapOp('setTableStyle', async () => {
-    await ctx.computeBridge.setTableStyle(tableName, styleName);
+    await ctx.computeBridge.setTableStyle(
+      tableName,
+      tableStyleIdForCompute(styleName) ?? styleName,
+    );
   });
 }
 

@@ -20,7 +20,7 @@ import type { CellFormat, CellRange, SheetId } from '@mog/types-core/core';
 
 /**
  * Table style presets matching Excel's table style gallery.
- * Light styles (1-21), Medium styles (1-28), Dark styles (1-11).
+ * Light styles (1-28), Medium styles (1-28), Dark styles (1-11).
  */
 export type TableStylePreset =
   | 'none'
@@ -46,6 +46,13 @@ export type TableStylePreset =
   | 'light19'
   | 'light20'
   | 'light21'
+  | 'light22'
+  | 'light23'
+  | 'light24'
+  | 'light25'
+  | 'light26'
+  | 'light27'
+  | 'light28'
   // Medium styles
   | 'medium1'
   | 'medium2'

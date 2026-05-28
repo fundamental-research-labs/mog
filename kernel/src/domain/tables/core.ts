@@ -32,6 +32,7 @@ import * as Filters from '../sorting/filters';
 
 // Import from sibling module
 import { resolveTableRange } from './range-resolution';
+import { tableStyleIdForCompute } from './style-normalization';
 
 // =============================================================================
 // Validation Types
@@ -367,7 +368,8 @@ export async function updateTable(
     await ctx.computeBridge.renameTable(existing.name, updates.name);
   }
   if (updates.style?.preset && updates.style.preset !== existing.style?.preset) {
-    await ctx.computeBridge.setTableStyle(existing.name, updates.style.preset);
+    const styleId = tableStyleIdForCompute(updates.style.preset) ?? updates.style.preset;
+    await ctx.computeBridge.setTableStyle(existing.name, styleId);
   }
 }
 

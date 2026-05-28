@@ -952,9 +952,48 @@ static BUILT_IN_STYLES: LazyLock<HashMap<String, TableStyleDef>> = LazyLock::new
 });
 
 pub(super) fn get(id: &str) -> Option<&'static TableStyleDef> {
-    BUILT_IN_STYLES.get(id)
+    if let Some(style) = BUILT_IN_STYLES.get(id) {
+        return Some(style);
+    }
+
+    let canonical = canonical_builtin_id(id)?;
+    BUILT_IN_STYLES.get(canonical.as_str())
 }
 
 pub(super) fn all() -> Vec<&'static TableStyleDef> {
     BUILT_IN_STYLES.values().collect()
+}
+
+fn canonical_builtin_id(id: &str) -> Option<String> {
+    let trimmed = id.trim();
+    for (prefix, family, max) in [
+        ("light", "Light", 28_u8),
+        ("medium", "Medium", 28_u8),
+        ("dark", "Dark", 11_u8),
+    ] {
+        if let Some(index) = parse_style_index(trimmed, prefix, max) {
+            return Some(format!("TableStyle{family}{index}"));
+        }
+
+        let full_prefix = format!("TableStyle{family}");
+        if let Some(index) = parse_style_index(trimmed, &full_prefix, max) {
+            return Some(format!("TableStyle{family}{index}"));
+        }
+    }
+
+    None
+}
+
+fn parse_style_index(id: &str, prefix: &str, max: u8) -> Option<u8> {
+    if id.len() <= prefix.len() || !id.get(..prefix.len())?.eq_ignore_ascii_case(prefix) {
+        return None;
+    }
+
+    let suffix = &id[prefix.len()..];
+    if suffix.is_empty() || !suffix.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+
+    let index = suffix.parse::<u8>().ok()?;
+    (1..=max).contains(&index).then_some(index)
 }

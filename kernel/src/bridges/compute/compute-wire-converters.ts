@@ -16,11 +16,7 @@ import {
   type IdentityFormulaRef,
 } from '@mog-sdk/contracts/cell-identity';
 import { type CellRange, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type {
-  TableConfig,
-  TableColumn as ContractTableColumn,
-  TableStylePreset,
-} from '@mog-sdk/contracts/tables';
+import type { TableConfig, TableColumn as ContractTableColumn } from '@mog-sdk/contracts/tables';
 import type { Table } from '@mog/table-engine';
 
 import type {
@@ -34,6 +30,7 @@ import type { IdentityFormulaRefWire, IdentityFormulaWire } from './compute-wire
 import type { ColumnFilter } from './compute-types.gen';
 
 import { BridgeError } from '../../errors/bridge';
+import { tableStylePresetFromStyleId } from '../../domain/tables/style-normalization';
 
 // =============================================================================
 // Identity Formula Converters
@@ -442,7 +439,7 @@ export function wireTableToTableConfig(table: Table): TableConfig {
     hasTotalRow: table.hasTotalsRow,
     columns,
     style: {
-      preset: table.style as TableStylePreset,
+      preset: tableStylePresetFromStyleId(table.style),
       showBandedRows: table.bandedRows,
       showBandedColumns: table.bandedColumns,
       showFirstColumnHighlight: table.emphasizeFirstColumn,

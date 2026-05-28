@@ -30,7 +30,7 @@ import type {
   TableSelectionChangedEvent,
   TableUpdatedEvent,
 } from '@mog-sdk/contracts/events';
-import type { TableConfig, TableStyle, TableStylePreset } from '@mog-sdk/contracts/tables';
+import type { TableConfig, TableStyle } from '@mog-sdk/contracts/tables';
 import type { RangeCellData, TotalsFunction } from '../../bridges/compute/compute-types.gen';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
@@ -65,6 +65,10 @@ import {
   dataRowToSheetRow,
   parseTableRange,
 } from './protected-table-operations';
+import {
+  tableStyleForEventConfig,
+  tableStyleIdForCompute,
+} from '../../domain/tables/style-normalization';
 
 // FIX-001-tables-hotcheck-v1
 export class WorksheetTablesImpl implements WorksheetTables {
@@ -79,27 +83,6 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   private _ensureWritable(op: string): void {
     this.ctx.writeGate.assertWritable(op);
-  }
-
-  private normalizeTableStyleForCompute(styleName: string | undefined | null): string | null {
-    if (styleName == null) return null;
-    const normalized = styleName.trim();
-    if (!normalized) return null;
-    if (normalized === 'none') return 'none';
-
-    const full = normalized.match(/^TableStyle(Light|Medium|Dark)(\d+)$/i);
-    if (full) {
-      const family = full[1][0].toUpperCase() + full[1].slice(1).toLowerCase();
-      return `TableStyle${family}${full[2]}`;
-    }
-
-    const short = normalized.match(/^(light|medium|dark)(\d+)$/i);
-    if (short) {
-      const family = short[1][0].toUpperCase() + short[1].slice(1).toLowerCase();
-      return `TableStyle${family}${short[2]}`;
-    }
-
-    return normalized;
   }
 
   private emitTableCreated(table: TableInfo): void {
@@ -169,28 +152,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
     styleName: string | undefined,
     flags: Omit<TableStyle, 'preset' | 'custom'> = {},
   ): TableStyle {
-    const preset = this.normalizeTableStylePreset(styleName);
-    return preset ? { preset, ...flags } : { ...flags };
+    return tableStyleForEventConfig(styleName, flags);
   }
-
-  private normalizeTableStylePreset(styleName: string | undefined): TableStylePreset | undefined {
-    if (!styleName) return undefined;
-    const normalized = styleName.trim();
-    if (normalized === 'none') return 'none';
-
-    const full = normalized.match(/^TableStyle(Light|Medium|Dark)(\d+)$/i);
-    if (full) {
-      return `${full[1].toLowerCase()}${full[2]}` as TableStylePreset;
-    }
-
-    const short = normalized.match(/^(light|medium|dark)(\d+)$/i);
-    if (short) {
-      return `${short[1].toLowerCase()}${short[2]}` as TableStylePreset;
-    }
-
-    return undefined;
-  }
-
 
   private async assertValidTableNameForRename(currentName: string, newName: string): Promise<void> {
     const existingNames = (await this.list())
@@ -309,7 +272,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       endCol,
       [],
       options?.hasHeaders !== false,
-      this.normalizeTableStyleForCompute(options?.style),
+      tableStyleIdForCompute(options?.style),
     );
 
     // Re-fetch the table to get the complete info (with generated name, columns, etc.)
@@ -514,7 +477,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (updates.style !== undefined) {
       await this.ctx.computeBridge.setTableStyle(
         tableName,
-        this.normalizeTableStyleForCompute(updates.style) ?? updates.style,
+        tableStyleIdForCompute(updates.style) ?? updates.style,
       );
     }
     if (updates.name !== undefined) {
@@ -665,7 +628,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    const style = this.normalizeTableStyleForCompute(preset) ?? preset;
+    const style = tableStyleIdForCompute(preset) ?? preset;
     await this.ctx.computeBridge.setTableStyle(tableName, style);
     this.emitTableUpdated(tableName, { style: this.tableStyleFromPreset(style) });
   }

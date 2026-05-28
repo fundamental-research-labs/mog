@@ -59,6 +59,7 @@ export function showProtectionFeedback(
 export function isProtectionRejection(error: unknown): boolean {
   if (!error) return false;
   const maybe = error as { code?: string; message?: string };
+  if (maybe.code === 'API_PROTECTED_SHEET') return true;
   return (
     maybe.code === 'OPERATION_FAILED' &&
     typeof maybe.message === 'string' &&

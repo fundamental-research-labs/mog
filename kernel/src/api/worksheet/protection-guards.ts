@@ -10,7 +10,12 @@ export function protectedOperationMessage(operation: ProtectionOperation): strin
 }
 
 function throwProtected(operation: ProtectionOperation): never {
-  throw new KernelError('OPERATION_FAILED', protectedOperationMessage(operation));
+  throw new KernelError('API_PROTECTED_SHEET', protectedOperationMessage(operation), {
+    context: {
+      internalCode: 'API_PROTECTED_SHEET',
+      operation,
+    },
+  });
 }
 
 export async function assertSheetOperationAllowed(

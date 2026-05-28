@@ -12,6 +12,7 @@ import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
 import * as ObjectHandlers from '../object';
+import { isProtectionRejection } from '../handler-utils';
 import { createMockFileHandle, createMockPlatform, createMockShellService } from './test-helpers';
 
 const SHEET_ID = makeSheetId('sheet1');
@@ -30,6 +31,11 @@ function createMockDeps(picture: PictureOverrides = {}): {
   checkboxAdd: jest.Mock;
   comboBoxAdd: jest.Mock;
   pictureUpdate: jest.Mock;
+  canDoStructureOp: jest.Mock;
+  uiState: {
+    setSelectionError: jest.Mock;
+    showProtectionAlert: jest.Mock;
+  };
 } {
   const platform = createMockPlatform();
   const shellService = createMockShellService();
@@ -39,6 +45,11 @@ function createMockDeps(picture: PictureOverrides = {}): {
   const checkboxAdd = jest.fn(async () => ({ id: 'checkbox-new-1' }));
   const comboBoxAdd = jest.fn(async () => ({ id: 'combobox-new-1' }));
   const pictureUpdate = jest.fn(async () => undefined);
+  const canDoStructureOp = jest.fn(async () => true);
+  const uiState = {
+    setSelectionError: jest.fn(),
+    showProtectionAlert: jest.fn(),
+  };
   const pictureGetData = jest.fn(async () => ({
     src: picture.src ?? 'data:image/png;base64,aGVsbG8=',
     displayName: 'kitten.png',
@@ -64,6 +75,9 @@ function createMockDeps(picture: PictureOverrides = {}): {
         addCheckbox: checkboxAdd,
         addComboBox: comboBoxAdd,
       },
+      protection: {
+        canDoStructureOp,
+      },
     })),
     setPendingUndoDescription: jest.fn(),
   };
@@ -85,7 +99,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
     shellService,
     workbook,
     getActiveSheetId: () => SHEET_ID,
-    uiStore: { getState: () => ({}) },
+    uiStore: { getState: () => uiState },
     accessors: {
       selection: {
         getDataBoundedRanges: () => [{ startRow: 1, startCol: 2, endRow: 1, endCol: 2 }],
@@ -101,7 +115,16 @@ function createMockDeps(picture: PictureOverrides = {}): {
     },
   } as unknown as ActionDependencies;
 
-  return { deps, pictureAdd, textBoxAdd, checkboxAdd, comboBoxAdd, pictureUpdate };
+  return {
+    deps,
+    pictureAdd,
+    textBoxAdd,
+    checkboxAdd,
+    comboBoxAdd,
+    pictureUpdate,
+    canDoStructureOp,
+    uiState,
+  };
 }
 
 describe('object picture handlers', () => {
@@ -191,7 +214,7 @@ describe('object picture handlers', () => {
 
   describe('form control insertion', () => {
     it('inserts a checkbox form control through the worksheet API', async () => {
-      const { deps, checkboxAdd } = createMockDeps();
+      const { deps, checkboxAdd, canDoStructureOp } = createMockDeps();
 
       const result = await ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps);
 
@@ -204,10 +227,11 @@ describe('object picture handlers', () => {
         width: 96,
         height: 20,
       });
+      expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
     });
 
     it('inserts a combo box form control through the worksheet API', async () => {
-      const { deps, comboBoxAdd } = createMockDeps();
+      const { deps, comboBoxAdd, canDoStructureOp } = createMockDeps();
 
       const result = await ObjectHandlers.INSERT_FORM_CONTROL_COMBOBOX(deps);
 
@@ -221,6 +245,55 @@ describe('object picture handlers', () => {
         width: 140,
         height: 28,
       });
+      expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
+    });
+
+    it('shows protection feedback when checkbox and combo-box insertion is preflight denied', async () => {
+      const { deps, checkboxAdd, comboBoxAdd, canDoStructureOp, uiState } = createMockDeps();
+      canDoStructureOp.mockResolvedValue(false);
+
+      await expect(ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps)).resolves.toEqual({
+        handled: false,
+        reason: 'disabled',
+      });
+      await expect(ObjectHandlers.INSERT_FORM_CONTROL_COMBOBOX(deps)).resolves.toEqual({
+        handled: false,
+        reason: 'disabled',
+      });
+
+      expect(checkboxAdd).not.toHaveBeenCalled();
+      expect(comboBoxAdd).not.toHaveBeenCalled();
+      expect(uiState.setSelectionError).toHaveBeenCalledWith('protection', expect.any(String));
+      expect(uiState.showProtectionAlert).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('classifies protected-sheet API errors from form-control insertion', async () => {
+      expect(isProtectionRejection({ code: 'API_PROTECTED_SHEET', message: 'blocked' })).toBe(true);
+      expect(
+        isProtectionRejection({
+          code: 'OPERATION_FAILED',
+          message: 'Cannot perform editObject: sheet is protected',
+        }),
+      ).toBe(true);
+
+      const { deps, checkboxAdd, comboBoxAdd, uiState } = createMockDeps();
+      const error = Object.assign(new Error('Cannot perform editObject'), {
+        code: 'API_PROTECTED_SHEET',
+      });
+      checkboxAdd.mockRejectedValueOnce(error);
+      comboBoxAdd.mockRejectedValueOnce(error);
+
+      await expect(ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps)).resolves.toEqual({
+        handled: false,
+        reason: 'disabled',
+      });
+      await expect(ObjectHandlers.INSERT_FORM_CONTROL_COMBOBOX(deps)).resolves.toEqual({
+        handled: false,
+        reason: 'disabled',
+      });
+
+      expect(uiState.setSelectionError).toHaveBeenCalledWith('protection', error.message);
+      expect(uiState.showProtectionAlert).toHaveBeenCalledWith(error.message);
     });
   });
 

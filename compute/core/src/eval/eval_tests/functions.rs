@@ -2,6 +2,32 @@
 
 use super::*;
 
+fn cellref(sheet: SheetId, row: u32, col: u32) -> ASTNode {
+    ASTNode::CellReference(CellRefNode {
+        reference: CellRef::Positional { sheet, row, col },
+        abs_row: false,
+        abs_col: false,
+    })
+}
+
+fn range(sheet: SheetId, sr: u32, sc: u32, er: u32, ec: u32) -> ASTNode {
+    ASTNode::Range(RangeRef {
+        start: CellRef::Positional {
+            sheet,
+            row: sr,
+            col: sc,
+        },
+        end: CellRef::Positional {
+            sheet,
+            row: er,
+            col: ec,
+        },
+        abs_start: AbsFlags::default(),
+        abs_end: AbsFlags::default(),
+        range_type: RangeType::CellRange,
+    })
+}
+
 // -----------------------------------------------------------------------
 // NOT() array broadcasting
 // -----------------------------------------------------------------------
@@ -672,6 +698,63 @@ fn test_rows_columns() {
     );
     assert_eq!(
         eval(&func("COLUMNS", vec![arr]), &ctx),
+        CellValue::number(3.0)
+    );
+}
+
+#[test]
+fn test_areas_counts_reference_union_members() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+
+    assert_eq!(
+        eval(&func("AREAS", vec![cellref(s, 0, 0)]), &ctx),
+        CellValue::number(1.0)
+    );
+    assert_eq!(
+        eval(&func("AREAS", vec![range(s, 0, 0, 1, 1)]), &ctx),
+        CellValue::number(1.0)
+    );
+
+    let union = ASTNode::Union {
+        ranges: vec![cellref(s, 0, 0), cellref(s, 0, 1)],
+    };
+    assert_eq!(
+        eval(&func("AREAS", vec![ASTNode::Paren(Box::new(union))]), &ctx),
+        CellValue::number(2.0)
+    );
+
+    let nested_paren_union = ASTNode::Paren(Box::new(ASTNode::Paren(Box::new(ASTNode::Union {
+        ranges: vec![cellref(s, 0, 0), cellref(s, 0, 1)],
+    }))));
+    assert_eq!(
+        eval(&func("AREAS", vec![nested_paren_union]), &ctx),
+        CellValue::number(2.0)
+    );
+}
+
+#[test]
+fn test_areas_counts_wrapped_nested_reference_unions() {
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+
+    let wrapped_union = ASTNode::SheetRef {
+        sheet: s,
+        inner: Box::new(ASTNode::Paren(Box::new(ASTNode::Union {
+            ranges: vec![
+                range(s, 0, 0, 1, 0),
+                ASTNode::UnresolvedSheetRef {
+                    sheet_name: "Sheet1".into(),
+                    inner: Box::new(ASTNode::Union {
+                        ranges: vec![cellref(s, 0, 1), cellref(s, 0, 2)],
+                    }),
+                },
+            ],
+        }))),
+    };
+
+    assert_eq!(
+        eval(&func("AREAS", vec![wrapped_union]), &ctx),
         CellValue::number(3.0)
     );
 }

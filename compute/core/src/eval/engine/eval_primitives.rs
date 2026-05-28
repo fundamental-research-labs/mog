@@ -46,6 +46,25 @@ enum FormulaTextTarget {
     Unsupported,
 }
 
+fn areas_reference_count(node: &ASTNode) -> usize {
+    match node {
+        ASTNode::Union { ranges } => ranges.iter().map(areas_reference_count).sum(),
+        ASTNode::Paren(inner)
+        | ASTNode::SheetRef { inner, .. }
+        | ASTNode::UnresolvedSheetRef { inner, .. }
+        | ASTNode::ThreeDRef { inner, .. }
+        | ASTNode::UnresolvedThreeDRef { inner, .. }
+        | ASTNode::ExternalSheetRef { inner, .. }
+        | ASTNode::ExternalThreeDRef { inner, .. } => areas_reference_count(inner),
+        ASTNode::CellReference(_)
+        | ASTNode::Range(_)
+        | ASTNode::RangeOp { .. }
+        | ASTNode::StructuredRef(_)
+        | ASTNode::ExternalNameRef { .. } => 1,
+        _ => 1,
+    }
+}
+
 impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     async fn eval_operator_function_alias(
         &mut self,
@@ -1361,14 +1380,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 if args.len() != 1 {
                     return Ok(CellValue::Error(CellError::Value, None));
                 }
-                let count = match &args[0] {
-                    ASTNode::Union { ranges } => ranges.len(),
-                    ASTNode::Paren(inner) => match inner.as_ref() {
-                        ASTNode::Union { ranges } => ranges.len(),
-                        _ => 1,
-                    },
-                    _ => 1,
-                };
+                let count = areas_reference_count(&args[0]);
                 Ok(CellValue::number(count as f64))
             }
 

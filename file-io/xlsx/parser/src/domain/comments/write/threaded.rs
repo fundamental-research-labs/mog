@@ -229,4 +229,3 @@ impl ThreadedCommentsWriter {
         w.end_element("threadedComment");
     }
 }
-

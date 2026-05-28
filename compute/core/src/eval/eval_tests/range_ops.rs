@@ -394,7 +394,10 @@ fn test_intersection_preserves_range_source_in_aggregate() {
     let ctx = make_ctx(&mirror, sheet);
     let node = func(
         "SUM",
-        vec![intersection(range(sheet, 0, 0, 2, 0), range(sheet, 0, 0, 2, 0))],
+        vec![intersection(
+            range(sheet, 0, 0, 2, 0),
+            range(sheet, 0, 0, 2, 0),
+        )],
     );
     assert_eq!(eval(&node, &ctx), CellValue::number(5.0));
 }

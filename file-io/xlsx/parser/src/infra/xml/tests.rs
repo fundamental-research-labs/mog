@@ -91,7 +91,10 @@ fn test_parse_u32_attr_saturates_and_rejects_no_leading_digit() {
 
 #[test]
 fn test_parse_u8_attr_saturates_and_rejects_no_leading_digit() {
-    assert_eq!(parse_u8_attr(b"<color theme=\"999\">", b"theme=\""), Some(255));
+    assert_eq!(
+        parse_u8_attr(b"<color theme=\"999\">", b"theme=\""),
+        Some(255)
+    );
     assert_eq!(parse_u8_attr(b"<color theme=\"x1\">", b"theme=\""), None);
 }
 
@@ -221,7 +224,10 @@ fn test_parse_bytes_attr() {
 
 #[test]
 fn test_parse_bytes_attr_rejects_single_quotes_and_returns_unclosed_tail() {
-    assert_eq!(parse_bytes_attr(b"<filter type='custom'>", b"type=\""), None);
+    assert_eq!(
+        parse_bytes_attr(b"<filter type='custom'>", b"type=\""),
+        None
+    );
     assert_eq!(
         parse_bytes_attr(b"<filter type=\"custom", b"type=\""),
         Some(b"custom".as_slice())
@@ -252,7 +258,10 @@ fn test_decode_xml_entities_numeric_refs() {
 
 #[test]
 fn test_decode_xml_entities_invalid_utf8_replacement() {
-    assert_eq!(decode_xml_entities(&[0xFF]), char::REPLACEMENT_CHARACTER.to_string());
+    assert_eq!(
+        decode_xml_entities(&[0xFF]),
+        char::REPLACEMENT_CHARACTER.to_string()
+    );
 }
 
 #[test]

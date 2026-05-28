@@ -1,6 +1,6 @@
 use bridge_core as bridge;
 
-use super::{construction, services, CsvImportOptions, YrsComputeEngine};
+use super::{CsvImportOptions, YrsComputeEngine, construction, services};
 use crate::snapshot::{MutationResult, RecalcResult, WorkbookSnapshot};
 use value_types::ComputeError;
 
@@ -12,7 +12,6 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl YrsComputeEngine {
-
     // -------------------------------------------------------------------
     // Construction
     // -------------------------------------------------------------------

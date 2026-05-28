@@ -18,12 +18,12 @@ use crate::write::pivot_writer::cache_data::build_cache;
 use crate::write::pivot_writer::cache_sources::assign_cache_sources;
 use crate::write::pivot_writer::config_to_def::parsed_pivot_to_def;
 use crate::write::pivot_writer::part_paths::{
-    pivot_cache_definition_path, pivot_cache_records_path, pivot_cache_rels_path,
-    pivot_table_path, pivot_table_rels_path,
+    pivot_cache_definition_path, pivot_cache_records_path, pivot_cache_rels_path, pivot_table_path,
+    pivot_table_rels_path,
 };
 use crate::write::pivot_writer::source_fields::derive_missing_fields;
-use domain_types::domain::pivot::ParsedPivotTable;
 use domain_types::ParseOutput;
+use domain_types::domain::pivot::ParsedPivotTable;
 use std::collections::{HashMap, HashSet};
 
 /// All generated pivot data ready for ZIP assembly.

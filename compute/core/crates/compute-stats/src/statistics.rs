@@ -23,14 +23,13 @@ pub use bandwidth::{scott_bandwidth, silverman_bandwidth};
 pub use binning::{freedman_diaconis_bins, sturges_bins};
 pub use bivariate::{correlation, covariance, sample_covariance};
 pub use descriptive::{
-    max_val, mean, median, min_val, range, sample_std_dev, sample_variance, std_dev, sum,
-    variance,
+    max_val, mean, median, min_val, range, sample_std_dev, sample_variance, std_dev, sum, variance,
 };
 pub use kde::kde;
 pub use kernels::{
     biweight_kernel, epanechnikov_kernel, gaussian_kernel, triangular_kernel, uniform_kernel,
 };
 pub use outliers::{outlier_bounds, outliers, remove_outliers};
-pub use quantile::{iqr, quartiles, quantile};
+pub use quantile::{iqr, quantile, quartiles};
 pub use scale::{normalize, z_scores};
 pub use types::{KdeOptions, KdeResult, KernelChoice, OutlierBounds, Quartiles};

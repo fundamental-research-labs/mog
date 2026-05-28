@@ -1,5 +1,5 @@
-use super::fixtures::MockResolver;
 use super::super::{ast_to_identity, to_identity_formula};
+use super::fixtures::MockResolver;
 use crate::ast::{ASTNode, AbsFlags, CellRefNode, RangeRef};
 use crate::parser::{ParseError, ParseErrorKind, parse_formula};
 use cell_types::{CellId, SheetId};

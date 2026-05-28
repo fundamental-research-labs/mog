@@ -83,13 +83,7 @@ pub(super) fn build_cross_sheet_adjusted_formula(
         .refs
         .iter()
         .map(|r| {
-            resolve_identity_ref_to_fill_position(
-                mirror,
-                target_sheet_id,
-                r,
-                src_row,
-                src_col,
-            )
+            resolve_identity_ref_to_fill_position(mirror, target_sheet_id, r, src_row, src_col)
         })
         .collect();
 

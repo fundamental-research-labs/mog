@@ -5,9 +5,7 @@ use super::assembly::{
     WorksheetFormControlVmlGraphEntry, WorksheetOleVmlGraphEntry,
     WorksheetThreadedCommentsGraphEntry,
 };
-use super::{
-    WriteError, chart_auxiliary, chart_replay, external_links, vml_merge,
-};
+use super::{WriteError, chart_auxiliary, chart_replay, external_links, vml_merge};
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer::PivotWriteData;
@@ -663,10 +661,7 @@ pub(super) fn write_zip_package(
 
     for part in package_graph.opaque_parts() {
         let bytes = part.bytes.clone().ok_or_else(|| {
-            WriteError::PackageIntegrity(format!(
-                "opaque part {} has no bytes to emit",
-                part.path
-            ))
+            WriteError::PackageIntegrity(format!("opaque part {} has no bytes to emit", part.path))
         })?;
         zip.add_file(&part.path, bytes);
         let owner = crate::write::package_graph::PackageOwner::Part {

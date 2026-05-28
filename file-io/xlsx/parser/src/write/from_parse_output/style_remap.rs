@@ -18,10 +18,12 @@ impl StyleExportRemapper {
     #[must_use]
     pub(super) fn emitted_cell_xf_id(&self, current_style_id: u32) -> Option<u32> {
         match self.source {
-            CellStyleSource::WorkbookCellXfs { count } => (current_style_id < count)
-                .then_some(current_style_id),
-            CellStyleSource::Palette { count } => (current_style_id < count)
-                .then_some(current_style_id + 1),
+            CellStyleSource::WorkbookCellXfs { count } => {
+                (current_style_id < count).then_some(current_style_id)
+            }
+            CellStyleSource::Palette { count } => {
+                (current_style_id < count).then_some(current_style_id + 1)
+            }
         }
     }
 
@@ -101,7 +103,11 @@ fn styles_writer_from_workbook_stylesheet(stylesheet: WorkbookStylesheet) -> Sty
     writer.cell_xfs = stylesheet.cell_xfs;
     writer.cell_styles = stylesheet.named_cell_styles;
     writer.dxfs = if stylesheet.differential_formats.is_empty() {
-        stylesheet.dxf_registry.iter().map(|dxf| dxf.to_ooxml()).collect()
+        stylesheet
+            .dxf_registry
+            .iter()
+            .map(|dxf| dxf.to_ooxml())
+            .collect()
     } else {
         stylesheet.differential_formats
     };

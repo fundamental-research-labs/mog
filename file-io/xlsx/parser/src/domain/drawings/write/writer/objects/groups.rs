@@ -1,8 +1,8 @@
 use crate::write::xml_writer::XmlWriter;
 
 use super::super::super::types::GroupShapeProps;
-use super::super::styling::write_scene3d;
 use super::super::DrawingWriter;
+use super::super::styling::write_scene3d;
 
 impl DrawingWriter {
     pub(in crate::domain::drawings::write::writer) fn write_group_shape(
@@ -179,5 +179,4 @@ impl DrawingWriter {
 
         w.end_element("xdr:grpSp");
     }
-
 }

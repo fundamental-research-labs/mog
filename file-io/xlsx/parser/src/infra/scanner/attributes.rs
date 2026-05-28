@@ -42,7 +42,6 @@ pub fn find_attr_simd(bytes: &[u8], attr: &[u8], start: usize) -> Option<usize> 
     None
 }
 
-
 /// Extract the value between quotes in an attribute.
 /// Assumes `start` is positioned after the opening quote.
 ///

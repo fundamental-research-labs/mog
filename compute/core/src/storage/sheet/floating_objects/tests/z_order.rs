@@ -1,9 +1,8 @@
 use super::helpers::{basic_object_config, storage_with_sheet};
 use crate::storage::sheet::floating_objects::{
     bring_floating_object_forward, bring_floating_object_to_front, create_floating_object,
-    get_floating_object_max_z_index, get_floating_object_min_z_index,
-    get_floating_object_typed, get_floating_objects_in_z_order, send_floating_object_backward,
-    send_floating_object_to_back,
+    get_floating_object_max_z_index, get_floating_object_min_z_index, get_floating_object_typed,
+    get_floating_objects_in_z_order, send_floating_object_backward, send_floating_object_to_back,
 };
 
 #[test]

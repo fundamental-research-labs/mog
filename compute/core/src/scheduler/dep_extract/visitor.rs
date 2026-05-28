@@ -4,8 +4,8 @@ use crate::formula_text::FormulaTextDepTarget;
 use crate::graph::RANGE_EXPANSION_THRESHOLD;
 use crate::mirror::CellMirror;
 use cell_types::SheetId;
-use compute_parser::{ASTNode, AstVisitor, CellRefNode, RangeRef};
 use compute_functions::helpers::VOLATILE_FUNCTIONS;
+use compute_parser::{ASTNode, AstVisitor, CellRefNode, RangeRef};
 use formula_types::CellRef;
 
 use super::formula_text::{FormulaTextCollectOutcome, FormulaTextDepCollector};

@@ -1,10 +1,10 @@
 //! Parser-side adapters for shared XLSX file I/O test contracts.
 
+pub mod fidelity;
 pub mod ooxml_contract;
 pub mod package_graph;
 pub mod perf;
 pub mod xml_diff;
-pub mod fidelity;
 
 #[cfg(test)]
 mod context_removal_audit;

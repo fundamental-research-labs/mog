@@ -52,7 +52,11 @@ impl ComputeCore {
     }
 
     /// Track HashMap capacity grows and insert counts (Task 1.5f).
-    pub(super) fn track_capacity_metrics(&self, metrics: &mut RecalcMetrics, ast_cap_before: usize) {
+    pub(super) fn track_capacity_metrics(
+        &self,
+        metrics: &mut RecalcMetrics,
+        ast_cap_before: usize,
+    ) {
         let ast_cap_after = self.ast_cache.capacity();
         if ast_cap_after > ast_cap_before {
             let mut cap = ast_cap_before.max(1);

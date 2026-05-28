@@ -16,6 +16,4 @@ mod evaluate_tests;
 
 pub(crate) use creation::prepare_data_table_creation;
 pub use evaluate::calculate_data_table;
-pub use types::{
-    CreateDataTableInput, CreateDataTableResult, DataTableParams, DataTableResult,
-};
+pub use types::{CreateDataTableInput, CreateDataTableResult, DataTableParams, DataTableResult};

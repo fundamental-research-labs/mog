@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_merge_formats_merges_partial_borders_per_edge_and_side_field() {
@@ -183,4 +183,3 @@ fn test_merge_formats_higher_wins() {
     ); // from lower
     assert_eq!(merged.italic, Some(true)); // from higher
 }
-

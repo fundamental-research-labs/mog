@@ -14,10 +14,7 @@ pub(super) fn write_sparkline(
     parent.insert(txn, key, prelim);
 }
 
-pub(super) fn read_sparkline_from_out<T: yrs::ReadTxn>(
-    out: &Out,
-    txn: &T,
-) -> Option<Sparkline> {
+pub(super) fn read_sparkline_from_out<T: yrs::ReadTxn>(out: &Out, txn: &T) -> Option<Sparkline> {
     match out {
         Out::YMap(map) => yrs_sparkline::from_yrs_map(map, txn),
         _ => None,
@@ -35,10 +32,7 @@ pub(super) fn write_group(
     parent.insert(txn, key, prelim);
 }
 
-pub(super) fn read_group_from_out<T: yrs::ReadTxn>(
-    out: &Out,
-    txn: &T,
-) -> Option<SparklineGroup> {
+pub(super) fn read_group_from_out<T: yrs::ReadTxn>(out: &Out, txn: &T) -> Option<SparklineGroup> {
     match out {
         Out::YMap(map) => yrs_sparkline::group_from_yrs_map(map, txn),
         _ => None,

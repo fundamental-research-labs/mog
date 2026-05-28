@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use super::harness::{assert_roundtrip_partial, RoundtripDomainFlags};
 use super::super::helpers::{cell, make_single_sheet};
+use super::harness::{RoundtripDomainFlags, assert_roundtrip_partial};
 use domain_types::{
-    CFCellRange, CFRule, CFStyle, Comment, CommentType, ConditionalFormat, ErrorStyle,
-    MergeRegion, TableColumnSpec, TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
+    CFCellRange, CFRule, CFStyle, Comment, CommentType, ConditionalFormat, ErrorStyle, MergeRegion,
+    TableColumnSpec, TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellValue, FiniteF64};
 

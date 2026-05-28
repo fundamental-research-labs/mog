@@ -1,7 +1,6 @@
 use super::{
-    manager::RelationshipManager,
     REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT,
-    REL_SHARED_STRINGS, REL_STYLES, REL_THEME, REL_WORKSHEET,
+    REL_SHARED_STRINGS, REL_STYLES, REL_THEME, REL_WORKSHEET, manager::RelationshipManager,
 };
 
 /// Create root relationships (_rels/.rels)

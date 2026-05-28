@@ -18,7 +18,6 @@ pub(crate) fn parse_u32(bytes: &[u8]) -> Option<u32> {
     Some(result)
 }
 
-
 pub(crate) fn extract_attribute<'a>(xml: &'a [u8], attr_name: &[u8]) -> Option<&'a [u8]> {
     // Build the pattern: attr_name="
     let mut pattern = Vec::with_capacity(attr_name.len() + 2);

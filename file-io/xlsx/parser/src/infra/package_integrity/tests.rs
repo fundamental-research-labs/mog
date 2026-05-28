@@ -1,8 +1,6 @@
 use super::*;
 use crate::domain::web_extensions::read::REL_WEB_EXTENSION_TASKPANES;
-use crate::infra::opc::{
-    REL_SHARED_STRINGS, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
-};
+use crate::infra::opc::{REL_SHARED_STRINGS, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET};
 use crate::write::ZipWriter;
 use crate::zip::XlsxArchive;
 
@@ -89,7 +87,8 @@ fn fragment_only_relationship_target_passes_without_part_lookup() {
         ),
     ]);
 
-    validate_archive_package_integrity(&archive).expect("fragment-only target is not a package part");
+    validate_archive_package_integrity(&archive)
+        .expect("fragment-only target is not a package part");
 }
 
 #[test]
@@ -141,8 +140,9 @@ fn missing_relationship_owner_fails() {
 
 #[test]
 fn content_type_override_for_missing_part_fails() {
-    let content_types =
-        valid_content_types(r#"<Override PartName="/xl/missing.xml" ContentType="application/xml"/>"#);
+    let content_types = valid_content_types(
+        r#"<Override PartName="/xl/missing.xml" ContentType="application/xml"/>"#,
+    );
     let workbook_rels = workbook_rels("");
     let archive = archive(&[
         ("[Content_Types].xml", &content_types),
@@ -279,8 +279,7 @@ fn chart_id_without_matching_chart_relationship_fails() {
         ),
     ]);
 
-    let errors =
-        validate_archive_package_integrity(&archive).expect_err("chart r:id is dangling");
+    let errors = validate_archive_package_integrity(&archive).expect_err("chart r:id is dangling");
     assert!(errors.iter().any(|error| matches!(
         error,
         PackageIntegrityError::MissingPartRelationshipReference {
@@ -440,8 +439,7 @@ fn emitted_taskpanes_without_root_relationship_fails() {
         ("xl/webextensions/taskpanes.xml", b"<wetp:taskpanes/>"),
     ]);
 
-    let errors =
-        validate_archive_package_integrity(&archive).expect_err("taskpanes rel missing");
+    let errors = validate_archive_package_integrity(&archive).expect_err("taskpanes rel missing");
     assert!(errors.iter().any(|error| matches!(
         error,
         PackageIntegrityError::MissingRequiredRelationship { rel_type, target_path, .. }

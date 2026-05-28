@@ -1,7 +1,7 @@
 use crate::{Point, RegressionMethod};
 
-use super::fixtures::{default_opts, pts};
 use super::super::{exponential_regression, logarithmic_regression, power_regression};
+use super::fixtures::{default_opts, pts};
 
 #[test]
 fn exp_known_curve() {
@@ -23,14 +23,12 @@ fn exp_known_curve() {
     assert_eq!(result.method, RegressionMethod::Exp);
 }
 
-
 #[test]
 fn exp_empty_data() {
     let result = exponential_regression(&[], &default_opts());
     assert!(result.r_squared.is_nan());
     assert!(result.points.is_empty());
 }
-
 
 #[test]
 fn exp_filters_negative_y() {
@@ -41,14 +39,12 @@ fn exp_filters_negative_y() {
     assert!(!result.r_squared.is_nan());
 }
 
-
 #[test]
 fn exp_all_negative_y_returns_nan() {
     let data = pts(&[(1.0, -1.0), (2.0, -2.0)]);
     let result = exponential_regression(&data, &default_opts());
     assert!(result.r_squared.is_nan());
 }
-
 
 #[test]
 fn log_known_curve() {
@@ -70,13 +66,11 @@ fn log_known_curve() {
     assert_eq!(result.method, RegressionMethod::Log);
 }
 
-
 #[test]
 fn log_empty_data() {
     let result = logarithmic_regression(&[], &default_opts());
     assert!(result.r_squared.is_nan());
 }
-
 
 #[test]
 fn log_filters_nonpositive_x() {
@@ -85,7 +79,6 @@ fn log_filters_nonpositive_x() {
     // Only 2 valid points (x=1, x=2) — just enough
     assert!(!result.r_squared.is_nan());
 }
-
 
 #[test]
 fn pow_known_curve() {
@@ -107,13 +100,11 @@ fn pow_known_curve() {
     assert_eq!(result.method, RegressionMethod::Pow);
 }
 
-
 #[test]
 fn pow_empty_data() {
     let result = power_regression(&[], &default_opts());
     assert!(result.r_squared.is_nan());
 }
-
 
 #[test]
 fn pow_filters_nonpositive() {
@@ -122,7 +113,6 @@ fn pow_filters_nonpositive() {
     // Only x=1 and x=2 are valid (positive x and y)
     assert!(!result.r_squared.is_nan());
 }
-
 
 #[test]
 fn pow_all_invalid_returns_nan() {

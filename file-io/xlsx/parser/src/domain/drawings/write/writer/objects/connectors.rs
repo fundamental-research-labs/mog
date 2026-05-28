@@ -200,5 +200,5 @@ impl DrawingWriter {
         w.end_element("xdr:cxnSp");
     }
 
-    /// Write a group shape element (`<xdr:grpSp>`)
+    // Write a group shape element (`<xdr:grpSp>`)
 }

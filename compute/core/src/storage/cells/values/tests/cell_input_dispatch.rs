@@ -1,5 +1,5 @@
-use super::*;
 use super::support::{make_grid_index, storage_with_sheet};
+use super::*;
 
 #[test]
 fn test_literal_preserves_text() {
@@ -406,4 +406,4 @@ fn parse_non_ascii_no_utf8_panic() {
 // transforms, backed by regression tests for the parser behavior.
 // -----------------------------------------------------------------------
 
-/// G1: bare number into a percent-formatted cell divides by 100.
+// G1: bare number into a percent-formatted cell divides by 100.

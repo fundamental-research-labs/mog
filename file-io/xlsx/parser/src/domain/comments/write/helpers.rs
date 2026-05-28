@@ -151,4 +151,3 @@ pub(super) fn indices_to_cell_ref(col: u32, row: u32) -> String {
 
     format!("{}{}", col_str, row + 1)
 }
-

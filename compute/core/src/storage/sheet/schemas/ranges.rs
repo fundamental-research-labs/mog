@@ -83,13 +83,16 @@ fn upsert_range_schema_by_id(
 
     let priority = yrs_io::get_sheet_sub_map(&txn, sheets, sheet_id, KEY_VALIDATION_RULES)
         .map(|rules_map| {
-            validation_rules::validation_rule_priority(&txn, &rules_map, schema_id)
-                .unwrap_or_else(|| validation_rules::next_validation_rule_priority(&txn, &rules_map))
+            validation_rules::validation_rule_priority(&txn, &rules_map, schema_id).unwrap_or_else(
+                || validation_rules::next_validation_rule_priority(&txn, &rules_map),
+            )
         })
         .unwrap_or(0);
 
     range_store::delete_validation_ranges_for_rule(&mut txn, sheets, sheet_id, schema_id);
-    range_store::create_validation_ranges(&mut txn, sheets, sheet_id, schema_id, &new_spec, priority);
+    range_store::create_validation_ranges(
+        &mut txn, sheets, sheet_id, schema_id, &new_spec, priority,
+    );
 
     Ok(())
 }

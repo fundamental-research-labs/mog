@@ -1,5 +1,5 @@
-use super::*;
 use super::attrs::sheet_state_to_xml_value;
+use super::*;
 
 #[test]
 fn test_empty_workbook() {
@@ -9,9 +9,9 @@ fn test_empty_workbook() {
     assert!(xml.contains("<?xml version=\"1.0\""));
     assert!(xml.contains("<workbook"));
     assert!(xml.contains("xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\""));
-    assert!(
-        xml.contains("xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"")
-    );
+    assert!(xml.contains(
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\""
+    ));
     assert!(xml.contains("<sheets>"));
     assert!(xml.contains("name=\"Sheet1\""));
     assert!(xml.contains("</sheets>"));
@@ -65,11 +65,9 @@ fn test_sheet_name_with_special_characters() {
 #[test]
 fn test_hidden_sheet() {
     let mut writer = WorkbookWriter::new();
-    writer.add_sheet("Visible", "rId1").add_sheet_with_state(
-        "Hidden",
-        "rId2",
-        SheetState::Hidden,
-    );
+    writer
+        .add_sheet("Visible", "rId1")
+        .add_sheet_with_state("Hidden", "rId2", SheetState::Hidden);
 
     let xml = String::from_utf8(writer.to_xml()).unwrap();
 

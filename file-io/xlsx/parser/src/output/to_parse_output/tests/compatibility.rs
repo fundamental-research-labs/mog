@@ -1,9 +1,9 @@
-use super::helpers::{
-    group_shape_anchor, smartart_parts, wordart_shape_anchor, wordart_shape_content,
-};
 use super::super::{
     append_import_compatibility_acknowledgements, count_ooxml_smartart_diagrams,
     count_ooxml_wordart_text_effects,
+};
+use super::helpers::{
+    group_shape_anchor, smartart_parts, wordart_shape_anchor, wordart_shape_content,
 };
 use crate::domain::drawings::Drawing;
 use crate::output::results::FullParsedSheet;

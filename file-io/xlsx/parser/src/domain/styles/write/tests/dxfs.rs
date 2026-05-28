@@ -48,7 +48,10 @@ fn test_write_dxfs_alignment_protection() {
         ..DxfDef::default()
     }];
     let xml = xml_string(&writer);
-    assert_contains_all(&xml, &["horizontal=\"center\"", "<protection", "locked=\"1\""]);
+    assert_contains_all(
+        &xml,
+        &["horizontal=\"center\"", "<protection", "locked=\"1\""],
+    );
 }
 
 #[test]

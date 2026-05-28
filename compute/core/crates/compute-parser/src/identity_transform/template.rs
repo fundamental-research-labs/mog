@@ -127,13 +127,9 @@ pub(super) fn ast_to_template(
             out,
         ),
 
-        ASTNode::ExternalNameRef { workbook, name } => external::emit_external_name_ref(
-            workbook,
-            name,
-            external_binder,
-            refs,
-            out,
-        ),
+        ASTNode::ExternalNameRef { workbook, name } => {
+            external::emit_external_name_ref(workbook, name, external_binder, refs, out)
+        }
 
         // ── Literals ────────────────────────────────────────────────
         ASTNode::Number(n) => {

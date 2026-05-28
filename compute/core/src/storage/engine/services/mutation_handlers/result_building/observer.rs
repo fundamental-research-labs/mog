@@ -12,13 +12,17 @@ use crate::snapshot::{
 };
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{dimensions, pivots, properties, settings, sparklines, view, visibility};
+use crate::storage::sheet::{
+    dimensions, pivots, properties, settings, sparklines, view, visibility,
+};
 use crate::storage::workbook;
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::observe::{CellChangeKind, DocumentChanges};
 
+use super::super::{
+    observer_kind_to_change_kind, resolve_col_id_to_index, resolve_row_id_to_index,
+};
 use super::sheet_hydration::build_sheet_hydration_changes;
-use super::super::{observer_kind_to_change_kind, resolve_col_id_to_index, resolve_row_id_to_index};
 
 // ---------------------------------------------------------------------------
 // build_mutation_result_from_changes

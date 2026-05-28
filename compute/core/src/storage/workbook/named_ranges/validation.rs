@@ -3,8 +3,8 @@ use yrs::{Doc, Map, MapRef, Transact};
 use domain_types::domain::named_range::{NameValidationError, NameValidationResult};
 
 use super::keys::{
-    get_defined_name_key, is_single_letter, is_valid_first_char, is_valid_name_char,
-    looks_like_cell_reference, looks_like_r1c1_reference, MAX_NAME_LENGTH, RESERVED_WORDS,
+    MAX_NAME_LENGTH, RESERVED_WORDS, get_defined_name_key, is_single_letter, is_valid_first_char,
+    is_valid_name_char, looks_like_cell_reference, looks_like_r1c1_reference,
 };
 use super::yrs_codec::{get_named_ranges_map, read_defined_name_from_out};
 

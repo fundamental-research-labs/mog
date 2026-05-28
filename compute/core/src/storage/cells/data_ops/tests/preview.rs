@@ -1,5 +1,5 @@
-use super::fixtures::*;
 use super::super::*;
+use super::fixtures::*;
 use value_types::CellValue;
 
 // ===================================================================

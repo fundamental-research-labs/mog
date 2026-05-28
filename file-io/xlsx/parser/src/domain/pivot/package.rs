@@ -589,7 +589,10 @@ mod tests {
         let discovery = parse_pivot_cache_packages(&archive);
 
         assert_eq!(discovery.links.len(), 1);
-        assert_eq!(discovery.links[0].records.relationship_id, Some("rId1".to_string()));
+        assert_eq!(
+            discovery.links[0].records.relationship_id,
+            Some("rId1".to_string())
+        );
         assert_eq!(
             discovery.links[0].records.records_path,
             Some("xl/pivotCache/pivotCacheRecords4.xml".to_string())

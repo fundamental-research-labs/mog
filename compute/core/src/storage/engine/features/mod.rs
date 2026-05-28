@@ -178,7 +178,9 @@ impl YrsComputeEngine {
         end_col: u32,
         options: super::mutation::BridgeSortOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::sort_range(self, sheet_id, start_row, start_col, end_row, end_col, options)
+        range_ops::sort_range(
+            self, sheet_id, start_row, start_col, end_row, end_col, options,
+        )
     }
 
     // -------------------------------------------------------------------
@@ -246,7 +248,20 @@ impl YrsComputeEngine {
         skip_blanks: bool,
         transpose: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::copy_range(self, source_sheet_id, src_start_row, src_start_col, src_end_row, src_end_col, target_sheet_id, target_row, target_col, copy_type, skip_blanks, transpose)
+        range_ops::copy_range(
+            self,
+            source_sheet_id,
+            src_start_row,
+            src_start_col,
+            src_end_row,
+            src_end_col,
+            target_sheet_id,
+            target_row,
+            target_col,
+            copy_type,
+            skip_blanks,
+            transpose,
+        )
     }
 
     // -------------------------------------------------------------------
@@ -340,13 +355,20 @@ impl YrsComputeEngine {
 
     /// Get the full grouping configuration for a sheet.
     #[bridge::read(scope = "sheet")]
-    pub fn get_sheet_grouping_config(&self, sheet_id: &SheetId) -> sheet_grouping::SheetGroupingConfig {
+    pub fn get_sheet_grouping_config(
+        &self,
+        sheet_id: &SheetId,
+    ) -> sheet_grouping::SheetGroupingConfig {
         grouping::get_sheet_grouping_config(self, sheet_id)
     }
 
     /// Get all groups for a given axis (row or column) in a sheet.
     #[bridge::read(scope = "sheet")]
-    pub fn get_groups(&self, sheet_id: &SheetId, axis: &str) -> Vec<sheet_grouping::GroupDefinition> {
+    pub fn get_groups(
+        &self,
+        sheet_id: &SheetId,
+        axis: &str,
+    ) -> Vec<sheet_grouping::GroupDefinition> {
         grouping::get_groups(self, sheet_id, axis)
     }
 
@@ -498,7 +520,9 @@ impl YrsComputeEngine {
         end_col: u32,
         options: sheet_grouping::SubtotalOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::create_subtotals(self, sheet_id, start_row, start_col, end_row, end_col, options)
+        grouping::create_subtotals(
+            self, sheet_id, start_row, start_col, end_row, end_col, options,
+        )
     }
 
     /// Remove subtotal rows and associated groups from a range.
@@ -595,7 +619,16 @@ impl YrsComputeEngine {
         columns: Vec<u32>,
         has_headers: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::remove_duplicates(self, sheet_id, start_row, start_col, end_row, end_col, columns, has_headers)
+        range_ops::remove_duplicates(
+            self,
+            sheet_id,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+            columns,
+            has_headers,
+        )
     }
 
     #[bridge::write(scope = "sheet")]
@@ -610,7 +643,9 @@ impl YrsComputeEngine {
         dest_col: u32,
         options: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        text_to_columns::text_to_columns(self, sheet_id, start_row, end_row, source_col, dest_row, dest_col, options)
+        text_to_columns::text_to_columns(
+            self, sheet_id, start_row, end_row, source_col, dest_row, dest_col, options,
+        )
     }
 
     /// Simplified text-to-columns that accepts the contract format directly.
@@ -633,7 +668,19 @@ impl YrsComputeEngine {
         treat_consecutive_as_one: bool,
         text_qualifier: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        text_to_columns::text_to_columns_simple(self, sheet_id, start_row, end_row, source_col, dest_row, dest_col, delimiter, custom_delimiter, treat_consecutive_as_one, text_qualifier)
+        text_to_columns::text_to_columns_simple(
+            self,
+            sheet_id,
+            start_row,
+            end_row,
+            source_col,
+            dest_row,
+            dest_col,
+            delimiter,
+            custom_delimiter,
+            treat_consecutive_as_one,
+            text_qualifier,
+        )
     }
 
     // -------------------------------------------------------------------
@@ -642,7 +689,11 @@ impl YrsComputeEngine {
 
     /// Get a single filter by ID.
     #[bridge::read(scope = "sheet")]
-    pub fn get_filter(&self, sheet_id: &SheetId, filter_id: &str) -> Option<sheet_filters::FilterState> {
+    pub fn get_filter(
+        &self,
+        sheet_id: &SheetId,
+        filter_id: &str,
+    ) -> Option<sheet_filters::FilterState> {
         filters::get_filter(self, sheet_id, filter_id)
     }
 
@@ -793,7 +844,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::clear_sparklines_in_range(self, sheet_id, start_row, start_col, end_row, end_col)
+        sparklines::clear_sparklines_in_range(
+            self, sheet_id, start_row, start_col, end_row, end_col,
+        )
     }
 
     /// Clear all sparklines and groups for a sheet.
@@ -1009,6 +1062,14 @@ impl YrsComputeEngine {
         options: cell_ops::TextToColumnsOptions,
         max_preview_rows: u32,
     ) -> Vec<Vec<String>> {
-        text_to_columns::preview_text_to_columns(self, sheet_id, source_start_row, source_end_row, source_col, options, max_preview_rows)
+        text_to_columns::preview_text_to_columns(
+            self,
+            sheet_id,
+            source_start_row,
+            source_end_row,
+            source_col,
+            options,
+            max_preview_rows,
+        )
     }
 }

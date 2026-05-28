@@ -2,10 +2,10 @@ use domain_types::CellFormat;
 use domain_types::domain::filter::{ColorPosition, SortOrder};
 use value_types::{CellValue, FiniteF64};
 
-use super::fixtures::{fmt_fill, fmt_font};
 use super::super::planner::compute_sorted_row_order;
 use super::super::test_helpers::{make_cell_id, place_cell, storage_with_sheet};
 use super::super::types::{CellRange, SortCriterion, SortMode, SortOptions};
+use super::fixtures::{fmt_fill, fmt_font};
 
 #[test]
 fn test_sort_by_cell_color_top_preserves_order() {

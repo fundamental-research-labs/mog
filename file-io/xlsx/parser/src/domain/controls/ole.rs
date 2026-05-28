@@ -78,10 +78,7 @@ impl OleWriter {
                 if !ext.is_empty() && registered_extensions.insert(ext.to_lowercase()) {
                     match ext.to_lowercase().as_str() {
                         "bin" => {
-                            ct.add_default(
-                                "bin",
-                                crate::infra::imported_parts::CT_OLE_OBJECT,
-                            );
+                            ct.add_default("bin", crate::infra::imported_parts::CT_OLE_OBJECT);
                         }
                         "emf" => {
                             ct.add_default("emf", "image/x-emf");

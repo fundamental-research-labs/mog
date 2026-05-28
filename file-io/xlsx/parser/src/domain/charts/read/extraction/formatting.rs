@@ -313,4 +313,4 @@ fn extract_alpha_transparency(color: &ooxml_types::drawings::DrawingColor) -> Op
     })
 }
 
-/// Extract plain text from a ChartText (CT_Tx).
+// Extract plain text from a ChartText (CT_Tx).

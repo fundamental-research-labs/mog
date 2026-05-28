@@ -1,14 +1,14 @@
 use std::fmt::Write;
 
 use formula_types::{
-    CellRef, ExternalA1Cell, ExternalA1Range, ExternalAbsFlags, ExternalCellRef,
-    ExternalNameRef, ExternalRangeAbsFlags, ExternalRangeRef, ExternalSheetKey,
-    ExternalWorkbookToken, IdentityFormulaRef, LinkId,
+    CellRef, ExternalA1Cell, ExternalA1Range, ExternalAbsFlags, ExternalCellRef, ExternalNameRef,
+    ExternalRangeAbsFlags, ExternalRangeRef, ExternalSheetKey, ExternalWorkbookToken,
+    IdentityFormulaRef, LinkId,
 };
 
+use crate::Span;
 use crate::ast::ASTNode;
 use crate::parser::{ParseError, ParseErrorKind};
-use crate::Span;
 
 /// Capability used by formula commit code to bind parser-preserved external
 /// workbook tokens to persisted link registry ids.

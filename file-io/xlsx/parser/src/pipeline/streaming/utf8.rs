@@ -102,7 +102,9 @@ mod tests {
         let mut validator = StreamingUtf8Validator::new();
         let mut buffer = Vec::new();
 
-        let first = validator.validate_chunk(&[b'a', 0xe2], &mut buffer).unwrap();
+        let first = validator
+            .validate_chunk(&[b'a', 0xe2], &mut buffer)
+            .unwrap();
         assert_eq!(first.direct_len, 1);
         assert!(!first.buffered);
 
@@ -131,7 +133,9 @@ mod tests {
         let mut validator = StreamingUtf8Validator::new();
         let mut buffer = Vec::new();
 
-        validator.validate_chunk(&[b'a', 0xe2, 0x82], &mut buffer).unwrap();
+        validator
+            .validate_chunk(&[b'a', 0xe2, 0x82], &mut buffer)
+            .unwrap();
 
         assert!(matches!(
             validator.finish(),

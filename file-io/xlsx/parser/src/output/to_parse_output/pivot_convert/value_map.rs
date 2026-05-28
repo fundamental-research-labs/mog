@@ -129,7 +129,10 @@ mod tests {
 
     #[test]
     fn subtotal_count_mappings_match_engine_contract() {
-        assert_eq!(convert_subtotal(&Subtotal::Count), AggregateFunction::CountA);
+        assert_eq!(
+            convert_subtotal(&Subtotal::Count),
+            AggregateFunction::CountA
+        );
         assert_eq!(
             convert_subtotal(&Subtotal::CountNums),
             AggregateFunction::Count
@@ -168,7 +171,10 @@ mod tests {
             "T:2024-01-01"
         );
         assert_eq!(shared_item_to_key(&SharedItem::Boolean(true)), "B:true");
-        assert_eq!(shared_item_to_key(&SharedItem::Error("#DIV/0!".to_string())), "E:#DIV/0!");
+        assert_eq!(
+            shared_item_to_key(&SharedItem::Error("#DIV/0!".to_string())),
+            "E:#DIV/0!"
+        );
         assert_eq!(shared_item_to_key(&SharedItem::Missing), "\x00BLANK\x00");
         assert_eq!(
             shared_item_to_key(&SharedItem::Number(-0.0)),

@@ -21,7 +21,7 @@ pub(super) fn write_font_scheme(xml: &mut XmlWriter, font_scheme: &FontScheme) {
 }
 
 /// Write a font collection (majorFont or minorFont).
-fn write_font_collection( xml: &mut XmlWriter, name: &str, collection: &FontCollection) {
+fn write_font_collection(xml: &mut XmlWriter, name: &str, collection: &FontCollection) {
     xml.start_element_ns("a", name).end_attrs();
 
     // Latin font (required)
@@ -45,7 +45,7 @@ fn write_font_collection( xml: &mut XmlWriter, name: &str, collection: &FontColl
 }
 
 /// Write a font definition element.
-fn write_font_def( xml: &mut XmlWriter, name: &str, font: &ThemeFontDef) {
+fn write_font_def(xml: &mut XmlWriter, name: &str, font: &ThemeFontDef) {
     xml.start_element_ns("a", name)
         .attr("typeface", &font.typeface);
 

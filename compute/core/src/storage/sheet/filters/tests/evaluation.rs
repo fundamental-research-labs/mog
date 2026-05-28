@@ -1,9 +1,9 @@
-use super::helpers::{storage_with_sheet, test_get_cell_format};
 use super::super::evaluation::cell_value_dedup_key;
 use super::super::{
-    create_filter, evaluate_filter, get_filtered_record_count, get_unique_values, set_column_filter,
-    ColumnFilter, FilterCondition, FilterKind, FilterLogic, FilterOperator,
+    ColumnFilter, FilterCondition, FilterKind, FilterLogic, FilterOperator, create_filter,
+    evaluate_filter, get_filtered_record_count, get_unique_values, set_column_filter,
 };
+use super::helpers::{storage_with_sheet, test_get_cell_format};
 use value_types::{CellValue, FiniteF64};
 
 #[test]

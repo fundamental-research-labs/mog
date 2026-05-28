@@ -1,6 +1,6 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::super::super::types::{SmartArtWriteData, DIAGRAM_GRAPHIC_DATA_URI, NS_DGM};
+use super::super::super::types::{DIAGRAM_GRAPHIC_DATA_URI, NS_DGM, SmartArtWriteData};
 use super::super::DrawingWriter;
 
 impl DrawingWriter {
@@ -63,26 +63,26 @@ impl DrawingWriter {
         w.end_element("xdr:graphicFrame");
     }
 
-    /// Write a slicer as `mc:AlternateContent` with `mc:Choice Requires="a14"`.
-    ///
-    /// Produces:
-    /// ```xml
-    /// <mc:AlternateContent>
-    ///   <mc:Choice Requires="a14">
-    ///     <xdr:graphicFrame>
-    ///       <xdr:nvGraphicFramePr>
-    ///         <xdr:cNvPr id="N" name="SlicerName"/>
-    ///         <xdr:cNvGraphicFramePr/>
-    ///       </xdr:nvGraphicFramePr>
-    ///       <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
-    ///       <a:graphic>
-    ///         <a:graphicData uri="http://schemas.microsoft.com/office/drawing/2010/slicer">
-    ///           <sle:slicer name="SlicerName"/>
-    ///         </a:graphicData>
-    ///       </a:graphic>
-    ///     </xdr:graphicFrame>
-    ///   </mc:Choice>
-    ///   <mc:Fallback/>
-    /// </mc:AlternateContent>
-    /// ```
+    // Write a slicer as `mc:AlternateContent` with `mc:Choice Requires="a14"`.
+    //
+    // Produces:
+    // ```xml
+    // <mc:AlternateContent>
+    //   <mc:Choice Requires="a14">
+    //     <xdr:graphicFrame>
+    //       <xdr:nvGraphicFramePr>
+    //         <xdr:cNvPr id="N" name="SlicerName"/>
+    //         <xdr:cNvGraphicFramePr/>
+    //       </xdr:nvGraphicFramePr>
+    //       <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
+    //       <a:graphic>
+    //         <a:graphicData uri="http://schemas.microsoft.com/office/drawing/2010/slicer">
+    //           <sle:slicer name="SlicerName"/>
+    //         </a:graphicData>
+    //       </a:graphic>
+    //     </xdr:graphicFrame>
+    //   </mc:Choice>
+    //   <mc:Fallback/>
+    // </mc:AlternateContent>
+    // ```
 }

@@ -7,7 +7,7 @@ use ooxml_types::drawings::{LineDash, LineFill, LineJoin, Outline};
 // ========================================================================
 
 /// Write an `Outline` to XML (ECMA-376 CT_LineProperties).
-pub(super) fn write_outline( xml: &mut XmlWriter, ln: &Outline) {
+pub(super) fn write_outline(xml: &mut XmlWriter, ln: &Outline) {
     let elem = xml.start_element_ns("a", "ln");
     if let Some(w) = ln.width {
         elem.attr("w", &w.to_string());
@@ -52,7 +52,7 @@ pub(super) fn write_outline( xml: &mut XmlWriter, ln: &Outline) {
 }
 
 /// Write line fill (EG_LineFillProperties).
-fn write_line_fill( xml: &mut XmlWriter, fill: &LineFill) {
+fn write_line_fill(xml: &mut XmlWriter, fill: &LineFill) {
     match fill {
         LineFill::NoFill => {
             xml.start_element_ns("a", "noFill").self_close();
@@ -72,7 +72,7 @@ fn write_line_fill( xml: &mut XmlWriter, fill: &LineFill) {
 }
 
 /// Write line dash (preset or custom).
-fn write_line_dash( xml: &mut XmlWriter, dash: &LineDash) {
+fn write_line_dash(xml: &mut XmlWriter, dash: &LineDash) {
     match dash {
         LineDash::Preset(style) => {
             xml.start_element_ns("a", "prstDash")
@@ -93,7 +93,7 @@ fn write_line_dash( xml: &mut XmlWriter, dash: &LineDash) {
 }
 
 /// Write line join.
-fn write_line_join( xml: &mut XmlWriter, join: &LineJoin) {
+fn write_line_join(xml: &mut XmlWriter, join: &LineJoin) {
     match join {
         LineJoin::Round => {
             xml.start_element_ns("a", "round").self_close();

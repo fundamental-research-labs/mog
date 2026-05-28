@@ -4,7 +4,7 @@ use compute_document::identity::GridIndex;
 use domain_types::domain::merge::{IdentityMergedRegion, ResolvedMergedRegion};
 use yrs::{Any, Out};
 
-use super::codec::{stored_merge_from_yrs_map, StoredMerge};
+use super::codec::{StoredMerge, stored_merge_from_yrs_map};
 
 /// Check if two axis-aligned rectangles overlap.
 #[allow(clippy::too_many_arguments)]

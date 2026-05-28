@@ -211,7 +211,9 @@ fn relocate_precedent_regenerates_dependent_formula_text() {
 
     let row = engine.query_range(&sid, 0, 0, 0, 2);
     assert!(
-        row.cells.iter().all(|cell| !(cell.row == 0 && cell.col == 0)),
+        row.cells
+            .iter()
+            .all(|cell| !(cell.row == 0 && cell.col == 0)),
         "source A1 should be empty after relocate: {:?}",
         row.cells
     );

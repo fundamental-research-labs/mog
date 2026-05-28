@@ -1,12 +1,12 @@
-use super::helpers::*;
 use super::super::*;
+use super::helpers::*;
 
 /// Test single-criteria functions: COUNTIF, SUMIF, AVERAGEIF.
 #[test]
 fn test_agg_prepass_single_criteria_functions() {
     let categories = [
-        "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y",
-        "X", "Y", "X", "Y",
+        "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y", "X", "Y",
+        "X", "Y",
     ];
     let mut cells = Vec::new();
     let mut id_counter = 0x3000u128;
@@ -66,7 +66,12 @@ fn test_agg_prepass_mixed_static_dynamic() {
         let cat = if row % 2 == 0 { "X" } else { "Y" };
 
         cells.push(text_cell(&mut id_counter, row, 0, cat));
-        cells.push(number_cell(&mut id_counter, row, 1, (row + 1) as f64 * 10.0));
+        cells.push(number_cell(
+            &mut id_counter,
+            row,
+            1,
+            (row + 1) as f64 * 10.0,
+        ));
     }
 
     for row in 0..10u32 {

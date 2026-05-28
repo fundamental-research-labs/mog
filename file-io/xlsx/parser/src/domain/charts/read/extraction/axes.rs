@@ -202,5 +202,5 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     }
 }
 
-/// Extract scalar chart-level fields from the first chart group's config.
-/// Returns (gap_width, overlap, doughnut_hole_size, first_slice_angle, bubble_scale, split_type, split_value).
+// Extract scalar chart-level fields from the first chart group's config.
+// Returns (gap_width, overlap, doughnut_hole_size, first_slice_angle, bubble_scale, split_type, split_value).

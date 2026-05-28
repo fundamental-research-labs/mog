@@ -1,6 +1,6 @@
 use super::{
-    modules::{detect_modules_from_raw, determine_module_type},
     VbaModule, VbaProject,
+    modules::{detect_modules_from_raw, determine_module_type},
 };
 use crate::domain::vba::constants::{
     DIRECTORY_ENTRY_SIZE, END_OF_CHAIN, OLE_MAGIC, SECTOR_SIZE_512,
@@ -113,8 +113,7 @@ pub(super) fn parse_directory_entries(
                 }
             }
             _ => {
-                if entry_type == 2 && !name.starts_with('_') && name != "dir" && name != "PROJECT"
-                {
+                if entry_type == 2 && !name.starts_with('_') && name != "dir" && name != "PROJECT" {
                     let module_type = determine_module_type(&name);
                     project.modules.push(VbaModule {
                         name: name.clone(),

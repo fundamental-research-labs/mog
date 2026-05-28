@@ -1,4 +1,6 @@
-use ooxml_types::drawings::{DrawingColor, DrawingFill, EffectList, EffectProperties, LineFill, Outline, SolidFill};
+use ooxml_types::drawings::{
+    DrawingColor, DrawingFill, EffectList, EffectProperties, LineFill, Outline, SolidFill,
+};
 use ooxml_types::themes::{EffectStyleItem, FormatScheme};
 
 /// Build the standard Office default format scheme.

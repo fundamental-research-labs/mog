@@ -190,14 +190,11 @@ pub(in crate::storage::engine) fn rename_table(
         .filter(|table| table.name != old_name)
         .cloned()
         .collect();
-    let renamed = compute_table::operations::rename_table_validated(
-        &table,
-        new_name,
-        &other_tables,
-    )
-    .map_err(|err| ComputeError::Eval {
-        message: err.to_string(),
-    })?;
+    let renamed =
+        compute_table::operations::rename_table_validated(&table, new_name, &other_tables)
+            .map_err(|err| ComputeError::Eval {
+                message: err.to_string(),
+            })?;
 
     stores.compute.remove_table(mirror, old_name);
     remove_table_from_yrs(stores, old_name);

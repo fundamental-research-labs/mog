@@ -7,7 +7,7 @@ use value_types::{CellArray, CellError, CellValue};
 use super::common::{rows_equal, to_array};
 use crate::PureFunction;
 
-pub(super) struct FnUnique;
+pub(in crate::lookup) struct FnUnique;
 
 impl PureFunction for FnUnique {
     fn name(&self) -> &'static str {

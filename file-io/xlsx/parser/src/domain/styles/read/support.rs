@@ -1,5 +1,7 @@
 use crate::infra::scanner::{find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
+};
 
 use super::super::types::*;
 

@@ -100,12 +100,7 @@ pub(super) fn emit_range_ref(
                 && let Ok((s_sheet, s_row, s_col)) = extract_position(&range.start, current_sheet)
                 && let Ok((e_sheet, e_row, e_col)) = extract_position(&range.end, current_sheet)
                 && s_sheet == e_sheet
-                && let (
-                    Some(start_row_id),
-                    Some(start_col_id),
-                    Some(end_row_id),
-                    Some(end_col_id),
-                ) = (
+                && let (Some(start_row_id), Some(start_col_id), Some(end_row_id), Some(end_col_id)) = (
                     resolver.get_row_id(&s_sheet, s_row),
                     resolver.get_col_id(&s_sheet, s_col),
                     resolver.get_row_id(&e_sheet, e_row),

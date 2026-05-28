@@ -1,8 +1,8 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_f64_attr, parse_string_attr};
 
-use super::support::{parse_color_ref, parse_named_color_ref};
 use super::super::types::*;
+use super::support::{parse_color_ref, parse_named_color_ref};
 
 /// Parse the <fills> section
 pub(super) fn parse_fills(out: &mut Vec<FillDef>, xml: &[u8]) {

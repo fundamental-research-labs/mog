@@ -3,8 +3,9 @@ use super::*;
 fn round_trip(formula: &str) {
     let ast1 = parse_formula(formula, None).unwrap().into_inner();
     let display = format!("{ast1}");
-    let ast2 = parse_formula(&display, None)
-        .unwrap_or_else(|e| panic!("Round-trip re-parse failed for '{formula}' -> '{display}': {e}"));
+    let ast2 = parse_formula(&display, None).unwrap_or_else(|e| {
+        panic!("Round-trip re-parse failed for '{formula}' -> '{display}': {e}")
+    });
     let ast2 = ast2.into_inner();
     assert_eq!(
         ast1, ast2,

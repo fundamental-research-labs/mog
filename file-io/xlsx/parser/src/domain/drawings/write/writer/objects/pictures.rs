@@ -1,11 +1,16 @@
 use crate::write::xml_writer::XmlWriter;
 
 use super::super::super::types::{FillMode, ImageProps, ShapePreset};
-use super::super::styling::{write_scene3d, write_shape3d};
 use super::super::DrawingWriter;
+use super::super::styling::{write_scene3d, write_shape3d};
 
 impl DrawingWriter {
-    pub(in crate::domain::drawings::write::writer) fn write_picture(&self, w: &mut XmlWriter, image: &ImageProps, object_id: &mut u32) {
+    pub(in crate::domain::drawings::write::writer) fn write_picture(
+        &self,
+        w: &mut XmlWriter,
+        image: &ImageProps,
+        object_id: &mut u32,
+    ) {
         let id = image.original_id.unwrap_or(*object_id);
         *object_id += 1;
 
@@ -315,5 +320,5 @@ impl DrawingWriter {
         w.end_element("xdr:pic");
     }
 
-    /// Write a shape element
+    // Write a shape element
 }

@@ -185,8 +185,8 @@ fn extract_ext_lst(body: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::types::{SlicerCrossFilter, SlicerSortOrder};
+    use super::*;
 
     #[test]
     fn parses_cache_with_table_slicer_cache() {
@@ -293,21 +293,29 @@ mod tests {
 
     #[test]
     fn table_slicer_cache_requires_table_id_and_column() {
-        assert!(parse_table_slicer_cache_from_ext(br#"<x15:tableSlicerCache tableId="1"/>"#).is_none());
-        assert!(parse_table_slicer_cache_from_ext(br#"<x15:tableSlicerCache column="2"/>"#).is_none());
+        assert!(
+            parse_table_slicer_cache_from_ext(br#"<x15:tableSlicerCache tableId="1"/>"#).is_none()
+        );
+        assert!(
+            parse_table_slicer_cache_from_ext(br#"<x15:tableSlicerCache column="2"/>"#).is_none()
+        );
 
         let cache =
             parse_table_slicer_cache_from_ext(br#"<x15:tableSlicerCache tableId="1" column="2"/>"#)
                 .unwrap();
         assert_eq!(cache.sort_order, SlicerSortOrder::Ascending);
         assert!(!cache.custom_list_sort);
-        assert_eq!(cache.cross_filter, SlicerCrossFilter::ShowItemsWithDataAtTop);
+        assert_eq!(
+            cache.cross_filter,
+            SlicerCrossFilter::ShowItemsWithDataAtTop
+        );
     }
 
     #[test]
     fn ext_lst_extraction_preserves_nested_xml_and_closing_tag() {
-        let ext = extract_ext_lst(br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#)
-            .unwrap();
+        let ext =
+            extract_ext_lst(br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#)
+                .unwrap();
         assert_eq!(ext, r#"<extLst><ext><nested value="1"/></ext></extLst>"#);
     }
 }

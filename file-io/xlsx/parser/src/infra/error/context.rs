@@ -138,7 +138,10 @@ mod tests {
         assert_eq!(ctx.error_count(), 1);
         assert!(!ctx.should_stop());
         assert_eq!(
-            ctx.errors()[0].location.as_ref().map(|loc| loc.part.as_str()),
+            ctx.errors()[0]
+                .location
+                .as_ref()
+                .map(|loc| loc.part.as_str()),
             Some("sheet1.xml")
         );
     }
@@ -154,7 +157,10 @@ mod tests {
         assert_eq!(ctx.error_count(), 0);
         assert!(!ctx.should_stop());
         assert_eq!(
-            ctx.errors()[0].location.as_ref().map(|loc| loc.part.as_str()),
+            ctx.errors()[0]
+                .location
+                .as_ref()
+                .map(|loc| loc.part.as_str()),
             Some("sheet1.xml")
         );
     }

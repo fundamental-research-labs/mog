@@ -35,9 +35,8 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
         let (block, sheetview_block_end) = if is_self_closing {
             (&xml[view_end + 1..view_end + 1], view_end + 1)
         } else {
-            let end =
-                crate::infra::scanner::find_closing_tag(xml, b"sheetView", view_start)
-                    .unwrap_or(xml.len());
+            let end = crate::infra::scanner::find_closing_tag(xml, b"sheetView", view_start)
+                .unwrap_or(xml.len());
             (&xml[view_end + 1..end], end)
         };
 

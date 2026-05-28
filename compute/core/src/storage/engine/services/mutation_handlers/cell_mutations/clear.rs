@@ -10,7 +10,10 @@ use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::cse_clear::{collect_materialized_cells_in_range, cse_anchor_clear_targets_for_range, push_resolved_clear_target};
+use super::cse_clear::{
+    collect_materialized_cells_in_range, cse_anchor_clear_targets_for_range,
+    push_resolved_clear_target,
+};
 
 pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     stores: &mut EngineStores,

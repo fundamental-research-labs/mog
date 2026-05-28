@@ -76,287 +76,340 @@ impl<'a> grouping::SubtotalsCellAccessor for EngineSubtotalAccessor<'a> {
     }
 }
 
-pub(super) fn group_rows(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        svc::group_rows(&mut engine.stores, sheet_id, start_row, end_row).map(|r| {
-            (
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                r,
-            )
-        })
-    }
+pub(super) fn group_rows(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    end_row: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    svc::group_rows(&mut engine.stores, sheet_id, start_row, end_row).map(|r| {
+        (
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            r,
+        )
+    })
+}
 
-pub(super) fn ungroup_rows(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::ungroup_rows(&mut engine.stores, sheet_id, start_row, end_row)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn ungroup_rows(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    end_row: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::ungroup_rows(&mut engine.stores, sheet_id, start_row, end_row)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn group_columns(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_col: u32,
-        end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        svc::group_columns(&mut engine.stores, sheet_id, start_col, end_col).map(|r| {
-            (
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                r,
-            )
-        })
-    }
+pub(super) fn group_columns(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_col: u32,
+    end_col: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    svc::group_columns(&mut engine.stores, sheet_id, start_col, end_col).map(|r| {
+        (
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            r,
+        )
+    })
+}
 
-pub(super) fn ungroup_columns(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_col: u32,
-        end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::ungroup_columns(&mut engine.stores, sheet_id, start_col, end_col)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn ungroup_columns(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_col: u32,
+    end_col: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::ungroup_columns(&mut engine.stores, sheet_id, start_col, end_col)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn set_group_collapsed(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        group_id: &str,
-        collapsed: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::set_group_collapsed(&mut engine.stores, sheet_id, group_id, collapsed)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn set_group_collapsed(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    group_id: &str,
+    collapsed: bool,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::set_group_collapsed(&mut engine.stores, sheet_id, group_id, collapsed)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn toggle_group_collapsed(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        group_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::toggle_group_collapsed(&mut engine.stores, sheet_id, group_id)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn toggle_group_collapsed(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    group_id: &str,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::toggle_group_collapsed(&mut engine.stores, sheet_id, group_id)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn expand_all_groups(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::expand_all_groups(&mut engine.stores, sheet_id)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn expand_all_groups(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::expand_all_groups(&mut engine.stores, sheet_id)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn collapse_all_groups(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::collapse_all_groups(&mut engine.stores, sheet_id)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn collapse_all_groups(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::collapse_all_groups(&mut engine.stores, sheet_id)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn get_sheet_grouping_config(engine: &YrsComputeEngine, sheet_id: &SheetId) -> grouping::SheetGroupingConfig {
-        svc::get_sheet_grouping_config(&engine.stores, sheet_id)
-    }
+pub(super) fn get_sheet_grouping_config(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> grouping::SheetGroupingConfig {
+    svc::get_sheet_grouping_config(&engine.stores, sheet_id)
+}
 
-pub(super) fn get_groups(engine: &YrsComputeEngine, sheet_id: &SheetId, axis: &str) -> Vec<grouping::GroupDefinition> {
-        svc::get_groups(&engine.stores, sheet_id, axis)
-    }
+pub(super) fn get_groups(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    axis: &str,
+) -> Vec<grouping::GroupDefinition> {
+    svc::get_groups(&engine.stores, sheet_id, axis)
+}
 
-pub(super) fn create_subtotals(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        start_col: u32,
-        end_row: u32,
-        end_col: u32,
-        options: grouping::SubtotalOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        match engine.apply_mutation(EngineMutation::CreateSubtotals {
-            sheet_id: *sheet_id,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-            options,
-        })? {
-            MutationOutput::Recalc(result) => Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            )),
-            _ => Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            )),
-        }
-    }
-
-pub(super) fn remove_subtotals(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        start_col: u32,
-        end_row: u32,
-        end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
-        let doc = engine.stores.storage.doc().clone();
-        let sheets_map = doc.get_or_insert_map("sheets");
-        let mut accessor = EngineSubtotalAccessor { engine: engine };
-        grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
-        Ok((
+pub(super) fn create_subtotals(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+    options: grouping::SubtotalOptions,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    match engine.apply_mutation(EngineMutation::CreateSubtotals {
+        sheet_id: *sheet_id,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+        options,
+    })? {
+        MutationOutput::Recalc(result) => Ok((
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            result,
+        )),
+        _ => Ok((
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             MutationResult::empty(),
-        ))
+        )),
     }
+}
 
-pub(super) fn auto_outline(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        start_col: u32,
-        end_row: u32,
-        end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
-        let doc = engine.stores.storage.doc().clone();
-        let sheets_map = doc.get_or_insert_map("sheets");
-        let accessor = EngineSubtotalAccessor { engine: engine };
-        let count = grouping::auto_outline(&doc, &sheets_map, &accessor, sheet_id, &range);
-        let mut result = MutationResult::empty();
-        result.grouping_changes.push(GroupingChange {
-            sheet_id: sheet_id.to_uuid_string(),
-            axis: Axis::Row,
-            kind: ChangeKind::Set,
-        });
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result.with_data(&count)?,
-        ))
-    }
+pub(super) fn remove_subtotals(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
+    let doc = engine.stores.storage.doc().clone();
+    let sheets_map = doc.get_or_insert_map("sheets");
+    let mut accessor = EngineSubtotalAccessor { engine: engine };
+    grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
+    Ok((
+        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+        MutationResult::empty(),
+    ))
+}
 
-pub(super) fn get_subtotal_config(engine: &YrsComputeEngine, sheet_id: &SheetId) -> grouping::SheetGroupingConfig {
-        svc::get_sheet_grouping_config(&engine.stores, sheet_id)
-    }
+pub(super) fn auto_outline(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
+    let doc = engine.stores.storage.doc().clone();
+    let sheets_map = doc.get_or_insert_map("sheets");
+    let accessor = EngineSubtotalAccessor { engine: engine };
+    let count = grouping::auto_outline(&doc, &sheets_map, &accessor, sheet_id, &range);
+    let mut result = MutationResult::empty();
+    result.grouping_changes.push(GroupingChange {
+        sheet_id: sheet_id.to_uuid_string(),
+        axis: Axis::Row,
+        kind: ChangeKind::Set,
+    });
+    Ok((
+        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+        result.with_data(&count)?,
+    ))
+}
 
-pub(super) fn get_group_in_sheet(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        group_id: &str,
-    ) -> Option<grouping::GroupDefinition> {
-        svc::get_group_in_sheet(&engine.stores, sheet_id, group_id)
-    }
+pub(super) fn get_subtotal_config(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> grouping::SheetGroupingConfig {
+    svc::get_sheet_grouping_config(&engine.stores, sheet_id)
+}
 
-pub(super) fn get_row_outline_levels(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        end_row: u32,
-    ) -> Vec<grouping::OutlineLevel> {
-        svc::get_row_outline_levels(&engine.stores, sheet_id, start_row, end_row)
-    }
+pub(super) fn get_group_in_sheet(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    group_id: &str,
+) -> Option<grouping::GroupDefinition> {
+    svc::get_group_in_sheet(&engine.stores, sheet_id, group_id)
+}
 
-pub(super) fn get_column_outline_levels(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_col: u32,
-        end_col: u32,
-    ) -> Vec<grouping::OutlineLevel> {
-        svc::get_column_outline_levels(&engine.stores, sheet_id, start_col, end_col)
-    }
+pub(super) fn get_row_outline_levels(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    end_row: u32,
+) -> Vec<grouping::OutlineLevel> {
+    svc::get_row_outline_levels(&engine.stores, sheet_id, start_row, end_row)
+}
 
-pub(super) fn get_max_outline_level(engine: &YrsComputeEngine, sheet_id: &SheetId, axis: &str) -> u32 {
-        svc::get_max_outline_level(&engine.stores, sheet_id, axis)
-    }
+pub(super) fn get_column_outline_levels(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_col: u32,
+    end_col: u32,
+) -> Vec<grouping::OutlineLevel> {
+    svc::get_column_outline_levels(&engine.stores, sheet_id, start_col, end_col)
+}
 
-pub(super) fn get_outline_gutter_dimensions(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        level_width: u32,
-        level_height: u32,
-    ) -> Result<serde_json::Value, ComputeError> {
-        svc::get_outline_gutter_dimensions(&engine.stores, sheet_id, level_width, level_height)
-    }
+pub(super) fn get_max_outline_level(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    axis: &str,
+) -> u32 {
+    svc::get_max_outline_level(&engine.stores, sheet_id, axis)
+}
 
-pub(super) fn get_outline_level_buttons(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-    ) -> Vec<grouping::OutlineLevelButton> {
-        svc::get_outline_level_buttons(&engine.stores, sheet_id)
-    }
+pub(super) fn get_outline_gutter_dimensions(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    level_width: u32,
+    level_height: u32,
+) -> Result<serde_json::Value, ComputeError> {
+    svc::get_outline_gutter_dimensions(&engine.stores, sheet_id, level_width, level_height)
+}
 
-pub(super) fn get_outline_render_data(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        viewport: grouping::Viewport,
-    ) -> grouping::OutlineRenderData {
-        svc::get_outline_render_data(&engine.stores, sheet_id, &viewport)
-    }
+pub(super) fn get_outline_level_buttons(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Vec<grouping::OutlineLevelButton> {
+    svc::get_outline_level_buttons(&engine.stores, sheet_id)
+}
 
-pub(super) fn get_outline_symbols(engine: &YrsComputeEngine,
-        sheet_id: &SheetId,
-        viewport: grouping::Viewport,
-    ) -> Vec<grouping::OutlineSymbol> {
-        svc::get_outline_symbols(&engine.stores, sheet_id, &viewport)
-    }
+pub(super) fn get_outline_render_data(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    viewport: grouping::Viewport,
+) -> grouping::OutlineRenderData {
+    svc::get_outline_render_data(&engine.stores, sheet_id, &viewport)
+}
+
+pub(super) fn get_outline_symbols(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    viewport: grouping::Viewport,
+) -> Vec<grouping::OutlineSymbol> {
+    svc::get_outline_symbols(&engine.stores, sheet_id, &viewport)
+}
 
 pub(super) fn should_render_outlines(engine: &YrsComputeEngine, sheet_id: &SheetId) -> bool {
-        svc::should_render_outlines(&engine.stores, sheet_id)
-    }
+    svc::should_render_outlines(&engine.stores, sheet_id)
+}
 
-pub(super) fn get_affected_rows_by_group(engine: &YrsComputeEngine, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
-        svc::get_affected_rows_by_group(&engine.stores, sheet_id, group_id)
-    }
+pub(super) fn get_affected_rows_by_group(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    group_id: &str,
+) -> Vec<u32> {
+    svc::get_affected_rows_by_group(&engine.stores, sheet_id, group_id)
+}
 
-pub(super) fn get_affected_columns_by_group(engine: &YrsComputeEngine, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
-        svc::get_affected_columns_by_group(&engine.stores, sheet_id, group_id)
-    }
+pub(super) fn get_affected_columns_by_group(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    group_id: &str,
+) -> Vec<u32> {
+    svc::get_affected_columns_by_group(&engine.stores, sheet_id, group_id)
+}
 
-pub(super) fn is_row_visible_by_groups(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32) -> bool {
-        svc::is_row_visible_by_groups(&engine.stores, sheet_id, row)
-    }
+pub(super) fn is_row_visible_by_groups(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+) -> bool {
+    svc::is_row_visible_by_groups(&engine.stores, sheet_id, row)
+}
 
-pub(super) fn is_column_visible_by_groups(engine: &YrsComputeEngine, sheet_id: &SheetId, col: u32) -> bool {
-        svc::is_column_visible_by_groups(&engine.stores, sheet_id, col)
-    }
+pub(super) fn is_column_visible_by_groups(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    col: u32,
+) -> bool {
+    svc::is_column_visible_by_groups(&engine.stores, sheet_id, col)
+}
 
-pub(super) fn set_level_collapsed(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        axis: &str,
-        level: u32,
-        collapsed: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::set_level_collapsed(&mut engine.stores, sheet_id, axis, level, collapsed)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn set_level_collapsed(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    axis: &str,
+    level: u32,
+    collapsed: bool,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::set_level_collapsed(&mut engine.stores, sheet_id, axis, level, collapsed)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn set_outline_settings(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        settings: grouping::OutlineSettingsUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::set_outline_settings(&mut engine.stores, sheet_id, &settings)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn set_outline_settings(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    settings: grouping::OutlineSettingsUpdate,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::set_outline_settings(&mut engine.stores, sheet_id, &settings)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn clear_row_grouping(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_row: u32,
-        end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::clear_row_grouping(&mut engine.stores, sheet_id, start_row, end_row)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn clear_row_grouping(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_row: u32,
+    end_row: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::clear_row_grouping(&mut engine.stores, sheet_id, start_row, end_row)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn clear_column_grouping(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-        start_col: u32,
-        end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::clear_column_grouping(&mut engine.stores, sheet_id, start_col, end_col)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn clear_column_grouping(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    start_col: u32,
+    end_col: u32,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::clear_column_grouping(&mut engine.stores, sheet_id, start_col, end_col)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}
 
-pub(super) fn clear_all_grouping(engine: &mut YrsComputeEngine,
-        sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = svc::clear_all_grouping(&mut engine.stores, sheet_id)?;
-        let patches = engine.produce_full_viewport_patches(sheet_id);
-        Ok((patches, result))
-    }
+pub(super) fn clear_all_grouping(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let result = svc::clear_all_grouping(&mut engine.stores, sheet_id)?;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok((patches, result))
+}

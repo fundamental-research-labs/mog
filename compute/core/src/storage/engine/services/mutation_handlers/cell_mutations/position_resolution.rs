@@ -7,7 +7,9 @@ use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::edits::{canonicalize_position_cell_inputs, canonicalize_position_raw_edits, validate_edit_bounds};
+use super::edits::{
+    canonicalize_position_cell_inputs, canonicalize_position_raw_edits, validate_edit_bounds,
+};
 use super::raw_edits::mutation_set_cells_raw;
 use super::set_cells::mutation_set_cells;
 

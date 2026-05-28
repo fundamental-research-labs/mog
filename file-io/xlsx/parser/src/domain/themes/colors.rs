@@ -217,8 +217,8 @@ impl RuntimeColorScheme {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{RgbColor, ThemeColor};
+    use super::*;
 
     #[test]
     fn test_color_scheme_get_by_index() {
@@ -261,7 +261,10 @@ mod tests {
         runtime.fol_hlink = Some(ThemeColor::Rgb(RgbColor::new(11, 11, 11)));
 
         for index in 0..=11 {
-            assert!(runtime.get_by_index(index).is_some(), "missing index {index}");
+            assert!(
+                runtime.get_by_index(index).is_some(),
+                "missing index {index}"
+            );
         }
         assert!(runtime.get_by_index(12).is_none());
     }

@@ -291,7 +291,10 @@ mod tests {
             panic!("expected graphic frame");
         };
         assert_eq!(frame.nv_graphic_frame_pr.c_nv_pr.name, "Opaque");
-        assert_eq!(frame.xfrm.rotation, Some(ooxml_types::drawings::StAngle::new(60000)));
+        assert_eq!(
+            frame.xfrm.rotation,
+            Some(ooxml_types::drawings::StAngle::new(60000))
+        );
         assert_eq!(frame.xfrm.flip_h, Some(true));
         assert_eq!(frame.xfrm.offset, Some((10, 20)));
         assert_eq!(frame.xfrm.extent, Some((30, 40)));

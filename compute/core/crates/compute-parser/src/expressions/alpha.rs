@@ -64,10 +64,7 @@ pub fn try_parse_cell_or_range_or_func(
 }
 
 /// Parse something that starts with an alphabetic character.
-pub(super) fn parse_alpha_starting(
-    input: &mut &str,
-    state: &ParseState,
-) -> ModalResult<ASTNode> {
+pub(super) fn parse_alpha_starting(input: &mut &str, state: &ParseState) -> ModalResult<ASTNode> {
     let saved = *input;
     let first_after = peek_past_ident(saved);
 
@@ -170,10 +167,7 @@ fn try_alpha_boolean<'a>(input: &mut &'a str, saved: &'a str) -> Option<ASTNode>
     None
 }
 
-fn try_alpha_identifier_fallback<'a>(
-    input: &mut &'a str,
-    saved: &'a str,
-) -> ModalResult<ASTNode> {
+fn try_alpha_identifier_fallback<'a>(input: &mut &'a str, saved: &'a str) -> ModalResult<ASTNode> {
     let ident = lexer::identifier.parse_next(input)?;
     let after_ident = *input;
     let _ = lexer::ws.parse_next(input);

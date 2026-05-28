@@ -53,4 +53,4 @@ pub(super) fn extract_legend_from_chart_space(
     })
 }
 
-/// Extract axes from ChartSpace.
+// Extract axes from ChartSpace.

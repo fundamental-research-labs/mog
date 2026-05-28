@@ -6,12 +6,12 @@ use domain_types::{
 };
 use value_types::CellError;
 
+use super::super::SharedStringsWriter;
 use super::sheet_formulas::{
     current_formula_metadata, data_table_formula_text, data_table_master_formula_map,
     is_data_table_body_formula,
 };
 use super::style_remap::StyleExportRemapper;
-use super::super::SharedStringsWriter;
 use crate::write::sheet::{CellData, CellValue, SheetWriter};
 
 pub(super) fn apply_cells(
@@ -120,16 +120,16 @@ fn convert_cell_with_metadata_refs(
         (_, Some(formula)) => {
             let cached = match &cell.value {
                 DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
-                DomainValue::Text(s) => Some(Box::new(CellValue::FormulaString(
-                    s.as_ref().to_string(),
-                ))),
+                DomainValue::Text(s) => {
+                    Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+                }
                 DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
                 DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
                     Some(Box::new(CellValue::Number(0.0)))
                 }
-                DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
-                    e.as_str().to_string(),
-                ))),
+                DomainValue::Error(e, _) => {
+                    Some(Box::new(CellValue::Error(e.as_str().to_string())))
+                }
                 _ if cell.has_empty_cached_value => Some(Box::new(CellValue::Number(0.0))),
                 _ => None,
             };

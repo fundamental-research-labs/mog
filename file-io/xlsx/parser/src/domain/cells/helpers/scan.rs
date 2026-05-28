@@ -2,8 +2,7 @@ use super::super::adapters::{find_byte, find_sequence};
 use super::super::types::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR,
     CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_INLINE,
-    VALUE_TYPE_NONE,
-    VALUE_TYPE_SHARED_STRING,
+    VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
 };
 use super::a1::parse_a1_reference;
 use super::bytes::parse_u32;

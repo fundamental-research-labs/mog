@@ -3,7 +3,7 @@ use crate::infra::scanner::{
 };
 
 use super::xml_values::{parse_bool_val, parse_bytes_u32, parse_val_attr_u32};
-use super::{parse_chart_ext_lst, DataPointOverride, Marker};
+use super::{DataPointOverride, Marker, parse_chart_ext_lst};
 use crate::domain::charts::parse_shape_properties;
 use crate::domain::charts::types::MarkerStyle;
 

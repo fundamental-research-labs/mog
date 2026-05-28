@@ -27,7 +27,7 @@ pub(super) fn write_color_scheme(xml: &mut XmlWriter, color_scheme: &ColorScheme
 /// Write a DrawingColor inside a named slot element (e.g., `<a:dk1>...<a:sysClr .../></a:dk1>`).
 ///
 /// This is used for color scheme slots where the color is wrapped in a named element.
-fn write_slot_color( xml: &mut XmlWriter, slot_name: &str, color: &DrawingColor) {
+fn write_slot_color(xml: &mut XmlWriter, slot_name: &str, color: &DrawingColor) {
     xml.start_element_ns("a", slot_name).end_attrs();
     write_drawing_color(xml, color);
     xml.end_element_ns("a", slot_name);
@@ -38,7 +38,7 @@ fn write_slot_color( xml: &mut XmlWriter, slot_name: &str, color: &DrawingColor)
 // ========================================================================
 
 /// Write a `DrawingColor` to XML (ECMA-376 EG_ColorChoice).
-pub(super) fn write_drawing_color( xml: &mut XmlWriter, color: &DrawingColor) {
+pub(super) fn write_drawing_color(xml: &mut XmlWriter, color: &DrawingColor) {
     match color {
         DrawingColor::SrgbClr { val, transforms } => {
             if transforms.is_empty() {
@@ -137,7 +137,7 @@ pub(super) fn write_drawing_color( xml: &mut XmlWriter, color: &DrawingColor) {
 }
 
 /// Write color transform children.
-fn write_color_transforms( xml: &mut XmlWriter, transforms: &[ColorTransform]) {
+fn write_color_transforms(xml: &mut XmlWriter, transforms: &[ColorTransform]) {
     for t in transforms {
         let name = t.to_ooxml_name();
         match t.val() {

@@ -198,10 +198,7 @@ impl YrsComputeEngine {
         // Pivot CRUD doesn't touch cells but `recalculate_with_options` uses
         // `materialize_all_pivots` to render output — must not short-circuit.
         self.stores.compute.mark_dirty();
-        Ok((
-            shared::empty_patches(),
-            result,
-        ))
+        Ok((shared::empty_patches(), result))
     }
 
     /// Atomically create a new sheet AND a pivot table on it.
@@ -259,10 +256,7 @@ impl YrsComputeEngine {
         // Pivot config changes layout/aggregation — next calculate must
         // re-materialize, so don't let the idempotent short-circuit skip it.
         self.stores.compute.mark_dirty();
-        Ok((
-            shared::empty_patches(),
-            result,
-        ))
+        Ok((shared::empty_patches(), result))
     }
 
     /// Delete a pivot table by ID. Returns `MutationResult` with `bool` in `data`.
@@ -300,10 +294,7 @@ impl YrsComputeEngine {
         // Removed pivot must not be re-materialized on next calculate —
         // but cells we just cleared need the flush; mark dirty either way.
         self.stores.compute.mark_dirty();
-        Ok((
-            shared::empty_patches(),
-            result,
-        ))
+        Ok((shared::empty_patches(), result))
     }
 
     /// Get a single pivot table by ID.
@@ -427,7 +418,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         pivot_name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::pivot_unregister_def(&mut self.mirror, sheet_id, pivot_name).map(shared::with_empty_patches)
+        services::objects::pivot_unregister_def(&mut self.mirror, sheet_id, pivot_name)
+            .map(shared::with_empty_patches)
     }
 
     /// Compute and materialize a pivot table to sheet cells.
@@ -521,3 +513,4 @@ impl YrsComputeEngine {
 
         Ok(result)
     }
+}

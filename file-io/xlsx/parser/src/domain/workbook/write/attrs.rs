@@ -3,8 +3,7 @@ use domain_types::domain::workbook::{ObjectDisplayMode, UpdateLinks};
 use super::SheetState;
 
 /// Spreadsheet ML namespace.
-pub(super) const SPREADSHEET_NS: &str =
-    "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+pub(super) const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 /// Relationships namespace.
 pub(super) const RELATIONSHIPS_NS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

@@ -1,8 +1,12 @@
+use super::super::super::helpers::{
+    extract_attr_value_in_element, parse_i32, parse_i64, parse_u32,
+};
+use super::super::super::reader::elements::{direct_child_elements, direct_child_slice};
+use super::super::super::types::{
+    TextAutofit, TextBodyProperties, TextHorzOverflow, TextVertOverflow, TextVerticalType,
+};
 use super::common::parse_ext_lst;
 use super::enums::{parse_text_anchor, parse_text_wrap};
-use super::super::super::helpers::{extract_attr_value_in_element, parse_i32, parse_i64, parse_u32};
-use super::super::super::reader::elements::{direct_child_elements, direct_child_slice};
-use super::super::super::types::{TextAutofit, TextBodyProperties, TextHorzOverflow, TextVerticalType, TextVertOverflow};
 use ooxml_types::drawings::StAngle;
 
 pub(super) fn parse_body_props(xml: &[u8]) -> TextBodyProperties {

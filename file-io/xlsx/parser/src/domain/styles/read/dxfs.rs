@@ -1,11 +1,13 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_string_attr, parse_u32_attr};
 
-use super::{
-    borders::parse_single_border, cell_formats::{parse_single_alignment, parse_single_protection},
-    fills::parse_single_fill, fonts::parse_single_font,
-};
 use super::super::types::*;
+use super::{
+    borders::parse_single_border,
+    cell_formats::{parse_single_alignment, parse_single_protection},
+    fills::parse_single_fill,
+    fonts::parse_single_font,
+};
 
 /// Parse the <dxfs> section
 pub(super) fn parse_dxfs(xml: &[u8]) -> Vec<DxfDef> {

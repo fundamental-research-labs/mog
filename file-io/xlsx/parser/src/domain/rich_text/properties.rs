@@ -2,8 +2,7 @@
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    parse_bool_attr, parse_bool_attr_with_default, parse_f64_attr, parse_string_attr,
-    parse_u8_attr,
+    parse_bool_attr, parse_bool_attr_with_default, parse_f64_attr, parse_string_attr, parse_u8_attr,
 };
 
 use super::types::{Color, FontProperties, RunProperties, UnderlineStyle, VerticalAlign};

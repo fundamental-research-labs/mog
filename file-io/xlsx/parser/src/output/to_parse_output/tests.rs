@@ -1,7 +1,7 @@
-mod helpers;
 mod cells;
 mod compatibility;
 mod extents;
+mod helpers;
 mod protection;
 mod round_trip;
 mod styles;

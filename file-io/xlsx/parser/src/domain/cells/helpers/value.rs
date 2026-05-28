@@ -1,7 +1,10 @@
 use super::super::adapters::{find_byte, find_sequence};
+use super::super::types::{
+    CELL_TYPE_STRING, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE,
+    VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
+};
 use super::bytes::parse_u32;
 use super::cell_attrs::parse_cell_type;
-use super::super::types::{CELL_TYPE_STRING, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING};
 use crate::domain::strings::read::decode_xml_entities_full;
 
 /// Extract cell value from the cell element.
@@ -275,9 +278,5 @@ pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> O
         pos = t_end + b"</t>".len();
     }
 
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }

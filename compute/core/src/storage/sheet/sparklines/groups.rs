@@ -2,10 +2,10 @@ use cell_types::SheetId;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use yrs::{Doc, Map, MapRef, Origin, Transact};
 
+use super::SparklineGroup;
 use super::codec::{read_group_from_out, read_sparkline_from_out, write_group, write_sparkline};
 use super::keys::{GROUP_PREFIX, group_key, idx_key};
 use super::yrs_io::get_sheet_sparklines_map;
-use super::SparklineGroup;
 
 pub fn add_sparkline_group(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, group: &SparklineGroup) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));

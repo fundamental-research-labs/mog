@@ -358,15 +358,11 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
         match &args[0] {
             ASTNode::Omitted => Ok(CellValue::Boolean(true)),
-            _ => {
-                match self.eval_node(&args[0]).await? {
-                    EvalValue::Omitted => Ok(CellValue::Boolean(true)),
-                    EvalValue::Cell(CellValue::Error(e, payload)) => {
-                        Ok(CellValue::Error(e, payload))
-                    }
-                    _ => Ok(CellValue::Boolean(false)),
-                }
-            }
+            _ => match self.eval_node(&args[0]).await? {
+                EvalValue::Omitted => Ok(CellValue::Boolean(true)),
+                EvalValue::Cell(CellValue::Error(e, payload)) => Ok(CellValue::Error(e, payload)),
+                _ => Ok(CellValue::Boolean(false)),
+            },
         }
     }
 

@@ -677,10 +677,11 @@ fn export_single_sheet(
                         _ => None,
                     })
                     .unwrap_or_default();
-                let worksheet_ext_lst_xml = m.get(&txn, "worksheetExtLstXml").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
+                let worksheet_ext_lst_xml =
+                    m.get(&txn, "worksheetExtLstXml").and_then(|v| match v {
+                        Out::Any(Any::String(s)) => Some(s.to_string()),
+                        _ => None,
+                    });
                 (
                     osi,
                     vis,

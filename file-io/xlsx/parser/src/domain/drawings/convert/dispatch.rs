@@ -2,8 +2,8 @@ use super::connectors::connector_to_props;
 use super::graphic_frames::extract_chart_ref_from_graphic_frame;
 use super::groups::{group_shape_to_props, relationship_ids_for_group};
 use super::outcome::{
-    DrawingConversionOutcome, relationship_ids_for_graphic_frame,
-    relationship_ids_for_non_visual, relationship_ids_for_picture, relationship_ids_for_smartart,
+    DrawingConversionOutcome, relationship_ids_for_graphic_frame, relationship_ids_for_non_visual,
+    relationship_ids_for_picture, relationship_ids_for_smartart,
 };
 use super::pictures::picture_to_image_props;
 use super::shapes::shape_to_text_box;

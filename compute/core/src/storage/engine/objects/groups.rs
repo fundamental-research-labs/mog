@@ -1,8 +1,8 @@
 use super::shared;
 use crate::engine_types::SerializedFloatingObjectGroup;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::services;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use value_types::ComputeError;
@@ -49,7 +49,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::delete_floating_object_group(&mut self.stores, sheet_id, group_id).map(shared::with_empty_patches)
+        services::objects::delete_floating_object_group(&mut self.stores, sheet_id, group_id)
+            .map(shared::with_empty_patches)
     }
 
     // -------------------------------------------------------------------
@@ -59,7 +60,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_floating_object_group(&mut self.stores, sheet_id, config).map(shared::with_empty_patches)
+        services::objects::create_floating_object_group(&mut self.stores, sheet_id, config)
+            .map(shared::with_empty_patches)
     }
 
     /// Update a floating object group by merging partial JSON updates.

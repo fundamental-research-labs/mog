@@ -131,6 +131,9 @@ pub(super) fn assert_cell_value_is_string(
     };
     match cell_map.get(&txn, KEY_VALUE) {
         Some(Out::Any(Any::String(ref s))) => assert_eq!(s.as_ref(), expected),
-        other => panic!("expected String({expected:?}) at ({row},{col}), got {:?}", other),
+        other => panic!(
+            "expected String({expected:?}) at ({row},{col}), got {:?}",
+            other
+        ),
     }
 }

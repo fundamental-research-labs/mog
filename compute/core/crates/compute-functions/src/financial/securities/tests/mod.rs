@@ -17,5 +17,5 @@ fn approx(a: &CellValue, expected: f64, tol: f64) -> bool {
 }
 
 fn ymd_to_serial(year: i32, month: u32, day: u32) -> f64 {
-    super::super::helpers::ymd_to_serial(year, month, day)
+    super::super::helpers::ymd_to_serial(year, month as i32, day as i32)
 }

@@ -46,4 +46,4 @@ pub(super) fn extract_data_label_data(
     }
 }
 
-/// Extract legend as typed LegendData.
+// Extract legend as typed LegendData.

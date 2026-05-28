@@ -1,11 +1,16 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::common::write_raw_xml;
-use super::super::super::types::{ChartRef, OpaqueGraphicFrame, NS_C};
+use super::super::super::types::{ChartRef, NS_C, OpaqueGraphicFrame};
 use super::super::DrawingWriter;
+use super::common::write_raw_xml;
 
 impl DrawingWriter {
-    pub(in crate::domain::drawings::write::writer) fn write_chart(&self, w: &mut XmlWriter, chart: &ChartRef, object_id: &mut u32) {
+    pub(in crate::domain::drawings::write::writer) fn write_chart(
+        &self,
+        w: &mut XmlWriter,
+        chart: &ChartRef,
+        object_id: &mut u32,
+    ) {
         let id = chart.original_id.unwrap_or(*object_id);
         *object_id += 1;
 
@@ -180,7 +185,11 @@ impl DrawingWriter {
     }
 
     /// Write an opaque graphic frame verbatim
-    pub(in crate::domain::drawings::write::writer) fn write_graphic_frame(&self, w: &mut XmlWriter, gf: &OpaqueGraphicFrame) {
+    pub(in crate::domain::drawings::write::writer) fn write_graphic_frame(
+        &self,
+        w: &mut XmlWriter,
+        gf: &OpaqueGraphicFrame,
+    ) {
         self.write_raw_xml(w, &gf.raw_xml);
     }
 }

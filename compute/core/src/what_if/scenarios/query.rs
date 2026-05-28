@@ -55,4 +55,3 @@ pub fn find_by_name(storage: &YrsStorage, name: &str) -> Option<Scenario> {
         .into_iter()
         .find(|s| s.name.to_lowercase().trim() == name_trimmed)
 }
-

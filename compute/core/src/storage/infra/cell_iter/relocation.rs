@@ -7,9 +7,9 @@ use compute_document::schema::KEY_VALUE;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
+use super::super::grid_helpers::{get_cells_map, get_properties_map};
 use super::clear::clear_range_and_return_ids;
 use super::types::RelocationResult;
-use super::super::grid_helpers::{get_cells_map, get_properties_map};
 use crate::storage::cells::values::{remove_cell_position_from_yrs, write_cell_position_to_yrs};
 use cell_types::{CellId, RangePos, SheetId};
 

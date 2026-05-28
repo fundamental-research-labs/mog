@@ -1,5 +1,5 @@
-use super::helpers::*;
 use super::super::*;
+use super::helpers::*;
 
 /// Build a snapshot for same-sheet COUNTIFS testing.
 ///
@@ -17,7 +17,12 @@ fn agg_same_sheet_snapshot() -> WorkbookSnapshot {
 
         cells.push(text_cell(&mut id_counter, row, 0, cat));
         cells.push(text_cell(&mut id_counter, row, 1, region));
-        cells.push(number_cell(&mut id_counter, row, 2, (row + 1) as f64 * 10.0));
+        cells.push(number_cell(
+            &mut id_counter,
+            row,
+            2,
+            (row + 1) as f64 * 10.0,
+        ));
     }
 
     for row in 0..10u32 {

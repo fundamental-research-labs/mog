@@ -122,9 +122,7 @@ pub(super) fn wordart_shape_content(from_word_art: bool) -> DrawingContent {
     DrawingContent::Shape(wordart_shape(from_word_art))
 }
 
-pub(super) fn wordart_shape(
-    from_word_art: bool,
-) -> ooxml_types::drawings::SpreadsheetShape {
+pub(super) fn wordart_shape(from_word_art: bool) -> ooxml_types::drawings::SpreadsheetShape {
     let mut shape = ooxml_types::drawings::SpreadsheetShape::default();
     shape.tx_body = Some(ooxml_types::drawings::TextBody {
         body_props: ooxml_types::drawings::TextBodyProperties {

@@ -4,8 +4,8 @@ use domain_types::{ColStyleEntry, RowStyleEntry};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 
-use super::style_ids::style_id_for_cell_format;
 use super::super::PaletteOps;
+use super::style_ids::style_id_for_cell_format;
 
 pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     stores: &EngineStores,

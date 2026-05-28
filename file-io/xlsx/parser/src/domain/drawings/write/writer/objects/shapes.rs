@@ -4,7 +4,12 @@ use super::super::super::types::ShapeProps;
 use super::super::DrawingWriter;
 
 impl DrawingWriter {
-    pub(in crate::domain::drawings::write::writer) fn write_shape(&self, w: &mut XmlWriter, shape: &ShapeProps, object_id: &mut u32) {
+    pub(in crate::domain::drawings::write::writer) fn write_shape(
+        &self,
+        w: &mut XmlWriter,
+        shape: &ShapeProps,
+        object_id: &mut u32,
+    ) {
         let id = shape.original_id.unwrap_or(*object_id);
         *object_id += 1;
 
@@ -101,5 +106,5 @@ impl DrawingWriter {
         w.end_element("xdr:sp");
     }
 
-    /// Write a chart reference
+    // Write a chart reference
 }

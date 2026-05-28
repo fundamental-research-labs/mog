@@ -1,11 +1,16 @@
 use crate::infra::scanner::{find_closing_tag, find_tag_simd};
 
-use super::{
-    borders::parse_borders, cell_formats::{parse_cell_styles, parse_cell_xfs},
-    colors::parse_colors, dxfs::parse_dxfs, fills::parse_fills, fonts::parse_fonts,
-    number_formats::parse_num_fmts, table_styles::parse_table_styles,
-};
 use super::super::types::*;
+use super::{
+    borders::parse_borders,
+    cell_formats::{parse_cell_styles, parse_cell_xfs},
+    colors::parse_colors,
+    dxfs::parse_dxfs,
+    fills::parse_fills,
+    fonts::parse_fonts,
+    number_formats::parse_num_fmts,
+    table_styles::parse_table_styles,
+};
 
 /// Parse styles.xml content
 ///

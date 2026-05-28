@@ -1,5 +1,5 @@
-use super::fixtures::{pts, EPS};
 use super::super::moving_average;
+use super::fixtures::{EPS, pts};
 
 #[test]
 fn ma_period_3() {
@@ -24,14 +24,12 @@ fn ma_period_3() {
     assert!((result.points[2].y - 40.0).abs() < EPS);
 }
 
-
 #[test]
 fn ma_period_greater_than_data() {
     let data = pts(&[(1.0, 10.0), (2.0, 20.0)]);
     let result = moving_average(&data, 5);
     assert!(result.points.is_empty());
 }
-
 
 #[test]
 fn ma_period_equal_to_data() {
@@ -40,7 +38,6 @@ fn ma_period_equal_to_data() {
     assert_eq!(result.points.len(), 1);
     assert!((result.points[0].y - 4.0).abs() < EPS);
 }
-
 
 #[test]
 fn ma_period_1_returns_identity() {

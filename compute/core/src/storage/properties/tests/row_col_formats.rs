@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_set_and_get_row_format() {
@@ -219,7 +219,10 @@ fn test_get_all_row_formats_surfaces_formats_and_xlsx_style_ids() {
     assert_eq!(rows[1].row, 4);
     assert!(rows[1].format.is_none());
     assert_eq!(rows[1].xlsx_style_id, Some(17));
-    assert_eq!(get_row_xlsx_style_id(&storage, &sid, 4, Some(&gi)), Some(17));
+    assert_eq!(
+        get_row_xlsx_style_id(&storage, &sid, 4, Some(&gi)),
+        Some(17)
+    );
     assert!(get_all_row_formats(&storage, &sid, None).is_empty());
 }
 
@@ -266,7 +269,10 @@ fn test_get_all_col_formats_surfaces_formats_and_xlsx_style_ids() {
     assert_eq!(cols[1].col, 3);
     assert!(cols[1].format.is_none());
     assert_eq!(cols[1].xlsx_style_id, Some(23));
-    assert_eq!(get_col_xlsx_style_id(&storage, &sid, 3, Some(&gi)), Some(23));
+    assert_eq!(
+        get_col_xlsx_style_id(&storage, &sid, 3, Some(&gi)),
+        Some(23)
+    );
     assert!(get_all_col_formats(&storage, &sid, None).is_empty());
 }
 

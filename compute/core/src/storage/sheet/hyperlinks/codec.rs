@@ -8,10 +8,7 @@ use super::keys::{
     TARGET_KIND_RELATIONSHIP,
 };
 
-pub(super) fn read_hyperlink_url<T: yrs::ReadTxn>(
-    txn: &T,
-    cell_map: &MapRef,
-) -> Option<String> {
+pub(super) fn read_hyperlink_url<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef) -> Option<String> {
     read_string_key(txn, cell_map, KEY_HYPERLINK)
 }
 
@@ -53,8 +50,7 @@ pub(super) fn decode_sheet_hyperlink<T: yrs::ReadTxn>(
     let (target, location_from_url) =
         target_and_location_from_stored_url(&raw_url, target_kind, stored_target_kind.is_some());
 
-    let location =
-        read_string_key(txn, cell_map, KEY_HYPERLINK_LOCATION).or(location_from_url);
+    let location = read_string_key(txn, cell_map, KEY_HYPERLINK_LOCATION).or(location_from_url);
     let cell_ref =
         read_string_key(txn, cell_map, KEY_HYPERLINK_RANGE_REF).unwrap_or(fallback_cell_ref);
     let order = read_order(txn, cell_map);

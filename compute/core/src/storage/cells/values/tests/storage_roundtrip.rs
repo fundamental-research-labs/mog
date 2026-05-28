@@ -1,5 +1,5 @@
-use super::*;
 use super::support::{make_cell_id, make_grid_index, make_sheet_id, storage_with_sheet};
+use super::*;
 
 #[test]
 fn test_set_cell_value_number() {

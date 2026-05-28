@@ -214,14 +214,14 @@ pub use domain_types::domain::external_link::{
 // =============================================================================
 
 pub use infra::imported_parts::{
-    ImportedPackageParts, CT_OLE_OBJECT, CT_PRINTER_SETTINGS, infer_content_type,
+    CT_OLE_OBJECT, CT_PRINTER_SETTINGS, ImportedPackageParts, infer_content_type,
 };
+pub use infra::xml_fragment::{extract_element_bounds, extract_element_xml};
 pub use infra::xml_namespaces::{
     NS_CONTENT_TYPES, NS_DRAWING_ML, NS_MC, NS_RELATIONSHIPS, NS_SPREADSHEET_ML, NS_X14,
     NamespaceDeclaration, NamespaceMap, NamespaceWriter, styles_namespaces, workbook_namespaces,
     worksheet_namespaces,
 };
-pub use infra::xml_fragment::{extract_element_bounds, extract_element_xml};
 pub use pipeline::import_extensions::ImportExtensionParts;
 
 // =============================================================================

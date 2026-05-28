@@ -1,8 +1,10 @@
+use super::super::super::helpers::{decode_xml_entities_string, extract_attr_value_in_element};
+use super::super::super::reader::elements::{
+    direct_child_elements, direct_child_slice, direct_child_text, document_element_slice,
+};
+use super::super::super::types::{Paragraph, TextRun, TextRunContent};
 use super::para_props::parse_para_props;
 use super::run_props::parse_run_props;
-use super::super::super::helpers::{decode_xml_entities_string, extract_attr_value_in_element};
-use super::super::super::reader::elements::{direct_child_elements, direct_child_slice, direct_child_text, document_element_slice};
-use super::super::super::types::{Paragraph, TextRun, TextRunContent};
 
 pub(super) fn parse_paragraph(xml: &[u8]) -> Option<Paragraph> {
     let element = document_element_slice(xml)?;

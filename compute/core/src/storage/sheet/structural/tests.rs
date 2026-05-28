@@ -501,8 +501,7 @@ fn test_insert_rows_at_beginning() {
     );
 
     // Insert at row 0 (beginning)
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 3)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 3).unwrap();
 
     // Cell should shift down by 3
     assert_eq!(grid.cell_position(&c), Some((3, 0)));
@@ -530,8 +529,7 @@ fn test_insert_rows_at_end() {
     );
 
     // Insert at row 5 (end, past all cells)
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 5, 3)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 5, 3).unwrap();
 
     // Cell position unchanged
     assert_eq!(grid.cell_position(&c), Some((2, 0)));
@@ -558,8 +556,7 @@ fn test_insert_cols_at_beginning() {
     );
 
     // Insert at col 0
-    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 2)
-        .unwrap();
+    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 2).unwrap();
 
     assert_eq!(grid.cell_position(&c), Some((0, 2)));
     assert_eq!(mirror.resolve_position(&c), Some(SheetPos::new(0, 2)));
@@ -665,26 +662,22 @@ fn test_multiple_structural_operations_in_sequence() {
     );
 
     // Step 1: Insert 2 rows at row 1 -> cell moves from (2,2) to (4,2)
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 1, 2)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 1, 2).unwrap();
     assert_eq!(grid.cell_position(&c), Some((4, 2)));
     assert_eq!(mirror.resolve_position(&c), Some(SheetPos::new(4, 2)));
 
     // Step 2: Insert 1 col at col 0 -> cell moves from (4,2) to (4,3)
-    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
+    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
     assert_eq!(grid.cell_position(&c), Some((4, 3)));
     assert_eq!(mirror.resolve_position(&c), Some(SheetPos::new(4, 3)));
 
     // Step 3: Delete 1 row at row 0 -> cell moves from (4,3) to (3,3)
-    StructuralOps::delete_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
+    StructuralOps::delete_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
     assert_eq!(grid.cell_position(&c), Some((3, 3)));
     assert_eq!(mirror.resolve_position(&c), Some(SheetPos::new(3, 3)));
 
     // Step 4: Delete 1 col at col 0 -> cell moves from (3,3) to (3,2)
-    StructuralOps::delete_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
+    StructuralOps::delete_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
     assert_eq!(grid.cell_position(&c), Some((3, 2)));
     assert_eq!(mirror.resolve_position(&c), Some(SheetPos::new(3, 2)));
 
@@ -740,8 +733,7 @@ fn test_structural_ops_preserve_formulas() {
     );
 
     // Insert 2 rows at row 1 -> formula cell moves from (1,0) to (3,0)
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 1, 2)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 1, 2).unwrap();
 
     // Cell positions shifted
     assert_eq!(grid.cell_position(&c_formula), Some((3, 0)));
@@ -797,14 +789,10 @@ fn test_cell_ids_stable_across_structural_changes() {
     }
 
     // Perform multiple structural operations
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 3, 5)
-        .unwrap();
-    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 2, 3)
-        .unwrap();
-    StructuralOps::delete_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
-    StructuralOps::delete_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 3, 5).unwrap();
+    StructuralOps::insert_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 2, 3).unwrap();
+    StructuralOps::delete_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
+    StructuralOps::delete_cols(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
 
     // All surviving CellIds should still be retrievable with consistent positions
     // Cell 900 was at (0,0): delete_rows(0,1) removes it
@@ -840,8 +828,7 @@ fn test_structural_transaction_uses_correct_origin() {
     let undo_mgr = compute_document::undo::UndoRedoManager::new(&doc, &sheets_map);
 
     // Perform a structural operation
-    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1)
-        .unwrap();
+    StructuralOps::insert_rows(&doc, &sheets_map, &mut grid, &mut mirror, &sheet_id, 0, 1).unwrap();
 
     // The structural change should be tracked by the undo manager
     // (ORIGIN_STRUCTURAL is in the tracked origins)

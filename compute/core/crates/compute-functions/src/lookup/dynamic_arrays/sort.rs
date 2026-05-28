@@ -3,7 +3,7 @@ use value_types::{CellError, CellValue};
 use super::common::{cell_value_cmp_sort, to_array};
 use crate::PureFunction;
 
-pub(super) struct FnSort;
+pub(in crate::lookup) struct FnSort;
 
 impl PureFunction for FnSort {
     fn name(&self) -> &'static str {

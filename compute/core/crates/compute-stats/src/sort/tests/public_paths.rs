@@ -1,10 +1,10 @@
 use value_types::CellValue;
 
-use super::fixtures::mixed_values_for_sort_path_parity;
 use super::super::{
     KeyConfig, SortConfig, sort_by_custom_order_in_place, sort_by_in_place,
     sort_by_multiple_in_place, sort_values,
 };
+use super::fixtures::mixed_values_for_sort_path_parity;
 
 #[test]
 fn public_sort_paths_share_mixed_value_semantics() {

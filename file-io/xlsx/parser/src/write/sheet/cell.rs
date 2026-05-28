@@ -1,4 +1,4 @@
-use super::{to_a1, CellData, CellValue};
+use super::{CellData, CellValue, to_a1};
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::worksheet::CellFormulaType;
 
@@ -200,7 +200,10 @@ fn write_formula(
         }
         Some(cf) if cf.t == CellFormulaType::Array => {
             if let Some(ref ref_range) = cf.r#ref {
-                let b = w.start_element("f").attr("ref", ref_range).attr("t", "array");
+                let b = w
+                    .start_element("f")
+                    .attr("ref", ref_range)
+                    .attr("t", "array");
                 if cf.aca {
                     b.attr("aca", "1");
                 }

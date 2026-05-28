@@ -1,5 +1,5 @@
-use super::helpers::*;
 use super::super::*;
+use super::helpers::*;
 
 #[test]
 fn test_validate_and_clean_orphaned_comments() {

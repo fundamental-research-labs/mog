@@ -1,7 +1,5 @@
 /// Extract title text from a Title element.
-pub(super) fn extract_title_text_from_title(
-    title: &ooxml_types::charts::Title,
-) -> Option<String> {
+pub(super) fn extract_title_text_from_title(title: &ooxml_types::charts::Title) -> Option<String> {
     use ooxml_types::charts::ChartText;
     use ooxml_types::drawings::TextRunContent;
 

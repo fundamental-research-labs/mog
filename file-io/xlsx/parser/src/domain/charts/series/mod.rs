@@ -42,13 +42,13 @@ pub use ooxml_types::charts::{
 };
 
 pub use data_sources::{
-    parse_num_data, parse_num_ref, parse_series_text, parse_str_data, parse_str_ref, AxisData,
+    AxisData, parse_num_data, parse_num_ref, parse_series_text, parse_str_data, parse_str_ref,
 };
 pub use error_bars::parse_error_bars;
 pub use labels::parse_data_labels;
 pub(crate) use labels::parse_individual_data_label;
-pub use parse::{parse_all_series, parse_series};
 pub(crate) use parse::is_standard_ser_tag;
+pub use parse::{parse_all_series, parse_series};
 pub use points::{parse_all_data_points, parse_data_point, parse_marker};
 pub use trendlines::parse_trendline;
 pub(crate) use xml_values::parse_val_attr_u32;

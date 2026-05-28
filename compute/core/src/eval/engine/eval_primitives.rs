@@ -238,7 +238,6 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             "RANK.AVG" => self.eval_rank_avg(args).await,
 
             // === End SMALL/LARGE/RANK ===
-
             "AREAS" => self.eval_areas(args),
 
             // -- SUMPRODUCT: vectorized special dispatch (avoids intermediate arrays) --

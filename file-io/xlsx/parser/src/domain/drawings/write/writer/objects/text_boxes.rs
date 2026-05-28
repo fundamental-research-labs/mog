@@ -1,8 +1,8 @@
 use crate::write::xml_writer::XmlWriter;
 
 use super::super::super::types::{ShapePreset, TextBox};
-use super::super::styling::{write_scene3d, write_shape3d};
 use super::super::DrawingWriter;
+use super::super::styling::{write_scene3d, write_shape3d};
 
 impl DrawingWriter {
     pub(in crate::domain::drawings::write::writer) fn write_text_box(
@@ -241,5 +241,5 @@ impl DrawingWriter {
         w.end_element("xdr:sp");
     }
 
-    /// Write a connector element (`<xdr:cxnSp>`)
+    // Write a connector element (`<xdr:cxnSp>`)
 }

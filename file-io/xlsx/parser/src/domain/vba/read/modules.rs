@@ -72,10 +72,7 @@ mod tests {
     use super::*;
 
     fn utf16le(value: &str) -> Vec<u8> {
-        value
-            .encode_utf16()
-            .flat_map(|c| c.to_le_bytes())
-            .collect()
+        value.encode_utf16().flat_map(|c| c.to_le_bytes()).collect()
     }
 
     #[test]

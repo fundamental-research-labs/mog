@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_get_column_schema_none_initially() {

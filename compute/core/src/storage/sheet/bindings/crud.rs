@@ -41,10 +41,11 @@ pub fn create_binding(
     };
 
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let bindings_map =
-        yrs_io::get_bindings_map(&txn, sheets, sheet_id).ok_or_else(|| ComputeError::SheetNotFound {
+    let bindings_map = yrs_io::get_bindings_map(&txn, sheets, sheet_id).ok_or_else(|| {
+        ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_string(),
-        })?;
+        }
+    })?;
 
     // Write as structured Y.Map
     let prelim: MapPrelim = codec::to_yrs_prelim(&binding).into_iter().collect();

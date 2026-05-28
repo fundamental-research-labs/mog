@@ -1,8 +1,8 @@
 use value_types::{CellError, CellValue};
 
-use super::fixtures::{assert_blank_suffix, number_values, numbers};
 use super::super::in_place::apply_permutation;
 use super::super::{SortConfig, sort_by, sort_by_in_place, sort_values};
+use super::fixtures::{assert_blank_suffix, number_values, numbers};
 
 #[test]
 fn apply_permutation_identity() {
@@ -46,7 +46,10 @@ fn sorts_numbers_ascending() {
 
     sort_values(&mut values, &SortConfig::asc());
 
-    assert_eq!(numbers(&values), vec![1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 9.0]);
+    assert_eq!(
+        numbers(&values),
+        vec![1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 9.0]
+    );
 }
 
 #[test]

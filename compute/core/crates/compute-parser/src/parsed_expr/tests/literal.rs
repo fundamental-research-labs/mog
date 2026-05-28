@@ -39,6 +39,12 @@ fn parsed_expr_to_a1_string_constant() {
 
 #[test]
 fn constant_to_a1_image_fallback_is_empty() {
-    let image = CellImage::new("https://example.test/i.png", None, CellImageSizing::Fit, None, None);
+    let image = CellImage::new(
+        "https://example.test/i.png",
+        None,
+        CellImageSizing::Fit,
+        None,
+        None,
+    );
     assert_eq!(constant_to_a1(&CellValue::Image(image)), "");
 }

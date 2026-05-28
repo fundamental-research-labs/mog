@@ -67,17 +67,13 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
             }
             FloatingObjectData::Drawing(_) => {}
             FloatingObjectData::Connector(conn_data) => {
-                let anchor = connectors::convert_unified_connector_to_anchor(
-                    &obj.common,
-                    conn_data,
-                );
+                let anchor =
+                    connectors::convert_unified_connector_to_anchor(&obj.common, conn_data);
                 anchors.push((anchor_index, anchor));
             }
             FloatingObjectData::Diagram(diagram_data) => {
-                let anchor = smartart::convert_unified_smartart_to_anchor(
-                    &obj.common,
-                    diagram_data,
-                );
+                let anchor =
+                    smartart::convert_unified_smartart_to_anchor(&obj.common, diagram_data);
                 anchors.push((anchor_index, anchor));
             }
             _ => {}

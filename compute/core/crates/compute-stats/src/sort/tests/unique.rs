@@ -1,8 +1,8 @@
 use crate::types::SortDirection;
 use value_types::CellValue;
 
-use super::fixtures::texts;
 use super::super::get_unique_sorted;
+use super::fixtures::texts;
 
 #[test]
 fn returns_unique_sorted_values() {

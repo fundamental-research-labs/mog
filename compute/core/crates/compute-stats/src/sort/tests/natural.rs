@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 
 use value_types::CellValue;
 
-use super::fixtures::{text_values, texts};
 use super::super::natural::compare_numeric_strings;
 use super::super::{SortConfig, compare_cell_values, natural_compare, sort_values};
+use super::fixtures::{text_values, texts};
 
 #[test]
 fn natural_sort_for_strings_with_numbers() {
@@ -42,7 +42,10 @@ fn sorts_strings_naturally() {
 
     sort_values(&mut values, &SortConfig::asc());
 
-    assert_eq!(texts(&values), vec!["Item 1", "Item 2", "Item 10", "Item 20"]);
+    assert_eq!(
+        texts(&values),
+        vec!["Item 1", "Item 2", "Item 10", "Item 20"]
+    );
 }
 
 #[test]

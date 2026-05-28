@@ -26,21 +26,19 @@ mod features;
 mod media;
 mod metadata;
 mod package_fidelity;
-mod sheet;
 pub(crate) mod pivot_convert;
+mod sheet;
 mod sheet_extents;
 mod styles;
 mod threaded_comments;
 mod workbook_metadata;
 use crate::domain::workbook::read::parse_all_rels;
 use crate::infra::opc::{
-    resolve_relationship_target, REL_COMMENTS, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_COMMENTS, REL_THREADED_COMMENT, REL_VML_DRAWING, resolve_relationship_target,
 };
 use cells::*;
 use comments::build_sheet_comment_package_info;
-use diagnostics::{
-    append_import_compatibility_acknowledgements, append_object_import_diagnostics,
-};
+use diagnostics::{append_import_compatibility_acknowledgements, append_object_import_diagnostics};
 #[cfg(test)]
 use diagnostics::{count_ooxml_smartart_diagrams, count_ooxml_wordart_text_effects};
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
@@ -51,9 +49,9 @@ use package_fidelity::build_package_fidelity_metadata;
 use sheet::convert_sheet;
 use sheet_extents::*;
 use styles::*;
+use threaded_comments::merge_threaded_comments;
 #[cfg(test)]
 use threaded_comments::threaded_candidate_ids;
-use threaded_comments::merge_threaded_comments;
 use workbook_metadata::*;
 
 use std::collections::HashMap;
@@ -295,7 +293,6 @@ pub fn full_parse_result_to_parse_output(
 
     (parse_output, diagnostics)
 }
-
 
 #[cfg(test)]
 mod tests;

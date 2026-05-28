@@ -1,5 +1,5 @@
-use super::fixtures::EPS;
 use super::super::solver::gaussian_elimination;
+use super::fixtures::EPS;
 
 #[test]
 fn gauss_simple_2x2() {
@@ -12,7 +12,6 @@ fn gauss_simple_2x2() {
     assert!((x[0] - 1.0).abs() < EPS);
     assert!((x[1] - 3.0).abs() < EPS);
 }
-
 
 #[test]
 fn gauss_singular_returns_none() {

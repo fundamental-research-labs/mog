@@ -13,7 +13,7 @@ mod text;
 mod wildcard;
 
 pub use condition::matches_condition;
-pub use wildcard::{matches_wildcard_pattern, CompiledPattern, WildcardToken};
+pub use wildcard::{CompiledPattern, WildcardToken, matches_wildcard_pattern};
 
 #[cfg(test)]
 mod tests;

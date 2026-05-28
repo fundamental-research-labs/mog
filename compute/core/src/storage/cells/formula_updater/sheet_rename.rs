@@ -30,7 +30,9 @@ pub fn update_formula_templates_on_sheet_rename(
 
         Some(FormulaFieldUpdate {
             new_template: template.map(|t| replace_sheet_name_in_template(t, old_name, new_name)),
-            new_formula: Some(replace_sheet_name_in_a1_formula(formula, old_name, new_name)),
+            new_formula: Some(replace_sheet_name_in_a1_formula(
+                formula, old_name, new_name,
+            )),
         })
     })
 }

@@ -324,3 +324,4 @@ impl ComputeCore {
         }
         result
     }
+}

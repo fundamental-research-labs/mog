@@ -59,7 +59,9 @@ impl PhoneticProperties {
 
 pub(super) fn parse_text_content(xml: &[u8], start: usize) -> Option<String> {
     let t_start = find_tag_simd(xml, b"t", start)?;
-    let content_start = find_gt_simd(xml, t_start).map(|p| p + 1).unwrap_or(xml.len());
+    let content_start = find_gt_simd(xml, t_start)
+        .map(|p| p + 1)
+        .unwrap_or(xml.len());
     let t_end = find_closing_tag(xml, b"t", content_start)?;
 
     if content_start < t_end {

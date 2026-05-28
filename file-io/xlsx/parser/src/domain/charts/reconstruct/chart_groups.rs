@@ -1,6 +1,6 @@
 use domain_types::{
-    chart::{ChartSpec, ChartSubType, ChartType as DomainChartType},
     ChartDefinition,
+    chart::{ChartSpec, ChartSubType, ChartType as DomainChartType},
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,

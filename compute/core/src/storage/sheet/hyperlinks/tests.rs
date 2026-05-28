@@ -1,6 +1,5 @@
-use super::*;
 use super::keys::*;
-use std::sync::Arc;
+use super::*;
 use crate::storage::YrsStorage;
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
@@ -8,6 +7,7 @@ use compute_document::identity::GridIndex;
 use compute_document::schema::{KEY_FORMULA, KEY_GRID_INDEX, KEY_VALUE};
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::hyperlink::HyperlinkTargetKind;
+use std::sync::Arc;
 use yrs::{Any, Map, MapPrelim, Origin, Out, Transact};
 
 use crate::storage::infra::grid_helpers::get_cells_map;
@@ -181,9 +181,7 @@ fn test_set_hyperlink_on_empty_position() {
     let (storage, sheet_id, mut grid) = storage_with_sheet();
 
     // No cell at (5, 3)
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 5, 3).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 5, 3).is_none());
 
     // Set hyperlink on empty position
     set_hyperlink(
@@ -274,9 +272,7 @@ fn test_get_hyperlink_on_empty_cell_returns_none() {
 
     // Cell with value but no hyperlink
     seed_cell(&storage, &mut grid, sheet_id, 0, 0, Any::Number(99.0));
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none());
 }
 
 // -------------------------------------------------------------------
@@ -300,9 +296,7 @@ fn test_remove_hyperlink_preserves_cell_with_value() {
         0,
         "https://example.com",
     );
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_some()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_some());
 
     remove_hyperlink(
         storage.doc(),
@@ -314,9 +308,7 @@ fn test_remove_hyperlink_preserves_cell_with_value() {
     );
 
     // Hyperlink gone
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none());
 
     // Cell still exists with its value
     assert!(cell_exists(&storage, sheet_id, &cell_hex));
@@ -352,9 +344,7 @@ fn test_remove_hyperlink_deletes_empty_cell() {
         3,
         "https://tobedeleted.com",
     );
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 3, 3).is_some()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 3, 3).is_some());
     assert!(pos_exists_in_grid(&grid, 3, 3));
 
     // Remove hyperlink -- cell should be deleted entirely
@@ -367,9 +357,7 @@ fn test_remove_hyperlink_deletes_empty_cell() {
         3,
     );
 
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 3, 3).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 3, 3).is_none());
 
     // Grid index entry should be cleaned up
     assert!(!pos_exists_in_grid(&grid, 3, 3));
@@ -384,9 +372,7 @@ fn test_hyperlink_roundtrip() {
     let (storage, sheet_id, mut grid) = storage_with_sheet();
 
     // Initially no hyperlink
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none());
 
     // Set
     set_hyperlink(
@@ -412,9 +398,7 @@ fn test_hyperlink_roundtrip() {
         0,
         0,
     );
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0).is_none());
 }
 
 #[test]
@@ -536,9 +520,7 @@ fn test_multiple_hyperlinks_different_cells() {
         1,
         1,
     );
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 1, 1).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 1, 1).is_none());
     assert_eq!(
         get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 0, 0),
         Some("https://a.com".to_string())
@@ -770,9 +752,7 @@ fn test_overwrite_then_remove_marker_cell() {
         7,
         7,
     );
-    assert!(
-        get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 7, 7).is_none()
-    );
+    assert!(get_hyperlink(storage.doc(), &storage.sheets_ref(), &sheet_id, &grid, 7, 7).is_none());
     assert!(!pos_exists_in_grid(&grid, 7, 7));
 }
 
@@ -787,10 +767,7 @@ fn test_get_hyperlink_full_returns_all_cell_metadata() {
         0,
         vec![
             (KEY_HYPERLINK, Any::String(Arc::from("https://example.com"))),
-            (
-                KEY_HYPERLINK_LOCATION,
-                Any::String(Arc::from("Sheet2!A1")),
-            ),
+            (KEY_HYPERLINK_LOCATION, Any::String(Arc::from("Sheet2!A1"))),
             (KEY_HYPERLINK_DISPLAY, Any::String(Arc::from("Example"))),
             (KEY_HYPERLINK_TOOLTIP, Any::String(Arc::from("Open link"))),
             (KEY_HYPERLINK_UID, Any::String(Arc::from("{uid-1}"))),

@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_set_and_get_properties() {
@@ -402,7 +402,6 @@ fn test_clear_formula_cache_metadata_deletes_entry_when_empty() {
     assert!(get_properties(doc, workbook, sheets, &sid, "formula-only").is_none());
 }
 
-
 /// Helper: create a storage with a sheet and get a mutable SheetMirror reference.
 fn storage_with_sheet_and_mirror() -> (
     crate::storage::YrsStorage,
@@ -420,4 +419,3 @@ fn storage_with_sheet_and_mirror() -> (
     let gi = GridIndex::new(sid, 100, 26, id_alloc);
     (storage, sid, gi, mirror)
 }
-

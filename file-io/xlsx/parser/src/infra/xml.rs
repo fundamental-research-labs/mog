@@ -17,8 +17,8 @@ pub use attrs::{
 };
 pub use decode::{decode_xml_entities, decode_xml_entities_string};
 pub use mc::{
-    resolve_mc_alternate_content, resolve_mc_alternate_content_v2, McBranch, McResolution,
-    MC_SUPPORTED_NAMESPACES,
+    MC_SUPPORTED_NAMESPACES, McBranch, McResolution, resolve_mc_alternate_content,
+    resolve_mc_alternate_content_v2,
 };
 pub use relationships::raw_xml_contains_relationship_attr;
 

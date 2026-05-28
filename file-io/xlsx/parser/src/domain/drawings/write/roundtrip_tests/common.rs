@@ -1,6 +1,4 @@
-use crate::domain::drawings::write::types::{
-    CellAnchor, DrawingColor, DrawingFill, SolidFill,
-};
+use crate::domain::drawings::write::types::{CellAnchor, DrawingColor, DrawingFill, SolidFill};
 
 pub(super) fn rgb(hex: &str) -> DrawingColor {
     DrawingColor::SrgbClr {

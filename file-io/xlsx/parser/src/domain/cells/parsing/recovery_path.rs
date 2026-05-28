@@ -1,8 +1,8 @@
-use super::rows::apply_recovery_row_attrs;
 use super::super::adapters::{find_byte, find_sequence, skip_whitespace};
 use super::super::helpers::{CellEnd, find_cell_end, find_sheet_data, parse_row_number};
 use super::super::recovery::{CellParseResult, parse_cell_element_with_context};
 use super::super::types::CellData;
+use super::rows::apply_recovery_row_attrs;
 use crate::infra::error::{ErrorCode, ErrorLocation, ParseContext, ParseErrorDetail};
 use ooxml_types::worksheet::RowHeight;
 
@@ -68,31 +68,30 @@ pub(super) fn parse_worksheet_with_context_impl(
                 let CellEnd {
                     end: cell_end,
                     is_self_closing,
-                } = match find_cell_end(xml, pos) {
-                    Some(ce) => ce,
-                    None => {
-                        context.report_error_detail(
-                            ParseErrorDetail::error(
-                                ErrorCode::MalformedXml,
-                                "Cannot find end of cell element",
-                            )
-                            .with_location(ErrorLocation::cell(
-                                &context.current_part,
-                                current_row + 1,
-                                0,
-                            )),
-                        );
-                        if context.should_stop() {
-                            return (cell_idx, skipped_count);
+                } =
+                    match find_cell_end(xml, pos) {
+                        Some(ce) => ce,
+                        None => {
+                            context.report_error_detail(
+                                ParseErrorDetail::error(
+                                    ErrorCode::MalformedXml,
+                                    "Cannot find end of cell element",
+                                )
+                                .with_location(
+                                    ErrorLocation::cell(&context.current_part, current_row + 1, 0),
+                                ),
+                            );
+                            if context.should_stop() {
+                                return (cell_idx, skipped_count);
+                            }
+                            skipped_count += 1;
+                            if let Some(next_lt) = find_byte(xml, b'<', pos) {
+                                pos = next_lt;
+                                continue;
+                            }
+                            break;
                         }
-                        skipped_count += 1;
-                        if let Some(next_lt) = find_byte(xml, b'<', pos) {
-                            pos = next_lt;
-                            continue;
-                        }
-                        break;
-                    }
-                };
+                    };
 
                 match parse_cell_element_with_context(
                     &xml[cell_start..cell_end],

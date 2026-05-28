@@ -73,11 +73,7 @@ pub(super) fn insert_compact_cell_properties(
         Some(Out::YMap(map)) => map,
         _ => panic!("cellProperties map not found"),
     };
-    props_map.insert(
-        &mut txn,
-        cell_hex,
-        Any::String(std::sync::Arc::from(json)),
-    );
+    props_map.insert(&mut txn, cell_hex, Any::String(std::sync::Arc::from(json)));
 }
 
 pub(super) fn insert_row_xlsx_style_id(
@@ -88,7 +84,13 @@ pub(super) fn insert_row_xlsx_style_id(
     style_id: u32,
 ) {
     let row_key = id_to_hex(grid_index.row_id(row).unwrap().as_u128());
-    insert_axis_xlsx_style_id(storage, sheet_id, compute_document::schema::KEY_ROW_FORMATS, &row_key, style_id);
+    insert_axis_xlsx_style_id(
+        storage,
+        sheet_id,
+        compute_document::schema::KEY_ROW_FORMATS,
+        &row_key,
+        style_id,
+    );
 }
 
 pub(super) fn insert_col_xlsx_style_id(
@@ -99,7 +101,13 @@ pub(super) fn insert_col_xlsx_style_id(
     style_id: u32,
 ) {
     let col_key = id_to_hex(grid_index.col_id(col).unwrap().as_u128());
-    insert_axis_xlsx_style_id(storage, sheet_id, compute_document::schema::KEY_COL_FORMATS, &col_key, style_id);
+    insert_axis_xlsx_style_id(
+        storage,
+        sheet_id,
+        compute_document::schema::KEY_COL_FORMATS,
+        &col_key,
+        style_id,
+    );
 }
 
 fn insert_axis_xlsx_style_id(
@@ -120,12 +128,10 @@ fn insert_axis_xlsx_style_id(
         Some(Out::YMap(map)) => map,
         _ => panic!("axis format map not found"),
     };
-    let entries: MapPrelim = vec![
-        (
-            domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
-            Any::Number(style_id as f64),
-        ),
-    ]
+    let entries: MapPrelim = vec![(
+        domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
+        Any::Number(style_id as f64),
+    )]
     .into_iter()
     .collect();
     format_map.insert(&mut txn, axis_key, entries);

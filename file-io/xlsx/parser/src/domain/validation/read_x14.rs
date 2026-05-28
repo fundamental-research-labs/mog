@@ -128,5 +128,8 @@ pub fn parse_x14_data_validations(
         pos = element_end;
     }
 
-    summarize_validations(&container.validations, DataValidationsContainerAttrs::from(&container))
+    summarize_validations(
+        &container.validations,
+        DataValidationsContainerAttrs::from(&container),
+    )
 }

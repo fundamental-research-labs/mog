@@ -1,8 +1,8 @@
 use super::shared;
 use crate::engine_types::ZOrderEntry;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::services;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use domain_types::domain::floating_object::FloatingObject;
@@ -33,7 +33,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::send_floating_object_to_back(&mut self.stores, sheet_id, object_id).map(shared::with_empty_patches)
+        services::objects::send_floating_object_to_back(&mut self.stores, sheet_id, object_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Bring a floating object one step forward in z-order.
@@ -43,7 +44,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::bring_floating_object_forward(&mut self.stores, sheet_id, object_id).map(shared::with_empty_patches)
+        services::objects::bring_floating_object_forward(&mut self.stores, sheet_id, object_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Send a floating object one step backward in z-order.
@@ -53,7 +55,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::send_floating_object_backward(&mut self.stores, sheet_id, object_id).map(shared::with_empty_patches)
+        services::objects::send_floating_object_backward(&mut self.stores, sheet_id, object_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Get all floating objects sorted by z-order (back to front).

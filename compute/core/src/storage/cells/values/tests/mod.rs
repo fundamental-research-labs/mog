@@ -5,10 +5,10 @@ use value_types::FiniteF64;
 
 // Coverage is split by parser behavior, format hints, storage round trips,
 // and CellInput dispatch. Shared deterministic fixtures live in support.
-mod support;
-mod parse_input_basic;
-mod formatted_numbers;
+mod cell_input_dispatch;
 mod dates;
 mod format_hints;
+mod formatted_numbers;
+mod parse_input_basic;
 mod storage_roundtrip;
-mod cell_input_dispatch;
+mod support;

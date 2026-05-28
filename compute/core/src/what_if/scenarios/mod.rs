@@ -21,7 +21,6 @@
 //! map because Yrs `Any` values don't support deeply nested structures
 //! natively. The Array preserves insertion order.
 
-
 mod apply_restore;
 mod crud;
 mod query;
@@ -38,8 +37,8 @@ pub use query::{
     is_at_limit,
 };
 pub use types::{
-    MAX_CHANGING_CELLS_PER_SCENARIO, MAX_SCENARIO_COMMENT_LENGTH,
-    MAX_SCENARIO_NAME_LENGTH, MAX_SCENARIOS,
+    MAX_CHANGING_CELLS_PER_SCENARIO, MAX_SCENARIO_COMMENT_LENGTH, MAX_SCENARIO_NAME_LENGTH,
+    MAX_SCENARIOS,
 };
 pub(crate) use types::{
     ScenarioApplyPlan, ScenarioBaseline, ScenarioBaselineCell, ScenarioRestorePlan,

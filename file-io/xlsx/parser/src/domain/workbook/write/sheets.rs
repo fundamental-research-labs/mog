@@ -1,7 +1,7 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::attrs::sheet_state_to_xml_value;
 use super::SheetDef;
+use super::attrs::sheet_state_to_xml_value;
 
 /// Write sheets section.
 pub(super) fn write_sheets(w: &mut XmlWriter, sheets: &[SheetDef]) {

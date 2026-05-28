@@ -210,8 +210,13 @@ fn test_delete_last_sparkline_in_group_removes_group() {
 fn test_delete_nonexistent_group() {
     let (storage, sid) = storage_with_sheet();
 
-    let result =
-        delete_sparkline_group(storage.doc(), &storage.sheets_ref(), &sid, "nonexistent", true);
+    let result = delete_sparkline_group(
+        storage.doc(),
+        &storage.sheets_ref(),
+        &sid,
+        "nonexistent",
+        true,
+    );
     assert!(!result);
 }
 

@@ -1,7 +1,7 @@
 use crate::{Point, RegressionMethod};
 
-use super::fixtures::{default_opts, pts, EPS};
 use super::super::linear_regression;
+use super::fixtures::{EPS, default_opts, pts};
 
 #[test]
 fn linear_perfect_line() {
@@ -20,7 +20,6 @@ fn linear_perfect_line() {
     assert!((result.r_squared - 1.0).abs() < EPS, "R^2 should be 1");
     assert_eq!(result.method, RegressionMethod::Linear);
 }
-
 
 #[test]
 fn linear_horizontal_line() {
@@ -42,7 +41,6 @@ fn linear_horizontal_line() {
     );
 }
 
-
 #[test]
 fn linear_single_point() {
     let data = pts(&[(3.0, 7.0)]);
@@ -54,7 +52,6 @@ fn linear_single_point() {
     assert_eq!(result.points.len(), 1);
 }
 
-
 #[test]
 fn linear_empty_data() {
     let data: Vec<Point> = vec![];
@@ -65,7 +62,6 @@ fn linear_empty_data() {
     assert!(result.r_squared.is_nan());
     assert!(result.points.is_empty());
 }
-
 
 #[test]
 fn linear_same_x_values() {
@@ -79,7 +75,6 @@ fn linear_same_x_values() {
     assert!((result.r_squared - 0.0).abs() < EPS);
 }
 
-
 #[test]
 fn linear_noisy_data() {
     // Roughly y = x + noise
@@ -92,7 +87,6 @@ fn linear_noisy_data() {
     // Slope should be close to 1
     assert!((result.coefficients[1] - 1.0).abs() < 0.1);
 }
-
 
 #[test]
 fn linear_generates_50_points_by_default() {

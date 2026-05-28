@@ -22,9 +22,7 @@ mod tests;
 use value_types::CellValue;
 
 use self::counting::{pivot_counta, pivot_countunique};
-use self::numeric::{
-    pivot_average, pivot_count, pivot_max, pivot_min, pivot_product, pivot_sum,
-};
+use self::numeric::{pivot_average, pivot_count, pivot_max, pivot_min, pivot_product, pivot_sum};
 use self::statistical::{pivot_stdev, pivot_stdevp, pivot_var, pivot_varp};
 use super::types::AggregateFunction;
 

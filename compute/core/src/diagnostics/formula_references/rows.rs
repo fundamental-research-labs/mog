@@ -3,17 +3,16 @@ use compute_parser::ReferenceTokenClass;
 use crate::mirror::CellMirror;
 use crate::range_manager::pos_to_a1;
 
-use super::edges::{edge_code, external_mapping, PendingEdge};
+use super::edges::{PendingEdge, edge_code, external_mapping};
 use super::page::stable_hash_parts;
 use super::resolver::DiagnosticResolver;
-use super::sources::{normalize_display_formula, SourceFormula};
+use super::sources::{SourceFormula, normalize_display_formula};
 use super::types::{
     ExternalLinkStatus, FormulaReferenceAddressStatus, FormulaReferenceBaseDiagnostic,
-    FormulaReferenceDiagnostic, FormulaReferenceDiagnosticsOptions,
-    FormulaReferenceEdgeDiagnostic, FormulaReferenceEdgeDiagnosticRow, FormulaReferenceEdgeKind,
-    FormulaReferenceEdgeStatus, FormulaReferenceLocation, FormulaReferenceParseDiagnosticRow,
-    FormulaReferenceParseKind, FormulaReferenceParseSourceReason, FormulaReferenceSeverity,
-    FormulaReferenceTargetKind,
+    FormulaReferenceDiagnostic, FormulaReferenceDiagnosticsOptions, FormulaReferenceEdgeDiagnostic,
+    FormulaReferenceEdgeDiagnosticRow, FormulaReferenceEdgeKind, FormulaReferenceEdgeStatus,
+    FormulaReferenceLocation, FormulaReferenceParseDiagnosticRow, FormulaReferenceParseKind,
+    FormulaReferenceParseSourceReason, FormulaReferenceSeverity, FormulaReferenceTargetKind,
 };
 use super::visitor::collect_ast_edges;
 

@@ -5,8 +5,8 @@ use crate::infra::xml::decode_xml_entities;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32, parse_val_f64};
 use super::{
-    parse_chart_ext_lst, LayoutMode, LayoutTarget, ManualLayout, Trendline, TrendlineLabel,
-    TrendlineType,
+    LayoutMode, LayoutTarget, ManualLayout, Trendline, TrendlineLabel, TrendlineType,
+    parse_chart_ext_lst,
 };
 use crate::domain::charts::{parse_shape_properties, parse_text_body};
 use ooxml_types::charts::NumFmt;

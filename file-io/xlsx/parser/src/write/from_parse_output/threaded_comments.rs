@@ -15,8 +15,11 @@ pub(super) fn add_relationship_for_export(
         .unwrap_or_else(|| format!("xl/threadedComments/threadedComment{global_idx}.xml"));
     let target = worksheet_relative_target(&path);
     let generated_relationship_id = rels.add(REL_THREADED_COMMENT, &target);
-    let relationship_id_hint =
-        Some(relationship_id_hint.unwrap_or(&generated_relationship_id).to_string());
+    let relationship_id_hint = Some(
+        relationship_id_hint
+            .unwrap_or(&generated_relationship_id)
+            .to_string(),
+    );
 
     WorksheetThreadedCommentsGraphEntry {
         sheet_idx,

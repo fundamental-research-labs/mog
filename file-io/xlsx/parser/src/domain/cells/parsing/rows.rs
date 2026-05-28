@@ -1,7 +1,7 @@
-use super::row_attrs::RowAttrs;
-use super::row_attrs::parse_row_attrs;
 use super::super::adapters::{find_byte, find_sequence};
 use super::super::types::ParseExtras;
+use super::row_attrs::RowAttrs;
+use super::row_attrs::parse_row_attrs;
 use ooxml_types::worksheet::RowHeight;
 
 pub(super) struct AppliedRowAttrs {

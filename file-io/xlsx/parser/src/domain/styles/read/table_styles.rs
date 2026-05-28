@@ -1,13 +1,15 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::parse_string_attr;
 
-use super::raw::{RawTableStyle, RawTableStyleElement};
 use super::super::types::*;
+use super::raw::{RawTableStyle, RawTableStyleElement};
 
 /// Parse the <tableStyles> section.
 ///
 /// Returns (styles, default_table_style, default_pivot_style).
-pub(super) fn parse_table_styles(xml: &[u8]) -> (Vec<TableStyleDef>, Option<String>, Option<String>) {
+pub(super) fn parse_table_styles(
+    xml: &[u8],
+) -> (Vec<TableStyleDef>, Option<String>, Option<String>) {
     // Parse container attrs from <tableStyles count="..." defaultTableStyle="..." defaultPivotStyle="...">
     let container_end = find_gt_simd(xml, 0).map(|p| p + 1).unwrap_or(xml.len());
     let container_tag = &xml[0..container_end];

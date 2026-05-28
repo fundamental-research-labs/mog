@@ -8,8 +8,8 @@ use ooxml_types::drawings::{
     PenAlignment, ShapePreset, ShapeStyle, StAngle, StStyleMatrixColumnIndex,
 };
 
-use super::common::{minimal_props, outline_color_rgb, roundtrip, style_ref_color_rgb};
 use super::super::common::{rgb, solid_fill};
+use super::common::{minimal_props, outline_color_rgb, roundtrip, style_ref_color_rgb};
 
 #[test]
 fn roundtrip_connectors_survive_save() {

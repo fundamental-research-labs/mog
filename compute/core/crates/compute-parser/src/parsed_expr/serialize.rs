@@ -5,8 +5,8 @@ use formula_types::{CellRef, IdentityFormula, RangeType};
 
 use crate::ast::{CellRefNode, RangeRef};
 
-use super::literal::constant_to_a1;
 use super::ParsedExpr;
+use super::literal::constant_to_a1;
 
 impl ParsedExpr {
     /// Materialize an empty [`IdentityFormula`] shell suitable for writing a

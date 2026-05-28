@@ -6,8 +6,8 @@
 
 use super::*;
 
-mod entrypoints;
 mod cache_invalidation;
+mod entrypoints;
 mod full;
 mod incremental;
 mod passes;
@@ -16,7 +16,7 @@ mod result;
 mod selective_fixup;
 mod session;
 
-pub(super) use session::{clear_thread_local_caches, make_deadline, past_deadline, Deadline};
+pub(super) use session::{Deadline, clear_thread_local_caches, make_deadline, past_deadline};
 
 #[cfg(test)]
 pub(super) use entrypoints::set_recalc_options_panic_before_full_recalc_for_tests;

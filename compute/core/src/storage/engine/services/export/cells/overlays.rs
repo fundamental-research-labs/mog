@@ -5,13 +5,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
 
+use super::super::PaletteOps;
 use super::materialize::{
     build_cell_data_for_cell_id, explicit_blank_cell, is_imported_style_only_blank_cell,
     is_plain_blank_cell, range_payload_cell,
 };
 use super::style_ids::format_range_style_id_at;
 use super::yrs_reads::batch_read_props_array_refs_and_formula_metadata;
-use super::super::PaletteOps;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,

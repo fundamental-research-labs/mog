@@ -41,8 +41,7 @@ pub(super) fn write_calc_settings(w: &mut XmlWriter, calc_settings: Option<&Calc
     if settings.iterate_count != 100 || settings.has_explicit_iterate_count {
         w.attr_num("iterateCount", settings.iterate_count);
     }
-    if (settings.iterate_delta - 0.001).abs() > f64::EPSILON
-        || settings.has_explicit_iterate_delta
+    if (settings.iterate_delta - 0.001).abs() > f64::EPSILON || settings.has_explicit_iterate_delta
     {
         w.attr_num("iterateDelta", settings.iterate_delta);
     }

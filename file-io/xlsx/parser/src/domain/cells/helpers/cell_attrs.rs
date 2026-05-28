@@ -1,9 +1,9 @@
 use super::super::adapters::{find_byte, find_sequence};
-use super::a1::parse_a1_reference;
 use super::super::types::{
     CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER,
     CELL_TYPE_STRING,
 };
+use super::a1::parse_a1_reference;
 
 /// Parse A1-style cell reference without allocation.
 ///

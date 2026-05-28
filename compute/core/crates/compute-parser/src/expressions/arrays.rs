@@ -14,10 +14,7 @@ use value_types::CellError;
 use super::alpha::try_parse_boolean;
 
 /// Parse an array literal: {expr, expr; expr, expr}
-pub(super) fn parse_array_literal(
-    input: &mut &str,
-    state: &ParseState,
-) -> ModalResult<ASTNode> {
+pub(super) fn parse_array_literal(input: &mut &str, state: &ParseState) -> ModalResult<ASTNode> {
     let open_pos = state.offset(input) as usize;
     let _ = '{'.parse_next(input)?;
     let _ = lexer::ws.parse_next(input)?;

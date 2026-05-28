@@ -142,7 +142,10 @@ fn test_hide_already_hidden_row_no_duplicate() {
     let (storage, sid, _gi) = setup();
     hide_rows(storage.doc(), storage.sheets(), &sid, &[5]);
     hide_rows(storage.doc(), storage.sheets(), &sid, &[5]);
-    assert_eq!(get_hidden_rows(storage.doc(), storage.sheets(), &sid), vec![5]);
+    assert_eq!(
+        get_hidden_rows(storage.doc(), storage.sheets(), &sid),
+        vec![5]
+    );
 }
 
 #[test]
@@ -221,7 +224,10 @@ fn test_multiple_rows_hidden_and_unhidden() {
     let (storage, sid, _gi) = setup();
     hide_rows(storage.doc(), storage.sheets(), &sid, &[1, 3, 5, 7]);
     unhide_rows(storage.doc(), storage.sheets(), &sid, &[3, 7]);
-    assert_eq!(get_hidden_rows(storage.doc(), storage.sheets(), &sid), vec![1, 5]);
+    assert_eq!(
+        get_hidden_rows(storage.doc(), storage.sheets(), &sid),
+        vec![1, 5]
+    );
 }
 
 #[test]
@@ -446,13 +452,8 @@ fn test_clear_filter_restores_rows_still_manually_hidden() {
         &[],
         Some(&gi),
     );
-    let transitions = clear_filter_hidden_rows(
-        storage.doc(),
-        storage.sheets(),
-        &sid,
-        "filter-a",
-        Some(&gi),
-    );
+    let transitions =
+        clear_filter_hidden_rows(storage.doc(), storage.sheets(), &sid, "filter-a", Some(&gi));
     assert_eq!(transitions, vec![(5, false)]);
     assert!(is_row_hidden(storage.doc(), storage.sheets(), &sid, 4));
     assert!(!is_row_hidden(storage.doc(), storage.sheets(), &sid, 5));
@@ -461,13 +462,8 @@ fn test_clear_filter_restores_rows_still_manually_hidden() {
 #[test]
 fn test_clear_filter_hidden_rows_absent_owner_noop() {
     let (storage, sid, gi) = setup();
-    let transitions = clear_filter_hidden_rows(
-        storage.doc(),
-        storage.sheets(),
-        &sid,
-        "missing",
-        Some(&gi),
-    );
+    let transitions =
+        clear_filter_hidden_rows(storage.doc(), storage.sheets(), &sid, "missing", Some(&gi));
     assert!(transitions.is_empty());
 }
 

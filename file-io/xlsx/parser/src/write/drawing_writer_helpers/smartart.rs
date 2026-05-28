@@ -1,6 +1,4 @@
-use domain_types::domain::floating_object::{
-    DiagramData as FobjDiagramData, FloatingObjectCommon,
-};
+use domain_types::domain::floating_object::{DiagramData as FobjDiagramData, FloatingObjectCommon};
 
 use crate::domain::drawings::write::{DrawingAnchor, DrawingObject, SmartArtWriteData};
 

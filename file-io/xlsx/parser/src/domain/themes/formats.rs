@@ -737,7 +737,12 @@ mod tests {
         ));
         assert!(matches!(
             parse_drawing_color(br#"<a:hslClr hue="60000" sat="70000" lum="80000"/>"#),
-            Some(DrawingColor::HslClr { hue: 60000, sat: 70000, lum: 80000, .. })
+            Some(DrawingColor::HslClr {
+                hue: 60000,
+                sat: 70000,
+                lum: 80000,
+                ..
+            })
         ));
         assert!(matches!(
             parse_drawing_color(br#"<a:prstClr val="red"/>"#),
@@ -745,7 +750,12 @@ mod tests {
         ));
         assert!(matches!(
             parse_drawing_color(br#"<a:scrgbClr r="10000" g="20000" b="30000"/>"#),
-            Some(DrawingColor::ScrgbClr { r: 10000, g: 20000, b: 30000, .. })
+            Some(DrawingColor::ScrgbClr {
+                r: 10000,
+                g: 20000,
+                b: 30000,
+                ..
+            })
         ));
     }
 
@@ -799,8 +809,14 @@ mod tests {
         match &fills[1] {
             DrawingFill::Pattern(pattern) => {
                 assert_eq!(pattern.preset, Some(PresetPatternVal::Cross));
-                assert!(matches!(&pattern.fg_color, Some(DrawingColor::SrgbClr { .. })));
-                assert!(matches!(&pattern.bg_color, Some(DrawingColor::SrgbClr { .. })));
+                assert!(matches!(
+                    &pattern.fg_color,
+                    Some(DrawingColor::SrgbClr { .. })
+                ));
+                assert!(matches!(
+                    &pattern.bg_color,
+                    Some(DrawingColor::SrgbClr { .. })
+                ));
             }
             _ => panic!("Expected Pattern fill"),
         }
@@ -823,9 +839,7 @@ mod tests {
 
     #[test]
     fn test_parse_line_styles_preserves_custom_dash_join_and_ends() {
-        use ooxml_types::drawings::{
-            LineDash, LineEndSize, LineEndType, LineJoin, PenAlignment,
-        };
+        use ooxml_types::drawings::{LineDash, LineEndSize, LineEndType, LineJoin, PenAlignment};
 
         let xml = br#"
         <a:lnStyleLst>

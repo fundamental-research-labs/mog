@@ -8,10 +8,8 @@ impl Hyperlink {
     pub fn resolve_target(&mut self, relationships: &[HyperlinkRelationship]) {
         if let Some(ref r_id) = self.r_id {
             if let Some(rel) = relationships.iter().find(|r| r.id == *r_id) {
-                let full_target = combine_relationship_target_and_location(
-                    &rel.target,
-                    self.location.as_deref(),
-                );
+                let full_target =
+                    combine_relationship_target_and_location(&rel.target, self.location.as_deref());
 
                 self.target = Some(full_target.clone());
                 self.link_type = HyperlinkType::from_target(&full_target);

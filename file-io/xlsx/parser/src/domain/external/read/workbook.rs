@@ -1,9 +1,7 @@
 use crate::infra::scanner::{find_closing_tag, find_tag_simd};
 use crate::infra::xml::{parse_string_attr_quoted, parse_u32_attr};
 
-use domain_types::domain::external_link::{
-    ExternalDefinedName, ExternalLink, ExternalLinkType,
-};
+use domain_types::domain::external_link::{ExternalDefinedName, ExternalLink, ExternalLinkType};
 
 use super::cache::parse_sheet_data_set;
 use super::support::start_tag_element;
@@ -64,12 +62,7 @@ fn parse_sheet_names(xml: &[u8], start: usize, end: usize, names: &mut Vec<Strin
     }
 }
 
-fn parse_defined_names(
-    xml: &[u8],
-    start: usize,
-    end: usize,
-    names: &mut Vec<ExternalDefinedName>,
-) {
+fn parse_defined_names(xml: &[u8], start: usize, end: usize, names: &mut Vec<ExternalDefinedName>) {
     let mut pos = start;
 
     while pos < end {

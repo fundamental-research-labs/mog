@@ -1,7 +1,10 @@
 use value_types::CellValue;
 
 pub(super) fn number_values(values: &[f64]) -> Vec<CellValue> {
-    values.iter().map(|value| CellValue::number(*value)).collect()
+    values
+        .iter()
+        .map(|value| CellValue::number(*value))
+        .collect()
 }
 
 pub(super) fn text_values(values: &[&str]) -> Vec<CellValue> {

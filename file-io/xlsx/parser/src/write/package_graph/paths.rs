@@ -6,7 +6,6 @@ pub fn part_relationships_path(part_path: &str) -> String {
     })
 }
 
-
 pub(super) fn normalize_external_link_part_path(part_name: &str) -> String {
     let trimmed = normalize_part_path(part_name);
     if trimmed.starts_with("xl/") {

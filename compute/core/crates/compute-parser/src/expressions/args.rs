@@ -14,10 +14,7 @@ use super::pratt::parse_expression;
 /// Maximum number of arguments in a single function call or argument list.
 const MAX_ARGS: usize = 4096;
 
-pub(super) fn parse_arg_list(
-    input: &mut &str,
-    state: &ParseState,
-) -> ModalResult<Vec<ASTNode>> {
+pub(super) fn parse_arg_list(input: &mut &str, state: &ParseState) -> ModalResult<Vec<ASTNode>> {
     parse_arg_list_for_function(input, state, None)
 }
 

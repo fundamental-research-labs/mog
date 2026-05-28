@@ -79,8 +79,8 @@ fn parse_connection(xml: &[u8]) -> Option<Connection> {
 mod tests {
     use super::*;
     use ooxml_types::drawings::{
-        CompoundLine, LineCap, LineEndSize, LineEndType, LineJoin, ShapePreset,
-        StDrawingElementId, StStyleMatrixColumnIndex,
+        CompoundLine, LineCap, LineEndSize, LineEndType, LineJoin, ShapePreset, StDrawingElementId,
+        StStyleMatrixColumnIndex,
     };
 
     use super::super::super::types::SpreadsheetConnector;

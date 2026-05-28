@@ -174,7 +174,9 @@ pub(crate) fn convert_ole_objects(
                 })
             });
             let object_id = format!("ole-shape-{}", o.shape_id);
-            let import_status = Some(ole_object_import_status(o, &object_id, &embedding, &preview));
+            let import_status = Some(ole_object_import_status(
+                o, &object_id, &embedding, &preview,
+            ));
             let ooxml = OleObjectOoxmlProps {
                 shape_id: o.shape_id,
                 r_id: o.r_id.clone(),
@@ -236,10 +238,7 @@ pub(crate) fn convert_ole_objects(
         .collect()
 }
 
-fn form_control_import_status(
-    fc: &FormControlOutput,
-    object_id: &str,
-) -> ImportObjectStatus {
+fn form_control_import_status(fc: &FormControlOutput, object_id: &str) -> ImportObjectStatus {
     let mut diagnostics = Vec::new();
     if fc.macro_name.is_some() {
         diagnostics.push(ImportDiagnosticRef {

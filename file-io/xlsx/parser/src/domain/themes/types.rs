@@ -1029,7 +1029,10 @@ mod tests {
         );
         assert_eq!(
             theme.ext_lst_xml.as_deref(),
-            Some(br#"<a:extLst><a:ext uri="{test}"><a16:creationId id="1"/></a:ext></a:extLst>"#.as_slice())
+            Some(
+                br#"<a:extLst><a:ext uri="{test}"><a16:creationId id="1"/></a:ext></a:extLst>"#
+                    .as_slice()
+            )
         );
     }
 
@@ -1047,7 +1050,10 @@ mod tests {
         let theme = Theme::parse(xml);
         assert!(theme.object_defaults_xml.is_none());
         assert!(theme.extra_clr_scheme_lst_xml.is_none());
-        assert_eq!(theme.ext_lst_xml.as_deref(), Some(br#"<a:extLst/>"#.as_slice()));
+        assert_eq!(
+            theme.ext_lst_xml.as_deref(),
+            Some(br#"<a:extLst/>"#.as_slice())
+        );
     }
 
     #[test]

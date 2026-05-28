@@ -164,8 +164,16 @@ mod tests {
             Some("$A$1:$D$10".to_string())
         );
 
-        assert!(parse_location(br#"<location firstDataRow="1"/>"#).ref_.is_none());
+        assert!(
+            parse_location(br#"<location firstDataRow="1"/>"#)
+                .ref_
+                .is_none()
+        );
         assert!(parse_location(br#"<location ref=""/>"#).ref_.is_none());
-        assert!(parse_location(b"<location ref=\"not-a-range\"/>").ref_.is_none());
+        assert!(
+            parse_location(b"<location ref=\"not-a-range\"/>")
+                .ref_
+                .is_none()
+        );
     }
 }

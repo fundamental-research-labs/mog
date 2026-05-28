@@ -11,14 +11,13 @@ fn stored_number_format_at(
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(
-            &engine.stores,
-            sheet_id,
-            row,
-            col,
-        )
-        .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.stores,
+        sheet_id,
+        row,
+        col,
+    )
+    .expect("cell allocated");
     engine
         .get_cell_format(sheet_id, &cell_id, row, col)
         .number_format
@@ -311,7 +310,10 @@ fn test_set_cell_date_formula_applies_date_format() {
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
     match cell_value {
         Some(CellValue::Number(serial)) => {
-            assert!(serial.get() > 40000.0, "expected date serial, got {serial:?}");
+            assert!(
+                serial.get() > 40000.0,
+                "expected date serial, got {serial:?}"
+            );
         }
         other => panic!("expected Number for DATE formula result, got {:?}", other),
     }

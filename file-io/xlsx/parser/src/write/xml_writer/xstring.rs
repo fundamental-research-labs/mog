@@ -6,11 +6,7 @@ pub(super) fn append_escaped_xstring_attr(buffer: &mut Vec<u8>, value: &str) {
     let mut i = 0;
     while i < bytes.len() {
         let byte = bytes[i];
-        if byte == b'\r'
-            && i + 2 < bytes.len()
-            && bytes[i + 1] == b'\r'
-            && bytes[i + 2] == b'\n'
-        {
+        if byte == b'\r' && i + 2 < bytes.len() && bytes[i + 1] == b'\r' && bytes[i + 2] == b'\n' {
             buffer.extend_from_slice(b"_x000D_\r\n");
             i += 3;
             continue;
@@ -45,11 +41,7 @@ pub(super) fn append_escaped_xstring_text(buffer: &mut Vec<u8>, value: &str) {
     let mut i = 0;
     while i < bytes.len() {
         let byte = bytes[i];
-        if byte == b'\r'
-            && i + 2 < bytes.len()
-            && bytes[i + 1] == b'\r'
-            && bytes[i + 2] == b'\n'
-        {
+        if byte == b'\r' && i + 2 < bytes.len() && bytes[i + 1] == b'\r' && bytes[i + 2] == b'\n' {
             buffer.extend_from_slice(b"_x000D_\r\n");
             i += 3;
             continue;

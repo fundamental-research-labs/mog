@@ -1,7 +1,7 @@
 use crate::{Point, RegressionMethod};
 
-use super::fixtures::{default_opts, pts, EPS};
 use super::super::create_regression;
+use super::fixtures::{EPS, default_opts, pts};
 
 #[test]
 fn dispatch_linear() {
@@ -11,7 +11,6 @@ fn dispatch_linear() {
     assert!((result.coefficients[1] - 2.0).abs() < EPS);
 }
 
-
 #[test]
 fn dispatch_quad() {
     let data = pts(&[(0.0, 0.0), (1.0, 1.0), (2.0, 4.0), (3.0, 9.0), (4.0, 16.0)]);
@@ -19,7 +18,6 @@ fn dispatch_quad() {
     assert_eq!(result.method, RegressionMethod::Quad);
     assert_eq!(result.order, Some(2));
 }
-
 
 #[test]
 fn dispatch_poly() {
@@ -33,7 +31,6 @@ fn dispatch_poly() {
     assert_eq!(result.method, RegressionMethod::Poly);
     assert_eq!(result.order, Some(3));
 }
-
 
 #[test]
 fn dispatch_exp() {
@@ -50,7 +47,6 @@ fn dispatch_exp() {
     assert_eq!(result.method, RegressionMethod::Exp);
 }
 
-
 #[test]
 fn dispatch_log() {
     let data: Vec<Point> = (1..=5)
@@ -62,7 +58,6 @@ fn dispatch_log() {
     let result = create_regression(&data, RegressionMethod::Log, 0, &default_opts());
     assert_eq!(result.method, RegressionMethod::Log);
 }
-
 
 #[test]
 fn dispatch_pow() {

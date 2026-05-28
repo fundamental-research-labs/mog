@@ -126,7 +126,9 @@ impl YrsComputeEngine {
         active_row: u32,
         active_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::toggle_format_property(self, sheet_id, ranges, property, active_row, active_col)
+        range_mutations::toggle_format_property(
+            self, sheet_id, ranges, property, active_row, active_col,
+        )
     }
 
     #[bridge::write(scope = "sheet")]
@@ -376,7 +378,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<Vec<Vec<Option<CellFormat>>>, ComputeError> {
-        range_queries::query_range_properties(self, sheet_id, start_row, start_col, end_row, end_col)
+        range_queries::query_range_properties(
+            self, sheet_id, start_row, start_col, end_row, end_col,
+        )
     }
 
     #[bridge::read(scope = "cell")]
@@ -398,7 +402,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<Vec<Vec<CellFormat>>, ComputeError> {
-        displayed::get_displayed_range_properties(self, sheet_id, start_row, start_col, end_row, end_col)
+        displayed::get_displayed_range_properties(
+            self, sheet_id, start_row, start_col, end_row, end_col,
+        )
     }
 
     #[bridge::read(scope = "sheet")]
@@ -478,5 +484,4 @@ impl YrsComputeEngine {
     ) -> CellValidationResult {
         schemas::validate_cell_value(self, sheet_id, row, col, value)
     }
-
 }

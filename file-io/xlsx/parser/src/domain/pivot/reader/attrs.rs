@@ -132,7 +132,10 @@ mod tests {
 
     #[test]
     fn axis_and_sort_unknowns_return_none() {
-        assert_eq!(parse_axis_attr(br#"<pivotField axis="axisRow"/>"#), Some(PivotAxis::Row));
+        assert_eq!(
+            parse_axis_attr(br#"<pivotField axis="axisRow"/>"#),
+            Some(PivotAxis::Row)
+        );
         assert_eq!(parse_axis_attr(br#"<pivotField axis="unknown"/>"#), None);
         assert_eq!(parse_axis_attr(br#"<pivotField/>"#), None);
 
@@ -140,7 +143,10 @@ mod tests {
             parse_sort_attr(br#"<pivotField sortType="ascending"/>"#),
             Some(SortType::Ascending)
         );
-        assert_eq!(parse_sort_attr(br#"<pivotField sortType="unknown"/>"#), None);
+        assert_eq!(
+            parse_sort_attr(br#"<pivotField sortType="unknown"/>"#),
+            None
+        );
         assert_eq!(parse_sort_attr(br#"<pivotField/>"#), None);
     }
 }

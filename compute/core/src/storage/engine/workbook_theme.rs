@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bridge_core as bridge;
 
-use super::{construction, YrsComputeEngine};
+use super::{YrsComputeEngine, construction};
 use crate::snapshot::MutationResult;
 use crate::storage::YrsStorage;
 use value_types::ComputeError;

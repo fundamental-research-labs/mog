@@ -1,6 +1,4 @@
-use crate::domain::styles::write::{
-    BorderDef, CellXfDef, FillDef, FontDef, StylesWriter,
-};
+use crate::domain::styles::write::{BorderDef, CellXfDef, FillDef, FontDef, StylesWriter};
 
 use super::fixtures::{rgb, thin_side};
 

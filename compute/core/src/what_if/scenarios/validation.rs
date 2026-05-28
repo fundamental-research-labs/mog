@@ -132,11 +132,9 @@ pub fn validate_scenario_input(
     errors
 }
 
-
 pub(super) fn scenario_error(field: &str, message: impl Into<String>) -> ScenarioValidationError {
     ScenarioValidationError {
         field: field.to_string(),
         message: message.into(),
     }
 }
-

@@ -28,12 +28,11 @@ pub use domain_types::domain::sparkline::*;
 
 pub use crate::engine_types::sparklines::*;
 pub use groups::{
-    add_sparkline_group, delete_sparkline_group, get_sparkline_group,
-    get_sparkline_groups_in_sheet,
+    add_sparkline_group, delete_sparkline_group, get_sparkline_group, get_sparkline_groups_in_sheet,
 };
 pub use items::{
-    add_sparkline, delete_sparkline, get_sparkline, get_sparkline_at_cell,
-    get_sparklines_in_sheet, has_sparkline, update_sparkline,
+    add_sparkline, delete_sparkline, get_sparkline, get_sparkline_at_cell, get_sparklines_in_sheet,
+    has_sparkline, update_sparkline,
 };
 pub use range::{clear_sparklines_for_sheet, clear_sparklines_in_range};
 

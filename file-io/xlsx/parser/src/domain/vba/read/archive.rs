@@ -1,5 +1,7 @@
-use super::{ole::parse_ole_document, signature::detect_signature_status, VbaProject};
-use crate::domain::vba::constants::{vba_project_path, OLE_MAGIC, SECTOR_SIZE_512, XLSM_CONTENT_TYPE};
+use super::{VbaProject, ole::parse_ole_document, signature::detect_signature_status};
+use crate::domain::vba::constants::{
+    OLE_MAGIC, SECTOR_SIZE_512, XLSM_CONTENT_TYPE, vba_project_path,
+};
 use crate::zip::XlsxArchive;
 
 pub fn has_vba(archive: &XlsxArchive) -> bool {

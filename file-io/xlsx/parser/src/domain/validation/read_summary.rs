@@ -13,10 +13,7 @@ pub fn parse_data_validations(
 ) {
     DataValidations::parse(xml)
         .map(|dvs| {
-            summarize_validations(
-                &dvs.validations,
-                DataValidationsContainerAttrs::from(&dvs),
-            )
+            summarize_validations(&dvs.validations, DataValidationsContainerAttrs::from(&dvs))
         })
         .unwrap_or_default()
 }
@@ -24,7 +21,10 @@ pub fn parse_data_validations(
 pub(crate) fn summarize_validations(
     validations: &[DataValidation],
     attrs: DataValidationsContainerAttrs,
-) -> (Vec<crate::output::results::DvSummary>, DataValidationsContainerAttrs) {
+) -> (
+    Vec<crate::output::results::DvSummary>,
+    DataValidationsContainerAttrs,
+) {
     let summaries = validations
         .iter()
         .map(|dv| {

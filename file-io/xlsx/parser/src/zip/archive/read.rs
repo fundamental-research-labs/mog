@@ -3,8 +3,8 @@ use super::super::constants::{COMPRESSION_DEFLATE, COMPRESSION_STORE, MAX_UNCOMP
 use super::super::decompress::decompress_deflate;
 use super::super::entry::ZipEntry;
 use super::super::error::ZipError;
-use super::validation::validate_xml_part_utf8;
 use super::XlsxArchive;
+use super::validation::validate_xml_part_utf8;
 
 impl<'a> XlsxArchive<'a> {
     /// Read a file from the archive by name

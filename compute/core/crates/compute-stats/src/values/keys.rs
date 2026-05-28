@@ -3,9 +3,7 @@ use std::sync::Arc;
 
 use value_types::CellValue;
 
-use super::group::{
-    ARRAY_KEY, BLANK_KEY, GroupKey, cell_value_to_group_key, f64_to_group_bits,
-};
+use super::group::{ARRAY_KEY, BLANK_KEY, GroupKey, cell_value_to_group_key, f64_to_group_bits};
 
 /// Convert a `CellValue` to the wire-format string key used at boundaries
 /// that cannot yet carry a typed [`GroupKey`] (XLSX OOXML parser output,

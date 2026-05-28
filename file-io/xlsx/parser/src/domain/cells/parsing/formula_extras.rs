@@ -1,9 +1,9 @@
-use super::data_tables::push_data_table_entry;
-use super::xml_text::validated_xml_text;
 use super::super::helpers::{extract_formula_extras_fused, parse_cell_ref_fast};
 use super::super::types::{
     CellData, ParseExtras, SharedFormulaMaster, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA,
 };
+use super::data_tables::push_data_table_entry;
+use super::xml_text::validated_xml_text;
 
 pub(super) fn collect_formula_extras(
     extras: &mut ParseExtras,

@@ -11,7 +11,7 @@ use ooxml_types::themes::EffectStyleItem;
 // ========================================================================
 
 /// Write an `EffectStyleItem` to XML (CT_EffectStyleItem).
-pub(super) fn write_effect_style_item( xml: &mut XmlWriter, item: &EffectStyleItem) {
+pub(super) fn write_effect_style_item(xml: &mut XmlWriter, item: &EffectStyleItem) {
     xml.start_element_ns("a", "effectStyle").end_attrs();
 
     // Effect properties (required per spec; write empty effectLst if None)
@@ -36,7 +36,7 @@ pub(super) fn write_effect_style_item( xml: &mut XmlWriter, item: &EffectStyleIt
 }
 
 /// Write effect properties (effectLst or effectDag).
-pub(super) fn write_effect_properties( xml: &mut XmlWriter, props: &EffectProperties) {
+pub(super) fn write_effect_properties(xml: &mut XmlWriter, props: &EffectProperties) {
     match props {
         EffectProperties::EffectList(list) => {
             write_effect_list(xml, list);
@@ -48,7 +48,7 @@ pub(super) fn write_effect_properties( xml: &mut XmlWriter, props: &EffectProper
 }
 
 /// Write an effect list (CT_EffectList).
-pub(super) fn write_effect_list( xml: &mut XmlWriter, list: &EffectList) {
+pub(super) fn write_effect_list(xml: &mut XmlWriter, list: &EffectList) {
     let is_empty = list.blur.is_none()
         && list.fill_overlay.is_none()
         && list.glow.is_none()
@@ -95,7 +95,7 @@ pub(super) fn write_effect_list( xml: &mut XmlWriter, list: &EffectList) {
 }
 
 /// Write a blur effect.
-pub(super) fn write_blur( xml: &mut XmlWriter, blur: &BlurEffect) {
+pub(super) fn write_blur(xml: &mut XmlWriter, blur: &BlurEffect) {
     let elem = xml.start_element_ns("a", "blur");
     elem.attr("rad", &blur.rad.value().to_string());
     elem.attr("grow", if blur.grow { "1" } else { "0" });
@@ -103,7 +103,7 @@ pub(super) fn write_blur( xml: &mut XmlWriter, blur: &BlurEffect) {
 }
 
 /// Write a fill overlay effect.
-pub(super) fn write_fill_overlay( xml: &mut XmlWriter, fo: &FillOverlayEffect) {
+pub(super) fn write_fill_overlay(xml: &mut XmlWriter, fo: &FillOverlayEffect) {
     xml.start_element_ns("a", "fillOverlay")
         .attr("blend", fo.blend.to_ooxml())
         .end_attrs();
@@ -114,7 +114,7 @@ pub(super) fn write_fill_overlay( xml: &mut XmlWriter, fo: &FillOverlayEffect) {
 }
 
 /// Write a glow effect.
-pub(super) fn write_glow( xml: &mut XmlWriter, glow: &Glow) {
+pub(super) fn write_glow(xml: &mut XmlWriter, glow: &Glow) {
     xml.start_element_ns("a", "glow")
         .attr("rad", &glow.rad.value().to_string())
         .end_attrs();
@@ -125,7 +125,7 @@ pub(super) fn write_glow( xml: &mut XmlWriter, glow: &Glow) {
 }
 
 /// Write an inner shadow effect.
-pub(super) fn write_inner_shadow( xml: &mut XmlWriter, s: &InnerShadow) {
+pub(super) fn write_inner_shadow(xml: &mut XmlWriter, s: &InnerShadow) {
     xml.start_element_ns("a", "innerShdw")
         .attr("blurRad", &s.blur_rad.value().to_string())
         .attr("dist", &s.dist.value().to_string())
@@ -138,7 +138,7 @@ pub(super) fn write_inner_shadow( xml: &mut XmlWriter, s: &InnerShadow) {
 }
 
 /// Write an outer shadow effect.
-pub(super) fn write_outer_shadow( xml: &mut XmlWriter, s: &OuterShadow) {
+pub(super) fn write_outer_shadow(xml: &mut XmlWriter, s: &OuterShadow) {
     let elem = xml.start_element_ns("a", "outerShdw");
     // Only emit optional attributes when they differ from XSD defaults
     if s.blur_rad.value() != 0 {
@@ -176,7 +176,7 @@ pub(super) fn write_outer_shadow( xml: &mut XmlWriter, s: &OuterShadow) {
 }
 
 /// Write a preset shadow effect.
-pub(super) fn write_preset_shadow( xml: &mut XmlWriter, s: &PresetShadow) {
+pub(super) fn write_preset_shadow(xml: &mut XmlWriter, s: &PresetShadow) {
     xml.start_element_ns("a", "prstShdw")
         .attr("prst", s.preset.to_ooxml())
         .attr("dist", &s.dist.value().to_string())
@@ -189,7 +189,7 @@ pub(super) fn write_preset_shadow( xml: &mut XmlWriter, s: &PresetShadow) {
 }
 
 /// Write a reflection effect.
-pub(super) fn write_reflection( xml: &mut XmlWriter, r: &Reflection) {
+pub(super) fn write_reflection(xml: &mut XmlWriter, r: &Reflection) {
     let elem = xml.start_element_ns("a", "reflection");
     elem.attr("blurRad", &r.blur_rad.value().to_string());
     elem.attr("stA", &r.start_alpha.value().to_string());
@@ -211,14 +211,14 @@ pub(super) fn write_reflection( xml: &mut XmlWriter, r: &Reflection) {
 }
 
 /// Write a soft edge effect.
-pub(super) fn write_soft_edge( xml: &mut XmlWriter, se: &SoftEdge) {
+pub(super) fn write_soft_edge(xml: &mut XmlWriter, se: &SoftEdge) {
     xml.start_element_ns("a", "softEdge")
         .attr("rad", &se.rad.value().to_string())
         .self_close();
 }
 
 /// Write an effect container (effectDag or nested cont).
-pub(super) fn write_effect_container( xml: &mut XmlWriter, tag: &str, container: &EffectContainer) {
+pub(super) fn write_effect_container(xml: &mut XmlWriter, tag: &str, container: &EffectContainer) {
     let elem = xml.start_element_ns("a", tag);
     if let Some(ct) = &container.container_type {
         elem.attr("type", ct.to_ooxml());
@@ -239,7 +239,7 @@ pub(super) fn write_effect_container( xml: &mut XmlWriter, tag: &str, container:
 }
 
 /// Write a single DAG effect (EG_Effect).
-pub(super) fn write_dag_effect( xml: &mut XmlWriter, effect: &DagEffect) {
+pub(super) fn write_dag_effect(xml: &mut XmlWriter, effect: &DagEffect) {
     match effect {
         DagEffect::Container(c) => {
             write_effect_container(xml, "cont", c);

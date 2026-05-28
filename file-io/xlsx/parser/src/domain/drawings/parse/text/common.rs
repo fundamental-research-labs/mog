@@ -1,7 +1,9 @@
-use super::super::styling::{parse_color, parse_fill};
 use super::super::super::helpers::{extract_attr_value_in_element, parse_u32};
-use super::super::super::reader::elements::{direct_child_elements, direct_child_slice, document_element_slice};
+use super::super::super::reader::elements::{
+    direct_child_elements, direct_child_slice, document_element_slice,
+};
 use super::super::super::types::{ExtensionList, Fill, SolidFill, TextSpacing};
+use super::super::styling::{parse_color, parse_fill};
 
 pub(super) fn parse_direct_fill_choice(xml: &[u8]) -> Option<Fill> {
     direct_child_elements(xml).find_map(|child| {

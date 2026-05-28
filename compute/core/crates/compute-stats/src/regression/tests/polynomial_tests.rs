@@ -1,7 +1,7 @@
 use crate::{Point, RegressionMethod};
 
-use super::fixtures::{default_opts, pts, EPS};
 use super::super::polynomial_regression;
+use super::fixtures::{EPS, default_opts, pts};
 
 #[test]
 fn poly_perfect_quadratic() {
@@ -17,7 +17,6 @@ fn poly_perfect_quadratic() {
     assert_eq!(result.method, RegressionMethod::Quad);
     assert_eq!(result.order, Some(2));
 }
-
 
 #[test]
 fn poly_known_cubic() {
@@ -41,7 +40,6 @@ fn poly_known_cubic() {
     assert_eq!(result.order, Some(3));
 }
 
-
 #[test]
 fn poly_degree_1_delegates_to_linear() {
     let data = pts(&[(1.0, 3.0), (2.0, 5.0), (3.0, 7.0)]);
@@ -50,7 +48,6 @@ fn poly_degree_1_delegates_to_linear() {
     assert_eq!(result.method, RegressionMethod::Linear);
     assert!((result.coefficients[1] - 2.0).abs() < EPS);
 }
-
 
 #[test]
 fn poly_empty_data() {
@@ -61,7 +58,6 @@ fn poly_empty_data() {
     assert!(result.r_squared.is_nan());
     assert!(result.points.is_empty());
 }
-
 
 #[test]
 fn poly_degree_clamped_to_6() {
@@ -75,7 +71,6 @@ fn poly_degree_clamped_to_6() {
     let result = polynomial_regression(&data, 10, &default_opts());
     assert_eq!(result.order, Some(6));
 }
-
 
 #[test]
 fn poly_quadratic_with_intercept() {
@@ -95,7 +90,6 @@ fn poly_quadratic_with_intercept() {
     assert!((result.coefficients[1] - 3.0).abs() < 1e-4, "a1 ~ 3");
     assert!((result.coefficients[2] - 2.0).abs() < 1e-4, "a2 ~ 2");
 }
-
 
 #[test]
 fn poly_equation_string() {

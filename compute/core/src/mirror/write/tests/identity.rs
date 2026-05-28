@@ -146,7 +146,9 @@ fn register_ghost_cell_writes_null_into_col_data_outside_projections() {
 fn register_ghost_cell_preserves_projected_col_data() {
     let (mut mirror, sheet_id) = make_mirror();
     let source_id = CellId::from_raw(124);
-    mirror.projection_registry.register(source_id, sheet_id, 1, 1, 2, 2);
+    mirror
+        .projection_registry
+        .register(source_id, sheet_id, 1, 1, 2, 2);
     mirror.materialize_projection(
         &sheet_id,
         1,
@@ -167,7 +169,9 @@ fn register_ghost_cell_preserves_projected_col_data() {
 fn ensure_cell_id_preserves_projected_col_data() {
     let (mut mirror, sheet_id) = make_mirror();
     let source_id = CellId::from_raw(126);
-    mirror.projection_registry.register(source_id, sheet_id, 3, 3, 1, 2);
+    mirror
+        .projection_registry
+        .register(source_id, sheet_id, 3, 3, 1, 2);
     mirror.materialize_projection(
         &sheet_id,
         3,

@@ -4,8 +4,8 @@ use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
 use yrs::{Doc, MapRef, Transact};
 
-use super::read::has_data_at;
 use super::super::grid_helpers::get_cells_map;
+use super::read::has_data_at;
 use cell_types::SheetId;
 
 /// Find the data edge from a cell in a given direction (Ctrl+Arrow navigation).

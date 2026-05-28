@@ -284,12 +284,10 @@ fn test_no_fill_roundtrip() {
 }
 
 use crate::domain::drawings::{
-    BlipFill as ReadBlipFill, GradientFill as ReadGradientFill,
-    GradientStop as ReadGradientStop, PictureNonVisual, SpreadsheetPicture,
+    BlipFill as ReadBlipFill, GradientFill as ReadGradientFill, GradientStop as ReadGradientStop,
+    PictureNonVisual, SpreadsheetPicture,
 };
-use ooxml_types::drawings::{
-    BlackWhiteMode, BlipEffect, CompressionState, FillMode, SourceRect,
-};
+use ooxml_types::drawings::{BlackWhiteMode, BlipEffect, CompressionState, FillMode, SourceRect};
 
 /// Helper: build a fully-populated read-side `SpreadsheetPicture` for testing.
 fn full_picture() -> SpreadsheetPicture {
@@ -862,7 +860,10 @@ fn conversion_outcome_reports_chart_graphic_frame_relationship() {
 
     assert_eq!(outcome.status, ConversionStatus::Emitted);
     assert_eq!(outcome.relationship_ids, ["rId7"]);
-    assert!(matches!(outcome.object, Some(write::DrawingObject::Chart(_))));
+    assert!(matches!(
+        outcome.object,
+        Some(write::DrawingObject::Chart(_))
+    ));
 }
 
 #[test]

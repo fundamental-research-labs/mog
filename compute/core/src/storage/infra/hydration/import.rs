@@ -27,8 +27,7 @@ use super::workbook::{
     hydrate_workbook_pivot_cache_records, hydrate_workbook_protection,
     hydrate_workbook_root_namespaces, hydrate_workbook_slicers, hydrate_workbook_table_styles,
     hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
-    hydrate_workbook_views,
-    hydrate_workbook_web_publishing,
+    hydrate_workbook_views, hydrate_workbook_web_publishing,
 };
 use super::{HydrationIdMap, IdAllocator};
 

@@ -37,7 +37,7 @@ pub use attributes::{extract_quoted_value, find_attr_simd, matches_at};
 pub use cursor::XmlScanner;
 pub use primitives::{find_any_simd, find_gt_simd, find_lt_simd, skip_whitespace_simd};
 pub use tags::{
-    find_closing_tag, find_element_end, find_start_tag_end_quoted, find_tag_simd, StartTagEnd,
+    StartTagEnd, find_closing_tag, find_element_end, find_start_tag_end_quoted, find_tag_simd,
 };
 
 #[cfg(test)]

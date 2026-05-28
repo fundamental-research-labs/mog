@@ -138,7 +138,8 @@ mod tests {
     #[test]
     fn local_only_unordered_path_matching() {
         let mut opts = XmlDiffOptions::default();
-        opts.unordered_element_paths.insert("/root/items".to_string());
+        opts.unordered_element_paths
+            .insert("/root/items".to_string());
         assert!(opts.contains_path(
             "/{http://example.com/ns}root/{http://example.com/ns}items",
             "/root/items"

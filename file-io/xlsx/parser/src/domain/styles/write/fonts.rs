@@ -1,6 +1,4 @@
-use crate::domain::styles::types::{
-    FontDef, UnderlineStyle, VerticalAlignRun,
-};
+use crate::domain::styles::types::{FontDef, UnderlineStyle, VerticalAlignRun};
 use crate::write::xml_writer::XmlWriter;
 
 use super::colors::write_color;

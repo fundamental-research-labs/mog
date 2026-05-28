@@ -15,7 +15,11 @@ pub(super) fn write_sparkline(sparkline: &Sparkline, writer: &mut XmlWriter) {
 }
 
 /// Write a color element to an XmlWriter.
-pub(super) fn write_color_element(writer: &mut XmlWriter, name: &str, color: &Option<SparklineColor>) {
+pub(super) fn write_color_element(
+    writer: &mut XmlWriter,
+    name: &str,
+    color: &Option<SparklineColor>,
+) {
     if let Some(c) = color {
         if let Some(ref rgb) = c.rgb {
             writer.start_element_ns("x14", name).attr("rgb", rgb);

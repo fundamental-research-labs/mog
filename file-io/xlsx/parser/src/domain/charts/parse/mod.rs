@@ -110,9 +110,7 @@ impl Chart {
         // Parse floor
         if let Some(floor_start) = find_tag_simd(xml, b"floor", chart_start) {
             let floor_end = find_closing_tag(xml, b"floor", floor_start).unwrap_or(xml.len());
-            chart.floor = Some(surfaces::parse_chart_surface(
-                &xml[floor_start..floor_end],
-            ));
+            chart.floor = Some(surfaces::parse_chart_surface(&xml[floor_start..floor_end]));
         }
 
         // Parse sideWall

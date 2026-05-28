@@ -1,6 +1,6 @@
-use super::para_props::parse_para_props;
 use super::super::super::reader::elements::direct_child_slice;
 use super::super::super::types::TextListStyle;
+use super::para_props::parse_para_props;
 
 pub(super) fn parse_list_style(xml: &[u8]) -> Option<TextListStyle> {
     let mut style = TextListStyle::default();

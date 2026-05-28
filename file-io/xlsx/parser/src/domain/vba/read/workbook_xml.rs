@@ -1,4 +1,4 @@
-use super::{SheetCodeName, VbaRelationship, VBA_RELATIONSHIP_TYPE};
+use super::{SheetCodeName, VBA_RELATIONSHIP_TYPE, VbaRelationship};
 use crate::domain::vba::constants::workbook_rels_path;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_tag_simd};
 use crate::zip::XlsxArchive;
@@ -173,7 +173,8 @@ mod tests {
 
     #[test]
     fn test_sheet_missing_name_with_code_name() {
-        let xml = br#"<workbook><sheets><sheet sheetId="1" codeName="DataCode"/></sheets></workbook>"#;
+        let xml =
+            br#"<workbook><sheets><sheet sheetId="1" codeName="DataCode"/></sheets></workbook>"#;
         let mut code_names = Vec::new();
         parse_sheet_code_names(xml, &mut code_names);
 

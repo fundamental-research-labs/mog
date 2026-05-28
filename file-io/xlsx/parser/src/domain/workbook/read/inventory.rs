@@ -5,20 +5,16 @@ use crate::domain::content_types::read::{
 use crate::domain::workbook::types::SheetState;
 use crate::infra::opc::{REL_WORKSHEET, resolve_relationship_target};
 use crate::zip::XlsxArchive;
-use domain_types::{
-    PackageDiagnosticRef, WorkbookSheetKind, WorkbookSheetPackageInfo,
-};
+use domain_types::{PackageDiagnosticRef, WorkbookSheetKind, WorkbookSheetPackageInfo};
 
 const REL_CHARTSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet";
 const REL_DIALOGSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet";
-const REL_MACRO_SHEET: &str =
-    "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet";
+const REL_MACRO_SHEET: &str = "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet";
 const CONTENT_TYPE_DIALOGSHEET: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml";
-const CONTENT_TYPE_MACRO_SHEET: &str =
-    "application/vnd.ms-excel.macrosheet+xml";
+const CONTENT_TYPE_MACRO_SHEET: &str = "application/vnd.ms-excel.macrosheet+xml";
 
 /// Parser-facing package context for sheet-owned parts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,9 +133,7 @@ pub fn build_workbook_sheet_inventory(
                         if !archive.contains(&path) {
                             diagnostics.push(package_diag(
                                 "workbook_sheet_missing_target_part",
-                                format!(
-                                    "workbook sheet target {path} is missing from the package"
-                                ),
+                                format!("workbook sheet target {path} is missing from the package"),
                             ));
                         }
                         content_type = content_types
@@ -149,10 +143,7 @@ pub fn build_workbook_sheet_inventory(
                     }
                     Err(err) => diagnostics.push(package_diag(
                         "workbook_sheet_invalid_target",
-                        format!(
-                            "workbook sheet target {} is invalid: {:?}",
-                            rel.target, err
-                        ),
+                        format!("workbook sheet target {} is invalid: {:?}", rel.target, err),
                     )),
                 }
             }
@@ -168,10 +159,7 @@ pub fn build_workbook_sheet_inventory(
         ) {
             diagnostics.push(package_diag(
                 "workbook_sheet_unsupported_kind",
-                format!(
-                    "workbook sheet {} is classified as {:?}",
-                    sheet.name, kind
-                ),
+                format!("workbook sheet {} is classified as {:?}", sheet.name, kind),
             ));
         }
         if matches!(kind, WorkbookSheetKind::Invalid) {
@@ -216,9 +204,7 @@ pub fn build_workbook_sheet_inventory(
 }
 
 #[must_use]
-pub fn sheet_package_contexts(
-    inventory: &[WorkbookSheetPackageInfo],
-) -> Vec<SheetPackageContext> {
+pub fn sheet_package_contexts(inventory: &[WorkbookSheetPackageInfo]) -> Vec<SheetPackageContext> {
     inventory
         .iter()
         .filter(|entry| entry.editable_sheet_index.is_some())
@@ -231,9 +217,7 @@ fn classify_sheet_kind(
     content_type: Option<&str>,
 ) -> WorkbookSheetKind {
     match (relationship_type, content_type) {
-        (Some(REL_WORKSHEET), Some(CONTENT_TYPE_WORKSHEET) | None) => {
-            WorkbookSheetKind::Worksheet
-        }
+        (Some(REL_WORKSHEET), Some(CONTENT_TYPE_WORKSHEET) | None) => WorkbookSheetKind::Worksheet,
         (Some(REL_CHARTSHEET), Some(CONTENT_TYPE_CHARTSHEET) | None) => {
             WorkbookSheetKind::Chartsheet
         }
@@ -252,10 +236,7 @@ fn classify_sheet_kind(
     }
 }
 
-fn package_diag(
-    code: impl Into<String>,
-    message: impl Into<String>,
-) -> PackageDiagnosticRef {
+fn package_diag(code: impl Into<String>, message: impl Into<String>) -> PackageDiagnosticRef {
     PackageDiagnosticRef {
         code: code.into(),
         message: message.into(),

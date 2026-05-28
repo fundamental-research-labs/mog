@@ -1,8 +1,8 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_string_attr_single_quote};
 
-use super::support::parse_color_ref;
 use super::super::types::*;
+use super::support::parse_color_ref;
 
 /// Parse a border side element (e.g., <left style="thin"><color rgb="FF000000"/></left>)
 pub(super) fn parse_border_side(xml: &[u8], tag: &[u8]) -> Option<BorderSideDef> {

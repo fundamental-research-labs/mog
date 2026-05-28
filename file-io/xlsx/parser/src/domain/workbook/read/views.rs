@@ -56,8 +56,7 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
             extract_quoted_value(elem, vs)
                 .and_then(|(s, e)| std::str::from_utf8(&elem[s..e]).ok().map(|s| s.to_string()))
         });
-        view.auto_filter_date_grouping =
-            parse_bool(b"autoFilterDateGrouping=\"", true);
+        view.auto_filter_date_grouping = parse_bool(b"autoFilterDateGrouping=\"", true);
 
         views.push(view);
         offset = tag_end;

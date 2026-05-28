@@ -1,5 +1,5 @@
-use crate::mirror::test_helpers::{make_cell_id, make_sheet_id};
 use crate::mirror::CellMirror;
+use crate::mirror::test_helpers::{make_cell_id, make_sheet_id};
 use cell_types::SheetId;
 use domain_types::domain::table::{Table as CanonicalTable, TableColumn};
 use formula_types::{NamedRangeDef, Scope};

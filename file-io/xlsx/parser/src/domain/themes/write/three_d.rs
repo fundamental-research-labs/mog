@@ -7,7 +7,7 @@ use ooxml_types::drawings::{Backdrop, Bevel, Scene3D, Shape3D};
 // ========================================================================
 
 /// Write a Scene3D element (CT_Scene3D).
-pub(super) fn write_scene_3d( xml: &mut XmlWriter, scene: &Scene3D) {
+pub(super) fn write_scene_3d(xml: &mut XmlWriter, scene: &Scene3D) {
     xml.start_element_ns("a", "scene3d").end_attrs();
 
     // Camera
@@ -62,7 +62,7 @@ pub(super) fn write_scene_3d( xml: &mut XmlWriter, scene: &Scene3D) {
 }
 
 /// Write a backdrop (CT_Backdrop).
-pub(super) fn write_backdrop( xml: &mut XmlWriter, backdrop: &Backdrop) {
+pub(super) fn write_backdrop(xml: &mut XmlWriter, backdrop: &Backdrop) {
     xml.start_element_ns("a", "backdrop").end_attrs();
 
     // Anchor point
@@ -90,7 +90,7 @@ pub(super) fn write_backdrop( xml: &mut XmlWriter, backdrop: &Backdrop) {
 }
 
 /// Write Shape3D properties (CT_Shape3D).
-pub(super) fn write_shape_3d( xml: &mut XmlWriter, sp3d: &Shape3D) {
+pub(super) fn write_shape_3d(xml: &mut XmlWriter, sp3d: &Shape3D) {
     let elem = xml.start_element_ns("a", "sp3d");
     if let Some(eh) = sp3d.extrusion_h {
         elem.attr("extrusionH", &eh.value().to_string());
@@ -145,7 +145,7 @@ pub(super) fn write_shape_3d( xml: &mut XmlWriter, sp3d: &Shape3D) {
 }
 
 /// Write a bevel element (CT_Bevel).
-pub(super) fn write_bevel( xml: &mut XmlWriter, tag: &str, bevel: &Bevel) {
+pub(super) fn write_bevel(xml: &mut XmlWriter, tag: &str, bevel: &Bevel) {
     let elem = xml.start_element_ns("a", tag);
     if let Some(w) = bevel.w {
         elem.attr("w", &w.value().to_string());

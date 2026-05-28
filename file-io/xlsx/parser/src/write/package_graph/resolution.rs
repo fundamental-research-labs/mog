@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::{
-    PackageOwner, PackagePart, PackageRelationship, PackageRelationshipTarget,
-    normalize_part_path, relative_target,
+    PackageOwner, PackagePart, PackageRelationship, PackageRelationshipTarget, normalize_part_path,
+    relative_target,
 };
 use crate::write::write_error::WriteError;
 

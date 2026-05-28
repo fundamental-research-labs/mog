@@ -1,6 +1,5 @@
 use super::xml::{
-    checked_xml_text, decode_xml_entities, extract_attr_value_in_range,
-    find_element_end_simple,
+    checked_xml_text, decode_xml_entities, extract_attr_value_in_range, find_element_end_simple,
 };
 use crate::infra::scanner::find_tag_simd;
 use crate::zip::constants::MAX_RELATIONSHIPS_PER_PART;

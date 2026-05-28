@@ -7,19 +7,23 @@ pub(super) fn build_package_fidelity_metadata(
         content_type_defaults: result
             .content_type_defaults
             .iter()
-            .map(|(extension, content_type)| domain_types::PackageContentTypeDefaultHint {
-                extension: extension.clone(),
-                content_type: content_type.clone(),
-            })
+            .map(
+                |(extension, content_type)| domain_types::PackageContentTypeDefaultHint {
+                    extension: extension.clone(),
+                    content_type: content_type.clone(),
+                },
+            )
             .collect(),
         content_type_overrides: result
             .content_type_overrides
             .iter()
-            .map(|(part_name, content_type)| domain_types::PackageContentTypeOverrideHint {
-                part_name: domain_types::normalize_package_path(part_name),
-                original_part_name: part_name.clone(),
-                content_type: content_type.clone(),
-            })
+            .map(
+                |(part_name, content_type)| domain_types::PackageContentTypeOverrideHint {
+                    part_name: domain_types::normalize_package_path(part_name),
+                    original_part_name: part_name.clone(),
+                    content_type: content_type.clone(),
+                },
+            )
             .collect(),
         root_relationships: result
             .root_relationships

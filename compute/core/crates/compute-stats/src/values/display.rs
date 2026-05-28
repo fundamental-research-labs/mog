@@ -30,7 +30,8 @@ pub fn cell_value_to_display_key(value: &CellValue) -> String {
     }
 
     match value {
-        CellValue::Number(n) => {
+        CellValue::Number(n) =>
+        {
             #[allow(clippy::float_cmp, clippy::cast_possible_truncation)]
             if n.get() == n.trunc() && n.abs() < 1e15 {
                 format!("{}", n.get() as i64)

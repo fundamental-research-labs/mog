@@ -6,9 +6,7 @@ use super::yrs_access::{
 };
 use crate::identity::GridIndex;
 use cell_types::SheetId;
-use compute_document::schema::{
-    KEY_FILTER_HIDDEN_ROWS, KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS,
-};
+use compute_document::schema::{KEY_FILTER_HIDDEN_ROWS, KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS};
 use compute_document::undo::ORIGIN_USER_EDIT;
 
 /// Hide rows for manual/user ownership.

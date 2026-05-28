@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_str_to_cell_value_number() {

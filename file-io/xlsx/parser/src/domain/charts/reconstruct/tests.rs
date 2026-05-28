@@ -1,7 +1,5 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use domain_types::chart::{
-    AnchorPosition, ChartSpec, ChartType as DomainChartType, ObjectSize,
-};
+use domain_types::chart::{AnchorPosition, ChartSpec, ChartType as DomainChartType, ObjectSize};
 
 use super::{ranges, reconstruct_chart_space};
 

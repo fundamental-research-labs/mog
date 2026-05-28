@@ -7,7 +7,7 @@ use ooxml_types::drawings::{DrawingFill, GradientFill, GradientStop, PatternFill
 // ========================================================================
 
 /// Write a `DrawingFill` to XML (ECMA-376 EG_FillProperties).
-pub(super) fn write_drawing_fill( xml: &mut XmlWriter, fill: &DrawingFill) {
+pub(super) fn write_drawing_fill(xml: &mut XmlWriter, fill: &DrawingFill) {
     match fill {
         DrawingFill::NoFill => {
             xml.start_element_ns("a", "noFill").self_close();
@@ -30,7 +30,7 @@ pub(super) fn write_drawing_fill( xml: &mut XmlWriter, fill: &DrawingFill) {
 }
 
 /// Write a gradient fill.
-pub(super) fn write_gradient_fill( xml: &mut XmlWriter, g: &GradientFill) {
+pub(super) fn write_gradient_fill(xml: &mut XmlWriter, g: &GradientFill) {
     let elem = xml.start_element_ns("a", "gradFill");
     if let Some(flip) = &g.flip {
         elem.attr("flip", flip.to_ooxml());
@@ -76,7 +76,7 @@ pub(super) fn write_gradient_fill( xml: &mut XmlWriter, g: &GradientFill) {
 }
 
 /// Write a gradient stop.
-fn write_gradient_stop( xml: &mut XmlWriter, stop: &GradientStop) {
+fn write_gradient_stop(xml: &mut XmlWriter, stop: &GradientStop) {
     xml.start_element_ns("a", "gs")
         .attr("pos", &stop.position.value().to_string())
         .end_attrs();
@@ -85,7 +85,7 @@ fn write_gradient_stop( xml: &mut XmlWriter, stop: &GradientStop) {
 }
 
 /// Write a relative rectangle element.
-pub(super) fn write_relative_rect( xml: &mut XmlWriter, tag: &str, rect: &RelativeRect) {
+pub(super) fn write_relative_rect(xml: &mut XmlWriter, tag: &str, rect: &RelativeRect) {
     // Split "a:fillToRect" -> ("a", "fillToRect")
     let (ns, local) = tag.split_once(':').unwrap_or(("a", tag));
     let elem = xml.start_element_ns(ns, local);
@@ -105,7 +105,7 @@ pub(super) fn write_relative_rect( xml: &mut XmlWriter, tag: &str, rect: &Relati
 }
 
 /// Write a pattern fill.
-pub(super) fn write_pattern_fill( xml: &mut XmlWriter, p: &PatternFill) {
+pub(super) fn write_pattern_fill(xml: &mut XmlWriter, p: &PatternFill) {
     let elem = xml.start_element_ns("a", "pattFill");
     if let Some(prst) = &p.preset {
         elem.attr("prst", prst.to_ooxml());

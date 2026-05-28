@@ -1,7 +1,7 @@
 use super::shared;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::services;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::services;
 use crate::storage::sheet::hyperlinks;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -103,9 +103,6 @@ impl YrsComputeEngine {
                 }
             }
         }
-        Ok((
-            shared::empty_patches(),
-            MutationResult::empty(),
-        ))
+        Ok((shared::empty_patches(), MutationResult::empty()))
     }
 }

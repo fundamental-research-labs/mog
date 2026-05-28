@@ -4,10 +4,9 @@ use super::{
     CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DOC_METADATA_LABEL_INFO, CT_EXTENDED_PROPERTIES,
     CT_METADATA, CT_SHARED_STRINGS, CT_STYLES, CT_THEME, CT_WORKBOOK, CT_WORKSHEET,
     PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind, PackageRelationship,
-    PackageRelationshipTarget, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES,
-    REL_EXTENDED_PROPERTIES, REL_METADATA, REL_OFFICE_DOCUMENT, REL_PERSON, REL_SHARED_STRINGS,
-    REL_STYLES, REL_THEME, REL_WORKSHEET, ResolvedPackageGraph, imported_relationship_identity_hint,
-    normalize_part_path,
+    PackageRelationshipTarget, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_EXTENDED_PROPERTIES,
+    REL_METADATA, REL_OFFICE_DOCUMENT, REL_PERSON, REL_SHARED_STRINGS, REL_STYLES, REL_THEME,
+    REL_WORKSHEET, ResolvedPackageGraph, imported_relationship_identity_hint, normalize_part_path,
 };
 use crate::write::write_error::WriteError;
 

@@ -1,9 +1,9 @@
-use super::cell_extras::{CellExtrasInput, collect_cell_extras};
-use super::formula_extras::collect_formula_extras;
-use super::rows::apply_fast_row_attrs;
 use super::super::adapters::{find_byte, find_sequence};
 use super::super::helpers::{ScanResult, find_sheet_data, parse_row_number, scan_cell};
 use super::super::types::{CellData, ParseExtras};
+use super::cell_extras::{CellExtrasInput, collect_cell_extras};
+use super::formula_extras::collect_formula_extras;
+use super::rows::apply_fast_row_attrs;
 use ooxml_types::worksheet::RowHeight;
 
 pub(super) fn parse_worksheet_core(

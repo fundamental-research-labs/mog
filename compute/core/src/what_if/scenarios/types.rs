@@ -65,4 +65,3 @@ pub(crate) struct ScenarioRestorePlan {
     pub edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)>,
     pub result: ScenarioRestoreResult,
 }
-

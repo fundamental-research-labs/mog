@@ -1,14 +1,12 @@
 use domain_types::chart::{
-    ChartDataTableData, ChartFontData, ChartFormatData, ChartView3DData, DataLabelData,
-    LegendData, LegendEntryData,
+    ChartDataTableData, ChartFontData, ChartFormatData, ChartView3DData, DataLabelData, LegendData,
+    LegendEntryData,
 };
 use ooxml_types::charts::{
     self, ChartSurface, ChartText, DataLabelOptions, DataLabelPosition, DataTableConfig,
     LegendPosition, NumFmt, View3D,
 };
-use ooxml_types::drawings::{
-    Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent,
-};
+use ooxml_types::drawings::{Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent};
 
 use super::formatting::{build_run_properties, build_shape_properties, build_text_body};
 

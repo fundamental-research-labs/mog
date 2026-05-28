@@ -1,10 +1,12 @@
+use super::super::super::helpers::{extract_attr_value_in_element, parse_i64, parse_u32};
+use super::super::super::reader::elements::{direct_child_elements, direct_child_slice};
+use super::super::super::types::{
+    ParagraphProperties, TextFontAlignType, TextTabAlignType, TextTabStop,
+};
 use super::bullets::parse_bullet_props;
 use super::common::{parse_ext_lst, parse_text_spacing};
 use super::enums::parse_text_align;
 use super::run_props::parse_run_props;
-use super::super::super::helpers::{extract_attr_value_in_element, parse_i64, parse_u32};
-use super::super::super::reader::elements::{direct_child_elements, direct_child_slice};
-use super::super::super::types::{ParagraphProperties, TextFontAlignType, TextTabAlignType, TextTabStop};
 use ooxml_types::drawings::StTextIndentLevelType;
 
 pub(super) fn parse_para_props(xml: &[u8]) -> ParagraphProperties {

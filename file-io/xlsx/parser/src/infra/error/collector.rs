@@ -242,8 +242,7 @@ mod tests {
     fn test_lenient_max_zero_tracks_fatal_without_storing() {
         let mut collector = ErrorCollector::with_max_errors(ParseMode::Lenient, 0);
 
-        let cont =
-            collector.add_error(ParseErrorDetail::fatal(ErrorCode::DataCorruption, "fatal"));
+        let cont = collector.add_error(ParseErrorDetail::fatal(ErrorCode::DataCorruption, "fatal"));
 
         assert!(!cont);
         assert!(collector.has_fatal_error());

@@ -68,7 +68,10 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
             _ => Ok(EvalValue::Cell(CellValue::error_with_message(
                 CellError::Ref,
-                format!("3-D ref: sheet '{}' or '{}' not found", start_name, end_name),
+                format!(
+                    "3-D ref: sheet '{}' or '{}' not found",
+                    start_name, end_name
+                ),
             ))),
         }
     }

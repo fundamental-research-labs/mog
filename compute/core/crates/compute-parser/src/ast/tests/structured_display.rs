@@ -73,5 +73,8 @@ fn structured_ref_this_row_display() {
         specifiers: vec![StructuredRefSpecifier::ThisRow],
     };
 
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[[#This Row]]");
+    assert_eq!(
+        format!("{}", ASTNode::StructuredRef(sr)),
+        "Table1[[#This Row]]"
+    );
 }

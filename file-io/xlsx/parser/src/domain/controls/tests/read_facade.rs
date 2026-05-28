@@ -32,6 +32,9 @@ fn read_facade_preserves_legacy_import_surface() {
     let vml_images = read::parse_vml_imagedata(
         br#"<v:shape id="_x0000_s1025"><v:imagedata o:relid="rId2"/></v:shape>"#,
     );
-    assert_eq!(vml_images.get("_x0000_s1025").map(String::as_str), Some("rId2"));
+    assert_eq!(
+        vml_images.get("_x0000_s1025").map(String::as_str),
+        Some("rId2")
+    );
     assert_eq!(read::extract_vml_shape_number("_x0000_s1025"), Some(1025));
 }

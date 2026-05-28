@@ -3,8 +3,8 @@ use ooxml_types::drawings::{
     FontCollectionIndex, FontReference, ShapeStyle, StStyleMatrixColumnIndex,
 };
 
-use super::common::{minimal_props, roundtrip, style_ref_color_rgb};
 use super::super::common::{rgb, solid_fill};
+use super::common::{minimal_props, roundtrip, style_ref_color_rgb};
 
 #[test]
 fn roundtrip_style() {

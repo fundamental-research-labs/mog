@@ -125,11 +125,7 @@ pub fn recover_style_index(raw: &str) -> u32 {
 /// # Returns
 /// A placeholder string for display
 pub fn recover_shared_string(index: usize, max: usize) -> &'static str {
-    if index >= max {
-        "#REF!"
-    } else {
-        ""
-    }
+    if index >= max { "#REF!" } else { "" }
 }
 
 #[cfg(test)]

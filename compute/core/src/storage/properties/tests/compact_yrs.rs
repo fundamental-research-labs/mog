@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_get_all_properties_resolves_compact_and_skips_malformed_entries() {
@@ -30,7 +30,12 @@ fn test_get_all_properties_resolves_compact_and_skips_malformed_entries() {
     );
     insert_compact_cell_properties(&storage, &sid, &metadata_hex, r#"{"cm":true,"vm":3}"#);
     insert_compact_cell_properties(&storage, &sid, "not-a-cell-id", r#"{"s":5}"#);
-    insert_compact_cell_properties(&storage, &sid, &id_to_hex(0x102).to_string(), r#"{"s":"bad"}"#);
+    insert_compact_cell_properties(
+        &storage,
+        &sid,
+        &id_to_hex(0x102).to_string(),
+        r#"{"s":"bad"}"#,
+    );
 
     {
         let mut txn = doc.transact_mut();

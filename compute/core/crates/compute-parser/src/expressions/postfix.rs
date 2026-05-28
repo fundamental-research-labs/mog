@@ -14,11 +14,7 @@ use super::binding::POSTFIX_BP;
 use super::range_ops::is_callable;
 
 #[inline]
-pub(super) fn try_postfix_hash(
-    input: &mut &str,
-    lhs: ASTNode,
-    min_bp: u8,
-) -> (ASTNode, bool) {
+pub(super) fn try_postfix_hash(input: &mut &str, lhs: ASTNode, min_bp: u8) -> (ASTNode, bool) {
     if !input.starts_with('#') || POSTFIX_BP < min_bp {
         return (lhs, false);
     }
@@ -49,11 +45,7 @@ fn is_spillable_anchor(node: &ASTNode) -> bool {
 }
 
 #[inline]
-pub(super) fn try_postfix_percent(
-    input: &mut &str,
-    lhs: ASTNode,
-    min_bp: u8,
-) -> (ASTNode, bool) {
+pub(super) fn try_postfix_percent(input: &mut &str, lhs: ASTNode, min_bp: u8) -> (ASTNode, bool) {
     if !input.starts_with('%') || POSTFIX_BP < min_bp {
         return (lhs, false);
     }

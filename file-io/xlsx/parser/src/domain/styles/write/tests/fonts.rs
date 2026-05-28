@@ -96,7 +96,9 @@ fn test_to_xml_with_theme_color() {
         ..Default::default()
     });
 
-    writer.fills.push(crate::domain::styles::write::FillDef::None);
+    writer
+        .fills
+        .push(crate::domain::styles::write::FillDef::None);
     writer
         .borders
         .push(crate::domain::styles::write::BorderDef::default());

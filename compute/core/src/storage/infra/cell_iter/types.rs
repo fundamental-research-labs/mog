@@ -45,4 +45,3 @@ pub struct IterCellData {
     pub value: Option<CellValue>,
     pub formula: Option<String>,
 }
-

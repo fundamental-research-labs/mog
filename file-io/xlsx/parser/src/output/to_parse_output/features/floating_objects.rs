@@ -17,9 +17,7 @@ fn normalize_hex_color(value: &str) -> Option<String> {
     Some(format!("#{hex}").to_uppercase())
 }
 
-fn alpha_transparency(
-    transforms: &[ooxml_types::drawings::ColorTransform],
-) -> Option<f64> {
+fn alpha_transparency(transforms: &[ooxml_types::drawings::ColorTransform]) -> Option<f64> {
     let mut alpha = 100_000.0;
     let mut touched = false;
 
@@ -136,7 +134,12 @@ fn project_drawing_fill(
 
 fn project_line_fill(
     fill: &ooxml_types::drawings::LineFill,
-) -> Option<(domain_types::domain::floating_object::OutlineStyle, String, Option<f64>, bool)> {
+) -> Option<(
+    domain_types::domain::floating_object::OutlineStyle,
+    String,
+    Option<f64>,
+    bool,
+)> {
     use domain_types::domain::floating_object::OutlineStyle;
     use ooxml_types::drawings::LineFill;
 
@@ -176,14 +179,8 @@ fn project_line_dash(
         }
         DashStyle::LongDash => (OutlineStyle::Dashed, Some(DomainLineDash::LgDash)),
         DashStyle::LongDashDot => (OutlineStyle::Dashed, Some(DomainLineDash::LgDashDot)),
-        DashStyle::LongDashDotDot => (
-            OutlineStyle::Dashed,
-            Some(DomainLineDash::LgDashDotDot),
-        ),
-        DashStyle::SystemDashDotDot => (
-            OutlineStyle::Dashed,
-            Some(DomainLineDash::SysDashDotDot),
-        ),
+        DashStyle::LongDashDotDot => (OutlineStyle::Dashed, Some(DomainLineDash::LgDashDotDot)),
+        DashStyle::SystemDashDotDot => (OutlineStyle::Dashed, Some(DomainLineDash::SysDashDotDot)),
     }
 }
 
@@ -209,12 +206,7 @@ fn project_shape_outline(
 
     let (mut style, color, transparency, visible) = match outline.fill.as_ref() {
         Some(fill) => project_line_fill(fill)?,
-        None => (
-            OutlineStyle::Solid,
-            String::from("#000000"),
-            None,
-            true,
-        ),
+        None => (OutlineStyle::Solid, String::from("#000000"), None, true),
     };
 
     let dash = outline.dash.as_ref().and_then(|dash| {

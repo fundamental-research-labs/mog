@@ -143,7 +143,9 @@ fn pattern_fill_without_pattern_type_omits_attribute() {
     });
 
     let xml = xml_string(&writer);
-    assert!(xml.contains("<patternFill><fgColor rgb=\"FFFF0000\"/><bgColor indexed=\"64\"/></patternFill>"));
+    assert!(xml.contains(
+        "<patternFill><fgColor rgb=\"FFFF0000\"/><bgColor indexed=\"64\"/></patternFill>"
+    ));
 }
 
 #[test]

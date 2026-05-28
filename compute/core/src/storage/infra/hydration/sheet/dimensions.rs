@@ -127,11 +127,8 @@ pub(crate) fn hydrate_dimensions(
     if !sheet.dimensions.trailing_col_ranges.is_empty()
         && let Ok(json) = serde_json::to_string(&sheet.dimensions.trailing_col_ranges)
     {
-        maps.meta_map.insert(
-            txn,
-            "trailingColRanges",
-            Any::String(Arc::from(json)),
-        );
+        maps.meta_map
+            .insert(txn, "trailingColRanges", Any::String(Arc::from(json)));
     }
 
     let custom_height_rows: Vec<u32> = sheet

@@ -6,7 +6,7 @@ use super::common::cell_value_cmp_sort;
 use crate::PureFunction;
 use crate::helpers::coercion::flatten_values;
 
-pub(super) struct FnSortBy;
+pub(in crate::lookup) struct FnSortBy;
 
 impl PureFunction for FnSortBy {
     fn name(&self) -> &'static str {

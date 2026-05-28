@@ -2,11 +2,11 @@ use cell_types::SheetId;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 
+use super::CellRange;
 use super::codec::read_sparkline_from_out;
 use super::groups::remove_sparkline_from_group_if_present;
 use super::keys::idx_key;
 use super::yrs_io::get_sheet_sparklines_map;
-use super::CellRange;
 
 pub fn clear_sparklines_in_range(
     doc: &Doc,

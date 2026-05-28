@@ -3,7 +3,7 @@ use value_types::{CellError, CellValue};
 use super::common::{is_truthy, to_array};
 use crate::PureFunction;
 
-pub(super) struct FnFilter;
+pub(in crate::lookup) struct FnFilter;
 
 impl PureFunction for FnFilter {
     fn name(&self) -> &'static str {

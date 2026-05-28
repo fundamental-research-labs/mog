@@ -1,9 +1,9 @@
 use value_types::CellValue;
 
-use super::fixtures::{text_values, texts};
 use super::super::{
     SortConfig, sort_by_custom_order, sort_by_custom_order_in_place, sort_by_in_place,
 };
+use super::fixtures::{text_values, texts};
 
 #[test]
 fn sorts_by_custom_order() {
@@ -95,12 +95,7 @@ fn custom_order_in_place() {
     let mut items = text_values(&["c", "a", "b"]);
     let custom_order = text_values(&["b", "a", "c"]);
 
-    sort_by_custom_order_in_place(
-        &mut items,
-        Clone::clone,
-        &custom_order,
-        &SortConfig::asc(),
-    );
+    sort_by_custom_order_in_place(&mut items, Clone::clone, &custom_order, &SortConfig::asc());
 
     assert_eq!(texts(&items), vec!["b", "a", "c"]);
 }
@@ -128,12 +123,7 @@ fn descending_does_not_reverse_custom_list_indices() {
     let mut items = text_values(&["low", "high", "medium"]);
     let custom_order = text_values(&["high", "medium", "low"]);
 
-    sort_by_custom_order_in_place(
-        &mut items,
-        Clone::clone,
-        &custom_order,
-        &SortConfig::desc(),
-    );
+    sort_by_custom_order_in_place(&mut items, Clone::clone, &custom_order, &SortConfig::desc());
 
     assert_eq!(texts(&items), vec!["high", "medium", "low"]);
 }
@@ -143,12 +133,7 @@ fn desc_affects_only_non_custom_fallback_items() {
     let mut items = text_values(&["custom", "Item 2", "Item 10", "alpha"]);
     let custom_order = text_values(&["custom"]);
 
-    sort_by_custom_order_in_place(
-        &mut items,
-        Clone::clone,
-        &custom_order,
-        &SortConfig::desc(),
-    );
+    sort_by_custom_order_in_place(&mut items, Clone::clone, &custom_order, &SortConfig::desc());
 
     assert_eq!(texts(&items), vec!["custom", "Item 10", "Item 2", "alpha"]);
 }

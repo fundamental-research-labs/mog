@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_format_cascade_all_layers() {
@@ -408,8 +408,7 @@ fn test_format_range_cold_load_hydrates_imported_style_only_range() {
             Some(Out::YMap(map)) => map,
             _ => panic!("sheet map not found"),
         };
-        let range_formats = match sheet_map.get(&txn, compute_document::schema::KEY_RANGE_FORMATS)
-        {
+        let range_formats = match sheet_map.get(&txn, compute_document::schema::KEY_RANGE_FORMATS) {
             Some(Out::YMap(map)) => map,
             _ => {
                 let empty: MapPrelim = Vec::<(&str, Any)>::new().into_iter().collect();

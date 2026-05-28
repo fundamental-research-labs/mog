@@ -180,7 +180,12 @@ impl PackageGraphBuilder {
         });
     }
 
-    fn relationship_exists(&self, owner: &PackageOwner, relationship_type: &str, path: &str) -> bool {
+    fn relationship_exists(
+        &self,
+        owner: &PackageOwner,
+        relationship_type: &str,
+        path: &str,
+    ) -> bool {
         let normalized = normalize_part_path(path);
         self.relationships.iter().any(|rel| {
             &rel.owner == owner
@@ -224,7 +229,9 @@ impl PackageGraphBuilder {
                 .identity_hint
                 .as_ref()
                 .map(|hint| hint.id.as_str())
-                .or_else(|| current_relationship_hint_id(self.package_fidelity.as_ref(), relationship));
+                .or_else(|| {
+                    current_relationship_hint_id(self.package_fidelity.as_ref(), relationship)
+                });
             let id = allocate_relationship_id(
                 &owner_rels_path,
                 hinted_id,

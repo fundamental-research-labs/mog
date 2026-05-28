@@ -379,7 +379,10 @@ fn test_crate_root_public_reexports() {
     let _: RootPhoneticRun = RootPhoneticRun::default();
     let _: RootPhoneticProperties = RootPhoneticProperties::default();
     let _: RootRichText = RootRichText::default();
-    assert_eq!(RootUnderlineStyle::from_str(None), RootUnderlineStyle::Single);
+    assert_eq!(
+        RootUnderlineStyle::from_str(None),
+        RootUnderlineStyle::Single
+    );
     assert_eq!(
         RootVerticalAlign::from_str("superscript"),
         RootVerticalAlign::Superscript

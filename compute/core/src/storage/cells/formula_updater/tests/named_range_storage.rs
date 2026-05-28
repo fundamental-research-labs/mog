@@ -2,8 +2,8 @@ use crate::storage::YrsStorage;
 use formula_types::IdentityFormula;
 use value_types::{CellValue, FiniteF64};
 
-use super::{make_cell_id, make_sheet_id};
 use super::super::update_formula_templates_on_named_range_rename;
+use super::{make_cell_id, make_sheet_id};
 
 fn set_formula_cell(
     storage: &mut YrsStorage,
@@ -36,7 +36,9 @@ fn named_range_storage_rewrites_bare_name_but_not_string_literal() {
     let mut storage = YrsStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet = make_sheet_id(1);
-    storage.add_sheet(&mut mirror, sheet, "Sheet1", 10, 5).unwrap();
+    storage
+        .add_sheet(&mut mirror, sheet, "Sheet1", 10, 5)
+        .unwrap();
     let cell = make_cell_id(1);
     set_formula_cell(
         &mut storage,
@@ -66,7 +68,9 @@ fn named_range_storage_skips_sheet_prefix_collision() {
     let mut storage = YrsStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet = make_sheet_id(1);
-    storage.add_sheet(&mut mirror, sheet, "Sheet1", 10, 5).unwrap();
+    storage
+        .add_sheet(&mut mirror, sheet, "Sheet1", 10, 5)
+        .unwrap();
     let cell = make_cell_id(2);
     set_formula_cell(
         &mut storage,
@@ -96,7 +100,9 @@ fn named_range_storage_skips_structured_table_ref_collision() {
     let mut storage = YrsStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet = make_sheet_id(1);
-    storage.add_sheet(&mut mirror, sheet, "Sheet1", 10, 5).unwrap();
+    storage
+        .add_sheet(&mut mirror, sheet, "Sheet1", 10, 5)
+        .unwrap();
     let cell = make_cell_id(3);
     set_formula_cell(
         &mut storage,
@@ -122,16 +128,11 @@ fn named_range_storage_does_not_insert_empty_formula_for_template_only_cell() {
     let mut storage = YrsStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet = make_sheet_id(1);
-    storage.add_sheet(&mut mirror, sheet, "Sheet1", 10, 5).unwrap();
+    storage
+        .add_sheet(&mut mirror, sheet, "Sheet1", 10, 5)
+        .unwrap();
     let cell = make_cell_id(4);
-    set_formula_cell(
-        &mut storage,
-        &mut mirror,
-        sheet,
-        cell,
-        None,
-        "Region+1",
-    );
+    set_formula_cell(&mut storage, &mut mirror, sheet, cell, None, "Region+1");
 
     let count = update_formula_templates_on_named_range_rename(
         storage.doc(),

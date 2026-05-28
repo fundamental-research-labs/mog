@@ -1,7 +1,7 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 
-use super::raw::{RawAlignment, RawCellStyle, RawCellXfAttrs, RawProtection};
 use super::super::types::*;
+use super::raw::{RawAlignment, RawCellStyle, RawCellXfAttrs, RawProtection};
 
 /// Parse the <cellXfs> section
 pub(super) fn parse_cell_xfs(out: &mut Vec<CellXfDef>, xml: &[u8]) {

@@ -17,7 +17,7 @@ mod writer;
 #[cfg(test)]
 mod tests;
 
-pub use calc::calc_settings_from_domain;
 pub use super::types::{CalcMode, CalcSettings, SheetDef, SheetState, WorkbookView};
+pub use calc::calc_settings_from_domain;
 pub use types::DefinedNameDef;
 pub use writer::WorkbookWriter;

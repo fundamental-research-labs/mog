@@ -1,7 +1,7 @@
 use crate::infra::xml::parse_string_attr;
-use crate::output::results::SmartArtPartsOutput;
-use crate::infra::xml_namespaces::NamespaceMap;
 use crate::infra::xml_fragment::extract_element_bounds;
+use crate::infra::xml_namespaces::NamespaceMap;
+use crate::output::results::SmartArtPartsOutput;
 
 // =============================================================================
 // SmartArt Conversion Helper

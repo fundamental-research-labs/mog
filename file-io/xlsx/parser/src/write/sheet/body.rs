@@ -1,4 +1,4 @@
-use super::{hyperlinks, raw_sections, relationships, sheet_data, SheetWriter};
+use super::{SheetWriter, hyperlinks, raw_sections, relationships, sheet_data};
 use crate::domain::worksheet::write::{
     write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_properties,
     write_sheet_views,

@@ -458,7 +458,11 @@ mod tests {
         }
 
         assert_eq!(
-            list.inner_shadow.as_ref().expect("inner shadow").dist.value(),
+            list.inner_shadow
+                .as_ref()
+                .expect("inner shadow")
+                .dist
+                .value(),
             20000
         );
         assert_eq!(list.glow.as_ref().expect("glow").rad.value(), 5000);
@@ -471,7 +475,11 @@ mod tests {
             12000
         );
         assert_eq!(
-            list.preset_shadow.as_ref().expect("preset shadow").dist.value(),
+            list.preset_shadow
+                .as_ref()
+                .expect("preset shadow")
+                .dist
+                .value(),
             19000
         );
         let blur = list.blur.as_ref().expect("blur");

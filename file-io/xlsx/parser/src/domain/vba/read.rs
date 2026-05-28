@@ -16,8 +16,8 @@ mod signature;
 mod workbook_xml;
 
 pub use super::constants::{
-    is_macro_extension, vba_project_path, workbook_rels_path, VBA_RELATIONSHIP_TYPE,
-    XLSM_CONTENT_TYPE,
+    VBA_RELATIONSHIP_TYPE, XLSM_CONTENT_TYPE, is_macro_extension, vba_project_path,
+    workbook_rels_path,
 };
 pub use super::types::{
     SheetCodeName, SignatureStatus, VbaModule, VbaModuleType, VbaProject, VbaReference,

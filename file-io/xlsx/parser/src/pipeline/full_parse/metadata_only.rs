@@ -1,7 +1,5 @@
 use crate::domain::workbook::read::SheetInfo;
-use crate::domain::worksheet::read::{
-    parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views,
-};
+use crate::domain::worksheet::read::{parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views};
 use crate::output::results::FullParsedSheet;
 use crate::zip::{XlsxArchive, ZipError};
 

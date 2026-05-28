@@ -2,9 +2,9 @@ use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
 use yrs::{Doc, MapRef, Transact};
 
+use super::super::grid_helpers::get_cells_map;
 use super::read::has_data_at;
 use super::types::RangeSpan;
-use super::super::grid_helpers::get_cells_map;
 use cell_types::{RangePos, SheetId};
 
 /// Get the current region around a cell (Ctrl+Shift+* functionality).

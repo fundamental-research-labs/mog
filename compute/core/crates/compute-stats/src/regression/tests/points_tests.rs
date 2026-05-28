@@ -1,5 +1,5 @@
-use super::fixtures::{pts, EPS};
-use super::super::{linear_regression, RegressionOptions};
+use super::super::{RegressionOptions, linear_regression};
+use super::fixtures::{EPS, pts};
 
 #[test]
 fn generate_points_custom_num() {
@@ -11,7 +11,6 @@ fn generate_points_custom_num() {
     let result = linear_regression(&data, &opts);
     assert_eq!(result.points.len(), 10);
 }
-
 
 #[test]
 fn custom_min_max_x() {

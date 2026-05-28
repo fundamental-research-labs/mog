@@ -211,9 +211,7 @@ fn ole_owner_parse_output() -> ParseOutput {
                         preview: Some(OleObjectPreviewIdentity {
                             path: "xl/media/image1.png".to_string(),
                             relationship_id: Some("rIdPreview1".to_string()),
-                            bytes: vec![
-                                0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n',
-                            ],
+                            bytes: vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'],
                         }),
                         vml_drawing_path: Some("xl/drawings/vmlDrawing1.vml".to_string()),
                         vml_relationship_id: Some("rIdVml1".to_string()),
@@ -286,7 +284,10 @@ fn imported_picture_survives_context_stripped_hydration_export_and_deletion_remo
         .export_to_parse_output()
         .expect("production parse output export should succeed")
         .parse_output;
-    let object_id = exported_parse.sheets[0].floating_objects[0].common.id.clone();
+    let object_id = exported_parse.sheets[0].floating_objects[0]
+        .common
+        .id
+        .clone();
     let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
     engine
         .delete_floating_object(&sheet_id_after_hydration, &object_id)
@@ -322,7 +323,10 @@ fn modeled_ole_survives_context_stripped_hydration_export_and_deletion_removes_p
         .export_to_parse_output()
         .expect("production parse output export should succeed")
         .parse_output;
-    let object_id = exported_parse.sheets[0].floating_objects[0].common.id.clone();
+    let object_id = exported_parse.sheets[0].floating_objects[0]
+        .common
+        .id
+        .clone();
     let sheet_id_after_hydration = engine.get_all_sheet_ids()[0].clone();
     engine
         .delete_floating_object(&sheet_id_after_hydration, &object_id)

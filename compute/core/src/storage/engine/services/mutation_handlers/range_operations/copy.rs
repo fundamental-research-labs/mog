@@ -7,11 +7,11 @@ use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::formula_rebase::build_cross_sheet_adjusted_formula;
 use super::super::cell_mutations::mutation_set_cells_by_position_raw;
 use super::super::fill::{
     AdjustedPositionLookup, build_adjusted_formula, resolve_identity_ref_to_fill_position,
 };
+use super::formula_rebase::build_cross_sheet_adjusted_formula;
 
 // ---------------------------------------------------------------------------
 // mutation_copy_range
@@ -148,12 +148,13 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                         .and_then(|sm| sm.cell_id_at(pos))
                         .map(|cell_id| {
                             let cell_hex = id_to_hex(cell_id.as_u128());
-                            let table_fmt = super::super::super::tables::resolve_table_format_at_cell(
-                                mirror,
-                                source_sheet_id,
-                                src_row,
-                                src_col,
-                            );
+                            let table_fmt =
+                                super::super::super::tables::resolve_table_format_at_cell(
+                                    mirror,
+                                    source_sheet_id,
+                                    src_row,
+                                    src_col,
+                                );
                             properties::get_effective_format(
                                 &stores.storage,
                                 source_sheet_id,

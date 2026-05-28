@@ -1,7 +1,7 @@
 use super::shared;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::services;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use domain_types::domain::floating_object::FloatingObject;
@@ -21,7 +21,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_chart(&mut self.stores, sheet_id, config).map(shared::with_empty_patches)
+        services::objects::create_chart(&mut self.stores, sheet_id, config)
+            .map(shared::with_empty_patches)
     }
 
     /// Update a chart's config fields as individual Y.Map keys on the floating object.
@@ -32,7 +33,8 @@ impl YrsComputeEngine {
         chart_id: &str,
         updates: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_chart(&mut self.stores, sheet_id, chart_id, updates).map(shared::with_empty_patches)
+        services::objects::update_chart(&mut self.stores, sheet_id, chart_id, updates)
+            .map(shared::with_empty_patches)
     }
 
     /// Delete a chart by removing the floating object. Returns `floating_object_changes` with `Removed` kind.
@@ -42,7 +44,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::delete_chart(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::delete_chart(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Get a single chart by ID. Reads from floating objects filtered by type=="chart".
@@ -64,7 +67,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::bring_chart_to_front(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::bring_chart_to_front(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Send a chart to the back (lowest z-order). Delegates to floating object z-order.
@@ -74,7 +78,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::send_chart_to_back(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::send_chart_to_back(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Bring a chart one step forward in z-order. Delegates to floating object z-order.
@@ -84,7 +89,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::bring_chart_forward(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::bring_chart_forward(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Send a chart one step backward in z-order. Delegates to floating object z-order.
@@ -94,7 +100,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::send_chart_backward(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::send_chart_backward(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Get all charts sorted by z-order (back to front).
@@ -111,7 +118,8 @@ impl YrsComputeEngine {
         chart_id: &str,
         table_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::link_chart_to_table(&mut self.stores, sheet_id, chart_id, table_id).map(shared::with_empty_patches)
+        services::objects::link_chart_to_table(&mut self.stores, sheet_id, chart_id, table_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Unlink a chart from its table.
@@ -121,7 +129,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::unlink_chart_from_table(&mut self.stores, sheet_id, chart_id).map(shared::with_empty_patches)
+        services::objects::unlink_chart_from_table(&mut self.stores, sheet_id, chart_id)
+            .map(shared::with_empty_patches)
     }
 
     /// Check whether a chart is linked to any table.

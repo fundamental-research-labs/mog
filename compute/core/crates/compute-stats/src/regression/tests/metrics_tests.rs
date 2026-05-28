@@ -1,5 +1,5 @@
-use super::fixtures::{default_opts, pts};
 use super::super::linear_regression;
+use super::fixtures::{default_opts, pts};
 
 #[test]
 fn r_squared_clamped_to_0_1() {

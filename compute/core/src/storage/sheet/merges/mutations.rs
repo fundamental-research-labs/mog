@@ -9,7 +9,7 @@ use compute_document::undo::ORIGIN_USER_EDIT;
 use value_types::ComputeError;
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
-use super::codec::{stored_merge_to_yrs_prelim, StoredMerge};
+use super::codec::{StoredMerge, stored_merge_to_yrs_prelim};
 use super::resolve::{ranges_overlap, resolve_merge_entry};
 use super::yrs_io::{get_merge_backups_map, get_merges_map};
 use domain_types::domain::merge::IdentityMergedRegion;

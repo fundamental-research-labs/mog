@@ -131,5 +131,8 @@ fn parse_height(row_elem: &[u8]) -> (Option<f64>, Option<String>) {
         return (None, None);
     };
     let raw = std::str::from_utf8(&row_elem[s..e]).ok();
-    (raw.and_then(|r| r.parse::<f64>().ok()), raw.map(|r| r.to_string()))
+    (
+        raw.and_then(|r| r.parse::<f64>().ok()),
+        raw.map(|r| r.to_string()),
+    )
 }

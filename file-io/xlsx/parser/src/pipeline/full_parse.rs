@@ -3,8 +3,8 @@
 //! Public native entrypoints stay here while the implementation lives in
 //! child modules under `pipeline/full_parse/`.
 
-mod helpers;
 mod external_links_phase;
+mod helpers;
 mod implementation;
 mod metadata_only;
 mod timing;

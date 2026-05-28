@@ -2,10 +2,10 @@ use crate::infra::opc::{
     PackageOwner, WorkbookRelationships, WorksheetRelationships, parse_owned_relationships,
 };
 
+use super::super::types::{SlicerAnchor, SlicerCacheDef, SlicerDef};
 use super::anchors::parse_slicer_anchors_from_drawing;
 use super::cache::parse_slicer_cache;
 use super::part::parse_slicer_part;
-use super::super::types::{SlicerAnchor, SlicerCacheDef, SlicerDef};
 
 /// Parse slicers and drawing anchors for a given sheet.
 pub fn parse_slicers_for_sheet(

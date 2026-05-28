@@ -1,4 +1,4 @@
-use super::{modules::contains_utf16le, SignatureStatus};
+use super::{SignatureStatus, modules::contains_utf16le};
 
 pub(super) fn detect_signature_status(data: &[u8]) -> SignatureStatus {
     if contains_utf16le(data, "_VBA_PROJECT_CUR") && contains_utf16le(data, "VBASigDataV3") {
@@ -21,10 +21,7 @@ mod tests {
     use super::*;
 
     fn insert_utf16le(data: &mut [u8], offset: usize, value: &str) {
-        let encoded: Vec<u8> = value
-            .encode_utf16()
-            .flat_map(|c| c.to_le_bytes())
-            .collect();
+        let encoded: Vec<u8> = value.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
         data[offset..offset + encoded.len()].copy_from_slice(&encoded);
     }
 

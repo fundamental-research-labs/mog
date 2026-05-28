@@ -16,10 +16,10 @@ use compute_document::cell_serde::{
 
 use super::IdAllocator;
 use super::helpers::get_or_create_cell_id_for_pos;
-use crate::storage::sheet::schemas;
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
 };
+use crate::storage::sheet::schemas;
 use domain_types::domain::hyperlink::HyperlinkTargetKind;
 use formula_types::CellRef;
 

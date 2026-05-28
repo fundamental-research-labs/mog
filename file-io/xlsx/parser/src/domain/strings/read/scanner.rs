@@ -44,9 +44,7 @@ pub(super) fn parse_unique_count(xml: &[u8]) -> Option<usize> {
 pub(super) fn needs_xml_text_decode(bytes: &[u8]) -> bool {
     // '&' starts XML entities, '_' may start an OOXML _xHHHH_ escape, and
     // raw CR/CRLF in XML text is normalized to LF by conforming XML parsers.
-    memchr(b'&', bytes).is_some()
-        || memchr(b'_', bytes).is_some()
-        || memchr(b'\r', bytes).is_some()
+    memchr(b'&', bytes).is_some() || memchr(b'_', bytes).is_some() || memchr(b'\r', bytes).is_some()
 }
 
 /// Find the content boundaries of a <t> element

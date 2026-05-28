@@ -213,4 +213,4 @@ fn extract_error_bars_new(
     (general, x_bars, y_bars)
 }
 
-/// Extract legend from ChartSpace.
+// Extract legend from ChartSpace.

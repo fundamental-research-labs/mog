@@ -2,7 +2,7 @@ use value_types::{CellError, CellValue};
 
 use crate::PureFunction;
 
-pub(super) struct FnSequence;
+pub(in crate::lookup) struct FnSequence;
 
 impl PureFunction for FnSequence {
     fn name(&self) -> &'static str {

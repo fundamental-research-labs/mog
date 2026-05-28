@@ -213,7 +213,10 @@ mod tests {
         let range = ProtectedRange::new("EditableArea", "A1:D10");
         let xml = String::from_utf8(range.to_xml()).unwrap();
 
-        assert_eq!(xml, "<protectedRange name=\"EditableArea\" sqref=\"A1:D10\"/>");
+        assert_eq!(
+            xml,
+            "<protectedRange name=\"EditableArea\" sqref=\"A1:D10\"/>"
+        );
     }
 
     #[test]

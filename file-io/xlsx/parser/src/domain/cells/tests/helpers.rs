@@ -1,8 +1,8 @@
 use crate::domain::cells::{
-    CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER,
-    CELL_TYPE_STRING, CellData, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA,
-    VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING, col_to_letters,
-    extract_cell_value_fast, parse_a1_reference, parse_cell_type, parse_style_idx,
+    CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING,
+    CellData, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_NONE,
+    VALUE_TYPE_SHARED_STRING, col_to_letters, extract_cell_value_fast, parse_a1_reference,
+    parse_cell_type, parse_style_idx,
 };
 
 #[test]

@@ -8,8 +8,8 @@ use value_types::CellValue;
 
 use super::query::get_by_id;
 use super::types::{
-    ScenarioApplyPlan, ScenarioBaseline, ScenarioBaselineCell, ScenarioRestorePlan,
-    ScenarioSessionState, SESSION_DOCUMENT_ID,
+    SESSION_DOCUMENT_ID, ScenarioApplyPlan, ScenarioBaseline, ScenarioBaselineCell,
+    ScenarioRestorePlan, ScenarioSessionState,
 };
 use super::validation::{scenario_error, validate_scenario_input};
 use crate::storage::YrsStorage;
@@ -315,4 +315,3 @@ pub(crate) fn prepare_restore(
         },
     })
 }
-

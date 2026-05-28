@@ -89,7 +89,10 @@ mod tests {
         let rels = br#"<Relationships><Relationship Id="rId1" Target="/xl/slicers/slicer1.xml"/><Relationship Id="rId2" Target="../slicerCaches/slicerCache1.xml"/></Relationships>"#;
         let map = build_rel_id_map(rels);
 
-        assert_eq!(map.get("rId1").map(String::as_str), Some("/xl/slicers/slicer1.xml"));
+        assert_eq!(
+            map.get("rId1").map(String::as_str),
+            Some("/xl/slicers/slicer1.xml")
+        );
         assert_eq!(
             map.get("rId2").map(String::as_str),
             Some("../slicerCaches/slicerCache1.xml")

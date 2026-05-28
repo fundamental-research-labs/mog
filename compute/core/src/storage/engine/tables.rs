@@ -228,7 +228,10 @@ impl YrsComputeEngine {
                     message: format!("Table name \"{}\" already exists", table_name),
                 });
             }
-            let style = Some(services::tables::normalize_table_style_id(&self.stores, style)?);
+            let style = Some(services::tables::normalize_table_style_id(
+                &self.stores,
+                style,
+            )?);
 
             let mut combined = MutationResult::empty();
             let mut effective_end_row = end_row;

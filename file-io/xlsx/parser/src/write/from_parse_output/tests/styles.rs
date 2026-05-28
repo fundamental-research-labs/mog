@@ -251,15 +251,17 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
 #[test]
 fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
     let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
-    imported_styles.cell_xfs.push(ooxml_types::styles::CellXfDef {
-        num_fmt_id: Some(49),
-        font_id: Some(0),
-        fill_id: Some(0),
-        border_id: Some(0),
-        xf_id: Some(0),
-        apply_number_format: Some(true),
-        ..Default::default()
-    });
+    imported_styles
+        .cell_xfs
+        .push(ooxml_types::styles::CellXfDef {
+            num_fmt_id: Some(49),
+            font_id: Some(0),
+            fill_id: Some(0),
+            border_id: Some(0),
+            xf_id: Some(0),
+            apply_number_format: Some(true),
+            ..Default::default()
+        });
 
     let output = ParseOutput {
         workbook_stylesheet: Some(WorkbookStylesheet::from_stylesheet(
@@ -300,7 +302,10 @@ fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(styles_xml.contains(r#"<cellXfs count="2">"#), "{styles_xml}");
+    assert!(
+        styles_xml.contains(r#"<cellXfs count="2">"#),
+        "{styles_xml}"
+    );
     assert!(
         styles_xml.contains(r#"<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>"#),
         "{styles_xml}"

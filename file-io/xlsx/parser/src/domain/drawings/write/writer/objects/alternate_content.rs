@@ -1,6 +1,6 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::super::super::types::{ChartExRef, SLICER_GRAPHIC_DATA_URI, NS_CX, NS_CX1, NS_R};
+use super::super::super::types::{ChartExRef, NS_CX, NS_CX1, NS_R, SLICER_GRAPHIC_DATA_URI};
 use super::super::DrawingWriter;
 
 impl DrawingWriter {

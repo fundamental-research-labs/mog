@@ -10,7 +10,7 @@ use crate::parser::ParseErrorKind;
 use crate::state::ParseState;
 
 use super::atom::parse_atomic;
-use super::binding::{infix_bp, RANGE_L_BP, RANGE_R_BP};
+use super::binding::{RANGE_L_BP, RANGE_R_BP, infix_bp};
 use super::pratt::{parse_expr_bp, parse_expression};
 
 pub(super) fn try_intersection(
@@ -75,10 +75,7 @@ pub(super) fn try_expression_range_op(
     ))
 }
 
-pub(super) fn parse_paren_or_union(
-    input: &mut &str,
-    state: &ParseState,
-) -> ModalResult<ASTNode> {
+pub(super) fn parse_paren_or_union(input: &mut &str, state: &ParseState) -> ModalResult<ASTNode> {
     let open_pos = state.offset(input) as usize;
     *input = &input[1..];
     let _ = lexer::ws.parse_next(input)?;

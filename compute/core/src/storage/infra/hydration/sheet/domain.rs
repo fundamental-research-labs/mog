@@ -39,10 +39,6 @@ pub(crate) fn hydrate_worksheet_import_xml_metadata(
         .as_deref()
         .filter(|xml| !xml.is_empty())
     {
-        meta_map.insert(
-            txn,
-            "worksheetExtLstXml",
-            Any::String(Arc::from(xml)),
-        );
+        meta_map.insert(txn, "worksheetExtLstXml", Any::String(Arc::from(xml)));
     }
 }

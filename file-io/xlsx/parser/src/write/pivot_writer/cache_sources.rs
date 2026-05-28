@@ -1,6 +1,6 @@
 use crate::write::pivot_writer::a1::col_to_letters;
-use domain_types::domain::pivot::ParsedPivotTable;
 use domain_types::PivotCacheSourceDef;
+use domain_types::domain::pivot::ParsedPivotTable;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

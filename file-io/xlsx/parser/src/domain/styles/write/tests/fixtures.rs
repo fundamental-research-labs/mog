@@ -1,6 +1,4 @@
-use crate::domain::styles::write::{
-    BorderSideDef, BorderStyle, ColorDef, FillDef, StylesWriter,
-};
+use crate::domain::styles::write::{BorderSideDef, BorderStyle, ColorDef, FillDef, StylesWriter};
 
 pub(super) fn xml_string(writer: &StylesWriter) -> String {
     String::from_utf8(writer.to_xml()).unwrap()

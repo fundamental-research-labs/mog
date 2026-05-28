@@ -32,10 +32,7 @@ pub fn parse_workbook_properties(
         show_objects: extract_attr_value_in_range(elem, b"showObjects=\"")
             .map(ooxml_types::workbook::ObjectDisplayMode::from_bytes)
             .unwrap_or_default(),
-        show_border_unselected_tables: parse_bool(
-            b"showBorderUnselectedTables=\"",
-            true,
-        ),
+        show_border_unselected_tables: parse_bool(b"showBorderUnselectedTables=\"", true),
         filter_privacy: parse_bool(b"filterPrivacy=\"", false),
         prompted_solutions: parse_bool(b"promptedSolutions=\"", false),
         show_ink_annotation: parse_bool(b"showInkAnnotation=\"", true),
@@ -59,9 +56,7 @@ pub fn parse_workbook_properties(
 }
 
 /// Parse the `<fileVersion>` element from workbook.xml.
-pub fn parse_file_version(
-    xml: &[u8],
-) -> Option<domain_types::domain::workbook::FileVersion> {
+pub fn parse_file_version(xml: &[u8]) -> Option<domain_types::domain::workbook::FileVersion> {
     let tag_start = find_tag_simd(xml, b"fileVersion", 0)?;
     let tag_end = find_gt_simd(xml, tag_start)
         .map(|p| p + 1)
@@ -86,9 +81,7 @@ pub fn parse_file_version(
 }
 
 /// Parse the `<fileSharing>` element from workbook.xml.
-pub fn parse_file_sharing(
-    xml: &[u8],
-) -> Option<domain_types::domain::workbook::FileSharing> {
+pub fn parse_file_sharing(xml: &[u8]) -> Option<domain_types::domain::workbook::FileSharing> {
     let tag_start = find_tag_simd(xml, b"fileSharing", 0)?;
     let tag_end = find_gt_simd(xml, tag_start)
         .map(|p| p + 1)
@@ -185,7 +178,8 @@ mod tests {
 
     #[test]
     fn workbook_properties_preserve_defaults_and_fields() {
-        let xml = br#"<workbook><workbookPr date1904="1" defaultThemeVersion="166925"/></workbook>"#;
+        let xml =
+            br#"<workbook><workbookPr date1904="1" defaultThemeVersion="166925"/></workbook>"#;
 
         let props = parse_workbook_properties(xml).expect("workbookPr should parse");
         assert!(props.date1904);

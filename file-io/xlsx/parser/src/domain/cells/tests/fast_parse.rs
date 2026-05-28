@@ -1,6 +1,6 @@
 use crate::domain::cells::{
-    CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER,
-    CELL_TYPE_STRING, CellData, ParseExtras, VALUE_TYPE_FORMULA, parse_worksheet_fast,
+    CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING,
+    CellData, ParseExtras, VALUE_TYPE_FORMULA, parse_worksheet_fast,
     parse_worksheet_fast_with_extras,
 };
 

@@ -85,10 +85,12 @@ mod tests {
     fn facade_imports_remain_available() {
         use crate::write::{
             ProtectedRange as WriteProtectedRange, ProtectedRanges as WriteProtectedRanges,
-            SheetProtection as WriteSheetProtection, SheetProtectionWrite as WriteSheetProtectionWrite,
+            SheetProtection as WriteSheetProtection,
+            SheetProtectionWrite as WriteSheetProtectionWrite,
             WorkbookProtection as WriteWorkbookProtection,
             WorkbookProtectionWrite as WriteWorkbookProtectionWrite,
-            generate_salt as write_generate_salt, hash_password_legacy as write_hash_password_legacy,
+            generate_salt as write_generate_salt,
+            hash_password_legacy as write_hash_password_legacy,
             hash_password_sha512 as write_hash_password_sha512,
         };
 

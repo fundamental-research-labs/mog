@@ -1,8 +1,8 @@
 //! Aggregation helpers — TaggedValue, flattening, and aggregate dispatch.
 
 use cell_types::SheetId;
-use compute_parser::{ASTNode, BinOp};
 use compute_parser::RangeRef;
+use compute_parser::{ASTNode, BinOp};
 use formula_types::CellRef;
 use value_types::{CellError, CellValue, ComputeError};
 

@@ -87,19 +87,20 @@ fn stylesheet_root_declaration_namespace_and_attribute_order_are_stable() {
     );
     assert!(!xml.contains("mc:Ignorable=\"foo\""));
     assert!(!xml.contains("mc:Ignorable=\"xr foo\""));
-    assert_in_order(&xml, &["xmlns:xr=\"urn:xr\"", "xmlns:foo=\"urn:foo\"", "xmlns:mc="]);
+    assert_in_order(
+        &xml,
+        &["xmlns:xr=\"urn:xr\"", "xmlns:foo=\"urn:foo\"", "xmlns:mc="],
+    );
 }
 
 #[test]
 fn known_fonts_suppresses_duplicate_x14ac_namespace_and_deduplicates_ignorable() {
     let mut writer = StylesWriter::with_defaults();
     writer.known_fonts = true;
-    writer.root_namespaces = StyleRootNamespaces::from_attrs(vec![
-        (
-            "x14ac".to_string(),
-            "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac".to_string(),
-        )
-    ]);
+    writer.root_namespaces = StyleRootNamespaces::from_attrs(vec![(
+        "x14ac".to_string(),
+        "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac".to_string(),
+    )]);
 
     let xml = xml_string(&writer);
     assert_eq!(xml.matches("xmlns:x14ac=").count(), 1);

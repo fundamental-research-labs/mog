@@ -1,5 +1,5 @@
-use crate::mirror::test_helpers::{make_cell_id, make_sheet_id, mirror_with_grid};
 use crate::mirror::CellMirror;
+use crate::mirror::test_helpers::{make_cell_id, make_sheet_id, mirror_with_grid};
 use cell_types::{CellId, RowId, SheetPos};
 
 #[test]

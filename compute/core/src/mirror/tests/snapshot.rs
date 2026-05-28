@@ -1,5 +1,5 @@
-use crate::mirror::test_helpers::{make_cell_id, simple_snapshot};
 use crate::mirror::CellMirror;
+use crate::mirror::test_helpers::{make_cell_id, simple_snapshot};
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use cell_types::{CellId, SheetId, SheetPos};
 use formula_types::{NamedRangeDef, Scope, TableDef};

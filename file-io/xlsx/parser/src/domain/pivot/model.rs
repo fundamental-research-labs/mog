@@ -457,7 +457,10 @@ mod tests {
 
     #[test]
     fn shared_item_variants_are_distinct() {
-        assert!(matches!(SharedItem::String("test".to_string()), SharedItem::String(_)));
+        assert!(matches!(
+            SharedItem::String("test".to_string()),
+            SharedItem::String(_)
+        ));
         assert!(matches!(SharedItem::Number(42.0), SharedItem::Number(_)));
         assert!(matches!(SharedItem::Missing, SharedItem::Missing));
     }

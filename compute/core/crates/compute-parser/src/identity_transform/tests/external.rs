@@ -1,9 +1,7 @@
-use super::fixtures::MockResolver;
 use super::super::{ExternalLinkBinder, to_identity_formula_with_external_binder};
+use super::fixtures::MockResolver;
 use crate::parser::{ParseError, ParseErrorKind};
-use formula_types::{
-    ExternalSheetKey, ExternalWorkbookToken, IdentityFormulaRef, LinkId,
-};
+use formula_types::{ExternalSheetKey, ExternalWorkbookToken, IdentityFormulaRef, LinkId};
 
 struct FixedBinder {
     link_id: LinkId,
@@ -35,8 +33,7 @@ impl ExternalLinkBinder for ErrorBinder {
 #[test]
 fn external_ref_requires_binder() {
     let r = MockResolver::new();
-    let err =
-        to_identity_formula_with_external_binder("=[1]Sheet1!A1", &r, None).unwrap_err();
+    let err = to_identity_formula_with_external_binder("=[1]Sheet1!A1", &r, None).unwrap_err();
 
     assert_eq!(err.kind, ParseErrorKind::InvalidReference);
 }
@@ -45,8 +42,8 @@ fn external_ref_requires_binder() {
 fn external_binder_error_propagates() {
     let r = MockResolver::new();
     let binder = ErrorBinder;
-    let err = to_identity_formula_with_external_binder("=[1]Sheet1!A1", &r, Some(&binder))
-        .unwrap_err();
+    let err =
+        to_identity_formula_with_external_binder("=[1]Sheet1!A1", &r, Some(&binder)).unwrap_err();
 
     assert_eq!(err.kind, ParseErrorKind::InvalidReference);
 }
@@ -57,8 +54,7 @@ fn external_cell_uses_bound_link_sheet_and_one_based_address() {
     let binder = FixedBinder {
         link_id: LinkId::from_raw(7),
     };
-    let f = to_identity_formula_with_external_binder("=[1]Sheet1!$A$1", &r, Some(&binder))
-        .unwrap();
+    let f = to_identity_formula_with_external_binder("=[1]Sheet1!$A$1", &r, Some(&binder)).unwrap();
 
     assert_eq!(f.template, "{0}");
     match &f.refs[0] {
@@ -85,12 +81,9 @@ fn external_range_uses_bound_link_and_one_based_address() {
     let binder = FixedBinder {
         link_id: LinkId::from_raw(8),
     };
-    let f = to_identity_formula_with_external_binder(
-        "=[1]'Sheet Name'!$A$1:B10",
-        &r,
-        Some(&binder),
-    )
-    .unwrap();
+    let f =
+        to_identity_formula_with_external_binder("=[1]'Sheet Name'!$A$1:B10", &r, Some(&binder))
+            .unwrap();
 
     assert_eq!(f.template, "{0}");
     match &f.refs[0] {

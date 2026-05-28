@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use value_types::{CellArray, CellControl, CellError, CellImage, CellImageSizing, CellValue};
 
-use super::fixtures::{
-    assert_num, assert_null, empty, numbers, strings, with_errors, with_nulls,
-};
+use super::fixtures::{assert_null, assert_num, empty, numbers, strings, with_errors, with_nulls};
 use crate::aggregate::counting::{pivot_counta, pivot_countunique};
 use crate::aggregate::numeric::pivot_count;
 

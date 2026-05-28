@@ -51,8 +51,8 @@ use crate::output::results::{
 };
 use crate::output::results::{
     DefinedNameOutput, FullCellData, FullParseError, FullParseResult, FullParsedSheet,
-    HyperlinkOutput, ImportedBinaryPart, ParseStats, ParseTimings, ProtectionOutput,
-    RawVmlDrawing, SparklineSummary, StylesOutput,
+    HyperlinkOutput, ImportedBinaryPart, ParseStats, ParseTimings, ProtectionOutput, RawVmlDrawing,
+    SparklineSummary, StylesOutput,
 };
 use crate::zip::constants::{
     MAX_CHARTS, MAX_MERGES, MAX_PIVOTS, MAX_SHARED_STRINGS, MAX_STYLES, MAX_TABLES,
@@ -60,7 +60,9 @@ use crate::zip::constants::{
 };
 use crate::zip::{XlsxArchive, ZipError};
 
-use crate::pipeline::doc_props::{parse_doc_props_app, parse_doc_props_core, parse_doc_props_custom};
+use crate::pipeline::doc_props::{
+    parse_doc_props_app, parse_doc_props_core, parse_doc_props_custom,
+};
 use crate::pipeline::metadata::parse_metadata;
 
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -494,10 +496,9 @@ pub(super) fn parse_xlsx_full_native_impl(
         {
             let sheet_num = legacy_sheet_num_for_context(sheet_context);
             let sheet_name = sheet_context.sheet_name.clone();
-            let sheet_path = sheet_context
-                .owner_part_path
-                .as_deref()
-                .ok_or_else(|| format!("Workbook sheet {} has no worksheet part path", sheet_name))?;
+            let sheet_path = sheet_context.owner_part_path.as_deref().ok_or_else(|| {
+                format!("Workbook sheet {} has no worksheet part path", sheet_name)
+            })?;
 
             let worksheet_xml = archive
                 .read_file(sheet_path)
@@ -638,7 +639,9 @@ pub(super) fn parse_xlsx_full_native_impl(
         let mut par_sheet_namespaces = Vec::with_capacity(sorted.len());
         for r in sorted {
             let mut s = r.sheet;
-            s.sheet_id = sheet_package_contexts.get(s.index).and_then(|ctx| ctx.sheet_id);
+            s.sheet_id = sheet_package_contexts
+                .get(s.index)
+                .and_then(|ctx| ctx.sheet_id);
             s.state = sheet_package_contexts
                 .get(s.index)
                 .map(|ctx| ctx.visibility)
@@ -854,8 +857,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         file_sharing,
         web_publishing,
         extensions: {
-            let mut imported_parts =
-                crate::infra::imported_parts::ImportedPackageParts::new();
+            let mut imported_parts = crate::infra::imported_parts::ImportedPackageParts::new();
             if let Some(parts) = web_extension_parts {
                 for (path, data) in parts.parts {
                     imported_parts.record(path, data);
@@ -1333,10 +1335,12 @@ fn parse_sheets_sequential(
 
     for (sheet_idx, sheet_context) in sheet_package_contexts.iter().enumerate() {
         let sheet_num = legacy_sheet_num_for_context(sheet_context);
-        let sheet_path = sheet_context
-            .owner_part_path
-            .as_deref()
-            .ok_or_else(|| format!("Workbook sheet {} has no worksheet part path", sheet_context.sheet_name))?;
+        let sheet_path = sheet_context.owner_part_path.as_deref().ok_or_else(|| {
+            format!(
+                "Workbook sheet {} has no worksheet part path",
+                sheet_context.sheet_name
+            )
+        })?;
         ctx.set_current_part(&sheet_path);
 
         let sheet_name = sheet_context.sheet_name.clone();
@@ -1469,7 +1473,6 @@ fn parse_sheets_sequential(
 
         // Extract full <extLst>...</extLst> from post-sheetData for round-trip passthrough
         let _ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
-
 
         let aux_t0 = tick(timings);
         let merges = parse_merge_cells(post_sd);

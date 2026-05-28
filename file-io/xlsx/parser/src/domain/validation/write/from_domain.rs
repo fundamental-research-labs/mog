@@ -2,9 +2,7 @@
 // Domain bridge: domain_types::ValidationSpec → DataValidationWriter
 // ============================================================================
 
-use super::{
-    DataValidation, DataValidationWriter, ErrorStyle, ValidationOperator, ValidationType,
-};
+use super::{DataValidation, DataValidationWriter, ErrorStyle, ValidationOperator, ValidationType};
 
 /// Convert `domain_types::ValidationSpec` list into XML (no container-level attrs).
 pub fn validations_xml_from_domain(specs: &[domain_types::ValidationSpec]) -> String {

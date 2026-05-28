@@ -390,7 +390,10 @@ fn test_pretty_pending_attribute_child_sibling_and_closing_indent() {
         .start_element("sibling")
         .self_close()
         .end_element("root");
-    assert_eq!(w.finish_string(), "<root>\n  <child/>\n  <sibling/>\n</root>\n");
+    assert_eq!(
+        w.finish_string(),
+        "<root>\n  <child/>\n  <sibling/>\n</root>\n"
+    );
 }
 
 #[test]

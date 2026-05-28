@@ -1,7 +1,7 @@
-use super::helpers::{test_cell, threading_result};
 use super::super::{
     convert_cell, full_parse_result_to_parse_output, parse_error_code, resolve_cell_value,
 };
+use super::helpers::{test_cell, threading_result};
 use crate::output::results::{
     CELL_TYPE_VAL_BOOL as CELL_TYPE_BOOL, CELL_TYPE_VAL_EMPTY as CELL_TYPE_EMPTY,
     CELL_TYPE_VAL_FORMULA as CELL_TYPE_FORMULA, CELL_TYPE_VAL_NUMBER as CELL_TYPE_NUMBER,

@@ -11,7 +11,7 @@ use crate::parser::ParseErrorKind;
 use crate::state::{MAX_DEPTH, ParseState};
 
 use super::atom::parse_atomic;
-use super::binding::{infix_bp, peek_infix, PREFIX_BP};
+use super::binding::{PREFIX_BP, infix_bp, peek_infix};
 use super::postfix::{try_call_expression, try_postfix_hash, try_postfix_percent};
 use super::range_ops::{try_expression_range_op, try_intersection};
 

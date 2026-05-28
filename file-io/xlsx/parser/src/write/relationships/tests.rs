@@ -40,7 +40,10 @@ fn test_manager_new_and_default() {
     assert_eq!(mgr.relationships().len(), 0);
 
     let mut default_mgr = RelationshipManager::default();
-    assert_eq!(default_mgr.add(REL_WORKSHEET, "worksheets/sheet1.xml"), "rId1");
+    assert_eq!(
+        default_mgr.add(REL_WORKSHEET, "worksheets/sheet1.xml"),
+        "rId1"
+    );
 }
 
 #[test]
@@ -141,7 +144,10 @@ fn test_add_with_id_preserves_id_and_bumps_next_id() {
     mgr.add_with_id("rId7", REL_WORKSHEET, "worksheets/sheet1.xml");
     mgr.add_with_id("custom-id", REL_STYLES, "styles.xml");
 
-    assert_eq!(mgr.get_by_id("rId7").unwrap().target, "worksheets/sheet1.xml");
+    assert_eq!(
+        mgr.get_by_id("rId7").unwrap().target,
+        "worksheets/sheet1.xml"
+    );
     assert_eq!(mgr.get_by_id("custom-id").unwrap().target, "styles.xml");
     assert_eq!(mgr.add(REL_THEME, "theme/theme1.xml"), "rId8");
 }
@@ -243,7 +249,11 @@ fn test_xml_preserves_insertion_order_and_target_modes() {
     let mut mgr = RelationshipManager::new();
     mgr.add(REL_WORKSHEET, "worksheets/sheet1.xml");
     mgr.add_external(REL_HYPERLINK, "https://example.com");
-    mgr.add_with_target_mode(REL_HYPERLINK, "custom-target", Some("CustomMode".to_string()));
+    mgr.add_with_target_mode(
+        REL_HYPERLINK,
+        "custom-target",
+        Some("CustomMode".to_string()),
+    );
 
     let xml = String::from_utf8(mgr.to_xml()).unwrap();
     let first = xml.find("Id=\"rId1\"").unwrap();
@@ -310,10 +320,19 @@ fn test_create_root_rels_full_partial_and_custom() {
 
     assert_eq!(rels.len(), 3);
     assert_eq!(rels.get_by_id("rId1").unwrap().target, "/xl/workbook.xml");
-    assert_eq!(rels.get_by_id("rId2").unwrap().rel_type, REL_CORE_PROPERTIES);
+    assert_eq!(
+        rels.get_by_id("rId2").unwrap().rel_type,
+        REL_CORE_PROPERTIES
+    );
     assert_eq!(rels.get_by_id("rId2").unwrap().target, "/docProps/core.xml");
-    assert_eq!(rels.get_by_id("rId3").unwrap().rel_type, REL_CUSTOM_PROPERTIES);
-    assert_eq!(rels.get_by_id("rId3").unwrap().target, "/docProps/custom.xml");
+    assert_eq!(
+        rels.get_by_id("rId3").unwrap().rel_type,
+        REL_CUSTOM_PROPERTIES
+    );
+    assert_eq!(
+        rels.get_by_id("rId3").unwrap().target,
+        "/docProps/custom.xml"
+    );
 }
 
 #[test]

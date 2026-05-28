@@ -6,29 +6,29 @@ use value_types::{CellError, CellValue, ComputeError};
 
 impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     pub(in crate::eval) async fn eval_operator_function_alias(
-            &mut self,
-            upper: &str,
-            args: &[ASTNode],
-        ) -> Result<Option<CellValue>, ComputeError> {
-            if let Some(op) = binary_operator_alias(upper) {
-                if args.len() != 2 {
-                    return Ok(Some(CellValue::Error(CellError::Value, None)));
-                }
-                let left = self.eval_node_cv(&args[0]).await?;
-                let right = self.eval_node_cv(&args[1]).await?;
-                return Ok(Some(eval_binary_op(op, &left, &right)));
+        &mut self,
+        upper: &str,
+        args: &[ASTNode],
+    ) -> Result<Option<CellValue>, ComputeError> {
+        if let Some(op) = binary_operator_alias(upper) {
+            if args.len() != 2 {
+                return Ok(Some(CellValue::Error(CellError::Value, None)));
             }
-
-            if let Some(op) = unary_operator_alias(upper) {
-                if args.len() != 1 {
-                    return Ok(Some(CellValue::Error(CellError::Value, None)));
-                }
-                let value = self.eval_node_cv(&args[0]).await?;
-                return Ok(Some(eval_unary_op(op, &value)));
-            }
-
-            Ok(None)
+            let left = self.eval_node_cv(&args[0]).await?;
+            let right = self.eval_node_cv(&args[1]).await?;
+            return Ok(Some(eval_binary_op(op, &left, &right)));
         }
+
+        if let Some(op) = unary_operator_alias(upper) {
+            if args.len() != 1 {
+                return Ok(Some(CellValue::Error(CellError::Value, None)));
+            }
+            let value = self.eval_node_cv(&args[0]).await?;
+            return Ok(Some(eval_unary_op(op, &value)));
+        }
+
+        Ok(None)
+    }
 }
 
 fn binary_operator_alias(name: &str) -> Option<BinOp> {

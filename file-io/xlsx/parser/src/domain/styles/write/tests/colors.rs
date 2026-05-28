@@ -1,6 +1,8 @@
 use crate::domain::styles::write::{ColorDef, ColorsDef, StylesWriter};
 
-use super::fixtures::{assert_contains_all, assert_in_order, indexed_tint, rgb_tint, theme, xml_string};
+use super::fixtures::{
+    assert_contains_all, assert_in_order, indexed_tint, rgb_tint, theme, xml_string,
+};
 
 #[test]
 fn test_write_colors() {

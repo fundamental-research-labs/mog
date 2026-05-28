@@ -14,11 +14,7 @@ pub(super) fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
     count
 }
 
-pub(super) fn ensure_lazy_limit(
-    label: &str,
-    count: usize,
-    limit: usize,
-) -> Result<(), ParseError> {
+pub(super) fn ensure_lazy_limit(label: &str, count: usize, limit: usize) -> Result<(), ParseError> {
     if count > limit {
         Err(ParseError::ParseFailed(format!(
             "{label} count {count} exceeds XLSX parser safety limit {limit}"

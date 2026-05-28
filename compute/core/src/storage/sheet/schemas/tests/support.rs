@@ -4,14 +4,13 @@ pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-
 pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId, GridIndex) {
     let (storage, sid, gi, _mirror) = storage_with_sheet_and_mirror();
     (storage, sid, gi)
 }
 
-
-pub(super) fn storage_with_sheet_and_mirror() -> (YrsStorage, SheetId, GridIndex, crate::mirror::CellMirror) {
+pub(super) fn storage_with_sheet_and_mirror()
+-> (YrsStorage, SheetId, GridIndex, crate::mirror::CellMirror) {
     let mut storage = YrsStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sid = make_sheet_id(1);
@@ -23,16 +22,13 @@ pub(super) fn storage_with_sheet_and_mirror() -> (YrsStorage, SheetId, GridIndex
     (storage, sid, gi, mirror)
 }
 
-
 pub(super) fn empty_mirror() -> crate::mirror::CellMirror {
     crate::mirror::CellMirror::new()
 }
 
-
 pub(super) fn validation_rule_count(storage: &YrsStorage, sid: &SheetId) -> usize {
     get_range_schemas_for_sheet(storage.doc(), storage.sheets(), sid).len()
 }
-
 
 pub(super) fn make_range_schema(id: &str) -> RangeSchema {
     RangeSchema {
@@ -66,7 +62,6 @@ pub(super) fn make_range_schema(id: &str) -> RangeSchema {
     }
 }
 
-
 pub(super) fn range_schema_at(id: &str, start: &str, end: &str) -> RangeSchema {
     RangeSchema {
         id: id.to_string(),
@@ -89,7 +84,6 @@ pub(super) fn range_schema_at(id: &str, start: &str, end: &str) -> RangeSchema {
     }
 }
 
-
 pub(super) fn sync_storage(src: &YrsStorage, dst: &YrsStorage) {
     use yrs::updates::decoder::Decode;
     let sv = dst.doc().transact().state_vector();
@@ -100,7 +94,6 @@ pub(super) fn sync_storage(src: &YrsStorage, dst: &YrsStorage) {
         .apply_update(decoded)
         .expect("apply update");
 }
-
 
 pub(super) fn clone_storage(src: &YrsStorage) -> YrsStorage {
     use yrs::updates::decoder::Decode;
@@ -118,14 +111,12 @@ pub(super) fn clone_storage(src: &YrsStorage) -> YrsStorage {
     storage2
 }
 
-
 pub(super) fn view_ids(storage: &YrsStorage, sid: &SheetId) -> Vec<String> {
     get_range_schemas_for_sheet(storage.doc(), storage.sheets(), sid)
         .into_iter()
         .map(|r| r.id)
         .collect()
 }
-
 
 pub(super) fn make_custom_formula_range_schema(
     id: &str,

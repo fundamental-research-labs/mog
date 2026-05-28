@@ -11,14 +11,14 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::engine::validation;
 use crate::storage::sheet::structural::StructuralOps;
 
+use super::super::metadata_shift;
+use super::super::mutation::{rebuild_merge_index, sync_mirror_merge_regions};
 use super::formula_writeback::{invalidate_stale_yrs_formulas, regenerate_named_range_yrs_refs};
 use super::pre_delete_reanchor::pre_delete_re_anchor_range_refs;
 use super::range_virtual_cells::{
     collect_virtual_cell_ids_for_deleted_cols, collect_virtual_cell_ids_for_deleted_rows,
     purge_virtual_cell_ids_from_yrs,
 };
-use super::super::metadata_shift;
-use super::super::mutation::{rebuild_merge_index, sync_mirror_merge_regions};
 
 // -------------------------------------------------------------------
 // Structure Change (insert/delete rows/cols)

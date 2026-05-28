@@ -269,10 +269,7 @@ mod tests {
             } => {
                 assert_eq!(path, "/");
                 assert!(left.contains("parse error:"), "left={left}");
-                assert!(
-                    left.contains("unknown namespace prefix"),
-                    "left={left}"
-                );
+                assert!(left.contains("unknown namespace prefix"), "left={left}");
                 assert!(
                     reason.contains("left document failed to parse"),
                     "reason={reason}"

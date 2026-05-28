@@ -4,8 +4,8 @@ use ooxml_types::drawings::{
     LineFill, LineJoin, PenAlignment,
 };
 
-use super::common::{minimal_props, outline_color_rgb, roundtrip};
 use super::super::common::rgb;
+use super::common::{minimal_props, outline_color_rgb, roundtrip};
 
 #[test]
 fn roundtrip_arrowheads() {

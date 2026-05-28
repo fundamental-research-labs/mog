@@ -4,8 +4,8 @@
 pub mod a1;
 pub mod arena;
 pub mod error;
-pub mod json;
 pub mod imported_parts;
+pub mod json;
 pub mod opc;
 pub mod package_integrity;
 pub mod scanner;

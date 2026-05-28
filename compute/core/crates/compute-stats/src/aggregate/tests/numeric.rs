@@ -1,7 +1,7 @@
 use value_types::{CellControl, CellError, CellValue};
 
 use super::fixtures::{
-    all_nulls, assert_num, assert_null, empty, mixed_numbers, numbers, strings, with_errors,
+    all_nulls, assert_null, assert_num, empty, mixed_numbers, numbers, strings, with_errors,
 };
 use crate::aggregate::numeric::{
     pivot_average, pivot_count, pivot_max, pivot_min, pivot_product, pivot_sum,

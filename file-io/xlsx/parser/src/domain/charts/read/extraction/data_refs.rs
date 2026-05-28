@@ -332,4 +332,4 @@ fn extract_cat_ref_formula_str(src: &ooxml_types::charts::CatDataSource) -> Opti
 // Formatting extraction helpers
 // =============================================================================
 
-/// Extract ChartFormatData from optional ShapeProperties and TextBody.
+// Extract ChartFormatData from optional ShapeProperties and TextBody.

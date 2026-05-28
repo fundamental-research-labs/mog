@@ -1,8 +1,10 @@
-use super::{
-    CT_JPEG, CT_PNG, PackagePart, PackagePartKind, normalize_part_path,
-};
+use super::{CT_JPEG, CT_PNG, PackagePart, PackagePartKind, normalize_part_path};
 
-pub(super) fn imported_opaque_part(path: &str, content_type: Option<String>, bytes: Vec<u8>) -> PackagePart {
+pub(super) fn imported_opaque_part(
+    path: &str,
+    content_type: Option<String>,
+    bytes: Vec<u8>,
+) -> PackagePart {
     let normalized = normalize_part_path(path);
     let default_extension = content_type.is_none().then(|| {
         normalized

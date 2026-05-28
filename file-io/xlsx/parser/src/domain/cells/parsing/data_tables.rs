@@ -1,8 +1,8 @@
 #![allow(clippy::string_slice)]
 
-use super::xml_text::validated_xml_text;
 use super::super::helpers::{FormulaExtras, parse_a1_reference, parse_cell_ref_fast};
 use super::super::types::{DataTableEntry, ParseExtras};
+use super::xml_text::validated_xml_text;
 
 /// Classify a single XLSX `<f t="dataTable">` `r1` / `r2` attribute into the
 /// typed `formula_types::CellRef` form.

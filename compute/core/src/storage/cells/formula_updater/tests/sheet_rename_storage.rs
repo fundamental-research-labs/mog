@@ -2,8 +2,8 @@ use crate::storage::YrsStorage;
 use formula_types::IdentityFormula;
 use value_types::{CellValue, FiniteF64};
 
-use super::{make_cell_id, make_sheet_id};
 use super::super::update_formula_templates_on_sheet_rename;
+use super::{make_cell_id, make_sheet_id};
 
 #[test]
 fn test_update_templates_on_rename_end_to_end() {
@@ -244,7 +244,9 @@ fn test_update_templates_quoted_to_unquoted() {
     let s1 = make_sheet_id(1);
     let s2 = make_sheet_id(2);
     storage.add_sheet(&mut mirror, s1, "Sheet1", 10, 5).unwrap();
-    storage.add_sheet(&mut mirror, s2, "My Sheet", 10, 5).unwrap();
+    storage
+        .add_sheet(&mut mirror, s2, "My Sheet", 10, 5)
+        .unwrap();
 
     let cell_id = make_cell_id(400);
     storage.set_cell(

@@ -5,8 +5,8 @@ use crate::infra::xml::decode_xml_entities;
 
 use super::xml_values::{parse_bytes_u32, parse_val_attr_u32};
 use super::{
-    parse_chart_ext_lst, CatDataSource, NumData, NumDataSource, NumPoint, NumRef,
-    SeriesTextSource, StrData, StrPoint, StrRef,
+    CatDataSource, NumData, NumDataSource, NumPoint, NumRef, SeriesTextSource, StrData, StrPoint,
+    StrRef, parse_chart_ext_lst,
 };
 
 pub fn parse_series_text(xml: &[u8]) -> Option<SeriesTextSource> {

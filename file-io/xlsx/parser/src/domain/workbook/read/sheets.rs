@@ -1,6 +1,6 @@
 use super::xml::{
-    checked_xml_text, decode_xml_entities, extract_attr_value_in_range,
-    find_closing_tag_simple, find_element_end_simple,
+    checked_xml_text, decode_xml_entities, extract_attr_value_in_range, find_closing_tag_simple,
+    find_element_end_simple,
 };
 use crate::domain::workbook::types::{SheetInfo, SheetState};
 use crate::infra::scanner::find_tag_simd;
@@ -16,8 +16,7 @@ pub fn parse_workbook(xml: &[u8]) -> Vec<SheetInfo> {
         None => return sheets,
     };
 
-    let sheets_end = find_closing_tag_simple(xml, b"sheets", sheets_start)
-        .unwrap_or(xml.len());
+    let sheets_end = find_closing_tag_simple(xml, b"sheets", sheets_start).unwrap_or(xml.len());
     let mut pos = sheets_start;
 
     while pos < sheets_end {

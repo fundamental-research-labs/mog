@@ -1,5 +1,5 @@
-use super::helpers::*;
 use super::super::*;
+use super::helpers::*;
 use domain_types::domain::comment::NoteShapeAnchor;
 
 #[test]
@@ -116,12 +116,7 @@ fn test_set_note_dimensions_applies_height_and_width_independently() {
     assert_eq!(width_added.note_width, Some(60.0));
 
     assert!(set_note_dimensions(
-        doc,
-        sheets,
-        &sheet_id,
-        &note.id,
-        None,
-        None
+        doc, sheets, &sheet_id, &note.id, None, None
     ));
     let unchanged = get_comment(doc, sheets, &sheet_id, &note.id).unwrap();
     assert_eq!(unchanged.note_height, Some(120.0));

@@ -1,4 +1,4 @@
-use super::{escape, xstring, ElementState, XmlWriter};
+use super::{ElementState, XmlWriter, escape, xstring};
 
 impl XmlWriter {
     /// Write escaped text content.

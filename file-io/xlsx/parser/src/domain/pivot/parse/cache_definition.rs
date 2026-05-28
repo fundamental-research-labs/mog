@@ -146,9 +146,13 @@ mod tests {
         ];
 
         for (raw, expected) in cases {
-            let xml =
-                format!(r#"<pivotCacheDefinition><cacheSource type="{raw}"/></pivotCacheDefinition>"#);
-            assert_eq!(parse_pivot_cache_definition(xml.as_bytes()).source_type, expected);
+            let xml = format!(
+                r#"<pivotCacheDefinition><cacheSource type="{raw}"/></pivotCacheDefinition>"#
+            );
+            assert_eq!(
+                parse_pivot_cache_definition(xml.as_bytes()).source_type,
+                expected
+            );
         }
 
         assert_eq!(

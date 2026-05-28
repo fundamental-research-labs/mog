@@ -74,7 +74,6 @@ pub fn find_start_tag_end_quoted(bytes: &[u8], start: usize) -> StartTagEnd {
     }
 }
 
-
 /// Find a specific XML tag (e.g., `<sheetData>`) in the byte stream.
 ///
 /// This is optimized for OOXML parsing where we know the exact tags to look for.
@@ -131,7 +130,6 @@ pub fn find_element_end(bytes: &[u8], start: usize) -> Option<usize> {
         StartTagEnd::UnterminatedQuote { .. } | StartTagEnd::Missing => None,
     }
 }
-
 
 /// Find the closing tag for an element (e.g., `</sheetData>`).
 ///

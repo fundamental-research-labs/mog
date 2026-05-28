@@ -2,9 +2,9 @@ use cell_types::{CellId, SheetId};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{
-    Axis, CellPosition, CfChange, ChangeKind, CommentChange, FilterChange,
-    FloatingObjectChange, FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult,
-    PageBreakChange, PivotTableChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange,
+    Axis, CellPosition, CfChange, ChangeKind, CommentChange, FilterChange, FloatingObjectChange,
+    FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult, PageBreakChange,
+    PivotTableChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange,
     ScrollPositionChange, SheetChange, SheetChangeField, SheetSettingsChange, SparklineChange,
     SplitConfigChange, TableChange,
 };

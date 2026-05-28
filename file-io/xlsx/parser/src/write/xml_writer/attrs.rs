@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::io::Write;
 
-use super::{escape, xstring, ElementState, XmlWriter};
+use super::{ElementState, XmlWriter, escape, xstring};
 
 impl XmlWriter {
     /// Add an attribute to the current element.

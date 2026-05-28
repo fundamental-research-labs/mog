@@ -1,8 +1,11 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr, parse_bool_attr_with_default, parse_f64_attr, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    parse_bool_attr, parse_bool_attr_with_default, parse_f64_attr, parse_string_attr,
+    parse_u32_attr,
+};
 
-use super::support::{parse_color_ref, parse_optional_bool_element};
 use super::super::types::*;
+use super::support::{parse_color_ref, parse_optional_bool_element};
 
 /// Parse the `x14ac:knownFonts` attribute from the `<fonts>` element in styles.xml.
 ///

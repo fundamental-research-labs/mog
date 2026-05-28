@@ -1,6 +1,6 @@
-use super::fixtures::{default_opts, pts};
 use super::super::format::{format_significant, round_coef};
 use super::super::linear_regression;
+use super::fixtures::{default_opts, pts};
 
 #[test]
 fn equation_string_format() {
@@ -11,7 +11,6 @@ fn equation_string_format() {
     assert!(result.equation.contains('x'));
 }
 
-
 #[test]
 fn format_significant_basic() {
     assert_eq!(format_significant(1234.5, 4), "1234");
@@ -19,7 +18,6 @@ fn format_significant_basic() {
     assert_eq!(format_significant(0.001234, 4), "0.001234");
     assert_eq!(format_significant(0.0, 4), "0");
 }
-
 
 #[test]
 fn round_coef_zero_threshold() {

@@ -1,8 +1,6 @@
 use super::IdentityRangeSchemaRef;
 
-pub(super) fn parse_range_corners(
-    rr: &IdentityRangeSchemaRef,
-) -> Option<((u32, u32), (u32, u32))> {
+pub(super) fn parse_range_corners(rr: &IdentityRangeSchemaRef) -> Option<((u32, u32), (u32, u32))> {
     fn parse_row_col(id: &str) -> Option<(u32, u32)> {
         let (r_str, c_str) = id.split_once(':')?;
         Some((r_str.parse::<u32>().ok()?, c_str.parse::<u32>().ok()?))

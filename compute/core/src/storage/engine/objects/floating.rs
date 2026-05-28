@@ -3,8 +3,8 @@ use crate::engine_types::floating_objects::{
     CreateShapeConfig, FlipAxis, MoveTarget, ResizeConfig, ShapeStyleUpdate,
 };
 use crate::snapshot::{FloatingObjectBounds, MutationResult};
-use crate::storage::engine::services;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use domain_types::domain::floating_object::FloatingObject;
@@ -25,7 +25,8 @@ impl YrsComputeEngine {
         object_id: &str,
         json: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_floating_object(&mut self.stores, sheet_id, object_id, json).map(shared::with_empty_patches)
+        services::objects::set_floating_object(&mut self.stores, sheet_id, object_id, json)
+            .map(shared::with_empty_patches)
     }
 
     #[bridge::read(scope = "sheet")]
@@ -51,7 +52,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::delete_floating_object(&mut self.stores, sheet_id, object_id).map(shared::with_empty_patches)
+        services::objects::delete_floating_object(&mut self.stores, sheet_id, object_id)
+            .map(shared::with_empty_patches)
     }
 
     // -------------------------------------------------------------------
@@ -62,7 +64,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_floating_object(&mut self.stores, sheet_id, config).map(shared::with_empty_patches)
+        services::objects::create_floating_object(&mut self.stores, sheet_id, config)
+            .map(shared::with_empty_patches)
     }
 
     /// Update a floating object by merging partial JSON updates.
@@ -84,7 +87,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: CreateShapeConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_shape(&mut self.stores, sheet_id, config).map(shared::with_empty_patches)
+        services::objects::create_shape(&mut self.stores, sheet_id, config)
+            .map(shared::with_empty_patches)
     }
 
     /// Move a floating object to a new position.
@@ -141,7 +145,8 @@ impl YrsComputeEngine {
         object_id: &str,
         style: ShapeStyleUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_shape_style(&mut self.stores, sheet_id, object_id, style).map(shared::with_empty_patches)
+        services::objects::update_shape_style(&mut self.stores, sheet_id, object_id, style)
+            .map(shared::with_empty_patches)
     }
 
     /// Flip a floating object along an axis.

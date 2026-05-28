@@ -84,7 +84,10 @@ fn test_create_style_with_all_components() {
     assert_eq!(xf.apply_fill, Some(true));
     assert_eq!(xf.apply_border, Some(true));
     assert_eq!(xf.apply_alignment, None);
-    assert_eq!(xf.alignment.as_ref().unwrap().horizontal, Some(HorizontalAlign::Center));
+    assert_eq!(
+        xf.alignment.as_ref().unwrap().horizontal,
+        Some(HorizontalAlign::Center)
+    );
 }
 
 #[test]

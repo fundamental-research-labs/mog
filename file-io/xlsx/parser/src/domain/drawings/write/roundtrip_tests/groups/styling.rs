@@ -1,6 +1,4 @@
-use crate::domain::drawings::write::types::{
-    BlackWhiteMode, DrawingColor, DrawingFill, SolidFill,
-};
+use crate::domain::drawings::write::types::{BlackWhiteMode, DrawingColor, DrawingFill, SolidFill};
 
 use super::common::{minimal_group_props, roundtrip_group};
 

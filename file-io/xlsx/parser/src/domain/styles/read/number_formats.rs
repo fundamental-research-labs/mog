@@ -1,7 +1,7 @@
 use crate::infra::scanner::{find_element_end, find_tag_simd};
 
-use super::raw::RawNumFmt;
 use super::super::types::*;
+use super::raw::RawNumFmt;
 
 /// Get the number format code for a style index
 ///

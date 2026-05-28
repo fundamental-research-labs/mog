@@ -25,10 +25,7 @@ pub(super) fn decode_xml_entities(bytes: &[u8]) -> String {
 }
 
 /// Extract attribute value within a byte slice.
-pub(super) fn extract_attr_value_in_range<'a>(
-    bytes: &'a [u8],
-    attr: &[u8],
-) -> Option<&'a [u8]> {
+pub(super) fn extract_attr_value_in_range<'a>(bytes: &'a [u8], attr: &[u8]) -> Option<&'a [u8]> {
     let attr_pos = find_attr_simd(bytes, attr, 0)?;
     let value_start = attr_pos + attr.len();
     let (start, end) = extract_quoted_value(bytes, value_start)?;
@@ -36,11 +33,7 @@ pub(super) fn extract_attr_value_in_range<'a>(
 }
 
 /// Simple closing tag finder that doesn't use the full scanner.
-pub(super) fn find_closing_tag_simple(
-    bytes: &[u8],
-    tag: &[u8],
-    start: usize,
-) -> Option<usize> {
+pub(super) fn find_closing_tag_simple(bytes: &[u8], tag: &[u8], start: usize) -> Option<usize> {
     let mut pos = start;
 
     while pos + 2 + tag.len() < bytes.len() {

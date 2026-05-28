@@ -5,11 +5,7 @@ use crate::mirror::types::MergeRegion;
 
 impl CellMirror {
     /// Set merge regions for a sheet (replaces all existing).
-    pub fn set_merge_regions(
-        &mut self,
-        sheet_id: &SheetId,
-        regions: Vec<MergeRegion>,
-    ) {
+    pub fn set_merge_regions(&mut self, sheet_id: &SheetId, regions: Vec<MergeRegion>) {
         if let Some(s) = self.sheets.get_mut(sheet_id) {
             s.merge_regions = regions;
         }

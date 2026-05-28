@@ -1,7 +1,9 @@
-use super::super::styling::parse_color;
 use super::super::super::helpers::{extract_attr_value_in_element, parse_u32};
 use super::super::super::reader::elements::direct_child_slice;
-use super::super::super::types::{BulletColor, BulletProperties, BulletSize, BulletType, DrawingColor, TextFont};
+use super::super::super::types::{
+    BulletColor, BulletProperties, BulletSize, BulletType, DrawingColor, TextFont,
+};
+use super::super::styling::parse_color;
 use ooxml_types::drawings::{StPitchFamily, TextAutonumberType};
 
 pub(super) fn parse_bullet_props(xml: &[u8]) -> Option<BulletProperties> {

@@ -30,7 +30,10 @@ fn test_noop_without_formula_or_table_context() {
         qualify_implicit_structured_refs("[@Score]", Some("Table1")),
         "[@Score]"
     );
-    assert_eq!(qualify_implicit_structured_refs("=[@Score]", None), "=[@Score]");
+    assert_eq!(
+        qualify_implicit_structured_refs("=[@Score]", None),
+        "=[@Score]"
+    );
     assert_eq!(
         qualify_implicit_structured_refs("=[@Score]", Some("")),
         "=[@Score]"

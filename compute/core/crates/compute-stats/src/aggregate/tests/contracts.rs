@@ -1,6 +1,6 @@
 use value_types::{CellError, CellValue};
 
-use super::fixtures::{assert_num, assert_null};
+use super::fixtures::{assert_null, assert_num};
 use crate::aggregate::{aggregate, get_aggregate_functions};
 use crate::types::AggregateFunction;
 use crate::values::cell_value_is_numeric;

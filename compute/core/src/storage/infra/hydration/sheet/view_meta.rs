@@ -34,19 +34,12 @@ pub(crate) fn hydrate_sheet_view_metadata(
     hydrate_hf_images(txn, meta_map, &sheet.hf_images);
     hydrate_page_breaks(txn, meta_map, &sheet.page_breaks);
 
-    yrs_schema::helpers::write_json_vec(
-        meta_map,
-        txn,
-        "extraSheetViews",
-        &sheet.extra_sheet_views,
-    );
+    yrs_schema::helpers::write_json_vec(meta_map, txn, "extraSheetViews", &sheet.extra_sheet_views);
 
     if let Some(ref uid) = sheet.uid {
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
-    if write_sheet_properties
-        && let Some(properties) = &sheet.sheet_properties
-    {
+    if write_sheet_properties && let Some(properties) = &sheet.sheet_properties {
         yrs_schema::sheet_properties::insert(txn, meta_map, properties);
         if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
             meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));

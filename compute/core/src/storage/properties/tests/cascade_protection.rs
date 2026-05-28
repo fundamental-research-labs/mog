@@ -1,5 +1,5 @@
-use super::*;
 use super::support::*;
+use super::*;
 
 #[test]
 fn test_effective_format_full_inheritance() {
@@ -221,16 +221,8 @@ fn test_effective_format_preloaded_no_ranges_uses_supplied_cell_format() {
         bold: Some(true),
         ..Default::default()
     };
-    let eff = get_effective_format_preloaded(
-        &storage,
-        &sid,
-        3,
-        2,
-        None,
-        &cell_format,
-        Some(&gi),
-        None,
-    );
+    let eff =
+        get_effective_format_preloaded(&storage, &sid, 3, 2, None, &cell_format, Some(&gi), None);
 
     assert_eq!(eff.bold, Some(true));
     assert_eq!(eff.font_color, Some("#FF0000".to_string()));
@@ -282,4 +274,3 @@ fn test_positional_format_no_ranges_omits_cell_and_table_layers() {
     assert_eq!(eff.italic, Some(true));
     assert_eq!(eff.bold, Some(false));
 }
-

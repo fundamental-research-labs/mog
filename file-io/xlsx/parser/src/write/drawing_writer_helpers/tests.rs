@@ -542,8 +542,10 @@ fn connector_anchor_index_is_carried_without_anchor_level_ooxml_restoration() {
     };
 
     let result = build_sheet_drawing_data(&[conn]);
-    let (anchor_index, DrawingAnchor::TwoCell(anchor, _)) =
-        result.anchors.first().expect("connector anchor should emit")
+    let (anchor_index, DrawingAnchor::TwoCell(anchor, _)) = result
+        .anchors
+        .first()
+        .expect("connector anchor should emit")
     else {
         panic!("expected two-cell connector anchor");
     };

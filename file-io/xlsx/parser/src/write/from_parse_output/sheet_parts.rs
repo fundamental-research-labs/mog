@@ -106,9 +106,8 @@ pub(super) fn build_sheet_parts(
             style_remapper,
         );
         if !sheet_data.worksheet_root_namespaces.is_empty() {
-            sheet_writer.set_root_namespaces(NamespaceMap::from(
-                &sheet_data.worksheet_root_namespaces,
-            ));
+            sheet_writer
+                .set_root_namespaces(NamespaceMap::from(&sheet_data.worksheet_root_namespaces));
         }
 
         // ── Sheet UID (xr:uid on <worksheet> root) ───────────────────
@@ -271,13 +270,10 @@ pub(super) fn build_sheet_parts(
         let comments_data = if !sheet_data.comments.is_empty() {
             let original_authors = (!sheet_data.legacy_comment_authors.is_empty())
                 .then_some(sheet_data.legacy_comment_authors.as_slice());
-            let root_ns_attrs = sheet_data
-                .comment_package
-                .as_ref()
-                .and_then(|package| {
-                    (!package.comments_root_namespace_attrs.is_empty())
-                        .then_some(package.comments_root_namespace_attrs.as_slice())
-                });
+            let root_ns_attrs = sheet_data.comment_package.as_ref().and_then(|package| {
+                (!package.comments_root_namespace_attrs.is_empty())
+                    .then_some(package.comments_root_namespace_attrs.as_slice())
+            });
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(
                     sheet_num,
@@ -291,13 +287,10 @@ pub(super) fn build_sheet_parts(
         };
 
         // ── Threaded Comments ────────────────────────────────────────────
-        let threaded_root_ns_attrs = sheet_data
-            .comment_package
-            .as_ref()
-            .and_then(|package| {
-                (!package.threaded_comments_root_namespace_attrs.is_empty())
-                    .then_some(package.threaded_comments_root_namespace_attrs.as_slice())
-            });
+        let threaded_root_ns_attrs = sheet_data.comment_package.as_ref().and_then(|package| {
+            (!package.threaded_comments_root_namespace_attrs.is_empty())
+                .then_some(package.threaded_comments_root_namespace_attrs.as_slice())
+        });
         let threaded_comments = crate::domain::comments::write::threaded_comments_xml_from_domain(
             &sheet_data.comments,
             threaded_root_ns_attrs,
@@ -590,14 +583,19 @@ fn find_ext_lst_start_tag(xml: &str) -> Option<(usize, usize)> {
             } else {
                 start
             };
-            let end = xml[element_start..].find('>').map(|pos| element_start + pos + 1)?;
+            let end = xml[element_start..]
+                .find('>')
+                .map(|pos| element_start + pos + 1)?;
             Some((end, element_start))
         })
         .min_by_key(|(_, element_start)| *element_start)
 }
 
 fn find_ext_lst_end_tag(xml: &str, element_start: usize) -> Option<usize> {
-    let root_tag = &xml[element_start..xml[element_start..].find('>').map(|pos| element_start + pos)?];
+    let root_tag = &xml[element_start
+        ..xml[element_start..]
+            .find('>')
+            .map(|pos| element_start + pos)?];
     let name_start = root_tag.find('<')? + 1;
     let name_end = root_tag[name_start..]
         .find(|c: char| c.is_whitespace() || c == '>')

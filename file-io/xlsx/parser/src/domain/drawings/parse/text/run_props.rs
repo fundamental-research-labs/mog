@@ -1,9 +1,14 @@
-use super::common::{parse_direct_fill_choice, parse_ext_lst};
-use super::super::styling::{parse_color, parse_effect_list, parse_outline};
 use super::super::super::helpers::{extract_attr_value_in_element, parse_i32, parse_u32};
 use super::super::super::reader::elements::direct_child_slice;
-use super::super::super::types::{DrawingColor, Fill, Hyperlink, RunProperties, TextCapsType, TextFont, TextStrikeType, TextUnderlineType, UnderlineFill, UnderlineLine};
-use ooxml_types::drawings::{StPercentage, StPitchFamily, StTextFontSize, StTextNonNegativePoint, StTextPoint};
+use super::super::super::types::{
+    DrawingColor, Fill, Hyperlink, RunProperties, TextCapsType, TextFont, TextStrikeType,
+    TextUnderlineType, UnderlineFill, UnderlineLine,
+};
+use super::super::styling::{parse_color, parse_effect_list, parse_outline};
+use super::common::{parse_direct_fill_choice, parse_ext_lst};
+use ooxml_types::drawings::{
+    StPercentage, StPitchFamily, StTextFontSize, StTextNonNegativePoint, StTextPoint,
+};
 
 pub(super) fn parse_run_props(xml: &[u8]) -> RunProperties {
     let mut props = RunProperties::default();

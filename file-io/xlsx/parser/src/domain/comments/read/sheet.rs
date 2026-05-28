@@ -41,7 +41,11 @@ pub fn parse_comments_for_sheet(
         let comments_result = parse_comments(&comments_xml);
         let authors = comments_result.authors.clone();
         let root_ns_attrs = comments_result.root_namespace_attrs.clone();
-        let comments = comments_result.comments.iter().map(comment_to_output).collect();
+        let comments = comments_result
+            .comments
+            .iter()
+            .map(comment_to_output)
+            .collect();
         (comments, authors, root_ns_attrs)
     } else {
         (Vec::new(), Vec::new(), Vec::new())

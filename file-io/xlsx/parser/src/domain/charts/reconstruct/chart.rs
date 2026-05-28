@@ -1,4 +1,4 @@
-use domain_types::{chart::ChartSpec, ChartDefinition};
+use domain_types::{ChartDefinition, chart::ChartSpec};
 use ooxml_types::charts::{self, DisplayBlanksAs};
 
 use super::{

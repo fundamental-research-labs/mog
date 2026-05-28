@@ -9,11 +9,17 @@ use crate::test_helpers::TestResolver;
 use cell_types::SheetId;
 use formula_types::{CellRef, RangeType};
 
+#[path = "range_intersection_tests/display_round_trip.rs"]
 mod display_round_trip;
+#[path = "range_intersection_tests/error_cases.rs"]
 mod error_cases;
+#[path = "range_intersection_tests/intersection_operator.rs"]
 mod intersection_operator;
+#[path = "range_intersection_tests/literal_ranges.rs"]
 mod literal_ranges;
+#[path = "range_intersection_tests/non_intersection.rs"]
 mod non_intersection;
+#[path = "range_intersection_tests/range_operator.rs"]
 mod range_operator;
 
 // ---------------------------------------------------------------------------

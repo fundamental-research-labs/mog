@@ -1,5 +1,5 @@
 use cell_types::SheetId;
-use compute_document::hex::{id_to_hex, SmallHex};
+use compute_document::hex::{SmallHex, id_to_hex};
 use domain_types::domain::named_range::DefinedName;
 
 use crate::mirror::CellMirror;

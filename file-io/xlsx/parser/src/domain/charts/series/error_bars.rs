@@ -5,8 +5,7 @@ use crate::infra::scanner::{
 use super::data_sources::parse_num_ref;
 use super::xml_values::parse_bool_val;
 use super::{
-    parse_chart_ext_lst, ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType,
-    NumDataSource,
+    ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType, NumDataSource, parse_chart_ext_lst,
 };
 use crate::domain::charts::parse_shape_properties;
 

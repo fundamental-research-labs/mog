@@ -1,6 +1,6 @@
 use bridge_core as bridge;
 
-use super::{services, YrsComputeEngine};
+use super::{YrsComputeEngine, services};
 use crate::snapshot::{MutationResult, UndoState};
 use value_types::ComputeError;
 

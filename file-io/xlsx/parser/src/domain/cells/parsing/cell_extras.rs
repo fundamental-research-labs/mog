@@ -1,5 +1,5 @@
-use super::xml_text::validated_xml_text;
 use super::super::types::{CELL_TYPE_DATE, CellData, ParseExtras};
+use super::xml_text::validated_xml_text;
 
 pub(super) struct CellExtrasInput {
     pub(super) has_cm: bool,

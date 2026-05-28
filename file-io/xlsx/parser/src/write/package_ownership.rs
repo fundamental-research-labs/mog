@@ -172,8 +172,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "query table definition mutation",
             "table connection binding mutation",
         ],
-        opaque_policy:
-            "known connection/query-table clusters must be emitted only from typed owner state",
+        opaque_policy: "known connection/query-table clusters must be emitted only from typed owner state",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::OleObjects,
@@ -290,13 +289,21 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::DocumentProperties,
         owner_domain: "docProps",
-        parts: &["docProps/core.xml", "docProps/app.xml", "docProps/custom.xml"],
+        parts: &[
+            "docProps/core.xml",
+            "docProps/app.xml",
+            "docProps/custom.xml",
+        ],
         relationships: &[
             "root -> core-properties",
             "root -> extended-properties",
             "root -> custom-properties",
         ],
-        content_types: &["core properties", "extended properties", "custom properties"],
+        content_types: &[
+            "core properties",
+            "extended properties",
+            "custom properties",
+        ],
         relationship_id_hints: &["root docProps r:id allocation"],
         dirty_invalidation_triggers: &[
             "document properties mutation",
@@ -346,7 +353,10 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::ThreadedComments,
         owner_domain: "threaded comments",
-        parts: &["xl/threadedComments/threadedComment*.xml", "xl/persons/person.xml"],
+        parts: &[
+            "xl/threadedComments/threadedComment*.xml",
+            "xl/persons/person.xml",
+        ],
         relationships: &["worksheet -> threadedComment", "workbook -> person"],
         content_types: &["threadedComment", "person"],
         relationship_id_hints: &["worksheet threaded comment r:id", "person id"],
@@ -370,7 +380,11 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "worksheet -> control",
             "control -> activeX",
         ],
-        content_types: &["control properties", "activeX xml", "activeX binary default"],
+        content_types: &[
+            "control properties",
+            "activeX xml",
+            "activeX binary default",
+        ],
         relationship_id_hints: &["control shape r:id", "control property r:id"],
         dirty_invalidation_triggers: &[
             "form control add/update/delete",
@@ -382,7 +396,10 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::PrintSettings,
         owner_domain: "print settings",
-        parts: &["xl/printerSettings/printerSettings*.bin", "worksheet print/page setup"],
+        parts: &[
+            "xl/printerSettings/printerSettings*.bin",
+            "worksheet print/page setup",
+        ],
         relationships: &["worksheet -> printerSettings"],
         content_types: &["printerSettings binary default"],
         relationship_id_hints: &["worksheet printer settings r:id"],
@@ -391,8 +408,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "print options mutation",
             "header/footer mutation",
         ],
-        opaque_policy:
-            "typed print/page setup is regenerated; printerSettings binaries are inert owner-scoped payloads",
+        opaque_policy: "typed print/page setup is regenerated; printerSettings binaries are inert owner-scoped payloads",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::Hyperlinks,
@@ -407,7 +423,11 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
     PackageOwnershipContract {
         owner: PackageFeatureOwner::Media,
         owner_domain: "media",
-        parts: &["xl/media/*", "xl/embeddings/*", "xl/drawings/_rels/drawing*.xml.rels"],
+        parts: &[
+            "xl/media/*",
+            "xl/embeddings/*",
+            "xl/drawings/_rels/drawing*.xml.rels",
+        ],
         relationships: &["drawing -> image", "drawing/chart -> package"],
         content_types: &["image defaults", "embedded package defaults"],
         relationship_id_hints: &["drawing media r:id"],
@@ -425,7 +445,13 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "xl/chartsheets/sheet*.xml",
             "xl/dialogsheets/sheet*.xml",
         ],
-        ooxml_modules: &["workbook", "worksheet", "chartsheet", "calc_chain", "custom_views"],
+        ooxml_modules: &[
+            "workbook",
+            "worksheet",
+            "chartsheet",
+            "calc_chain",
+            "custom_views",
+        ],
         canonical_type_status: CanonicalTypeStatus::NeedsCorrection,
         classification: OoxmlOwnershipClassification::TypedEditable,
         production_reader: "domain::workbook::read; domain::worksheet::read; pipeline::full_parse",
@@ -438,8 +464,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
-        unsupported_diagnostic_policy:
-            "chartsheets/dialogsheets and calcChain gaps use unsupported-needs-model or intentional-recalculation-drop diagnostics",
+        unsupported_diagnostic_policy: "chartsheets/dialogsheets and calcChain gaps use unsupported-needs-model or intentional-recalculation-drop diagnostics",
         dirty_invalidation_triggers: &[
             "sheet add/delete/reorder",
             "workbook property mutation",
@@ -468,8 +493,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         canonical_type_status: CanonicalTypeStatus::NeedsCorrection,
         classification: OoxmlOwnershipClassification::TypedEditable,
-        production_reader:
-            "domain::worksheet, domain::validation, domain::cond_format, domain::print, domain::protection, domain::sparklines",
+        production_reader: "domain::worksheet, domain::validation, domain::cond_format, domain::print, domain::protection, domain::sparklines",
         private_parser_adapter: "SheetData semantic containers and parser-local rule structs",
         full_parse_result_field: "sheets[*]",
         parse_output_domain_owner: "SheetData and worksheet semantic containers",
@@ -479,8 +503,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "typed-owned-partial for partial worksheet models; unsupported-needs-model-dropped for unmodeled active containers",
+        unsupported_diagnostic_policy: "typed-owned-partial for partial worksheet models; unsupported-needs-model-dropped for unmodeled active containers",
         dirty_invalidation_triggers: &[
             "cell/range mutation",
             "row/column mutation",
@@ -492,7 +515,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
     },
     OoxmlOwnershipRow {
         surface: "styles, shared strings, rich text, and theme registries",
-        package_part_patterns: &["xl/styles.xml", "xl/sharedStrings.xml", "xl/theme/theme*.xml"],
+        package_part_patterns: &[
+            "xl/styles.xml",
+            "xl/sharedStrings.xml",
+            "xl/theme/theme*.xml",
+        ],
         ooxml_modules: &["shared", "shared_strings", "styles", "themes"],
         canonical_type_status: CanonicalTypeStatus::NeedsCorrection,
         classification: OoxmlOwnershipClassification::TypedEditable,
@@ -513,13 +540,21 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "shared string mutation",
             "theme mutation",
         ],
-        semantic_references: &["style ids", "dxf ids", "shared string ids", "theme color/font refs"],
+        semantic_references: &[
+            "style ids",
+            "dxf ids",
+            "shared string ids",
+            "theme color/font refs",
+        ],
         user_visible_behavior: "rendered values, rich text, and style identity",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 03",
     },
     OoxmlOwnershipRow {
         surface: "cell, row, column, trailing-column, and authored-run style references",
-        package_part_patterns: &["xl/styles.xml cellXfs", "xl/worksheets/sheet*.xml style attrs"],
+        package_part_patterns: &[
+            "xl/styles.xml cellXfs",
+            "xl/worksheets/sheet*.xml style attrs",
+        ],
         ooxml_modules: &["styles", "worksheet"],
         canonical_type_status: CanonicalTypeStatus::ProductionReady,
         classification: OoxmlOwnershipClassification::TypedEditable,
@@ -533,8 +568,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
-        unsupported_diagnostic_policy:
-            "missing current style IDs are omitted instead of emitting invalid cellXfs references",
+        unsupported_diagnostic_policy: "missing current style IDs are omitted instead of emitting invalid cellXfs references",
         dirty_invalidation_triggers: &[
             "cell style mutation",
             "row style mutation",
@@ -563,17 +597,14 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_reader: "domain::tables, domain::connections",
         private_parser_adapter: "table and connection parser structs",
         full_parse_result_field: "tables, connections",
-        parse_output_domain_owner:
-            "WorkbookDataFeatures tables/connections/queryTables projection; compatibility fields SheetData.tables and ParseOutput.connections",
-        yrs_app_persistence_owner:
-            "table Yrs state plus workbookConnections registry; unreferenced connections survive export",
+        parse_output_domain_owner: "WorkbookDataFeatures tables/connections/queryTables projection; compatibility fields SheetData.tables and ParseOutput.connections",
+        yrs_app_persistence_owner: "table Yrs state plus workbookConnections registry; unreferenced connections survive export",
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "domain::tables::write; connection writer when modeled",
         package_feature_owner: Some(PackageFeatureOwner::ConnectionsAndQueryTables),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
-        unsupported_diagnostic_policy:
-            "unsupported-external-capable-dropped for refresh/external-capable connection behavior",
+        unsupported_diagnostic_policy: "unsupported-external-capable-dropped for refresh/external-capable connection behavior",
         dirty_invalidation_triggers: &[
             "table mutation",
             "connection mutation",
@@ -581,8 +612,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         semantic_references: &["table id/name", "connection id", "queryTable r:id"],
         user_visible_behavior: "table ranges, filters, and external data binding metadata",
-        fixture_coverage:
-            "WorkbookDataFeatures projection contract; L2 export no longer filters unreferenced connections",
+        fixture_coverage: "WorkbookDataFeatures projection contract; L2 export no longer filters unreferenced connections",
     },
     OoxmlOwnershipRow {
         surface: "drawings, drawing references, charts, ChartEx, media, and chart auxiliaries",
@@ -608,8 +638,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::DrawingObjects),
         auxiliary_policy: None,
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
-        unsupported_diagnostic_policy:
-            "typed-owned-partial for unsupported chart/drawing children; unsupported-needs-model for chartsheets until plan 01",
+        unsupported_diagnostic_policy: "typed-owned-partial for unsupported chart/drawing children; unsupported-needs-model for chartsheets until plan 01",
         dirty_invalidation_triggers: &[
             "drawing object mutation",
             "chart mutation",
@@ -643,14 +672,19 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::Comments),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "unsupported-active-dropped for ActiveX/executable controls; typed-owned-partial for comments/OLE gaps",
+        unsupported_diagnostic_policy: "unsupported-active-dropped for ActiveX/executable controls; typed-owned-partial for comments/OLE gaps",
         dirty_invalidation_triggers: &[
             "comment mutation",
             "control mutation",
             "OLE placeholder mutation",
         ],
-        semantic_references: &["comment ref", "thread/person id", "VML shape id", "control r:id", "OLE r:id"],
+        semantic_references: &[
+            "comment ref",
+            "thread/person id",
+            "VML shape id",
+            "control r:id",
+            "OLE r:id",
+        ],
         user_visible_behavior: "notes, threaded comments, form controls, OLE placeholders",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 04",
     },
@@ -674,8 +708,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::Controls),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
-        unsupported_diagnostic_policy:
-            "macro-bearing controls use security-disabled diagnostics; imported controls are preserved as non-editable typed objects",
+        unsupported_diagnostic_policy: "macro-bearing controls use security-disabled diagnostics; imported controls are preserved as non-editable typed objects",
         dirty_invalidation_triggers: &[
             "form control add/update/delete",
             "control property mutation",
@@ -689,8 +722,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "linked cell/range formulas",
         ],
         user_visible_behavior: "visible form control placeholder, linked-cell metadata, and disabled macro assignment",
-        fixture_coverage:
-            "domain::controls tests cover worksheet controls, VML controls, props, and writer roundtrip",
+        fixture_coverage: "domain::controls tests cover worksheet controls, VML controls, props, and writer roundtrip",
     },
     OoxmlOwnershipRow {
         surface: "embedded OLE, linked-only OLE, and OLE preview media",
@@ -713,8 +745,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::OleObjects),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
         opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
-        unsupported_diagnostic_policy:
-            "linked OLE uses security-disabled diagnostics; missing embedded bytes use missing-part diagnostics",
+        unsupported_diagnostic_policy: "linked OLE uses security-disabled diagnostics; missing embedded bytes use missing-part diagnostics",
         dirty_invalidation_triggers: &[
             "OLE object add/delete/update",
             "embedded binary mutation",
@@ -728,8 +759,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "linked target",
             "preview media r:id",
         ],
-        user_visible_behavior:
-            "disabled OLE placeholder with preview image when available and link/embed identity",
+        user_visible_behavior: "disabled OLE placeholder with preview image when available and link/embed identity",
         fixture_coverage: "domain::controls OLE parser/writer tests and package graph ownership gates",
     },
     OoxmlOwnershipRow {
@@ -752,14 +782,18 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::Controls),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "security-disabled-active-content diagnostic with package part and relationship fingerprints",
+        unsupported_diagnostic_policy: "security-disabled-active-content diagnostic with package part and relationship fingerprints",
         dirty_invalidation_triggers: &[
             "ActiveX XML detected",
             "ActiveX binary detected",
             "control persistence relationship detected",
         ],
-        semantic_references: &["class id", "persistence r:id", "ActiveX XML path", "ActiveX binary path"],
+        semantic_references: &[
+            "class id",
+            "persistence r:id",
+            "ActiveX XML path",
+            "ActiveX binary path",
+        ],
         user_visible_behavior: "diagnostic-only disabled active content",
         fixture_coverage: "domain::controls active_x parser tests; production placeholder persistence pending",
     },
@@ -783,23 +817,26 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_reader: "domain::pivot, domain::slicers, domain::metadata",
         private_parser_adapter: "pivot/cache/slicer/metadata parser structs",
         full_parse_result_field: "pivot_tables, slicers, metadata, rich_data",
-        parse_output_domain_owner:
-            "WorkbookDataFeatures pivot/slicer/timeline/metadata projection; compatibility fields ParseOutput.pivot_tables, pivot_cache_records, slicer_caches, metadata and SheetData.slicers",
+        parse_output_domain_owner: "WorkbookDataFeatures pivot/slicer/timeline/metadata projection; compatibility fields ParseOutput.pivot_tables, pivot_cache_records, slicer_caches, metadata and SheetData.slicers",
         yrs_app_persistence_owner: "pivot/slicer/metadata state where modeled; WorkbookDataFeatures projection rebuilt on export",
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "pivot/slicer/metadata writers",
         package_feature_owner: Some(PackageFeatureOwner::PivotTables),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::DiagnosticsOnly),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "unsupported-needs-model-dropped for timelines/data-model/cube gaps until plan 05 models them",
+        unsupported_diagnostic_policy: "unsupported-needs-model-dropped for timelines/data-model/cube gaps until plan 05 models them",
         dirty_invalidation_triggers: &[
             "pivot mutation",
             "pivot source mutation",
             "slicer/timeline binding mutation",
             "metadata cm/vm mutation",
         ],
-        semantic_references: &["pivot cache id", "slicer cache id", "timeline cache id", "cm/vm index"],
+        semantic_references: &[
+            "pivot cache id",
+            "slicer cache id",
+            "timeline cache id",
+            "cm/vm index",
+        ],
         user_visible_behavior: "pivot output, slicers/timelines, rich data display and metadata bindings",
         fixture_coverage: "WorkbookDataFeatures projection contract; feature gates still owned by plan 05 follow-up slices",
     },
@@ -812,17 +849,14 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_reader: "domain::external",
         private_parser_adapter: "external link parser structs and workbook externalReference order",
         full_parse_result_field: "external_links",
-        parse_output_domain_owner:
-            "WorkbookDataFeatures externalLinks projection; compatibility field ParseOutput.external_links",
-        yrs_app_persistence_owner:
-            "workbook links registry plus imported external cache records",
+        parse_output_domain_owner: "WorkbookDataFeatures externalLinks projection; compatibility field ParseOutput.external_links",
+        yrs_app_persistence_owner: "workbook links registry plus imported external cache records",
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "write::from_parse_output external_links writer",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ExternalCapable),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "orphan external links and unsupported DDE/OLE refresh behaviors are diagnosed; stale opaque externalLink parts are rejected",
+        unsupported_diagnostic_policy: "orphan external links and unsupported DDE/OLE refresh behaviors are diagnosed; stale opaque externalLink parts are rejected",
         dirty_invalidation_triggers: &[
             "external link add/update/delete",
             "external link reorder",
@@ -860,14 +894,17 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::DocumentProperties),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
         opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
-        unsupported_diagnostic_policy:
-            "inert-opaque-preserved for vetted inert custom XML; unsupported-needs-model for XML-map bindings",
+        unsupported_diagnostic_policy: "inert-opaque-preserved for vetted inert custom XML; unsupported-needs-model for XML-map bindings",
         dirty_invalidation_triggers: &[
             "document property mutation",
             "custom XML binding mutation",
             "sensitivity label mutation",
         ],
-        semantic_references: &["custom property pid", "XML map id", "custom XML relationship target"],
+        semantic_references: &[
+            "custom property pid",
+            "XML map id",
+            "custom XML relationship target",
+        ],
         user_visible_behavior: "document metadata and XML-bound data semantics",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plans 01/05",
     },
@@ -901,14 +938,17 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ExternalCapable),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "unsupported-active-dropped or unsupported-external-capable-dropped; unsupported-needs-model for revisions/volatile/property bags",
+        unsupported_diagnostic_policy: "unsupported-active-dropped or unsupported-external-capable-dropped; unsupported-needs-model for revisions/volatile/property bags",
         dirty_invalidation_triggers: &[
             "external reference mutation",
             "macro/security content detected",
             "web extension detected",
         ],
-        semantic_references: &["external link ordinal", "external relationship target", "revision id"],
+        semantic_references: &[
+            "external link ordinal",
+            "external relationship target",
+            "revision id",
+        ],
         user_visible_behavior: "external workbook bindings, revision history, executable or refresh-capable content",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 05/security slices",
     },
@@ -923,7 +963,13 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "xl/timelines/timeline*.xml",
             "xl/timelineCaches/timelineCache*.xml",
         ],
-        ooxml_modules: &["revisions", "smart_tags", "timelines", "volatile", "xml_map"],
+        ooxml_modules: &[
+            "revisions",
+            "smart_tags",
+            "timelines",
+            "volatile",
+            "xml_map",
+        ],
         canonical_type_status: CanonicalTypeStatus::InventoryOnly,
         classification: OoxmlOwnershipClassification::UnsupportedActive,
         production_reader: "package inventory and feature-specific scanners where present",
@@ -936,8 +982,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         package_feature_owner: Some(PackageFeatureOwner::SlicersAndTimelines),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::UnsupportedNeedsModel),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy:
-            "unsupported-needs-model-dropped with package part and relationship fingerprints",
+        unsupported_diagnostic_policy: "unsupported-needs-model-dropped with package part and relationship fingerprints",
         dirty_invalidation_triggers: &["detected package adjunct", "owning typed feature mutation"],
         semantic_references: &[
             "timeline cache id",
@@ -945,8 +990,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "feature property bag id",
             "XML map id",
         ],
-        user_visible_behavior:
-            "functional but currently unmodeled OOXML surfaces that must not be stale-replayed",
+        user_visible_behavior: "functional but currently unmodeled OOXML surfaces that must not be stale-replayed",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plans 02/05",
     },
 ];
@@ -1021,9 +1065,7 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
         Some(PackageFeatureOwner::Media)
     } else if matches!(
         path,
-        "docProps/core.xml"
-            | "docProps/app.xml"
-            | "docProps/custom.xml"
+        "docProps/core.xml" | "docProps/app.xml" | "docProps/custom.xml"
     ) {
         Some(PackageFeatureOwner::DocumentProperties)
     } else {
@@ -1221,9 +1263,9 @@ mod tests {
             "xl/smartTags.xml",
         ] {
             assert!(
-                ROUND_9_OOXML_OWNERSHIP_MATRIX.iter().any(|row| row
-                    .package_part_patterns
-                    .contains(&required_pattern)),
+                ROUND_9_OOXML_OWNERSHIP_MATRIX
+                    .iter()
+                    .any(|row| row.package_part_patterns.contains(&required_pattern)),
                 "ROUND_9_OOXML_OWNERSHIP_MATRIX lacks high-risk package pattern {required_pattern}"
             );
         }

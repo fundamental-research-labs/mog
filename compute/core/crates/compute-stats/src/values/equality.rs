@@ -81,7 +81,9 @@ mod tests {
     #[test]
     fn test_is_not_numeric_infinity() {
         assert!(!cell_value_is_numeric(&CellValue::number(f64::INFINITY)));
-        assert!(!cell_value_is_numeric(&CellValue::number(f64::NEG_INFINITY)));
+        assert!(!cell_value_is_numeric(&CellValue::number(
+            f64::NEG_INFINITY
+        )));
     }
 
     #[test]

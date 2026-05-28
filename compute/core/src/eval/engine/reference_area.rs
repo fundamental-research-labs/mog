@@ -192,19 +192,15 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     pub(in crate::eval) fn eval_node_as_area<'b>(
         &'b mut self,
         node: &'b ASTNode,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RefArea, ComputeError>> + 'b>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RefArea, ComputeError>> + 'b>>
+    {
         Box::pin(async move {
             self.tick()?;
             self.eval_node_as_area_inner(node).await
         })
     }
 
-    async fn eval_node_as_area_inner(
-        &mut self,
-        node: &ASTNode,
-    ) -> Result<RefArea, ComputeError> {
+    async fn eval_node_as_area_inner(&mut self, node: &ASTNode) -> Result<RefArea, ComputeError> {
         match node {
             ASTNode::CellReference(CellRefNode { reference, .. }) => {
                 let (sheet, row, col) =
@@ -255,13 +251,12 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             ASTNode::BinaryOp {
                 op: compute_parser::BinOp::Intersect,
                 ..
-            } => {
-                self.eval_node_as_intersection_area(node).await?.ok_or_else(|| {
-                    ComputeError::Eval {
-                        message: "Intersection: referenced areas do not overlap".into(),
-                    }
-                })
-            }
+            } => self
+                .eval_node_as_intersection_area(node)
+                .await?
+                .ok_or_else(|| ComputeError::Eval {
+                    message: "Intersection: referenced areas do not overlap".into(),
+                }),
 
             ASTNode::Function { name, args } => {
                 let upper = name.to_uppercase();

@@ -406,8 +406,10 @@ mod xml {
         assert!(
             xml_str.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
         );
-        assert!(xml_str
-            .contains("xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\""));
+        assert!(
+            xml_str
+                .contains("xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"")
+        );
         assert!(xml_str.contains("<Default Extension=\"rels\""));
         assert!(xml_str.contains("<Default Extension=\"xml\""));
         assert!(xml_str.contains("<Override PartName=\"/xl/workbook.xml\""));
@@ -577,7 +579,13 @@ mod constants {
             CT_DIAGRAM_DRAWING,
             "application/vnd.ms-office.drawingml.diagramDrawing+xml"
         );
-        assert_eq!(CT_METADATA, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml");
-        assert_eq!(CT_CALC_CHAIN, "application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml");
+        assert_eq!(
+            CT_METADATA,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"
+        );
+        assert_eq!(
+            CT_CALC_CHAIN,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"
+        );
     }
 }

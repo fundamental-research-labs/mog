@@ -1,7 +1,7 @@
-use super::helpers::{empty_style_cell, extent_test_cell};
 use super::super::{
     compute_dimensions, compute_sheet_extent, convert_sheet, extend_sheet_data_extent, non_empty,
 };
+use super::helpers::{empty_style_cell, extent_test_cell};
 use crate::output::results::{CommentOutput, FullParsedSheet, HyperlinkOutput};
 use domain_types::{AuthoredStyleRun, Comment, SheetData};
 use ooxml_types::worksheet::MergeRange;

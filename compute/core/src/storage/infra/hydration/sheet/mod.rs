@@ -37,8 +37,7 @@ use dimensions::{DimensionMaps, hydrate_dimensions};
 use domain::{hydrate_worksheet_import_xml_metadata, hydrate_worksheet_semantic_containers};
 use grid_index::{collect_physical_phantom_cells, mirror_pos_map_into_grid_index};
 use identity::{
-    allocate_missing_anchored_identities, insert_missing_anchored_identities,
-    sheet_identity_extent,
+    allocate_missing_anchored_identities, insert_missing_anchored_identities, sheet_identity_extent,
 };
 use view_meta::{hydrate_sheet_view_metadata, sheet_color_to_hex};
 

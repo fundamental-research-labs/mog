@@ -3,7 +3,8 @@
 // ============================================================================
 
 /// Main namespace for spreadsheetml
-pub(super) const SPREADSHEETML_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+pub(super) const SPREADSHEETML_NS: &str =
+    "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 /// Markup compatibility namespace (for mc:Ignorable)
 pub(super) const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
@@ -23,4 +24,3 @@ pub(super) const OFFICE_NS: &str = "urn:schemas-microsoft-com:office:office";
 
 /// Excel namespace for VML
 pub(super) const EXCEL_NS: &str = "urn:schemas-microsoft-com:office:excel";
-

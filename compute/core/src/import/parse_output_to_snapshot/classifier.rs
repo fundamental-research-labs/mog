@@ -535,7 +535,7 @@ fn encode_mixed_cbor(run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
                 payload.push(0x04);
                 payload.push(error_discriminant(*err));
             }
-            CellValue::Array(_) | CellValue::Control(_) => {
+            CellValue::Array(_) | CellValue::Control(_) | CellValue::Image(_) => {
                 // Treat as null for now — these are not expected in import data.
                 payload.push(0x00);
             }

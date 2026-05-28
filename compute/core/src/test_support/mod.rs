@@ -40,5 +40,6 @@ pub fn cell_value_to_input_string(value: &CellValue) -> String {
         CellValue::Error(..) => String::new(),
         CellValue::Array(_) => String::new(),
         CellValue::Control(c) => if c.value { "TRUE" } else { "FALSE" }.to_string(),
+        CellValue::Image(image) => image.fallback_text().to_string(),
     }
 }

@@ -639,7 +639,9 @@ fn constant_to_a1(v: &CellValue) -> String {
         CellValue::Text(s) => format!("\"{}\"", s.replace('"', "\"\"")),
         CellValue::Error(e, _) => e.as_str().to_string(),
         // Not produced by `try_parse_constant_literal`; defensive fallback.
-        CellValue::Null | CellValue::Array(_) | CellValue::Control(_) => String::new(),
+        CellValue::Null | CellValue::Array(_) | CellValue::Control(_) | CellValue::Image(_) => {
+            String::new()
+        }
     }
 }
 

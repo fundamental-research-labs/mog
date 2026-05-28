@@ -340,6 +340,7 @@ pub(in crate::eval) fn cell_value_cmp(a: &CellValue, b: &CellValue) -> i32 {
                     CellValue::Error(..) => 4,
                     CellValue::Array(_) => 5,
                     CellValue::Control(_) => 3, // coerces to Boolean
+                    CellValue::Image(_) => 5,
                 }
             }
             (type_rank(a) as i32) - (type_rank(b) as i32)
@@ -393,6 +394,7 @@ pub(in crate::eval) fn cell_value_cmp_for_lookup(a: &CellValue, b: &CellValue) -
             CellValue::Error(..) => 4,
             CellValue::Array(_) => 5,
             CellValue::Control(_) => 3, // coerces to Boolean
+            CellValue::Image(_) => 5,
         }
     }
 

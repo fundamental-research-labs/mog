@@ -25,6 +25,7 @@
 #![deny(clippy::all, clippy::pedantic)]
 
 mod cell_array;
+mod cell_image;
 mod cell_value;
 mod color;
 mod errors;
@@ -56,6 +57,7 @@ pub mod precision;
 // for consumers who need the full module namespace.
 
 pub use cell_array::{CellArray, CellArrayError};
+pub use cell_image::{CellImage, CellImageSizing};
 pub use cell_value::{CellControl, CellControlType, CellValue, format_number};
 pub use color::{Color, HexColorError};
 pub use date_serial::{

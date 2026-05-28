@@ -65,6 +65,7 @@ export const VALUE_TYPE_NUMBER = 1;
 export const VALUE_TYPE_TEXT = 2;
 export const VALUE_TYPE_BOOL = 3;
 export const VALUE_TYPE_ERROR = 4;
+export const VALUE_TYPE_IMAGE = 5;
 export const HAS_FORMULA = 0x8;
 export const HAS_COMMENT = 0x10;
 export const HAS_SPARKLINE = 0x20;
@@ -73,6 +74,7 @@ export const IS_CHECKBOX = 0x80;
 export const IS_SPILL_MEMBER = 0x100;
 export const HAS_VALIDATION_ERROR = 0x200;
 export const HAS_CF_EXTRAS = 0x400;
+export const HAS_CELL_IMAGE = 0x800;
 
 /** Value type enum (convenience wrapper over flag bits 0-2). */
 export enum ValueType {
@@ -81,6 +83,7 @@ export enum ValueType {
   Text = 2,
   Bool = 3,
   Error = 4,
+  Image = 5,
 }
 
 // ---------------------------------------------------------------------------

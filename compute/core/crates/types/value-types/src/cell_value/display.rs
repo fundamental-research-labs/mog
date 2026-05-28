@@ -17,6 +17,7 @@ impl fmt::Display for CellValue {
                 let label = if c.value { "TRUE" } else { "FALSE" };
                 write!(f, "{icon} {label}")
             }
+            CellValue::Image(image) => write!(f, "{}", image.fallback_text()),
             CellValue::Array(arr) => {
                 write!(f, "{{")?;
                 for (i, row) in arr.rows_iter().enumerate() {

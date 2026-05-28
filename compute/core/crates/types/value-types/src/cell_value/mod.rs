@@ -25,6 +25,7 @@ pub use control::{CellControl, CellControlType};
 use std::sync::Arc;
 
 use crate::CellError;
+use crate::CellImage;
 use crate::FiniteF64;
 use crate::cell_array::CellArray;
 
@@ -82,6 +83,8 @@ pub enum CellValue {
     /// Cell-embedded interactive control (checkbox, future: toggle, dropdown).
     /// For formula evaluation, coerces to `Boolean(control.value)`.
     Control(CellControl),
+    /// Cell-embedded image result produced by formulas such as `IMAGE`.
+    Image(CellImage),
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +469,13 @@ impl CellValue {
         matches!(self, CellValue::Array(_))
     }
 
+    /// Check if this is an in-cell image value.
+    #[must_use]
+    #[inline]
+    pub fn is_image(&self) -> bool {
+        matches!(self, CellValue::Image(_))
+    }
+
     /// Extract boolean if this is a boolean value.
     #[must_use]
     #[inline]
@@ -483,6 +493,16 @@ impl CellValue {
     pub fn as_array(&self) -> Option<&CellArray> {
         match self {
             CellValue::Array(arr) => Some(arr.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Extract the image payload if this is an in-cell image value.
+    #[must_use]
+    #[inline]
+    pub fn as_image(&self) -> Option<&CellImage> {
+        match self {
+            CellValue::Image(image) => Some(image),
             _ => None,
         }
     }
@@ -577,6 +597,7 @@ impl PartialEq for CellValue {
             (CellValue::Null, CellValue::Null) => true,
             (CellValue::Array(a), CellValue::Array(b)) => a == b,
             (CellValue::Control(a), CellValue::Control(b)) => a == b,
+            (CellValue::Image(a), CellValue::Image(b)) => a == b,
             _ => false,
         }
     }

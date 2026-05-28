@@ -114,6 +114,7 @@ pub fn cell_value_to_any(value: &CellValue) -> Any {
         CellValue::Error(e, _) => Any::String(Arc::from(e.as_str())),
         CellValue::Array(_) => Any::String(Arc::from(format!("{}", value).as_str())),
         CellValue::Control(c) => Any::Bool(c.value),
+        CellValue::Image(image) => Any::String(Arc::from(image.fallback_text())),
     }
 }
 

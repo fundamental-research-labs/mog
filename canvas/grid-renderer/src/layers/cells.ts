@@ -116,6 +116,7 @@ export interface BinaryCellReader {
   readonly isCheckbox: boolean;
   readonly isProjectedPosition: boolean;
   readonly hasValidationError: boolean;
+  readonly hasCellImage?: boolean;
 
   // CF data from binary viewport buffer
   /** CF background color override as "#RRGGBB", or null if no override. */
@@ -126,6 +127,7 @@ export interface BinaryCellReader {
   getDataBar(): DataBarData | null;
   /** Icon render data for the current cell, or null if none. */
   getIcon(): IconData | null;
+  getCellImage?(): unknown | null;
 
   // Neighbor peek methods (random access without moving the cursor)
   /** Check if a cell at (row, col) is empty without moving the cursor.
@@ -196,8 +198,18 @@ interface CellRenderInfoExtended extends CellRenderInfo {
   filterInfo: { filterId: string; headerCellId: string; hasActiveFilter: boolean } | undefined;
   /** Whether zero value display is suppressed */
   suppressZeroDisplay: boolean;
+  /** Structured in-cell image data, when the value is an IMAGE result */
+  cellImage: InCellImageData | null;
   /** Sheet ID */
   sheetId: string;
+}
+
+interface InCellImageData {
+  source: string;
+  altText?: string | null;
+  sizing?: 'fit' | 'fill' | 'original' | 'custom';
+  height?: number | null;
+  width?: number | null;
 }
 
 // =============================================================================
@@ -218,6 +230,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
   private binaryCellReaderForViewport:
     | ((viewportId: string) => BinaryCellReader | undefined)
     | undefined;
+  private readonly imageCache = new Map<string, HTMLImageElement | 'loading' | 'error'>();
   private centerAcrossSpanProvider: CenterAcrossSpanProvider | undefined;
   private overflowIndex = new OverflowIndex();
 
@@ -427,6 +440,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         const fontColorOverride = reader.getFontColorOverride();
         const dataBar = reader.getDataBar();
         const iconData = reader.getIcon();
+        const cellImage = normalizeInCellImage(reader.getCellImage?.() ?? null);
         const sparklineData = reader.hasSparkline
           ? cellData.getSparklineRenderData(sheetId, coord)
           : undefined;
@@ -486,6 +500,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           richTextSegments,
           filterInfo,
           suppressZeroDisplay,
+          cellImage,
           sheetId,
         };
 
@@ -545,6 +560,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         sparklineData,
         richTextSegments,
         iconData: cfIconData,
+        cellImage,
         filterInfo,
         suppressZeroDisplay,
         fontColorOverride,
@@ -592,10 +608,18 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         );
       }
 
+      if (cellImage && !isCheckbox) {
+        this.renderInCellImage(ctx, cellImage, contentBounds, displayText);
+      }
+
       // --- Render text content ---
       // Skip text if: editing, checkbox, icon-only CF, zero suppressed, or no text
       const shouldRenderText =
-        !isCheckbox && !cfIconData?.iconOnly && !suppressZeroDisplay && displayText.length > 0;
+        !cellImage &&
+        !isCheckbox &&
+        !cfIconData?.iconOnly &&
+        !suppressZeroDisplay &&
+        displayText.length > 0;
 
       if (shouldRenderText && !centerAcrossPaintedSources.has(`${row},${col}`)) {
         // Apply icon offset to cell info for text rendering
@@ -894,6 +918,66 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     });
   }
 
+  private renderInCellImage(
+    ctx: CanvasRenderingContext2D,
+    imageData: InCellImageData,
+    bounds: { x: number; y: number; width: number; height: number },
+    fallbackText: string,
+  ): void {
+    const padding = 2;
+    const x = bounds.x + padding;
+    const y = bounds.y + padding;
+    const width = Math.max(0, bounds.width - padding * 2);
+    const height = Math.max(0, bounds.height - padding * 2);
+    if (width <= 0 || height <= 0) return;
+
+    const cached = this.getCachedImage(imageData.source);
+    if (cached !== 'loading' && cached !== 'error') {
+      const rect = fitImageRect(cached, imageData, x, y, width, height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      ctx.drawImage(cached, rect.x, rect.y, rect.width, rect.height);
+      ctx.restore();
+      return;
+    }
+
+    ctx.save();
+    ctx.fillStyle = '#f3f4f6';
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+    const label = cached === 'error' ? fallbackText || imageData.altText || '' : imageData.altText || '';
+    if (label) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(truncateImageFallback(ctx, label, width - 8), x + 4, y + height / 2);
+    }
+    ctx.restore();
+  }
+
+  private getCachedImage(src: string): HTMLImageElement | 'loading' | 'error' {
+    const cached = this.imageCache.get(src);
+    if (cached) return cached;
+    const img = new Image();
+    this.imageCache.set(src, 'loading');
+    if (src.startsWith('https://') || src.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      this.imageCache.set(src, img);
+      this.markDirty({ type: 'full' });
+    };
+    img.onerror = () => {
+      this.imageCache.set(src, 'error');
+      this.markDirty({ type: 'full' });
+    };
+    img.src = src;
+    return 'loading';
+  }
+
   private renderCenterAcrossSpans(
     ctx: CanvasRenderingContext2D,
     meta: GridRegionMeta,
@@ -1015,9 +1099,78 @@ function binaryValueToRenderValue(reader: BinaryCellReader): unknown {
       return reader.numberValue !== 0;
     case 4: // Error
       return reader.errorText ?? '#ERROR!';
+    case 5: // Image
+      return normalizeInCellImage(reader.getCellImage?.() ?? null);
     default:
       return null;
   }
+}
+
+function normalizeInCellImage(value: unknown): InCellImageData | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const source = typeof record.source === 'string' ? record.source : null;
+  if (!source) return null;
+  const sizing = typeof record.sizing === 'string' ? record.sizing : 'fit';
+  return {
+    source,
+    altText: typeof record.altText === 'string' ? record.altText : null,
+    sizing:
+      sizing === 'fill' || sizing === 'original' || sizing === 'custom' || sizing === 'fit'
+        ? sizing
+        : 'fit',
+    height: typeof record.height === 'number' ? record.height : null,
+    width: typeof record.width === 'number' ? record.width : null,
+  };
+}
+
+function fitImageRect(
+  image: HTMLImageElement,
+  imageData: InCellImageData,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  const naturalWidth = image.naturalWidth || image.width || width;
+  const naturalHeight = image.naturalHeight || image.height || height;
+  if (imageData.sizing === 'custom' && imageData.width && imageData.height) {
+    return {
+      x,
+      y,
+      width: Math.min(width, imageData.width),
+      height: Math.min(height, imageData.height),
+    };
+  }
+  if (imageData.sizing === 'original') {
+    return { x, y, width: naturalWidth, height: naturalHeight };
+  }
+
+  const scale =
+    imageData.sizing === 'fill'
+      ? Math.max(width / naturalWidth, height / naturalHeight)
+      : Math.min(width / naturalWidth, height / naturalHeight);
+  const drawWidth = naturalWidth * scale;
+  const drawHeight = naturalHeight * scale;
+  return {
+    x: x + (width - drawWidth) / 2,
+    y: y + (height - drawHeight) / 2,
+    width: drawWidth,
+    height: drawHeight,
+  };
+}
+
+function truncateImageFallback(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let next = text;
+  while (next.length > 1 && ctx.measureText(`${next}...`).width > maxWidth) {
+    next = next.slice(0, -1);
+  }
+  return `${next}...`;
 }
 
 // =============================================================================

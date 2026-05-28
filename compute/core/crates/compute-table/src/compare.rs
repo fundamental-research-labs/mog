@@ -62,6 +62,7 @@ pub fn type_rank(value: &CellValue) -> u8 {
         CellValue::Number(_) => 0,
         CellValue::Array(_) => 4,   // treat arrays as blank for sorting
         CellValue::Control(_) => 2, // same rank as Boolean
+        CellValue::Image(_) => 1,   // sort image fallback with string-like values
     }
 }
 
@@ -194,6 +195,7 @@ pub fn cell_value_key(value: &CellValue) -> String {
         CellValue::Number(n) => format!("__NUM__:{}", n),
         CellValue::Text(s) => format!("__STR__:{}", s.to_lowercase()),
         CellValue::Control(c) => format!("__BOOL__:{}", c.value),
+        CellValue::Image(image) => format!("__IMG__:{}", image.fallback_text().to_lowercase()),
         CellValue::Array(_) => "__BLANK__".to_string(),
     }
 }
@@ -250,6 +252,7 @@ pub fn format_cell_display(value: &CellValue) -> String {
         }
         CellValue::Text(s) => s.to_string(),
         CellValue::Control(c) => if c.value { "TRUE" } else { "FALSE" }.to_string(),
+        CellValue::Image(image) => image.fallback_text().to_string(),
         CellValue::Array(_) => "(Array)".to_string(),
     }
 }

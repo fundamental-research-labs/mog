@@ -48,7 +48,10 @@ pub(crate) fn build_cell_patches(
             continue;
         }
 
-        let flags = u16::from(ValueType::from_cell_value(&change.value)) | change.extra_flags;
+        let mut flags = u16::from(ValueType::from_cell_value(&change.value)) | change.extra_flags;
+        if matches!(change.value, value_types::CellValue::Image(_)) {
+            flags |= render_flags::HAS_CELL_IMAGE;
+        }
         let number_value = number_value_for(&change.value);
         let (display_off, display_len) =
             intern_optional_string(string_pool, change.display_text.as_deref());
@@ -112,6 +115,9 @@ pub(crate) fn build_spill_patches(
                 | render_flags::IS_SPILL_MEMBER;
             if proj_change.is_cse {
                 flags |= render_flags::HAS_FORMULA;
+            }
+            if matches!(proj_cell.value, value_types::CellValue::Image(_)) {
+                flags |= render_flags::HAS_CELL_IMAGE;
             }
             let number_value = number_value_for(&proj_cell.value);
 

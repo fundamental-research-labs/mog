@@ -436,6 +436,7 @@ pub fn journal_fmt_value(v: &CellValue) -> String {
         }
         CellValue::Error(e, _) => format!("{}", e),
         CellValue::Null => "null".to_string(),
+        CellValue::Image(image) => format!("image({})", image.fallback_text()),
         CellValue::Array(arr) => {
             let rows = arr.rows();
             let cols = arr.cols();

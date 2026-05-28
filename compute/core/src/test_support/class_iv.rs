@@ -513,5 +513,6 @@ pub fn describe_value(v: &CellValue) -> String {
             "Control(type={:?}, checked={}, value={})",
             c.control_type, c.checked, c.value
         ),
+        CellValue::Image(image) => format!("Image({:?})", image.source),
     }
 }

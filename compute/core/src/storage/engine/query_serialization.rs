@@ -16,6 +16,14 @@ pub(in crate::storage::engine) fn cell_value_to_json(value: &CellValue) -> serde
         CellValue::Error(e, _) => serde_json::json!({ "type": "error", "value": e.as_str() }),
         CellValue::Array(_) => serde_json::json!({ "type": "array" }),
         CellValue::Control(c) => serde_json::json!({ "type": "boolean", "value": c.value }),
+        CellValue::Image(image) => serde_json::json!({
+            "type": "image",
+            "source": image.source.as_ref(),
+            "altText": image.alt_text.as_deref(),
+            "sizing": image.sizing,
+            "height": image.height,
+            "width": image.width,
+        }),
     }
 }
 

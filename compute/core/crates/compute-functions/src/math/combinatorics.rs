@@ -435,7 +435,10 @@ impl PureFunction for FnGcd {
                     }
                     nums.push(n.get() as i64);
                 }
-                CellValue::Boolean(_) | CellValue::Control(_) | CellValue::Null => {}
+                CellValue::Boolean(_)
+                | CellValue::Control(_)
+                | CellValue::Image(_)
+                | CellValue::Null => {}
                 CellValue::Text(_) => match v.coerce_to_number() {
                     Ok(n) if n < 0.0 => {
                         return CellValue::error_with_message(
@@ -496,7 +499,10 @@ impl PureFunction for FnLcm {
                     }
                     nums.push(n_int);
                 }
-                CellValue::Boolean(_) | CellValue::Control(_) | CellValue::Null => {}
+                CellValue::Boolean(_)
+                | CellValue::Control(_)
+                | CellValue::Image(_)
+                | CellValue::Null => {}
                 CellValue::Text(_) => match v.coerce_to_number() {
                     Ok(n) if n < 0.0 => {
                         return CellValue::error_with_message(

@@ -666,6 +666,7 @@ impl PureFunction for FnType {
             CellValue::Boolean(_) | CellValue::Control(_) => 4.0,
             CellValue::Error(..) => 16.0,
             CellValue::Array(_) => 64.0,
+            CellValue::Image(_) => 64.0,
             CellValue::Null => 1.0, // Excel treats blank as number
         };
         CellValue::number(type_num)

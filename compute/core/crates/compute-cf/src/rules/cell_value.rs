@@ -23,6 +23,7 @@ fn to_number(value: &CellValue) -> Option<f64> {
         CellValue::Error(..) => None,
         CellValue::Null => None,
         CellValue::Array(_) => None,
+        CellValue::Image(_) => None,
     }
 }
 
@@ -121,7 +122,7 @@ fn compare_values_string(value: &CellValue, threshold: &str, operator: &CellValu
     // match. Booleans only compare via the numeric path (TRUE=1, FALSE=0).
     if matches!(
         value,
-        CellValue::Boolean(_) | CellValue::Error(..) | CellValue::Array(_)
+        CellValue::Boolean(_) | CellValue::Error(..) | CellValue::Array(_) | CellValue::Image(_)
     ) {
         return false;
     }

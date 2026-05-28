@@ -30,7 +30,7 @@
 use value_types::CellValue;
 
 /// Error returned when converting a raw `u16` into a [`ValueType`] fails
-/// because the discriminant is not 0–4.
+/// because the discriminant is not 0-5.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidValueType(
     /// The invalid discriminant (already masked to bits 0-2).
@@ -61,6 +61,8 @@ pub const VALUE_TYPE_TEXT: u16 = 2;
 pub const VALUE_TYPE_BOOL: u16 = 3;
 /// Value type 4: error value.
 pub const VALUE_TYPE_ERROR: u16 = 4;
+/// Value type 5: in-cell image value.
+pub const VALUE_TYPE_IMAGE: u16 = 5;
 
 /// Cell value type encoded in bits 0-2 of the flags `u16`.
 ///
@@ -92,6 +94,8 @@ pub enum ValueType {
     Bool = VALUE_TYPE_BOOL,
     /// Error value (discriminant 4).
     Error = VALUE_TYPE_ERROR,
+    /// In-cell image value (discriminant 5).
+    Image = VALUE_TYPE_IMAGE,
 }
 
 impl ValueType {
@@ -105,6 +109,7 @@ impl ValueType {
             CellValue::Text(_) => Self::Text,
             CellValue::Boolean(_) | CellValue::Control(_) => Self::Bool,
             CellValue::Error(..) => Self::Error,
+            CellValue::Image(_) => Self::Image,
         }
     }
 }
@@ -121,7 +126,7 @@ impl TryFrom<u16> for ValueType {
 
     /// Convert a raw `u16` (masked to bits 0-2) into a [`ValueType`].
     ///
-    /// Returns `Err(InvalidValueType)` if the discriminant is not 0-4.
+    /// Returns `Err(InvalidValueType)` if the discriminant is not 0-5.
     #[inline]
     fn try_from(raw: u16) -> Result<Self, InvalidValueType> {
         match raw & VALUE_TYPE_MASK {
@@ -130,6 +135,7 @@ impl TryFrom<u16> for ValueType {
             VALUE_TYPE_TEXT => Ok(Self::Text),
             VALUE_TYPE_BOOL => Ok(Self::Bool),
             VALUE_TYPE_ERROR => Ok(Self::Error),
+            VALUE_TYPE_IMAGE => Ok(Self::Image),
             other => Err(InvalidValueType(other)),
         }
     }
@@ -155,6 +161,8 @@ pub const IS_SPILL_MEMBER: u16 = 0x100;
 pub const HAS_VALIDATION_ERROR: u16 = 0x200;
 /// Bit 10: cell has CF extras (data bar and/or icon) in the trailing sections.
 pub const HAS_CF_EXTRAS: u16 = 0x400;
+/// Bit 11: cell has structured in-cell image metadata.
+pub const HAS_CELL_IMAGE: u16 = 0x800;
 
 // ---------------------------------------------------------------------------
 // Mutation header flags (u8 bitfield at header offset 10)
@@ -177,7 +185,7 @@ mod tests {
 
     #[test]
     fn value_type_roundtrip() {
-        for raw in 0u16..=4 {
+        for raw in 0u16..=5 {
             let vt = ValueType::try_from(raw).unwrap();
             assert_eq!(u16::from(vt), raw);
         }
@@ -185,7 +193,6 @@ mod tests {
 
     #[test]
     fn value_type_invalid_discriminant() {
-        assert_eq!(ValueType::try_from(5u16), Err(InvalidValueType(5)));
         assert_eq!(ValueType::try_from(7u16), Err(InvalidValueType(7)));
     }
 

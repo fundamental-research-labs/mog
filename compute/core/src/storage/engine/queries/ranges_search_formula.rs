@@ -277,6 +277,7 @@ pub(in crate::storage::engine) fn get_range_with_identity(
                     value_types::CellValue::Control(c) => {
                         if c.value { "TRUE" } else { "FALSE" }.to_string()
                     }
+                    value_types::CellValue::Image(image) => image.fallback_text().to_string(),
                 }
             };
 

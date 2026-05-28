@@ -125,6 +125,7 @@ fn cell_value_to_type_string(value: Option<&CellValue>) -> &'static str {
         Some(CellValue::Error(..)) => "Error",
         Some(CellValue::Array(_)) => "Array",
         Some(CellValue::Control(_)) => "Boolean",
+        Some(CellValue::Image(_)) => "String",
     }
 }
 

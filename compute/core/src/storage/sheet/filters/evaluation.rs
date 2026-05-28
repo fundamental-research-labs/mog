@@ -275,6 +275,7 @@ pub(super) fn cell_value_dedup_key(value: &CellValue) -> String {
         CellValue::Error(e, _) => format!("__ERROR__:{}", e.as_str()),
         CellValue::Array(_) => "__ARRAY__".to_string(),
         CellValue::Control(c) => format!("__BOOL__:{}", c.value),
+        CellValue::Image(image) => format!("__IMG__:{}", image.fallback_text()),
     }
 }
 

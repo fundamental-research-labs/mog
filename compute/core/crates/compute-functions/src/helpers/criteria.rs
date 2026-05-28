@@ -155,6 +155,7 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
         CellValue::Boolean(_) | CellValue::Control(_) => "boolean",
         CellValue::Text(_) => "text",
         CellValue::Null => "null",
+        CellValue::Image(_) => "image",
         _ => "other",
     };
     let _span = tracing::info_span!("parse_criteria", criteria_type = criteria_type).entered();
@@ -318,6 +319,14 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
         CellValue::Control(c) => {
             let b = c.value;
             Box::new(move |v: &CellValue| v.as_bool() == Some(b))
+        }
+        CellValue::Image(image) => {
+            let fallback = image.fallback_text().to_string();
+            Box::new(move |v: &CellValue| {
+                v.coerce_to_string()
+                    .map(|s| s.eq_ignore_ascii_case(&fallback))
+                    .unwrap_or(false)
+            })
         }
         CellValue::Array(arr) => {
             // Extract the first scalar element from the array and use it as

@@ -58,3 +58,4 @@ pub(crate) mod lookup;
 pub(crate) mod math;
 pub(crate) mod statistical;
 pub(crate) mod text;
+pub(crate) mod web;

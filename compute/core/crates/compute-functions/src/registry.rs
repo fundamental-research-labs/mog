@@ -348,6 +348,7 @@ impl FunctionRegistry {
         crate::engineering::register(self);
         crate::database::register(self);
         crate::information::register(self);
+        crate::web::register(self);
     }
 }
 

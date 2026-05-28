@@ -69,6 +69,7 @@ export {
   DATA_BAR_ENTRY_STRIDE,
   DIM_STRIDE,
   HAS_CF_EXTRAS,
+  HAS_CELL_IMAGE,
   HAS_COMMENT,
   HAS_FORMULA,
   HAS_HYPERLINK,
@@ -92,6 +93,7 @@ export {
   POSITION_ENTRY_SIZE,
   VALUE_TYPE_BOOL,
   VALUE_TYPE_ERROR,
+  VALUE_TYPE_IMAGE,
   VALUE_TYPE_MASK,
   VALUE_TYPE_NULL,
   VALUE_TYPE_NUMBER,
@@ -103,6 +105,7 @@ import {
   CELL_STRIDE,
   DATA_BAR_ENTRY_STRIDE,
   DIM_STRIDE,
+  HAS_CELL_IMAGE,
   HEADER_SIZE,
   ICON_ENTRY_STRIDE,
   ICON_SET_NAMES,
@@ -117,6 +120,7 @@ import {
   OFF_FONT_COLOR_OVERRIDE,
   OFF_FORMAT_IDX,
   OFF_NUMBER_VALUE,
+  VALUE_TYPE_IMAGE,
 } from './constants.gen';
 
 // Patch key column multiplier (must be > max columns; Excel max = 16384)
@@ -1662,6 +1666,11 @@ export class CellAccessor {
     return (this.flags & 0x400) !== 0;
   }
 
+  /** Bit 11: has structured in-cell image metadata. */
+  get hasCellImage(): boolean {
+    return (this.flags & HAS_CELL_IMAGE) !== 0;
+  }
+
   // -------------------------------------------------------------------
   // Color override accessors
   // -------------------------------------------------------------------
@@ -1720,6 +1729,18 @@ export class CellAccessor {
    */
   get errorText(): string | null {
     return this._buffer.getOrDecodeString(this._errorOff, this._errorLen);
+  }
+
+  /** Structured image metadata for an in-cell image value. */
+  getCellImage(): unknown | null {
+    if (!this.hasCellImage && this.valueType !== VALUE_TYPE_IMAGE) return null;
+    const metadata = this._buffer.getOrDecodeString(this._errorOff, this._errorLen);
+    if (!metadata) return null;
+    try {
+      return JSON.parse(metadata);
+    } catch {
+      return null;
+    }
   }
 
   /** Current row (set by moveTo). */

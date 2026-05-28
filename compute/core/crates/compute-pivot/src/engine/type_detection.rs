@@ -13,6 +13,7 @@ fn detect_type(value: &CellValue) -> DetectedDataType {
         CellValue::Error(..) => DetectedDataType::Error,
         CellValue::Boolean(_) | CellValue::Control(_) => DetectedDataType::Boolean,
         CellValue::Number(_) => DetectedDataType::Number,
+        CellValue::Image(_) => DetectedDataType::String,
         CellValue::Text(s) => {
             // Try to detect dates
             // YYYY-MM-DD pattern

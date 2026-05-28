@@ -15,6 +15,7 @@ pub fn type_rank(v: &CellValue) -> u8 {
         CellValue::Boolean(_) | CellValue::Control(_) => 3,
         CellValue::Error(..) => 4,
         CellValue::Array(_) => 5,
+        CellValue::Image(_) => 5,
     }
 }
 

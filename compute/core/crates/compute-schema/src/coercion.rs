@@ -66,6 +66,9 @@ fn coerce_passthrough(value: &CellValue) -> CoercionResult {
         CellValue::Error(e, _) => CoercionResult::err(format!("Cannot coerce error value: {e}")),
         CellValue::Array(_) => CoercionResult::ok(CellValueResult::Text("[Array]".into())),
         CellValue::Control(c) => CoercionResult::ok(CellValueResult::Boolean(c.value)),
+        CellValue::Image(image) => {
+            CoercionResult::ok(CellValueResult::Text(image.fallback_text().into()))
+        }
     }
 }
 
@@ -174,6 +177,9 @@ fn coerce_to_string(value: &CellValue) -> CoercionResult {
         CellValue::Control(c) => CoercionResult::ok(CellValueResult::Text(
             if c.value { "true" } else { "false" }.into(),
         )),
+        CellValue::Image(image) => {
+            CoercionResult::ok(CellValueResult::Text(image.fallback_text().into()))
+        }
     }
 }
 

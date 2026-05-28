@@ -87,9 +87,11 @@ fn placeholder_for(value: &CellValue) -> &'static str {
         CellValue::Number(_) => PLACEHOLDER_NUMBER,
         CellValue::Boolean(_) => PLACEHOLDER_BOOLEAN,
         CellValue::Error(..) => PLACEHOLDER_ERROR,
-        CellValue::Text(_) | CellValue::Null | CellValue::Array(_) | CellValue::Control(_) => {
-            PLACEHOLDER_TEXT
-        }
+        CellValue::Text(_)
+        | CellValue::Null
+        | CellValue::Array(_)
+        | CellValue::Control(_)
+        | CellValue::Image(_) => PLACEHOLDER_TEXT,
     }
 }
 

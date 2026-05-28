@@ -62,6 +62,10 @@ pub(crate) fn number_value_for(value: &CellValue) -> f64 {
 pub(crate) fn intern_error_string(pool: &mut Vec<u8>, value: &CellValue) -> (u32, u16) {
     match value {
         CellValue::Error(e, _) => intern_str(pool, e.as_str()),
+        CellValue::Image(image) => match serde_json::to_string(image) {
+            Ok(metadata) => intern_str(pool, &metadata),
+            Err(_) => (NO_STRING, 0),
+        },
         _ => (NO_STRING, 0),
     }
 }

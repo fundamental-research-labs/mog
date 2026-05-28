@@ -300,6 +300,7 @@ pub fn format_value(
         value_types::CellValue::Control(c) => {
             FormatResult::text(if c.value { "TRUE" } else { "FALSE" })
         }
+        value_types::CellValue::Image(image) => FormatResult::text(image.fallback_text()),
     }
 }
 

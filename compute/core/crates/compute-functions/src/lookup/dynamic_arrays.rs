@@ -44,6 +44,14 @@ fn hash_cell_value_ci(v: &CellValue, hasher: &mut impl Hasher) {
             2u8.hash(hasher);
             c.value.hash(hasher);
         }
+        CellValue::Image(image) => {
+            6u8.hash(hasher);
+            image.source.hash(hasher);
+            image.alt_text.hash(hasher);
+            image.sizing.hash(hasher);
+            image.height.hash(hasher);
+            image.width.hash(hasher);
+        }
     }
 }
 

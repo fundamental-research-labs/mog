@@ -49,6 +49,16 @@ impl Serialize for CellValue {
                 map.serialize_entry("value", &c.value)?;
                 map.end()
             }
+            CellValue::Image(image) => {
+                let mut map = serializer.serialize_map(Some(6))?;
+                map.serialize_entry("type", "image")?;
+                map.serialize_entry("source", image.source.as_ref())?;
+                map.serialize_entry("altText", &image.alt_text.as_deref())?;
+                map.serialize_entry("sizing", &image.sizing)?;
+                map.serialize_entry("height", &image.height)?;
+                map.serialize_entry("width", &image.width)?;
+                map.end()
+            }
         }
     }
 }
@@ -135,6 +145,11 @@ impl<'de> Visitor<'de> for CellValueVisitor {
         let mut message_field: Option<String> = None;
         let mut control_type_field: Option<String> = None;
         let mut checked_field: Option<bool> = None;
+        let mut source_field: Option<String> = None;
+        let mut alt_text_field: Option<String> = None;
+        let mut sizing_field: Option<crate::CellImageSizing> = None;
+        let mut height_field: Option<u32> = None;
+        let mut width_field: Option<u32> = None;
 
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
@@ -152,6 +167,21 @@ impl<'de> Visitor<'de> for CellValueVisitor {
                 }
                 "checked" => {
                     checked_field = Some(map.next_value()?);
+                }
+                "source" => {
+                    source_field = Some(map.next_value()?);
+                }
+                "altText" => {
+                    alt_text_field = Some(map.next_value()?);
+                }
+                "sizing" => {
+                    sizing_field = Some(map.next_value()?);
+                }
+                "height" => {
+                    height_field = Some(map.next_value()?);
+                }
+                "width" => {
+                    width_field = Some(map.next_value()?);
                 }
                 _ => {
                     // Skip unknown fields
@@ -185,6 +215,18 @@ impl<'de> Visitor<'de> for CellValueVisitor {
                     checked,
                     value,
                 }))
+            }
+            Some("image") => {
+                let Some(source) = source_field else {
+                    return Ok(CellValue::Error(CellError::Calc, None));
+                };
+                Ok(CellValue::Image(crate::CellImage::new(
+                    source,
+                    alt_text_field.map(Arc::<str>::from),
+                    sizing_field.unwrap_or(crate::CellImageSizing::Fit),
+                    height_field,
+                    width_field,
+                )))
             }
             // Unknown object type -- treat as Calc error
             _ => {

@@ -163,6 +163,7 @@ pub fn cell_value_to_group_key(value: &CellValue) -> GroupKey {
         CellValue::Text(s) => GroupKey::Text(Arc::from(s.to_lowercase().as_str())),
         CellValue::Boolean(b) => GroupKey::Bool(*b),
         CellValue::Control(c) => GroupKey::Bool(c.value),
+        CellValue::Image(image) => GroupKey::Text(Arc::from(image.fallback_text())),
         CellValue::Error(e, _) => GroupKey::Error(e.as_str().to_string()),
         CellValue::Array(_) => GroupKey::Array,
         // Null and whitespace-only Text already handled by is_visually_blank above.
@@ -423,6 +424,10 @@ pub fn cell_value_to_sort_key(v: &CellValue) -> SortKey {
             type_priority: 2,
             key_data: SortKeyData::Bool(c.value),
         },
+        CellValue::Image(image) => SortKey {
+            type_priority: 1,
+            key_data: SortKeyData::Text(image.fallback_text().to_lowercase()),
+        },
         CellValue::Error(e, _) => SortKey {
             type_priority: 3,
             key_data: SortKeyData::ErrorOrdinal(error_ordinal(*e)),
@@ -610,6 +615,7 @@ pub fn cell_value_to_display_key(value: &CellValue) -> String {
         CellValue::Text(s) => s.to_lowercase(),
         CellValue::Boolean(b) => b.to_string(),
         CellValue::Control(c) => c.value.to_string(),
+        CellValue::Image(image) => image.fallback_text().to_string(),
         CellValue::Error(e, _) => e.as_str().to_string(),
         CellValue::Array(_) => ARRAY_DISPLAY_LABEL.to_string(),
         // Already handled by is_blank above.

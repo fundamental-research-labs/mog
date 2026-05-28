@@ -136,6 +136,7 @@ impl ComputeCore {
                     CellValue::Error(..) => "Error",
                     CellValue::Null => "Null",
                     CellValue::Array(_) => "Array",
+                    CellValue::Image(_) => "Image",
                 };
                 crate::journal::record(crate::journal::JournalEvent::EvalResult {
                     cell: cell_id,
@@ -396,6 +397,7 @@ impl ComputeCore {
                     CellValue::Error(..) => "Error",
                     CellValue::Null => "Null",
                     CellValue::Array(_) => "Array",
+                    CellValue::Image(_) => "Image",
                 };
                 crate::journal::record(crate::journal::JournalEvent::EvalResult {
                     cell: cell_id,

@@ -390,6 +390,7 @@ fn classify_cell_value_type(value: &CellValue) -> &'static str {
         CellValue::Error(..) => "Error",
         CellValue::Array(_) => "String",
         CellValue::Control(_) => "Boolean",
+        CellValue::Image(_) => "String",
     }
 }
 

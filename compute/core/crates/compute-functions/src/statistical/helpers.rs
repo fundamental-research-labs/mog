@@ -15,6 +15,7 @@ pub(crate) fn extract_numbers_a(vals: &[CellValue]) -> Result<Vec<f64>, CellErro
             CellValue::Number(n) => nums.push(n.get()),
             CellValue::Boolean(b) => nums.push(if *b { 1.0 } else { 0.0 }),
             CellValue::Control(c) => nums.push(if c.value { 1.0 } else { 0.0 }),
+            CellValue::Image(_) => {}
             CellValue::Text(s) => {
                 if let Ok(n) = fast_float::parse::<f64, _>(s.trim()) {
                     nums.push(n);

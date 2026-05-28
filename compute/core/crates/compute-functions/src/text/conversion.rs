@@ -506,6 +506,7 @@ impl PureFunction for FnValueToText {
             } else {
                 "FALSE".to_string().into()
             }),
+            CellValue::Image(image) => CellValue::Text(image.fallback_text().into()),
             CellValue::Number(_) => CellValue::Text(
                 args[0]
                     .coerce_to_string()
@@ -615,6 +616,7 @@ impl PureFunction for FnArrayToText {
                 CellValue::Error(e, _) => e.as_str().to_string(),
                 CellValue::Control(c) => if c.value { "TRUE" } else { "FALSE" }.to_string(),
                 CellValue::Array(_) => String::new(),
+                CellValue::Image(image) => image.fallback_text().to_string(),
             }
         }
 

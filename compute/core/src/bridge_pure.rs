@@ -728,6 +728,7 @@ impl FormatBridge {
             Some(CellValue::Error(..)) => "Error",
             Some(CellValue::Array(_)) => "String",
             Some(CellValue::Control(_)) => "Boolean",
+            Some(CellValue::Image(_)) => "String",
         }
         .to_string()
     }

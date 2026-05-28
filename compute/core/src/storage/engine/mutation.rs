@@ -81,6 +81,9 @@ impl CellInput {
                     "FALSE".to_string()
                 },
             },
+            CellValue::Image(image) => CellInput::Literal {
+                text: image.fallback_text().to_string(),
+            },
         }
     }
 

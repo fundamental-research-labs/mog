@@ -30,6 +30,7 @@ pub fn infer_type(value: &CellValue) -> SchemaType {
         CellValue::Error(..) => SchemaType::Any,
         CellValue::Array(_) => SchemaType::Any,
         CellValue::Control(_) => SchemaType::Boolean,
+        CellValue::Image(_) => SchemaType::Any,
     }
 }
 

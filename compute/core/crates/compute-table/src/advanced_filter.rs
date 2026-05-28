@@ -617,6 +617,7 @@ fn header_text(value: &CellValue) -> String {
                 "FALSE".to_string()
             }
         }
+        CellValue::Image(image) => image.fallback_text().to_string(),
     }
 }
 
@@ -641,6 +642,7 @@ fn cell_match_text(value: &CellValue) -> String {
                 "FALSE".to_string()
             }
         }
+        CellValue::Image(image) => image.fallback_text().to_string(),
     }
 }
 

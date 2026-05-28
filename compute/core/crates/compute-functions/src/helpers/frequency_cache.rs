@@ -85,6 +85,8 @@ impl NormalizedKey {
                 NormalizedKey::Text(s.to_lowercase())
             }
             CellValue::Boolean(b) => NormalizedKey::Boolean(*b),
+            CellValue::Control(c) => NormalizedKey::Boolean(c.value),
+            CellValue::Image(image) => NormalizedKey::Text(image.fallback_text().to_lowercase()),
             CellValue::Null => NormalizedKey::Null,
             CellValue::Error(e, _) => NormalizedKey::Error(*e),
             // 1x1 arrays (e.g. from structured table refs) unwrap to scalar.
@@ -138,6 +140,7 @@ pub fn is_exact_match_criteria(criteria: &CellValue) -> bool {
         CellValue::Number(_)
         | CellValue::Boolean(_)
         | CellValue::Control(_)
+        | CellValue::Image(_)
         | CellValue::Null
         | CellValue::Error(..) => true,
         // Single-element arrays (1x1): unwrap to the scalar element.

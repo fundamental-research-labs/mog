@@ -505,6 +505,7 @@ pub(super) fn build_viewport_render_data_inner(
 
                         let error = match proj.value {
                             CellValue::Error(e, _) => Some(e.as_str().to_string()),
+                            CellValue::Image(image) => serde_json::to_string(image).ok(),
                             _ => None,
                         };
 
@@ -516,7 +517,11 @@ pub(super) fn build_viewport_render_data_inner(
                             CellValue::Error(..) => render_flags::VALUE_TYPE_ERROR,
                             CellValue::Array(_) => render_flags::VALUE_TYPE_NUMBER,
                             CellValue::Control(_) => render_flags::VALUE_TYPE_BOOL,
+                            CellValue::Image(_) => render_flags::VALUE_TYPE_IMAGE,
                         };
+                        if matches!(proj.value, CellValue::Image(_)) {
+                            flags |= render_flags::HAS_CELL_IMAGE;
+                        }
                         // `HAS_FORMULA` means formula ownership. Dynamic-array
                         // spill members are values projected from the anchor:
                         // they carry `IS_SPILL_MEMBER` but do not own formula
@@ -614,6 +619,7 @@ pub(super) fn build_viewport_render_data_inner(
 
                         let error = match value {
                             CellValue::Error(e, _) => Some(e.as_str().to_string()),
+                            CellValue::Image(image) => serde_json::to_string(image).ok(),
                             _ => None,
                         };
 
@@ -625,7 +631,11 @@ pub(super) fn build_viewport_render_data_inner(
                             CellValue::Error(..) => render_flags::VALUE_TYPE_ERROR,
                             CellValue::Array(_) => render_flags::VALUE_TYPE_NUMBER,
                             CellValue::Control(_) => render_flags::VALUE_TYPE_BOOL,
+                            CellValue::Image(_) => render_flags::VALUE_TYPE_IMAGE,
                         };
+                        if matches!(value, CellValue::Image(_)) {
+                            flags |= render_flags::HAS_CELL_IMAGE;
+                        }
                         if has_formula {
                             flags |= render_flags::HAS_FORMULA;
                         }

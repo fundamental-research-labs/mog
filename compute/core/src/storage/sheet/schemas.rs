@@ -835,6 +835,7 @@ fn validation_cell_value_to_string(value: &CellValue) -> Option<String> {
         CellValue::Error(..) => None,
         CellValue::Array(arr) => arr.get(0, 0).and_then(validation_cell_value_to_string),
         CellValue::Control(control) => Some(control.value.to_string()),
+        CellValue::Image(image) => Some(image.fallback_text().to_string()),
     }
 }
 

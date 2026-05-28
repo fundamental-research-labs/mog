@@ -61,7 +61,7 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         extensions: rt
             .map(|r| clean_chart_extensions(&r.chart_extensions))
             .unwrap_or_default(),
-        has_empty_ext_lst: rt.map(|r| r.has_empty_chart_ext_lst).unwrap_or(false),
+        has_empty_ext_lst: false,
     }
 }
 

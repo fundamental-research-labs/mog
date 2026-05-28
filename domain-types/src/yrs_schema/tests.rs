@@ -6,7 +6,6 @@
 
 use yrs::{Doc, Map, MapPrelim, Transact};
 
-use crate::MergeRegion;
 use crate::domain::chart::*;
 use crate::domain::comment::*;
 use crate::domain::connector::*;
@@ -24,6 +23,7 @@ use crate::domain::sparkline::*;
 use crate::domain::table::*;
 use crate::domain::validation::*;
 use crate::domain::workbook::*;
+use crate::MergeRegion;
 
 use super::*;
 
@@ -310,6 +310,7 @@ fn test_sheet_protection_yrs_roundtrip() {
     let original = SheetProtection {
         is_protected: true,
         password_hash: Some("ABC123".to_string()),
+        hash_value: Some("HASH456".to_string()),
         algorithm_name: Some("SHA-512".to_string()),
         salt_value: Some("base64salt==".to_string()),
         spin_count: Some(100000),

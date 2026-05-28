@@ -19,11 +19,47 @@ pub(super) struct WorksheetCustomPropertyPart {
 }
 
 pub(super) fn custom_properties_for_export(
-    _round_trip_ctx: &RoundTripContext,
-    _sheet_rt: &SheetRoundTripContext,
-    _sheet_idx: usize,
+    round_trip_ctx: &RoundTripContext,
+    sheet_rt: &SheetRoundTripContext,
+    sheet_idx: usize,
 ) -> Option<WorksheetCustomProperties> {
-    None
+    let xml = sheet_rt.custom_properties_xml.clone()?;
+    let mut parts = Vec::new();
+
+    for subgraph in &round_trip_ctx.opaque_package_subgraphs {
+        let domain_types::OpaquePackageOwner::Worksheet { index, .. } = &subgraph.owner else {
+            continue;
+        };
+        if *index != sheet_idx {
+            continue;
+        }
+        if subgraph.owner_relationship.relationship_type != REL_WORKSHEET_CUSTOM_PROPERTY {
+            continue;
+        }
+        if subgraph.ownership != domain_types::OpaquePackageOwnership::CleanImported {
+            continue;
+        }
+        let Some(relationship_id_hint) = subgraph
+            .owner_relationship
+            .relationship_id_hint
+            .as_ref()
+            .cloned()
+        else {
+            continue;
+        };
+        for part in &subgraph.parts {
+            if part.ownership != domain_types::OpaquePackageOwnership::CleanImported {
+                continue;
+            }
+            parts.push(WorksheetCustomPropertyPart {
+                path: part.part.path.clone(),
+                relationship_id_hint: relationship_id_hint.clone(),
+                data: part.part.data.clone(),
+            });
+        }
+    }
+
+    (!parts.is_empty()).then_some(WorksheetCustomProperties { xml, parts })
 }
 
 pub(super) fn with_resolved_relationship_ids(

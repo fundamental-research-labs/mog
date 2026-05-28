@@ -1057,6 +1057,14 @@ fn format_hyperlinks(xml: &[u8]) -> Vec<HyperlinkOutput> {
 /// Parse sheet protection from worksheet XML and return typed output struct
 fn format_protection(xml: &[u8]) -> Option<ProtectionOutput> {
     protection::SheetProtection::parse(xml).map(|sp| ProtectionOutput {
+        password: sp.password,
+        algorithm_name: {
+            let alg = sp.algorithm_name.as_str();
+            (!alg.is_empty()).then(|| alg.to_string())
+        },
+        hash_value: sp.hash_value,
+        salt_value: sp.salt_value,
+        spin_count: sp.spin_count,
         sheet: sp.sheet,
         objects: sp.objects,
         scenarios: sp.scenarios,

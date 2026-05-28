@@ -993,23 +993,32 @@ fn modeled_xlsx_metadata_is_exported_without_raw_metadata_replay() {
 }
 
 #[test]
-fn stale_raw_worksheet_ext_lst_modeled_extensions_are_dropped() {
+fn x14_worksheet_ext_lst_is_preserved_without_modeled_standard_owner() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(42.0).unwrap()),
+        )],
         ..Default::default()
     }]);
     let ctx = domain_types::RoundTripContext {
         sheets: vec![domain_types::SheetRoundTripContext {
             ext_lst_xml: Some(
-                r#"<extLst><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations count="1"/></ext></extLst>"#
+                r#"<extLst><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations count="1"><x14:dataValidation type="whole"><xm:sqref>A1:A1</xm:sqref></x14:dataValidation></x14:dataValidations></ext><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}"><x14:conditionalFormattings count="1"><x14:conditionalFormatting><xm:sqref>B1:B1</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>"#
                     .to_string(),
             ),
-            sheet_preserved_elements: vec![(
-                "worksheet\0after\0tableParts\0extLst".to_string(),
-                r#"<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}"><x14:conditionalFormattings count="1"/></ext></extLst>"#
-                    .to_string(),
-            )],
-            has_empty_ext_lst: true,
+            preserved_namespace_attrs: vec![
+                (
+                    "x14".to_string(),
+                    "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main".to_string(),
+                ),
+                (
+                    "xm".to_string(),
+                    "http://schemas.microsoft.com/office/excel/2006/main".to_string(),
+                ),
+            ],
             ..Default::default()
         }],
         ..Default::default()
@@ -1020,9 +1029,52 @@ fn stale_raw_worksheet_ext_lst_modeled_extensions_are_dropped() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
+    assert!(sheet_xml.contains(r#"<c r="A1"><v>42</v></c>"#));
+    assert!(sheet_xml
+        .contains(r#"xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main""#));
+    assert!(sheet_xml.contains(r#"xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main""#));
+    assert!(sheet_xml.contains("<x14:dataValidations"));
+    assert!(sheet_xml.contains("<x14:conditionalFormattings"));
+    assert!(sheet_xml.contains("<xm:sqref>A1:A1</xm:sqref>"));
+    assert!(sheet_xml.contains("<xm:sqref>B1:B1</xm:sqref>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn relationship_bearing_x14_worksheet_ext_lst_is_dropped() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(7.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![domain_types::SheetRoundTripContext {
+            ext_lst_xml: Some(
+                r#"<extLst><ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}"><x14:dataValidations count="1" r:id="rIdStale"/></ext></extLst>"#
+                    .to_string(),
+            ),
+            preserved_namespace_attrs: vec![(
+                "x14".to_string(),
+                "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main".to_string(),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<c r="A1"><v>7</v></c>"#));
     assert!(!sheet_xml.contains("<extLst"));
-    assert!(!sheet_xml.contains("dataValidations"));
-    assert!(!sheet_xml.contains("conditionalFormattings"));
+    assert!(!sheet_xml.contains("rIdStale"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet1.xml.rels"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

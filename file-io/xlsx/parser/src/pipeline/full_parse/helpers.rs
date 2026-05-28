@@ -157,8 +157,8 @@ pub(super) fn capture_ext_lst_raw(xml: &[u8]) -> Option<Vec<u8>> {
 ///
 /// This captures extension elements like `<x14:dataValidations>`,
 /// `<x14:conditionalFormattings>`, etc. that live inside `<extLst>`.
-/// Only captures the non-empty `<extLst>...</extLst>` (empty `<extLst/>`
-/// is handled separately by `has_empty_ext_lst`).
+/// Only captures the non-empty `<extLst>...</extLst>`; empty `<extLst/>`
+/// is lexical compatibility and is not preserved.
 pub(super) fn extract_worksheet_ext_lst_xml(post_sd: &[u8]) -> Option<String> {
     use crate::infra::scanner::find_tag_simd;
 
@@ -168,7 +168,7 @@ pub(super) fn extract_worksheet_ext_lst_xml(post_sd: &[u8]) -> Option<String> {
     // Check if it's self-closing (empty <extLst/>)
     let gt_pos = memchr::memchr(b'>', &post_sd[tag_pos..])?;
     if post_sd[tag_pos + gt_pos - 1] == b'/' {
-        return None; // Self-closing — handled by has_empty_ext_lst
+        return None;
     }
 
     // Find the matching </extLst>
@@ -503,8 +503,7 @@ pub(super) const SHEET_KNOWN_POST_SD: &[&[u8]] = &[
     b"hyperlinks",
     b"autoFilter",
     b"sortState",
-    // sheetProtection — intentionally NOT listed so it's captured by PreservedElements
-    // and written back via the Tier 2 preservation system.
+    b"sheetProtection",
     b"printOptions",
     b"pageMargins",
     b"pageSetup",

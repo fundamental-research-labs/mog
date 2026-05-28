@@ -970,28 +970,20 @@ impl SheetWriter {
         self.write_sheet_data(&mut w);
 
         // Tier 2: Emit preserved elements after sheetData.
-        // When preserved elements contain sheetProtection, prefer the preserved
-        // (verbatim original) version over the domain-generated one for round-trip fidelity.
         let skip_table_parts = self.table_parts_xml.is_some();
-        let mut protection_emitted_from_preserved = false;
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("worksheet", "sheetData") {
                 if skip_table_parts && elem.raw_xml.contains("<tableParts") {
                     continue;
                 }
-                if self.write_preserved_element(&mut w, elem)
-                    && elem.raw_xml.contains("<sheetProtection")
-                {
-                    protection_emitted_from_preserved = true;
-                }
+                self.write_preserved_element(&mut w, elem);
             }
         }
 
-        // Write sheetProtection only if not already emitted from preserved elements
-        if !protection_emitted_from_preserved {
-            if let Some(ref sp) = self.sheet_protection_xml {
-                w.raw_str(sp);
-            }
+        // Sheet protection is modeled-authoritative; never let preserved XML
+        // override current SheetData.protection.
+        if let Some(ref sp) = self.sheet_protection_xml {
+            w.raw_str(sp);
         }
 
         // Write autoFilter (OOXML order: after sheetData, before sortState)

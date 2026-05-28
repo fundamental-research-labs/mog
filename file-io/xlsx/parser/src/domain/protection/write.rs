@@ -49,6 +49,9 @@ pub fn sheet_protection_xml_from_domain(prot: &domain_types::SheetProtection) ->
     if let Some(ref alg) = prot.algorithm_name {
         w.attr("algorithmName", alg);
     }
+    if let Some(ref hash) = prot.hash_value {
+        w.attr("hashValue", hash);
+    }
     if let Some(ref salt) = prot.salt_value {
         w.attr("saltValue", salt);
     }

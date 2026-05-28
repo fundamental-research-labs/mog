@@ -502,16 +502,8 @@ fn export_single_sheet(
             (None, None)
         }
     };
-    let rows = if max_row > 0 {
-        max_row
-    } else {
-        stored_rows.unwrap_or(100)
-    };
-    let cols = if data_max_col > 0 {
-        data_max_col
-    } else {
-        stored_cols.unwrap_or(26)
-    };
+    let rows = stored_rows.unwrap_or(100).max(max_row);
+    let cols = stored_cols.unwrap_or(26).max(data_max_col);
 
     let dims_max_row = sheet_dimensions
         .row_heights

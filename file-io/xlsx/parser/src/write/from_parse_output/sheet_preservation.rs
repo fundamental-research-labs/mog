@@ -94,13 +94,6 @@ pub(super) fn standalone_ext_lst_for_export<'a>(
     Some(xml)
 }
 
-pub(super) fn empty_ext_lst_for_export(
-    sheet_data: &SheetData,
-    sheet_rt: &SheetRoundTripContext,
-) -> bool {
-    sheet_rt.has_empty_ext_lst && !sheet_has_modeled_ext_lst_owner(sheet_data)
-}
-
 fn raw_worksheet_element_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
     if raw_xml_contains_element(xml, "sheetPr") {
         if sheet_data.outline_properties.is_some() || raw_xml_contains_element(xml, "outlinePr") {
@@ -173,12 +166,11 @@ fn raw_xml_contains_element(raw_xml: &str, local_name: &str) -> bool {
 }
 
 fn raw_worksheet_ext_lst_is_compatible(sheet_data: &SheetData, xml: &str) -> bool {
-    if sheet_has_modeled_ext_lst_owner(sheet_data) {
+    if crate::infra::xml::raw_xml_contains_relationship_attr(xml) {
         return false;
     }
 
-    !crate::infra::xml::raw_xml_contains_relationship_attr(xml)
-        && !raw_ext_lst_contains_modeled_owner(xml)
+    !raw_ext_lst_conflicts_with_modeled_owner(sheet_data, xml)
 }
 
 fn sheet_has_modeled_ext_lst_owner(sheet_data: &SheetData) -> bool {
@@ -188,17 +180,111 @@ fn sheet_has_modeled_ext_lst_owner(sheet_data: &SheetData) -> bool {
         || !sheet_data.conditional_formats.is_empty()
 }
 
-fn raw_ext_lst_contains_modeled_owner(xml: &str) -> bool {
-    [
-        "dataValidations",
-        "dataValidation",
-        "conditionalFormattings",
-        "conditionalFormatting",
-        "sparklineGroups",
-        "sparklineGroup",
-    ]
-    .iter()
-    .any(|marker| xml.contains(marker))
+fn raw_ext_lst_conflicts_with_modeled_owner(sheet_data: &SheetData, xml: &str) -> bool {
+    let owners = RawExtLstOwners::from_xml(xml);
+
+    if owners.sparkline_groups {
+        return true;
+    }
+
+    if owners.standard_data_validations || owners.standard_conditional_formatting {
+        return true;
+    }
+
+    if owners.x14_data_validations && !sheet_data.data_validations.is_empty() {
+        return true;
+    }
+
+    if owners.x14_conditional_formatting && !sheet_data.conditional_formats.is_empty() {
+        return true;
+    }
+
+    if owners.has_unmodeled_x14_owner() {
+        return false;
+    }
+
+    sheet_has_modeled_ext_lst_owner(sheet_data)
+}
+
+#[derive(Default)]
+struct RawExtLstOwners {
+    standard_data_validations: bool,
+    x14_data_validations: bool,
+    standard_conditional_formatting: bool,
+    x14_conditional_formatting: bool,
+    sparkline_groups: bool,
+}
+
+impl RawExtLstOwners {
+    fn from_xml(xml: &str) -> Self {
+        let mut owners = Self::default();
+        for (prefix, local_name) in raw_xml_start_element_names(xml) {
+            match local_name {
+                "dataValidations" | "dataValidation" => {
+                    if prefix == Some("x14") {
+                        owners.x14_data_validations = true;
+                    } else {
+                        owners.standard_data_validations = true;
+                    }
+                }
+                "conditionalFormattings" | "conditionalFormatting" => {
+                    if prefix == Some("x14") {
+                        owners.x14_conditional_formatting = true;
+                    } else {
+                        owners.standard_conditional_formatting = true;
+                    }
+                }
+                "sparklineGroups" | "sparklineGroup" => {
+                    owners.sparkline_groups = true;
+                }
+                _ => {}
+            }
+        }
+        owners
+    }
+
+    fn has_unmodeled_x14_owner(&self) -> bool {
+        self.x14_data_validations || self.x14_conditional_formatting
+    }
+}
+
+fn raw_xml_start_element_names(xml: &str) -> Vec<(Option<&str>, &str)> {
+    let mut names = Vec::new();
+    let bytes = xml.as_bytes();
+    let mut pos = 0;
+
+    while let Some(offset) = bytes[pos..].iter().position(|&b| b == b'<') {
+        let lt = pos + offset;
+        let name_start = lt + 1;
+        if name_start >= bytes.len() {
+            break;
+        }
+
+        if matches!(bytes[name_start], b'/' | b'!' | b'?') {
+            pos = name_start + 1;
+            continue;
+        }
+
+        let mut name_end = name_start;
+        while name_end < bytes.len()
+            && !matches!(bytes[name_end], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/')
+        {
+            name_end += 1;
+        }
+
+        if name_start < name_end {
+            let qname = &xml[name_start..name_end];
+            if let Some((prefix, local_name)) = qname.split_once(':') {
+                names.push((Some(prefix), local_name));
+            } else {
+                names.push((None, qname));
+            }
+        }
+
+        pos = name_end;
+    }
+
+    names
 }
 
 fn modeled_rows(sheet_data: &SheetData) -> HashSet<u32> {
@@ -231,10 +317,42 @@ mod tests {
     }
 
     #[test]
-    fn drops_known_modeled_extension_owners_without_current_domain_state() {
+    fn preserves_relationship_free_x14_validation_extension_without_current_domain_state() {
         let sheet_data = SheetData::default();
         let sheet_rt =
             sheet_rt_with_ext(r#"<extLst><ext><x14:dataValidations count="1"/></ext></extLst>"#);
+
+        assert!(standalone_ext_lst_for_export(&sheet_data, &sheet_rt).is_some());
+    }
+
+    #[test]
+    fn drops_x14_validation_extension_when_current_standard_owner_is_modeled() {
+        let sheet_data = SheetData {
+            data_validations: vec![domain_types::ValidationSpec::default()],
+            ..Default::default()
+        };
+        let sheet_rt =
+            sheet_rt_with_ext(r#"<extLst><ext><x14:dataValidations count="1"/></ext></extLst>"#);
+
+        assert!(standalone_ext_lst_for_export(&sheet_data, &sheet_rt).is_none());
+    }
+
+    #[test]
+    fn drops_x14_conditional_formatting_extension_when_current_standard_owner_is_modeled() {
+        let sheet_data = SheetData {
+            conditional_formats: vec![domain_types::ConditionalFormat {
+                id: "cf-1".to_string(),
+                sheet_id: "sheet-1".to_string(),
+                pivot: None,
+                ranges: Vec::new(),
+                range_identities: None,
+                rules: Vec::new(),
+            }],
+            ..Default::default()
+        };
+        let sheet_rt = sheet_rt_with_ext(
+            r#"<extLst><ext><x14:conditionalFormattings count="1"/></ext></extLst>"#,
+        );
 
         assert!(standalone_ext_lst_for_export(&sheet_data, &sheet_rt).is_none());
     }
@@ -256,6 +374,16 @@ mod tests {
         let sheet_rt = sheet_rt_with_ext(r#"<extLst><ext uri="{vendor}"/></extLst>"#);
 
         assert!(standalone_ext_lst_for_export(&sheet_data, &sheet_rt).is_some());
+    }
+
+    #[test]
+    fn drops_relationship_bearing_x14_extension() {
+        let sheet_data = SheetData::default();
+        let sheet_rt = sheet_rt_with_ext(
+            r#"<extLst><ext><x14:dataValidations r:id="rIdStale"/></ext></extLst>"#,
+        );
+
+        assert!(standalone_ext_lst_for_export(&sheet_data, &sheet_rt).is_none());
     }
 
     #[test]

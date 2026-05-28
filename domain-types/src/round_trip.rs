@@ -56,11 +56,14 @@ pub struct RoundTripContext {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetRoundTripContext {
-    /// Deprecated compatibility-only input for legacy snapshots.
+    /// Worksheet relationship metadata used only by owner-specific import
+    /// lowering for clean opaque subgraphs.
     ///
-    /// Sheet relationships must not be replayed as package authority. New export
-    /// paths derive relationships from modeled parts plus explicit clean
-    /// `opaque_package_subgraphs`.
+    /// Sheet relationships must not be replayed as package authority. Export
+    /// derives relationships from modeled parts plus explicit clean
+    /// `opaque_package_subgraphs`; this list may only identify the original
+    /// target of an owned opaque package part while constructing those
+    /// subgraphs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet_opc_rels: Vec<OpcRelationship>,
     /// Compatibility input only. Comment VML and header/footer image VML may
@@ -106,14 +109,9 @@ pub struct SheetRoundTripContext {
     /// Compatibility identity hint; does not create rows by itself.
     #[serde(default)]
     pub row_outline_level_zero: Vec<u32>,
-    /// Whether the original worksheet had an empty `<extLst/>` element.
-    /// Compatibility input only; emitted only when no modeled worksheet
-    /// extension owner is present.
-    #[serde(default)]
-    pub has_empty_ext_lst: bool,
     /// Raw `<extLst>...</extLst>` XML from the worksheet.
-    /// Compatibility input only. Known modeled extension owners such as
-    /// x14 data validations, conditional formatting, and sparklines are not
+    /// Unknown worksheet extensions only. Known modeled extension owners such
+    /// as x14 data validations, conditional formatting, and sparklines are not
     /// replayed from this raw sidecar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<String>,

@@ -162,6 +162,94 @@ fn shared_string_hints_survive_yrs_hydration_export() {
 }
 
 #[test]
+fn sheet_protection_modern_hash_fields_survive_yrs_hydration_export() {
+    let protection = domain_types::SheetProtection {
+        is_protected: true,
+        password_hash: Some("CC2A".to_string()),
+        hash_value: Some("modernHash==".to_string()),
+        algorithm_name: Some("SHA-512".to_string()),
+        salt_value: Some("modernSalt==".to_string()),
+        spin_count: Some(100000),
+        select_locked: false,
+        select_unlocked: true,
+        format_cells: true,
+        ..Default::default()
+    };
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Protected".to_string(),
+            rows: 1,
+            cols: 1,
+            protection: Some(protection.clone()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+
+    assert_eq!(exported.sheets[0].protection.as_ref(), Some(&protection));
+}
+
+#[test]
+fn explicit_empty_cached_formula_value_survives_yrs_hydration_export() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Null,
+                formula: Some("A2".to_string()),
+                has_empty_cached_value: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+
+    let cell = exported.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 0)
+        .expect("formula cell should export");
+    assert_eq!(cell.formula.as_deref(), Some("A2"));
+    assert!(cell.has_empty_cached_value);
+}
+
+#[test]
+fn sheet_extent_survives_yrs_hydration_export_when_sheet_has_data() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Number(FiniteF64::new(1.0).unwrap()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+
+    assert_eq!(exported.sheets[0].rows, 100);
+    assert_eq!(exported.sheets[0].cols, 26);
+}
+
+#[test]
 fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
     let mut output = ParseOutput {
         sheets: vec![SheetData {

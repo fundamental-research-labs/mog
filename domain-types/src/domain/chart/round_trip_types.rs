@@ -332,44 +332,7 @@ impl From<ChartPrintSettings> for ocharts::PrintSettings {
 }
 
 // ===========================================================================
-// ChartExternalData (CT_ExternalData, row 2.7)
-// ===========================================================================
-
-/// External data reference on the chart (CT_ExternalData).
-///
-/// `rel_id` points via the chart's relationships part to the external source
-/// (e.g. another workbook).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(default)]
-pub struct ChartExternalData {
-    /// Relationship ID (`@r:id`).
-    pub rel_id: String,
-    /// Auto-update on open (`<c:autoUpdate>`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub auto_update: Option<bool>,
-}
-
-impl From<&ocharts::ExternalData> for ChartExternalData {
-    fn from(e: &ocharts::ExternalData) -> Self {
-        Self {
-            rel_id: e.r_id.clone(),
-            auto_update: e.auto_update,
-        }
-    }
-}
-
-impl From<ChartExternalData> for ocharts::ExternalData {
-    fn from(e: ChartExternalData) -> Self {
-        Self {
-            r_id: e.rel_id,
-            auto_update: e.auto_update,
-        }
-    }
-}
-
-// ===========================================================================
-// ChartPivotSource (CT_PivotSource, row 2.8)
+// ChartPivotSource (CT_PivotSource)
 // ===========================================================================
 
 /// Pivot source metadata (CT_PivotSource) — links a chart to its source pivot.
@@ -954,19 +917,6 @@ mod tests {
     fn print_settings_default_emits_no_keys() {
         let p = ChartPrintSettings::default();
         assert_eq!(serde_json::to_string(&p).unwrap(), "{}");
-    }
-
-    // -- ChartExternalData --
-
-    #[test]
-    fn external_data_round_trip() {
-        let original = ocharts::ExternalData {
-            r_id: "rId3".into(),
-            auto_update: Some(true),
-        };
-        let dom: ChartExternalData = (&original).into();
-        let round: ocharts::ExternalData = dom.into();
-        assert_eq!(original, round);
     }
 
     // -- ChartPivotSource --

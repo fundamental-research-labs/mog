@@ -1,7 +1,7 @@
 //! Cell-level export: batch Yrs reads, per-sheet cell export, row/col style export.
 
-use cell_types::{CellId, RangeId, SheetId, SheetPos};
-use compute_document::hex::{hex_to_id, id_to_hex, parse_cell_id};
+use cell_types::{CellId, SheetId, SheetPos};
+use compute_document::hex::{id_to_hex, parse_cell_id};
 use compute_document::schema::*;
 use domain_types::{
     AuthoredStyleRun, CellData, CellFormat, ColStyleEntry, DocumentFormat,
@@ -124,68 +124,21 @@ fn read_formula_metadata_from_yrs<T: yrs::ReadTxn>(
     }
 }
 
-fn batch_read_range_format_style_ids(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> FxHashMap<RangeId, u32> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let mut out = FxHashMap::default();
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-
-    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-        return out;
-    };
-    let Some(Out::YMap(range_formats_map)) = sheet_map.get(&txn, KEY_RANGE_FORMATS) else {
-        return out;
-    };
-
-    for (range_hex, value) in range_formats_map.iter(&txn) {
-        let Some(raw_id) = hex_to_id(range_hex) else {
-            continue;
-        };
-        let Out::YMap(format_map) = value else {
-            continue;
-        };
-        let Some(Out::Any(Any::Number(style_id))) = format_map.get(
-            &txn,
-            domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
-        ) else {
-            continue;
-        };
-        if style_id >= 0.0 {
-            out.insert(RangeId::from_raw(raw_id), style_id as u32);
-        }
-    }
-
-    out
-}
-
 fn style_id_for_cell_format(
     format: &CellFormat,
-    has_lossless_stylesheet: bool,
-    original_cellxfs_count: u32,
     palette: &impl PaletteOps,
 ) -> Option<u32> {
     let doc_fmt = cell_format_to_document_format(format);
     if doc_fmt == DocumentFormat::default() {
         return None;
     }
-    let palette_id = palette.get_or_insert(doc_fmt);
-    Some(if has_lossless_stylesheet {
-        original_cellxfs_count + palette_id
-    } else {
-        palette_id
-    })
+    Some(palette.get_or_insert(doc_fmt))
 }
 
 fn format_range_style_id_at(
     sheet: &crate::mirror::SheetMirror,
     row: u32,
     col: u32,
-    imported_style_ids: &FxHashMap<RangeId, u32>,
-    has_lossless_stylesheet: bool,
-    original_cellxfs_count: u32,
     palette: &impl PaletteOps,
 ) -> Option<u32> {
     let matching = sheet.format_ranges_at(row, col);
@@ -193,19 +146,8 @@ fn format_range_style_id_at(
         return None;
     }
 
-    for (range_id, _) in matching.iter().rev() {
-        if let Some(style_id) = imported_style_ids.get(range_id) {
-            return Some(*style_id);
-        }
-    }
-
     matching.last().and_then(|(_, format)| {
-        style_id_for_cell_format(
-            format,
-            has_lossless_stylesheet,
-            original_cellxfs_count,
-            palette,
-        )
+        style_id_for_cell_format(format, palette)
     })
 }
 
@@ -226,19 +168,12 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     palette: &impl PaletteOps,
 ) -> Vec<CellData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_cells_for_sheet");
-    // When a lossless stylesheet is available, cell style_ids reference
-    // the original cellXfs indices directly (stored during hydration as "s").
-    let has_lossless_stylesheet = false;
-    // Original cellXfs count — new palette entries are appended after these,
-    // so mutated cells get style_id = original_count + palette_idx.
-    let original_cellxfs_count = 0;
 
     // Batch-read ALL cell properties and raw formulas in a single Yrs
     // transaction, avoiding duplicate transaction setup overhead (O2+O3).
     // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
     let (all_props, raw_formulas, array_refs, formula_metadata) =
-        batch_read_props_formulas_and_array_refs(stores, sheet_id, has_lossless_stylesheet);
-    let imported_range_style_ids = batch_read_range_format_style_ids(stores, sheet_id);
+        batch_read_props_formulas_and_array_refs(stores, sheet_id, false);
 
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
     let grid = stores.grid_indexes.get(sheet_id);
@@ -275,8 +210,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &raw_formulas,
                 &array_refs,
                 &formula_metadata,
-                has_lossless_stylesheet,
-                original_cellxfs_count,
                 palette,
                 false,
             ) {
@@ -287,9 +220,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                         sheet,
                         row,
                         col,
-                        &imported_range_style_ids,
-                        has_lossless_stylesheet,
-                        original_cellxfs_count,
                         palette,
                     );
                 }
@@ -315,9 +245,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                         sheet,
                         row,
                         col,
-                        &imported_range_style_ids,
-                        has_lossless_stylesheet,
-                        original_cellxfs_count,
                         palette,
                     );
                     cells_by_pos.insert((row, col), cell);
@@ -354,8 +281,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     &raw_formulas,
                     &array_refs,
                     &formula_metadata,
-                    has_lossless_stylesheet,
-                    original_cellxfs_count,
                     palette,
                     true,
                 );
@@ -374,9 +299,6 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                         sheet,
                         row,
                         col,
-                        &imported_range_style_ids,
-                        has_lossless_stylesheet,
-                        original_cellxfs_count,
                         palette,
                     );
                 }
@@ -448,25 +370,12 @@ pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
         return Vec::new();
     };
 
-    let has_lossless_stylesheet = false;
-    let original_cellxfs_count = 0;
-    let imported_style_ids = batch_read_range_format_style_ids(stores, sheet_id);
-
     let mut runs = Vec::new();
     for range in sheet.format_ranges() {
-        let style_id = imported_style_ids.get(&range.id).copied().or_else(|| {
-            sheet
-                .range_format_cache()
-                .get(&range.id)
-                .and_then(|format| {
-                    style_id_for_cell_format(
-                        format,
-                        has_lossless_stylesheet,
-                        original_cellxfs_count,
-                        palette,
-                    )
-                })
-        });
+        let style_id = sheet
+            .range_format_cache()
+            .get(&range.id)
+            .and_then(|format| style_id_for_cell_format(format, palette));
         let Some(style_id) = style_id else {
             continue;
         };
@@ -496,8 +405,6 @@ fn build_cell_data_for_cell_id(
     raw_formulas: &FxHashMap<CellId, String>,
     array_refs: &FxHashMap<CellId, String>,
     formula_metadata: &FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
-    has_lossless_stylesheet: bool,
-    original_cellxfs_count: u32,
     palette: &impl PaletteOps,
     preserve_blank: bool,
 ) -> Option<CellData> {
@@ -525,12 +432,7 @@ fn build_cell_data_for_cell_id(
         });
 
     let cell_props = all_props.get(cell_id);
-    let style_id = cell_style_id(
-        cell_props,
-        has_lossless_stylesheet,
-        original_cellxfs_count,
-        palette,
-    );
+    let style_id = cell_style_id(cell_props, palette);
 
     let cm = cell_props.map(|props| props.cm).unwrap_or(false);
     let vm = cell_props.and_then(|props| props.vm);
@@ -607,33 +509,16 @@ fn is_imported_style_only_blank(
 
 fn cell_style_id(
     cell_props: Option<&CellProperties>,
-    has_lossless_stylesheet: bool,
-    original_cellxfs_count: u32,
     palette: &impl PaletteOps,
 ) -> Option<u32> {
-    if has_lossless_stylesheet {
-        // Prefer the original style index for unmodified cells (lossless round-trip).
-        // If `style_id` was cleared, fall through to CellFormat -> DocumentFormat.
-        cell_props.and_then(|props| props.style_id).or_else(|| {
-            cell_props.and_then(|props| {
-                let cell_fmt = props.format.as_ref()?;
-                let doc_fmt = cell_format_to_document_format(cell_fmt);
-                if doc_fmt == DocumentFormat::default() {
-                    return None;
-                }
-                Some(original_cellxfs_count + palette.get_or_insert(doc_fmt))
-            })
-        })
-    } else {
-        cell_props.and_then(|props| {
-            let cell_fmt = props.format.as_ref()?;
-            let doc_fmt = cell_format_to_document_format(cell_fmt);
-            if doc_fmt == DocumentFormat::default() {
-                return None;
-            }
-            Some(palette.get_or_insert(doc_fmt))
-        })
-    }
+    cell_props.and_then(|props| {
+        let cell_fmt = props.format.as_ref()?;
+        let doc_fmt = cell_format_to_document_format(cell_fmt);
+        if doc_fmt == DocumentFormat::default() {
+            return None;
+        }
+        Some(palette.get_or_insert(doc_fmt))
+    })
 }
 
 fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellData {
@@ -710,32 +595,14 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     _max_col: u32,
     palette: &impl PaletteOps,
 ) -> (Vec<RowStyleEntry>, Vec<ColStyleEntry>) {
-    let has_lossless_stylesheet = false;
-    let original_cellxfs_count = 0;
-
     let grid_index = stores.grid_indexes.get(sheet_id);
 
     // Batch-read all row formats in one transaction
     let all_row_fmts = properties::get_all_row_formats(&stores.storage, sheet_id, grid_index);
     let mut row_styles = Vec::with_capacity(all_row_fmts.len());
     for entry in all_row_fmts {
-        // Lossless path: use stored XLSX style index if available
-        if has_lossless_stylesheet && let Some(stored_idx) = entry.xlsx_style_id {
-            if stored_idx > 0 {
-                row_styles.push(RowStyleEntry {
-                    row: entry.row,
-                    style_id: stored_idx,
-                });
-            }
-            continue;
-        }
         if let Some(fmt) = entry.format
-            && let Some(style_id) = style_id_for_cell_format(
-                &fmt,
-                has_lossless_stylesheet,
-                original_cellxfs_count,
-                palette,
-            )
+            && let Some(style_id) = style_id_for_cell_format(&fmt, palette)
         {
             row_styles.push(RowStyleEntry {
                 row: entry.row,
@@ -748,22 +615,8 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     let all_col_fmts = properties::get_all_col_formats(&stores.storage, sheet_id, grid_index);
     let mut col_styles = Vec::with_capacity(all_col_fmts.len());
     for entry in all_col_fmts {
-        if has_lossless_stylesheet && let Some(stored_idx) = entry.xlsx_style_id {
-            if stored_idx > 0 {
-                col_styles.push(ColStyleEntry {
-                    col: entry.col,
-                    style_id: stored_idx,
-                });
-            }
-            continue;
-        }
         if let Some(fmt) = entry.format
-            && let Some(style_id) = style_id_for_cell_format(
-                &fmt,
-                has_lossless_stylesheet,
-                original_cellxfs_count,
-                palette,
-            )
+            && let Some(style_id) = style_id_for_cell_format(&fmt, palette)
         {
             col_styles.push(ColStyleEntry {
                 col: entry.col,

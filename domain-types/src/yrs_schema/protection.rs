@@ -12,6 +12,7 @@ use crate::domain::workbook::{HashAlgorithm, WorkbookProtection};
 
 pub const KEY_IS_PROTECTED: &str = "isProtected";
 pub const KEY_PASSWORD_HASH: &str = "passwordHash";
+pub const KEY_HASH_VALUE: &str = "hashValue";
 pub const KEY_ALGORITHM_NAME: &str = "algorithmName";
 pub const KEY_SALT_VALUE: &str = "saltValue";
 pub const KEY_SPIN_COUNT: &str = "spinCount";
@@ -77,6 +78,9 @@ pub fn sheet_to_yrs_prelim(prot: &SheetProtection) -> Vec<(&str, Any)> {
     if let Some(hash) = &prot.password_hash {
         entries.push((KEY_PASSWORD_HASH, Any::String(Arc::from(hash.as_str()))));
     }
+    if let Some(hash) = &prot.hash_value {
+        entries.push((KEY_HASH_VALUE, Any::String(Arc::from(hash.as_str()))));
+    }
     if let Some(alg) = &prot.algorithm_name {
         entries.push((KEY_ALGORITHM_NAME, Any::String(Arc::from(alg.as_str()))));
     }
@@ -94,6 +98,7 @@ pub fn sheet_from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<SheetProt
     Some(SheetProtection {
         is_protected: read_bool(map, txn, KEY_IS_PROTECTED).unwrap_or(false),
         password_hash: read_string(map, txn, KEY_PASSWORD_HASH),
+        hash_value: read_string(map, txn, KEY_HASH_VALUE),
         algorithm_name: read_string(map, txn, KEY_ALGORITHM_NAME),
         salt_value: read_string(map, txn, KEY_SALT_VALUE),
         spin_count: read_u32(map, txn, KEY_SPIN_COUNT),
@@ -199,4 +204,50 @@ pub fn workbook_from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Workbo
 /// Update a single field on an existing protection Y.Map.
 pub fn update_field(map: &MapRef, txn: &mut TransactionMut, key: &str, value: Any) {
     map.insert(txn, key, value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yrs::Transact;
+
+    #[test]
+    fn sheet_modern_hash_fields_roundtrip_through_yrs_map() {
+        let original = SheetProtection {
+            is_protected: true,
+            password_hash: Some("CC2A".to_string()),
+            hash_value: Some("modernHash==".to_string()),
+            algorithm_name: Some("SHA-512".to_string()),
+            salt_value: Some("modernSalt==".to_string()),
+            spin_count: Some(100000),
+            select_locked: false,
+            select_unlocked: true,
+            format_cells: true,
+            format_columns: false,
+            format_rows: true,
+            insert_columns: false,
+            insert_rows: true,
+            insert_hyperlinks: false,
+            delete_columns: true,
+            delete_rows: false,
+            sort: true,
+            auto_filter: false,
+            pivot_tables: true,
+            objects: true,
+            scenarios: false,
+        };
+
+        let doc = yrs::Doc::new();
+        let map = doc.get_or_insert_map("protection");
+        let mut txn = doc.transact_mut();
+        for (key, value) in sheet_to_yrs_prelim(&original) {
+            map.insert(&mut txn, key, value);
+        }
+        drop(txn);
+
+        let txn = doc.transact();
+        let restored = sheet_from_yrs_map(&map, &txn).expect("protection should hydrate");
+
+        assert_eq!(restored, original);
+    }
 }

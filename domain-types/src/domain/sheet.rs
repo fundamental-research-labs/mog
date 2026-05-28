@@ -372,6 +372,7 @@ mod tests {
         let prot = SheetProtection {
             is_protected: true,
             password_hash: Some("hash".to_string()),
+            hash_value: Some("modern_hash".to_string()),
             algorithm_name: Some("SHA-512".to_string()),
             salt_value: Some("salt".to_string()),
             spin_count: Some(100000),

@@ -332,15 +332,11 @@ pub struct ChartRoundTripData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub print_settings: Option<ChartPrintSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub external_data: Option<ChartExternalData>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pivot_source: Option<ChartPivotSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_fmts: Vec<ChartPivotFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clr_map_ovr: Option<ChartColorMappingOverride>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_shapes: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date1904: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -353,8 +349,6 @@ pub struct ChartRoundTripData {
     pub chart_extensions: Vec<ooxml_types::charts::ExtensionEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plot_area_extensions: Vec<ooxml_types::charts::ExtensionEntry>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub has_empty_chart_ext_lst: bool,
 
     // Layout
     #[serde(skip_serializing_if = "Option::is_none")]

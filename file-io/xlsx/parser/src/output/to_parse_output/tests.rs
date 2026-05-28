@@ -7,7 +7,8 @@ use crate::output::results::{
 };
 use crate::output::results::{
     CommentOutput, CommentRunOutput, DefinedNameOutput, FullCellData, FullParseResult,
-    FullParsedSheet, HyperlinkOutput, ParseStats, SmartArtPartsOutput, StylesOutput,
+    FullParsedSheet, HyperlinkOutput, ParseStats, ProtectionOutput, SmartArtPartsOutput,
+    StylesOutput,
 };
 use domain_types::ImportedCellProjectionRole;
 use domain_types::domain::comment::{CommentContentType, CommentType, RichTextRun};
@@ -168,6 +169,54 @@ fn compatibility_acknowledgements_add_user_facing_messages() {
 
     assert!(messages.contains(&"Detected 3 diagrams from OOXML SmartArt. Diagram source metadata was preserved; editable Mog diagrams are not materialized yet.".to_string()));
     assert!(messages.contains(&"Loaded 2 text-effect objects from OOXML WordArt.".to_string()));
+}
+
+#[test]
+fn sheet_protection_modern_hash_fields_reach_parse_output() {
+    let result = threading_result(
+        FullParsedSheet {
+            name: "Protected".to_string(),
+            protection: Some(ProtectionOutput {
+                password: Some("CC2A".to_string()),
+                algorithm_name: Some("SHA-512".to_string()),
+                hash_value: Some("modernHash==".to_string()),
+                salt_value: Some("modernSalt==".to_string()),
+                spin_count: Some(100000),
+                sheet: true,
+                objects: true,
+                scenarios: false,
+                format_cells: true,
+                format_columns: false,
+                format_rows: false,
+                insert_columns: true,
+                insert_rows: true,
+                insert_hyperlinks: false,
+                delete_columns: true,
+                delete_rows: false,
+                sort: true,
+                auto_filter: false,
+                pivot_tables: true,
+                select_locked_cells: false,
+                select_unlocked_cells: true,
+            }),
+            ..Default::default()
+        },
+        None,
+        Vec::new(),
+    );
+
+    let (output, _, _) = full_parse_result_to_parse_output(&result);
+    let protection = output.sheets[0]
+        .protection
+        .as_ref()
+        .expect("sheet protection should be converted");
+
+    assert_eq!(protection.password_hash.as_deref(), Some("CC2A"));
+    assert_eq!(protection.algorithm_name.as_deref(), Some("SHA-512"));
+    assert_eq!(protection.hash_value.as_deref(), Some("modernHash=="));
+    assert_eq!(protection.salt_value.as_deref(), Some("modernSalt=="));
+    assert_eq!(protection.spin_count, Some(100000));
+    assert!(protection.is_protected);
 }
 
 #[test]

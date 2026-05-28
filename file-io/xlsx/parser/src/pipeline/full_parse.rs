@@ -1094,8 +1094,6 @@ fn process_sheet_core(
 
     let outline_properties = crate::domain::worksheet::read::parse_outline_properties(pre_sd);
 
-    // Detect empty <extLst/> for round-trip fidelity
-    let has_empty_ext_lst = memchr::memmem::find(worksheet_xml, b"<extLst/>").is_some();
     let explicit_blank_cells = extract_explicit_blank_cells(worksheet_xml);
     let header_footer_xml = extract_raw_element_xml(worksheet_xml, b"headerFooter");
     let worksheet_controls_xml = extract_worksheet_controls_xml(worksheet_xml);
@@ -1216,6 +1214,14 @@ fn process_sheet_core(
 
     let protection_output =
         protection::SheetProtection::parse(post_sd).map(|sp| ProtectionOutput {
+            password: sp.password,
+            algorithm_name: {
+                let alg = sp.algorithm_name.as_str();
+                (!alg.is_empty()).then(|| alg.to_string())
+            },
+            hash_value: sp.hash_value,
+            salt_value: sp.salt_value,
+            spin_count: sp.spin_count,
             sheet: sp.sheet,
             objects: sp.objects,
             scenarios: sp.scenarios,
@@ -1331,7 +1337,6 @@ fn process_sheet_core(
         worksheet_controls_xml,
         ole_objects,
         connectors,
-        has_empty_ext_lst,
         ext_lst_xml,
         sheet_opc_rels,
         auto_filter,
@@ -1491,8 +1496,6 @@ fn parse_sheets_sequential(
         let outline_properties =
             crate::domain::worksheet::read::parse_outline_properties(pre_sd_early);
 
-        // Detect empty <extLst/> for round-trip fidelity
-        let has_empty_ext_lst = memchr::memmem::find(&worksheet_xml, b"<extLst/>").is_some();
         let explicit_blank_cells = extract_explicit_blank_cells(&worksheet_xml);
         let header_footer_xml = extract_raw_element_xml(&worksheet_xml, b"headerFooter");
         let worksheet_controls_xml = extract_worksheet_controls_xml(&worksheet_xml);
@@ -1621,6 +1624,14 @@ fn parse_sheets_sequential(
 
         let protection_output =
             protection::SheetProtection::parse(post_sd).map(|sp| ProtectionOutput {
+                password: sp.password,
+                algorithm_name: {
+                    let alg = sp.algorithm_name.as_str();
+                    (!alg.is_empty()).then(|| alg.to_string())
+                },
+                hash_value: sp.hash_value,
+                salt_value: sp.salt_value,
+                spin_count: sp.spin_count,
                 sheet: sp.sheet,
                 objects: sp.objects,
                 scenarios: sp.scenarios,
@@ -1864,7 +1875,6 @@ fn parse_sheets_sequential(
             worksheet_controls_xml,
             ole_objects,
             connectors,
-            has_empty_ext_lst,
             sheet_opc_rels,
             raw_vml_drawings,
             parsed_drawing,

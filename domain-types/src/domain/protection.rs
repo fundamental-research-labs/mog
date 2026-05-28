@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct SheetProtection {
     pub is_protected: bool,
+    /// Legacy OOXML `password` hash.
     pub password_hash: Option<String>,
+    /// Modern OOXML `hashValue`.
+    pub hash_value: Option<String>,
     pub algorithm_name: Option<String>,
     pub salt_value: Option<String>,
     pub spin_count: Option<u32>,
@@ -30,6 +33,7 @@ impl Default for SheetProtection {
         Self {
             is_protected: false,
             password_hash: None,
+            hash_value: None,
             algorithm_name: None,
             salt_value: None,
             spin_count: None,

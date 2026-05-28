@@ -1125,10 +1125,11 @@ fn convert_sheet(
     let protection = sheet.protection.as_ref().map(|p| {
         domain_types::SheetProtection {
             is_protected: p.sheet,
-            password_hash: None,
-            algorithm_name: None,
-            salt_value: None,
-            spin_count: None,
+            password_hash: p.password.clone(),
+            hash_value: p.hash_value.clone(),
+            algorithm_name: p.algorithm_name.clone(),
+            salt_value: p.salt_value.clone(),
+            spin_count: p.spin_count,
             // In OOXML, selectLockedCells/selectUnlockedCells default to false
             // (meaning selection IS allowed). The domain type inverts the sense:
             // true = user can select. So we negate the parser's value.
@@ -1235,7 +1236,16 @@ fn convert_sheet(
 
     // --- Build SheetRoundTripContext ---
     let sheet_rt = SheetRoundTripContext {
-        sheet_opc_rels: Vec::new(),
+        sheet_opc_rels: sheet
+            .sheet_opc_rels
+            .iter()
+            .map(|r| domain_types::OpcRelationship {
+                id: r.id.clone(),
+                rel_type: r.rel_type.clone(),
+                target: r.target.clone(),
+                target_mode: r.target_mode.clone(),
+            })
+            .collect(),
         raw_vml_drawings: sheet
             .raw_vml_drawings
             .iter()
@@ -1283,10 +1293,9 @@ fn convert_sheet(
             .filter(|rh| rh.outline_level == Some(0))
             .map(|rh| rh.row)
             .collect(),
-        has_empty_ext_lst: sheet.has_empty_ext_lst,
         ext_lst_xml: sheet.ext_lst_xml.clone(),
         preserved_namespace_attrs: Vec::new(), // populated per-sheet from extensions below
-        custom_properties_xml: None,
+        custom_properties_xml: sheet.custom_properties_xml.clone(),
         sheet_preserved_elements: Vec::new(),
         // Collect drawing anchor passthroughs: twoCellAnchors with content-level
         // mc:AlternateContent (e.g., ChartEx wrapped in mc:AlternateContent).

@@ -27,6 +27,21 @@ pub struct HyperlinkOutput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProtectionOutput {
+    /// Legacy OOXML `password` hash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    /// OOXML `algorithmName` for modern sheet protection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub algorithm_name: Option<String>,
+    /// OOXML `hashValue` for modern sheet protection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_value: Option<String>,
+    /// OOXML `saltValue` for modern sheet protection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub salt_value: Option<String>,
+    /// OOXML `spinCount` for modern sheet protection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spin_count: Option<u32>,
     pub sheet: bool,
     pub objects: bool,
     pub scenarios: bool,
@@ -271,9 +286,6 @@ pub struct FullParsedSheet {
     pub ole_objects: Vec<OleObjectOutput>,
     /// Connector lines between shapes
     pub connectors: Vec<ConnectorOutput>,
-    /// Whether the original worksheet had an empty `<extLst/>` element.
-    #[serde(skip)]
-    pub has_empty_ext_lst: bool,
     /// Raw `<extLst>...</extLst>` XML from the worksheet for round-trip passthrough.
     /// Captures extension elements (x14:dataValidations, x14:conditionalFormattings, etc.)
     /// that live inside `<extLst>` in the post-sheetData region.

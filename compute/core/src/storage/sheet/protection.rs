@@ -80,6 +80,7 @@ pub(crate) fn protect_sheet_with_options(
         let protection = domain_types::domain::protection::SheetProtection {
             is_protected: true,
             password_hash: password_hash.map(ToOwned::to_owned),
+            hash_value: None,
             algorithm_name: None,
             salt_value: None,
             spin_count: None,
@@ -105,7 +106,7 @@ pub(crate) fn protect_sheet_with_options(
     }
 }
 
-/// Replace the full protection option set while preserving protection state and password hash.
+/// Replace the full protection option set while preserving protection state and hashes.
 pub(crate) fn set_sheet_protection_options(
     doc: &Doc,
     sheets: &MapRef,
@@ -115,12 +116,31 @@ pub(crate) fn set_sheet_protection_options(
     let current = super::settings::get_sheet_settings(doc, sheets, sheet_id);
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
+        let existing = match meta.get(&txn, KEY_PROTECTION_DETAILS) {
+            Some(yrs::Out::YMap(prot_map)) => {
+                protection_schema::sheet_from_yrs_map(&prot_map, &txn)
+            }
+            _ => None,
+        };
         let protection = domain_types::domain::protection::SheetProtection {
             is_protected: current.is_protected,
-            password_hash: current.protection_password_hash,
-            algorithm_name: None,
-            salt_value: None,
-            spin_count: None,
+            password_hash: current.protection_password_hash.or_else(|| {
+                existing
+                    .as_ref()
+                    .and_then(|protection| protection.password_hash.clone())
+            }),
+            hash_value: existing
+                .as_ref()
+                .and_then(|protection| protection.hash_value.clone()),
+            algorithm_name: existing
+                .as_ref()
+                .and_then(|protection| protection.algorithm_name.clone()),
+            salt_value: existing
+                .as_ref()
+                .and_then(|protection| protection.salt_value.clone()),
+            spin_count: existing
+                .as_ref()
+                .and_then(|protection| protection.spin_count),
             select_locked: options.select_locked_cells,
             select_unlocked: options.select_unlocked_cells,
             format_cells: options.format_cells,

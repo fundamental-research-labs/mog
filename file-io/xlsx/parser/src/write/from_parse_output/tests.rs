@@ -24,6 +24,7 @@ mod charts;
 mod data_tables;
 mod pivot_package;
 mod smoke_and_formulas;
+mod sparklines;
 mod styles;
 mod theme;
 
@@ -77,6 +78,36 @@ fn shared_string_rich_text_hint_is_preserved_from_parse_output() {
 
     assert!(shared_strings.contains("<rPr><b/>"));
     assert!(shared_strings.contains("<t>Rich</t>"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn sheet_protection_modern_hash_fields_are_written_from_parse_output() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        protection: Some(domain_types::SheetProtection {
+            is_protected: true,
+            password_hash: Some("CC2A".to_string()),
+            hash_value: Some("modernHash==".to_string()),
+            algorithm_name: Some("SHA-512".to_string()),
+            salt_value: Some("modernSalt==".to_string()),
+            spin_count: Some(100000),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains("<sheetProtection"));
+    assert!(sheet_xml.contains(r#"password="CC2A""#));
+    assert!(sheet_xml.contains(r#"algorithmName="SHA-512""#));
+    assert!(sheet_xml.contains(r#"hashValue="modernHash==""#));
+    assert!(sheet_xml.contains(r#"saltValue="modernSalt==""#));
+    assert!(sheet_xml.contains(r#"spinCount="100000""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

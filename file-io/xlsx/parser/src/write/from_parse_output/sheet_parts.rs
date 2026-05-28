@@ -37,7 +37,6 @@ pub(super) fn build_sheet_parts(
     output: &domain_types::ParseOutput,
     round_trip_ctx: Option<&RoundTripContext>,
     shared_strings: &mut SharedStringsWriter,
-    has_lossless_stylesheet: bool,
 ) -> BuiltSheetParts {
     let mut sheet_writers = Vec::with_capacity(output.sheets.len());
     let mut sheet_extras = Vec::with_capacity(output.sheets.len());
@@ -107,7 +106,6 @@ pub(super) fn build_sheet_parts(
         let mut sheet_writer = build_sheet(
             sheet_data,
             shared_strings,
-            has_lossless_stylesheet,
             sheet_rt,
             &data_table_body_positions,
             &sheet_data_table_regions,
@@ -245,7 +243,14 @@ pub(super) fn build_sheet_parts(
 
         // ── Sparklines / extLst ──────────────────────────────────────────
         let sheet_rt_for_ext = round_trip_ctx.and_then(|ctx| ctx.sheets.get(sheet_idx));
-        if !sheet_data.sparklines.is_empty() {
+        if !sheet_data.sparkline_groups.is_empty() {
+            let xml = crate::domain::sparklines::write::sparkline_groups_xml_from_domain(
+                &sheet_data.name,
+                &sheet_data.sparklines,
+                &sheet_data.sparkline_groups,
+            );
+            sheet_writer.set_ext_lst_xml(xml);
+        } else if !sheet_data.sparklines.is_empty() {
             let xml = crate::domain::sparklines::write::sparklines_xml_from_domain(
                 &sheet_data.name,
                 &sheet_data.sparklines,
@@ -257,8 +262,6 @@ pub(super) fn build_sheet_parts(
                     sheet_preservation::standalone_ext_lst_for_export(sheet_data, sheet_rt)
                 {
                     sheet_writer.set_ext_lst_xml(ext_xml.clone());
-                } else if sheet_preservation::empty_ext_lst_for_export(sheet_data, sheet_rt) {
-                    sheet_writer.set_ext_lst_xml("<extLst/>".to_string());
                 }
             }
         }

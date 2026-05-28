@@ -145,7 +145,7 @@ impl YrsComputeEngine {
                 continue;
             }
 
-            let Some(format) = inferred_time_format(trimmed, &culture) else {
+            let Some(format) = inferred_time_format(trimmed, &culture.name) else {
                 continue;
             };
 

@@ -6,7 +6,7 @@ use super::assembly::{
     WorksheetThreadedCommentsGraphEntry,
 };
 use super::{
-    WriteError, chart_allows_auxiliary_replay, chart_auxiliary, external_links, vml_merge,
+    WriteError, chart_auxiliary, chart_replay, external_links, vml_merge,
 };
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::write::package_graph::ResolvedPackageGraph;
@@ -553,7 +553,7 @@ pub(super) fn write_zip_package(
 
                 // Write chart auxiliary files (style XML, colors XML) only
                 // when the current chart still carries imported chart identity.
-                if chart_allows_auxiliary_replay(chart_spec)
+                if chart_replay::chart_allows_auxiliary_replay(chart_spec)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =
@@ -598,7 +598,7 @@ pub(super) fn write_zip_package(
                 // Write ChartEx auxiliary files only when the current chart
                 // still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-                if chart_allows_auxiliary_replay(chart_spec)
+                if chart_replay::chart_allows_auxiliary_replay(chart_spec)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =

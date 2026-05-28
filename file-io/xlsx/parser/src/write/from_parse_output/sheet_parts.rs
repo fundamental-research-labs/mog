@@ -5,7 +5,7 @@ use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
 use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
-use super::{chart_allows_auxiliary_replay, sheet_preservation, should_reconstruct_chart_space};
+use super::{chart_replay, sheet_preservation};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -327,7 +327,7 @@ pub(super) fn build_sheet_parts(
             }
             // Reconstruct from typed fields when present so modeled chart edits
             // are not overridden by stale preserved ChartSpace XML.
-            let chart_xml = if should_reconstruct_chart_space(chart_spec) {
+            let chart_xml = if chart_replay::should_reconstruct_chart_space(chart_spec) {
                 let chart_space =
                     crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
                 serialize_chart_space(&chart_space)
@@ -340,7 +340,7 @@ pub(super) fn build_sheet_parts(
             // Preserve original chart number from the imported chart object when available.
             // E.g., if original was "xl/charts/chart2.xml", extract 2 instead of using
             // the sequential counter (which would produce chart1.xml).
-            let original_idx = chart_allows_auxiliary_replay(chart_spec)
+            let original_idx = chart_replay::chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
                     chart_auxiliary::chart_auxiliary_data(chart_spec)
                         .and_then(|aux| chart_auxiliary::standard_chart_number(&aux))
@@ -379,7 +379,7 @@ pub(super) fn build_sheet_parts(
                 _ => continue, // not a chartEx
             };
             // Preserve original chartEx number from the imported chart object when available.
-            let original_idx = chart_allows_auxiliary_replay(chart_spec)
+            let original_idx = chart_replay::chart_allows_auxiliary_replay(chart_spec)
                 .then(|| {
                     chart_auxiliary::chart_auxiliary_data(chart_spec)
                         .and_then(|aux| chart_auxiliary::chart_ex_number(&aux))

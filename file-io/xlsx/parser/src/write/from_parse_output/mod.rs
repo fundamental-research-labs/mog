@@ -11,13 +11,16 @@
 
 mod assembly;
 mod chart_auxiliary;
+mod chart_replay;
 mod differential_formats;
 mod doc_props;
+mod export_context;
 mod external_links;
 mod form_controls;
 mod hyperlink_targets;
 mod metadata;
 mod ole_objects;
+mod preflight_phase;
 mod pivot_package;
 mod printer_settings;
 mod rich_data;
@@ -41,7 +44,6 @@ use crate::domain::drawings::write::{
     AbsoluteAnchor, CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject,
     DrawingWriter, Extent, OneCellAnchor, Position, TwoCellAnchor,
 };
-use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
@@ -57,115 +59,6 @@ use assembly::{
     WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry, WorksheetOleVmlGraphEntry,
     WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
-
-fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
-    if has_modeled_chart_space_state(chart_spec) {
-        return true;
-    }
-
-    if matches!(
-        chart_spec.definition,
-        Some(domain_types::ChartDefinition::Chart(_))
-    ) {
-        return false;
-    }
-
-    false
-}
-
-fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
-    chart_spec
-        .title
-        .as_deref()
-        .is_some_and(|title| !title.is_empty())
-        || !chart_spec.series.is_empty()
-        || chart_spec
-            .data_range
-            .as_deref()
-            .is_some_and(|range| !range.is_empty())
-        || chart_spec.axes.is_some()
-        || chart_spec.legend.is_some()
-        || chart_spec.data_labels.is_some()
-        || chart_spec.data_table.is_some()
-        || chart_spec.style.is_some()
-        || chart_spec.rounded_corners.is_some()
-        || chart_spec.auto_title_deleted.is_some()
-        || chart_spec.show_data_labels_over_max.is_some()
-        || chart_spec.chart_format.is_some()
-        || chart_spec.plot_format.is_some()
-        || chart_spec.title_format.is_some()
-        || chart_spec.title_rich_text.is_some()
-        || chart_spec.title_formula.is_some()
-        || chart_spec.display_blanks_as.is_some()
-        || chart_spec.plot_visible_only.is_some()
-        || chart_spec.sub_type.is_some()
-        || chart_spec.gap_width.is_some()
-        || chart_spec.overlap.is_some()
-        || chart_spec.doughnut_hole_size.is_some()
-        || chart_spec.first_slice_angle.is_some()
-        || chart_spec.bubble_scale.is_some()
-        || chart_spec.split_type.is_some()
-        || chart_spec.split_value.is_some()
-        || chart_spec.bar_shape.is_some()
-        || chart_spec.bubble_3d_effect.is_some()
-        || chart_spec.wireframe.is_some()
-        || chart_spec.surface_top_view.is_some()
-        || chart_spec.color_scheme.is_some()
-        || chart_spec.category_label_level.is_some()
-        || chart_spec.series_name_level.is_some()
-        || chart_spec.show_all_field_buttons.is_some()
-        || chart_spec.second_plot_size.is_some()
-        || chart_spec.vary_by_categories.is_some()
-        || chart_spec.title_h_align.is_some()
-        || chart_spec.title_v_align.is_some()
-        || chart_spec.title_show_shadow.is_some()
-        || chart_spec.pivot_options.is_some()
-        || chart_spec.view_3d.is_some()
-        || chart_spec.floor_format.is_some()
-        || chart_spec.side_wall_format.is_some()
-        || chart_spec.back_wall_format.is_some()
-}
-
-fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
-    chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
-}
-
-fn register_chart_owned_external_relationships(
-    package_graph_builder: &mut crate::write::package_graph::PackageGraphBuilder,
-    chart_path: &str,
-    chart_spec: &domain_types::ChartSpec,
-) -> Result<(), WriteError> {
-    if let Some((_, rel)) = chart_auxiliary::chart_external_data_relationship(chart_spec) {
-        if rel.target_mode.as_deref() == Some("External")
-            && let (Some(rel_type), Some(target)) =
-                (rel.relationship_type.as_deref(), rel.target.as_deref())
-        {
-            crate::write::package_graph::register_chart_external_relationship(
-                package_graph_builder,
-                chart_path,
-                rel_type,
-                target,
-                &rel.r_id,
-            );
-        }
-    }
-
-    if let Some(user_shapes) = chart_auxiliary::chart_user_shapes_data(chart_spec, chart_path) {
-        crate::write::package_graph::register_chart_auxiliary_part(
-            package_graph_builder,
-            &user_shapes.path,
-        )?;
-        crate::write::package_graph::register_chart_auxiliary_relationship(
-            package_graph_builder,
-            chart_path,
-            user_shapes.relationship_type,
-            &user_shapes.path,
-            user_shapes.relationship_id_hint,
-        );
-    }
-
-    Ok(())
-}
 
 fn worksheet_legacy_vml_path(
     sheet_idx: usize,
@@ -195,48 +88,18 @@ fn worksheet_legacy_vml_path(
 ///
 /// Modeled workbook state is generated from domain types.
 pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, WriteError> {
-    let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
-    let output = &remapped_output;
-    // ── 1. Build styles ─────────────────────────────────────────────────
-    // Build a modeled stylesheet from the current semantic style palette. Style
-    // ids in cells/rows/columns are generated palette indices, not preserved
-    // source XLSX cellXfs identities.
-    let has_style_references = output_references_style_ids(output);
-    let style_palette_for_export = if has_style_references {
-        output.style_palette.as_slice()
-    } else {
-        &[]
-    };
-
-    let mut styles_writer = build_styles(style_palette_for_export);
-    styles_writer.dxfs = registry_dxfs;
-    if styles_writer.dxfs.is_empty() {
-        styles_writer.dxfs = differential_formats::collect(output);
-    }
-    if styles_writer.table_styles.is_empty() {
-        styles_writer.table_styles = output.custom_table_styles.clone();
-    }
-    if styles_writer.default_table_style.is_none() {
-        styles_writer.default_table_style = output.default_table_style.clone();
-    }
-    if styles_writer.default_pivot_style.is_none() {
-        styles_writer.default_pivot_style = output.default_pivot_style.clone();
-    }
-
-    // ── 2. Build sheets ─────────────────────────────────────────────────
-    let mut shared_strings = sheet_parts::build_shared_strings(output);
-    let sheet_parts::BuiltSheetParts {
+    let export_context::WorkbookPreflight {
+        output: remapped_output,
+        styles_writer,
+        shared_strings,
         mut sheet_writers,
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
-    } = sheet_parts::build_sheet_parts(output, &mut shared_strings);
-
-    // Collected image blobs from floating objects: (zip_path, bytes).
-    let mut all_image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
-
-    // ── Build pivot table and cache data ──────────────────────────────
-    let pivot_data = pivot_writer::build_pivot_data(output);
+        pivot_data,
+        mut all_image_blobs,
+    } = preflight_phase::run(output);
+    let output = &remapped_output;
 
     // ── Build sheet rels and assign r:ids ────────────────────────────────
     // We need to build rels for each sheet and update hyperlink/table r:ids.
@@ -765,7 +628,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     let default_cx_target = format!("../charts/chartEx{}.xml", cx_entry.global_idx);
                     let cx_path = format!("xl/charts/chartEx{}.xml", cx_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_allows_auxiliary_replay(chart_spec)
+                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
                             && chart_auxiliary::chart_frame_identity_matches_path(
                                 chart_spec, &cx_path,
                             );
@@ -868,7 +731,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         format!("../charts/chart{}.xml", chart_entry.global_idx);
                     let chart_path = format!("xl/charts/chart{}.xml", chart_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_allows_auxiliary_replay(chart_spec)
+                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
                             && chart_auxiliary::chart_frame_identity_matches_path(
                                 chart_spec,
                                 &chart_path,
@@ -1306,7 +1169,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
@@ -1349,7 +1212,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     }
                 }
             }
-            register_chart_owned_external_relationships(
+            chart_replay::register_chart_owned_external_relationships(
                 &mut package_graph_builder,
                 &chart_path,
                 chart_spec,
@@ -1364,7 +1227,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
@@ -1977,8 +1840,6 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         &worksheet_threaded_comments_relationships,
     )
 }
-
-use styles::{build_styles, output_references_style_ids};
 
 fn worksheet_relative_target(zip_path: &str) -> String {
     let path = zip_path.trim_start_matches('/');

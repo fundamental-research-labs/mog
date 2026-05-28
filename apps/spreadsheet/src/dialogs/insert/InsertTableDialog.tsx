@@ -188,6 +188,7 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
   // dialog opens with the expanded data block instead of just the active cell.
   const initialRange = useUIStore((s) => s.insertTableInitialRange);
   const initialHasHeaders = useUIStore((s) => s.insertTableInitialHasHeaders);
+  const initialStylePreset = useUIStore((s) => s.insertTableInitialStylePreset);
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
 
@@ -217,7 +218,8 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
       endCol: seedRange.endCol,
     });
     setHasHeaders(initialHasHeaders);
-  }, [isOpen, initialRange, initialHasHeaders, setTablePreviewRange]);
+    setSelectedStyle(initialStylePreset ?? 'medium2');
+  }, [isOpen, initialRange, initialHasHeaders, initialStylePreset, setTablePreviewRange]);
 
   // Validate range input
   const validateRange = useCallback((value: string): string | null => {
@@ -279,8 +281,7 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
       const rangeA1 = formatA1Range(parsedRange);
       void wb
         .undoGroup(async () => {
-          const tableInfo = await ws.tables.add(rangeA1, { hasHeaders });
-          await ws.tables.setStylePreset(tableInfo.name, selectedStyle);
+          await ws.tables.add(rangeA1, { hasHeaders, style: selectedStyle });
         })
         .catch((err: unknown) => {
           console.error('Failed to create table:', err);

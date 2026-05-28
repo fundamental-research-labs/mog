@@ -20,6 +20,7 @@ import type { FilterHeaderInfo } from '@mog-sdk/contracts/filter';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
+import type { TableInfo } from '@mog-sdk/contracts/api';
 
 import { useWorkbook } from '../../infra/context';
 
@@ -27,6 +28,36 @@ interface UseFilterHeaderCacheOptions {
   activeSheetId: SheetId;
   /** Optional callback invoked when cache data updates (e.g. to invalidate the renderer). */
   onCacheUpdate?: () => void;
+}
+
+function tableContainsFilterRange(table: TableInfo, range: FilterHeaderInfoRange): boolean {
+  const match = table.range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+  if (!match) return false;
+  const tableStartCol = a1ColToIndex(match[1]);
+  const tableStartRow = Number(match[2]) - 1;
+  const tableEndCol = a1ColToIndex(match[3]);
+  const tableEndRow = Number(match[4]) - 1;
+  return (
+    tableStartRow === range.startRow &&
+    tableStartCol === range.startCol &&
+    tableEndRow === range.endRow &&
+    tableEndCol === range.endCol
+  );
+}
+
+interface FilterHeaderInfoRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
+function a1ColToIndex(col: string): number {
+  let n = 0;
+  for (let i = 0; i < col.length; i++) {
+    n = n * 26 + col.toUpperCase().charCodeAt(i) - 64;
+  }
+  return n - 1;
 }
 
 /**
@@ -56,7 +87,8 @@ export function useFilterHeaderCache({
 
     try {
       const ws = wb.getSheetById(activeSheetId);
-      const filterDetails = await ws.filters.list();
+      const [filterDetails, tables] = await Promise.all([ws.filters.list(), ws.tables.list()]);
+      const tablesById = new Map(tables.map((table) => [table.id, table]));
 
       if (filterDetails.length === 0) {
         cacheRef.current = newCache;
@@ -66,6 +98,12 @@ export function useFilterHeaderCache({
 
       for (const detail of filterDetails) {
         if (detail.filterKind === 'advancedFilter') continue;
+        const owningTable =
+          (detail.tableId ? tablesById.get(detail.tableId) : undefined) ??
+          tables.find((table) => tableContainsFilterRange(table, detail.range));
+        if (owningTable && (!owningTable.hasHeaderRow || !owningTable.showFilterButtons)) {
+          continue;
+        }
 
         const headerRow = detail.range.startRow;
         const startCol = detail.range.startCol;
@@ -116,6 +154,10 @@ export function useFilterHeaderCache({
     unsubscribers.push(ws.on('filter:deleted', handler));
     unsubscribers.push(ws.on('filter:cleared', handler));
     unsubscribers.push(ws.on('filter:applied', handler));
+    unsubscribers.push(ws.on('table:created', handler));
+    unsubscribers.push(ws.on('table:updated', handler));
+    unsubscribers.push(ws.on('table:deleted', handler));
+    unsubscribers.push(ws.on('table:converted-to-range', handler));
 
     return () => {
       for (const unsub of unsubscribers) {

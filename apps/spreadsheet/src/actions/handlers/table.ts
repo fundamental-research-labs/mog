@@ -369,12 +369,13 @@ export const CONVERT_TO_RANGE: AsyncActionHandler = async (
     return { handled: false, error: 'no-table' };
   }
 
-  // Use unified Worksheet API: find table across sheets, then deleteTable
+  // Use unified Worksheet API: find table across sheets, then convert table
+  // metadata through the compute conversion path.
   const found = await findTableInWorkbook(deps.workbook, tableId);
   if (!found) {
     return { handled: false, error: `Table not found: ${tableId}` };
   }
-  await found.ws.tables.remove(tableId);
+  await found.ws.tables.convertToRange(tableId);
 
   // Close the dialog if it's open
   const uiStore = deps.uiStore as { getState: () => UIState } | undefined;

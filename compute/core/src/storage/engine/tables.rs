@@ -213,7 +213,22 @@ impl YrsComputeEngine {
             } else {
                 requested_name
             };
-            let style = style.and_then(|value| (!value.trim().is_empty()).then_some(value));
+            compute_table::table::validate_table_name(&table_name).map_err(|err| {
+                ComputeError::Eval {
+                    message: err.to_string(),
+                }
+            })?;
+            if self
+                .mirror
+                .all_tables()
+                .iter()
+                .any(|table| table.name.eq_ignore_ascii_case(&table_name))
+            {
+                return Err(ComputeError::Eval {
+                    message: format!("Table name \"{}\" already exists", table_name),
+                });
+            }
+            let style = Some(services::tables::normalize_table_style_id(&self.stores, style)?);
 
             let mut combined = MutationResult::empty();
             let mut effective_end_row = end_row;
@@ -250,6 +265,57 @@ impl YrsComputeEngine {
                 }
 
                 effective_end_row = effective_end_row.saturating_add(1);
+            } else if columns.is_empty() {
+                let col_count = end_col.saturating_sub(start_col) + 1;
+                let mut used_names = std::collections::HashSet::new();
+                let mut generated_counter = 1_u32;
+                let mut edits = Vec::new();
+
+                for i in 0..col_count {
+                    let col = start_col + i;
+                    let existing = self
+                        .mirror
+                        .get_cell_value_at(sheet_id, cell_types::SheetPos::new(start_row, col))
+                        .and_then(|value| match value {
+                            value_types::CellValue::Text(text) => {
+                                let trimmed = text.trim();
+                                (!trimmed.is_empty()).then(|| trimmed.to_string())
+                            }
+                            value_types::CellValue::Number(number) => Some(number.to_string()),
+                            _ => None,
+                        });
+
+                    if let Some(name) = existing {
+                        used_names.insert(name.to_lowercase());
+                        continue;
+                    }
+
+                    let generated = loop {
+                        let candidate = format!("Column{}", generated_counter);
+                        generated_counter += 1;
+                        if !used_names.contains(&candidate.to_lowercase()) {
+                            break candidate;
+                        }
+                    };
+                    used_names.insert(generated.to_lowercase());
+                    edits.push((
+                        *sheet_id,
+                        start_row,
+                        col,
+                        CellInput::Parse { text: generated },
+                    ));
+                }
+
+                if !edits.is_empty() {
+                    if let MutationOutput::Recalc(recalc_result) =
+                        self.apply_mutation(EngineMutation::SetCellsByPosition {
+                            edits,
+                            skip_cycle_check: false,
+                        })?
+                    {
+                        merge_mutation_result(&mut combined, recalc_result);
+                    }
+                }
             }
 
             let create_result = services::tables::create_table(
@@ -344,7 +410,8 @@ impl YrsComputeEngine {
                 .ok_or_else(|| ComputeError::Eval {
                     message: format!("Table not found: {}", table_name),
                 })?;
-        table.style = style_name.to_string();
+        table.style =
+            services::tables::normalize_table_style_id(&self.stores, Some(style_name.to_string()))?;
         self.stores.compute.set_table(&mut self.mirror, table);
 
         services::tables::persist_table_style_to_yrs(&mut self.stores, &self.mirror, table_name)?;

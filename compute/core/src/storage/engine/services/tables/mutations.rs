@@ -20,6 +20,20 @@ pub(in crate::storage::engine) fn create_table(
     has_headers: bool,
     style: Option<String>,
 ) -> Result<MutationResult, ComputeError> {
+    compute_table::table::validate_table_name(&name).map_err(|err| ComputeError::Eval {
+        message: err.to_string(),
+    })?;
+    if mirror
+        .all_tables()
+        .iter()
+        .any(|table| table.name.eq_ignore_ascii_case(&name))
+    {
+        return Err(ComputeError::Eval {
+            message: format!("Table name \"{}\" already exists", name),
+        });
+    }
+    let style = super::normalize_table_style_id(stores, style)?;
+
     // Derive column names: use provided names, fall back to header-row cell
     // values, and finally generate "Column1", "Column2", etc.
     let col_count = (end_col - start_col + 1) as usize;
@@ -66,7 +80,7 @@ pub(in crate::storage::engine) fn create_table(
             .collect(),
         has_header_row: has_headers,
         has_totals_row: false,
-        style: style.unwrap_or_else(|| "TableStyleMedium2".to_string()),
+        style,
         banded_rows: true,
         banded_columns: false,
         emphasize_first_column: false,
@@ -170,10 +184,23 @@ pub(in crate::storage::engine) fn rename_table(
         .ok_or_else(|| ComputeError::Eval {
             message: format!("Table not found: {}", old_name),
         })?;
+    let other_tables: Vec<CanonicalTable> = mirror
+        .all_tables()
+        .iter()
+        .filter(|table| table.name != old_name)
+        .cloned()
+        .collect();
+    let renamed = compute_table::operations::rename_table_validated(
+        &table,
+        new_name,
+        &other_tables,
+    )
+    .map_err(|err| ComputeError::Eval {
+        message: err.to_string(),
+    })?;
+
     stores.compute.remove_table(mirror, old_name);
     remove_table_from_yrs(stores, old_name);
-    let mut renamed = table;
-    renamed.name = new_name.to_string();
     stores.compute.set_table(mirror, renamed.clone());
     persist_table_to_yrs(stores, &renamed);
 

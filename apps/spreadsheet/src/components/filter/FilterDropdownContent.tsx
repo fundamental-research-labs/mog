@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 
-import type { FilterDropdownData } from '@mog-sdk/contracts/api';
+import type { FilterDropdownData, Worksheet } from '@mog-sdk/contracts/api';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import type { ColumnFilterCriteria, FilterOperator } from '@mog-sdk/contracts/filter';
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
@@ -57,6 +57,46 @@ export interface FilterDropdownContentProps {
 
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
+
+function tableRangeMatchesFilter(
+  tableRange: string,
+  range: { startRow: number; startCol: number; endRow: number; endCol: number },
+): boolean {
+  const a1 = cellRangeToA1(range);
+  return tableRange.toUpperCase() === a1.toUpperCase();
+}
+
+async function sortFilterRange(
+  ws: Worksheet,
+  filterId: string,
+  col: number,
+  direction: 'asc' | 'desc',
+): Promise<void> {
+  const filterInfo = await ws.filters.getInfo(filterId);
+  if (!filterInfo) {
+    console.warn('[FilterDropdownContent] Cannot sort: filter range invalid');
+    return;
+  }
+  const range = filterInfo.range;
+  const tables = await ws.tables.list();
+  const filterTableId = (filterInfo as { tableId?: string }).tableId;
+  const table =
+    (filterTableId ? tables.find((candidate) => candidate.id === filterTableId) : undefined) ??
+    tables.find((candidate) => tableRangeMatchesFilter(candidate.range, range));
+
+  if (table) {
+    await ws.tables.sort.apply(table.name, [
+      { columnIndex: col - range.startCol, ascending: direction === 'asc' },
+    ]);
+    return;
+  }
+
+  await ws.sortRange(cellRangeToA1(range), {
+    columns: [{ column: col - range.startCol, direction }],
+    hasHeaders: true,
+    visibleRowsOnly: true,
+  });
+}
 
 /**
  * Filter dropdown content for AutoFilter header cells.
@@ -220,21 +260,7 @@ export function FilterDropdownContent({
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-
-    // Get filter info (includes resolved range)
-    const filterInfo = await ws.filters.getInfo(filterId);
-    if (!filterInfo) {
-      console.warn('[FilterDropdownContent] Cannot sort: filter range invalid');
-      onClose();
-      return;
-    }
-    const range = filterInfo.range;
-
-    void ws.sortRange(cellRangeToA1(range), {
-      columns: [{ column: col - range.startCol, direction: 'asc' }],
-      hasHeaders: true,
-      visibleRowsOnly: true,
-    });
+    await sortFilterRange(ws, filterId, col, 'asc');
     onClose();
     onFilterApplied?.();
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
@@ -243,20 +269,7 @@ export function FilterDropdownContent({
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-
-    const filterInfo = await ws.filters.getInfo(filterId);
-    if (!filterInfo) {
-      console.warn('[FilterDropdownContent] Cannot sort: filter range invalid');
-      onClose();
-      return;
-    }
-    const range = filterInfo.range;
-
-    void ws.sortRange(cellRangeToA1(range), {
-      columns: [{ column: col - range.startCol, direction: 'desc' }],
-      hasHeaders: true,
-      visibleRowsOnly: true,
-    });
+    await sortFilterRange(ws, filterId, col, 'desc');
     onClose();
     onFilterApplied?.();
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);

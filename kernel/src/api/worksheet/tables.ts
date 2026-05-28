@@ -80,6 +80,27 @@ export class WorksheetTablesImpl implements WorksheetTables {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private normalizeTableStyleForCompute(styleName: string | undefined | null): string | null {
+    if (styleName == null) return null;
+    const normalized = styleName.trim();
+    if (!normalized) return null;
+    if (normalized === 'none') return 'none';
+
+    const full = normalized.match(/^TableStyle(Light|Medium|Dark)(\d+)$/i);
+    if (full) {
+      const family = full[1][0].toUpperCase() + full[1].slice(1).toLowerCase();
+      return `TableStyle${family}${full[2]}`;
+    }
+
+    const short = normalized.match(/^(light|medium|dark)(\d+)$/i);
+    if (short) {
+      const family = short[1][0].toUpperCase() + short[1].slice(1).toLowerCase();
+      return `TableStyle${family}${short[2]}`;
+    }
+
+    return normalized;
+  }
+
   private emitTableCreated(table: TableInfo): void {
     this.ctx.eventBus.emit({
       type: 'table:created',
@@ -269,7 +290,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       endCol,
       [],
       options?.hasHeaders !== false,
-      options?.style ?? null,
+      this.normalizeTableStyleForCompute(options?.style),
     );
 
     // Re-fetch the table to get the complete info (with generated name, columns, etc.)
@@ -374,6 +395,37 @@ export class WorksheetTablesImpl implements WorksheetTables {
     this.emitTableDeleted(name);
   }
 
+  async convertToRange(name: string): Promise<number> {
+    const table = await this.get(name);
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.convertToRange',
+      name,
+      table?.range,
+    );
+    const result = await this.ctx.computeBridge.convertTableToRange(name);
+    this.sortSpecCache.delete(name);
+    const convertedCount =
+      typeof result.data === 'number'
+        ? result.data
+        : typeof result.data === 'string'
+          ? Number(result.data)
+          : 0;
+    this.ctx.eventBus.emit({
+      type: 'table:converted-to-range',
+      timestamp: Date.now(),
+      sheetId: this.sheetId,
+      tableId: name,
+      tableName: name,
+      range: table ? this.tableRangeFromA1(table.range) : this.tableRangeFromA1('A1:A1'),
+      affectedFormulaCount: Number.isFinite(convertedCount) ? convertedCount : 0,
+      source: 'api',
+    });
+    this.emitTableDeleted(name);
+    return Number.isFinite(convertedCount) ? convertedCount : 0;
+  }
+
   async clear(): Promise<void> {
     const tables = await this.list();
     for (const table of tables) {
@@ -437,7 +489,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     }
     if (updates.style !== undefined) {
-      await this.ctx.computeBridge.setTableStyle(tableName, updates.style);
+      await this.ctx.computeBridge.setTableStyle(
+        tableName,
+        this.normalizeTableStyleForCompute(updates.style) ?? updates.style,
+      );
     }
     if (updates.name !== undefined) {
       await this.ctx.computeBridge.renameTable(tableName, updates.name);
@@ -587,8 +642,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    await this.ctx.computeBridge.setTableStyle(tableName, preset);
-    this.emitTableUpdated(tableName, { style: this.tableStyleFromPreset(preset) });
+    const style = this.normalizeTableStyleForCompute(preset) ?? preset;
+    await this.ctx.computeBridge.setTableStyle(tableName, style);
+    this.emitTableUpdated(tableName, { style: this.tableStyleFromPreset(style) });
   }
 
   async resize(name: string, newRange: string | CellRange): Promise<TableResizeReceipt> {
@@ -712,6 +768,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
     const edits = cells.map(({ row, col }) => ({ row, col, input: toCellInput(formula) }));
     await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    this.emitTableUpdated(tableName);
   }
 
   async clearCalculatedColumn(tableName: string, colIndex: number): Promise<void> {

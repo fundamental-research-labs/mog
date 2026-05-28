@@ -32,15 +32,13 @@
  */
 
 import React, { useCallback, useEffect } from 'react';
-import { useActiveSheetId, useFeatureGate, useUIStore, useWorkbook } from '../../../internal-api';
+import { useFeatureGate, useUIStore } from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
 import { STYLES_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
-import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { StyleGallery } from '../../../components/pickers/StyleGallery';
 import { TableStyleGallery } from '../../../components/pickers/TableStyleGallery';
-import { useCoordinator } from '../../../hooks/shared/use-coordinator';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useToolbarActions } from '../../../hooks/toolbar/use-toolbar-actions';
 import { ConditionalFormattingMenu } from '../galleries/ConditionalFormattingMenu';
@@ -175,47 +173,11 @@ export const StylesGroup = React.memo(function StylesGroup() {
   // for a follow-up cleanup.
   const { handleApplyStyle } = useToolbarActions();
 
-  // formatAsTable: reads selection on-demand via coordinator, then writes via
-  // ws.tables.add. Same caveat — needs FORMAT_AS_TABLE action in a follow-up.
-  const wb = useWorkbook();
-  const activeSheetId = useActiveSheetId();
-  const ws = wb.getSheetById(activeSheetId);
-  const coordinator = useCoordinator();
-
   const formatAsTable = useCallback(
     (styleId: TableStylePreset) => {
-      const { ranges } = coordinator.grid.getSelectionSnapshot();
-      if (ranges.length === 0) return;
-
-      const range = ranges[0];
-      const normalizedRange = {
-        sheetId: activeSheetId,
-        startRow: Math.min(range.startRow, range.endRow),
-        endRow: Math.max(range.startRow, range.endRow),
-        startCol: Math.min(range.startCol, range.endCol),
-        endCol: Math.max(range.startCol, range.endCol),
-      };
-
-      const rowCount = normalizedRange.endRow - normalizedRange.startRow + 1;
-      if (rowCount < 1) {
-        console.warn('Cannot create table: selection must have at least 1 row');
-        return;
-      }
-
-      try {
-        const rangeA1 = cellRangeToA1(normalizedRange);
-        const tableName = `Table${Date.now()}`;
-        void ws.tables
-          .add(rangeA1, { name: tableName, hasHeaders: true, style: styleId })
-          .then((tableInfo) => {
-            const name = tableInfo.name;
-            void ws.tables.setShowBandedRows(name, true);
-          });
-      } catch (error) {
-        console.error('Failed to create table:', error);
-      }
+      void dispatch('INSERT_TABLE', { stylePreset: styleId });
     },
-    [ws, activeSheetId, coordinator],
+    [dispatch],
   );
 
   // applyStyle: dispatch CLEAR_FORMATS for "normal", else delegate to

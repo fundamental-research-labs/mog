@@ -25,6 +25,7 @@ import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
 import type { EditorDependencies } from '../coordinator/types';
+import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
 import {
   CoordinatorProvider as BaseCoordinatorProvider,
   useCoordinator,
@@ -555,7 +556,14 @@ export function SpreadsheetCoordinatorProvider({
       // instead of silently completing. The previous `.then(() => {})` form
       // dropped both the resolved value and any rejection.
       setCellValue: async (sheetId, row, col, value) => {
-        await workbook.getSheetById(sheetId).setCell(row, col, value);
+        const ws = workbook.getSheetById(sheetId);
+        await ws.setCell(row, col, value);
+        if (value.startsWith('=')) {
+          const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
+          if (autoFill) {
+            await ws.tables.setCalculatedColumn(autoFill.tableId, autoFill.columnIndex, value);
+          }
+        }
       },
       setDateValue: async (sheetId, row, col, isoDate, kind) => {
         const ws = workbook.getSheetById(sheetId);

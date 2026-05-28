@@ -24,6 +24,7 @@ import {
   TABLE_TOOLS_COLLAPSE_CONFIG,
 } from '@mog-sdk/contracts/ribbon';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
+import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
@@ -32,6 +33,9 @@ import {
   ConvertToRangeIcon,
   DeleteTableIcon,
   DropdownArrowIcon,
+  PivotTableIcon,
+  RemoveDuplicatesIcon,
+  SlicerIcon,
   TableIcon,
 } from '../primitives/ToolbarIcons';
 
@@ -255,6 +259,7 @@ export function TableDesignRibbon({
   onConvertToRange,
 }: TableDesignRibbonProps) {
   const [localName, setLocalName] = useState(tableName ?? '');
+  const dispatch = useDispatch();
 
   // style gallery dropdown lifted into the ribbonDropdowns slice so
   // the keytip chord (Alt+J,T,S) can open it via OPEN_RIBBON_DROPDOWN.
@@ -321,6 +326,22 @@ export function TableDesignRibbon({
 
     keyTipRegistry.register({ key: 'D', tabId: 'tableDesign', elementId: 'table-delete' });
     cleanups.push(() => keyTipRegistry.unregister('D', 'tableDesign'));
+
+    keyTipRegistry.register({ key: 'R', tabId: 'tableDesign', elementId: 'table-resize' });
+    cleanups.push(() => keyTipRegistry.unregister('R', 'tableDesign'));
+
+    keyTipRegistry.register({ key: 'P', tabId: 'tableDesign', elementId: 'table-summarize-pivot' });
+    cleanups.push(() => keyTipRegistry.unregister('P', 'tableDesign'));
+
+    keyTipRegistry.register({
+      key: 'M',
+      tabId: 'tableDesign',
+      elementId: 'table-remove-duplicates',
+    });
+    cleanups.push(() => keyTipRegistry.unregister('M', 'tableDesign'));
+
+    keyTipRegistry.register({ key: 'I', tabId: 'tableDesign', elementId: 'table-insert-slicer' });
+    cleanups.push(() => keyTipRegistry.unregister('I', 'tableDesign'));
 
     keyTipRegistry.register({ key: 'S', tabId: 'tableDesign', elementId: 'table-style-gallery' });
     cleanups.push(() => keyTipRegistry.unregister('S', 'tableDesign'));
@@ -450,6 +471,58 @@ export function TableDesignRibbon({
         dropdownIcon={<ConvertToRangeIcon />}
       >
         <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+          <RibbonButton
+            id="table-resize"
+            layout="vertical"
+            height="full"
+            icon={<TableIcon />}
+            label="Resize"
+            onClick={() => {
+              if (tableName) dispatch('OPEN_RESIZE_TABLE_DIALOG', { tableId: tableName });
+            }}
+            title="Resize Table"
+            aria-label="Resize Table"
+            disabled={!tableName}
+          />
+          <RibbonButton
+            id="table-summarize-pivot"
+            layout="vertical"
+            height="full"
+            icon={<PivotTableIcon />}
+            label="PivotTable"
+            onClick={() => {
+              if (tableName) dispatch('OPEN_PIVOT_DIALOG', { tableId: tableName });
+            }}
+            title="Summarize with PivotTable"
+            aria-label="Summarize with PivotTable"
+            disabled={!tableName}
+          />
+          <RibbonButton
+            id="table-remove-duplicates"
+            layout="vertical"
+            height="full"
+            icon={<RemoveDuplicatesIcon />}
+            label="Duplicates"
+            onClick={() => {
+              if (tableName) dispatch('OPEN_REMOVE_DUPLICATES_DIALOG', { tableId: tableName });
+            }}
+            title="Remove Duplicates"
+            aria-label="Remove Duplicates"
+            disabled={!tableName}
+          />
+          <RibbonButton
+            id="table-insert-slicer"
+            layout="vertical"
+            height="full"
+            icon={<SlicerIcon />}
+            label="Slicer"
+            onClick={() => {
+              if (tableName) dispatch('OPEN_INSERT_SLICER_DIALOG', { tableId: tableName });
+            }}
+            title="Insert Slicer"
+            aria-label="Insert Slicer"
+            disabled={!tableName}
+          />
           <RibbonButton
             id="table-convert-to-range"
             layout="vertical"

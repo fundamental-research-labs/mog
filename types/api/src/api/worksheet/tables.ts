@@ -182,6 +182,18 @@ export interface WorksheetTables {
   remove(name: string): Promise<void>;
 
   /**
+   * Convert a table to a plain range using the table conversion path.
+   *
+   * Cell data and formatting are preserved, and structured references that
+   * point at the converted table are rewritten to A1 references where the
+   * compute engine can resolve them.
+   *
+   * @param name - Table name
+   * @returns Number of structured references converted
+   */
+  convertToRange(name: string): Promise<number>;
+
+  /**
    * Remove all tables from this worksheet.
    */
   clear(): Promise<void>;

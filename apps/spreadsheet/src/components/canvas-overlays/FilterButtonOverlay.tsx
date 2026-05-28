@@ -101,6 +101,12 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
           maxHeight: 'min(450px, var(--radix-popper-available-height, calc(100vh - 24px)))',
         }}
         data-testid="filter-dropdown-popover"
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') {
+            event.stopPropagation();
+          }
+        }}
       >
         {/*
  Real filter dropdown content with all functionality.

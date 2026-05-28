@@ -258,9 +258,20 @@ export function ValueFilterList({
       {/* Search input - supports Excel wildcards (* and ?) */}
       <input
         type="text"
+        data-testid="filter-value-search"
         placeholder="Search (* and ? wildcards)"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.currentTarget.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            handleApply();
+          }
+          if (event.key === 'Escape') {
+            onCancel?.();
+          }
+        }}
+        onKeyUp={(event) => event.stopPropagation()}
         className="w-full px-2 py-1 border border-ss-border rounded text-body-sm focus:outline-none focus:ring-1 focus:ring-ss-primary"
         autoFocus
         title="Use * to match any characters, ? to match a single character"

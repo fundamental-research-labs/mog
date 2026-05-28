@@ -7,6 +7,7 @@
  */
 
 import type { StateCreator } from 'zustand';
+import type { TableStylePreset } from '@mog-sdk/contracts/tables';
 
 /**
  * Table Design panel state
@@ -41,13 +42,18 @@ export interface TableDesignSlice {
    */
   insertTableInitialRange: TablePreviewRange | null;
   insertTableInitialHasHeaders: boolean;
+  insertTableInitialStylePreset: TableStylePreset | null;
   setSelectedTable: (tableId: string | null) => void;
   /**
    * Open the Insert Table dialog. When `range` is provided (e.g., from the
    * INSERT_TABLE handler after Excel current-region expansion), the dialog
    * seeds its range input from that value and highlights it as the preview.
    */
-  openInsertTableDialog: (payload: { range: TablePreviewRange; hasHeaders: boolean }) => void;
+  openInsertTableDialog: (payload: {
+    range: TablePreviewRange;
+    hasHeaders: boolean;
+    stylePreset?: TableStylePreset;
+  }) => void;
   closeInsertTableDialog: () => void;
   /** Update preview range as user edits in dialog */
   setTablePreviewRange: (range: TablePreviewRange | null) => void;
@@ -65,6 +71,7 @@ export const createTableDesignSlice: StateCreator<TableDesignSlice, [], [], Tabl
   tablePreviewRange: null,
   insertTableInitialRange: null,
   insertTableInitialHasHeaders: false,
+  insertTableInitialStylePreset: null,
 
   setSelectedTable: (tableId: string | null) => {
     set({
@@ -79,6 +86,7 @@ export const createTableDesignSlice: StateCreator<TableDesignSlice, [], [], Tabl
       insertTableDialogOpen: true,
       insertTableInitialRange: payload.range,
       insertTableInitialHasHeaders: payload.hasHeaders,
+      insertTableInitialStylePreset: payload.stylePreset ?? null,
       tablePreviewRange: payload.range,
     });
   },
@@ -90,6 +98,7 @@ export const createTableDesignSlice: StateCreator<TableDesignSlice, [], [], Tabl
       tablePreviewRange: null,
       insertTableInitialRange: null,
       insertTableInitialHasHeaders: false,
+      insertTableInitialStylePreset: null,
     });
   },
 

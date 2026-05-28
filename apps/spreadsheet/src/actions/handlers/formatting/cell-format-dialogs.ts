@@ -196,7 +196,10 @@ export const APPLY_PROTECTION_FORMAT: AsyncActionHandler = async (deps) => {
  * Section 16 Compliance: Dialog opening uses UIStore, not onUIAction.
  *
  */
-export const INSERT_TABLE: AsyncActionHandler = async (deps) => {
+export const INSERT_TABLE: AsyncActionHandler = async (
+  deps,
+  payload?: { stylePreset?: import('@mog-sdk/contracts/tables').TableStylePreset },
+) => {
   const sheetId = deps.getActiveSheetId();
   const { ranges } = getSelectionContext(deps);
   if (ranges.length === 0) {
@@ -208,7 +211,11 @@ export const INSERT_TABLE: AsyncActionHandler = async (deps) => {
 
   const uiState = getUIStore(deps).getState();
   if (uiState?.openInsertTableDialog) {
-    uiState.openInsertTableDialog({ range: target.range, hasHeaders: target.hasHeaders });
+    uiState.openInsertTableDialog({
+      range: target.range,
+      hasHeaders: target.hasHeaders,
+      ...(payload?.stylePreset ? { stylePreset: payload.stylePreset } : {}),
+    });
     return handled();
   }
   return { handled: false, reason: 'disabled' };

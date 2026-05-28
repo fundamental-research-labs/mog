@@ -1,0 +1,223 @@
+use compute_document::hex::id_to_hex;
+use compute_document::identity::GridIndex;
+use yrs::{Doc, MapRef, Transact};
+
+use super::read::has_data_at;
+use super::types::RangeSpan;
+use super::super::grid_helpers::get_cells_map;
+use cell_types::{RangePos, SheetId};
+
+/// Get the current region around a cell (Ctrl+Shift+* functionality).
+///
+/// The current region is the contiguous block of cells containing data
+/// that surrounds the specified cell, bounded by empty rows/columns.
+/// This matches Excel's "Select Current Region" behavior.
+///
+/// If the starting cell is empty and has no adjacent data, returns a
+/// single-cell range.
+pub fn get_current_region(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: SheetId,
+    grid: &GridIndex,
+    start_row: u32,
+    start_col: u32,
+) -> RangePos {
+    let max_row: u32 = 10_000;
+    let max_col: u32 = 500;
+
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let txn = doc.transact();
+
+    let single_cell = RangePos::new(sheet_id, start_row, start_col, start_row, start_col);
+
+    let Some(cells_map) = get_cells_map(&txn, sheets, &sheet_hex) else {
+        return single_cell;
+    };
+
+    let has_data = |row: u32, col: u32| -> bool { has_data_at(&txn, grid, &cells_map, row, col) };
+
+    // Check if start cell has data
+    let start_has_data = has_data(start_row, start_col);
+
+    let mut top = start_row;
+    let mut bottom = start_row;
+    let mut left = start_col;
+    let mut right = start_col;
+
+    // If starting cell is empty, check cardinal directions for adjacent data
+    if !start_has_data {
+        let has_above = start_row > 0 && has_data(start_row - 1, start_col);
+        let has_below = start_row < max_row && has_data(start_row + 1, start_col);
+        let has_left = start_col > 0 && has_data(start_row, start_col - 1);
+        let has_right = start_col < max_col && has_data(start_row, start_col + 1);
+
+        if !has_above && !has_below && !has_left && !has_right {
+            return single_cell;
+        }
+    }
+
+    // Expand outward until no more data found in any direction
+    let mut expanded = true;
+    while expanded {
+        expanded = false;
+
+        // Try expanding up
+        if top > 0 {
+            let mut found = false;
+            for col in left..=right {
+                if has_data(top - 1, col) {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                top -= 1;
+                expanded = true;
+            }
+        }
+
+        // Try expanding down
+        if bottom < max_row {
+            let mut found = false;
+            for col in left..=right {
+                if has_data(bottom + 1, col) {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                bottom += 1;
+                expanded = true;
+            }
+        }
+
+        // Try expanding left
+        if left > 0 {
+            let mut found = false;
+            for row in top..=bottom {
+                if has_data(row, left - 1) {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                left -= 1;
+                expanded = true;
+            }
+        }
+
+        // Try expanding right
+        if right < max_col {
+            let mut found = false;
+            for row in top..=bottom {
+                if has_data(row, right + 1) {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                right += 1;
+                expanded = true;
+            }
+        }
+    }
+
+    RangePos::new(sheet_id, top, left, bottom, right)
+}
+
+/// Constrain a full column/row selection to actual data bounds.
+///
+/// When a user selects an entire column (clicking the header) and performs
+/// an operation like sort, Excel detects the actual data range and operates
+/// only on that, not all 1M+ rows. For normal selections, returns the
+/// range unchanged.
+///
+/// Returns `None` if no data is found in the selected columns/rows.
+pub(crate) fn get_data_bounds_for_range(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: SheetId,
+    grid: &GridIndex,
+    range: &RangePos,
+    span: RangeSpan,
+) -> Option<RangePos> {
+    // If not a full column/row selection, return as-is
+    if span == RangeSpan::Exact {
+        return Some(*range);
+    }
+
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let txn = doc.transact();
+    let cells_map = get_cells_map(&txn, sheets, &sheet_hex)?;
+
+    let has_data = |row: u32, col: u32| -> bool { has_data_at(&txn, grid, &cells_map, row, col) };
+
+    if span == RangeSpan::FullColumns {
+        let search_limit: u32 = 10_000;
+
+        // Find first row with data in any of the selected columns
+        let mut first_data_row: Option<u32> = None;
+        'outer: for row in 0..search_limit {
+            for col in range.start_col()..=range.end_col() {
+                if has_data(row, col) {
+                    first_data_row = Some(row);
+                    break 'outer;
+                }
+            }
+        }
+
+        let first_data_row = first_data_row?;
+
+        // Use get_current_region to find the contiguous data block
+        let data_region = get_current_region(
+            doc,
+            sheets,
+            sheet_id,
+            grid,
+            first_data_row,
+            range.start_col(),
+        );
+
+        Some(RangePos::new(
+            sheet_id,
+            data_region.start_row(),
+            range.start_col(),
+            data_region.end_row(),
+            range.end_col(),
+        ))
+    } else {
+        // is_full_row
+        let search_limit: u32 = 1_000;
+
+        // Find first column with data in any of the selected rows
+        let mut first_data_col: Option<u32> = None;
+        'outer: for col in 0..search_limit {
+            for row in range.start_row()..=range.end_row() {
+                if has_data(row, col) {
+                    first_data_col = Some(col);
+                    break 'outer;
+                }
+            }
+        }
+
+        let first_data_col = first_data_col?;
+
+        let data_region = get_current_region(
+            doc,
+            sheets,
+            sheet_id,
+            grid,
+            range.start_row(),
+            first_data_col,
+        );
+
+        Some(RangePos::new(
+            sheet_id,
+            range.start_row(),
+            data_region.start_col(),
+            range.end_row(),
+            data_region.end_col(),
+        ))
+    }
+}

@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useActiveCell, useUIStore } from '../../../internal-api';
+import { parseCSV } from '../../../domain/clipboard/clipboard-parser';
 import {
   useActiveSheetId,
   useSpreadsheetHostCommandsOptional,
@@ -27,7 +28,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  useShellService,
 } from '@mog/shell';
 import {
   DATA_TOOLS_COLLAPSE_CONFIG,
@@ -69,6 +69,7 @@ import {
 type JsonRow = Record<string, unknown>;
 type JsonCellValue = string | number | boolean | null;
 type JsonCellUpdate = { row: number; col: number; value: JsonCellValue };
+type CsvCellUpdate = { row: number; col: number; value: string };
 
 function isPlainObject(value: unknown): value is JsonRow {
   return value != null && typeof value === 'object' && !Array.isArray(value);
@@ -128,6 +129,16 @@ function jsonToCellUpdates(value: unknown, startRow: number, startCol: number): 
   });
 
   return updates;
+}
+
+function stripUtf8Bom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+function csvToCellUpdates(text: string): CsvCellUpdate[] {
+  return parseCSV(stripUtf8Bom(text)).flatMap((row, rowIndex) =>
+    row.map((value, colIndex) => ({ row: rowIndex, col: colIndex, value })),
+  );
 }
 
 // =============================================================================
@@ -221,7 +232,6 @@ export function DataRibbon({
   // Get dispatch for action handling
   const dispatch = useDispatch();
   const hostCommands = useSpreadsheetHostCommandsOptional();
-  const shellService = useShellService();
   const workbook = useWorkbook();
   const activeSheetId = useActiveSheetId();
   const { row: activeRow, col: activeCol } = useActiveCell();
@@ -272,14 +282,17 @@ export function DataRibbon({
         if (onImportCsv) {
           onImportCsv(file);
         } else {
-          void file.arrayBuffer().then((buffer) =>
-            shellService.loadDocument(file.name, new Uint8Array(buffer), { kind: 'csv' }),
-          );
+          void file.text().then(async (text) => {
+            const updates = csvToCellUpdates(text);
+            if (updates.length > 0) {
+              await workbook.getSheetById(activeSheetId).setCells(updates);
+            }
+          });
         }
       }
     };
     input.click();
-  }, [hostCommands, onImportCsv, setIsGetDataDropdownOpen, shellService]);
+  }, [activeSheetId, hostCommands, onImportCsv, setIsGetDataDropdownOpen, workbook]);
 
   const handleImportJson = useCallback(() => {
     setIsGetDataDropdownOpen(false);

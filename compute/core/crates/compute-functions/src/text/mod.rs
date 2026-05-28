@@ -228,7 +228,31 @@ mod source_shape_tests {
         for (path, source) in [
             ("byte_ops.rs", include_str!("byte_ops.rs")),
             ("cjk.rs", include_str!("cjk.rs")),
-            ("conversion.rs", include_str!("conversion.rs")),
+            ("conversion/mod.rs", include_str!("conversion/mod.rs")),
+            (
+                "conversion/array_text.rs",
+                include_str!("conversion/array_text.rs"),
+            ),
+            (
+                "conversion/char_code.rs",
+                include_str!("conversion/char_code.rs"),
+            ),
+            (
+                "conversion/number_format.rs",
+                include_str!("conversion/number_format.rs"),
+            ),
+            (
+                "conversion/sheets_to.rs",
+                include_str!("conversion/sheets_to.rs"),
+            ),
+            (
+                "conversion/text_format.rs",
+                include_str!("conversion/text_format.rs"),
+            ),
+            (
+                "conversion/value_parse.rs",
+                include_str!("conversion/value_parse.rs"),
+            ),
             ("encoding.rs", include_str!("encoding.rs")),
             ("extraction.rs", include_str!("extraction.rs")),
             ("joining.rs", include_str!("joining.rs")),

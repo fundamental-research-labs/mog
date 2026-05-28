@@ -414,6 +414,7 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
       tableShowLastColumnHighlight={tableSelection.showLastColumnHighlight}
       tableHasHeaderRow={tableSelection.hasHeaderRow}
       tableHasTotalRow={tableSelection.hasTotalRow}
+      tableShowFilterButtons={tableSelection.showFilterButtons}
       onRenameTable={tableSelection.renameTable}
       onSetTableStylePreset={tableSelection.setStylePreset}
       onToggleTableBandedRows={tableSelection.toggleBandedRows}
@@ -422,6 +423,7 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
       onToggleTableLastColumnHighlight={tableSelection.toggleLastColumnHighlight}
       onToggleTableHeaderRow={tableSelection.toggleHeaderRow}
       onToggleTableTotalRow={tableSelection.toggleTotalRow}
+      onToggleTableFilterButtons={tableSelection.toggleFilterButtons}
       onDeleteTable={tableSelection.deleteTable}
       onConvertTableToRange={tableSelection.convertToRange}
     />

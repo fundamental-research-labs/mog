@@ -157,6 +157,9 @@ export function useFilterHeaderCache({
     unsubscribers.push(ws.on('table:created', handler));
     unsubscribers.push(ws.on('table:updated', handler));
     unsubscribers.push(ws.on('table:deleted', handler));
+    unsubscribers.push(ws.on('table:resized', handler));
+    unsubscribers.push(ws.on('table:column-deleted', handler));
+    unsubscribers.push(ws.on('table:total-row-changed', handler));
     unsubscribers.push(ws.on('table:converted-to-range', handler));
 
     return () => {

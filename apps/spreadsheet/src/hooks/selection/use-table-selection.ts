@@ -126,6 +126,7 @@ export interface UseTableSelectionReturn {
   showLastColumnHighlight: boolean;
   hasHeaderRow: boolean;
   hasTotalRow: boolean;
+  showFilterButtons: boolean;
 
   // === Actions ===
 
@@ -152,6 +153,9 @@ export interface UseTableSelectionReturn {
 
   /** Toggle total row */
   toggleTotalRow: () => void;
+
+  /** Toggle filter buttons */
+  toggleFilterButtons: () => void;
 
   /** Delete the table (keep data) */
   deleteTable: () => void;
@@ -283,6 +287,7 @@ export function useTableSelection(): UseTableSelectionReturn {
   const showLastColumnHighlight = table?.emphasizeLastColumn ?? false;
   const hasHeaderRow = table?.hasHeaderRow ?? true;
   const hasTotalRow = table?.hasTotalsRow ?? false;
+  const showFilterButtons = table?.showFilterButtons ?? true;
   const stylePreset = normalizeTableStylePreset(table?.style);
 
   // === Actions ===
@@ -341,6 +346,11 @@ export function useTableSelection(): UseTableSelectionReturn {
     void ws.tables.setShowTotals(table.name, !table.hasTotalsRow).then(refreshSelectedTable);
   }, [ws, table, refreshSelectedTable]);
 
+  const toggleFilterButtons = useCallback(() => {
+    if (!table) return;
+    void ws.tables.setShowFilterButton(table.name, !showFilterButtons).then(refreshSelectedTable);
+  }, [ws, table, showFilterButtons, refreshSelectedTable]);
+
   const handleDeleteTable = useCallback(() => {
     if (!table) return;
     void ws.tables.remove(table.name);
@@ -362,6 +372,7 @@ export function useTableSelection(): UseTableSelectionReturn {
     showLastColumnHighlight,
     hasHeaderRow,
     hasTotalRow,
+    showFilterButtons,
     renameTable: handleRenameTable,
     setStylePreset,
     toggleBandedRows,
@@ -370,6 +381,7 @@ export function useTableSelection(): UseTableSelectionReturn {
     toggleLastColumnHighlight,
     toggleHeaderRow,
     toggleTotalRow,
+    toggleFilterButtons,
     deleteTable: handleDeleteTable,
     convertToRange: handleConvertToRange,
   };

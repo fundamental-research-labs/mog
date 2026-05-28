@@ -310,6 +310,7 @@ function createMockCtx(): any {
       setThreadResolved: jest.fn().mockResolvedValue(undefined),
       getCommentThread: jest.fn().mockResolvedValue([]),
       getSheetVisibility: jest.fn().mockResolvedValue('visible'),
+      tableValidateTableName: jest.fn().mockResolvedValue({ valid: true }),
       getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       mergeRange: jest.fn().mockResolvedValue(undefined),
       unmergeRange: jest.fn().mockResolvedValue(undefined),

@@ -91,6 +91,7 @@ function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}
     createTableLifecycle: jest.fn().mockResolvedValue(undefined),
     deleteTable: jest.fn().mockResolvedValue(undefined),
     renameTable: jest.fn().mockResolvedValue(undefined),
+    tableValidateTableName: jest.fn().mockResolvedValue({ valid: true }),
     setTableStyle: jest.fn().mockResolvedValue(undefined),
     setTableBoolOption: jest.fn().mockResolvedValue(undefined),
     setTableAutoExpand: jest.fn().mockResolvedValue(undefined),

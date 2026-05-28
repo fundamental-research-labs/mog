@@ -76,6 +76,27 @@ interface TableDesignRibbonProps {
 // Style Gallery Component
 // =============================================================================
 
+function isA1StyleCellReference(name: string): boolean {
+  const match = /^([A-Za-z]{1,3})([0-9]+)$/.exec(name);
+  if (!match) return false;
+
+  const row = Number(match[2]);
+  if (!Number.isInteger(row) || row < 1 || row > 1_048_576) return false;
+
+  let col = 0;
+  for (const char of match[1].toUpperCase()) {
+    col = col * 26 + (char.charCodeAt(0) - 64);
+  }
+
+  return col >= 1 && col <= 16_384;
+}
+
+function isValidTableNameSyntax(name: string): boolean {
+  if (name.trim().length === 0) return false;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return false;
+  return !isA1StyleCellReference(name);
+}
+
 interface StyleSwatchProps {
   preset: TableStylePreset;
   isSelected: boolean;
@@ -281,7 +302,11 @@ export function TableDesignRibbon({
   }, []);
 
   const handleNameBlur = useCallback(() => {
-    if (localName && localName !== tableName) {
+    if (!isValidTableNameSyntax(localName)) {
+      setLocalName(tableName ?? '');
+      return;
+    }
+    if (localName !== tableName) {
       onRenameTable(localName);
     }
   }, [localName, tableName, onRenameTable]);
@@ -382,6 +407,7 @@ export function TableDesignRibbon({
             onKeyDown={handleNameKeyDown}
             className="w-25 px-1 py-0.5 text-ribbon"
             title="Table name (used in structured references)"
+            aria-label="Table Name"
           />
         </div>
       </ToolbarGroup>

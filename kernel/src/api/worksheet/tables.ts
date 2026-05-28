@@ -191,6 +191,24 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return undefined;
   }
 
+
+  private async assertValidTableNameForRename(currentName: string, newName: string): Promise<void> {
+    const existingNames = (await this.list())
+      .map((table) => table.name)
+      .filter((name) => name.toLowerCase() !== currentName.toLowerCase());
+    const validation = await this.ctx.computeBridge.tableValidateTableName(newName, existingNames);
+    if (!validation.valid) {
+      throw new KernelError(
+        'TABLE_INVALID_NAME',
+        validation.reason ?? `Invalid table name: ${newName}`,
+        {
+          context: { currentName, newName },
+          path: ['name'],
+        },
+      );
+    }
+  }
+
   private tableUpdateOptionsToEventChanges(
     updates: TableUpdateOptions,
   ): TableUpdatedEvent['changes'] {
@@ -445,6 +463,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async rename(oldName: string, newName: string): Promise<void> {
     await assertUnprotectedTableDefinition(this.ctx, this.sheetId, 'tables.rename', oldName);
+    await this.assertValidTableNameForRename(oldName, newName);
     await this.ctx.computeBridge.renameTable(oldName, newName);
     const cached = this.sortSpecCache.get(oldName);
     if (cached) {
@@ -488,6 +507,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
       updates.bandedRows !== undefined
     ) {
       await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
+    }
+    if (updates.name !== undefined) {
+      await this.assertValidTableNameForRename(tableName, updates.name);
     }
     if (updates.style !== undefined) {
       await this.ctx.computeBridge.setTableStyle(

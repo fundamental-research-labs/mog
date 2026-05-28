@@ -752,7 +752,8 @@ export const INSERT_SHAPE: AsyncActionHandler = async (deps, payload): Promise<A
 
 /**
  * Start Shape Insert — enters insertion mode (crosshair cursor, drag to define size).
- * Power-user alternative to INSERT_SHAPE: Shift+click a shape in the menu to draw it.
+ * Default gallery path for drawing a shape on the worksheet; INSERT_SHAPE remains
+ * the explicit instant smart-position command.
  * Payload: { shapeType: ShapeType }
  */
 export const START_SHAPE_INSERT: ActionHandler = (deps, payload): ActionResult => {

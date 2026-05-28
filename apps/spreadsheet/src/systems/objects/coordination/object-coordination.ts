@@ -24,7 +24,8 @@ import type {
 } from '@mog-sdk/contracts/actors';
 import type { Workbook } from '@mog-sdk/contracts/api';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { ObjectHitRegion } from '@mog-sdk/contracts/floating-objects';
+import type { ObjectHitRegion, ShapeType } from '@mog-sdk/contracts/floating-objects';
+import type { ViewportPoint } from '@mog-sdk/contracts/rendering/coordinates';
 import type {
   GridRenderer,
   GroupingData,
@@ -53,6 +54,15 @@ import {
 // Point is imported from @mog-sdk/contracts
 
 const MATERIAL_CHANGE_EPSILON = 1e-9;
+const INSERT_MIN_SIZE = 20;
+const INSERT_DEFAULT_SIZE = 200;
+
+interface ShapeInsertBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /** Result of floating object hit test */
 export interface ObjectHitResult {
@@ -431,6 +441,80 @@ export function setupObjectCoordination(
     commands.clearOperation();
   }
 
+  function computeShapeInsertBounds(startPos: Point, position: Point): ShapeInsertBounds {
+    let x = Math.min(startPos.x, position.x);
+    let y = Math.min(startPos.y, position.y);
+    let width = Math.abs(position.x - startPos.x);
+    let height = Math.abs(position.y - startPos.y);
+
+    if (width < INSERT_MIN_SIZE && height < INSERT_MIN_SIZE) {
+      x = startPos.x;
+      y = startPos.y;
+      width = INSERT_DEFAULT_SIZE;
+      height = INSERT_DEFAULT_SIZE;
+    } else {
+      if (width < INSERT_MIN_SIZE) width = INSERT_MIN_SIZE;
+      if (height < INSERT_MIN_SIZE) height = INSERT_MIN_SIZE;
+    }
+
+    return { x, y, width, height };
+  }
+
+  function viewportBoundsToDocumentBounds(
+    sheetId: SheetId,
+    bounds: ShapeInsertBounds,
+  ): ShapeInsertBounds {
+    const gridRenderer = config.getGridRenderer();
+    if (!gridRenderer) return bounds;
+
+    const coords = gridRenderer.getCoordinateSystem();
+    const topLeft = coords.viewportToDocument(sheetId, {
+      x: bounds.x,
+      y: bounds.y,
+    } as ViewportPoint);
+    const bottomRight = coords.viewportToDocument(sheetId, {
+      x: bounds.x + bounds.width,
+      y: bounds.y + bounds.height,
+    } as ViewportPoint);
+
+    return {
+      x: Math.min(topLeft.x, bottomRight.x),
+      y: Math.min(topLeft.y, bottomRight.y),
+      width: Math.abs(bottomRight.x - topLeft.x),
+      height: Math.abs(bottomRight.y - topLeft.y),
+    };
+  }
+
+  function getDocumentInsertBounds(viewportBounds: ShapeInsertBounds): ShapeInsertBounds {
+    const wb = getWorkbook();
+    if (!wb) return viewportBounds;
+    return viewportBoundsToDocumentBounds(toSheetId(wb.activeSheet.sheetId), viewportBounds);
+  }
+
+  async function createShapeFromDocumentBounds(
+    shapeType: ShapeType,
+    documentBounds: ShapeInsertBounds,
+  ): Promise<void> {
+    const wb = getWorkbook();
+    if (!wb) return;
+
+    const ws = wb.activeSheet;
+    const maybeInternalWorkbook = wb as Workbook & {
+      setPendingUndoDescription?: (description: string) => void;
+    };
+    maybeInternalWorkbook.setPendingUndoDescription?.('Insert shape');
+
+    await ws.shapes.add({
+      type: shapeType,
+      anchorRow: 0,
+      anchorCol: 0,
+      pixelX: documentBounds.x,
+      pixelY: documentBounds.y,
+      width: documentBounds.width,
+      height: documentBounds.height,
+    });
+  }
+
   // Subscribe to detect operating → selected transition
   const operationSub = objectInteractionActor.subscribe(() => {
     const isOperating = accessors.isOperating();
@@ -644,32 +728,16 @@ export function setupObjectCoordination(
       const startPos = accessors.getInsertStartPosition();
 
       if (shapeType && startPos) {
-        // Compute bounds from drag rectangle
-        const MIN_SIZE = 20;
-        const DEFAULT_SIZE = 200;
+        const bounds = getDocumentInsertBounds(computeShapeInsertBounds(startPos, position));
 
-        let x = Math.min(startPos.x, position.x);
-        let y = Math.min(startPos.y, position.y);
-        let width = Math.abs(position.x - startPos.x);
-        let height = Math.abs(position.y - startPos.y);
-
-        // If user clicked without dragging (no drag distance), create at default size
-        if (width < MIN_SIZE && height < MIN_SIZE) {
-          x = startPos.x;
-          y = startPos.y;
-          width = DEFAULT_SIZE;
-          height = DEFAULT_SIZE;
-        } else {
-          // Enforce minimum dimensions
-          if (width < MIN_SIZE) width = MIN_SIZE;
-          if (height < MIN_SIZE) height = MIN_SIZE;
-        }
-
-        // Dispatch INSERT_SHAPE with computed bounds
         if (config.dispatch) {
           config.dispatch('INSERT_SHAPE', {
             shapeType,
-            position: { x, y, width, height },
+            position: bounds,
+          });
+        } else {
+          void createShapeFromDocumentBounds(shapeType as ShapeType, bounds).catch((error) => {
+            console.error('[object-coordination] Failed to create inserted shape', error);
           });
         }
       }

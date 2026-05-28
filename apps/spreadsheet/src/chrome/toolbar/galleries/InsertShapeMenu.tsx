@@ -4,8 +4,8 @@
  * A dropdown menu for selecting shapes to insert into the spreadsheet.
  * Displays a gallery of shapes organized by category.
  *
- * - Click: instant insert via dispatch('INSERT_SHAPE') with smart positioning
- * - Shift+click: enters insertion mode (crosshair cursor, drag on canvas to define size)
+ * - Click: enters insertion mode (crosshair cursor, drag on canvas to define size)
+ * - Shift+click: instant insert via dispatch('INSERT_SHAPE') with smart positioning
  *
  */
 
@@ -260,13 +260,13 @@ export const InsertShapeMenu = React.memo(function InsertShapeMenu() {
     return { left: Math.max(padding, left), top: Math.max(padding, top) };
   }, [anchorX, anchorY]);
 
-  // Handle shape selection — click: instant insert, shift+click: drag-to-draw mode
+  // Handle shape selection: click starts drag-to-draw; Shift+click keeps explicit instant insert.
   const handleShapeSelect = useCallback(
     (shapeType: ShapeType, e: React.MouseEvent) => {
       if (e.shiftKey) {
-        dispatch('START_SHAPE_INSERT', { shapeType });
-      } else {
         dispatch('INSERT_SHAPE', { shapeType });
+      } else {
+        dispatch('START_SHAPE_INSERT', { shapeType });
       }
       closeShapesMenu();
     },

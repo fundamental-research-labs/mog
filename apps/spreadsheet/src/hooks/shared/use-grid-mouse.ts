@@ -117,6 +117,16 @@ function dispatchMoveToSelectionEdge(
   else dispatch('MOVE_TO_EDGE_DOWN');
 }
 
+function isObjectDragOperationLive(coordinator: UseGridMouseOptions['coordinator']): boolean {
+  const operationType = coordinator.objects.access.accessors.object.getOperationType();
+  return operationType === 'drag' || operationType === 'resize' || operationType === 'rotate';
+}
+
+function isObjectInteractionOwningPointer(coordinator: UseGridMouseOptions['coordinator']): boolean {
+  const objectAccess = coordinator.objects.access.accessors.object;
+  return objectAccess.isInserting() || isObjectDragOperationLive(coordinator);
+}
+
 function makeRangeSelectionRange(
   mode: RangeSelectionDragMode,
   startCell: { row: number; col: number },
@@ -599,9 +609,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         if (!geometry) return;
 
         // Insert mode: route pointerdown to object coordination for drag-to-insert
-        if (objectInteraction.isInserting) {
+        if (coordinator.objects.access.accessors.object.isInserting()) {
           const position = { x, y };
-          objectInteraction.onMouseDownBody('', position, false, false);
+          coordinator.objects.handleObjectMouseDown('', 'body', position, false, false);
           return;
         }
 
@@ -641,9 +651,15 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const position = { x, y };
             const ctrlKey = e.ctrlKey || e.metaKey;
             if (hit.region === 'body' || hit.region === 'border') {
-              objectInteraction.onMouseDownBody(hit.objectId, position, e.shiftKey, ctrlKey);
+              coordinator.objects.handleObjectMouseDown(
+                hit.objectId,
+                'body',
+                position,
+                e.shiftKey,
+                ctrlKey,
+              );
             } else {
-              objectInteraction.onMouseDownHandle(
+              coordinator.objects.handleObjectMouseDown(
                 hit.objectId,
                 hit.region,
                 position,
@@ -668,9 +684,15 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           const position = { x, y };
           const ctrlKey = e.ctrlKey || e.metaKey; // metaKey for Mac Cmd
           if (hit.region === 'body' || hit.region === 'border') {
-            objectInteraction.onMouseDownBody(hit.objectId, position, e.shiftKey, ctrlKey);
+            coordinator.objects.handleObjectMouseDown(
+              hit.objectId,
+              'body',
+              position,
+              e.shiftKey,
+              ctrlKey,
+            );
           } else {
-            objectInteraction.onMouseDownHandle(
+            coordinator.objects.handleObjectMouseDown(
               hit.objectId,
               hit.region,
               position,
@@ -1277,23 +1299,14 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       }
 
       // 1. Handle floating object drag/resize/rotate (and insert mode)
-      if (
-        objectInteraction.isDragging ||
-        objectInteraction.isResizing ||
-        objectInteraction.isRotating ||
-        objectInteraction.isInserting
-      ) {
-        objectInteraction.onMouseMove(position, e.shiftKey);
+      if (isObjectInteractionOwningPointer(coordinator)) {
+        coordinator.objects.handleObjectMouseMove(position, e.shiftKey);
         return;
       }
 
       // 2. Update hovered handle for cursor feedback
       // Use unified renderer.hitTest() for cursor feedback
-      if (
-        !objectInteraction.isDragging &&
-        !objectInteraction.isResizing &&
-        !objectInteraction.isRotating
-      ) {
+      if (!isObjectDragOperationLive(coordinator)) {
         const hitTest = getHitTest();
         if (hitTest) {
           const hit = hitTest.atViewportPoint({ x, y });
@@ -1578,16 +1591,11 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   const handleMouseUp = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // 1. Handle floating object operations (and insert mode)
-      if (
-        objectInteraction.isDragging ||
-        objectInteraction.isResizing ||
-        objectInteraction.isRotating ||
-        objectInteraction.isInserting
-      ) {
+      if (isObjectInteractionOwningPointer(coordinator)) {
         const container = containerRef.current;
         if (container) {
           const { x, y } = getRelativePosition(e, container);
-          objectInteraction.onMouseUp({ x, y });
+          coordinator.objects.handleObjectMouseUp({ x, y });
         }
         return;
       }
@@ -1602,7 +1610,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       // which is called from handlePointerUp in the useEffect below.
       // This avoids the stale React state bug.
     },
-    [containerRef, objectInteraction, formulaRangeDrag],
+    [containerRef, coordinator, formulaRangeDrag],
   );
 
   // ==========================================================================

@@ -544,7 +544,7 @@ fn time_branch_enabled(target: Option<FormatType>) -> bool {
     )
 }
 
-fn parse_time_string(value: &str, culture: &str) -> Option<f64> {
+pub(crate) fn parse_time_string(value: &str, culture: &str) -> Option<f64> {
     let locale = compute_formats::get_culture(culture);
     let trimmed = value.trim();
     let lower = trimmed.to_ascii_lowercase();

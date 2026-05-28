@@ -132,8 +132,11 @@ export function FormatCellsDialog() {
   // on the header close button, swallowing the first arrow keystroke.
   const numberCategoryListboxRef = useRef<HTMLDivElement | null>(null);
 
-  // Track pending format for Number tab (legacy pattern - handled inline)
   const pendingNumberFormatRef = useRef<{ format: string; type: NumberFormatType } | null>(null);
+  const [pendingNumberFormat, setPendingNumberFormatDraft] = useState<{
+    format: string;
+    type: NumberFormatType;
+  } | null>(null);
 
   // Get current selection for initial format values
   // PERFORMANCE: Use granular hook - only subscribe to activeCell, not full selection
@@ -153,6 +156,7 @@ export function FormatCellsDialog() {
   useEffect(() => {
     if (open) {
       pendingNumberFormatRef.current = null;
+      setPendingNumberFormatDraft(null);
     }
   }, [open]);
 
@@ -254,11 +258,9 @@ export function FormatCellsDialog() {
   const applyActiveTabChanges = async (): Promise<boolean> => {
     switch (activeTab) {
       case 'number': {
-        if (
-          pendingNumberFormatRef.current &&
-          pendingNumberFormatRef.current.format !== currentNumberFormat
-        ) {
-          setPendingNumberFormat(pendingNumberFormatRef.current.format);
+        const draft = pendingNumberFormatRef.current ?? pendingNumberFormat;
+        if (draft && draft.format !== currentNumberFormat) {
+          setPendingNumberFormat(draft.format);
           const result = await dispatch('APPLY_NUMBER_FORMAT', deps);
           if (result.handled === false) return false;
         }
@@ -345,7 +347,9 @@ export function FormatCellsDialog() {
    */
   const handleNumberFormatChange = useCallback(
     (formatCode: string, formatType: NumberFormatType) => {
-      pendingNumberFormatRef.current = { format: formatCode, type: formatType };
+      const draft = { format: formatCode, type: formatType };
+      pendingNumberFormatRef.current = draft;
+      setPendingNumberFormatDraft(draft);
     },
     [],
   );
@@ -424,6 +428,7 @@ export function FormatCellsDialog() {
               <>
                 <TabPanel tabId="number">
                   <NumberFormatPanel
+                    variant="embedded"
                     currentFormat={currentNumberFormat}
                     currentType={currentNumberFormatType}
                     sampleValue={sampleValue}

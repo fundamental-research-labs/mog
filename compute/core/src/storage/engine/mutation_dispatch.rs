@@ -119,7 +119,7 @@ impl YrsComputeEngine {
                 // inference after the value writes land in the mirror. Doing this
                 // here (rather than in TS) keeps the value write and the format
                 // application atomic from the caller's perspective.
-                let date_candidates: Vec<(SheetId, u32, u32, String)> = edits
+                let inferred_format_candidates: Vec<(SheetId, u32, u32, String)> = edits
                     .iter()
                     .filter_map(|(sid, row, col, input)| match input {
                         mutation::CellInput::Parse { text } => {
@@ -146,8 +146,9 @@ impl YrsComputeEngine {
                     self.apply_formula_inherited_number_formats(&formula_format_candidates)?;
                 self.prepare_recalc_for_flush(&mut recalc);
 
-                if !date_candidates.is_empty() {
-                    self.apply_inferred_date_formats(&date_candidates)?;
+                if !inferred_format_candidates.is_empty() {
+                    self.apply_inferred_date_formats(&inferred_format_candidates)?;
+                    self.apply_inferred_time_formats(&inferred_format_candidates)?;
                 }
 
                 let mut result = MutationResult::from_recalc(recalc);

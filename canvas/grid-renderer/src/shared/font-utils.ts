@@ -14,8 +14,20 @@ export const METRIC_COMPATIBLE_FONTS: Record<string, string> = {
   Cambria: 'Caladea',
 };
 
+export const INTRINSIC_FONT_METADATA: Record<string, { fontWeight?: number }> = {
+  'Arial Black': { fontWeight: 900 },
+};
+
+export function getIntrinsicFontWeight(fontFamily: string): number | undefined {
+  return INTRINSIC_FONT_METADATA[fontFamily]?.fontWeight;
+}
+
 export function buildFontFamilyWithFallbacks(fontFamily: string): string {
   const parts: string[] = [`"${fontFamily}"`];
+  if (fontFamily === 'Arial Black') {
+    parts.push('"Arial"', 'sans-serif');
+    return parts.join(', ');
+  }
   const compatible = METRIC_COMPATIBLE_FONTS[fontFamily];
   if (compatible) {
     parts.push(`"${compatible}"`);

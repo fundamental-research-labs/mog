@@ -15,7 +15,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
-import type { CellFormat, CellRange } from '@mog-sdk/contracts/core';
+import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { TextFormat } from '@mog-sdk/contracts/rich-text';
 
 import {
@@ -27,6 +27,7 @@ import {
   getUIStore,
   handled,
 } from './shared';
+import { autoFitRowsForBoundedRanges } from './row-autofit';
 
 // =============================================================================
 // Constants
@@ -274,25 +275,7 @@ export const APPLY_FONT_FORMAT: AsyncActionHandler = async (deps) => {
  * For bounded ranges (e.g. A1:A100 from drag-select or shift-click) the
  * row count is user-bounded and an eager auto-fit is the right call.
  */
-async function autoFitRowsForRangeChange(
-  deps: ActionDependencies,
-  ranges: CellRange[],
-): Promise<void> {
-  const boundedRanges = ranges.filter((r) => !r.isFullColumn);
-  if (boundedRanges.length === 0) return;
-
-  const rowSet = new Set<number>();
-  for (const range of boundedRanges) {
-    const startRow = Math.min(range.startRow, range.endRow);
-    const endRow = Math.max(range.startRow, range.endRow);
-    for (let row = startRow; row <= endRow; row++) {
-      rowSet.add(row);
-    }
-  }
-
-  if (rowSet.size === 0) return;
-  await deps.workbook.activeSheet.layout.autoFitRows(Array.from(rowSet));
-}
+const autoFitRowsForRangeChange = autoFitRowsForBoundedRanges;
 
 /**
  * Set font size for selected cells.

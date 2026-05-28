@@ -9,6 +9,7 @@ use super::types::{
     CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA,
     VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
 };
+use crate::domain::strings::read::decode_xml_entities_full;
 pub use crate::infra::a1::col_to_letters;
 
 /// Result of scanning a single cell element.
@@ -231,6 +232,7 @@ pub(crate) fn scan_cell<'a>(
     } else {
         find_byte(xml, b'<', body_start)
     };
+    let mut owned_value: Option<Vec<u8>> = None;
     let (value_type, value_bytes): (u8, &[u8]) = if let Some(first_lt) = first_lt_opt {
         let next = first_lt + 1;
         if next < len {
@@ -330,7 +332,13 @@ pub(crate) fn scan_cell<'a>(
                         }
                     }
                 }
-                b'i' => extract_inline_string_forward(xml, first_lt),
+                b'i' => match extract_inline_string_owned_forward(xml, first_lt) {
+                    Some(value) => {
+                        owned_value = Some(value);
+                        (VALUE_TYPE_INLINE, owned_value.as_deref().unwrap_or(b""))
+                    }
+                    None => (VALUE_TYPE_NONE, b""),
+                },
                 _ => (VALUE_TYPE_NONE, b"" as &[u8]),
             }
         } else {
@@ -954,37 +962,38 @@ fn extract_v_forward<'a>(
     (VALUE_TYPE_NONE, b"")
 }
 
-/// Extract inline string from `<is><t>content</t></is>`.
-#[inline]
-fn extract_inline_string_forward(xml: &[u8], is_lt: usize) -> (u8, &[u8]) {
-    // Find end of <is...> tag
-    let is_tag_end = match find_byte(xml, b'>', is_lt) {
-        Some(p) => p,
-        None => return (VALUE_TYPE_NONE, b""),
-    };
+fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> Option<Vec<u8>> {
+    let is_tag_end = find_byte(xml, b'>', is_lt)?;
+    let is_end = find_sequence(xml, b"</is>", is_tag_end + 1)?;
+    let mut pos = is_tag_end + 1;
+    let mut out = Vec::new();
 
-    // Find <t> or <t ...> inside <is>
-    let t_lt = match find_byte(xml, b'<', is_tag_end + 1) {
-        Some(p) if p + 1 < xml.len() && xml[p + 1] == b't' => p,
-        _ => return (VALUE_TYPE_NONE, b""),
-    };
-
-    let after_t = t_lt + 2;
-    let content_start = if after_t < xml.len() && xml[after_t] == b'>' {
-        after_t + 1 // <t>
-    } else {
-        // <t ...> (e.g. xml:space="preserve")
-        match find_byte(xml, b'>', after_t) {
-            Some(gt) => gt + 1,
-            None => return (VALUE_TYPE_NONE, b""),
+    while let Some(t_lt) = find_sequence(xml, b"<t", pos) {
+        if t_lt >= is_end {
+            break;
         }
-    };
-
-    if let Some(t_end) = find_sequence(xml, b"</t>", content_start) {
-        return (VALUE_TYPE_INLINE, &xml[content_start..t_end]);
+        let after_t = t_lt + 2;
+        let content_start = if after_t < xml.len() && xml[after_t] == b'>' {
+            after_t + 1
+        } else {
+            find_byte(xml, b'>', after_t)? + 1
+        };
+        if content_start > is_end {
+            break;
+        }
+        let t_end = match find_sequence(xml, b"</t>", content_start) {
+            Some(end) if end <= is_end => end,
+            _ => break,
+        };
+        decode_xml_entities_full(&xml[content_start..t_end], &mut out);
+        pos = t_end + b"</t>".len();
     }
 
-    (VALUE_TYPE_NONE, b"")
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 /// Extract an attribute value from an XML element

@@ -30,6 +30,7 @@ import {
   buildFontFamilyWithFallbacks,
   getCachedCJKInfo,
   getCJKFallbackChain,
+  getIntrinsicFontWeight,
   OFFICE_THEME,
 } from '@mog/grid-renderer';
 import type { CellTextStyle } from '@mog-sdk/contracts/cell-style';
@@ -87,10 +88,6 @@ export function getCellCanvasFont(
   if (style.fontStyle === 'italic') {
     parts.push('italic');
   }
-  if (style.fontWeight === 'bold') {
-    parts.push('bold');
-  }
-  parts.push(`${style.fontSize}px`);
 
   // Step 3: Build font family with fallbacks
   // - Preview font (from font picker hover) takes priority
@@ -102,6 +99,13 @@ export function getCellCanvasFont(
   // Extract the primary font name for fallback lookup
   // (style.fontFamily might be a stack like "Inter, -apple-system, ...")
   const primaryFont = baseFontFamily.split(',')[0].trim().replace(/["']/g, '');
+  const intrinsicWeight = getIntrinsicFontWeight(primaryFont);
+  if (intrinsicWeight != null) {
+    parts.push(String(intrinsicWeight));
+  } else if (style.fontWeight === 'bold') {
+    parts.push('bold');
+  }
+  parts.push(`${style.fontSize}px`);
   let fontFamily = buildFontFamilyWithFallbacks(primaryFont);
 
   // Add CJK fallback chain if needed
@@ -192,6 +196,7 @@ export function getCellDOMStyle(
   // - Add CJK fallback chain if content contains CJK characters
   const baseFontFamily = previewFont || style.fontFamily;
   const primaryFont = baseFontFamily.split(',')[0].trim().replace(/["']/g, '');
+  const intrinsicWeight = getIntrinsicFontWeight(primaryFont);
   let fontFamily = buildFontFamilyWithFallbacks(primaryFont);
 
   if (cellContent) {
@@ -255,7 +260,7 @@ export function getCellDOMStyle(
     // Typography
     fontSize: style.fontSize,
     fontFamily, // Uses computed fontFamily with CJK fallback if needed
-    fontWeight: style.fontWeight,
+    fontWeight: intrinsicWeight ?? style.fontWeight,
     fontStyle: style.fontStyle,
     color: style.color,
     textDecoration: style.textDecoration,

@@ -116,7 +116,7 @@ function FontItem({
       className={`${baseClasses} ${stateClasses}`}
       style={{ fontFamily: `"${font}", sans-serif` }}
       title={title}
-      aria-label={`Select ${font} font${!isAvailable ? ' (not installed)' : ''}`}
+      aria-label={font}
       aria-selected={isSelected}
       tabIndex={isFocused ? 0 : -1}
       role="option"

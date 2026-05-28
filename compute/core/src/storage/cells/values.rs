@@ -126,6 +126,7 @@ mod parsing;
 
 pub(crate) use parsing::{
     InputParseContext, ParsedValue, parse_input_value, parse_input_value_with_context,
+    parse_time_string,
 };
 #[cfg(test)]
 use parsing::{is_plain_number, parse_date_string, parse_formatted_number};

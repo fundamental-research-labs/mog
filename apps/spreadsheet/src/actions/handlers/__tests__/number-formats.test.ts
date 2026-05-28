@@ -93,10 +93,10 @@ describe('Number Format Handlers — preset format strings', () => {
     expect(getAppliedFormat(deps)).toBe('$#,##0.00');
   });
 
-  it('FORMAT_PERCENTAGE applies 0.00%', async () => {
+  it('FORMAT_PERCENTAGE applies 0%', async () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_PERCENTAGE(deps);
-    expect(getAppliedFormat(deps)).toBe('0.00%');
+    expect(getAppliedFormat(deps)).toBe('0%');
   });
 
   it('FORMAT_SCIENTIFIC applies 0.00E+00', async () => {

@@ -90,7 +90,7 @@ export const FORMAT_DATE: AsyncActionHandler = async (deps) => applyNumberFormat
 export const FORMAT_CURRENCY: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '$#,##0.00');
 export const FORMAT_PERCENTAGE: AsyncActionHandler = async (deps) =>
-  applyNumberFormat(deps, '0.00%');
+  applyNumberFormat(deps, '0%');
 export const FORMAT_SCIENTIFIC: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '0.00E+00');
 export const FORMAT_COMMA: AsyncActionHandler = async (deps) => applyNumberFormat(deps, '#,##0.00');

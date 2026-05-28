@@ -26,6 +26,8 @@ import { useCallback, useEffect, useMemo, useState, type Ref } from 'react';
 // =============================================================================
 
 interface NumberFormatPanelProps {
+  /** Standalone toolbar dropdown or embedded Format Cells content. */
+  variant?: 'standalone' | 'embedded';
   /** Current format code */
   currentFormat?: string;
   /** Current format type */
@@ -101,6 +103,57 @@ const DEFAULT_STATE: CategoryState = {
   customFormat: '',
 };
 
+function formatCodeForCategory(category: NumberFormatType, state: CategoryState): string {
+  switch (category) {
+    case 'general':
+      return 'General';
+    case 'number':
+      return buildFormatCode({
+        type: 'number',
+        decimalPlaces: state.decimalPlaces,
+        useThousandsSeparator: state.useThousandsSeparator,
+        negativeFormat: state.negativeFormat,
+      });
+    case 'currency':
+      return buildFormatCode({
+        type: 'currency',
+        decimalPlaces: state.decimalPlaces,
+        currencySymbol: getCurrencySymbol(state.currencyCode),
+        negativeFormat: state.negativeFormat,
+      });
+    case 'accounting':
+      return buildFormatCode({
+        type: 'accounting',
+        decimalPlaces: state.decimalPlaces,
+        currencySymbol: getCurrencySymbol(state.currencyCode),
+      });
+    case 'date':
+      return state.dateFormat;
+    case 'time':
+      return state.timeFormat;
+    case 'percentage':
+      return buildFormatCode({
+        type: 'percentage',
+        decimalPlaces: state.decimalPlaces,
+      });
+    case 'fraction':
+      return FRACTION_FORMATS[state.fractionType]?.code || '# ?/?';
+    case 'scientific':
+      return buildFormatCode({
+        type: 'scientific',
+        decimalPlaces: state.decimalPlaces,
+      });
+    case 'text':
+      return '@';
+    case 'special':
+      return SPECIAL_FORMATS[state.specialType]?.code || '00000';
+    case 'custom':
+      return state.customFormat || 'General';
+    default:
+      return 'General';
+  }
+}
+
 /** Look up currency symbol from ISO code */
 function getCurrencySymbol(code: string): string {
   return (
@@ -175,6 +228,7 @@ function FormatPresetListbox({
 // =============================================================================
 
 export function NumberFormatPanel({
+  variant = 'standalone',
   currentFormat,
   currentType,
   sampleValue = 1234.5,
@@ -185,6 +239,7 @@ export function NumberFormatPanel({
   formatPreviewFn,
   categoryListboxRef,
 }: NumberFormatPanelProps) {
+  const embedded = variant === 'embedded';
   // Determine initial category from current format
   const initialCategory =
     currentType || (currentFormat ? detectFormatType(currentFormat) : 'general');
@@ -197,56 +252,7 @@ export function NumberFormatPanel({
 
   // Build format code from current state
   const formatCode = useMemo(() => {
-    switch (selectedCategory) {
-      case 'general':
-        return 'General';
-      case 'number':
-        return buildFormatCode({
-          type: 'number',
-          decimalPlaces: state.decimalPlaces,
-          useThousandsSeparator: state.useThousandsSeparator,
-          negativeFormat: state.negativeFormat,
-        });
-      case 'currency':
-        return buildFormatCode({
-          type: 'currency',
-          decimalPlaces: state.decimalPlaces,
-          currencySymbol: getCurrencySymbol(state.currencyCode),
-          negativeFormat: state.negativeFormat,
-        });
-      case 'accounting':
-        return buildFormatCode({
-          type: 'accounting',
-          decimalPlaces: state.decimalPlaces,
-          currencySymbol: getCurrencySymbol(state.currencyCode),
-        });
-      case 'date':
-        return state.dateFormat;
-      case 'time':
-        return state.timeFormat;
-      case 'percentage':
-        return buildFormatCode({
-          type: 'percentage',
-          decimalPlaces: state.decimalPlaces,
-        });
-      case 'fraction':
-        // Get format code directly from FRACTION_FORMATS
-        return FRACTION_FORMATS[state.fractionType]?.code || '# ?/?';
-      case 'scientific':
-        return buildFormatCode({
-          type: 'scientific',
-          decimalPlaces: state.decimalPlaces,
-        });
-      case 'text':
-        return '@';
-      case 'special':
-        // Get format code directly from SPECIAL_FORMATS
-        return SPECIAL_FORMATS[state.specialType]?.code || '00000';
-      case 'custom':
-        return state.customFormat || 'General';
-      default:
-        return 'General';
-    }
+    return formatCodeForCategory(selectedCategory, state);
   }, [selectedCategory, state]);
 
   // Generate preview via async Rust compute bridge
@@ -292,27 +298,49 @@ export function NumberFormatPanel({
   }, [recentFormats, sampleValue, formatPreviewFn]);
 
   // Handlers
-  const handleCategoryChange = useCallback((category: NumberFormatType) => {
-    setSelectedCategory(category);
-  }, []);
+  const emitDraft = useCallback(
+    (category: NumberFormatType, nextState: CategoryState) => {
+      onDraftChange?.(formatCodeForCategory(category, nextState), category);
+    },
+    [onDraftChange],
+  );
+
+  const handleCategoryChange = useCallback(
+    (category: NumberFormatType) => {
+      setSelectedCategory(category);
+      emitDraft(category, state);
+    },
+    [emitDraft, state],
+  );
 
   const handleApply = useCallback(() => {
     onApply(formatCode, selectedCategory);
     onClose();
   }, [formatCode, selectedCategory, onApply, onClose]);
 
-  const updateState = useCallback((updates: Partial<CategoryState>) => {
-    setState((prev) => ({ ...prev, ...updates }));
-  }, []);
+  const updateState = useCallback(
+    (updates: Partial<CategoryState>, category: NumberFormatType = selectedCategory) => {
+      const next = { ...state, ...updates };
+      setState(next);
+      emitDraft(category, next);
+    },
+    [emitDraft, selectedCategory, state],
+  );
 
   // Handler for selecting a recent format
   const handleRecentFormatClick = useCallback(
     (format: string) => {
       const type = detectFormatType(format);
-      onApply(format, type);
-      onClose();
+      if (embedded) {
+        setSelectedCategory(type);
+        setState((prev) => ({ ...prev, customFormat: format }));
+        onDraftChange?.(format, type);
+      } else {
+        onApply(format, type);
+        onClose();
+      }
     },
-    [onApply, onClose],
+    [embedded, onApply, onClose, onDraftChange],
   );
 
   // Track hover state for recent format items
@@ -587,18 +615,26 @@ export function NumberFormatPanel({
   };
 
   return (
-    <div className="flex flex-col w-[420px] bg-ss-surface rounded-ss-lg shadow-ss-lg overflow-hidden">
+    <div
+      className={
+        embedded
+          ? 'flex flex-col w-full bg-ss-surface overflow-hidden'
+          : 'flex flex-col w-[420px] bg-ss-surface rounded-ss-lg shadow-ss-lg overflow-hidden'
+      }
+    >
       {/* Header */}
-      <div className="flex justify-between items-center p-3 border-b border-ss-border bg-ss-surface-secondary">
-        <span className="text-body-sm font-semibold text-text-ss-primary">Number Format</span>
-        <button
-          className="border-none bg-transparent text-body-lg cursor-pointer text-ss-text-secondary hover:text-text-ss-primary p-1 leading-none"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
+      {!embedded && (
+        <div className="flex justify-between items-center p-3 border-b border-ss-border bg-ss-surface-secondary">
+          <span className="text-body-sm font-semibold text-text-ss-primary">Number Format</span>
+          <button
+            className="border-none bg-transparent text-body-lg cursor-pointer text-ss-text-secondary hover:text-text-ss-primary p-1 leading-none"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 min-h-[300px]">
@@ -667,14 +703,16 @@ export function NumberFormatPanel({
       </div>
 
       {/* Footer */}
-      <div className="flex justify-end gap-2 p-3 border-t border-ss-border bg-ss-surface-secondary">
-        <Button variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={handleApply}>
-          Apply
-        </Button>
-      </div>
+      {!embedded && (
+        <div className="flex justify-end gap-2 p-3 border-t border-ss-border bg-ss-surface-secondary">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleApply}>
+            Apply
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

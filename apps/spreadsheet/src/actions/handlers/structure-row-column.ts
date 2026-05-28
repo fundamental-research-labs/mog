@@ -8,7 +8,7 @@
 import type { ActionDependencies, ActionResult } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
-import { handled } from './handler-utils';
+import { handled, isProtectionRejection, notHandled, showProtectionFeedback } from './handler-utils';
 
 function getTargetSheetIds(deps: ActionDependencies): SheetId[] {
   return [deps.getActiveSheetId()];
@@ -66,9 +66,17 @@ export async function insertRowAboveSelection(deps: ActionDependencies): Promise
   const rows = getSelectedRowsOrActive(ranges, activeCell);
   const insertAt = rows[0];
 
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.structure.insertRows(insertAt, 1);
+  try {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.structure.insertRows(insertAt, 1);
+    }
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
+    throw err;
   }
 
   return handled();
@@ -80,9 +88,17 @@ export async function insertColumnLeftSelection(deps: ActionDependencies): Promi
   const cols = getSelectedColsOrActive(ranges, activeCell);
   const insertAt = cols[0];
 
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.structure.insertColumns(insertAt, 1);
+  try {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.structure.insertColumns(insertAt, 1);
+    }
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
+    throw err;
   }
 
   return handled();
@@ -94,22 +110,30 @@ export async function deleteSelectedRows(deps: ActionDependencies): Promise<Acti
   const rows = getSelectedRowsOrActive(ranges, activeCell);
   const sortedDesc = [...rows].sort((a, b) => b - a);
 
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    let i = 0;
-    while (i < sortedDesc.length) {
-      const startRow = sortedDesc[i];
-      let count = 1;
+  try {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      let i = 0;
+      while (i < sortedDesc.length) {
+        const startRow = sortedDesc[i];
+        let count = 1;
 
-      while (i + count < sortedDesc.length && sortedDesc[i + count] === startRow - count) {
-        count++;
+        while (i + count < sortedDesc.length && sortedDesc[i + count] === startRow - count) {
+          count++;
+        }
+
+        const actualStartRow = startRow - count + 1;
+        await ws.structure.deleteRows(actualStartRow, count);
+
+        i += count;
       }
-
-      const actualStartRow = startRow - count + 1;
-      await ws.structure.deleteRows(actualStartRow, count);
-
-      i += count;
     }
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
+    throw err;
   }
 
   return handled();
@@ -121,22 +145,30 @@ export async function deleteSelectedColumns(deps: ActionDependencies): Promise<A
   const cols = getSelectedColsOrActive(ranges, activeCell);
   const sortedDesc = [...cols].sort((a, b) => b - a);
 
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    let i = 0;
-    while (i < sortedDesc.length) {
-      const startCol = sortedDesc[i];
-      let count = 1;
+  try {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      let i = 0;
+      while (i < sortedDesc.length) {
+        const startCol = sortedDesc[i];
+        let count = 1;
 
-      while (i + count < sortedDesc.length && sortedDesc[i + count] === startCol - count) {
-        count++;
+        while (i + count < sortedDesc.length && sortedDesc[i + count] === startCol - count) {
+          count++;
+        }
+
+        const actualStartCol = startCol - count + 1;
+        await ws.structure.deleteColumns(actualStartCol, count);
+
+        i += count;
       }
-
-      const actualStartCol = startCol - count + 1;
-      await ws.structure.deleteColumns(actualStartCol, count);
-
-      i += count;
     }
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
+    throw err;
   }
 
   return handled();

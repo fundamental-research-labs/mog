@@ -22,6 +22,10 @@ import {
 } from './shared';
 
 import { normalizeRange } from '../../internal/utils';
+import {
+  assertFormatOperationsAllowed,
+  assertFormatRangesAllowed,
+} from '../protection-guards';
 
 /**
  * Threshold for enumerating individual cells in affectedCells.
@@ -86,6 +90,7 @@ export async function setFormat(
   if (invalid) return invalid;
 
   try {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatCells']);
     await ctx.computeBridge.setFormatForRanges(
       sheetId,
       [[row, col, row, col]],
@@ -135,6 +140,7 @@ export async function setRangeFormat(
   const normalized = normalizeRange(range);
 
   try {
+    await assertFormatRangesAllowed(ctx, sheetId, [range]);
     // Single range tuple — O(1) payload regardless of range size
     await ctx.computeBridge.setFormatForRanges(
       sheetId,
@@ -177,6 +183,7 @@ export async function setFormatForRanges(
   format: CellFormat,
 ): Promise<OperationResult<void>> {
   return wrapOp('setFormatForRanges', async () => {
+    await assertFormatRangesAllowed(ctx, sheetId, ranges);
     const boundedRanges: Array<[number, number, number, number]> = [];
     const promises: Promise<unknown>[] = [];
 
@@ -229,6 +236,7 @@ export async function setRowFormat(
   }
 
   return wrapOp('setRowFormat', async () => {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatRows']);
     await ctx.computeBridge.setRowFormat(sheetId, row, format);
   });
 }
@@ -258,6 +266,7 @@ export async function setColFormat(
   }
 
   return wrapOp('setColFormat', async () => {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatColumns']);
     await ctx.computeBridge.setColFormat(sheetId, col, format);
   });
 }
@@ -281,6 +290,7 @@ export async function clearFormat(
   if (invalid) return invalid;
 
   try {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatCells']);
     await ctx.computeBridge.clearFormatForRanges(sheetId, [[row, col, row, col]]);
     return {
       success: true,
@@ -321,6 +331,7 @@ export async function applyFormatToRange(
   sourceRange: CellRange | null,
   targetRange: CellRange,
 ): Promise<void> {
+  await assertFormatRangesAllowed(ctx, sheetId, [targetRange]);
   const normalized = normalizeRange(targetRange);
 
   // Simple case: no source range - apply same format to all cells
@@ -483,6 +494,7 @@ export async function setRowProperties(
   updates: Map<number, CellFormat>,
 ): Promise<OperationResult<void>> {
   return wrapOp('setRowProperties', async () => {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatRows']);
     const entries: Array<[number, CellFormat]> = Array.from(updates.entries());
     await ctx.computeBridge.setRowFormats(sheetId, entries);
   });
@@ -536,6 +548,7 @@ export async function setColumnProperties(
   updates: Map<number, CellFormat>,
 ): Promise<OperationResult<void>> {
   return wrapOp('setColumnProperties', async () => {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatColumns']);
     const entries: Array<[number, CellFormat]> = Array.from(updates.entries());
     await ctx.computeBridge.setColFormats(sheetId, entries);
   });
@@ -594,6 +607,7 @@ export async function setCellProperties(
   updates: Array<{ row: number; col: number; format: CellFormat }>,
 ): Promise<OperationResult<void>> {
   return wrapOp('setCellProperties', async () => {
+    await assertFormatOperationsAllowed(ctx, sheetId, ['formatCells']);
     const tuples: Array<[number, number, CellFormat]> = updates.map((u) => [
       u.row,
       u.col,

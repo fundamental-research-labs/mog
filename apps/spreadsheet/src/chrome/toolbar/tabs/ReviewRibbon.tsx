@@ -24,6 +24,7 @@ import {
 } from '@mog-sdk/contracts/ribbon';
 import { useComments } from '../../../hooks/comments/use-comments';
 import { useSheetProtection } from '../../../hooks/structure/use-sheet-protection';
+import { useWorkbookStructureProtection } from '../../../hooks/structure/use-workbook-protection';
 import { useActionDependencies } from '../../../hooks/toolbar/use-action-dependencies';
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
@@ -203,6 +204,7 @@ export function ReviewRibbon() {
   const activeSheetId = useUIStore((s) => s.activeSheetId);
   const { protection } = useSheetProtection(activeSheetId);
   const isProtected = protection.isProtected;
+  const isWorkbookStructureProtected = useWorkbookStructureProtection();
 
   // Protection button handlers
   const handleProtectSheet = useCallback(() => {
@@ -214,8 +216,12 @@ export function ReviewRibbon() {
   }, [deps, isProtected]);
 
   const handleProtectWorkbook = useCallback(() => {
-    dispatch('OPEN_PROTECT_WORKBOOK_DIALOG', deps);
-  }, [deps]);
+    if (isWorkbookStructureProtected) {
+      dispatch('UNPROTECT_WORKBOOK', deps);
+    } else {
+      dispatch('OPEN_PROTECT_WORKBOOK_DIALOG', deps);
+    }
+  }, [deps, isWorkbookStructureProtected]);
 
   // ==========================================================================
   // Comment action handlers
@@ -468,10 +474,14 @@ export function ReviewRibbon() {
             layout="vertical"
             height="full"
             icon={<ProtectWorkbookIcon />}
-            label={'Protect\nWorkbook'}
+            label={isWorkbookStructureProtected ? 'Unprotect\nWorkbook' : 'Protect\nWorkbook'}
             onClick={handleProtectWorkbook}
-            title="Protect Workbook (structure protection)"
-            aria-label="Protect Workbook"
+            title={
+              isWorkbookStructureProtected
+                ? 'Unprotect Workbook'
+                : 'Protect Workbook (structure protection)'
+            }
+            aria-label={isWorkbookStructureProtected ? 'Unprotect Workbook' : 'Protect Workbook'}
           />
           <RibbonButton
             layout="vertical"

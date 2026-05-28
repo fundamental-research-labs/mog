@@ -39,6 +39,7 @@ import {
 } from '@mog-sdk/contracts/ribbon';
 import { ChartsGroup } from '../../../components/charts/ChartsGroup';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
+import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
 import { useActiveCell } from '../../../hooks/selection/use-active-cell';
 import { useSelectionRanges } from '../../../hooks/selection/use-granular-selection';
 import { PRODUCT_VOCABULARY } from '../../../ux/product-vocabulary';
@@ -91,6 +92,7 @@ export function InsertRibbon() {
   const wb = useWorkbook();
   const { row: activeRow, col: activeCol } = useActiveCell();
   const ranges = useSelectionRanges();
+  const sheetPermissions = useSheetProtectionPermissions(activeSheetId);
 
   // UIStore action for the inline shapes menu (anchored popover, not a
   // dialog). The visible ribbon click records an anchor; keytips open the
@@ -301,6 +303,7 @@ export function InsertRibbon() {
           icon={<FormsIcon />}
           label="Check Box"
           onClick={insertCheckboxFormControl}
+          disabled={!sheetPermissions.editObject}
           title="Insert Checkbox Form Control"
           aria-label="Insert Checkbox Form Control"
         />
@@ -311,6 +314,7 @@ export function InsertRibbon() {
           icon={<FormsIcon />}
           label="Combo Box"
           onClick={insertComboBoxFormControl}
+          disabled={!sheetPermissions.editObject}
           title="Insert Combo Box Form Control"
           aria-label="Insert Combo Box Form Control"
         />

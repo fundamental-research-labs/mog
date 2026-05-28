@@ -30,12 +30,13 @@
  *
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { useActiveSheetId, useFeatureGate, useUIStore, useWorkbook } from '../../../internal-api';
 
 import { SegmentedControl, Tooltip } from '@mog/shell';
 import { ALIGNMENT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
+import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
 import { getCenterAcrossSelectionAvailability } from '../../../actions/handlers/formatting/center-across-selection';
 import { keyTipRegistry } from '../keytips';
 import {
@@ -134,7 +135,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
   const ranges = useUIStore((s) => s.toolbarRanges);
-  const [canFormatCells, setCanFormatCells] = useState(true);
+  const canFormatCells = useSheetProtectionPermissions(activeSheetId).formatCells;
 
   const { canMerge, canUnmerge, isMerged } = useMemo(() => {
     if (!ranges || ranges.length === 0) {
@@ -184,22 +185,6 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       canMerge: !exactMerged,
       canUnmerge: overlapsMerge,
       isMerged: exactMerged,
-    };
-  }, [wb, activeSheetId, ranges]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void wb
-      .getSheetById(activeSheetId)
-      .protection.canDoStructureOp('formatCells')
-      .then((allowed) => {
-        if (!cancelled) setCanFormatCells(allowed);
-      })
-      .catch(() => {
-        if (!cancelled) setCanFormatCells(false);
-      });
-    return () => {
-      cancelled = true;
     };
   }, [wb, activeSheetId, ranges]);
 
@@ -300,6 +285,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             ariaLabel="Horizontal alignment"
             value={rawHAlign}
             onChange={(v) => dispatch('SET_HORIZONTAL_ALIGN', { align: v as HorizontalAlign })}
+            disabled={!canFormatCells}
             options={[
               {
                 value: 'left',
@@ -334,6 +320,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               icon={<AlignTopIcon />}
               onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
               isOpen={verticalAlign === 'top'}
+              disabled={!canFormatCells}
               aria-label="Align top"
               aria-pressed={verticalAlign === 'top'}
             />
@@ -345,6 +332,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               icon={<AlignMiddleIcon />}
               onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
               isOpen={verticalAlign === 'middle'}
+              disabled={!canFormatCells}
               aria-label="Align middle"
               aria-pressed={verticalAlign === 'middle'}
             />
@@ -356,6 +344,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               icon={<AlignBottomIcon />}
               onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
               isOpen={verticalAlign === 'bottom'}
+              disabled={!canFormatCells}
               aria-label="Align bottom"
               aria-pressed={verticalAlign === 'bottom'}
             />
@@ -371,6 +360,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               icon={<WordWrapIcon />}
               onClick={() => dispatch('TOGGLE_WRAP_TEXT')}
               isOpen={wordWrap}
+              disabled={!canFormatCells}
               aria-label="Word wrap"
               aria-pressed={wordWrap}
             />
@@ -386,7 +376,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                 icon={<MergeCellsIcon />}
                 variant="small"
                 isOpen={isMerged || mergeDropdownOpen}
-                disabled={!canMerge && !canUnmerge}
+                disabled={!canFormatCells || (!canMerge && !canUnmerge)}
                 aria-label="Merge & Center"
                 onMainClick={() => {
                   if (isMerged || canUnmerge) {
@@ -412,15 +402,15 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
- ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+                  ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
                   onClick={() => {
-                    if (canMerge) {
+                    if (canFormatCells && canMerge) {
                       dispatch('MERGE_AND_CENTER');
                       setMergeDropdownOpen(false);
                     }
                   }}
-                  disabled={!canMerge}
+                  disabled={!canFormatCells || !canMerge}
                 >
                   <MergeAndCenterIcon />
                   <span>Merge & Center</span>
@@ -433,15 +423,15 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
- ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+                  ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
                   onClick={() => {
-                    if (canMerge) {
+                    if (canFormatCells && canMerge) {
                       dispatch('MERGE_ACROSS');
                       setMergeDropdownOpen(false);
                     }
                   }}
-                  disabled={!canMerge}
+                  disabled={!canFormatCells || !canMerge}
                 >
                   <MergeAcrossIcon />
                   <span>Merge Across</span>
@@ -454,15 +444,15 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
- ${canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+                  ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
                   onClick={() => {
-                    if (canMerge) {
+                    if (canFormatCells && canMerge) {
                       dispatch('MERGE_CELLS');
                       setMergeDropdownOpen(false);
                     }
                   }}
-                  disabled={!canMerge}
+                  disabled={!canFormatCells || !canMerge}
                 >
                   <MergeCellsIcon />
                   <span>Merge Cells</span>
@@ -477,15 +467,15 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
- ${canUnmerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
+                  ${canFormatCells && canUnmerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
                   onClick={() => {
-                    if (canUnmerge) {
+                    if (canFormatCells && canUnmerge) {
                       dispatch('UNMERGE_CELLS');
                       setMergeDropdownOpen(false);
                     }
                   }}
-                  disabled={!canUnmerge}
+                  disabled={!canFormatCells || !canUnmerge}
                 >
                   <UnmergeCellsIcon />
                   <span>Unmerge Cells</span>
@@ -538,6 +528,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                 onClick={() => setOrientationDropdownOpen(!orientationDropdownOpen)}
                 isOpen={orientationDropdownOpen}
                 hasDropdown
+                disabled={!canFormatCells}
                 aria-label="Text orientation"
                 aria-expanded={orientationDropdownOpen}
               />
@@ -553,13 +544,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 45 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: 45 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <AngleCounterclockwiseIcon />
                   <span>Angle Counterclockwise</span>
@@ -570,13 +564,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === -45 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: -45 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <AngleClockwiseIcon />
                   <span>Angle Clockwise</span>
@@ -587,13 +584,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 255 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: 255 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <VerticalTextIcon />
                   <span>Vertical Text</span>
@@ -604,13 +604,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 90 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: 90 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <RotateTextUpIcon />
                   <span>Rotate Text Up</span>
@@ -621,13 +624,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === -90 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: -90 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <RotateTextDownIcon />
                   <span>Rotate Text Down</span>
@@ -639,13 +645,16 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                   className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
- transition-colors hover:bg-ss-surface-hover
+ transition-colors
+ ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 0 ? 'bg-ss-surface-selected' : ''}
  `}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_TEXT_ROTATION', { rotation: 0 });
                     setOrientationDropdownOpen(false);
                   }}
+                  disabled={!canFormatCells}
                 >
                   <span className="w-4" />
                   <span>No Rotation</span>
@@ -663,7 +672,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               layout="icon-only"
               icon={<DecreaseIndentIcon />}
               onClick={() => dispatch('DECREASE_INDENT')}
-              disabled={indent === 0}
+              disabled={!canFormatCells || indent === 0}
               aria-label="Decrease indent"
             />
           </Tooltip>
@@ -675,6 +684,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               layout="icon-only"
               icon={<IncreaseIndentIcon />}
               onClick={() => dispatch('INCREASE_INDENT')}
+              disabled={!canFormatCells}
               aria-label="Increase indent"
             />
           </Tooltip>

@@ -53,10 +53,21 @@ function createManager() {
   };
 }
 
+function createCtx() {
+  return {
+    computeBridge: {
+      canDoStructureOp: jest.fn(async () => true),
+    },
+    mirror: {
+      getSheetSettings: jest.fn(() => ({ isProtected: false })),
+    },
+  };
+}
+
 describe('WorksheetFormControlsImpl', () => {
   it('adds checkbox and comboBox controls through the workbook manager with the worksheet sheetId', async () => {
     const { manager, checkbox, comboBox } = createManager();
-    const api = new WorksheetFormControlsImpl(manager as any, 'sheet-1');
+    const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
 
     await expect(
       api.add({ type: 'checkbox', anchor: { row: 1, col: 2 }, linkedCell: { row: 1, col: 3 } }),
@@ -85,7 +96,7 @@ describe('WorksheetFormControlsImpl', () => {
 
   it('updates only controls on the worksheet', () => {
     const { manager, checkbox } = createManager();
-    const api = new WorksheetFormControlsImpl(manager as any, 'sheet-1');
+    const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
 
     expect(api.update(checkbox.id, { enabled: false })).toBe(checkbox);
     expect(manager.updateControl).toHaveBeenCalledWith(checkbox.id, { enabled: false });
@@ -96,7 +107,7 @@ describe('WorksheetFormControlsImpl', () => {
 
   it('removes only controls on the worksheet', () => {
     const { manager, checkbox } = createManager();
-    const api = new WorksheetFormControlsImpl(manager as any, 'sheet-1');
+    const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
 
     expect(api.remove(checkbox.id)).toBe(true);
     expect(manager.deleteControl).toHaveBeenCalledWith(checkbox.id);

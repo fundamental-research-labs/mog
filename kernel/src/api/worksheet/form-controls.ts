@@ -15,6 +15,8 @@ import type {
   FormControl,
   IFormControlManager,
 } from '@mog-sdk/contracts/form-controls';
+import type { DocumentContext } from '../../context';
+import { assertSheetOperationAllowed, assertSheetOperationAllowedSync } from './protection-guards';
 
 type WorksheetCreateCheckboxOptions = Omit<CreateCheckboxOptions, 'sheetId'>;
 type WorksheetCreateComboBoxOptions = Omit<CreateComboBoxOptions, 'sheetId'>;
@@ -31,6 +33,7 @@ type FormControlAnchorUpdate = {
 
 export class WorksheetFormControlsImpl implements WorksheetFormControls {
   constructor(
+    private readonly ctx: DocumentContext,
     private readonly manager: IFormControlManager,
     private readonly sheetId: SheetId,
   ) {}
@@ -52,10 +55,12 @@ export class WorksheetFormControlsImpl implements WorksheetFormControls {
   }
 
   async addCheckbox(options: WorksheetCreateCheckboxOptions): Promise<CheckboxControl> {
+    await assertSheetOperationAllowed(this.ctx, this.sheetId, 'editObject');
     return this.manager.createCheckbox({ ...options, sheetId: this.sheetId });
   }
 
   async addComboBox(options: WorksheetCreateComboBoxOptions): Promise<ComboBoxControl> {
+    await assertSheetOperationAllowed(this.ctx, this.sheetId, 'editObject');
     return this.manager.createComboBox({ ...options, sheetId: this.sheetId });
   }
 
@@ -77,6 +82,7 @@ export class WorksheetFormControlsImpl implements WorksheetFormControls {
 
   update(controlId: string, updates: FormControlUpdate): FormControl | undefined {
     if (!this.get(controlId)) return undefined;
+    assertSheetOperationAllowedSync(this.ctx, this.sheetId, 'editObject');
     this.manager.updateControl(controlId, updates);
     return this.get(controlId);
   }
@@ -86,18 +92,21 @@ export class WorksheetFormControlsImpl implements WorksheetFormControls {
     newAnchor: FormControlAnchorUpdate,
   ): Promise<FormControl | undefined> {
     if (!this.get(controlId)) return undefined;
+    await assertSheetOperationAllowed(this.ctx, this.sheetId, 'editObject');
     await this.manager.moveControl(controlId, newAnchor);
     return this.get(controlId);
   }
 
   resize(controlId: string, width: number, height: number): FormControl | undefined {
     if (!this.get(controlId)) return undefined;
+    assertSheetOperationAllowedSync(this.ctx, this.sheetId, 'editObject');
     this.manager.resizeControl(controlId, width, height);
     return this.get(controlId);
   }
 
   remove(controlId: string): boolean {
     if (!this.get(controlId)) return false;
+    assertSheetOperationAllowedSync(this.ctx, this.sheetId, 'editObject');
     this.manager.deleteControl(controlId);
     return true;
   }

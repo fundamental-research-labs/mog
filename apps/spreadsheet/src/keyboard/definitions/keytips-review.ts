@@ -113,7 +113,7 @@ export const KEYTIPS_REVIEW_SHORTCUTS: KeyboardShortcut[] = [
     id: 'keytips-review.protect-workbook',
     bindings: altBinding('KeyR'),
     sequence: ['KeyW'],
-    description: 'Protect Workbook (Alt+R,W)',
+    description: 'Protect / Unprotect workbook (Alt+R,W)',
     action: 'OPEN_PROTECT_WORKBOOK_DIALOG',
     enabled: true,
     priority: 'medium',
@@ -121,6 +121,7 @@ export const KEYTIPS_REVIEW_SHORTCUTS: KeyboardShortcut[] = [
     contexts: REVIEW_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
-    notes: 'Excel 365: Review → W opens Protect Workbook dialog.',
+    notes:
+      'Excel 365: Review → W toggles workbook structure protection through the current Protect Workbook command state.',
   },
 ];

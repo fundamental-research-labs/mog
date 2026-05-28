@@ -30,6 +30,17 @@ export interface UseSheetProtectionReturn {
   };
 }
 
+export interface SheetProtectionPermissions {
+  formatCells: boolean;
+  formatRows: boolean;
+  formatColumns: boolean;
+  insertRows: boolean;
+  insertColumns: boolean;
+  deleteRows: boolean;
+  deleteColumns: boolean;
+  editObject: boolean;
+}
+
 export interface UseAllSheetsProtectionReturn {
   /** Check if a specific sheet is protected */
   isSheetProtected: (sheetId: SheetId) => boolean;
@@ -46,6 +57,33 @@ function deriveProtection(settings: SheetSettings): UseSheetProtectionReturn['pr
     isProtected: settings.isProtected,
     options: (settings.protectionOptions ?? {}) as SheetProtectionOptions,
     hasPassword: !!settings.protectionPasswordHash,
+  };
+}
+
+function derivePermissions(settings: SheetSettings): SheetProtectionPermissions {
+  if (!settings.isProtected) {
+    return {
+      formatCells: true,
+      formatRows: true,
+      formatColumns: true,
+      insertRows: true,
+      insertColumns: true,
+      deleteRows: true,
+      deleteColumns: true,
+      editObject: true,
+    };
+  }
+
+  const options = settings.protectionOptions;
+  return {
+    formatCells: options?.formatCells ?? false,
+    formatRows: options?.formatRows ?? false,
+    formatColumns: options?.formatColumns ?? false,
+    insertRows: options?.insertRows ?? false,
+    insertColumns: options?.insertColumns ?? false,
+    deleteRows: options?.deleteRows ?? false,
+    deleteColumns: options?.deleteColumns ?? false,
+    editObject: options?.editObjects ?? false,
   };
 }
 
@@ -147,4 +185,26 @@ export function useAllSheetsProtection(): UseAllSheetsProtectionReturn {
     isSheetProtected,
     protectionVersion,
   };
+}
+
+export function useSheetProtectionPermissions(sheetId: SheetId): SheetProtectionPermissions {
+  const wb = useWorkbook();
+  const [permissions, setPermissions] = useState<SheetProtectionPermissions>(() =>
+    derivePermissions(wb.mirror.getSheetSettings(sheetId)),
+  );
+
+  useEffect(() => {
+    const ws = wb.getSheetById(sheetId);
+    setPermissions(derivePermissions(wb.mirror.getSheetSettings(sheetId)));
+
+    const unsubscribe = ws.on('sheet:settings-changed', (event) => {
+      if (event.changedKey === 'isProtected' || event.changedKey === 'protectionOptions') {
+        setPermissions(derivePermissions(wb.mirror.getSheetSettings(sheetId)));
+      }
+    });
+
+    return unsubscribe;
+  }, [wb, sheetId]);
+
+  return permissions;
 }

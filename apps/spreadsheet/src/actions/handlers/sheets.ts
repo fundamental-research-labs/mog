@@ -202,15 +202,19 @@ export const OPEN_PROTECT_SHEET_DIALOG: AsyncActionHandler = async (deps) => {
 };
 
 /**
- * OPEN_PROTECT_WORKBOOK_DIALOG: Open Protect Workbook dialog.
+ * OPEN_PROTECT_WORKBOOK_DIALOG: Open Protect Workbook dialog, or unprotect
+ * when workbook structure protection is already active.
  *
  * Opens the workbook protection configuration dialog.
  * Currently structure protection only (prevents sheet add/delete/move/rename/hide/unhide).
  *
  * Protect Workbook Dialog
  */
-export const OPEN_PROTECT_WORKBOOK_DIALOG: ActionHandler = (deps) => {
-  // Open Protect Workbook dialog (uses new UIStore slice)
+export const OPEN_PROTECT_WORKBOOK_DIALOG: AsyncActionHandler = async (deps) => {
+  if (await deps.workbook.protection.isProtected()) {
+    return UNPROTECT_WORKBOOK(deps);
+  }
+
   getUIStore(deps).getState().openProtectWorkbookDialog();
 
   return handled();

@@ -2583,6 +2583,7 @@ export class WorksheetImpl implements Worksheet {
   private _formControls?: WorksheetFormControlsImpl;
   get formControls(): WorksheetFormControls {
     return (this._formControls ??= new WorksheetFormControlsImpl(
+      this.ctx,
       (
         this.workbook as unknown as {
           getFormControlManager(): import('@mog-sdk/contracts/form-controls').IFormControlManager;

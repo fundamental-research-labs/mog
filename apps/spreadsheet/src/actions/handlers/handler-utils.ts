@@ -46,3 +46,22 @@ export function notHandled(
 ): ActionResult {
   return { handled: false, reason };
 }
+
+export function showProtectionFeedback(
+  deps: ActionDependencies,
+  message = 'This action is disabled because the sheet is protected.',
+): void {
+  const state = getUIStore(deps).getState();
+  state.setSelectionError?.('protection', message);
+  state.showProtectionAlert?.(message);
+}
+
+export function isProtectionRejection(error: unknown): boolean {
+  if (!error) return false;
+  const maybe = error as { code?: string; message?: string };
+  return (
+    maybe.code === 'OPERATION_FAILED' &&
+    typeof maybe.message === 'string' &&
+    maybe.message.toLowerCase().includes('protected')
+  );
+}

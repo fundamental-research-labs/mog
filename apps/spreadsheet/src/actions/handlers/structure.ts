@@ -24,12 +24,12 @@
  *
  */
 
-import type { ActionDependencies, AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type { ActionDependencies, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
-import { handled } from './handler-utils';
+import { handled, isProtectionRejection, notHandled, showProtectionFeedback } from './handler-utils';
 import {
   deleteSelectedColumns,
   deleteSelectedRows,
@@ -79,6 +79,22 @@ function getRangesOrActiveCell(
   activeCell: { row: number; col: number },
 ): CellRange[] {
   return ranges.length > 0 ? ranges : [activeCellRange(activeCell)];
+}
+
+async function withProtectionFeedback(
+  deps: ActionDependencies,
+  operation: () => Promise<void>,
+): Promise<ActionResult> {
+  try {
+    await operation();
+    return handled();
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -152,13 +168,12 @@ export const INSERT_ROW_BELOW: AsyncActionHandler = async (deps) => {
 
   const insertAt = rows[rows.length - 1] + 1;
 
-  // Apply to ALL selected sheets
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.structure.insertRows(insertAt, 1);
-  }
-
-  return handled();
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.structure.insertRows(insertAt, 1);
+    }
+  });
 };
 
 // =============================================================================
@@ -190,13 +205,12 @@ export const INSERT_COLUMN_RIGHT: AsyncActionHandler = async (deps) => {
 
   const insertAt = cols[cols.length - 1] + 1;
 
-  // Apply to ALL selected sheets
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.structure.insertColumns(insertAt, 1);
-  }
-
-  return handled();
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.structure.insertColumns(insertAt, 1);
+    }
+  });
 };
 
 // =============================================================================
@@ -239,13 +253,14 @@ export const HIDE_ROW: AsyncActionHandler = async (deps) => {
 
   const rows = getSelectedRowsOrActive(ranges, activeCell);
   if (rows.length > 0) {
-    // Apply to ALL selected sheets
-    for (const sheetId of targetSheetIds) {
-      const ws = deps.workbook.getSheetById(sheetId);
-      for (const row of rows) {
-        await ws.layout.setRowVisible(row, false);
+    return withProtectionFeedback(deps, async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = deps.workbook.getSheetById(sheetId);
+        for (const row of rows) {
+          await ws.layout.setRowVisible(row, false);
+        }
       }
-    }
+    });
   }
 
   return handled();
@@ -263,13 +278,14 @@ export const UNHIDE_ROW: AsyncActionHandler = async (deps) => {
 
   const rows = getSelectedRowsOrActive(ranges, activeCell);
   if (rows.length > 0) {
-    // Apply to ALL selected sheets
-    for (const sheetId of targetSheetIds) {
-      const ws = deps.workbook.getSheetById(sheetId);
-      for (const row of rows) {
-        await ws.layout.setRowVisible(row, true);
+    return withProtectionFeedback(deps, async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = deps.workbook.getSheetById(sheetId);
+        for (const row of rows) {
+          await ws.layout.setRowVisible(row, true);
+        }
       }
-    }
+    });
   }
 
   return handled();
@@ -291,13 +307,14 @@ export const HIDE_COLUMN: AsyncActionHandler = async (deps) => {
 
   const cols = getSelectedColsOrActive(ranges, activeCell);
   if (cols.length > 0) {
-    // Apply to ALL selected sheets
-    for (const sheetId of targetSheetIds) {
-      const ws = deps.workbook.getSheetById(sheetId);
-      for (const col of cols) {
-        await ws.layout.setColumnVisible(col, false);
+    return withProtectionFeedback(deps, async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = deps.workbook.getSheetById(sheetId);
+        for (const col of cols) {
+          await ws.layout.setColumnVisible(col, false);
+        }
       }
-    }
+    });
   }
 
   return handled();
@@ -315,13 +332,14 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
 
   const cols = getSelectedColsOrActive(ranges, activeCell);
   if (cols.length > 0) {
-    // Apply to ALL selected sheets
-    for (const sheetId of targetSheetIds) {
-      const ws = deps.workbook.getSheetById(sheetId);
-      for (const col of cols) {
-        await ws.layout.setColumnVisible(col, true);
+    return withProtectionFeedback(deps, async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = deps.workbook.getSheetById(sheetId);
+        for (const col of cols) {
+          await ws.layout.setColumnVisible(col, true);
+        }
       }
-    }
+    });
   }
 
   return handled();
@@ -351,14 +369,15 @@ export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
   ]);
   const textMeasurement = getTextMeasurementService();
   const ws = deps.workbook.getSheetById(sheetId);
-  await autoFitRows(
-    sheetId,
-    rows,
-    textMeasurement,
-    (entries) => ws.formatValues(entries),
-    deps.workbook,
+  return withProtectionFeedback(deps, () =>
+    autoFitRows(
+      sheetId,
+      rows,
+      textMeasurement,
+      (entries) => ws.formatValues(entries),
+      deps.workbook,
+    ),
   );
-  return handled();
 };
 
 /**
@@ -376,14 +395,15 @@ export const AUTO_FIT_COLUMN_WIDTH: AsyncActionHandler = async (deps) => {
   ]);
   const textMeasurement = getTextMeasurementService();
   const ws = deps.workbook.getSheetById(sheetId);
-  await autoFitColumns(
-    sheetId,
-    cols,
-    textMeasurement,
-    (entries) => ws.formatValues(entries),
-    deps.workbook,
+  return withProtectionFeedback(deps, () =>
+    autoFitColumns(
+      sheetId,
+      cols,
+      textMeasurement,
+      (entries) => ws.formatValues(entries),
+      deps.workbook,
+    ),
   );
-  return handled();
 };
 
 // =============================================================================
@@ -410,10 +430,11 @@ export const APPLY_ROW_HEIGHT: AsyncActionHandler = async (deps, payload) => {
   const rows = applyToAll ? getSelectedRowsOrActive(ranges, activeCell) : [activeCell.row];
 
   const ws = deps.workbook.getSheetById(sheetId);
-  for (const row of rows) {
-    await ws.layout.setRowHeight(row, height);
-  }
-  return handled();
+  return withProtectionFeedback(deps, async () => {
+    for (const row of rows) {
+      await ws.layout.setRowHeight(row, height);
+    }
+  });
 };
 
 /**
@@ -434,8 +455,9 @@ export const APPLY_COLUMN_WIDTH: AsyncActionHandler = async (deps, payload) => {
   const cols = applyToAll ? getSelectedColsOrActive(ranges, activeCell) : [activeCell.col];
 
   const ws = deps.workbook.getSheetById(sheetId);
-  await ws.layout.setColumnWidths(cols.map((col) => [col, width]));
-  return handled();
+  return withProtectionFeedback(deps, () =>
+    ws.layout.setColumnWidths(cols.map((col) => [col, width])),
+  );
 };
 
 // =============================================================================
@@ -566,14 +588,15 @@ export const INSERT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
   if (range.isFullRow) return INSERT_ROW_ABOVE(deps);
   if (range.isFullColumn) return INSERT_COLUMN_LEFT(deps);
   const ws = deps.workbook.activeSheet;
-  await ws.structure.insertCellsWithShift(
-    range.startRow,
-    range.startCol,
-    range.endRow,
-    range.endCol,
-    'down',
+  return withProtectionFeedback(deps, () =>
+    ws.structure.insertCellsWithShift(
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+      'down',
+    ),
   );
-  return handled();
 };
 
 /**
@@ -603,15 +626,15 @@ export const INSERT_CELLS: AsyncActionHandler = async (deps, payload) => {
   }
 
   const ws = deps.workbook.activeSheet;
-  await ws.structure.insertCellsWithShift(
-    range.startRow,
-    range.startCol,
-    range.endRow,
-    range.endCol,
-    direction,
+  return withProtectionFeedback(deps, () =>
+    ws.structure.insertCellsWithShift(
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+      direction,
+    ),
   );
-
-  return handled();
 };
 
 /**
@@ -641,13 +664,13 @@ export const DELETE_CELLS: AsyncActionHandler = async (deps, payload) => {
   }
 
   const ws = deps.workbook.activeSheet;
-  await ws.structure.deleteCellsWithShift(
-    range.startRow,
-    range.startCol,
-    range.endRow,
-    range.endCol,
-    direction,
+  return withProtectionFeedback(deps, () =>
+    ws.structure.deleteCellsWithShift(
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+      direction,
+    ),
   );
-
-  return handled();
 };

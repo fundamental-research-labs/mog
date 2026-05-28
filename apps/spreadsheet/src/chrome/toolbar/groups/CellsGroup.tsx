@@ -17,11 +17,19 @@
  */
 
 import React, { useCallback, useEffect } from 'react';
-import { dispatch, useActionDependencies, useFeatureGate, useUIStore } from '../../../internal-api';
+import {
+  dispatch,
+  useActionDependencies,
+  useActiveSheetId,
+  useFeatureGate,
+  useUIStore,
+} from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
 import { CELLS_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
+import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
+import { useWorkbookStructureProtection } from '../../../hooks/structure/use-workbook-protection';
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import {
@@ -70,6 +78,9 @@ export const CellsGroup = React.memo(function CellsGroup() {
 
   const deps = useActionDependencies();
   const dispatchAction = useDispatch();
+  const activeSheetId = useActiveSheetId();
+  const sheetPermissions = useSheetProtectionPermissions(activeSheetId);
+  const workbookStructureLocked = useWorkbookStructureProtection();
 
   // ===========================================================================
   // Local State (dropdown visibility)
@@ -151,7 +162,10 @@ export const CellsGroup = React.memo(function CellsGroup() {
                 {/* Main click area: insert cells immediately (shift down) */}
                 <button
                   type="button"
-                  className="flex items-center gap-1 px-1.5 h-[var(--ribbon-button-height-third)] rounded-l cursor-pointer select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active"
+                  disabled={!sheetPermissions.insertRows}
+                  className={`flex items-center gap-1 px-1.5 h-[var(--ribbon-button-height-third)] rounded-l select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none ${
+                    sheetPermissions.insertRows ? 'cursor-pointer' : 'cursor-not-allowed'
+                  }`}
                   aria-label="Insert"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -195,6 +209,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="insert-rows"
             icon={<InsertRowIcon />}
             onClick={() => dispatchAction('INSERT_ROW_ABOVE')}
+            disabled={!sheetPermissions.insertRows}
           >
             Insert Sheet Rows
           </RibbonDropdownItem>
@@ -202,6 +217,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="insert-columns"
             icon={<InsertColumnIcon />}
             onClick={() => dispatchAction('INSERT_COLUMN_LEFT')}
+            disabled={!sheetPermissions.insertColumns}
           >
             Insert Sheet Columns
           </RibbonDropdownItem>
@@ -210,6 +226,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="insert-sheet"
             icon={<InsertSheetIcon />}
             onClick={() => dispatchAction('INSERT_SHEET')}
+            disabled={workbookStructureLocked}
           >
             Insert Sheet
           </RibbonDropdownItem>
@@ -248,6 +265,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="delete-rows"
             icon={<DeleteRowIcon />}
             onClick={() => dispatchAction('DELETE_ROWS')}
+            disabled={!sheetPermissions.deleteRows}
           >
             Delete Sheet Rows
           </RibbonDropdownItem>
@@ -255,6 +273,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="delete-columns"
             icon={<DeleteColumnIcon />}
             onClick={() => dispatchAction('DELETE_COLUMNS')}
+            disabled={!sheetPermissions.deleteColumns}
           >
             Delete Sheet Columns
           </RibbonDropdownItem>
@@ -263,6 +282,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="delete-sheet"
             icon={<DeleteSheetIcon />}
             onClick={() => dispatchAction('DELETE_SHEET')}
+            disabled={workbookStructureLocked}
           >
             Delete Sheet
           </RibbonDropdownItem>
@@ -296,6 +316,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="row-height"
             icon={<RowHeightIcon />}
             onClick={() => dispatchAction('OPEN_ROW_HEIGHT_DIALOG')}
+            disabled={!sheetPermissions.formatRows}
           >
             Row Height...
           </RibbonDropdownItem>
@@ -303,6 +324,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="autofit-row-height"
             icon={<RowHeightIcon />}
             onClick={() => dispatchAction('AUTO_FIT_ROW_HEIGHT')}
+            disabled={!sheetPermissions.formatRows}
           >
             AutoFit Row Height
           </RibbonDropdownItem>
@@ -314,6 +336,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="column-width"
             icon={<ColumnWidthIcon />}
             onClick={() => dispatchAction('OPEN_COLUMN_WIDTH_DIALOG')}
+            disabled={!sheetPermissions.formatColumns}
           >
             Column Width...
           </RibbonDropdownItem>
@@ -321,6 +344,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="autofit-column-width"
             icon={<ColumnWidthIcon />}
             onClick={() => dispatchAction('AUTO_FIT_COLUMN_WIDTH')}
+            disabled={!sheetPermissions.formatColumns}
           >
             AutoFit Column Width
           </RibbonDropdownItem>
@@ -332,6 +356,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="hide-rows"
             icon={<HideRowIcon />}
             onClick={() => dispatchAction('HIDE_ROW')}
+            disabled={!sheetPermissions.formatRows}
           >
             Hide Rows
           </RibbonDropdownItem>
@@ -339,6 +364,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="unhide-rows"
             icon={<HideRowIcon />}
             onClick={() => dispatchAction('UNHIDE_ROW')}
+            disabled={!sheetPermissions.formatRows}
           >
             Unhide Rows
           </RibbonDropdownItem>
@@ -346,6 +372,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="hide-columns"
             icon={<HideColumnIcon />}
             onClick={() => dispatchAction('HIDE_COLUMN')}
+            disabled={!sheetPermissions.formatColumns}
           >
             Hide Columns
           </RibbonDropdownItem>
@@ -353,6 +380,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
             dataValue="unhide-columns"
             icon={<HideColumnIcon />}
             onClick={() => dispatchAction('UNHIDE_COLUMN')}
+            disabled={!sheetPermissions.formatColumns}
           >
             Unhide Columns
           </RibbonDropdownItem>

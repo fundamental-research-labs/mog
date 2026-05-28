@@ -34,7 +34,13 @@ import type {
 import type { MutationReceipt } from '@mog-sdk/contracts/api';
 import type { ObjectFill, ShapeOutline, ShapeText } from '@mog-sdk/contracts/floating-objects';
 
-import { getUIStore, handled, notHandled } from './handler-utils';
+import {
+  getUIStore,
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 
 import type { ISheetViewGeometry, ISheetViewViewport } from '@mog-sdk/sheet-view';
 import type { SheetId } from '@mog-sdk/contracts/core';
@@ -810,6 +816,10 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
   const { anchorRow, anchorCol } = getSmartObjectPosition(deps, sheetId, SHAPE_POSITION_PRESET);
 
   try {
+    if (!(await ws.protection.canDoStructureOp('editObject'))) {
+      showProtectionFeedback(deps);
+      return notHandled('disabled');
+    }
     deps.workbook.setPendingUndoDescription('Insert checkbox');
     await ws.formControls.addCheckbox({
       anchor: { row: anchorRow, col: anchorCol },
@@ -820,6 +830,10 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
     });
     return handled();
   } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
     return { handled: false, error: (err as Error).message };
   }
 };
@@ -836,6 +850,10 @@ export const INSERT_FORM_CONTROL_COMBOBOX: AsyncActionHandler = async (
   const { anchorRow, anchorCol } = getSmartObjectPosition(deps, sheetId, SHAPE_POSITION_PRESET);
 
   try {
+    if (!(await ws.protection.canDoStructureOp('editObject'))) {
+      showProtectionFeedback(deps);
+      return notHandled('disabled');
+    }
     deps.workbook.setPendingUndoDescription('Insert combo box');
     await ws.formControls.addComboBox({
       anchor: { row: anchorRow, col: anchorCol },
@@ -847,6 +865,10 @@ export const INSERT_FORM_CONTROL_COMBOBOX: AsyncActionHandler = async (
     });
     return handled();
   } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('disabled');
+    }
     return { handled: false, error: (err as Error).message };
   }
 };

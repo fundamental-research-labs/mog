@@ -11,6 +11,7 @@ import { KernelError } from '../../errors';
 import { invalidCellAddress, operationFailed } from '../../errors/api';
 
 import type { DocumentContext } from '../../context';
+import { assertFormatOperationsAllowed } from './protection-guards';
 
 export class WorksheetLayoutImpl implements WorksheetLayout {
   constructor(
@@ -42,6 +43,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw operationFailed('setRowHeight', 'Height must be a finite number greater than 0');
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       await this.ctx.computeBridge.setRowHeight(this.sheetId, row, height);
     } catch (e) {
       throw operationFailed('setRowHeight', String(e));
@@ -68,6 +70,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw operationFailed('setColumnWidth', 'Width must be a finite number greater than 0');
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.setColWidth(this.sheetId, col, widthPx);
     } catch (e) {
       throw operationFailed('setColumnWidth', String(e));
@@ -97,6 +100,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw operationFailed('setColumnWidthChars', 'Width must be a finite number greater than 0');
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.setColWidthChars(this.sheetId, col, widthChars);
     } catch (e) {
       throw operationFailed('setColumnWidthChars', String(e));
@@ -114,6 +118,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       }
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.setColWidths(this.sheetId, widths);
     } catch (e) {
       throw operationFailed('setColumnWidths', String(e));
@@ -134,6 +139,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       }
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.setColWidthsChars(this.sheetId, widths);
     } catch (e) {
       throw operationFailed('setColumnWidthsChars', String(e));
@@ -145,6 +151,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(0, col);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.autoFitColumnAndSet(this.sheetId, col);
     } catch (e) {
       throw operationFailed('autoFitColumn', String(e));
@@ -154,6 +161,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
   async autoFitColumns(cols: number[]): Promise<void> {
     if (cols.length === 0) return;
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       await this.ctx.computeBridge.autoFitColumnsAndSet(this.sheetId, cols);
     } catch (e) {
       throw operationFailed('autoFitColumns', String(e));
@@ -165,6 +173,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(row, 0);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       await this.ctx.computeBridge.autoFitRowsAndSet(this.sheetId, [row]);
     } catch (e) {
       throw operationFailed('autoFitRow', String(e));
@@ -174,6 +183,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
   async autoFitRows(rows: number[]): Promise<void> {
     if (rows.length === 0) return;
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       await this.ctx.computeBridge.autoFitRowsAndSet(this.sheetId, rows);
     } catch (e) {
       throw operationFailed('autoFitRows', String(e));
@@ -221,6 +231,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(row, 0);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       if (visible) {
         await this.ctx.computeBridge.unhideRows(this.sheetId, [row]);
       } else {
@@ -236,6 +247,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(0, col);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       if (visible) {
         await this.ctx.computeBridge.unhideColumns(this.sheetId, [col]);
       } else {
@@ -277,6 +289,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw operationFailed('unhideRows', 'Invalid row range');
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       const rows = Array.from({ length: endRow - startRow + 1 }, (_, i) => startRow + i);
       await this.ctx.computeBridge.unhideRows(this.sheetId, rows);
     } catch (e) {
@@ -289,6 +302,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw operationFailed('unhideColumns', 'Invalid column range');
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       const cols = Array.from({ length: endCol - startCol + 1 }, (_, i) => startCol + i);
       await this.ctx.computeBridge.unhideColumns(this.sheetId, cols);
     } catch (e) {
@@ -298,11 +312,13 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
 
   async hideRows(rows: number[]): Promise<void> {
     if (rows.length === 0) return;
+    await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
     await this.ctx.computeBridge.hideRows(this.sheetId, rows);
   }
 
   async hideColumns(cols: number[]): Promise<void> {
     if (cols.length === 0) return;
+    await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
     await this.ctx.computeBridge.hideColumns(this.sheetId, cols);
   }
 
@@ -329,6 +345,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(row, 0);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
       const defaultHeight = await this.ctx.computeBridge.getDefaultRowHeight(this.sheetId);
       await this.ctx.computeBridge.setRowHeight(this.sheetId, row, defaultHeight);
     } catch (e) {
@@ -341,6 +358,7 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
       throw invalidCellAddress(0, col);
     }
     try {
+      await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       const defaultWidth = await this.ctx.computeBridge.getDefaultColWidthChars(this.sheetId);
       await this.ctx.computeBridge.setColWidthChars(this.sheetId, col, defaultWidth);
     } catch (e) {

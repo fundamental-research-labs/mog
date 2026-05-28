@@ -89,6 +89,7 @@ fn parse_bar3d_config(xml: &[u8]) -> Bar3DChartConfig {
             cfg.shape = Some(BarShape::from_ooxml(&val));
         }
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -177,6 +178,7 @@ fn parse_line3d_config(xml: &[u8]) -> Line3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"gapDepth", 0) {
         cfg.gap_depth = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -186,6 +188,7 @@ fn parse_pie3d_config(xml: &[u8]) -> ooxml_types::charts::Pie3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -198,6 +201,7 @@ fn parse_pie_config(xml: &[u8]) -> ooxml_types::charts::PieChartConfig {
     if let Some(start) = find_tag_simd(xml, b"firstSliceAng", 0) {
         cfg.first_slice_ang = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -213,6 +217,7 @@ fn parse_doughnut_config(xml: &[u8]) -> DoughnutChartConfig {
     if let Some(start) = find_tag_simd(xml, b"holeSize", 0) {
         cfg.hole_size = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -230,6 +235,7 @@ fn parse_area_config(xml: &[u8]) -> AreaChartConfig {
     if find_tag_simd(xml, b"dropLines", 0).is_some() {
         cfg.drop_lines = Some(ChartLines::default());
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -250,6 +256,7 @@ fn parse_area3d_config(xml: &[u8]) -> Area3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"gapDepth", 0) {
         cfg.gap_depth = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -264,6 +271,7 @@ fn parse_scatter_config(xml: &[u8]) -> ScatterChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -287,6 +295,7 @@ fn parse_bubble_config(xml: &[u8]) -> BubbleChartConfig {
             cfg.size_represents = Some(SizeRepresents::from_ooxml(&val));
         }
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -301,6 +310,7 @@ fn parse_radar_config(xml: &[u8]) -> RadarChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -328,6 +338,7 @@ fn parse_surface_config(xml: &[u8]) -> SurfaceChartConfig {
         cfg.band_fmts.push(band);
         pos = bf_end;
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -343,6 +354,7 @@ fn parse_stock_config(xml: &[u8]) -> StockChartConfig {
     if find_tag_simd(xml, b"upDownBars", 0).is_some() {
         cfg.up_down_bars = Some(parse_up_down_bars(xml));
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 
@@ -390,6 +402,7 @@ fn parse_ofpie_config(xml: &[u8]) -> OfPieChartConfig {
     if find_tag_simd(xml, b"serLines", 0).is_some() {
         cfg.ser_lines.push(ChartLines::default());
     }
+    cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
 

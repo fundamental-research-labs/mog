@@ -4,6 +4,7 @@ use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 
 use super::super::*;
 use super::attrs;
+use super::ext::{find_top_level_ext_lst, parse_chart_ext_lst_at};
 use super::layout;
 
 /// Parse plot area axes, preserving original XML element order.
@@ -87,6 +88,10 @@ pub(super) fn parse_plot_area_axes(xml: &[u8]) -> PlotArea {
     if let Some(dt_start) = find_tag_simd(xml, b"dTable", 0) {
         let dt_end = find_closing_tag(xml, b"dTable", dt_start).unwrap_or(xml.len());
         plot_area.data_table = Some(parse_data_table(&xml[dt_start..dt_end]));
+    }
+
+    if let Some(ext_start) = find_top_level_ext_lst(xml) {
+        plot_area.extensions = parse_chart_ext_lst_at(xml, ext_start);
     }
 
     plot_area

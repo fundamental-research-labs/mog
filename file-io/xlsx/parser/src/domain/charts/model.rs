@@ -137,6 +137,8 @@ pub struct PlotArea {
     pub data_table: Option<DataTableConfig>,
     /// Plot area shape properties (background/border)
     pub sp_pr: Option<ShapeProperties>,
+    /// Plot-area-level extLst entries.
+    pub extensions: Vec<ooxml_types::charts::ExtensionEntry>,
 }
 
 /// Display options for chart.

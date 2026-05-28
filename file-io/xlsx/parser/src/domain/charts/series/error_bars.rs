@@ -5,7 +5,8 @@ use crate::infra::scanner::{
 use super::data_sources::parse_num_ref;
 use super::xml_values::parse_bool_val;
 use super::{
-    ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType, NumDataSource, parse_chart_ext_lst,
+    ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType, NumDataSource,
+    find_top_level_ext_lst, parse_chart_ext_lst_at,
 };
 use crate::domain::charts::parse_shape_properties;
 
@@ -94,8 +95,10 @@ pub fn parse_error_bars(xml: &[u8]) -> ErrorBars {
         err_bars.sp_pr = Some(parse_shape_properties(&xml[sp_start..sp_end]));
     }
 
-    // Parse extLst
-    err_bars.extensions = parse_chart_ext_lst(xml);
+    // Parse direct-child extLst
+    if let Some(ext_start) = find_top_level_ext_lst(xml) {
+        err_bars.extensions = parse_chart_ext_lst_at(xml, ext_start);
+    }
 
     err_bars
 }

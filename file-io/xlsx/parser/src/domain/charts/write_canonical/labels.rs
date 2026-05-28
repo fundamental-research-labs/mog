@@ -325,6 +325,9 @@ fn emit_trendline_label(w: &mut XmlWriter, lbl: &TrendlineLabel) {
     if let Some(ref tb) = lbl.tx_pr {
         emit_text_body(w, tb, "c:txPr");
     }
+    if !lbl.extensions.is_empty() {
+        emit_extensions(w, &lbl.extensions);
+    }
 
     w.end_element("c:trendlineLbl");
 }
@@ -364,6 +367,9 @@ pub(super) fn emit_error_bars(w: &mut XmlWriter, eb: &ErrorBars) {
     }
     if let Some(ref sp) = eb.sp_pr {
         emit_shape_properties(w, sp, "c:spPr");
+    }
+    if !eb.extensions.is_empty() {
+        emit_extensions(w, &eb.extensions);
     }
 
     w.end_element("c:errBars");

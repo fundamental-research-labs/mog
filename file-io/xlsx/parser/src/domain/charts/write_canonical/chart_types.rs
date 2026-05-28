@@ -43,6 +43,9 @@ pub(super) fn emit_plot_area(w: &mut XmlWriter, pa: &ooxml_types::charts::PlotAr
     if let Some(ref sp) = pa.sp_pr {
         emit_shape_properties(w, sp, "c:spPr");
     }
+    if !pa.extensions.is_empty() {
+        emit_extensions(w, &pa.extensions);
+    }
 
     w.end_element("c:plotArea");
 }
@@ -228,6 +231,7 @@ fn emit_bar3d_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:bar3DChart");
 }
@@ -330,6 +334,7 @@ fn emit_line3d_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:line3DChart");
 }
@@ -363,6 +368,7 @@ fn emit_pie_chart(
             .attr("val", &v.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:pieChart");
 }
@@ -390,6 +396,7 @@ fn emit_pie3d_chart(
     if let Some(dl) = effective_d_lbls {
         emit_data_labels(w, dl);
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:pie3DChart");
 }
@@ -428,6 +435,7 @@ fn emit_doughnut_chart(
             .attr("val", &v.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:doughnutChart");
 }
@@ -470,6 +478,7 @@ fn emit_area_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:areaChart");
 }
@@ -517,6 +526,7 @@ fn emit_area3d_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:area3DChart");
 }
@@ -554,6 +564,7 @@ fn emit_scatter_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:scatterChart");
 }
@@ -608,6 +619,7 @@ fn emit_bubble_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:bubbleChart");
 }
@@ -645,6 +657,7 @@ fn emit_radar_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:radarChart");
 }
@@ -682,6 +695,7 @@ fn emit_surface_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element(tag);
 }
@@ -719,6 +733,7 @@ fn emit_stock_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:stockChart");
 }
@@ -788,6 +803,7 @@ fn emit_of_pie_chart(
             .attr("val", &id.to_string())
             .self_close();
     }
+    emit_chart_type_extensions(w, &cfg.extensions);
 
     w.end_element("c:ofPieChart");
 }

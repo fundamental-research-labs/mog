@@ -1,14 +1,13 @@
 use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
-use crate::infra::xml::decode_xml_entities;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32, parse_val_f64};
 use super::{
-    LayoutMode, LayoutTarget, ManualLayout, Trendline, TrendlineLabel, TrendlineType,
-    parse_chart_ext_lst,
+    Trendline, TrendlineLabel, TrendlineType, find_top_level_ext_lst, parse_chart_ext_lst_at,
 };
-use crate::domain::charts::{parse_shape_properties, parse_text_body};
+use crate::domain::charts::{parse_shape_properties, parse_str_ref, parse_text_body};
+use ooxml_types::charts::ChartText;
 use ooxml_types::charts::NumFmt;
 
 pub fn parse_trendline(xml: &[u8]) -> Trendline {
@@ -101,8 +100,10 @@ pub fn parse_trendline(xml: &[u8]) -> Trendline {
         trendline.trendline_lbl = Some(parse_trendline_label_element(lbl_xml));
     }
 
-    // Parse extLst
-    trendline.extensions = parse_chart_ext_lst(xml);
+    // Parse direct-child extLst
+    if let Some(ext_start) = find_top_level_ext_lst(xml) {
+        trendline.extensions = parse_chart_ext_lst_at(xml, ext_start);
+    }
 
     trendline
 }
@@ -113,51 +114,9 @@ fn parse_trendline_label_element(xml: &[u8]) -> TrendlineLabel {
     // Parse layout > manualLayout
     if let Some(layout_start) = find_tag_simd(xml, b"layout", 0) {
         let layout_end = find_closing_tag(xml, b"layout", layout_start).unwrap_or(xml.len());
-        let layout_xml = &xml[layout_start..layout_end];
-
-        if let Some(ml_start) = find_tag_simd(layout_xml, b"manualLayout", 0) {
-            let ml_end =
-                find_closing_tag(layout_xml, b"manualLayout", ml_start).unwrap_or(layout_xml.len());
-            let ml = &layout_xml[ml_start..ml_end];
-            let mut manual = ManualLayout::default();
-
-            if let Some(start) = find_tag_simd(ml, b"layoutTarget", 0) {
-                if let Some(attr_pos) = find_attr_simd(&ml[start..], b"val=\"", 0) {
-                    let value_start = start + attr_pos + 5;
-                    if let Some((s, e)) = extract_quoted_value(ml, value_start) {
-                        let val = String::from_utf8_lossy(&ml[s..e]);
-                        manual.layout_target = Some(LayoutTarget::from_ooxml(&val));
-                    }
-                }
-            }
-            if let Some(start) = find_tag_simd(ml, b"xMode", 0) {
-                if let Some(attr_pos) = find_attr_simd(&ml[start..], b"val=\"", 0) {
-                    let value_start = start + attr_pos + 5;
-                    if let Some((s, e)) = extract_quoted_value(ml, value_start) {
-                        let val = String::from_utf8_lossy(&ml[s..e]);
-                        manual.x_mode = Some(LayoutMode::from_ooxml(&val));
-                    }
-                }
-            }
-            if let Some(start) = find_tag_simd(ml, b"yMode", 0) {
-                if let Some(attr_pos) = find_attr_simd(&ml[start..], b"val=\"", 0) {
-                    let value_start = start + attr_pos + 5;
-                    if let Some((s, e)) = extract_quoted_value(ml, value_start) {
-                        let val = String::from_utf8_lossy(&ml[s..e]);
-                        manual.y_mode = Some(LayoutMode::from_ooxml(&val));
-                    }
-                }
-            }
-            // Parse x, y positions
-            if let Some(start) = find_tag_simd(ml, b"x", 0) {
-                manual.x = Some(parse_val_f64(&ml[start..]));
-            }
-            if let Some(start) = find_tag_simd(ml, b"y", 0) {
-                manual.y = Some(parse_val_f64(&ml[start..]));
-            }
-
-            label.layout = Some(manual);
-        }
+        label.layout = Some(crate::domain::charts::Chart::parse_layout(
+            &xml[layout_start..layout_end],
+        ));
     }
 
     // Parse numFmt
@@ -179,38 +138,21 @@ fn parse_trendline_label_element(xml: &[u8]) -> TrendlineLabel {
         label.num_fmt = Some(num_fmt);
     }
 
-    // Parse text (tx > rich > a:p > a:r > a:t)
-    if let Some(tx_start) = find_tag_simd(xml, b"<c:tx", 0) {
-        let tx_end = find_closing_tag(xml, b"c:tx", tx_start).unwrap_or(xml.len());
+    // Parse text (tx > rich or strRef)
+    if let Some(tx_start) = find_tag_simd(xml, b"tx", 0) {
+        let tx_end = find_closing_tag(xml, b"tx", tx_start).unwrap_or(xml.len());
         let tx_xml = &xml[tx_start..tx_end];
-        // Extract text from rich text runs
-        let mut text_parts = Vec::new();
-        let mut pos = 0;
-        while let Some(t_start) = find_tag_simd(tx_xml, b"a:t", pos) {
-            let t_content_start = find_gt_simd(tx_xml, t_start).map(|p| p + 1);
-            let t_end = find_closing_tag(tx_xml, b"a:t", t_start);
-            if let (Some(start), Some(end)) = (t_content_start, t_end) {
-                if start < end {
-                    text_parts.push(String::from_utf8_lossy(&tx_xml[start..end]).to_string());
-                }
-            }
-            pos = t_end.unwrap_or(tx_xml.len());
-        }
-        if !text_parts.is_empty() {
-            let combined_text = text_parts.join("");
-            let text_body = ooxml_types::drawings::TextBody {
-                paragraphs: vec![ooxml_types::drawings::Paragraph {
-                    runs: vec![ooxml_types::drawings::TextRunContent::Run(
-                        ooxml_types::drawings::TextRun {
-                            text: combined_text,
-                            ..Default::default()
-                        },
-                    )],
-                    ..Default::default()
-                }],
-                ..Default::default()
-            };
-            label.tx = Some(ooxml_types::charts::ChartText::Rich(text_body));
+        if let Some(rich_start) = find_tag_simd(tx_xml, b"rich", 0) {
+            let rich_end = find_closing_tag(tx_xml, b"rich", rich_start).unwrap_or(tx_xml.len());
+            label.tx = Some(ChartText::Rich(parse_text_body(
+                &tx_xml[rich_start..rich_end],
+            )));
+        } else if let Some(strref_start) = find_tag_simd(tx_xml, b"strRef", 0) {
+            let strref_end =
+                find_closing_tag(tx_xml, b"strRef", strref_start).unwrap_or(tx_xml.len());
+            label.tx = Some(ChartText::StrRef(parse_str_ref(
+                &tx_xml[strref_start..strref_end],
+            )));
         }
     }
 
@@ -224,6 +166,10 @@ fn parse_trendline_label_element(xml: &[u8]) -> TrendlineLabel {
     if let Some(tp_start) = find_tag_simd(xml, b"txPr", 0) {
         let tp_end = find_closing_tag(xml, b"txPr", tp_start).unwrap_or(xml.len());
         label.tx_pr = Some(parse_text_body(&xml[tp_start..tp_end]));
+    }
+
+    if let Some(ext_start) = find_top_level_ext_lst(xml) {
+        label.extensions = parse_chart_ext_lst_at(xml, ext_start);
     }
 
     label

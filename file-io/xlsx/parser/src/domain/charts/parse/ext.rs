@@ -195,11 +195,16 @@ pub(crate) fn parse_chart_type_ext_lst(xml: &[u8]) -> Vec<ooxml_types::charts::E
         after_last_ax_id = gt;
         pos = ax_start + 1;
     }
-    if after_last_ax_id == 0 {
-        return Vec::new();
-    }
+    let search_start = if after_last_ax_id == 0 {
+        match find_top_level_ext_lst(xml) {
+            Some(p) => p,
+            None => return Vec::new(),
+        }
+    } else {
+        after_last_ax_id
+    };
 
-    let ext_lst_start = match find_tag_simd(xml, b"extLst", after_last_ax_id) {
+    let ext_lst_start = match find_tag_simd(xml, b"extLst", search_start) {
         Some(p) => p,
         None => return Vec::new(),
     };

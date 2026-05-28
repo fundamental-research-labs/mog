@@ -179,10 +179,18 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
         series.d_lbls = Some(parse_data_labels(&xml[dlbls_start..dlbls_end]));
     }
 
-    // Parse error bars → Vec<ErrorBars>
-    if let Some(err_start) = find_tag_simd(child_xml, b"errBars", 0) {
-        let err_end = find_closing_tag(xml, b"errBars", err_start).unwrap_or(child_end);
-        series.err_bars = vec![parse_error_bars(&xml[err_start..err_end])];
+    // Parse all direct child error bars. Scatter, area, and bubble series can
+    // carry separate X and Y definitions, and order is significant.
+    let mut err_pos = 0;
+    while let Some(err_start) = find_tag_simd(child_xml, b"errBars", err_pos) {
+        let err_close = find_closing_tag(xml, b"errBars", err_start).unwrap_or(child_end);
+        let err_end = crate::infra::scanner::find_gt_simd(xml, err_close)
+            .map(|gt| gt + 1)
+            .unwrap_or(err_close);
+        series
+            .err_bars
+            .push(parse_error_bars(&xml[err_start..err_end.min(child_end)]));
+        err_pos = err_end.min(child_end);
     }
 
     // Parse all trendlines (Excel supports multiple trendlines per series)

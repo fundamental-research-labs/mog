@@ -100,6 +100,7 @@ pub use crate::domain::validation::write::{
 };
 pub use crate::domain::workbook::write::{
     CalcMode, CalcSettings, DefinedNameDef, SheetDef, SheetState, WorkbookView, WorkbookWriter,
+    calc_settings_from_domain,
 };
 pub use from_parse_output::write_xlsx_from_parse_output;
 pub use relationships::{

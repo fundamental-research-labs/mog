@@ -89,7 +89,7 @@ pub use crate::domain::styles::write::{
 pub use crate::domain::tables::write::{
     AutoFilterDef, CustomFilter, DynamicFilterType, FilterColumn, FilterOperator, FilterType,
     SortBy, SortCondition, SortState, TableColumn, TableStyleInfo, TableWriter, TotalsRowFunction,
-    default_table_style_info,
+    default_table_style_info, table_writer_from_domain,
 };
 pub use crate::domain::themes::write::{
     ColorScheme, ColorSchemeExt, FontCollection, RgbHexColor, ScriptFont, ThemeColorIndex,

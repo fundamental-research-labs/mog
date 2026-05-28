@@ -49,12 +49,36 @@ fn test_style_mapping_font() {
 }
 
 #[test]
-fn test_style_mapping_preserves_palette_zero_as_default_style() {
+fn test_style_mapping_keeps_palette_zero_out_of_default_style() {
     let palette = vec![DocumentFormat {
+        number_format: Some("#,##0.00".to_string()),
         font: Some(FontFormat {
             name: Some("Aptos Narrow".to_string()),
             size: Some(12_000),
             scheme: Some("minor".to_string()),
+            ..Default::default()
+        }),
+        border: Some(BorderFormat {
+            top: Some(DomainBorderSide {
+                style: "thin".to_string(),
+                color: Some("#000000".to_string()),
+                color_tint: None,
+            }),
+            bottom: Some(DomainBorderSide {
+                style: "thin".to_string(),
+                color: Some("#000000".to_string()),
+                color_tint: None,
+            }),
+            left: Some(DomainBorderSide {
+                style: "thin".to_string(),
+                color: Some("#000000".to_string()),
+                color_tint: None,
+            }),
+            right: Some(DomainBorderSide {
+                style: "thin".to_string(),
+                color: Some("#000000".to_string()),
+                color_tint: None,
+            }),
             ..Default::default()
         }),
         ..Default::default()
@@ -62,14 +86,80 @@ fn test_style_mapping_preserves_palette_zero_as_default_style() {
 
     let writer = build_styles(&palette);
 
-    let default_font_id = writer.cell_style_xfs[0].font_id.unwrap() as usize;
+    assert_eq!(writer.cell_style_xfs[0].num_fmt_id, Some(0));
+    assert_eq!(writer.cell_style_xfs[0].font_id, Some(0));
+    assert_eq!(writer.cell_style_xfs[0].fill_id, Some(0));
+    assert_eq!(writer.cell_style_xfs[0].border_id, Some(0));
+    assert_eq!(writer.cell_xfs[0].num_fmt_id, Some(0));
+    assert_eq!(writer.cell_xfs[0].font_id, Some(0));
+    assert_eq!(writer.cell_xfs[0].fill_id, Some(0));
+    assert_eq!(writer.cell_xfs[0].border_id, Some(0));
+
+    let applied_font_id = writer.cell_xfs[1].font_id.unwrap() as usize;
     assert_eq!(
-        writer.fonts[default_font_id].name.as_deref(),
+        writer.fonts[applied_font_id].name.as_deref(),
         Some("Aptos Narrow")
     );
-    assert_eq!(writer.fonts[default_font_id].size, Some(12.0));
-    assert_eq!(writer.cell_xfs[0].font_id, Some(default_font_id as u32));
-    assert_eq!(writer.cell_xfs[1].font_id, Some(default_font_id as u32));
+    assert_eq!(writer.fonts[applied_font_id].size, Some(12.0));
+    assert_ne!(writer.cell_xfs[1].num_fmt_id, Some(0));
+    assert_ne!(writer.cell_xfs[1].border_id, Some(0));
+}
+
+#[test]
+fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
+    let output = ParseOutput {
+        style_palette: vec![DocumentFormat {
+            number_format: Some("#,##0.00".to_string()),
+            border: Some(BorderFormat {
+                top: Some(DomainBorderSide {
+                    style: "thin".to_string(),
+                    color: Some("#000000".to_string()),
+                    color_tint: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![CellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+                style_id: Some(0),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(
+        styles_xml.contains(
+            r#"<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>"#
+        ),
+        "cellStyleXfs[0] must stay default, got: {styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(
+            r#"<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>"#
+        ),
+        "cellXfs[0] must stay default, got: {styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(r#"<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>"#),
+        "palette[0] must emit as the applied style after default, got: {styles_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
+        "style_id 0 must write as s=\"1\", got: {sheet_xml}"
+    );
 }
 
 #[test]

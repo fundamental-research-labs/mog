@@ -23,10 +23,6 @@ use crate::domain::styles::write::StylesWriter;
 pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     let mut writer = StylesWriter::with_defaults();
 
-    if let Some(default_fmt) = palette.first() {
-        apply_default_style(&mut writer, default_fmt);
-    }
-
     // The default style is already at cellXfs[0] from with_defaults().
     // Now add one cellXf per palette entry.
     for doc_fmt in palette {
@@ -105,41 +101,6 @@ fn add_style_components(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> 
         num_fmt_id,
         alignment: doc_fmt.alignment.as_ref().map(convert_alignment),
         protection: doc_fmt.protection.as_ref().map(convert_protection),
-    }
-}
-
-fn apply_default_style(writer: &mut StylesWriter, default_fmt: &DocumentFormat) {
-    let components = add_style_components(writer, default_fmt);
-
-    let style_xf = CellXfDef {
-        num_fmt_id: Some(components.num_fmt_id),
-        font_id: Some(components.font_id),
-        fill_id: Some(components.fill_id),
-        border_id: Some(components.border_id),
-        xf_id: None,
-        alignment: components.alignment.clone(),
-        protection: components.protection.clone(),
-        apply_number_format: None,
-        apply_font: None,
-        apply_fill: None,
-        apply_border: None,
-        apply_alignment: None,
-        apply_protection: None,
-        pivot_button: false,
-        quote_prefix: false,
-        ext_lst: None,
-    };
-
-    let cell_xf = CellXfDef {
-        xf_id: Some(0),
-        ..style_xf.clone()
-    };
-
-    if let Some(slot) = writer.cell_style_xfs.get_mut(0) {
-        *slot = style_xf;
-    }
-    if let Some(slot) = writer.cell_xfs.get_mut(0) {
-        *slot = cell_xf;
     }
 }
 

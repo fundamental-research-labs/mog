@@ -20,8 +20,7 @@
  *   empty textbox clears the cell. Callers who want the rare "store empty
  *   text" intent must pass `{ kind: 'literal', text: '' }` explicitly.
  * - any other string / number / boolean → `{ kind: 'parse', text: String(value) }`
- * - `CellError`-shaped object  → `{ kind: 'parse', text: String(value) }` — same
- *   lossy mapping the legacy `String(val)` path used.
+ * - `CellError`-shaped object  → `{ kind: 'parse', text: error display string }`
  *
  * This replaces the legacy `\x00`-prefix sentinel that the SDK used to
  * smuggle "store empty text" through a plain `String` at the engine
@@ -31,6 +30,7 @@
 
 import type { CellInput } from '../../../bridges/compute/compute-types.gen';
 import type { CellValue, CellValuePrimitive } from './types';
+import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
 
 export type { CellInput } from '../../../bridges/compute/compute-types.gen';
 
@@ -39,8 +39,8 @@ export type { CellInput } from '../../../bridges/compute/compute-types.gen';
  *
  * Accepts the full `CellValue` union so callers that already hold a
  * read-back value (including `CellError` from a prior computation) can
- * re-use it without awkward casts. Non-primitive values are stringified
- * the same way the legacy `String(val)` path did.
+ * re-use it without awkward casts. Unknown non-primitive values are
+ * stringified the same way the legacy `String(val)` path did.
  */
 export type ToCellInputValue = CellValue | CellValuePrimitive | undefined;
 
@@ -53,7 +53,9 @@ export function toCellInput(value: ToCellInputValue): CellInput {
     return { kind: 'clear' };
   }
   if (typeof value === 'object') {
-    // CellError-shaped; stringify lossily to preserve legacy behaviour.
+    if (isCellError(value)) {
+      return { kind: 'parse', text: errorDisplayString(value.value) };
+    }
     return { kind: 'parse', text: String(value) };
   }
   const text = String(value);

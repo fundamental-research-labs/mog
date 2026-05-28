@@ -1,5 +1,6 @@
 use crate::snapshot::{AutomaticConversionCategory, AutomaticConversionPolicy};
 use compute_formats::FormatType;
+use value_types::CellError;
 
 // ---------------------------------------------------------------------------
 // ParsedValue enum
@@ -14,6 +15,8 @@ pub(crate) enum ParsedValue {
     Number(f64),
     /// Parsed as a boolean (TRUE/FALSE, case-insensitive).
     Boolean(bool),
+    /// Parsed as an Excel-compatible cell error literal.
+    Error(CellError),
     /// Not coercible — store as literal text.
     Text(String),
 }
@@ -53,13 +56,14 @@ pub(crate) struct ParsedInputValue {
 ///
 /// Parsing order (matching the TypeScript implementation):
 /// 1. Empty string -> `ParsedValue::Empty`
-/// 2. Boolean ("TRUE"/"FALSE", case-insensitive) -> `ParsedValue::Boolean`
-/// 3. Date strings (US, ISO, D-MMM-YYYY, MMM D YYYY) -> `ParsedValue::Number` (Excel serial)
-/// 4. Plain numbers (e.g., "42", "-3.14", "0.5") -> `ParsedValue::Number`
+/// 2. Excel error literal -> `ParsedValue::Error`
+/// 3. Boolean ("TRUE"/"FALSE", case-insensitive) -> `ParsedValue::Boolean`
+/// 4. Date strings (US, ISO, D-MMM-YYYY, MMM D YYYY) -> `ParsedValue::Number` (Excel serial)
+/// 5. Plain numbers (e.g., "42", "-3.14", "0.5") -> `ParsedValue::Number`
 ///    — G1 (percent hint) divides by 100 on this branch only.
-/// 5. Formatted numbers ($500, 50%, 1,234.56) -> `ParsedValue::Number`
-/// 6. Fraction (`"n/d"`) when `target == Some(Fraction)` (G3) -> `ParsedValue::Number`
-/// 7. Everything else -> `ParsedValue::Text`
+/// 6. Formatted numbers ($500, 50%, 1,234.56) -> `ParsedValue::Number`
+/// 7. Fraction (`"n/d"`) when `target == Some(Fraction)` (G3) -> `ParsedValue::Number`
+/// 8. Everything else -> `ParsedValue::Text`
 ///
 /// `target` is the cell's effective number-format category. Hint-aware
 /// branches:
@@ -93,7 +97,11 @@ pub(crate) fn parse_input_value_with_context(
         };
     }
 
-    // 2. Boolean — hint NOT consulted; G2 (text-format) is enforced upstream
+    if let Some(error) = CellError::parse_error_str(trimmed) {
+        return parsed(ParsedValue::Error(error));
+    }
+
+    // 3. Boolean — hint NOT consulted; G2 (text-format) is enforced upstream
     //    in `CellWrite::from_user_string` so a Text-formatted cell never
     //    reaches this function.
     if trimmed.eq_ignore_ascii_case("TRUE") {

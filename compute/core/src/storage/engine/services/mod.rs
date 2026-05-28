@@ -71,6 +71,7 @@ pub(crate) fn parse_rich_value_with_context(
         ParsedValue::Empty => CellValue::Null,
         ParsedValue::Number(n) => CellValue::number(n),
         ParsedValue::Boolean(b) => CellValue::Boolean(b),
+        ParsedValue::Error(e) => CellValue::Error(e, None),
         ParsedValue::Text(s) => CellValue::Text(s.into()),
     };
     (value, parsed.preserved_category)

@@ -84,6 +84,7 @@ impl CellWrite {
             ParsedValue::Empty => CellValue::Null,
             ParsedValue::Number(n) => CellValue::number(n),
             ParsedValue::Boolean(b) => CellValue::Boolean(b),
+            ParsedValue::Error(e) => CellValue::Error(e, None),
             // Preserve the original (non-trimmed) input for text — matches
             // the existing `parse_plain_value` contract for trailing whitespace
             // round-trip.

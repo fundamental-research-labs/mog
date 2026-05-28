@@ -23,6 +23,7 @@ pub(super) fn parse_plain_value(input: &str) -> CellValue {
         ParsedValue::Empty => CellValue::Null,
         ParsedValue::Number(n) => CellValue::number(n),
         ParsedValue::Boolean(b) => CellValue::Boolean(b),
+        ParsedValue::Error(e) => CellValue::Error(e, None),
         // Preserve the original (non-trimmed) input for text — the caller
         // relies on this to round-trip trailing whitespace in literal text.
         ParsedValue::Text(_) => CellValue::Text(input.to_string().into()),
@@ -41,6 +42,7 @@ pub(super) fn parse_plain_value_with_context(
         ParsedValue::Empty => CellValue::Null,
         ParsedValue::Number(n) => CellValue::number(n),
         ParsedValue::Boolean(b) => CellValue::Boolean(b),
+        ParsedValue::Error(e) => CellValue::Error(e, None),
         ParsedValue::Text(_) => CellValue::Text(input.to_string().into()),
     };
     (value, parsed.preserved_category)

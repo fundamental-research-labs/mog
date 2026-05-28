@@ -31,6 +31,10 @@ import type { WorkbookInternal, WorksheetWithInternals } from '@mog-sdk/contract
 import type { IEventBus } from '@mog-sdk/contracts/events';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import { PivotExpansionManager } from '../../pivot/pivot-expansion-manager';
+import {
+  resolveInitialActiveSheetId,
+  subscribeActiveSheetPersistence,
+} from '../document-active-sheet';
 import { ChartImageExporterImpl } from '../services/chart-image-exporter';
 
 // UIState type and createUIStore factory are injected to avoid infra/ → ui-store/ DAG violation.
@@ -316,6 +320,7 @@ export function DocumentProvider({
     let cancelled = false;
     let handle: DocumentHandle | null = null;
     let pivotExpansion: PivotExpansionManager | null = null;
+    let unsubscribeActiveSheetPersistence: (() => void) | null = null;
 
     async function initialize() {
       try {
@@ -357,6 +362,19 @@ export function DocumentProvider({
           return;
         }
 
+        const restoredActiveSheetId = await resolveInitialActiveSheetId({
+          workbook,
+          initialSheetId: handle.initialSheetId,
+        });
+        if (cancelled) {
+          handle.dispose();
+          return;
+        }
+        if (restoredActiveSheetId !== uiStore.getState().activeSheetId) {
+          uiStore.getState().setActiveSheet(restoredActiveSheetId);
+        }
+        unsubscribeActiveSheetPersistence = subscribeActiveSheetPersistence({ workbook, uiStore });
+
         setState({
           status: 'ready',
           value: {
@@ -382,6 +400,7 @@ export function DocumentProvider({
     // Cleanup on unmount or docId change
     return () => {
       cancelled = true;
+      unsubscribeActiveSheetPersistence?.();
       // Destroy app-owned expansion manager
       pivotExpansion?.destroy();
       handle?.dispose();

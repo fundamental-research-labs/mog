@@ -64,6 +64,10 @@ import {
 } from './infra/context';
 import { useCoordinator } from './hooks/shared/use-coordinator';
 import { createSpreadsheetEmbedAppBridge } from './infra/embed/create-spreadsheet-embed-app-bridge';
+import {
+  resolveInitialActiveSheetId,
+  subscribeActiveSheetPersistence,
+} from './infra/document-active-sheet';
 import { createShellUIStore, type UIStoreApi } from './ui-store';
 // Import SpreadsheetCoordinatorProvider and SpreadsheetGrid from local components
 import { SpreadsheetCoordinatorProvider } from './app/CoordinatorProvider';
@@ -119,6 +123,14 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
       );
     } catch {
       /* marks may be cleared by React strict-mode effect cleanup */
+    }
+
+    const restoredActiveSheetId = await resolveInitialActiveSheetId({
+      workbook: workbook as WorkbookInternal,
+      initialSheetId: handle.initialSheetId,
+    });
+    if (restoredActiveSheetId !== uiStore.getState().activeSheetId) {
+      uiStore.getState().setActiveSheet(restoredActiveSheetId);
     }
 
     return {
@@ -179,6 +191,17 @@ function SpreadsheetEmbedRuntimeBridge(): null {
 
     return runtime.registerAppBridge(bridge);
   }, [documentId, coordinator, runtime, uiStore, workbook]);
+
+  return null;
+}
+
+function ActiveSheetPersistenceBridge(): null {
+  const workbook = useWorkbook();
+  const uiStore = useUIStoreApi();
+
+  useEffect(() => {
+    return subscribeActiveSheetPersistence({ workbook, uiStore });
+  }, [workbook, uiStore]);
 
   return null;
 }
@@ -427,6 +450,7 @@ export default function SpreadsheetApp({
           appearanceMode={appearanceMode as SpreadsheetAppAppearanceMode | undefined}
           onAppearanceModeChange={onAppearanceModeChange}
         />
+        <ActiveSheetPersistenceBridge />
         <SpreadsheetContent key={handle.documentId} />
       </FeatureGatesProvider>
     </DocumentContext.Provider>

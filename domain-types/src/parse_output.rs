@@ -100,6 +100,11 @@ pub struct WorkbookStylesheet {
     pub named_cell_styles: Vec<ooxml_types::styles::CellStyleDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub differential_formats: Vec<ooxml_types::styles::DxfDef>,
+    /// Stable workbook-level differential format registry. References stored
+    /// as `dxf_id` in CF, filters, sorts, and tables point at these stable IDs,
+    /// not at the transient OOXML `<dxfs>` array positions written on export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dxf_registry: Vec<DxfDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub table_styles: Vec<ooxml_types::styles::TableStyleDef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -123,6 +128,13 @@ impl WorkbookStylesheet {
         root_namespace_attrs: Vec<(String, String)>,
         ext_lst_xml: Option<Vec<u8>>,
     ) -> Self {
+        let dxf_registry = stylesheet
+            .dxfs
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(id, dxf)| DxfDef::from_ooxml(id as u32, dxf))
+            .collect();
         Self {
             number_formats: stylesheet.num_fmts,
             fonts: stylesheet.fonts,
@@ -132,7 +144,8 @@ impl WorkbookStylesheet {
             cell_style_xfs: stylesheet.cell_style_xfs,
             cell_xfs: stylesheet.cell_xfs,
             named_cell_styles: stylesheet.cell_styles,
-            differential_formats: stylesheet.dxfs,
+            differential_formats: Vec::new(),
+            dxf_registry,
             indexed_colors: stylesheet.colors,
             table_styles: stylesheet.table_styles,
             default_table_style: stylesheet.default_table_style,
@@ -151,6 +164,12 @@ impl WorkbookStylesheet {
             return self.stylesheet.clone();
         }
 
+        let dxfs = if self.differential_formats.is_empty() {
+            self.dxf_registry.iter().map(DxfDef::to_ooxml).collect()
+        } else {
+            self.differential_formats.clone()
+        };
+
         ooxml_types::styles::Stylesheet {
             num_fmts: self.number_formats.clone(),
             fonts: self.fonts.clone(),
@@ -160,7 +179,7 @@ impl WorkbookStylesheet {
             cell_style_xfs: self.cell_style_xfs.clone(),
             cell_xfs: self.cell_xfs.clone(),
             cell_styles: self.named_cell_styles.clone(),
-            dxfs: self.differential_formats.clone(),
+            dxfs,
             colors: self.indexed_colors.clone(),
             table_styles: self.table_styles.clone(),
             default_table_style: self.default_table_style.clone(),
@@ -194,6 +213,7 @@ impl WorkbookStylesheet {
             && self.cell_xfs.is_empty()
             && self.named_cell_styles.is_empty()
             && self.differential_formats.is_empty()
+            && self.dxf_registry.is_empty()
             && self.table_styles.is_empty()
             && self.indexed_colors.is_none()
             && self.default_table_style.is_none()

@@ -85,6 +85,7 @@ pub const KEY_VALIDATION_RULES: &str = "validationRules";
 /// Workbook-level domain maps
 pub const KEY_STYLE_PALETTE: &str = "stylePalette";
 pub const KEY_WORKBOOK_STYLESHEET: &str = "workbookStylesheet";
+pub const KEY_DXF_REGISTRY: &str = "differentialFormatRegistry";
 pub const KEY_SHARED_STRING_HINTS: &str = "sharedStringHints";
 pub const KEY_WORKBOOK_SETTINGS: &str = "workbookSettings";
 pub const KEY_WORKBOOK_IDENTITY: &str = "workbookIdentity";

@@ -194,6 +194,8 @@ fn worksheet_legacy_vml_path(
 ///
 /// Modeled workbook state is generated from domain types.
 pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, WriteError> {
+    let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
+    let output = &remapped_output;
     // ── 1. Build styles ─────────────────────────────────────────────────
     // Build a modeled stylesheet from the current semantic style palette. Style
     // ids in cells/rows/columns are generated palette indices, not preserved
@@ -213,6 +215,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             has_style_references,
         );
     }
+    styles_writer.dxfs = registry_dxfs;
     if styles_writer.dxfs.is_empty() {
         styles_writer.dxfs = differential_formats::collect(output);
     }

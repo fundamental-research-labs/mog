@@ -238,7 +238,7 @@ pub fn full_parse_result_to_parse_output(
         )
     });
 
-    let parse_output = ParseOutput {
+    let mut parse_output = ParseOutput {
         sheets: sheet_data_vec,
         style_palette,
         workbook_stylesheet,
@@ -270,6 +270,7 @@ pub fn full_parse_result_to_parse_output(
         external_links: result.external_links.clone(),
         persons,
     };
+    populate_dxf_registry_owners(&mut parse_output);
 
     // 10. Build ParseDiagnostics
     let mut diagnostics = build_diagnostics(result);
@@ -278,6 +279,39 @@ pub fn full_parse_result_to_parse_output(
     append_object_import_diagnostics(&parse_output, &mut diagnostics);
 
     (parse_output, diagnostics)
+}
+
+fn populate_dxf_registry_owners(output: &mut ParseOutput) {
+    let Some(stylesheet) = output.workbook_stylesheet.as_mut() else { return; };
+    let mut owners_by_id = HashMap::<u32, Vec<domain_types::DxfOwner>>::new();
+    for (sheet_index, sheet) in output.sheets.iter().enumerate() {
+        let sheet_index = sheet_index as u32;
+        for cf in &sheet.conditional_formats {
+            for rule in &cf.rules {
+                if let Some((rule_id, dxf_id)) = cf_rule_dxf(rule) {
+                    owners_by_id.entry(dxf_id).or_default().push(domain_types::DxfOwner::ConditionalFormatRule { sheet_index, format_id: cf.id.clone(), rule_id: rule_id.to_string() });
+                }
+            }
+        }
+    }
+    for entry in &mut stylesheet.dxf_registry {
+        entry.owners = owners_by_id.remove(&entry.id).unwrap_or_default();
+    }
+}
+
+fn cf_rule_dxf(rule: &domain_types::CFRule) -> Option<(&str, u32)> {
+    match rule {
+        domain_types::CFRule::CellValue { id, style, .. }
+        | domain_types::CFRule::Formula { id, style, .. }
+        | domain_types::CFRule::Top10 { id, style, .. }
+        | domain_types::CFRule::AboveAverage { id, style, .. }
+        | domain_types::CFRule::DuplicateValues { id, style, .. }
+        | domain_types::CFRule::ContainsText { id, style, .. }
+        | domain_types::CFRule::ContainsBlanks { id, style, .. }
+        | domain_types::CFRule::ContainsErrors { id, style, .. }
+        | domain_types::CFRule::TimePeriod { id, style, .. } => style.dxf_id.map(|dxf_id| (id.as_str(), dxf_id)),
+        domain_types::CFRule::ColorScale { .. } | domain_types::CFRule::DataBar { .. } | domain_types::CFRule::IconSet { .. } => None,
+    }
 }
 
 fn append_object_import_diagnostics(

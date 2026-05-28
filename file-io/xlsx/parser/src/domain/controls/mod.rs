@@ -9,6 +9,7 @@ pub mod read;
 pub mod relationships;
 pub mod types;
 pub mod vml;
+mod vml_write;
 pub mod worksheet;
 pub mod write;
 pub mod write_ole;

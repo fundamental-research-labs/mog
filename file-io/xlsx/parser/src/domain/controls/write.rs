@@ -18,7 +18,7 @@
 //!
 //! ```ignore
 //! use xlsx_parser::read::controls::{FormControl, FormControlType, CheckState, ControlAnchor};
-//! use xlsx_parser::write::controls_writer::ControlsWriter;
+//! use xlsx_parser::write::ControlsWriter;
 //!
 //! let mut control = FormControl::new(FormControlType::CheckBox);
 //! control.properties.linked_cell = Some("$A$1".to_string());
@@ -28,7 +28,8 @@
 //!
 //! let writer = ControlsWriter::new(vec![control]);
 //! let ctrl_prop_xml = writer.write_ctrl_prop(0);
-//! let worksheet_controls_xml = writer.write_worksheet_controls(1025);
+//! let r_ids = vec!["rId3".to_string()];
+//! let worksheet_controls_xml = writer.write_worksheet_controls(1025, &r_ids);
 //! let vml_xml = writer.write_vml_form_controls(1025);
 //! ```
 

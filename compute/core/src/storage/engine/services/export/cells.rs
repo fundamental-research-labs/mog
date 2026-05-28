@@ -419,6 +419,9 @@ fn build_cell_data_for_cell_id(
     let cm = cell_props.map(|props| props.cm).unwrap_or(false);
     let vm = cell_props.and_then(|props| props.vm);
     let formula_result_type = cell_props.and_then(|props| props.formula_result_type);
+    let has_empty_cached_value = cell_props
+        .map(|props| props.has_empty_cached_value)
+        .unwrap_or(false);
     let original_sst_index = cell_props.and_then(|props| props.original_sst_index);
     let original_value = cell_props
         .and_then(|props| props.original_value.as_ref())
@@ -430,6 +433,7 @@ fn build_cell_data_for_cell_id(
         && !cm
         && vm.is_none()
         && formula_result_type.is_none()
+        && !has_empty_cached_value
         && original_sst_index.is_none()
         && original_value.is_none()
         && !preserve_blank
@@ -444,6 +448,7 @@ fn build_cell_data_for_cell_id(
             cm,
             vm,
             formula_result_type,
+            has_empty_cached_value,
             original_sst_index,
             original_value.as_ref(),
         )
@@ -463,7 +468,7 @@ fn build_cell_data_for_cell_id(
         cell_formula: formula_metadata.get(cell_id).cloned(),
         cm,
         formula_result_type,
-        has_empty_cached_value: false,
+        has_empty_cached_value,
         vm,
         original_sst_index,
         original_value,
@@ -477,6 +482,7 @@ fn is_imported_style_only_blank(
     cm: bool,
     vm: Option<u32>,
     formula_result_type: Option<u8>,
+    has_empty_cached_value: bool,
     original_sst_index: Option<u32>,
     original_value: Option<&String>,
 ) -> bool {
@@ -485,6 +491,7 @@ fn is_imported_style_only_blank(
         && !cm
         && vm.is_none()
         && formula_result_type.is_none()
+        && !has_empty_cached_value
         && original_sst_index.is_none()
         && original_value.is_none_or(|value| value.is_empty())
 }

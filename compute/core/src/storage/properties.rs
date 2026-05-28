@@ -17,9 +17,9 @@
 //!
 //! Cell properties are stored as structured Y.Maps via `yrs_schema::cell_properties`.
 //! Round-trip bookkeeping (style palette index, cm, vm, formula_result_type,
-//! original_sst_index, original_value) lives as typed fields on
+//! has_empty_cached_value, original_sst_index, original_value) lives as typed fields on
 //! `CellProperties`; each field has its own short Yrs key (`si`, `cm`, `vm`,
-//! `frt`, `sst`, `ov`) alongside the format keys.
+//! `frt`, `ecv`, `sst`, `ov`) alongside the format keys.
 //!
 //! The `style_id` field references the workbook-level `stylePalette` map, which
 //! stores the full `CellFormat` per index. This reduces per-cell Yrs payload
@@ -60,9 +60,9 @@ pub use crate::engine_types::formatting::*;
 use cascade::apply_format_range_layer;
 pub use cascade::{get_effective_format, get_effective_format_preloaded, get_positional_format};
 pub use cell::{
-    clear_cell_format, clear_cell_formats, clear_properties, get_all_properties, get_cell_format,
-    get_properties, iter_all_properties, iter_formatted_property_cell_ids, set_cell_format,
-    set_cell_formats, set_properties,
+    clear_cell_format, clear_cell_formats, clear_formula_cache_metadata, clear_properties,
+    get_all_properties, get_cell_format, get_properties, iter_all_properties,
+    iter_formatted_property_cell_ids, set_cell_format, set_cell_formats, set_properties,
 };
 pub use defaults::default_format;
 #[cfg(test)]

@@ -57,7 +57,7 @@ pub struct RegionMeta {
 /// Mirrors [`domain_types::CellMetadata`]. Typed OOXML preservation: promoted the former
 /// `extra: HashMap<String, serde_json::Value>` bag to typed named
 /// fields (`style_id`, `cm`, `vm`, `formula_result_type`,
-/// `original_sst_index`, `original_value`).
+/// `has_empty_cached_value`, `original_sst_index`, `original_value`).
 ///
 /// **D3 (projection-family unification):** `region` is the unified
 /// region-membership shape; `is_array_formula`, `is_cse_anchor`, and
@@ -81,6 +81,12 @@ pub struct CellMetadata {
     pub vm: Option<u32>,
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
+    #[serde(
+        rename = "hasEmptyCachedValue",
+        default,
+        skip_serializing_if = "is_false"
+    )]
+    pub has_empty_cached_value: bool,
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     #[serde(rename = "originalValue", skip_serializing_if = "Option::is_none")]
@@ -121,6 +127,12 @@ pub struct CellProperties {
     pub vm: Option<u32>,
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
+    #[serde(
+        rename = "hasEmptyCachedValue",
+        default,
+        skip_serializing_if = "is_false"
+    )]
+    pub has_empty_cached_value: bool,
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     #[serde(rename = "originalValue", skip_serializing_if = "Option::is_none")]
@@ -141,6 +153,7 @@ impl CellProperties {
             && !self.cm
             && self.vm.is_none()
             && self.formula_result_type.is_none()
+            && !self.has_empty_cached_value
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -157,6 +170,7 @@ impl CellMetadata {
             && !self.cm
             && self.vm.is_none()
             && self.formula_result_type.is_none()
+            && !self.has_empty_cached_value
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -177,6 +191,7 @@ impl From<domain_types::CellProperties> for CellProperties {
             cm: d.cm,
             vm: d.vm,
             formula_result_type: d.formula_result_type,
+            has_empty_cached_value: d.has_empty_cached_value,
             original_sst_index: d.original_sst_index,
             original_value: d.original_value,
             is_array_formula: d.is_array_formula,
@@ -196,6 +211,7 @@ impl From<CellProperties> for domain_types::CellProperties {
             cm: s.cm,
             vm: s.vm,
             formula_result_type: s.formula_result_type,
+            has_empty_cached_value: s.has_empty_cached_value,
             original_sst_index: s.original_sst_index,
             original_value: s.original_value,
             is_array_formula: s.is_array_formula,

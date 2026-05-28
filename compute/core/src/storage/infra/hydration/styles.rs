@@ -300,6 +300,7 @@ pub(super) fn hydrate_cell_styles(
         let has_cm = cell.cm;
         let has_vm = cell.vm.is_some();
         let has_formula_result_type = cell.formula_result_type.is_some();
+        let has_empty_cached_value = cell.has_empty_cached_value;
         let has_original_sst_index = cell.original_sst_index.is_some();
         let has_original_value = cell.original_value.is_some();
         // Skip cells with neither style nor import/export metadata.
@@ -307,6 +308,7 @@ pub(super) fn hydrate_cell_styles(
             && !has_cm
             && !has_vm
             && !has_formula_result_type
+            && !has_empty_cached_value
             && !has_original_sst_index
             && !has_original_value
         {
@@ -325,6 +327,7 @@ pub(super) fn hydrate_cell_styles(
             && !has_cm
             && !has_vm
             && !has_formula_result_type
+            && !has_empty_cached_value
             && !has_original_sst_index
             && !has_original_value;
 
@@ -339,8 +342,8 @@ pub(super) fn hydrate_cell_styles(
         } else {
             // Slow path: build typed CellProperties and serialize. The serde
             // renames on CellProperties produce the wire keys (`s`, `cm`, `vm`,
-            // `formulaResultType`, `sstIndex`, `originalValue`) that the
-            // reader expects.
+            // `formulaResultType`, `hasEmptyCachedValue`, `sstIndex`,
+            // `originalValue`) that the reader expects.
             let props = domain_types::CellProperties {
                 format: None,
                 provenance: None,
@@ -354,6 +357,7 @@ pub(super) fn hydrate_cell_styles(
                 cm: has_cm,
                 vm: cell.vm,
                 formula_result_type: cell.formula_result_type,
+                has_empty_cached_value,
                 original_sst_index: cell.original_sst_index,
                 original_value: cell.original_value.clone(),
                 // CSE flags are runtime-derived; never set on the

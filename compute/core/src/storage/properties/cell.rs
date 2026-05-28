@@ -109,6 +109,34 @@ pub fn clear_properties(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, cell_id:
     }
 }
 
+/// Clear cached formula serialization metadata after a direct cell edit.
+///
+/// The cache markers describe the imported cached result shape, so user
+/// formula/value writes must not carry them forward unless recalculation
+/// explicitly writes fresh metadata later.
+pub fn clear_formula_cache_metadata(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_id: &str,
+) {
+    let Some(mut props) = get_properties(doc, workbook, sheets, sheet_id, cell_id) else {
+        return;
+    };
+    if props.formula_result_type.is_none() && !props.has_empty_cached_value {
+        return;
+    }
+
+    props.formula_result_type = None;
+    props.has_empty_cached_value = false;
+    if props.format.is_none() && props.metadata_is_empty() {
+        clear_properties(doc, sheets, sheet_id, cell_id);
+    } else {
+        set_properties(doc, sheets, sheet_id, cell_id, &props);
+    }
+}
+
 /// Iterate all cell IDs that have stored properties for a sheet.
 ///
 /// Returns `(cell_id_hex, CellProperties)` pairs. Used by the export path

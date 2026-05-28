@@ -47,6 +47,15 @@ pub struct CellMetadata {
     /// number ambiguity on formulas).
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
+    /// Whether an imported formula cell had an explicit empty cached
+    /// value element (`<v/>`). This is metadata for XLSX serialization,
+    /// not a computed result.
+    #[serde(
+        rename = "hasEmptyCachedValue",
+        default,
+        skip_serializing_if = "is_false"
+    )]
+    pub has_empty_cached_value: bool,
     /// Original shared-string-table index for `t="s"` cells. Preserves
     /// SST ordering on write even when the cached value has been
     /// recomputed.
@@ -101,6 +110,14 @@ pub struct CellProperties {
     /// Formula-result type code. See [`CellMetadata::formula_result_type`].
     #[serde(rename = "formulaResultType", skip_serializing_if = "Option::is_none")]
     pub formula_result_type: Option<u8>,
+    /// Explicit empty formula cached value marker. See
+    /// [`CellMetadata::has_empty_cached_value`].
+    #[serde(
+        rename = "hasEmptyCachedValue",
+        default,
+        skip_serializing_if = "is_false"
+    )]
+    pub has_empty_cached_value: bool,
     /// Original SST index. See [`CellMetadata::original_sst_index`].
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
@@ -130,6 +147,7 @@ impl CellProperties {
             && !self.cm
             && self.vm.is_none()
             && self.formula_result_type.is_none()
+            && !self.has_empty_cached_value
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -147,6 +165,7 @@ impl CellMetadata {
             && !self.cm
             && self.vm.is_none()
             && self.formula_result_type.is_none()
+            && !self.has_empty_cached_value
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula

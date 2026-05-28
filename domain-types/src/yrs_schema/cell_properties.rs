@@ -9,8 +9,8 @@
 //! for all format properties.
 //!
 //! Typed OOXML preservation: promoted the former `extra` JSON-blob bag to six typed
-//! fields (style_id / cm / vm / formula_result_type / original_sst_index
-//! / original_value). Each gets its own short Yrs key rather than
+//! fields (style_id / cm / vm / formula_result_type / has_empty_cached_value
+//! / original_sst_index / original_value). Each gets its own short Yrs key rather than
 //! round-tripping through an `ex` JSON string.
 
 use std::sync::Arc;
@@ -33,6 +33,7 @@ const KEY_STYLE_ID: &str = "si";
 const KEY_CM: &str = "cm";
 const KEY_VM: &str = "vm";
 const KEY_FORMULA_RESULT_TYPE: &str = "frt";
+const KEY_HAS_EMPTY_CACHED_VALUE: &str = "ecv";
 const KEY_ORIGINAL_SST_INDEX: &str = "sst";
 const KEY_ORIGINAL_VALUE: &str = "ov";
 
@@ -85,6 +86,9 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
     if let Some(frt) = props.formula_result_type {
         entries.push((KEY_FORMULA_RESULT_TYPE, Any::Number(frt as f64)));
     }
+    if props.has_empty_cached_value {
+        entries.push((KEY_HAS_EMPTY_CACHED_VALUE, Any::Bool(true)));
+    }
     if let Some(sst) = props.original_sst_index {
         entries.push((KEY_ORIGINAL_SST_INDEX, Any::Number(sst as f64)));
     }
@@ -129,6 +133,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
     let cm = read_bool(map, txn, KEY_CM).unwrap_or(false);
     let vm = read_u32(map, txn, KEY_VM);
     let formula_result_type = read_u32(map, txn, KEY_FORMULA_RESULT_TYPE).map(|n| n as u8);
+    let has_empty_cached_value =
+        read_bool(map, txn, KEY_HAS_EMPTY_CACHED_VALUE).unwrap_or(false);
     let original_sst_index = read_u32(map, txn, KEY_ORIGINAL_SST_INDEX);
     let original_value = read_string(map, txn, KEY_ORIGINAL_VALUE);
 
@@ -141,6 +147,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
         cm,
         vm,
         formula_result_type,
+        has_empty_cached_value,
         original_sst_index,
         original_value,
         // CSE flags are runtime-only — derived from the projection

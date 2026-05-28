@@ -807,6 +807,13 @@ pub(in crate::storage::engine) fn set_cell(
         &value,
         formula.as_deref(),
     );
+    crate::storage::properties::clear_formula_cache_metadata(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+        stores.storage.sheets(),
+        sheet_id,
+        &id_to_hex(cell_id.as_u128()),
+    );
     mutation.observer.set_suppressed(false);
 
     // Snapshot old value from mirror BEFORE apply_edit overwrites it.

@@ -155,6 +155,15 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     }
 
     write_prepared_cell_inputs_to_yrs(stores, &edits, &prepared_values)?;
+    for (sheet_id, cell_id, _, _, _) in &edits {
+        crate::storage::properties::clear_formula_cache_metadata(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+            stores.storage.sheets(),
+            sheet_id,
+            &id_to_hex(cell_id.as_u128()),
+        );
+    }
 
     for ((sheet_id, cell_id, row, col, _), (value, formula)) in
         edits.iter().zip(prepared_values.iter())
@@ -578,6 +587,15 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw(
         HashMap::with_capacity(edits.len());
 
     write_raw_cell_edits_to_yrs(stores, &edits)?;
+    for (sheet_id, cell_id, _, _, _, _) in &edits {
+        crate::storage::properties::clear_formula_cache_metadata(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+            stores.storage.sheets(),
+            sheet_id,
+            &id_to_hex(cell_id.as_u128()),
+        );
+    }
 
     for (sheet_id, cell_id, row, col, value, formula) in &edits {
         // Snapshot old value from mirror BEFORE anything overwrites it.

@@ -1150,6 +1150,7 @@ pub(super) fn get_active_cell(
         cm: props.cm,
         vm: props.vm,
         formula_result_type: props.formula_result_type,
+        has_empty_cached_value: props.has_empty_cached_value,
         original_sst_index: props.original_sst_index,
         original_value: props.original_value,
         is_array_formula: false,

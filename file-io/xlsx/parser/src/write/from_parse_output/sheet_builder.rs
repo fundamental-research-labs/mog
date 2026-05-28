@@ -1041,6 +1041,30 @@ mod tests {
 
         assert!(matches!(&converted.value, CellValue::String(0)));
     }
+
+    #[test]
+    fn explicit_empty_formula_cached_value_converts_to_empty_original_value() {
+        let mut shared_strings = SharedStringsWriter::new();
+        let cell = DomainCellData {
+            row: 0,
+            col: 0,
+            value: DomainValue::Null,
+            formula: Some("A2".to_string()),
+            has_empty_cached_value: true,
+            ..Default::default()
+        };
+
+        let converted = convert_cell(&cell, &mut shared_strings);
+
+        assert_eq!(converted.original_value.as_deref(), Some(""));
+        assert!(matches!(
+            converted.value,
+            CellValue::Formula {
+                cached_value: Some(_),
+                ..
+            }
+        ));
+    }
 }
 
 /// Apply outline groups to the sheet writer.

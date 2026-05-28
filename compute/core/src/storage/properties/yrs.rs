@@ -29,9 +29,9 @@ pub(in crate::storage::properties) fn get_sheet_submap<T: yrs::ReadTxn>(
 /// The compact JSON is produced by `hydration::styles::hydrate_cell_styles`
 /// during XLSX import. It deserializes directly into `CellProperties` via
 /// the typed `style_id` / `cm` / `vm` / `formula_result_type` /
-/// `original_sst_index` / `original_value` fields (serde renames keep the
+/// `has_empty_cached_value` / `original_sst_index` / `original_value` fields (serde renames keep the
 /// wire shape at `{"s", "cm", "vm", "formulaResultType", "sstIndex",
-/// "originalValue"}`). The style palette stores pre-serialized `CellFormat`
+/// "hasEmptyCachedValue", "originalValue"}`). The style palette stores pre-serialized `CellFormat`
 /// JSON per index; we look it up here and hydrate `format`.
 ///
 /// NOTE: `style_id` is intentionally preserved on the returned struct —

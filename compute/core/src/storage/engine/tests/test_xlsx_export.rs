@@ -225,6 +225,65 @@ fn explicit_empty_cached_formula_value_survives_yrs_hydration_export() {
 }
 
 #[test]
+fn editing_formula_clears_explicit_empty_cached_value_metadata() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Null,
+                formula: Some("A2".to_string()),
+                has_empty_cached_value: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let mut engine = engine_from_parse_output_normal(&input);
+    let sheet_id = *engine
+        .stores
+        .grid_indexes
+        .keys()
+        .next()
+        .expect("sheet should exist");
+    let cell_id = engine
+        .stores
+        .grid_indexes
+        .get(&sheet_id)
+        .and_then(|grid| {
+            grid.cells()
+                .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
+        })
+        .expect("A1 cell id");
+
+    engine
+        .set_cell(
+            &sheet_id,
+            cell_id,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse {
+                text: "=A3".into(),
+            },
+        )
+        .expect("formula edit should succeed");
+
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+    let cell = exported.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 0)
+        .expect("formula cell should export");
+    assert_eq!(cell.formula.as_deref(), Some("A3"));
+    assert!(!cell.has_empty_cached_value);
+}
+
+#[test]
 fn sheet_extent_survives_yrs_hydration_export_when_sheet_has_data() {
     let input = ParseOutput {
         sheets: vec![SheetData {

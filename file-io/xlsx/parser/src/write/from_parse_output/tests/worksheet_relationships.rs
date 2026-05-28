@@ -2315,6 +2315,114 @@ fn comments_after_high_number_header_footer_vml_use_graph_registered_vml_path() 
 }
 
 #[test]
+fn multiple_header_footer_vml_parts_use_each_sheets_legacy_drawing_hf_relationship() {
+    let hf_image = crate::domain::print::hf_images::HeaderFooterImage {
+        position: crate::domain::print::hf_images::HfImagePosition::LeftHeader,
+        image_rel_id: "rId1".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let hf_vml = crate::domain::print::hf_images::write_hf_images_vml(&[hf_image], "1", 13313);
+    let sheet_hf_image = domain_types::domain::print::HeaderFooterImageInfo {
+        position: domain_types::domain::print::HfImagePosition::LeftHeader,
+        src: "../media/image1.png".to_string(),
+        title: "LH".to_string(),
+        width_pt: 46.0,
+        height_pt: 46.0,
+    };
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "Sheet1".to_string(),
+            hf_images: vec![sheet_hf_image.clone()],
+            ..Default::default()
+        },
+        SheetData {
+            name: "Sheet2".to_string(),
+            hf_images: vec![sheet_hf_image],
+            ..Default::default()
+        },
+    ]);
+    let ctx = domain_types::RoundTripContext {
+        sheets: vec![
+            domain_types::SheetRoundTripContext {
+                legacy_drawing_hf_r_id: Some("rIdHf".to_string()),
+                sheet_opc_rels: vec![domain_types::OpcRelationship {
+                    id: "rIdHf".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing4.vml".to_string(),
+                    target_mode: None,
+                }],
+                raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                    path: "xl/drawings/vmlDrawing4.vml".to_string(),
+                    data: hf_vml.clone(),
+                    rels: Some(domain_types::VmlRels {
+                        path: "xl/drawings/_rels/vmlDrawing4.vml.rels".to_string(),
+                        data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#
+                            .to_vec(),
+                    }),
+                }],
+                ..Default::default()
+            },
+            domain_types::SheetRoundTripContext {
+                legacy_drawing_hf_r_id: Some("rIdHf".to_string()),
+                sheet_opc_rels: vec![domain_types::OpcRelationship {
+                    id: "rIdHf".to_string(),
+                    rel_type: REL_VML_DRAWING.to_string(),
+                    target: "../drawings/vmlDrawing8.vml".to_string(),
+                    target_mode: None,
+                }],
+                raw_vml_drawings: vec![domain_types::VmlDrawingPart {
+                    path: "xl/drawings/vmlDrawing8.vml".to_string(),
+                    data: hf_vml.clone(),
+                    rels: Some(domain_types::VmlRels {
+                        path: "xl/drawings/_rels/vmlDrawing8.vml.rels".to_string(),
+                        data: br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#
+                            .to_vec(),
+                    }),
+                }],
+                ..Default::default()
+            },
+        ],
+        opaque_package_subgraphs: vec![
+            clean_opaque_hf_vml_subgraph(
+                "xl/drawings/vmlDrawing4.vml",
+                hf_vml.clone(),
+                vec![("xl/media/image1.png", b"png bytes".to_vec())],
+            ),
+            clean_opaque_hf_vml_subgraph(
+                "xl/drawings/vmlDrawing8.vml",
+                hf_vml,
+                vec![("xl/media/image1.png", b"png bytes".to_vec())],
+            ),
+        ],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output, Some(&ctx)).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet1_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let sheet2_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet2.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/drawings/vmlDrawing4.vml"));
+    assert!(archive.contains("xl/drawings/vmlDrawing8.vml"));
+    assert!(sheet1_rels.contains("Target=\"../drawings/vmlDrawing4.vml\""));
+    assert!(sheet2_rels.contains("Target=\"../drawings/vmlDrawing8.vml\""));
+    assert!(!sheet2_rels.contains("vmlDrawing4.vml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn header_footer_vml_requires_clean_opaque_vml_part() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

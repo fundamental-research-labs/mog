@@ -435,6 +435,7 @@ pub(super) fn build_sheet_parts(
                             header_footer_vml_from_opaque_subgraphs(
                                 round_trip_ctx,
                                 sheet_idx,
+                                imported_header_footer_vml_path(sheet_idx, sheet_rt).as_deref(),
                                 comment_vml_path.as_deref(),
                                 &sheet_data.hf_images,
                             )
@@ -579,6 +580,7 @@ fn floating_object_has_imported_drawing_identity(
 fn header_footer_vml_from_opaque_subgraphs(
     round_trip_ctx: Option<&RoundTripContext>,
     sheet_idx: usize,
+    expected_vml_path: Option<&str>,
     comment_vml_path: Option<&str>,
     modeled_images: &[domain_types::domain::print::HeaderFooterImageInfo],
 ) -> Option<crate::domain::print::hf_images::ParsedHfVml> {
@@ -594,6 +596,9 @@ fn header_footer_vml_from_opaque_subgraphs(
         for part in subgraph.parts.iter().filter(|part| {
             emits_clean_opaque_part(part.ownership)
                 && part.part.path.ends_with(".vml")
+                && expected_vml_path.is_none_or(|expected| {
+                    normalize_path(&part.part.path) == normalize_path(expected)
+                })
                 && comment_vml_path != Some(part.part.path.as_str())
         }) {
             let rels_path = crate::write::package_graph::part_relationships_path(&part.part.path);
@@ -614,6 +619,24 @@ fn header_footer_vml_from_opaque_subgraphs(
         }
     }
     None
+}
+
+fn imported_header_footer_vml_path(
+    sheet_idx: usize,
+    sheet_rt: &domain_types::SheetRoundTripContext,
+) -> Option<String> {
+    let legacy_drawing_hf_r_id = sheet_rt.legacy_drawing_hf_r_id.as_ref()?;
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet_idx + 1);
+    sheet_rt
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| {
+            &rel.id == legacy_drawing_hf_r_id
+                && rel.rel_type == crate::infra::opc::REL_VML_DRAWING
+                && rel.target_mode.as_deref() != Some("External")
+        })
+        .and_then(|rel| resolve_relationship_target(Some(&owner_path), &rel.target).ok())
+        .map(|path| normalize_path(&path))
 }
 
 fn subgraph_allows_hf_vml_for_sheet(

@@ -47,7 +47,9 @@ pub(crate) enum Token {
     DateSecond2,    // ss
     DateSecond1,    // s
     AmPm(String),   // AM/PM, am/pm, A/P
-    FractionSlash,  // fraction display ?/?
+    FractionSlash, // fraction display ?/? or ?/N
+    /// Literal denominator digits in fixed-denominator fraction formats, e.g. `4` in `# ?/4`.
+    FractionDenominatorLiteral(String),
     ElapsedHours,   // [h] or [hh] -- total hours (no mod 24)
     ElapsedMinutes, // [m] or [mm] -- total minutes
     ElapsedSeconds, // [s] or [ss] -- total seconds

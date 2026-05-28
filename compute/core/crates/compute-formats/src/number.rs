@@ -401,6 +401,7 @@ pub(crate) fn format_numeric(
             Token::SkipWidth(_) => result.push(' '),
             Token::TextPlaceholder => result.push_str(&format_general(value)),
             Token::FractionSlash => result.push('/'),
+            Token::FractionDenominatorLiteral(s) => result.push_str(s),
             _ => {}
         }
     }

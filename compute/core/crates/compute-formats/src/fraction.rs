@@ -43,13 +43,33 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
         }
     }
 
-    // Count denominator placeholders: digit placeholders immediately after FractionSlash
-    let mut denom_placeholders = 0usize;
-    for tok in &section.tokens[slash_pos + 1..] {
-        if is_digit_placeholder(tok) {
-            denom_placeholders += 1;
+    let fixed_denominator = section.tokens[slash_pos + 1..].first().and_then(|token| {
+        if let Token::FractionDenominatorLiteral(value) = token {
+            value.parse::<u64>().ok().filter(|denominator| *denominator > 0)
         } else {
-            break;
+            None
+        }
+    });
+    let fixed_denominator_text = section.tokens[slash_pos + 1..].first().and_then(|token| {
+        if let Token::FractionDenominatorLiteral(value) = token {
+            Some(value.as_str())
+        } else {
+            None
+        }
+    });
+
+    // Count denominator placeholders: digit placeholders immediately after FractionSlash,
+    // or the literal width for fixed-denominator fraction formats.
+    let mut denom_placeholders = 0usize;
+    if let Some(denominator_text) = fixed_denominator_text {
+        denom_placeholders = denominator_text.len();
+    } else {
+        for tok in &section.tokens[slash_pos + 1..] {
+            if is_digit_placeholder(tok) {
+                denom_placeholders += 1;
+            } else {
+                break;
+            }
         }
     }
 
@@ -59,28 +79,37 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
         .iter()
         .any(is_digit_placeholder);
 
-    // Max denominator based on placeholder count.
-    // Cap at 9 digits — the continued-fractions algorithm is O(log max_denom),
-    // so even 999_999_999 terminates in ~30 iterations.
-    let capped_denom_digits = denom_placeholders.min(9) as u32;
-    let max_denom = 10u64.pow(capped_denom_digits) - 1;
-    let max_denom = max_denom.max(1);
-
-    // Find best rational approximation via continued fractions (Stern-Brocot tree)
-    let (best_num, best_denom) = if frac_part < 1e-12 {
-        (0u64, 1u64)
+    let (best_num, best_denom, carry_fraction) = if let Some(fixed_denominator) = fixed_denominator {
+        if frac_part < 1e-12 {
+            (0u64, fixed_denominator, false)
+        } else {
+            let rounded_num = (frac_part * fixed_denominator as f64).round() as u64;
+            if rounded_num >= fixed_denominator {
+                (0, fixed_denominator, true)
+            } else {
+                (rounded_num, fixed_denominator, false)
+            }
+        }
     } else {
-        let (n, d) = best_rational_approximation(frac_part, max_denom);
-        // If numerator equals denominator, add to integer and set fraction to 0
-        if n >= d { (0, 1) } else { (n, d) }
+        // Max denominator based on placeholder count.
+        // Cap at 9 digits — the continued-fractions algorithm is O(log max_denom),
+        // so even 999_999_999 terminates in ~30 iterations.
+        let capped_denom_digits = denom_placeholders.min(9) as u32;
+        let max_denom = 10u64.pow(capped_denom_digits) - 1;
+        let max_denom = max_denom.max(1);
+
+        // Find best rational approximation via continued fractions (Stern-Brocot tree)
+        if frac_part < 1e-12 {
+            (0u64, 1u64, false)
+        } else {
+            let (n, d) = best_rational_approximation(frac_part, max_denom);
+            // If numerator equals denominator, add to integer and set fraction to 0
+            if n >= d { (0, 1, true) } else { (n, d, false) }
+        }
     };
 
     // Adjust integer if numerator rounded up to denominator
-    let display_int = if frac_part > 1e-12 && best_num == 0 {
-        integer_part + 1
-    } else {
-        integer_part
-    };
+    let display_int = integer_part + u64::from(carry_fraction);
 
     let needs_minus = is_negative && (display_int > 0 || best_num > 0) && section_count <= 1;
 
@@ -142,12 +171,18 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
             continue;
         }
 
-        if in_denom_zone && is_digit_placeholder(tok) {
+        if in_denom_zone
+            && (is_digit_placeholder(tok) || matches!(tok, Token::FractionDenominatorLiteral(_)))
+        {
             if !denom_emitted {
                 if best_num == 0 {
-                    // No fraction — blank the denominator zone so a whole
-                    // number renders the trailing fraction columns as space.
-                    result.push_str(&" ".repeat(denom_placeholders));
+                    if let Some(denominator_text) = fixed_denominator_text {
+                        result.push_str(denominator_text);
+                    } else {
+                        // No fraction — blank the denominator zone so a whole
+                        // number renders the trailing fraction columns as space.
+                        result.push_str(&" ".repeat(denom_placeholders));
+                    }
                 } else {
                     // Emit denominator digits without right-padding for the
                     // same Excel-parity reason as the numerator block above.

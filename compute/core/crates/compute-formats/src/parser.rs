@@ -98,15 +98,37 @@ fn tokenize(section: &str) -> Vec<Token> {
             }
             '/' => {
                 // Check if this is a fraction slash: preceded by digit placeholder(s) and
-                // followed by digit placeholder(s) (0, #, ?)
+                // followed by digit placeholder(s) (0, #, ?) or a fixed denominator.
                 let preceded = tokens.iter().rev().any(is_digit_placeholder);
-                let followed = i + 1 < chars.len() && matches!(chars[i + 1], '0' | '#' | '?');
-                if preceded && followed {
+                let followed_by_placeholder =
+                    i + 1 < chars.len() && matches!(chars[i + 1], '0' | '#' | '?');
+                let followed_by_fixed_denominator =
+                    i + 1 < chars.len() && chars[i + 1].is_ascii_digit() && chars[i + 1] != '0';
+
+                if preceded && followed_by_fixed_denominator {
+                    let mut denominator = String::new();
+                    let mut j = i + 1;
+                    while j < chars.len() && chars[j].is_ascii_digit() {
+                        denominator.push(chars[j]);
+                        j += 1;
+                    }
+                    let valid_denominator =
+                        matches!(denominator.parse::<u64>(), Ok(value) if value > 0);
+                    if valid_denominator {
+                        tokens.push(Token::FractionSlash);
+                        tokens.push(Token::FractionDenominatorLiteral(denominator));
+                        i = j;
+                    } else {
+                        tokens.push(Token::Literal("/".to_string()));
+                        i += 1;
+                    }
+                } else if preceded && followed_by_placeholder {
                     tokens.push(Token::FractionSlash);
+                    i += 1;
                 } else {
                     tokens.push(Token::Literal("/".to_string()));
+                    i += 1;
                 }
-                i += 1;
             }
             'E' | 'e' => {
                 if i + 1 < chars.len() && (chars[i + 1] == '+' || chars[i + 1] == '-') {
@@ -278,6 +300,36 @@ fn tokenize(section: &str) -> Vec<Token> {
         }
     }
     tokens
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_fixed_fraction_denominator_digits() {
+        let section = parse_section("# ??/100");
+        assert!(section
+            .tokens
+            .iter()
+            .any(|token| matches!(token, Token::FractionSlash)));
+        assert!(section.tokens.iter().any(
+            |token| matches!(token, Token::FractionDenominatorLiteral(value) if value == "100")
+        ));
+    }
+
+    #[test]
+    fn leaves_single_zero_denominator_as_placeholder_fraction() {
+        let section = parse_section("0/0");
+        assert!(section
+            .tokens
+            .iter()
+            .any(|token| matches!(token, Token::FractionSlash)));
+        assert!(!section
+            .tokens
+            .iter()
+            .any(|token| matches!(token, Token::FractionDenominatorLiteral(_))));
+    }
 }
 
 fn count_ci(chars: &[char], start: usize, target: char) -> usize {

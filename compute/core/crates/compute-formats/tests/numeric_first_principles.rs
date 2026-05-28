@@ -685,6 +685,48 @@ mod fractions {
         let result = format_number(1.5, "# ???/???");
         assert_eq!(result, "1 1/2");
     }
+
+    #[test]
+    fn fixed_denominator_quarter_under_one() {
+        let result = format_number(0.25, "# ?/4");
+        assert_eq!(result, "  1/4");
+    }
+
+    #[test]
+    fn fixed_denominator_quarter_mixed_number() {
+        let result = format_number(1.25, "# ?/4");
+        assert_eq!(result, "1 1/4");
+    }
+
+    #[test]
+    fn fixed_denominator_tenths() {
+        let result = format_number(0.3, "# ?/10");
+        assert_eq!(result, "  3/10");
+    }
+
+    #[test]
+    fn fixed_denominator_whole_number_preserves_fraction_columns() {
+        let result = format_number(5.0, "# ?/4");
+        assert_eq!(result, "5  /4");
+    }
+
+    #[test]
+    fn fixed_denominator_carries_when_rounded_numerator_reaches_denominator() {
+        let result = format_number(0.99, "# ?/4");
+        assert_eq!(result, "1  /4");
+    }
+
+    #[test]
+    fn fixed_denominator_sixteenths() {
+        let result = format_number(0.3125, "# ??/16");
+        assert_eq!(result, "  5/16");
+    }
+
+    #[test]
+    fn fixed_denominator_hundredths() {
+        let result = format_number(0.03, "# ??/100");
+        assert_eq!(result, "  3/100");
+    }
 }
 
 // =========================================================================

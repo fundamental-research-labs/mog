@@ -377,6 +377,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             ASTNode::Boolean(b) => Ok(EvalValue::Cell(CellValue::Boolean(*b))),
             ASTNode::Error(e) => Ok(EvalValue::Cell(CellValue::Error(*e, None))),
             ASTNode::Omitted => Ok(EvalValue::Cell(CellValue::Null)),
+            ASTNode::OptionalLambdaParam(_) => {
+                Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None)))
+            }
 
             ASTNode::CellReference(CellRefNode { reference, .. }) => {
                 // If we're inside a LET/LAMBDA scope and this CellRef's A1 text

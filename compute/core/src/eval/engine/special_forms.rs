@@ -13,7 +13,7 @@ use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 
 use super::evaluator::{Evaluator, cell_ref_to_a1};
 
-use crate::eval::eval_value::EvalValue;
+use crate::eval::eval_value::{EvalValue, LambdaParam};
 use compute_parser::{ASTNode, CellRefNode};
 use formula_types::CellRef;
 use value_types::{CellError, CellValue, ComputeError};
@@ -39,18 +39,12 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                     .as_any()
                     .downcast_ref::<compute_parser::ASTNode>()
                     .expect("Lambda body must be ASTNode");
-                // Validate argument count
-                if args.len() != params.len() {
+                if !lambda_arity_accepts(&params, args.len()) {
                     return Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None)));
                 }
-                // Evaluate call arguments eagerly
-                let mut arg_vals = Vec::with_capacity(args.len());
-                for arg in args {
-                    let v = self.eval_node(arg).await?;
-                    if let EvalValue::Cell(cv @ CellValue::Error(..)) = &v {
-                        return Ok(EvalValue::Cell(cv.clone()));
-                    }
-                    arg_vals.push(v);
+                let arg_vals = self.eval_lambda_call_args(&params, args).await?;
+                if let Some(err) = first_cell_error(&arg_vals) {
+                    return Ok(EvalValue::Cell(err));
                 }
                 // Restore captured scope frames (lexical closure semantics).
                 // Track the number of pushed scopes so we pop exactly the right
@@ -64,8 +58,8 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 }
                 // Push parameter bindings on top of captured scope
                 let mut param_scope = FxHashMap::default();
-                for (name, val) in params.iter().zip(arg_vals) {
-                    param_scope.insert(name.clone(), val);
+                for (param, val) in params.iter().zip(arg_vals) {
+                    param_scope.insert(param.name.clone(), val);
                 }
                 if self.scope_stack.len() >= MAX_SCOPE_DEPTH {
                     // Pop captured scopes before returning error
@@ -113,7 +107,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                     .as_any()
                     .downcast_ref::<compute_parser::ASTNode>()
                     .expect("Lambda body must be ASTNode");
-                if arg_vals.len() != params.len() {
+                if !lambda_arity_accepts(params, arg_vals.len()) {
                     return Ok(CellValue::Error(CellError::Value, None));
                 }
                 // Restore captured scope frames (lexical closure semantics)
@@ -126,8 +120,11 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 }
                 // Push parameter bindings on top of captured scope
                 let mut param_scope = FxHashMap::default();
-                for (name, val) in params.iter().zip(arg_vals.iter()) {
-                    param_scope.insert(name.clone(), EvalValue::Cell(val.clone()));
+                for (param, val) in params.iter().zip(arg_vals.iter()) {
+                    param_scope.insert(param.name.clone(), EvalValue::Cell(val.clone()));
+                }
+                for param in params.iter().skip(arg_vals.len()) {
+                    param_scope.insert(param.name.clone(), EvalValue::Omitted);
                 }
                 if self.scope_stack.len() >= MAX_SCOPE_DEPTH {
                     self.pop_scopes(captured_count);
@@ -301,16 +298,36 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
 
         let mut params = Vec::new();
+        let mut saw_optional = false;
         // All args except the last are parameter names.
         // Accept CellRef too: `LAMBDA(a1, a1*2)` — `a1` is parsed as CellRef(A1).
         for arg in &args[..args.len() - 1] {
-            match arg {
-                ASTNode::Identifier(name) => params.push(name.clone()),
+            let param = match arg {
+                ASTNode::Identifier(name) => {
+                    if saw_optional {
+                        return Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None)));
+                    }
+                    LambdaParam::required(name.clone())
+                }
                 ASTNode::CellReference(CellRefNode { reference, .. }) => {
-                    params.push(cell_ref_to_a1(reference));
+                    if saw_optional {
+                        return Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None)));
+                    }
+                    LambdaParam::required(cell_ref_to_a1(reference))
+                }
+                ASTNode::OptionalLambdaParam(name) => {
+                    saw_optional = true;
+                    LambdaParam::optional(name.clone())
                 }
                 _ => return Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None))),
+            };
+            if params
+                .iter()
+                .any(|existing: &LambdaParam| existing.name.eq_ignore_ascii_case(&param.name))
+            {
+                return Ok(EvalValue::Cell(CellValue::Error(CellError::Value, None)));
             }
+            params.push(param);
         }
 
         // Last arg is the body (captured as AST, not evaluated)
@@ -341,10 +358,47 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         match &args[0] {
             ASTNode::Omitted => Ok(CellValue::Boolean(true)),
             _ => {
-                // Evaluate normally to propagate errors
-                let _val = self.eval_node(&args[0]).await?.into_cell_value();
-                Ok(CellValue::Boolean(false))
+                match self.eval_node(&args[0]).await? {
+                    EvalValue::Omitted => Ok(CellValue::Boolean(true)),
+                    EvalValue::Cell(CellValue::Error(e, payload)) => {
+                        Ok(CellValue::Error(e, payload))
+                    }
+                    _ => Ok(CellValue::Boolean(false)),
+                }
             }
         }
     }
+
+    async fn eval_lambda_call_args(
+        &mut self,
+        params: &[LambdaParam],
+        args: &[ASTNode],
+    ) -> Result<Vec<EvalValue>, ComputeError> {
+        let mut arg_vals = Vec::with_capacity(params.len());
+        for (param, arg) in params.iter().zip(args.iter()) {
+            if param.optional && matches!(arg, ASTNode::Omitted) {
+                arg_vals.push(EvalValue::Omitted);
+                continue;
+            }
+            arg_vals.push(self.eval_node(arg).await?);
+        }
+        for param in params.iter().skip(args.len()) {
+            if param.optional {
+                arg_vals.push(EvalValue::Omitted);
+            }
+        }
+        Ok(arg_vals)
+    }
+}
+
+fn lambda_arity_accepts(params: &[LambdaParam], arg_count: usize) -> bool {
+    let required = params.iter().filter(|param| !param.optional).count();
+    arg_count >= required && arg_count <= params.len()
+}
+
+fn first_cell_error(values: &[EvalValue]) -> Option<CellValue> {
+    values.iter().find_map(|value| match value {
+        EvalValue::Cell(err @ CellValue::Error(..)) => Some(err.clone()),
+        _ => None,
+    })
 }

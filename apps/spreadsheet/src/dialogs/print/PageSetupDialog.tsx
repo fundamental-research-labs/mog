@@ -290,6 +290,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
   // when this dialog opens/closes (render isolation per ARCHITECTURE-CHECKLIST.md Section 14)
   const isOpen = useUIStore((s) => s.pageSetupDialogOpen);
   const storeInitialTab = useUIStore((s) => s.pageSetupDialogInitialTab);
+  const rangeSelectionMode = useUIStore((s) => s.rangeSelectionMode);
   const effectiveInitialTab = initialTab ?? storeInitialTab;
 
   // Get action dependencies for dispatch()
@@ -569,6 +570,11 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
   }, [deps]);
 
   const guardedEnter = useRangeSelectionEnterGuard(handleOK);
+  const isPickingPrintTitleRange =
+    rangeSelectionMode.active &&
+    rangeSelectionMode.sourceDialogId === 'page-setup-dialog' &&
+    (rangeSelectionMode.sourceInputId === 'repeat-rows' ||
+      rangeSelectionMode.sourceInputId === 'repeat-cols');
 
   // Early return if not open - prevents expensive rendering
   // All hooks must be called before this point (rules of hooks)
@@ -581,6 +587,8 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
       onClose={handleCancel}
       dialogId="page-setup-dialog"
       width={480}
+      closeOnOverlayClick={!isPickingPrintTitleRange}
+      allowPointerEventsBehind={isPickingPrintTitleRange}
     >
       <DialogHeader onClose={handleCancel}>Page Setup</DialogHeader>
 

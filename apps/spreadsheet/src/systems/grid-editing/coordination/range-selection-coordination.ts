@@ -19,9 +19,9 @@
  */
 
 import { selectionSelectors } from '../../../selectors';
-import { toA1 } from '@mog/spreadsheet-utils/a1';
 import type { GridEditingUIStore, GridEditingUIStoreApi } from '../types';
 import type { SelectionActor } from './cross-coordination';
+import { formatRangeSelectionRange } from './range-selection-format';
 
 // =============================================================================
 // Types
@@ -147,12 +147,7 @@ export function setupRangeSelectionCoordination(config: RangeSelectionCoordinati
       });
 
     if (selectionChanged) {
-      // Convert ranges to A1 notation
-      const rangeStrings = currRanges.map((range) => {
-        const startCell = toA1(range.startRow, range.startCol);
-        const endCell = toA1(range.endRow, range.endCol);
-        return startCell === endCell ? startCell : `${startCell}:${endCell}`;
-      });
+      const rangeStrings = currRanges.map(formatRangeSelectionRange);
 
       // Join multiple ranges with commas if allowed
       const rangeString = rangeStrings.join(',');

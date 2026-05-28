@@ -74,6 +74,8 @@ export interface DialogProps {
   width?: 'sm' | 'md' | 'lg' | 'xl' | number;
   /** Whether clicking the overlay closes the dialog */
   closeOnOverlayClick?: boolean;
+  /** Allow pointer events to pass through the overlay to content behind the dialog. */
+  allowPointerEventsBehind?: boolean;
   /** Additional class names for the dialog container */
   className?: string;
   /** Called when Radix auto-focuses the dialog content on open. Use e.preventDefault() to cancel default auto-focus. */
@@ -205,7 +207,6 @@ const widthClasses: Record<string, string> = {
 
 const overlayClasses = [
   'fixed inset-0',
-  'pointer-events-auto',
   'bg-black/50',
   'z-ss-modal',
   'data-[state=open]:animate-in data-[state=open]:fade-in-0',
@@ -254,6 +255,7 @@ export function Dialog({
   dialogId,
   width = 'md',
   closeOnOverlayClick = true,
+  allowPointerEventsBehind = false,
   className = '',
   onOpenAutoFocus,
   onCloseAutoFocus,
@@ -267,6 +269,9 @@ export function Dialog({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const widthStyle = typeof width === 'number' ? { width: `${width}px` } : undefined;
   const widthClass = typeof width === 'string' ? widthClasses[width] : '';
+  const overlayPointerEventsClass = allowPointerEventsBehind
+    ? 'pointer-events-none'
+    : 'pointer-events-auto';
 
   // Support both legacy onClose and new onOpenChange API
   const handleOpenChange = (newOpen: boolean) => {
@@ -337,14 +342,21 @@ export function Dialog({
   );
 
   return (
-    <RadixDialog.Root open={open} onOpenChange={handleOpenChange}>
+    <RadixDialog.Root
+      open={open}
+      onOpenChange={handleOpenChange}
+      modal={!allowPointerEventsBehind}
+    >
       <RadixDialog.Portal container={portalContainer}>
-        <RadixDialog.Overlay className={overlayClasses} data-testid="dialog-overlay" />
+        <RadixDialog.Overlay
+          className={`${overlayClasses} ${overlayPointerEventsClass}`}
+          data-testid="dialog-overlay"
+        />
         <RadixDialog.Content
           ref={contentRef}
           className={`${contentClasses} ${widthClass} ${className}`}
           style={widthStyle}
-          aria-modal="true"
+          aria-modal={allowPointerEventsBehind ? undefined : 'true'}
           data-dialog-id={dialogId}
           onPointerDownOutside={(event) => {
             if (!closeOnOverlayClick) event.preventDefault();

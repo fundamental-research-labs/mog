@@ -111,6 +111,7 @@ pub trait AstVisitor {
             ASTNode::Function { name, args } => self.visit_function(name, args),
             ASTNode::Paren(inner) => self.visit_paren(inner),
             ASTNode::Identifier(name) => self.visit_identifier(name),
+            ASTNode::OptionalLambdaParam(name) => self.visit_optional_lambda_param(name),
             ASTNode::Array { rows } => self.visit_array(rows),
             ASTNode::CallExpression { callee, args } => self.visit_call_expr(callee, args),
             ASTNode::Omitted => self.visit_omitted(),
@@ -129,6 +130,7 @@ pub trait AstVisitor {
     fn visit_range(&mut self, r: &RangeRef) {}
     fn visit_structured_ref(&mut self, r: &StructuredRef) {}
     fn visit_identifier(&mut self, name: &str) {}
+    fn visit_optional_lambda_param(&mut self, name: &str) {}
     fn visit_omitted(&mut self) {}
 
     // ── Branch nodes (default: walk children) ───────────────────────

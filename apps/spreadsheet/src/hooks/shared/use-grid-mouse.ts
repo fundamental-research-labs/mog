@@ -23,12 +23,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isOnFillHandle, isOnSelectionBorder, isOnTableResizeHandle } from '@mog/grid-renderer';
 import { editorSelectors } from '../../selectors';
-import { type CellRange } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
 import type { TotalFunction } from '@mog-sdk/contracts/tables';
-import { parseA1Range, toA1 } from '@mog/spreadsheet-utils/a1';
+import { parseA1Range } from '@mog/spreadsheet-utils/a1';
 
 import { useUIStore, useUIStoreApi, useWorkbook } from '../../infra/context';
+import { formatRangeSelectionRange } from '../../systems/grid-editing/coordination/range-selection-format';
 import { isValidDropTarget } from '../../systems/grid-editing/features/drag-drop';
 import { useEditorActions } from '../editing/use-editor-actions';
 import { useObjectInteraction } from '../objects/use-object-interaction';
@@ -66,6 +67,7 @@ export type {
 // =============================================================================
 
 type SelectionBorderEdge = 'left' | 'right' | 'up' | 'down';
+type RangeSelectionDragMode = 'cell' | 'row' | 'column';
 
 interface NativeHandledCellDoubleClick {
   row: number;
@@ -115,6 +117,50 @@ function dispatchMoveToSelectionEdge(
   else dispatch('MOVE_TO_EDGE_DOWN');
 }
 
+function makeRangeSelectionRange(
+  mode: RangeSelectionDragMode,
+  startCell: { row: number; col: number },
+  currentCell: { row: number; col: number },
+): CellRange {
+  const startRow = Math.min(startCell.row, currentCell.row);
+  const endRow = Math.max(startCell.row, currentCell.row);
+  const startCol = Math.min(startCell.col, currentCell.col);
+  const endCol = Math.max(startCell.col, currentCell.col);
+
+  if (mode === 'row') {
+    return {
+      startRow,
+      endRow,
+      startCol: 0,
+      endCol: MAX_COLS - 1,
+    };
+  }
+
+  if (mode === 'column') {
+    return {
+      startRow: 0,
+      endRow: MAX_ROWS - 1,
+      startCol,
+      endCol,
+    };
+  }
+
+  return { startRow, endRow, startCol, endCol };
+}
+
+function updateRangeSelectionFromDrag(
+  uiStoreApi: ReturnType<typeof useUIStoreApi>,
+  mode: RangeSelectionDragMode,
+  startCell: { row: number; col: number },
+  currentCell: { row: number; col: number },
+): void {
+  uiStoreApi
+    .getState()
+    .updateRangeSelection(
+      formatRangeSelectionRange(makeRangeSelectionRange(mode, startCell, currentCell)),
+    );
+}
+
 function isMatchingNativeCellDoubleClick(
   handled: NativeHandledCellDoubleClick | null,
   cell: { row: number; col: number },
@@ -133,23 +179,6 @@ function isMatchingNativeCellDoubleClick(
     Math.abs(handled.clientX - event.clientX) <= coordinateTolerancePx &&
     Math.abs(handled.clientY - event.clientY) <= coordinateTolerancePx
   );
-}
-
-function formatRangeSelection(
-  startCell: { row: number; col: number },
-  endCell: { row: number; col: number },
-): string {
-  const startRow = Math.min(startCell.row, endCell.row);
-  const endRow = Math.max(startCell.row, endCell.row);
-  const startCol = Math.min(startCell.col, endCell.col);
-  const endCol = Math.max(startCell.col, endCell.col);
-
-  const startA1 = toA1(startRow, startCol);
-  if (startRow === endRow && startCol === endCol) {
-    return startA1;
-  }
-
-  return `${startA1}:${toA1(endRow, endCol)}`;
 }
 
 function getRangeSelectionAnchor(currentRange: string): { row: number; col: number } | null {
@@ -407,8 +436,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   // Range selection mode drag state
   const rangeSelectionDragRef = useRef<{
     isDragging: boolean;
+    mode: RangeSelectionDragMode;
     startCell: { row: number; col: number } | null;
-  }>({ isDragging: false, startCell: null });
+  }>({ isDragging: false, mode: 'cell', startCell: null });
 
   const getGeometry = useCallback(() => {
     return renderer.getGeometry();
@@ -666,21 +696,42 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         // When a dialog is in range selection mode (collapse button clicked),
         // clicking on the grid should update the selected range in the input field.
         const rangeSelectionMode = uiStoreApi.getState().rangeSelectionMode;
-        if (rangeSelectionMode.active && hit.type === 'cell') {
-          const cell = { row: hit.row, col: hit.col };
-          const anchor =
-            e.shiftKey ? getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell : cell;
+        if (rangeSelectionMode.active) {
+          if (hit.type === 'cell') {
+            const cell = { row: hit.row, col: hit.col };
+            const anchor =
+              e.shiftKey ? getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell : cell;
 
-          const rangeString = formatRangeSelection(anchor, cell);
-          uiStoreApi.getState().updateRangeSelection(rangeString);
+            updateRangeSelectionFromDrag(uiStoreApi, 'cell', anchor, cell);
+            rangeSelectionDragRef.current = {
+              isDragging: true,
+              mode: 'cell',
+              startCell: anchor,
+            };
+            return; // Don't proceed to normal selection
+          }
 
-          // Set up drag tracking for range extension
-          rangeSelectionDragRef.current = {
-            isDragging: true,
-            startCell: anchor,
-          };
+          if (hit.type === 'row-header') {
+            const cell = { row: hit.row, col: 0 };
+            updateRangeSelectionFromDrag(uiStoreApi, 'row', cell, cell);
+            rangeSelectionDragRef.current = {
+              isDragging: true,
+              mode: 'row',
+              startCell: cell,
+            };
+            return; // Don't proceed to normal row selection
+          }
 
-          return; // Don't proceed to normal selection
+          if (hit.type === 'column-header') {
+            const cell = { row: 0, col: hit.col };
+            updateRangeSelectionFromDrag(uiStoreApi, 'column', cell, cell);
+            rangeSelectionDragRef.current = {
+              isDragging: true,
+              mode: 'column',
+              startCell: cell,
+            };
+            return; // Don't proceed to normal column selection
+          }
         }
 
         // 2. Clicking on empty space deselects floating objects
@@ -1196,29 +1247,31 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       if (rangeSelectionDragRef.current.isDragging) {
         const rangeSelectionMode = uiStoreApi.getState().rangeSelectionMode;
         if (rangeSelectionMode.active && rangeSelectionDragRef.current.startCell) {
-          const geometry = getGeometry();
-          if (geometry) {
-            const currentCell = geometry.fromViewportPoint({ x, y });
-            if (currentCell) {
-              const startCell = rangeSelectionDragRef.current.startCell;
+          const startCell = rangeSelectionDragRef.current.startCell;
+          const mode = rangeSelectionDragRef.current.mode;
+          let currentCell: { row: number; col: number } | null = null;
 
-              // Calculate the range bounds (handle drag in any direction)
-              const startRow = Math.min(startCell.row, currentCell.row);
-              const endRow = Math.max(startCell.row, currentCell.row);
-              const startCol = Math.min(startCell.col, currentCell.col);
-              const endCol = Math.max(startCell.col, currentCell.col);
-
-              // Convert to A1 range notation
-              const startA1 = toA1(startRow, startCol);
-              const endA1 = toA1(endRow, endCol);
-
-              // Single cell vs range
-              const rangeString =
-                startRow === endRow && startCol === endCol ? startA1 : `${startA1}:${endA1}`;
-
-              uiStoreApi.getState().updateRangeSelection(rangeString);
+          const hitTest = getHitTest();
+          const hit = hitTest?.atViewportPoint({ x, y });
+          if (mode === 'row') {
+            if (hit?.type === 'row-header' || hit?.type === 'cell') {
+              currentCell = { row: hit.row, col: startCell.col };
+            }
+          } else if (mode === 'column') {
+            if (hit?.type === 'column-header' || hit?.type === 'cell') {
+              currentCell = { row: startCell.row, col: hit.col };
             }
           }
+
+          const geometry = getGeometry();
+          if (!currentCell && geometry) {
+            currentCell = geometry.fromViewportPoint({ x, y });
+          }
+
+          if (currentCell) {
+            updateRangeSelectionFromDrag(uiStoreApi, mode, startCell, currentCell);
+          }
+
           return; // Consume the event
         }
       }
@@ -1895,7 +1948,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       isPageBreakDraggingRef.current = false;
 
       // Reset range selection drag state
-      rangeSelectionDragRef.current = { isDragging: false, startCell: null };
+      rangeSelectionDragRef.current = { isDragging: false, mode: 'cell', startCell: null };
 
       // Delegate to coordinator for correct state-based event dispatch
       // This queries actual machine state, not potentially-stale React state
@@ -1913,7 +1966,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       isPageBreakDraggingRef.current = false;
 
       // Reset range selection drag state
-      rangeSelectionDragRef.current = { isDragging: false, startCell: null };
+      rangeSelectionDragRef.current = { isDragging: false, mode: 'cell', startCell: null };
       pendingFormatPainterTargetRef.current = false;
 
       // Use cancel handler to safely reset any drag state

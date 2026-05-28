@@ -196,6 +196,25 @@ pub(super) fn hydrate_workbook_connections(
     map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
 }
 
+pub(super) fn hydrate_workbook_root_namespaces(
+    workbook: &MapRef,
+    namespaces: &domain_types::XmlNamespaceDeclarations,
+    txn: &mut yrs::TransactionMut,
+) {
+    if namespaces.is_empty() {
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(namespaces) {
+        let settings_map =
+            crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_SETTINGS);
+        settings_map.insert(
+            txn,
+            "workbookRootNamespaces",
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+}
+
 pub(super) fn hydrate_workbook_table_styles(
     workbook: &MapRef,
     table_styles: &[ooxml_types::styles::TableStyleDef],

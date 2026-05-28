@@ -516,7 +516,7 @@ fn export_single_sheet(
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols, legacy_comment_authors) = {
+    let (stored_rows, stored_cols, legacy_comment_authors, comment_package) = {
         let txn = stores.storage.doc().transact();
         if let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) {
             let rows = match meta.get(&txn, KEY_ROWS) {
@@ -531,9 +531,13 @@ fn export_single_sheet(
                 Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).unwrap_or_default(),
                 _ => Vec::new(),
             };
-            (rows, cols, legacy_comment_authors)
+            let comment_package = match meta.get(&txn, "commentPackage") {
+                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).ok(),
+                _ => None,
+            };
+            (rows, cols, legacy_comment_authors, comment_package)
         } else {
-            (None, None, Vec::new())
+            (None, None, Vec::new(), None)
         }
     };
     let rows = stored_rows.unwrap_or(100).max(max_row);
@@ -599,6 +603,8 @@ fn export_single_sheet(
         sheet_uid,
         mut sheet_properties,
         worksheet_semantic_containers,
+        worksheet_root_namespaces,
+        worksheet_ext_lst_xml,
     ) = {
         let txn = stores.storage.doc().transact();
         let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
@@ -662,12 +668,27 @@ fn export_single_sheet(
                         _ => None,
                     })
                     .unwrap_or_default();
+                let worksheet_root_namespaces = m
+                    .get(&txn, "worksheetRootNamespaces")
+                    .and_then(|v| match v {
+                        Out::Any(Any::String(s)) => {
+                            serde_json::from_str::<domain_types::XmlNamespaceDeclarations>(&s).ok()
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                let worksheet_ext_lst_xml = m.get(&txn, "worksheetExtLstXml").and_then(|v| match v {
+                    Out::Any(Any::String(s)) => Some(s.to_string()),
+                    _ => None,
+                });
                 (
                     osi,
                     vis,
                     uid,
                     sheet_properties,
                     worksheet_semantic_containers,
+                    worksheet_root_namespaces,
+                    worksheet_ext_lst_xml,
                 )
             }
             None => (
@@ -676,6 +697,8 @@ fn export_single_sheet(
                 None,
                 None,
                 Default::default(),
+                Default::default(),
+                None,
             ),
         }
     };
@@ -700,6 +723,8 @@ fn export_single_sheet(
         name,
         rows,
         cols,
+        worksheet_root_namespaces,
+        worksheet_ext_lst_xml,
         sheet_id: original_sheet_id,
         visibility,
         uid: sheet_uid,
@@ -711,6 +736,7 @@ fn export_single_sheet(
         view,
         comments: comments_out,
         legacy_comment_authors,
+        comment_package,
         conditional_formats,
         hyperlinks: hyperlinks_out,
         data_validations,
@@ -882,6 +908,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
 
     ParseOutput {
         sheets: output_sheets,
+        workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
         style_palette,
         workbook_stylesheet: export_workbook_stylesheet(stores),
         package_fidelity: None,

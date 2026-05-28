@@ -24,9 +24,10 @@ use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_
 use super::workbook::{
     hydrate_shared_string_hints, hydrate_workbook_calculation, hydrate_workbook_connections,
     hydrate_workbook_metadata, hydrate_workbook_named_ranges, hydrate_workbook_parsed_pivot_tables,
-    hydrate_workbook_pivot_cache_records, hydrate_workbook_protection, hydrate_workbook_slicers,
-    hydrate_workbook_table_styles, hydrate_workbook_tables, hydrate_workbook_theme,
-    hydrate_workbook_threaded_comment_persons, hydrate_workbook_views,
+    hydrate_workbook_pivot_cache_records, hydrate_workbook_protection,
+    hydrate_workbook_root_namespaces, hydrate_workbook_slicers, hydrate_workbook_table_styles,
+    hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
+    hydrate_workbook_views,
     hydrate_workbook_web_publishing,
 };
 use super::{HydrationIdMap, IdAllocator};
@@ -189,6 +190,11 @@ impl YrsStorage {
             .collect();
         hydrate_workbook_tables(&self.workbook, &all_tables, &mut txn);
         hydrate_workbook_connections(&self.workbook, &output.connections, &mut txn);
+        hydrate_workbook_root_namespaces(
+            &self.workbook,
+            &output.workbook_root_namespaces,
+            &mut txn,
+        );
         hydrate_workbook_table_styles(
             &self.workbook,
             &output.custom_table_styles,
@@ -403,6 +409,11 @@ impl YrsStorage {
             })
             .collect();
         hydrate_workbook_tables(&self.workbook, &all_tables, &mut txn);
+        hydrate_workbook_root_namespaces(
+            &self.workbook,
+            &output.workbook_root_namespaces,
+            &mut txn,
+        );
         hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);
         hydrate_workbook_protection(&self.workbook, &output.protection, &mut txn);
         hydrate_workbook_slicers(

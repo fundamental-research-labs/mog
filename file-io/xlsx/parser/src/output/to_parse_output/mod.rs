@@ -24,8 +24,10 @@ mod metadata;
 pub(crate) mod pivot_convert;
 mod styles;
 mod workbook_metadata;
-use crate::infra::opc::resolve_relationship_target;
 use crate::domain::workbook::read::parse_all_rels;
+use crate::infra::opc::{
+    resolve_relationship_target, REL_COMMENTS, REL_THREADED_COMMENT, REL_VML_DRAWING,
+};
 use cells::*;
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
 use features::*;
@@ -119,6 +121,12 @@ pub fn full_parse_result_to_parse_output(
             &media_data_urls,
             &binary_parts,
         );
+        if let Some(extensions) = result.extensions.as_ref()
+            && let Some(namespaces) = extensions.sheet_namespaces.get(sheet_idx)
+        {
+            sd.worksheet_root_namespaces = namespaces.into();
+        }
+        sd.worksheet_ext_lst_xml = sheet.ext_lst_xml.clone();
         // Assign tables to each sheet (tables are per-sheet data)
         sd.tables = convert_tables(&sheet.tables);
         // Collect the ParsedPivotTable (config + ooxml sidecar) from the v2 converter
@@ -226,6 +234,11 @@ pub fn full_parse_result_to_parse_output(
 
     let mut parse_output = ParseOutput {
         sheets: sheet_data_vec,
+        workbook_root_namespaces: result
+            .extensions
+            .as_ref()
+            .map(|extensions| (&extensions.workbook_namespaces).into())
+            .unwrap_or_default(),
         style_palette,
         workbook_stylesheet,
         package_fidelity: build_package_fidelity_metadata(result),
@@ -1518,6 +1531,7 @@ fn convert_sheet(
     // --- Header/footer images ---
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.
     let hf_images = convert_hf_images(sheet);
+    let comment_package = build_sheet_comment_package_info(sheet);
 
     // --- Build SheetData ---
     let mut sheet_properties = sheet.sheet_properties.clone();
@@ -1529,6 +1543,8 @@ fn convert_sheet(
         name: sheet.name.clone(),
         rows,
         cols,
+        worksheet_root_namespaces: Default::default(),
+        worksheet_ext_lst_xml: None,
         sheet_id: sheet.sheet_id,
         visibility: sheet.state,
         uid: sheet.uid.clone(),
@@ -1545,6 +1561,7 @@ fn convert_sheet(
         conditional_formats,
         comments,
         legacy_comment_authors: sheet.comment_authors.clone(),
+        comment_package,
         hyperlinks,
         data_validations,
         x14_data_validations,
@@ -1576,13 +1593,49 @@ fn convert_sheet(
     }
 }
 
+fn build_sheet_comment_package_info(
+    sheet: &FullParsedSheet,
+) -> Option<domain_types::SheetCommentPackageInfo> {
+    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
+    let mut info = domain_types::SheetCommentPackageInfo {
+        comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
+        ..Default::default()
+    };
+
+    for rel in &sheet.sheet_opc_rels {
+        let Ok(path) = resolve_relationship_target(Some(&owner_path), &rel.target) else {
+            continue;
+        };
+        match rel.rel_type.as_str() {
+            REL_COMMENTS => {
+                info.comments_path_hint = Some(path);
+                info.comments_relationship_id_hint = Some(rel.id.clone());
+            }
+            REL_VML_DRAWING => {
+                if sheet.legacy_drawing_r_id.as_deref() == Some(rel.id.as_str())
+                    && sheet
+                        .raw_vml_drawings
+                        .iter()
+                        .any(|(vml_path, _, _)| vml_path == &path)
+                {
+                    info.vml_path_hint = Some(path);
+                    info.vml_relationship_id_hint = Some(rel.id.clone());
+                }
+            }
+            REL_THREADED_COMMENT => {
+                info.threaded_comments_path_hint = Some(path.clone());
+                info.threaded_comments_relationship_id_hint = Some(rel.id.clone());
+            }
+            _ => {}
+        }
+    }
+
+    (!info.is_empty()).then_some(info)
+}
+
 // =============================================================================
 // Threaded comments merging
 // =============================================================================
-
-/// Threaded comment relationship type URI.
-const REL_TYPE_THREADED_COMMENT: &str =
-    "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment";
 
 /// Parse persons from `xl/persons/person.xml` and merge threaded comment data
 /// into the per-sheet `Comment` entries. Returns the workbook-level person list.
@@ -1593,7 +1646,9 @@ const REL_TYPE_THREADED_COMMENT: &str =
 /// 3. Merge threaded comment data (person_id, parent_id, timestamp, actual text)
 ///    into legacy comments matched by relationship-backed candidate ids.
 fn merge_threaded_comments(result: &FullParseResult, sheets: &mut [SheetData]) -> Vec<PersonInfo> {
-    use crate::domain::comments::read::parse_threaded_comments;
+    use crate::domain::comments::read::{
+        parse_threaded_comments, parse_threaded_comments_root_attrs,
+    };
 
     // 1. Parse persons from person.xml
     let persons: Vec<PersonInfo> = result
@@ -1629,7 +1684,7 @@ fn merge_threaded_comments(result: &FullParseResult, sheets: &mut [SheetData]) -
 
         // Find the threaded comment target from this sheet's OPC rels
         let tc_path = parsed_sheet.sheet_opc_rels.iter().find_map(|rel| {
-            if rel.rel_type == REL_TYPE_THREADED_COMMENT {
+            if rel.rel_type == REL_THREADED_COMMENT {
                 let owner_path = format!("xl/worksheets/sheet{}.xml", parsed_sheet.index + 1);
                 resolve_relationship_target(Some(&owner_path), &rel.target).ok()
             } else {
@@ -1647,6 +1702,10 @@ fn merge_threaded_comments(result: &FullParseResult, sheets: &mut [SheetData]) -
             Some(xml) => *xml,
             None => continue,
         };
+        if let Some(comment_package) = sheet_data.comment_package.as_mut() {
+            comment_package.threaded_comments_root_namespace_attrs =
+                parse_threaded_comments_root_attrs(tc_xml);
+        }
 
         // Parse the threaded comments
         let threaded = parse_threaded_comments(tc_xml);

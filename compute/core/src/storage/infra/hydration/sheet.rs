@@ -133,6 +133,33 @@ fn hydrate_worksheet_semantic_containers(
     }
 }
 
+fn hydrate_worksheet_import_xml_metadata(
+    txn: &mut yrs::TransactionMut,
+    meta_map: &MapRef,
+    sheet: &SheetData,
+) {
+    if !sheet.worksheet_root_namespaces.is_empty()
+        && let Ok(json) = serde_json::to_string(&sheet.worksheet_root_namespaces)
+    {
+        meta_map.insert(
+            txn,
+            "worksheetRootNamespaces",
+            Any::String(Arc::from(json.as_str())),
+        );
+    }
+    if let Some(xml) = sheet
+        .worksheet_ext_lst_xml
+        .as_deref()
+        .filter(|xml| !xml.is_empty())
+    {
+        meta_map.insert(
+            txn,
+            "worksheetExtLstXml",
+            Any::String(Arc::from(xml)),
+        );
+    }
+}
+
 fn allocate_anchored_identities(
     sheet: &SheetData,
     allocator: &mut impl IdAllocator,
@@ -853,6 +880,12 @@ pub(crate) fn hydrate_sheet(
     {
         sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
     }
+    if let Some(comment_package) = &sheet.comment_package
+        && !comment_package.is_empty()
+        && let Ok(json) = serde_json::to_string(comment_package)
+    {
+        sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
+    }
 
     // --- Comments (yrs_schema::comment) ---
     // Resolve A1 cell_refs to stable CellId hex strings via the authoritative
@@ -901,6 +934,7 @@ pub(crate) fn hydrate_sheet(
     // --- Standalone worksheet sort state (typed OOXML metadata only) ---
     hydrate_sort_state(txn, &meta_map, &sheet.sort_state);
     hydrate_worksheet_semantic_containers(txn, &meta_map, &sheet.worksheet_semantic_containers);
+    hydrate_worksheet_import_xml_metadata(txn, &meta_map, sheet);
 
     // --- Outline groups (domain grouping config) ---
     hydrate_outline_groups(
@@ -1510,6 +1544,12 @@ pub(crate) fn hydrate_sheet_with_allocation(
     {
         sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
     }
+    if let Some(comment_package) = &sheet.comment_package
+        && !comment_package.is_empty()
+        && let Ok(json) = serde_json::to_string(comment_package)
+    {
+        sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
+    }
     hydrate_comments(txn, &comments_map, &pos_map, &sheet.comments, persons);
     hydrate_sparklines(
         txn,
@@ -1543,6 +1583,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
     hydrate_auto_filter(txn, &meta_map, &filters_map, &pos_map, &sheet.auto_filter);
     hydrate_sort_state(txn, &meta_map, &sheet.sort_state);
     hydrate_worksheet_semantic_containers(txn, &meta_map, &sheet.worksheet_semantic_containers);
+    hydrate_worksheet_import_xml_metadata(txn, &meta_map, sheet);
     hydrate_outline_groups(
         txn,
         &grouping_map,

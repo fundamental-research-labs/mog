@@ -263,6 +263,10 @@ pub fn parse_comments(xml: &[u8]) -> Comments {
 /// Returns `(attr_name, attr_value)` pairs preserving original order.
 /// Captures `xmlns`, `xmlns:*`, and `mc:Ignorable` attributes.
 fn parse_comments_root_attrs(xml: &[u8]) -> Vec<(String, String)> {
+    parse_root_attrs(xml, "comments")
+}
+
+fn parse_root_attrs(xml: &[u8], root_name: &str) -> Vec<(String, String)> {
     let xml_str = match std::str::from_utf8(xml) {
         Ok(s) => s,
         Err(_) => return Vec::new(),
@@ -275,8 +279,8 @@ fn parse_comments_root_attrs(xml: &[u8]) -> Vec<(String, String)> {
         0
     };
 
-    // Find the opening '<' of the root element.
-    let root_start = match xml_str[start..].find('<') {
+    let root_needle = format!("<{root_name}");
+    let root_start = match xml_str[start..].find(&root_needle) {
         Some(p) => start + p,
         None => return Vec::new(),
     };
@@ -400,6 +404,11 @@ pub fn parse_threaded_comments(xml: &[u8]) -> ThreadedComments {
     }
 
     threaded
+}
+
+/// Extract namespace declarations and `mc:Ignorable` from the threaded comments root.
+pub fn parse_threaded_comments_root_attrs(xml: &[u8]) -> Vec<(String, String)> {
+    parse_root_attrs(xml, "ThreadedComments")
 }
 
 /// Parse VML shapes for comment positioning

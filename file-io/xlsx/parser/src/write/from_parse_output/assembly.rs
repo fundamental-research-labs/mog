@@ -23,8 +23,12 @@ pub(super) struct SheetExtras {
     /// Original comment ZIP path from round-trip context (e.g. "xl/comments6.xml").
     /// When set, this path is used instead of sequential numbering.
     pub(super) original_comment_path: Option<String>,
+    pub(super) original_comment_relationship_id: Option<String>,
     /// Original VML drawing ZIP path from round-trip context.
     pub(super) original_vml_path: Option<String>,
+    pub(super) original_vml_relationship_id: Option<String>,
+    pub(super) original_threaded_comments_path: Option<String>,
+    pub(super) original_threaded_comments_relationship_id: Option<String>,
     /// Original drawing ZIP path from round-trip context (e.g. "xl/drawings/drawing1.xml").
     /// When set, this path is used instead of sequential numbering.
     pub(super) original_drawing_path: Option<String>,

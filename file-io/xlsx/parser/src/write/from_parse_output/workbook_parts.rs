@@ -2,6 +2,7 @@ use domain_types::ParseOutput;
 
 use super::WriteError;
 use super::external_links;
+use crate::infra::xml_namespaces::NamespaceMap;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer;
 use crate::write::pivot_writer::PivotWriteData;
@@ -23,6 +24,9 @@ pub(super) fn build_workbook_xml(
 ) -> Result<WorkbookXmlParts, WriteError> {
     // ── 4. Build workbook.xml ───────────────────────────────────────────
     let mut workbook_writer = WorkbookWriter::new();
+    if !output.workbook_root_namespaces.is_empty() {
+        workbook_writer.set_root_namespaces(NamespaceMap::from(&output.workbook_root_namespaces));
+    }
     for (idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
         let r_id = package_graph

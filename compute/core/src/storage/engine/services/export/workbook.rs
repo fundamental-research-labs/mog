@@ -587,6 +587,25 @@ pub(super) fn export_workbook_properties(
     ))
 }
 
+pub(super) fn export_workbook_root_namespaces(
+    stores: &EngineStores,
+) -> domain_types::XmlNamespaceDeclarations {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let settings_map = match workbook.get(&txn, KEY_WORKBOOK_SETTINGS) {
+        Some(Out::YMap(m)) => m,
+        _ => return Default::default(),
+    };
+
+    let Some(Out::Any(Any::String(json))) = settings_map.get(&txn, "workbookRootNamespaces") else {
+        return Default::default();
+    };
+
+    serde_json::from_str::<domain_types::XmlNamespaceDeclarations>(&json).unwrap_or_default()
+}
+
 /// Export workbook views from the `workbookSettings` Y.Map.
 pub(super) fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> {
     let doc = stores.storage.doc();

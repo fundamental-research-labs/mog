@@ -425,14 +425,28 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 .original_comment_path
                 .clone()
                 .unwrap_or_else(|| format!("xl/comments{}.xml", global_comment_idx));
+            if let Some(n) = extract_comment_number(&comments_path) {
+                global_comment_idx = global_comment_idx.max(n);
+            }
             let comments_target = worksheet_relative_target(&comments_path);
-            let comments_relationship_id_hint = Some(rels.add(REL_COMMENTS, &comments_target));
+            let generated_comments_r_id = rels.add(REL_COMMENTS, &comments_target);
+            let comments_relationship_id_hint = sheet_extras[sheet_idx]
+                .original_comment_relationship_id
+                .clone()
+                .or(Some(generated_comments_r_id));
             let vml_path = sheet_extras[sheet_idx]
                 .original_vml_path
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
+            if let Some(n) = extract_vml_drawing_number(&vml_path) {
+                global_vml_idx = global_vml_idx.max(n);
+            }
             let vml_target = worksheet_relative_target(&vml_path);
-            let vml_relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &vml_target));
+            let generated_vml_r_id = rels.add(REL_VML_DRAWING, &vml_target);
+            let vml_relationship_id_hint = sheet_extras[sheet_idx]
+                .original_vml_relationship_id
+                .clone()
+                .or(Some(generated_vml_r_id));
             worksheet_comments_relationships.push(WorksheetCommentsGraphEntry {
                 sheet_idx,
                 comments_path,
@@ -538,11 +552,23 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         // Threaded comment rels (must come after legacy comment rels)
         if has_threaded_comments {
             global_tc_idx += 1;
+            if let Some(path) = sheet_extras[sheet_idx]
+                .original_threaded_comments_path
+                .as_deref()
+                && let Some(n) = extract_threaded_comment_number(path)
+            {
+                global_tc_idx = global_tc_idx.max(n);
+            }
             worksheet_threaded_comments_relationships.push(
                 threaded_comments::add_relationship_for_export(
                     sheet_idx,
                     global_tc_idx,
-                    &sheet_data.comments,
+                    sheet_extras[sheet_idx]
+                        .original_threaded_comments_path
+                        .as_deref(),
+                    sheet_extras[sheet_idx]
+                        .original_threaded_comments_relationship_id
+                        .as_deref(),
                     &mut rels,
                 ),
             );
@@ -1965,6 +1991,22 @@ fn extract_vml_drawing_number(path: &str) -> Option<usize> {
     let file = path.rsplit('/').next()?;
     file.strip_prefix("vmlDrawing")?
         .strip_suffix(".vml")?
+        .parse()
+        .ok()
+}
+
+fn extract_comment_number(path: &str) -> Option<usize> {
+    let file = path.rsplit('/').next()?;
+    file.strip_prefix("comments")?
+        .strip_suffix(".xml")?
+        .parse()
+        .ok()
+}
+
+fn extract_threaded_comment_number(path: &str) -> Option<usize> {
+    let file = path.rsplit('/').next()?;
+    file.strip_prefix("threadedComment")?
+        .strip_suffix(".xml")?
         .parse()
         .ok()
 }

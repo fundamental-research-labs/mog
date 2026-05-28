@@ -757,6 +757,7 @@ impl CommentsWriter {
 pub struct ThreadedCommentsWriter {
     authors: Vec<ThreadedAuthor>,
     comments: Vec<ThreadedComment>,
+    root_namespace_attrs: Vec<(String, String)>,
 }
 
 impl ThreadedCommentsWriter {
@@ -797,6 +798,11 @@ impl ThreadedCommentsWriter {
     pub fn add_comment(&mut self, comment: ThreadedComment) -> &mut Self {
         self.comments.push(comment);
         self
+    }
+
+    /// Set preserved root namespace declarations for regenerated threaded comments.
+    pub fn set_root_namespace_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.root_namespace_attrs = attrs;
     }
 
     /// Add a simple threaded comment
@@ -857,9 +863,22 @@ impl ThreadedCommentsWriter {
 
         w.write_declaration();
 
-        w.start_element("ThreadedComments")
-            .attr("xmlns", THREADED_COMMENTS_NS)
-            .end_attrs();
+        let mut root = w.start_element("ThreadedComments");
+        if self.root_namespace_attrs.is_empty() {
+            root = root.attr("xmlns", THREADED_COMMENTS_NS);
+        } else {
+            let has_default = self
+                .root_namespace_attrs
+                .iter()
+                .any(|(name, _)| name == "xmlns");
+            if !has_default {
+                root = root.attr("xmlns", THREADED_COMMENTS_NS);
+            }
+            for (name, value) in &self.root_namespace_attrs {
+                root = root.attr(name, value);
+            }
+        }
+        root.end_attrs();
 
         for comment in &self.comments {
             self.write_threaded_comment(&mut w, comment);
@@ -1638,7 +1657,7 @@ mod tests {
         );
 
         // Threaded XML must be `None` — notes never write threaded entries.
-        let threaded = threaded_comments_xml_from_domain(&[note]);
+        let threaded = threaded_comments_xml_from_domain(&[note], None);
         assert!(
             threaded.is_none(),
             "notes must not produce threaded XML output"
@@ -1672,7 +1691,7 @@ mod tests {
             "a note's thread_id metadata must not rewrite its legacy author or xr:uid"
         );
         assert!(
-            threaded_comments_xml_from_domain(&[note]).is_none(),
+            threaded_comments_xml_from_domain(&[note], None).is_none(),
             "threaded XML is gated by CommentType, not thread_id"
         );
     }
@@ -1697,7 +1716,7 @@ mod tests {
             "threaded comment must use `tc={{thread_id}}` author in legacy XML"
         );
 
-        let threaded = threaded_comments_xml_from_domain(&[thread])
+        let threaded = threaded_comments_xml_from_domain(&[thread], None)
             .expect("threaded comment must produce threaded XML");
         let threaded_str = String::from_utf8(threaded).expect("utf8");
         assert!(threaded_str.contains("thread-001"));
@@ -1876,7 +1895,10 @@ pub fn comments_from_domain(
 /// Dispatch is `comment_type`-driven (single discriminator end-to-end). The
 /// storage invariant says threaded comments always have `thread_id = Some(...)`,
 /// so the unwrap inside is safe; we fall back to `comment.id` defensively.
-pub fn threaded_comments_xml_from_domain(comments: &[domain_types::Comment]) -> Option<Vec<u8>> {
+pub fn threaded_comments_xml_from_domain(
+    comments: &[domain_types::Comment],
+    root_namespace_attrs: Option<&[(String, String)]>,
+) -> Option<Vec<u8>> {
     let threaded: Vec<&domain_types::Comment> = comments
         .iter()
         .filter(|c| c.comment_type == CommentType::ThreadedComment)
@@ -1886,6 +1908,9 @@ pub fn threaded_comments_xml_from_domain(comments: &[domain_types::Comment]) -> 
     }
 
     let mut tw = ThreadedCommentsWriter::new();
+    if let Some(attrs) = root_namespace_attrs {
+        tw.set_root_namespace_attrs(attrs.to_vec());
+    }
 
     for comment in &threaded {
         let thread_id = comment

@@ -9,16 +9,6 @@ pub(super) fn append_dropped_import_diagnostics(
     let mut dropped = Vec::new();
 
     if let Some(ext) = result.extensions.as_ref() {
-        if !ext.workbook_namespaces.all().is_empty() {
-            dropped.push("workbook namespace declarations");
-        }
-        if !ext
-            .sheet_namespaces
-            .iter()
-            .all(|namespaces| namespaces.all().is_empty())
-        {
-            dropped.push("worksheet namespace declarations");
-        }
         append_suppressed_auxiliary_diagnostics(ext.imported_parts.paths(), &mut dropped);
     }
 
@@ -56,13 +46,6 @@ pub(super) fn append_dropped_import_diagnostics(
         .any(|sheet| sheet.worksheet_controls_xml.is_some())
     {
         dropped.push("worksheet controls XML sidecar");
-    }
-    if result
-        .sheets
-        .iter()
-        .any(|sheet| sheet.ext_lst_xml.is_some())
-    {
-        dropped.push("worksheet extension-list XML");
     }
     if result
         .sheets

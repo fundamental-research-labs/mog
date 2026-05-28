@@ -378,6 +378,34 @@ impl NamespaceMap {
     }
 }
 
+impl From<&NamespaceMap> for domain_types::XmlNamespaceDeclarations {
+    fn from(map: &NamespaceMap) -> Self {
+        Self {
+            declarations: map
+                .all()
+                .iter()
+                .map(|decl| domain_types::XmlNamespaceDeclaration {
+                    prefix: decl.prefix.clone(),
+                    uri: decl.uri.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<&domain_types::XmlNamespaceDeclarations> for NamespaceMap {
+    fn from(value: &domain_types::XmlNamespaceDeclarations) -> Self {
+        let mut map = NamespaceMap::new();
+        for decl in &value.declarations {
+            map.add(NamespaceDeclaration::new(
+                decl.prefix.clone(),
+                decl.uri.clone(),
+            ));
+        }
+        map
+    }
+}
+
 // ============================================================================
 // Writing Utilities
 // ============================================================================

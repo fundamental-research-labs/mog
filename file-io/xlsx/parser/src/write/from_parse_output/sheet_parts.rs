@@ -8,6 +8,7 @@ use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::{chart_allows_auxiliary_replay, sheet_preservation, should_reconstruct_chart_space};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
+use crate::infra::xml_namespaces::NamespaceMap;
 use crate::write::{SharedStringsWriter, SheetWriter};
 
 pub(super) struct BuiltSheetParts {
@@ -101,6 +102,11 @@ pub(super) fn build_sheet_parts(
             &sheet_data_table_regions,
             emit_cell_metadata_refs,
         );
+        if !sheet_data.worksheet_root_namespaces.is_empty() {
+            sheet_writer.set_root_namespaces(NamespaceMap::from(
+                &sheet_data.worksheet_root_namespaces,
+            ));
+        }
 
         // ── Sheet UID (xr:uid on <worksheet> root) ───────────────────
         if let Some(ref uid) = sheet_data.uid {
@@ -251,15 +257,24 @@ pub(super) fn build_sheet_parts(
                 ext_entries.push(xml);
             }
         }
-        if !ext_entries.is_empty() {
-            sheet_writer.set_ext_lst_xml(combine_ext_lst_entries(&ext_entries));
+        if sheet_data.worksheet_ext_lst_xml.is_some() || !ext_entries.is_empty() {
+            sheet_writer.set_ext_lst_xml(merge_ext_lst_entries(
+                sheet_data.worksheet_ext_lst_xml.as_deref(),
+                &ext_entries,
+            ));
         }
 
         // ── Comments ────────────────────────────────────────────────────
         let comments_data = if !sheet_data.comments.is_empty() {
             let original_authors = (!sheet_data.legacy_comment_authors.is_empty())
                 .then_some(sheet_data.legacy_comment_authors.as_slice());
-            let root_ns_attrs = None;
+            let root_ns_attrs = sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| {
+                    (!package.comments_root_namespace_attrs.is_empty())
+                        .then_some(package.comments_root_namespace_attrs.as_slice())
+                });
             let (comments_xml, generated_vml_xml) =
                 crate::domain::comments::write::comments_from_domain(
                     sheet_num,
@@ -273,8 +288,17 @@ pub(super) fn build_sheet_parts(
         };
 
         // ── Threaded Comments ────────────────────────────────────────────
-        let threaded_comments =
-            crate::domain::comments::write::threaded_comments_xml_from_domain(&sheet_data.comments);
+        let threaded_root_ns_attrs = sheet_data
+            .comment_package
+            .as_ref()
+            .and_then(|package| {
+                (!package.threaded_comments_root_namespace_attrs.is_empty())
+                    .then_some(package.threaded_comments_root_namespace_attrs.as_slice())
+            });
+        let threaded_comments = crate::domain::comments::write::threaded_comments_xml_from_domain(
+            &sheet_data.comments,
+            threaded_root_ns_attrs,
+        );
 
         // ── Tables (per-sheet) ───────────────────────────────────────────
         let mut table_xmls = Vec::new();
@@ -383,8 +407,18 @@ pub(super) fn build_sheet_parts(
         // Check for floating objects (images, shapes, etc.)
         let has_floating_objects = !sheet_data.floating_objects.is_empty();
 
-        let (original_comment_path, original_vml_path, hf_vml, original_drawing_path) =
-            (None, None, None, None);
+        let (original_comment_path, original_vml_path, hf_vml, original_drawing_path) = (
+            sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.comments_path_hint.clone()),
+            sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.vml_path_hint.clone()),
+            None,
+            None,
+        );
 
         let has_printer_settings = sheet_data
             .print_settings
@@ -420,7 +454,23 @@ pub(super) fn build_sheet_parts(
             has_chart_ex,
             has_floating_objects,
             original_comment_path,
+            original_comment_relationship_id: sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.comments_relationship_id_hint.clone()),
             original_vml_path,
+            original_vml_relationship_id: sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.vml_relationship_id_hint.clone()),
+            original_threaded_comments_path: sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.threaded_comments_path_hint.clone()),
+            original_threaded_comments_relationship_id: sheet_data
+                .comment_package
+                .as_ref()
+                .and_then(|package| package.threaded_comments_relationship_id_hint.clone()),
             hf_vml,
             original_drawing_path,
             has_printer_settings,
@@ -438,6 +488,39 @@ pub(super) fn build_sheet_parts(
     }
 }
 
+fn merge_ext_lst_entries(raw_ext_lst: Option<&str>, generated_parts: &[String]) -> String {
+    let generated_entries: Vec<ExtEntry<'_>> = generated_parts
+        .iter()
+        .flat_map(|part| split_ext_entries(part))
+        .collect();
+    let mut generated_used = vec![false; generated_entries.len()];
+    let mut merged_entries = Vec::new();
+
+    if let Some(raw_xml) = raw_ext_lst {
+        for raw_entry in split_ext_entries(raw_xml) {
+            if let Some(uri) = raw_entry.uri
+                && let Some((idx, generated_entry)) = generated_entries
+                    .iter()
+                    .enumerate()
+                    .find(|(idx, entry)| !generated_used[*idx] && entry.uri == Some(uri))
+            {
+                generated_used[idx] = true;
+                merged_entries.push(generated_entry.xml.to_string());
+                continue;
+            }
+            merged_entries.push(raw_entry.xml.to_string());
+        }
+    }
+
+    for (idx, generated_entry) in generated_entries.iter().enumerate() {
+        if !generated_used[idx] {
+            merged_entries.push(generated_entry.xml.to_string());
+        }
+    }
+
+    combine_ext_lst_entries(&merged_entries)
+}
+
 fn combine_ext_lst_entries(parts: &[String]) -> String {
     let mut xml = String::from("<extLst>");
     for part in parts {
@@ -452,7 +535,99 @@ fn combine_ext_lst_entries(parts: &[String]) -> String {
 }
 
 fn ext_lst_inner(xml: &str) -> Option<&str> {
-    let start_tag_end = xml.find("<extLst>").map(|pos| pos + "<extLst>".len())?;
-    let end = xml.rfind("</extLst>")?;
+    let (start_tag_end, element_start) = find_ext_lst_start_tag(xml)?;
+    let end = find_ext_lst_end_tag(xml, element_start)?;
     (start_tag_end <= end).then_some(&xml[start_tag_end..end])
+}
+
+#[derive(Clone, Copy)]
+struct ExtEntry<'a> {
+    xml: &'a str,
+    uri: Option<&'a str>,
+}
+
+fn split_ext_entries(xml: &str) -> Vec<ExtEntry<'_>> {
+    let inner = ext_lst_inner(xml).unwrap_or(xml);
+    let mut entries = Vec::new();
+    let mut pos = 0;
+    while let Some(rel_start) = find_ext_start(inner, pos) {
+        let start = rel_start;
+        let Some(start_tag_end_rel) = inner[start..].find('>') else {
+            break;
+        };
+        let start_tag_end = start + start_tag_end_rel + 1;
+        let start_tag = &inner[start..start_tag_end];
+        let Some(close_rel) = inner[start_tag_end..].find("</ext>") else {
+            break;
+        };
+        let end = start_tag_end + close_rel + "</ext>".len();
+        entries.push(ExtEntry {
+            xml: &inner[start..end],
+            uri: parse_ext_uri(start_tag),
+        });
+        pos = end;
+    }
+    if entries.is_empty() && !inner.trim().is_empty() {
+        entries.push(ExtEntry {
+            xml: inner,
+            uri: None,
+        });
+    }
+    entries
+}
+
+fn find_ext_lst_start_tag(xml: &str) -> Option<(usize, usize)> {
+    let candidates = ["<extLst", ":extLst"];
+    candidates
+        .iter()
+        .filter_map(|needle| {
+            let start = xml.find(needle)?;
+            let element_start = if *needle == ":extLst" {
+                xml[..start].rfind('<')?
+            } else {
+                start
+            };
+            let end = xml[element_start..].find('>').map(|pos| element_start + pos + 1)?;
+            Some((end, element_start))
+        })
+        .min_by_key(|(_, element_start)| *element_start)
+}
+
+fn find_ext_lst_end_tag(xml: &str, element_start: usize) -> Option<usize> {
+    let root_tag = &xml[element_start..xml[element_start..].find('>').map(|pos| element_start + pos)?];
+    let name_start = root_tag.find('<')? + 1;
+    let name_end = root_tag[name_start..]
+        .find(|c: char| c.is_whitespace() || c == '>')
+        .map(|pos| name_start + pos)
+        .unwrap_or(root_tag.len());
+    let root_name = &root_tag[name_start..name_end];
+    let close = format!("</{root_name}>");
+    xml.rfind(&close)
+}
+
+fn find_ext_start(xml: &str, pos: usize) -> Option<usize> {
+    let mut search_pos = pos;
+    while let Some(rel) = xml[search_pos..].find("<ext") {
+        let start = search_pos + rel;
+        let after = xml.as_bytes().get(start + "<ext".len()).copied();
+        if matches!(after, Some(b' ' | b'>' | b'/')) {
+            return Some(start);
+        }
+        search_pos = start + "<ext".len();
+    }
+    None
+}
+
+fn parse_ext_uri(start_tag: &str) -> Option<&str> {
+    let uri_pos = start_tag.find("uri")?;
+    let after_uri = &start_tag[uri_pos + "uri".len()..];
+    let eq_pos = after_uri.find('=')?;
+    let value = after_uri[eq_pos + 1..].trim_start();
+    let quote = value.as_bytes().first().copied()?;
+    if quote != b'"' && quote != b'\'' {
+        return None;
+    }
+    let value = &value[1..];
+    let end = value.find(quote as char)?;
+    Some(&value[..end])
 }

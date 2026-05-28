@@ -21,6 +21,10 @@ use value_types::CellValue;
 #[serde(rename_all = "camelCase")]
 pub struct ParseOutput {
     pub sheets: Vec<SheetData>,
+    /// Workbook-owned root XML namespace declarations captured from
+    /// `xl/workbook.xml`.
+    #[serde(default, skip_serializing_if = "XmlNamespaceDeclarations::is_empty")]
+    pub workbook_root_namespaces: XmlNamespaceDeclarations,
     pub style_palette: Vec<DocumentFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workbook_stylesheet: Option<WorkbookStylesheet>,
@@ -131,6 +135,69 @@ pub struct OpaquePackagePartHint {
     pub content_type: Option<String>,
     /// Parsed relationships from this part's imported sidecar, when captured.
     pub relationships: Vec<PackageRelationshipHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct XmlNamespaceDeclaration {
+    /// Namespace prefix; `None` represents the default `xmlns="..."`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct XmlNamespaceDeclarations {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declarations: Vec<XmlNamespaceDeclaration>,
+}
+
+impl XmlNamespaceDeclarations {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.declarations.is_empty()
+    }
+}
+
+/// Typed package identity hints for worksheet-owned comment artifacts.
+///
+/// These values are not payload preservation. Writers may use them to allocate
+/// current modeled parts and relationships when still valid, while generating
+/// XML from the current comment/person model.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetCommentPackageInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comments_path_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comments_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments_root_namespace_attrs: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vml_path_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vml_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threaded_comments_path_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threaded_comments_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub threaded_comments_root_namespace_attrs: Vec<(String, String)>,
+}
+
+impl SheetCommentPackageInfo {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.comments_path_hint.is_none()
+            && self.comments_relationship_id_hint.is_none()
+            && self.comments_root_namespace_attrs.is_empty()
+            && self.vml_path_hint.is_none()
+            && self.vml_relationship_id_hint.is_none()
+            && self.threaded_comments_path_hint.is_none()
+            && self.threaded_comments_relationship_id_hint.is_none()
+            && self.threaded_comments_root_namespace_attrs.is_empty()
+    }
 }
 
 impl PackageFidelityMetadata {
@@ -484,6 +551,14 @@ pub struct SheetData {
     pub name: String,
     pub rows: u32,
     pub cols: u32,
+    /// Worksheet-owned root XML namespace declarations captured from this
+    /// sheet's `<worksheet>` root.
+    #[serde(default, skip_serializing_if = "XmlNamespaceDeclarations::is_empty")]
+    pub worksheet_root_namespaces: XmlNamespaceDeclarations,
+    /// Raw worksheet-level `<extLst>...</extLst>` XML for unmodeled extension
+    /// children. Modeled extension owners are regenerated from current state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_ext_lst_xml: Option<String>,
     /// Original sheetId from workbook.xml (1-based). Preserved for round-trip fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sheet_id: Option<u32>,
@@ -517,6 +592,9 @@ pub struct SheetData {
     /// authors and original ordering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub legacy_comment_authors: Vec<String>,
+    /// Package identity and root-namespace hints for modeled comment artifacts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment_package: Option<SheetCommentPackageInfo>,
     pub hyperlinks: Vec<Hyperlink>,
     pub data_validations: Vec<ValidationSpec>,
     /// Source count attribute on `<dataValidations>`, when imported.

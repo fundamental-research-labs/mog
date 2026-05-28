@@ -202,20 +202,23 @@ export const OPEN_PROTECT_SHEET_DIALOG: AsyncActionHandler = async (deps) => {
 };
 
 /**
- * OPEN_PROTECT_WORKBOOK_DIALOG: Open Protect Workbook dialog, or unprotect
- * when workbook structure protection is already active.
+ * OPEN_PROTECT_WORKBOOK_DIALOG: Open the workbook protection command workflow.
  *
- * Opens the workbook protection configuration dialog.
+ * Opens protect mode for unprotected workbooks and unprotect mode for protected
+ * workbooks so every entrypoint can collect a password before unprotecting.
  * Currently structure protection only (prevents sheet add/delete/move/rename/hide/unhide).
  *
  * Protect Workbook Dialog
  */
 export const OPEN_PROTECT_WORKBOOK_DIALOG: AsyncActionHandler = async (deps) => {
+  const state = getUIStore(deps).getState();
+
   if (await deps.workbook.protection.isProtected()) {
-    return UNPROTECT_WORKBOOK(deps);
+    state.openProtectWorkbookDialog(undefined, 'unprotect');
+    return handled();
   }
 
-  getUIStore(deps).getState().openProtectWorkbookDialog();
+  state.openProtectWorkbookDialog();
 
   return handled();
 };
@@ -432,6 +435,8 @@ export const UNPROTECT_WORKBOOK: AsyncActionHandler = async (deps, payload?: unk
     getUIStore(deps).getState().showProtectionAlert('The password you supplied is not correct.');
     return notHandled('disabled');
   }
+
+  getUIStore(deps).getState().closeProtectWorkbookDialog();
 
   return handled();
 };

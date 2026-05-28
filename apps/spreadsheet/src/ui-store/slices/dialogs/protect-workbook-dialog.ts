@@ -27,12 +27,16 @@ export interface WorkbookProtectionOptions {
   // Future: windows: boolean; // Protect window position and size
 }
 
+export type ProtectWorkbookDialogMode = 'protect' | 'unprotect';
+
 /**
  * Protect Workbook dialog state
  */
 export interface ProtectWorkbookDialogState {
   /** Whether the dialog is open */
   isOpen: boolean;
+  /** Whether OK protects or unprotects workbook structure */
+  mode: ProtectWorkbookDialogMode;
   /** Optional password (masked in UI) */
   password: string;
   /** Confirm password field (masked in UI) */
@@ -43,7 +47,10 @@ export interface ProtectWorkbookDialogState {
 
 export interface ProtectWorkbookDialogSlice {
   protectWorkbookDialog: ProtectWorkbookDialogState;
-  openProtectWorkbookDialog: (currentOptions?: Partial<WorkbookProtectionOptions>) => void;
+  openProtectWorkbookDialog: (
+    currentOptions?: Partial<WorkbookProtectionOptions>,
+    mode?: ProtectWorkbookDialogMode,
+  ) => void;
   closeProtectWorkbookDialog: () => void;
   setProtectWorkbookPassword: (password: string) => void;
   setProtectWorkbookConfirmPassword: (confirmPassword: string) => void;
@@ -65,6 +72,7 @@ const defaultProtectionOptions: WorkbookProtectionOptions = {
 
 const initialState: ProtectWorkbookDialogState = {
   isOpen: false,
+  mode: 'protect',
   password: '',
   confirmPassword: '',
   options: { ...defaultProtectionOptions },
@@ -82,10 +90,11 @@ export const createProtectWorkbookDialogSlice: StateCreator<
 > = (set) => ({
   protectWorkbookDialog: initialState,
 
-  openProtectWorkbookDialog: (currentOptions) => {
+  openProtectWorkbookDialog: (currentOptions, mode = 'protect') => {
     set({
       protectWorkbookDialog: {
         isOpen: true,
+        mode,
         password: '',
         confirmPassword: '',
         options: {
@@ -97,12 +106,9 @@ export const createProtectWorkbookDialogSlice: StateCreator<
   },
 
   closeProtectWorkbookDialog: () => {
-    set((state) => ({
-      protectWorkbookDialog: {
-        ...state.protectWorkbookDialog,
-        isOpen: false,
-      },
-    }));
+    set({
+      protectWorkbookDialog: initialState,
+    });
   },
 
   setProtectWorkbookPassword: (password: string) => {

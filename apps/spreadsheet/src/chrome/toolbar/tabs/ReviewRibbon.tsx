@@ -216,12 +216,8 @@ export function ReviewRibbon() {
   }, [deps, isProtected]);
 
   const handleProtectWorkbook = useCallback(() => {
-    if (isWorkbookStructureProtected) {
-      dispatch('UNPROTECT_WORKBOOK', deps);
-    } else {
-      dispatch('OPEN_PROTECT_WORKBOOK_DIALOG', deps);
-    }
-  }, [deps, isWorkbookStructureProtected]);
+    dispatch('OPEN_PROTECT_WORKBOOK_DIALOG', deps);
+  }, [deps]);
 
   // ==========================================================================
   // Comment action handlers

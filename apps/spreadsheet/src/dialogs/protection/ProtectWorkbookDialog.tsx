@@ -44,6 +44,8 @@ export function ProtectWorkbookDialog() {
   // Ref for auto-focus on dialog open
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
+  const isUnprotectMode = dialogState.mode === 'unprotect';
+
   // Reset form when dialog opens and focus password field
   useEffect(() => {
     if (dialogState.isOpen) {
@@ -51,10 +53,15 @@ export function ProtectWorkbookDialog() {
       // Auto-focus the password field for accessibility
       setTimeout(() => passwordInputRef.current?.focus(), 0);
     }
-  }, [dialogState.isOpen]);
+  }, [dialogState.isOpen, dialogState.mode]);
 
   // Validate passwords match
   const validatePasswords = useCallback((): boolean => {
+    if (isUnprotectMode) {
+      setPasswordError(null);
+      return true;
+    }
+
     const { password, confirmPassword } = dialogState;
 
     // Password is optional - if both are empty, that's valid
@@ -71,23 +78,30 @@ export function ProtectWorkbookDialog() {
 
     setPasswordError(null);
     return true;
-  }, [dialogState]);
+  }, [dialogState, isUnprotectMode]);
 
-  // Handle OK button click - dispatch PROTECT_WORKBOOK action
+  // Handle OK button click
   const handleOk = useCallback(() => {
+    const { password, options } = dialogState;
+
+    if (isUnprotectMode) {
+      dispatch('UNPROTECT_WORKBOOK', deps, {
+        password: password || undefined,
+      });
+      return;
+    }
+
     // Validate passwords
     if (!validatePasswords()) {
       return;
     }
-
-    const { password, options } = dialogState;
 
     // Dispatch PROTECT_WORKBOOK action - handler will apply protection and close dialog
     dispatch('PROTECT_WORKBOOK', deps, {
       password: password || undefined,
       options,
     });
-  }, [dialogState, validatePasswords, deps]);
+  }, [dialogState, isUnprotectMode, deps, validatePasswords]);
 
   // Handle Cancel button click - dispatch close action
   const handleCancel = useCallback(() => {
@@ -102,20 +116,19 @@ export function ProtectWorkbookDialog() {
     [setOption],
   );
 
-  // Check if workbook is currently protected via unified Workbook API
-  const [isProtected, setIsProtected] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
   useEffect(() => {
-    void (async () => {
-      try {
-        const settings = await wb.getSettings();
-        setIsProtected(settings?.isWorkbookProtected ?? false);
-        setHasPassword(!!settings?.workbookProtectionPasswordHash);
-      } catch {
-        setIsProtected(false);
-        setHasPassword(false);
+    setHasPassword(!!wb.mirror.getWorkbookSettings().workbookProtectionPasswordHash);
+
+    const unsubscribe = wb.on('workbook:settings-changed', (event) => {
+      if (
+        event.changedKey === 'workbookProtectionPasswordHash' ||
+        event.changedKey === 'isWorkbookProtected'
+      ) {
+        setHasPassword(!!event.settings.workbookProtectionPasswordHash);
       }
-    })();
+    });
+    return unsubscribe;
   }, [wb]);
 
   if (!dialogState.isOpen) return null;
@@ -131,67 +144,77 @@ export function ProtectWorkbookDialog() {
       }}
     >
       <DialogHeader onClose={handleCancel}>
-        {isProtected ? 'Modify Workbook Protection' : 'Protect Workbook'}
+        {isUnprotectMode ? 'Unprotect Workbook' : 'Protect Workbook'}
       </DialogHeader>
 
       <DialogBody>
         <div className="flex flex-col gap-4">
           {/* Password Section */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="protect-workbook-password" className="font-semibold">
-              Password (optional):
-            </Label>
-            <Input
-              id="protect-workbook-password"
-              ref={passwordInputRef}
-              type="password"
-              value={dialogState.password}
-              onChange={(e) => setPassword(e.target.value)}
-              onBlur={validatePasswords}
-              placeholder="Enter password"
-              className="w-full"
-            />
-            <Input
-              id="protect-workbook-confirm-password"
-              type="password"
-              value={dialogState.confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              onBlur={validatePasswords}
-              placeholder="Confirm password"
-              className="w-full"
-            />
+            {(hasPassword || !isUnprotectMode) && (
+              <>
+                <Label htmlFor="protect-workbook-password" className="font-semibold">
+                  {isUnprotectMode ? 'Password:' : 'Password (optional):'}
+                </Label>
+                <Input
+                  id="protect-workbook-password"
+                  ref={passwordInputRef}
+                  type="password"
+                  value={dialogState.password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={validatePasswords}
+                  placeholder="Enter password"
+                  className="w-full"
+                />
+              </>
+            )}
+            {!isUnprotectMode && (
+              <Input
+                id="protect-workbook-confirm-password"
+                type="password"
+                value={dialogState.confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onBlur={validatePasswords}
+                placeholder="Confirm password"
+                className="w-full"
+              />
+            )}
             {passwordError && <p className="text-body-sm text-ss-error m-0">{passwordError}</p>}
-            {isProtected && hasPassword && (
+            {isUnprotectMode && !hasPassword && (
               <p className="text-body-sm text-ss-text-secondary m-0">
-                Note: Workbook currently has a password. Set a new password to change it, or leave
-                blank to remove password protection.
+                This workbook does not require a password to unprotect its structure.
               </p>
             )}
-            <p className="text-body-sm text-ss-text-secondary m-0">
-              Caution: If you lose or forget the password, it cannot be recovered. It is advisable
-              to keep a list of passwords and their corresponding workbook names in a safe place.
-            </p>
+            {!isUnprotectMode && (
+              <p className="text-body-sm text-ss-text-secondary m-0">
+                Caution: If you lose or forget the password, it cannot be recovered. It is advisable
+                to keep a list of passwords and their corresponding workbook names in a safe place.
+              </p>
+            )}
           </div>
 
-          {/* Divider */}
-          <div className="h-px bg-ss-surface-tertiary" />
+          {!isUnprotectMode && (
+            <>
+              {/* Divider */}
+              <div className="h-px bg-ss-surface-tertiary" />
 
-          {/* Protection Options */}
-          <div className="flex flex-col gap-2">
-            <Label className="font-semibold">Protect workbook for:</Label>
+              {/* Protection Options */}
+              <div className="flex flex-col gap-2">
+                <Label className="font-semibold">Protect workbook for:</Label>
 
-            <div className="flex flex-col gap-2 ml-2">
-              <Checkbox
-                checked={dialogState.options.structure}
-                onChange={handleOptionChange('structure')}
-                label="Structure"
-              />
-              <p className="text-body-sm text-ss-text-secondary m-0 ml-6">
-                Prevents users from adding, deleting, moving, renaming, hiding, or unhiding sheets.
-              </p>
+                <div className="flex flex-col gap-2 ml-2">
+                  <Checkbox
+                    checked={dialogState.options.structure}
+                    onChange={handleOptionChange('structure')}
+                    label="Structure"
+                  />
+                  <p className="text-body-sm text-ss-text-secondary m-0 ml-6">
+                    Prevents users from adding, deleting, moving, renaming, hiding, or unhiding
+                    sheets.
+                  </p>
 
-              {/* Future option placeholder */}
-              {/* <Checkbox
+                  {/* Future option placeholder */}
+                  {/* <Checkbox
  checked={false}
  disabled
  label="Windows (not yet supported)"
@@ -199,8 +222,10 @@ export function ProtectWorkbookDialog() {
  <p className="text-body-sm text-ss-text-secondary m-0 ml-6">
  Prevents users from moving, resizing, or closing the workbook window.
  </p> */}
-            </div>
-          </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </DialogBody>
 

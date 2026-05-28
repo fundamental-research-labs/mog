@@ -104,10 +104,18 @@ fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
 }
 
 #[test]
-fn reconstructed_chart_exports_typed_chart_owned_relationships() {
+fn imported_chart_definition_exports_chart_owned_relationships_without_rt_xml_authority() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
-        ooxml_types::charts::ChartSpace::default(),
+        ooxml_types::charts::ChartSpace {
+            lang: Some("en-US".to_string()),
+            external_data: Some(ooxml_types::charts::ExternalData {
+                r_id: "rIdExternalData".to_string(),
+                auto_update: Some(false),
+            }),
+            user_shapes: Some("rIdUserShapes".to_string()),
+            ..Default::default()
+        },
     ));
     imported_chart.rt = Some(domain_types::chart::ChartRoundTripData {
         external_data: Some(domain_types::chart::ChartExternalData {

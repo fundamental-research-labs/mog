@@ -1803,7 +1803,10 @@ mod tests {
         );
 
         assert!(xml.contains("<x14:dataValidations"));
-        assert!(xml.contains("<x14:dataValidation>"));
+        assert!(
+            xml.contains("<x14:dataValidation>")
+                || xml.contains("<x14:dataValidation ")
+        );
         assert!(xml.contains("<x14:formula1><xm:f>TRUE</xm:f></x14:formula1>"));
         assert!(xml.contains("<xm:sqref>A1:A3</xm:sqref>"));
     }

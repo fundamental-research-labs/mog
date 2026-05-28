@@ -396,10 +396,13 @@ pub(super) fn write_zip_package(
             for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
                 add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
+                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                let typed_user_shapes =
+                    chart_auxiliary::chart_user_shapes_data(chart_spec, &chart_path);
+                let mut written_auxiliary_paths = std::collections::BTreeSet::new();
 
                 // Write chart auxiliary files (style XML, colors XML) only
                 // when the current chart still carries imported chart identity.
-                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
                 if chart_allows_auxiliary_replay(chart_spec)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
@@ -410,8 +413,19 @@ pub(super) fn write_zip_package(
                         if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                             continue;
                         }
+                        written_auxiliary_paths.insert(path.trim_start_matches('/').to_string());
                         add_registered_part(package_graph, &mut zip, path, data.clone())?;
                     }
+                }
+                if let Some(user_shapes) = typed_user_shapes
+                    && written_auxiliary_paths.insert(user_shapes.path.clone())
+                {
+                    add_registered_part(
+                        package_graph,
+                        &mut zip,
+                        &user_shapes.path,
+                        user_shapes.data.to_vec(),
+                    )?;
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
                     &crate::write::package_graph::PackageOwner::Part { path: chart_path },

@@ -495,6 +495,16 @@ fn split_pane_exports_from_typed_view_state() {
 fn extra_sheet_view_exports_from_domain_view_state() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
+        view: domain_types::SheetView {
+            pane: Some(domain_types::SheetPaneConfig {
+                state: domain_types::SheetPaneState::Split,
+                x_split: 90.0,
+                y_split: 0.0,
+                top_left_cell: None,
+                active_pane: Some(domain_types::SheetPaneId::TopRight),
+            }),
+            ..Default::default()
+        },
         extra_sheet_views: vec![domain_types::SheetView {
             workbook_view_id: 1,
             view: Some("pageLayout".to_string()),

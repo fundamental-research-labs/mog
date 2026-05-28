@@ -1486,11 +1486,16 @@ fn relationship_type_allowed_for_owner(
         | Rel::Theme
         | Rel::SharedStrings
         | Rel::CalcChain
-        | Rel::ExternalLink
         | Rel::SlicerCache
         | Rel::Metadata
         | Rel::Person
         | Rel::VbaProject => owner == RelationshipOwnerKind::Workbook,
+        Rel::ExternalLink => {
+            matches!(
+                owner,
+                RelationshipOwnerKind::Workbook | RelationshipOwnerKind::Chart
+            )
+        }
         Rel::PivotCacheDefinition => {
             matches!(
                 owner,
@@ -1549,11 +1554,11 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::Theme
         | Rel::SharedStrings
         | Rel::CalcChain
-        | Rel::ExternalLink
         | Rel::SlicerCache
         | Rel::Metadata
         | Rel::Person
         | Rel::VbaProject => "workbook relationships",
+        Rel::ExternalLink => "workbook or chart relationships",
         Rel::PivotCacheDefinition => "workbook or pivot table relationships",
         Rel::Comments
         | Rel::ThreadedComments

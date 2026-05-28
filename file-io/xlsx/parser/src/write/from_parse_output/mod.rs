@@ -125,10 +125,6 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.floor_format.is_some()
         || chart_spec.side_wall_format.is_some()
         || chart_spec.back_wall_format.is_some()
-        || chart_spec
-            .rt
-            .as_ref()
-            .is_some_and(|rt| rt.external_data.is_some() || rt.user_shapes.is_some())
 }
 
 fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -139,9 +135,9 @@ fn register_chart_owned_external_relationships(
     package_graph_builder: &mut crate::write::package_graph::PackageGraphBuilder,
     chart_path: &str,
     chart_spec: &domain_types::ChartSpec,
-) {
+) -> Result<(), WriteError> {
     let Some(rt) = chart_spec.rt.as_ref() else {
-        return;
+        return Ok(());
     };
 
     if let Some(external_data) = rt.external_data.as_ref() {
@@ -159,6 +155,22 @@ fn register_chart_owned_external_relationships(
             );
         }
     }
+
+    if let Some(user_shapes) = chart_auxiliary::chart_user_shapes_data(chart_spec, chart_path) {
+        crate::write::package_graph::register_chart_auxiliary_part(
+            package_graph_builder,
+            &user_shapes.path,
+        )?;
+        crate::write::package_graph::register_chart_auxiliary_relationship(
+            package_graph_builder,
+            chart_path,
+            user_shapes.relationship_type,
+            &user_shapes.path,
+            user_shapes.relationship_id_hint,
+        );
+    }
+
+    Ok(())
 }
 
 fn comments_have_imported_identity(sheet_data: &domain_types::SheetData) -> bool {
@@ -1164,7 +1176,7 @@ pub fn write_xlsx_from_parse_output(
                 &mut package_graph_builder,
                 &chart_path,
                 chart_spec,
-            );
+            )?;
         }
     }
     for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {

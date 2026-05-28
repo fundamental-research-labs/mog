@@ -16,6 +16,13 @@ pub(super) struct ChartAuxiliaryDataRef<'a> {
     pub(super) original_path: String,
 }
 
+pub(super) struct ChartUserShapesDataRef<'a> {
+    pub(super) path: String,
+    pub(super) data: &'a [u8],
+    pub(super) relationship_type: &'a str,
+    pub(super) relationship_id_hint: &'a str,
+}
+
 pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxiliaryDataRef<'_>> {
     let rt = chart_spec.rt.as_ref()?;
     let (_, chart_rels) = rt.chart_rels_bytes.as_ref()?;
@@ -26,6 +33,30 @@ pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxili
         auxiliary_files: rt.auxiliary_files.as_slice(),
         chart_rels: chart_rels.as_slice(),
         original_path: chart_identity_path(chart_spec)?,
+    })
+}
+
+pub(super) fn chart_user_shapes_data<'a>(
+    chart_spec: &'a ChartSpec,
+    chart_path: &str,
+) -> Option<ChartUserShapesDataRef<'a>> {
+    let rt = chart_spec.rt.as_ref()?;
+    let user_shapes = rt.user_shapes.as_ref()?;
+    let relationship_type = user_shapes.relationship_type.as_deref()?;
+    let target = user_shapes.target.as_deref()?;
+    let target_path = crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
+        .ok()
+        .map(|path| normalize_path(&path))?;
+    let (_, data) = rt
+        .auxiliary_files
+        .iter()
+        .find(|(path, _)| normalize_path(path) == target_path)?;
+
+    Some(ChartUserShapesDataRef {
+        path: target_path,
+        data: data.as_slice(),
+        relationship_type,
+        relationship_id_hint: user_shapes.r_id.as_str(),
     })
 }
 

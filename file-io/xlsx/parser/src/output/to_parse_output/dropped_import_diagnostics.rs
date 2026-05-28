@@ -12,14 +12,11 @@ pub(super) fn append_dropped_import_diagnostics(
         dropped.push("custom XML package parts");
     }
     if let Some(ext) = result.extensions.as_ref() {
-        if !ext.binary_passthrough.is_empty() {
+        if !ext.imported_parts.is_empty() {
             dropped.push("binary passthrough package parts");
         }
         if !ext.workbook_namespaces.all().is_empty() {
             dropped.push("workbook namespace declarations");
-        }
-        if !ext.workbook_preserved.is_empty() {
-            dropped.push("workbook unknown XML elements");
         }
         if !ext
             .sheet_namespaces
@@ -27,13 +24,6 @@ pub(super) fn append_dropped_import_diagnostics(
             .all(|namespaces| namespaces.all().is_empty())
         {
             dropped.push("worksheet namespace declarations");
-        }
-        if !ext
-            .sheet_preserved
-            .iter()
-            .all(|preserved| preserved.is_empty())
-        {
-            dropped.push("worksheet unknown XML elements");
         }
     }
 
@@ -43,6 +33,37 @@ pub(super) fn append_dropped_import_diagnostics(
         .any(|sheet| !sheet.raw_vml_drawings.is_empty())
     {
         dropped.push("raw VML drawing sidecars");
+    }
+    if result.raw_doc_metadata_label_info.is_some() {
+        dropped.push("document label metadata package part");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| !sheet.comments_root_namespace_attrs.is_empty())
+    {
+        dropped.push("comments root namespace declarations");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| !sheet.table_xml_passthroughs.is_empty())
+    {
+        dropped.push("table XML passthrough package parts");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| sheet.header_footer_xml.is_some())
+    {
+        dropped.push("worksheet header/footer XML");
+    }
+    if result
+        .sheets
+        .iter()
+        .any(|sheet| sheet.worksheet_controls_xml.is_some())
+    {
+        dropped.push("worksheet controls XML sidecar");
     }
     if result
         .sheets

@@ -33,7 +33,7 @@
 //! # Typical usage
 //!
 //! ```ignore
-//! use xlsx_parser::roundtrip::xml_diff::{XmlDiff, XmlDiffOptions, structural_diff};
+//! use xlsx_parser::testing::xml_diff::{XmlDiff, XmlDiffOptions, structural_diff};
 //!
 //! let opts = XmlDiffOptions::default();
 //! match structural_diff(blob_xml, typed_xml, &opts) {

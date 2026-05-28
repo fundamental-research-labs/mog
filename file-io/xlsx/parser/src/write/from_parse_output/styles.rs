@@ -10,7 +10,7 @@ use crate::domain::styles::types::{
     FontScheme, GradientStop, GradientType, HorizontalAlign, PatternType, ProtectionDef,
     UnderlineStyle, VerticalAlign, VerticalAlignRun,
 };
-use crate::domain::styles::write::StylesWriter;
+use crate::domain::styles::write::{StyleRootNamespaces, StylesWriter};
 
 /// Build a `StylesWriter` from the modeled `DocumentFormat` export palette.
 ///
@@ -120,15 +120,8 @@ pub(super) fn apply_workbook_stylesheet(
     }
 
     if !workbook_stylesheet.root_namespace_attrs.is_empty() {
-        let mut ns = crate::roundtrip::namespaces::NamespaceMap::new();
-        for (prefix, uri) in &workbook_stylesheet.root_namespace_attrs {
-            if prefix.is_empty() {
-                ns.set_default(uri.clone());
-            } else {
-                ns.add_prefixed(prefix.clone(), uri.clone());
-            }
-        }
-        writer.preserved_namespaces = Some(ns);
+        writer.root_namespaces =
+            StyleRootNamespaces::from_attrs(workbook_stylesheet.root_namespace_attrs.clone());
     }
 }
 

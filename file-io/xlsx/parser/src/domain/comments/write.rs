@@ -462,7 +462,7 @@ impl CommentsWriter {
         w.start_element("comments");
 
         if !self.root_namespace_attrs.is_empty() {
-            // Emit preserved namespace declarations from the original file.
+            // Emit root namespace declarations from the original file.
             for (attr_name, attr_value) in &self.root_namespace_attrs {
                 w.attr(attr_name, attr_value);
             }

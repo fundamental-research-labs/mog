@@ -24,7 +24,7 @@
 //! assert_eq!(builder.build(), Some("x14ac xr".to_string()));
 //! ```
 
-use crate::roundtrip::namespaces::NamespaceMap;
+use crate::infra::xml_namespaces::NamespaceMap;
 
 /// Well-known namespace URIs for extension prefixes commonly found in mc:Ignorable.
 /// These are the prefixes that are NOT part of the base SpreadsheetML or relationships

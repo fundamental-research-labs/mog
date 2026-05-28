@@ -14,7 +14,7 @@
 //! Modules are organized into logical groups:
 //! - **`read/`** — Domain-specific parsers (strings, styles, workbook, etc.)
 //! - **`pipeline/`** — Parse orchestration (full, fast, lazy, streaming)
-//! - **`roundtrip/`** — Round-trip fidelity (attribute order, namespaces, unknown elements)
+//! - **`infra/`** — Shared XML, ZIP, namespace, and parser infrastructure
 //! - **`output/`** — Result types and serialization helpers
 //! - **Root-level** — Infrastructure (error handling, scanner, arena, etc.)
 //! - **Domain subdirs** — Complex feature parsers (cell_parser, charts, tables, etc.)
@@ -85,7 +85,6 @@ pub mod domain;
 // Orchestration
 pub mod output;
 pub mod pipeline; // Parse orchestration
-pub mod roundtrip; // Fidelity preservation
 pub mod testing; // Shared test contract adapters
 pub mod zip; // ZIP archive reading // Result types (was: wasm/)
 
@@ -211,25 +210,19 @@ pub use domain_types::domain::external_link::{
 };
 
 // =============================================================================
-// === Round-Trip Fidelity ===
+// === XML Infrastructure And Import Helpers ===
 // =============================================================================
 
-pub use roundtrip::attr_order::{
-    AttributeOrder, AttributeWriter, ElementAttributes, PreservedAttribute,
+pub use infra::imported_parts::{
+    ImportedPackageParts, CT_OLE_OBJECT, CT_PRINTER_SETTINGS, infer_content_type,
 };
-pub use roundtrip::binary_passthrough::{
-    BinaryPassthrough, CT_OLE_OBJECT, CT_PRINTER_SETTINGS, infer_content_type,
-};
-pub use roundtrip::namespaces::{
+pub use infra::xml_namespaces::{
     NS_CONTENT_TYPES, NS_DRAWING_ML, NS_MC, NS_RELATIONSHIPS, NS_SPREADSHEET_ML, NS_X14,
     NamespaceDeclaration, NamespaceMap, NamespaceWriter, styles_namespaces, workbook_namespaces,
     worksheet_namespaces,
 };
-pub use roundtrip::preservation::ExtensionPreservation;
-pub use roundtrip::unknown_elements::{
-    PreservedElements, PreservedPosition, PreservedWriter, PreservedXml, UnknownElementCapture,
-    extract_element_bounds, extract_element_xml,
-};
+pub use infra::xml_fragment::{extract_element_bounds, extract_element_xml};
+pub use pipeline::import_extensions::ImportExtensionParts;
 
 // =============================================================================
 // === Streaming & Infrastructure ===

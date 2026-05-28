@@ -2,6 +2,19 @@ use super::*;
 
 pub type RawVmlDrawing = (String, Vec<u8>, Option<(String, Vec<u8>)>);
 
+/// Imported binary package part used as an owner-scoped hydration input.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedBinaryPart {
+    /// Normalized ZIP package path, e.g. `xl/media/image1.png`.
+    pub path: String,
+    /// Source package content type when declared in `[Content_Types].xml`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    /// Verbatim package bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// Hyperlink output for parse result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -570,6 +583,10 @@ pub struct FullParseResult {
     /// Raw XML of <extLst>...</extLst> from xl/styles.xml for round-trip fidelity
     #[serde(skip)]
     pub styles_ext_lst_xml: Option<Vec<u8>>,
+    /// Namespace declarations from the `<styleSheet>` root element, owned by
+    /// the parsed stylesheet contract instead of generic extension context.
+    #[serde(skip)]
+    pub styles_root_namespace_attrs: Vec<(String, String)>,
     /// Full parsed OOXML stylesheet for lossless style round-tripping.
     /// Preserves theme/indexed color references, cellStyleXfs, dxfs, etc.
     #[serde(skip)]
@@ -621,10 +638,18 @@ pub struct FullParseResult {
     /// Extracted from `<sheet r:id="rIdN"/>` in workbook.xml.
     #[serde(skip)]
     pub sheet_workbook_r_ids: Vec<String>,
+    /// Imported `xl/media/*` bytes used only to hydrate current picture and
+    /// OLE-preview owners before parser state is dropped.
+    #[serde(skip)]
+    pub imported_media_parts: Vec<ImportedBinaryPart>,
+    /// Imported `xl/embeddings/*` bytes used only to hydrate current OLE owners
+    /// before parser state is dropped.
+    #[serde(skip)]
+    pub imported_ole_parts: Vec<ImportedBinaryPart>,
     /// Tier 2 extension preservation: captured namespace declarations, unknown elements,
     /// and binary passthrough entries for round-trip fidelity. Internal only — not sent to TypeScript.
     #[serde(skip)]
-    pub extensions: Option<crate::roundtrip::preservation::ExtensionPreservation>,
+    pub extensions: Option<crate::pipeline::import_extensions::ImportExtensionParts>,
     /// Raw bytes of `xl/metadata.xml` for verbatim round-trip passthrough.
     /// Avoids namespace rewriting issues (e.g., `xda` vs `xlrd`).
     #[serde(skip)]

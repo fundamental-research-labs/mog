@@ -3,6 +3,11 @@
 pub mod ooxml_contract;
 pub mod package_graph;
 pub mod perf;
+pub mod xml_diff;
+pub mod fidelity;
+
+#[cfg(test)]
+mod context_removal_audit;
 
 pub use ooxml_contract::*;
 pub use package_graph::*;

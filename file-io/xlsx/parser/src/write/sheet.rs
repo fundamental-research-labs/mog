@@ -29,7 +29,6 @@ use crate::domain::worksheet::write::{
     write_cols, write_dimensions, write_merge_cells, write_sheet_format_pr, write_sheet_properties,
     write_sheet_views,
 };
-use crate::roundtrip::unknown_elements::PreservedXml;
 use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers, WorksheetSemanticXml};
 pub use ooxml_types::worksheet::{
     ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
@@ -82,9 +81,7 @@ pub struct SheetWriter {
     /// Stable sheet identity for co-authoring (xr:uid on <worksheet> root)
     uid: Option<String>,
     /// Tier 2: Captured namespace declarations for round-trip fidelity
-    preserved_namespaces: Option<crate::roundtrip::namespaces::NamespaceMap>,
-    /// Tier 2: Captured unknown child elements for round-trip fidelity
-    preserved_elements: Option<crate::roundtrip::unknown_elements::PreservedElements>,
+    root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
     /// Raw autoFilter XML for verbatim round-trip passthrough.
     auto_filter_xml: Option<String>,
     /// Typed worksheet semantic containers emitted from SheetData, not preserved XML.
@@ -142,8 +139,7 @@ impl SheetWriter {
             print_writer: None,
             sheet_format_pr: SheetFormatPr::default(),
             uid: None,
-            preserved_namespaces: None,
-            preserved_elements: None,
+            root_namespaces: None,
             auto_filter_xml: None,
             worksheet_semantic_containers: WorksheetSemanticContainers::default(),
             sort_state_xml: None,
@@ -673,21 +669,12 @@ impl SheetWriter {
         self
     }
 
-    /// Set preserved namespace declarations for round-trip fidelity.
-    pub fn set_preserved_namespaces(
+    /// Set root namespace declarations for round-trip fidelity.
+    pub fn set_root_namespaces(
         &mut self,
-        ns: crate::roundtrip::namespaces::NamespaceMap,
+        ns: crate::infra::xml_namespaces::NamespaceMap,
     ) -> &mut Self {
-        self.preserved_namespaces = Some(ns);
-        self
-    }
-
-    /// Set preserved unknown elements for round-trip fidelity.
-    pub fn set_preserved_elements(
-        &mut self,
-        elements: crate::roundtrip::unknown_elements::PreservedElements,
-    ) -> &mut Self {
-        self.preserved_elements = Some(elements);
+        self.root_namespaces = Some(ns);
         self
     }
 
@@ -787,29 +774,6 @@ impl SheetWriter {
         self.legacy_drawing_r_id.is_some()
     }
 
-    fn should_skip_preserved_pivot_table_definition(&self, raw_xml: &str) -> bool {
-        if !raw_xml.contains("pivotTableDefinition") {
-            return false;
-        }
-
-        true
-    }
-
-    fn write_preserved_element(&self, w: &mut XmlWriter, elem: &PreservedXml) -> bool {
-        if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
-            return false;
-        }
-        let Some(replay_xml) =
-            crate::roundtrip::preserved_xml_policy::worksheet_preserved_xml_for_replay(
-                &elem.raw_xml,
-            )
-        else {
-            return false;
-        };
-        w.raw_str(&replay_xml);
-        true
-    }
-
     /// Set the relationship ID for `<legacyDrawing r:id="..."/>`.
     pub fn set_legacy_drawing_r_id(&mut self, r_id: String) -> &mut Self {
         self.legacy_drawing_r_id = Some(r_id);
@@ -858,12 +822,12 @@ impl SheetWriter {
                 .map_or(false, |xml| xml.contains("xr:uid"));
 
         // Build mc:Ignorable from Tier 1 + Tier 2 prefixes.
-        // When preserved namespaces exist, let add_from_namespace_map control the order
+        // When root namespaces exist, let add_from_namespace_map control the order
         // so that the mc:Ignorable value matches the original document order.
-        // Only add Tier 1 prefixes first in fresh-write mode (no preserved namespaces).
+        // Only add Tier 1 prefixes first in fresh-write mode (no root namespaces).
         use crate::write::mc_builder::McIgnorableBuilder;
         let mut mc_builder = McIgnorableBuilder::new();
-        if self.preserved_namespaces.is_none() {
+        if self.root_namespaces.is_none() {
             if has_descent {
                 mc_builder.add("x14ac");
             }
@@ -871,9 +835,9 @@ impl SheetWriter {
                 mc_builder.add("xr");
             }
         }
-        if let Some(ref ns) = self.preserved_namespaces {
+        if let Some(ref ns) = self.root_namespaces {
             mc_builder.add_from_namespace_map(ns);
-            // Add Tier 1 prefixes that aren't in preserved namespaces (edge case)
+            // Add Tier 1 prefixes that aren't in root namespaces (edge case)
             if has_descent {
                 mc_builder.add("x14ac");
             }
@@ -887,39 +851,39 @@ impl SheetWriter {
             .attr("xmlns", SPREADSHEET_NS)
             .attr("xmlns:r", RELATIONSHIPS_NS);
 
-        // Check which Tier 1 namespaces are already covered by preserved_namespaces.
-        // When preserved_namespaces contains x14ac or xr, we emit them via Tier 2
+        // Check which Tier 1 namespaces are already covered by root_namespaces.
+        // When root_namespaces contains x14ac or xr, we emit them via Tier 2
         // in their original document order rather than Tier 1, preserving namespace ordering.
         let preserved_has_x14ac = self
-            .preserved_namespaces
+            .root_namespaces
             .as_ref()
             .map_or(false, |ns| ns.has_prefix("x14ac"));
         let preserved_has_xr = self
-            .preserved_namespaces
+            .root_namespaces
             .as_ref()
             .map_or(false, |ns| ns.has_prefix("xr"));
-        // When preserved_namespaces contains "mc", defer xmlns:mc + mc:Ignorable to the
-        // preserved namespace loop so the original attribute order is reproduced exactly.
+        // When root_namespaces contains "mc", defer xmlns:mc + mc:Ignorable to the
+        // root namespace loop so the original attribute order is reproduced exactly.
         // Otherwise emit them immediately after xmlns:r (the default/fresh-write path).
         let preserved_has_mc = self
-            .preserved_namespaces
+            .root_namespaces
             .as_ref()
             .map_or(false, |ns| ns.has_prefix("mc"));
 
         let mc_uri = "http://schemas.openxmlformats.org/markup-compatibility/2006";
         let ignorable_value = mc_builder.build();
 
-        // Fresh-write mode (no preserved namespaces): emit xmlns:mc
+        // Fresh-write mode (no root namespaces): emit xmlns:mc
         // when extension prefixes are present, since we're generating new XML.
-        // Round-trip mode (preserved namespaces exist): only emit mc if the original had it
+        // Round-trip mode (root namespaces exist): only emit mc if the original had it
         // — if the original didn't have xmlns:mc, we shouldn't inject it.
         // Note: mc:Ignorable is deferred to after all namespace declarations (matching Excel's ordering).
-        let is_fresh_write = self.preserved_namespaces.is_none();
+        let is_fresh_write = self.root_namespaces.is_none();
         if !mc_builder.is_empty() && !preserved_has_mc && is_fresh_write {
             w.attr("xmlns:mc", mc_uri);
         }
 
-        // Emit Tier 1 namespace declarations (only when not already in preserved_namespaces)
+        // Emit Tier 1 namespace declarations (only when not already in root_namespaces)
         if has_descent && !preserved_has_x14ac {
             w.attr(
                 "xmlns:x14ac",
@@ -934,9 +898,9 @@ impl SheetWriter {
         }
 
         // Tier 2: Emit captured extension namespace declarations (skip already-emitted ones).
-        // When preserved_namespaces contains "mc", emit xmlns:mc + mc:Ignorable at the position
+        // When root_namespaces contains "mc", emit xmlns:mc + mc:Ignorable at the position
         // where "mc" appears in the original document order.
-        if let Some(ref ns) = self.preserved_namespaces {
+        if let Some(ref ns) = self.root_namespaces {
             for decl in ns.all() {
                 if let Some(ref prefix) = decl.prefix {
                     if prefix == "r" {
@@ -970,7 +934,7 @@ impl SheetWriter {
             w.attr("xr:uid", uid);
         }
 
-        // Emit mc:Ignorable at end only in fresh-write mode (no preserved namespaces).
+        // Emit mc:Ignorable at end only in fresh-write mode (no root namespaces).
         // In round-trip mode, mc:Ignorable was already emitted inline with xmlns:mc above.
         if is_fresh_write {
             if let Some(ref ignorable) = ignorable_value {
@@ -980,74 +944,23 @@ impl SheetWriter {
 
         w.end_attrs();
 
-        // Tier 2: Emit preserved elements with position First
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_first("worksheet") {
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
-
         write_sheet_properties(&mut w, self.sheet_properties.as_ref());
 
         // Write dimension
         self.write_dimension(&mut w);
 
-        // Tier 2: Emit preserved elements after dimension (e.g., sheetPr in non-standard order)
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "dimension") {
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
-
         // Write sheet views
         self.write_sheet_views(&mut w);
-
-        // Tier 2: Emit preserved elements after sheetViews
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "sheetViews") {
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
 
         // Write sheet format properties
         self.write_sheet_format_pr(&mut w);
 
-        // Tier 2: Emit preserved elements after sheetFormatPr (e.g., sheetPr with codeName)
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "sheetFormatPr") {
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
-
         // Write column definitions
         self.write_cols(&mut w);
-
-        // Tier 2: Emit preserved elements after cols / before sheetData
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "cols") {
-                self.write_preserved_element(&mut w, elem);
-            }
-            for elem in preserved.get_before("worksheet", "sheetData") {
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
 
         // Write sheet data (rows and cells)
         self.write_sheet_data(&mut w);
 
-        // Tier 2: Emit preserved elements after sheetData.
-        let skip_table_parts = self.table_parts_xml.is_some();
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "sheetData") {
-                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                    continue;
-                }
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
-
-        // Sheet protection is modeled-authoritative; never let preserved XML
-        // override current SheetData.protection.
         self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.sheet_calc_pr);
         if let Some(ref sp) = self.sheet_protection_xml {
             w.raw_str(sp);
@@ -1073,16 +986,6 @@ impl SheetWriter {
         // Write merge cells
         self.write_merge_cells(&mut w);
         self.write_semantic_container(&mut w, &self.worksheet_semantic_containers.phonetic_pr);
-
-        // Drain preserved elements positioned after mergeCells (e.g. phoneticPr)
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "mergeCells") {
-                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                    continue;
-                }
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
 
         // Write conditionalFormatting (OOXML order: after mergeCells/phoneticPr, before dataValidations)
         if let Some(ref cf) = self.conditional_formatting_xml {
@@ -1125,27 +1028,6 @@ impl SheetWriter {
             pw.write_to(&mut w);
         }
 
-        // Drain preserved elements positioned after print-related elements
-        // (e.g. ignoredErrors after pageMargins/pageSetup, before drawing)
-        // Skip structured elements we regenerate explicitly to avoid stale references.
-        if let Some(ref preserved) = self.preserved_elements {
-            for after in &[
-                "printOptions",
-                "pageMargins",
-                "pageSetup",
-                "headerFooter",
-                "rowBreaks",
-                "colBreaks",
-            ] {
-                for elem in preserved.get_after("worksheet", after) {
-                    if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                        continue;
-                    }
-                    self.write_preserved_element(&mut w, elem);
-                }
-            }
-        }
-
         // Write customProperties (OOXML order: after colBreaks, before drawing)
         if let Some(ref cp) = self.custom_properties_xml {
             w.raw_str(cp);
@@ -1157,16 +1039,6 @@ impl SheetWriter {
         // Write <drawing r:id="..."/> (OOXML order: after colBreaks, before legacyDrawing)
         if let Some(ref r_id) = self.drawing_r_id {
             w.start_element("drawing").attr("r:id", r_id).self_close();
-        }
-
-        // Drain preserved elements positioned after drawing
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "drawing") {
-                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                    continue;
-                }
-                self.write_preserved_element(&mut w, elem);
-            }
         }
 
         // Write <legacyDrawing r:id="..."/> (OOXML order: after drawing, before legacyDrawingHF)
@@ -1181,59 +1053,6 @@ impl SheetWriter {
             w.start_element("legacyDrawingHF")
                 .attr("r:id", r_id)
                 .self_close();
-        }
-
-        // Drain preserved elements positioned after legacyDrawingHF (e.g. ignoredErrors)
-        // Skip explicitly modeled controls and never replay OLE objects from preservation.
-        let skip_controls = self.controls_xml.is_some();
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_after("worksheet", "legacyDrawing") {
-                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                    continue;
-                }
-                if skip_controls && elem.raw_xml.contains("<controls") {
-                    continue;
-                }
-                if elem.raw_xml.contains("<oleObjects") {
-                    continue;
-                }
-                self.write_preserved_element(&mut w, elem);
-            }
-        }
-
-        // Tier 2: Emit any remaining preserved elements with AfterElement positions
-        // not already handled by the explicit drains above.
-        if let Some(ref preserved) = self.preserved_elements {
-            let handled = &[
-                // Pre-sheetData known elements (replayed inline above)
-                "dimension",
-                "sheetViews",
-                "sheetFormatPr",
-                "cols",
-                // Post-sheetData known elements
-                "sheetData",
-                "mergeCells",
-                "printOptions",
-                "pageMargins",
-                "pageSetup",
-                "headerFooter",
-                "rowBreaks",
-                "colBreaks",
-                "drawing",
-                "legacyDrawing",
-            ];
-            for elem in preserved.get_after_any("worksheet", handled) {
-                if skip_table_parts && elem.raw_xml.contains("<tableParts") {
-                    continue;
-                }
-                if skip_controls && elem.raw_xml.contains("<controls") {
-                    continue;
-                }
-                if elem.raw_xml.contains("<oleObjects") {
-                    continue;
-                }
-                self.write_preserved_element(&mut w, elem);
-            }
         }
 
         // Write OLE worksheet references from modeled floating-object state.
@@ -1263,13 +1082,6 @@ impl SheetWriter {
         // Write extLst (OOXML order: after tableParts, last child of worksheet)
         if let Some(ref ext) = self.ext_lst_xml {
             w.raw_str(ext);
-        }
-
-        // Tier 2: Emit preserved elements with position Last
-        if let Some(ref preserved) = self.preserved_elements {
-            for elem in preserved.get_last("worksheet") {
-                self.write_preserved_element(&mut w, elem);
-            }
         }
 
         // Close worksheet

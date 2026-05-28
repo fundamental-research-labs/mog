@@ -233,7 +233,7 @@ impl ReportBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::roundtrip::fidelity::compare::CellComparison;
+    use crate::testing::fidelity::compare::CellComparison;
 
     #[test]
     fn test_empty_report() {

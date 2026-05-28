@@ -204,7 +204,7 @@ pub fn parse_ole_objects_for_sheet(
     ole::parse_ole_objects_for_sheet(archive, sheet_num, worksheet_xml)
 }
 
-/// Extract OLE binary entries from the archive into a `BinaryPassthrough` store.
+/// Extract OLE binary entries from the archive into a `ImportedPackageParts` store.
 ///
 /// This should be called during import after `parse_ole_objects_for_sheet()` to
 /// eagerly extract OLE binary blobs and preview images for roundtrip preservation.
@@ -216,7 +216,7 @@ pub fn parse_ole_objects_for_sheet(
 pub fn extract_ole_binary_entries(
     archive: &crate::zip::XlsxArchive,
     ole_outputs: &[crate::output::results::OleObjectOutput],
-    passthrough: &mut crate::roundtrip::binary_passthrough::BinaryPassthrough,
+    passthrough: &mut crate::infra::imported_parts::ImportedPackageParts,
 ) {
     ole::extract_ole_binary_entries(archive, ole_outputs, passthrough);
 }

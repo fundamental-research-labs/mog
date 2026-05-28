@@ -60,9 +60,9 @@ impl OleWriter {
 
     pub fn register_content_types(
         ct: &mut crate::domain::content_types::write::ContentTypesManager,
-        passthrough: &crate::roundtrip::binary_passthrough::BinaryPassthrough,
+        passthrough: &crate::infra::imported_parts::ImportedPackageParts,
     ) {
-        use crate::roundtrip::binary_passthrough::infer_content_type;
+        use crate::infra::imported_parts::infer_content_type;
         use std::collections::HashSet;
 
         let mut registered_extensions: HashSet<String> = HashSet::new();
@@ -80,7 +80,7 @@ impl OleWriter {
                         "bin" => {
                             ct.add_default(
                                 "bin",
-                                crate::roundtrip::binary_passthrough::CT_OLE_OBJECT,
+                                crate::infra::imported_parts::CT_OLE_OBJECT,
                             );
                         }
                         "emf" => {
@@ -319,7 +319,7 @@ pub fn parse_ole_objects_for_sheet(
 pub fn extract_ole_binary_entries(
     archive: &crate::zip::XlsxArchive,
     ole_outputs: &[crate::output::results::OleObjectOutput],
-    passthrough: &mut crate::roundtrip::binary_passthrough::BinaryPassthrough,
+    passthrough: &mut crate::infra::imported_parts::ImportedPackageParts,
 ) {
     for ole in ole_outputs {
         if let Some(data_path) = &ole.data_path {

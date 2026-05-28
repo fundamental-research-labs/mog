@@ -526,7 +526,7 @@ fn imported_identity_from_domain(
 }
 
 fn source_kind_for_external_link(link: &ExternalLink) -> PersistedWorkbookLinkSourceKind {
-    match link.link_type {
+    match &link.link_type {
         ExternalLinkType::Workbook => PersistedWorkbookLinkSourceKind::ExcelWorkbook,
         ExternalLinkType::Dde { .. } => PersistedWorkbookLinkSourceKind::DdeLink,
         ExternalLinkType::Ole { .. } => PersistedWorkbookLinkSourceKind::OleLink,
@@ -550,11 +550,11 @@ fn persisted_target_for_external_link(
                 PersistedLinkTarget::OoxmlExternalPath { target }
             }
         }
-        ExternalLinkType::Dde { service, topic } => PersistedLinkTarget::OpaqueHostToken {
+        ExternalLinkType::Dde { service, topic, .. } => PersistedLinkTarget::OpaqueHostToken {
             namespace: "ooxml-dde".to_string(),
             token: stable_opaque_token(&format!("{service}\u{1f}{topic}")),
         },
-        ExternalLinkType::Ole { prog_id } => PersistedLinkTarget::OpaqueHostToken {
+        ExternalLinkType::Ole { prog_id, .. } => PersistedLinkTarget::OpaqueHostToken {
             namespace: "ooxml-ole".to_string(),
             token: stable_opaque_token(prog_id),
         },

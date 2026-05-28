@@ -50,7 +50,8 @@ use crate::infra::scanner::{
 use crate::infra::xml::{parse_string_attr_quoted, parse_u32_attr};
 
 use domain_types::domain::external_link::{
-    CachedValue, ExternalCacheValue, ExternalDefinedName, ExternalLink, ExternalLinkType,
+    CachedValue, DdeItem, DdeValue, DdeValueType, ExternalCacheValue, ExternalDefinedName,
+    ExternalLink, ExternalLinkType, OleItem,
 };
 
 #[cfg(test)]
@@ -80,11 +81,13 @@ impl ExternalLinks {
     pub fn parse_external_link(xml: &[u8], link_id: &str) -> Option<ExternalLink> {
         // Extract mc:Ignorable from root <externalLink> element for round-trip fidelity
         let mc_ignorable = extract_mc_ignorable(xml);
+        let ext_lst_xml = extract_ext_lst_xml(xml);
 
         // Check for externalBook (workbook reference)
         if let Some(book_start) = find_tag_simd(xml, b"externalBook", 0) {
             let mut link = parse_external_book(xml, book_start, link_id);
             link.mc_ignorable = mc_ignorable;
+            link.ext_lst_xml = ext_lst_xml;
             return Some(link);
         }
 
@@ -92,6 +95,7 @@ impl ExternalLinks {
         if let Some(dde_start) = find_tag_simd(xml, b"ddeLink", 0) {
             let mut link = parse_dde_link(xml, dde_start, link_id);
             link.mc_ignorable = mc_ignorable;
+            link.ext_lst_xml = ext_lst_xml;
             return Some(link);
         }
 
@@ -99,6 +103,7 @@ impl ExternalLinks {
         if let Some(ole_start) = find_tag_simd(xml, b"oleLink", 0) {
             let mut link = parse_ole_link(xml, ole_start, link_id);
             link.mc_ignorable = mc_ignorable;
+            link.ext_lst_xml = ext_lst_xml;
             return Some(link);
         }
 
@@ -226,6 +231,13 @@ fn extract_mc_ignorable(xml: &[u8]) -> Option<String> {
     let el_start = memchr::memmem::find(xml, b"<externalLink")?;
     let (element, _) = start_tag_element(xml, el_start, xml.len());
     parse_string_attr_quoted(element, b"mc:Ignorable")
+}
+
+fn extract_ext_lst_xml(xml: &[u8]) -> Option<String> {
+    let start = find_tag_simd(xml, b"extLst", 0)?;
+    let end = find_closing_tag(xml, b"extLst", start)?;
+    let closing_end = find_gt_simd(xml, end)?.saturating_add(1);
+    Some(String::from_utf8_lossy(&xml[start..closing_end]).into_owned())
 }
 
 fn start_tag_end_for_attrs(xml: &[u8], start: usize, limit: usize) -> usize {
@@ -570,30 +582,139 @@ fn parse_cached_value(content: &[u8], cell_type: Option<&str>) -> (CachedValue, 
 /// Parse a DDE link
 fn parse_dde_link(xml: &[u8], start: usize, link_id: &str) -> ExternalLink {
     // Find element end for attributes
-    let (element, _) = start_tag_element(xml, start, xml.len());
+    let (element, element_end) = start_tag_element(xml, start, xml.len());
 
     // Extract DDE service and topic
     let service = parse_string_attr_quoted(element, b"ddeService").unwrap_or_default();
     let topic = parse_string_attr_quoted(element, b"ddeTopic").unwrap_or_default();
+    let link_end = find_closing_tag(xml, b"ddeLink", start).unwrap_or(xml.len());
+    let items = parse_dde_items(xml, element_end, link_end);
 
     let mut link = ExternalLink::new(link_id.to_string());
-    link.link_type = ExternalLinkType::Dde { service, topic };
+    link.link_type = ExternalLinkType::Dde {
+        service,
+        topic,
+        items,
+    };
     link
 }
 
 /// Parse an OLE link
 fn parse_ole_link(xml: &[u8], start: usize, link_id: &str) -> ExternalLink {
     // Find element end for attributes
-    let (element, _) = start_tag_element(xml, start, xml.len());
+    let (element, element_end) = start_tag_element(xml, start, xml.len());
 
     // Extract OLE program ID
     let prog_id = parse_string_attr_quoted(element, b"progId")
-        .or_else(|| parse_string_attr_quoted(element, b"r:id"))
         .unwrap_or_default();
+    let r_id = parse_string_attr_quoted(element, b"r:id");
+    let link_end = find_closing_tag(xml, b"oleLink", start).unwrap_or(xml.len());
+    let items = parse_ole_items(xml, element_end, link_end);
 
     let mut link = ExternalLink::new(link_id.to_string());
-    link.link_type = ExternalLinkType::Ole { prog_id };
+    link.link_type = ExternalLinkType::Ole {
+        prog_id,
+        r_id,
+        items,
+    };
     link
+}
+
+fn parse_dde_items(xml: &[u8], start: usize, end: usize) -> Vec<DdeItem> {
+    let Some(items_start) = find_tag_simd(xml, b"ddeItems", start).filter(|&p| p < end) else {
+        return Vec::new();
+    };
+    let items_end = find_closing_tag(xml, b"ddeItems", items_start).unwrap_or(end);
+    let mut items = Vec::new();
+    let mut pos = items_start;
+    while let Some(item_start) = find_tag_simd(xml, b"ddeItem", pos).filter(|&p| p < items_end) {
+        let (element, element_end) = start_tag_element(xml, item_start, items_end);
+        let item_end = if element.ends_with(b"/>") {
+            element_end
+        } else {
+            find_closing_tag(xml, b"ddeItem", item_start).unwrap_or(items_end)
+        };
+        let mut item = DdeItem {
+            name: parse_string_attr_quoted(element, b"name"),
+            ole: parse_bool_attr_quoted(element, b"ole").unwrap_or(false),
+            advise: parse_bool_attr_quoted(element, b"advise").unwrap_or(false),
+            prefer_pic: parse_bool_attr_quoted(element, b"preferPic").unwrap_or(false),
+            ..Default::default()
+        };
+        parse_dde_values(xml, element_end, item_end, &mut item);
+        items.push(item);
+        pos = item_end.saturating_add(1);
+    }
+    items
+}
+
+fn parse_dde_values(xml: &[u8], start: usize, end: usize, item: &mut DdeItem) {
+    let values_start = find_tag_simd(xml, b"values", start)
+        .or_else(|| find_tag_simd(xml, b"ddeValues", start))
+        .filter(|&p| p < end);
+    let Some(values_start) = values_start else {
+        return;
+    };
+    let (values_el, values_el_end) = start_tag_element(xml, values_start, end);
+    item.rows = parse_u32_attr(values_el, b"rows=\"");
+    item.cols = parse_u32_attr(values_el, b"cols=\"");
+    let values_end = find_closing_tag(xml, b"values", values_start)
+        .or_else(|| find_closing_tag(xml, b"ddeValues", values_start))
+        .unwrap_or(end);
+    let mut pos = values_el_end;
+    while let Some(value_start) = find_tag_simd(xml, b"value", pos).filter(|&p| p < values_end) {
+        let (value_el, value_el_end) = start_tag_element(xml, value_start, values_end);
+        let value_type = parse_dde_value_type(parse_string_attr_quoted(value_el, b"t").as_deref());
+        let value = parse_string_attr_quoted(value_el, b"val").unwrap_or_else(|| {
+            if value_el.ends_with(b"/>") {
+                String::new()
+            } else {
+                let value_end = find_closing_tag(xml, b"value", value_start).unwrap_or(values_end);
+                let content_start = value_el_end;
+                crate::infra::xml::decode_xml_entities(&xml[content_start..value_end])
+            }
+        });
+        item.values.push(DdeValue { value_type, value });
+        pos = value_el_end;
+    }
+}
+
+fn parse_ole_items(xml: &[u8], start: usize, end: usize) -> Vec<OleItem> {
+    let Some(items_start) = find_tag_simd(xml, b"oleItems", start).filter(|&p| p < end) else {
+        return Vec::new();
+    };
+    let items_end = find_closing_tag(xml, b"oleItems", items_start).unwrap_or(end);
+    let mut items = Vec::new();
+    let mut pos = items_start;
+    while let Some(item_start) = find_tag_simd(xml, b"oleItem", pos).filter(|&p| p < items_end) {
+        let (element, element_end) = start_tag_element(xml, item_start, items_end);
+        if let Some(name) = parse_string_attr_quoted(element, b"name") {
+            items.push(OleItem {
+                name,
+                icon: parse_bool_attr_quoted(element, b"icon").unwrap_or(false),
+                advise: parse_bool_attr_quoted(element, b"advise").unwrap_or(false),
+                prefer_pic: parse_bool_attr_quoted(element, b"preferPic").unwrap_or(false),
+            });
+        }
+        pos = element_end;
+    }
+    items
+}
+
+fn parse_bool_attr_quoted(element: &[u8], name: &[u8]) -> Option<bool> {
+    parse_string_attr_quoted(element, name).map(|value| {
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on")
+    })
+}
+
+fn parse_dde_value_type(value: Option<&str>) -> DdeValueType {
+    match value {
+        Some("nil") => DdeValueType::Nil,
+        Some("b") => DdeValueType::Boolean,
+        Some("e") => DdeValueType::Error,
+        Some("str") => DdeValueType::String,
+        _ => DdeValueType::Number,
+    }
 }
 
 // ============================================================================
@@ -636,9 +757,47 @@ mod tests {
         );
         assert_eq!(link.id, "1");
         match &link.link_type {
-            ExternalLinkType::Dde { service, topic } => {
+            ExternalLinkType::Dde {
+                service,
+                topic,
+                items,
+            } => {
                 assert_eq!(service, "Excel");
                 assert_eq!(topic, "[Book1.xlsx]Sheet1");
+                assert_eq!(items.len(), 1);
+                assert_eq!(items[0].name.as_deref(), Some("R1C1"));
+                assert!(items[0].advise);
+            }
+            _ => panic!("Expected DDE link type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dde_link_values() {
+        let xml = br#"<externalLink>
+    <ddeLink ddeService="Excel" ddeTopic="[Book1.xlsx]Sheet1">
+        <ddeItems>
+            <ddeItem name="R1C1" ole="1" preferPic="1">
+                <values rows="1" cols="2">
+                    <value t="str" val="hello"/>
+                    <value t="n" val="42"/>
+                </values>
+            </ddeItem>
+        </ddeItems>
+    </ddeLink>
+</externalLink>"#;
+
+        let link = ExternalLinks::parse_external_link(xml, "1").unwrap();
+        match &link.link_type {
+            ExternalLinkType::Dde { items, .. } => {
+                assert_eq!(items.len(), 1);
+                assert!(items[0].ole);
+                assert!(items[0].prefer_pic);
+                assert_eq!(items[0].rows, Some(1));
+                assert_eq!(items[0].cols, Some(2));
+                assert_eq!(items[0].values.len(), 2);
+                assert_eq!(items[0].values[0].value_type, DdeValueType::String);
+                assert_eq!(items[0].values[0].value, "hello");
             }
             _ => panic!("Expected DDE link type"),
         }
@@ -649,8 +808,37 @@ mod tests {
         let link = ExternalLink::ole("1".to_string(), "Excel.Sheet.12".to_string());
         assert_eq!(link.id, "1");
         match &link.link_type {
-            ExternalLinkType::Ole { prog_id } => {
+            ExternalLinkType::Ole {
+                prog_id,
+                r_id,
+                items,
+            } => {
                 assert_eq!(prog_id, "Excel.Sheet.12");
+                assert!(r_id.is_none());
+                assert!(items.is_empty());
+            }
+            _ => panic!("Expected OLE link type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ole_link_items() {
+        let xml = br#"<externalLink>
+    <oleLink progId="Excel.Sheet.12" r:id="rId1">
+        <oleItems>
+            <oleItem name="Sheet1" icon="1" advise="1" preferPic="1"/>
+        </oleItems>
+    </oleLink>
+</externalLink>"#;
+
+        let link = ExternalLinks::parse_external_link(xml, "1").unwrap();
+        match &link.link_type {
+            ExternalLinkType::Ole { items, .. } => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(items[0].name, "Sheet1");
+                assert!(items[0].icon);
+                assert!(items[0].advise);
+                assert!(items[0].prefer_pic);
             }
             _ => panic!("Expected OLE link type"),
         }
@@ -883,7 +1071,7 @@ mod tests {
         assert_eq!(link.id, "1");
 
         match &link.link_type {
-            ExternalLinkType::Dde { service, topic } => {
+            ExternalLinkType::Dde { service, topic, .. } => {
                 assert_eq!(service, "Excel");
                 assert_eq!(topic, "[Book1.xlsx]Sheet1");
             }
@@ -900,7 +1088,7 @@ mod tests {
 
         let link = ExternalLinks::parse_external_link(xml, "1").unwrap();
         match &link.link_type {
-            ExternalLinkType::Dde { service, topic } => {
+            ExternalLinkType::Dde { service, topic, .. } => {
                 assert!(service.is_empty());
                 assert!(topic.is_empty());
             }
@@ -923,8 +1111,9 @@ mod tests {
         assert_eq!(link.id, "1");
 
         match &link.link_type {
-            ExternalLinkType::Ole { prog_id } => {
+            ExternalLinkType::Ole { prog_id, r_id, .. } => {
                 assert_eq!(prog_id, "Excel.Sheet.12");
+                assert_eq!(r_id.as_deref(), Some("rId1"));
             }
             _ => panic!("Expected OLE link type"),
         }
@@ -1230,7 +1419,7 @@ mod tests {
 
         let link2 = links.get_link("2").unwrap();
         match &link2.link_type {
-            ExternalLinkType::Dde { service, topic } => {
+            ExternalLinkType::Dde { service, topic, .. } => {
                 assert_eq!(service, "Excel");
                 assert_eq!(topic, "[Test.xlsx]Data");
             }

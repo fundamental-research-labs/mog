@@ -5,7 +5,8 @@
 //! - `xl/externalLinks/_rels/externalLinkN.xml.rels` — relationship file with target URLs
 
 use domain_types::domain::external_link::{
-    CachedValue, ExternalCacheValue, ExternalLink, ExternalLinkType,
+    CachedValue, DdeItem, DdeValueType, ExternalCacheValue, ExternalLink, ExternalLinkType,
+    OleItem,
 };
 
 /// Content type for external link parts.
@@ -31,11 +32,19 @@ pub fn write_external_link_xml(link: &ExternalLink) -> Vec<u8> {
 
     match &link.link_type {
         ExternalLinkType::Workbook => write_external_book(&mut xml, link),
-        ExternalLinkType::Dde { service, topic } => {
-            write_dde_link(&mut xml, service, topic);
+        ExternalLinkType::Dde {
+            service,
+            topic,
+            items,
+        } => {
+            write_dde_link(&mut xml, link, service, topic, items);
         }
-        ExternalLinkType::Ole { prog_id } => {
-            write_ole_link(&mut xml, prog_id);
+        ExternalLinkType::Ole {
+            prog_id,
+            r_id,
+            items,
+        } => {
+            write_ole_link(&mut xml, link, prog_id, r_id.as_deref(), items);
         }
     }
 
@@ -47,7 +56,11 @@ pub fn write_external_link_xml(link: &ExternalLink) -> Vec<u8> {
 /// Returns the XML bytes for the relationship file, or `None` if no rels are needed.
 pub fn write_external_link_rels(link: &ExternalLink) -> Option<Vec<u8>> {
     // Only workbook links have rels (with file paths)
-    if link.file_path.is_none() && link.alternate_url.is_none() && link.relative_url.is_none() {
+    if link.file_path.is_none()
+        && link.alternate_url.is_none()
+        && link.relative_url.is_none()
+        && link.extra_rels.is_empty()
+    {
         return None;
     }
 
@@ -316,6 +329,7 @@ fn write_external_book(xml: &mut Vec<u8>, link: &ExternalLink) {
     }
 
     xml.extend_from_slice(b"</externalBook>");
+    write_ext_lst_xml(xml, link);
     xml.extend_from_slice(b"</externalLink>");
 }
 
@@ -372,7 +386,13 @@ fn write_cell_element(xml: &mut Vec<u8>, cv: &ExternalCacheValue) {
     }
 }
 
-fn write_dde_link(xml: &mut Vec<u8>, service: &str, topic: &str) {
+fn write_dde_link(
+    xml: &mut Vec<u8>,
+    link: &ExternalLink,
+    service: &str,
+    topic: &str,
+    items: &[DdeItem],
+) {
     xml.extend_from_slice(b"<externalLink xmlns=\"");
     xml.extend_from_slice(NS_SPREADSHEETML.as_bytes());
     xml.extend_from_slice(b"\">");
@@ -380,18 +400,125 @@ fn write_dde_link(xml: &mut Vec<u8>, service: &str, topic: &str) {
     xml.extend_from_slice(&escape_xml_attr(service));
     xml.extend_from_slice(b"\" ddeTopic=\"");
     xml.extend_from_slice(&escape_xml_attr(topic));
-    xml.extend_from_slice(b"\"/>");
+    xml.push(b'"');
+    if items.is_empty() {
+        xml.extend_from_slice(b"/>");
+    } else {
+        xml.extend_from_slice(b"><ddeItems>");
+        for item in items {
+            write_dde_item(xml, item);
+        }
+        xml.extend_from_slice(b"</ddeItems></ddeLink>");
+    }
+    write_ext_lst_xml(xml, link);
     xml.extend_from_slice(b"</externalLink>");
 }
 
-fn write_ole_link(xml: &mut Vec<u8>, prog_id: &str) {
+fn write_ole_link(
+    xml: &mut Vec<u8>,
+    link: &ExternalLink,
+    prog_id: &str,
+    r_id: Option<&str>,
+    items: &[OleItem],
+) {
     xml.extend_from_slice(b"<externalLink xmlns=\"");
     xml.extend_from_slice(NS_SPREADSHEETML.as_bytes());
-    xml.extend_from_slice(b"\">");
+    xml.push(b'"');
+    if r_id.is_some() {
+        xml.extend_from_slice(b" xmlns:r=\"");
+        xml.extend_from_slice(NS_R.as_bytes());
+        xml.push(b'"');
+    }
+    xml.push(b'>');
     xml.extend_from_slice(b"<oleLink progId=\"");
     xml.extend_from_slice(&escape_xml_attr(prog_id));
-    xml.extend_from_slice(b"\"/>");
+    xml.push(b'"');
+    if let Some(r_id) = r_id {
+        xml.extend_from_slice(b" r:id=\"");
+        xml.extend_from_slice(&escape_xml_attr(r_id));
+        xml.push(b'"');
+    }
+    if items.is_empty() {
+        xml.extend_from_slice(b"/>");
+    } else {
+        xml.extend_from_slice(b"><oleItems>");
+        for item in items {
+            write_ole_item(xml, item);
+        }
+        xml.extend_from_slice(b"</oleItems></oleLink>");
+    }
+    write_ext_lst_xml(xml, link);
     xml.extend_from_slice(b"</externalLink>");
+}
+
+fn write_dde_item(xml: &mut Vec<u8>, item: &DdeItem) {
+    xml.extend_from_slice(b"<ddeItem");
+    if let Some(name) = &item.name {
+        xml.extend_from_slice(b" name=\"");
+        xml.extend_from_slice(&escape_xml_attr(name));
+        xml.push(b'"');
+    }
+    write_bool_attr(xml, "ole", item.ole);
+    write_bool_attr(xml, "advise", item.advise);
+    write_bool_attr(xml, "preferPic", item.prefer_pic);
+    if item.values.is_empty() && item.rows.is_none() && item.cols.is_none() {
+        xml.extend_from_slice(b"/>");
+        return;
+    }
+    xml.extend_from_slice(b"><values");
+    if let Some(rows) = item.rows {
+        xml.extend_from_slice(b" rows=\"");
+        xml.extend_from_slice(rows.to_string().as_bytes());
+        xml.push(b'"');
+    }
+    if let Some(cols) = item.cols {
+        xml.extend_from_slice(b" cols=\"");
+        xml.extend_from_slice(cols.to_string().as_bytes());
+        xml.push(b'"');
+    }
+    xml.push(b'>');
+    for value in &item.values {
+        xml.extend_from_slice(b"<value t=\"");
+        xml.extend_from_slice(dde_value_type_token(value.value_type).as_bytes());
+        xml.extend_from_slice(b"\" val=\"");
+        xml.extend_from_slice(&escape_xml_attr(&value.value));
+        xml.extend_from_slice(b"\"/>");
+    }
+    xml.extend_from_slice(b"</values></ddeItem>");
+}
+
+fn write_ole_item(xml: &mut Vec<u8>, item: &OleItem) {
+    xml.extend_from_slice(b"<oleItem name=\"");
+    xml.extend_from_slice(&escape_xml_attr(&item.name));
+    xml.push(b'"');
+    write_bool_attr(xml, "icon", item.icon);
+    write_bool_attr(xml, "advise", item.advise);
+    write_bool_attr(xml, "preferPic", item.prefer_pic);
+    xml.extend_from_slice(b"/>");
+}
+
+fn write_bool_attr(xml: &mut Vec<u8>, name: &str, value: bool) {
+    if value {
+        xml.push(b' ');
+        xml.extend_from_slice(name.as_bytes());
+        xml.extend_from_slice(b"=\"1\"");
+    }
+}
+
+fn dde_value_type_token(value_type: DdeValueType) -> &'static str {
+    match value_type {
+        DdeValueType::Nil => "nil",
+        DdeValueType::Boolean => "b",
+        DdeValueType::Number => "n",
+        DdeValueType::Error => "e",
+        DdeValueType::String => "str",
+    }
+}
+
+fn write_ext_lst_xml(xml: &mut Vec<u8>, link: &ExternalLink) {
+    if let Some(ext_lst_xml) = &link.ext_lst_xml {
+        xml.extend_from_slice(ext_lst_xml.as_bytes());
+    }
 }
 
 /// Escape XML special characters in attribute values.
@@ -469,7 +596,7 @@ fn escape_xml_content(s: &str) -> Vec<u8> {
 mod tests {
     use super::super::read::ExternalLinks;
     use super::*;
-    use domain_types::domain::external_link::ExternalCacheValue;
+    use domain_types::domain::external_link::{DdeValue, ExternalCacheValue, OleItem};
 
     #[test]
     fn test_write_external_book_basic() {
@@ -605,25 +732,50 @@ mod tests {
 
     #[test]
     fn test_write_dde_link() {
-        let link = ExternalLink::dde(
+        let mut link = ExternalLink::dde(
             "1".to_string(),
             "Excel".to_string(),
             "[Book1.xlsx]Sheet1".to_string(),
         );
+        if let ExternalLinkType::Dde { items, .. } = &mut link.link_type {
+            items.push(DdeItem {
+                name: Some("R1C1".to_string()),
+                advise: true,
+                rows: Some(1),
+                cols: Some(1),
+                values: vec![DdeValue {
+                    value_type: DdeValueType::String,
+                    value: "cached".to_string(),
+                }],
+                ..Default::default()
+            });
+        }
         let xml = write_external_link_xml(&link);
         let xml_str = String::from_utf8(xml).unwrap();
 
-        assert!(
-            xml_str.contains("<ddeLink ddeService=\"Excel\" ddeTopic=\"[Book1.xlsx]Sheet1\"/>")
-        );
+        assert!(xml_str.contains("<ddeLink ddeService=\"Excel\" ddeTopic=\"[Book1.xlsx]Sheet1\">"));
+        assert!(xml_str.contains("<ddeItem name=\"R1C1\" advise=\"1\">"));
+        assert!(xml_str.contains("<values rows=\"1\" cols=\"1\"><value t=\"str\" val=\"cached\"/>"));
     }
 
     #[test]
     fn test_write_ole_link() {
-        let link = ExternalLink::ole("1".to_string(), "Excel.Sheet.12".to_string());
+        let mut link = ExternalLink::ole("1".to_string(), "Excel.Sheet.12".to_string());
+        link.link_type = ExternalLinkType::Ole {
+            prog_id: "Excel.Sheet.12".to_string(),
+            r_id: Some("rId1".to_string()),
+            items: vec![OleItem {
+                name: "Sheet1".to_string(),
+                icon: true,
+                advise: true,
+                prefer_pic: false,
+            }],
+        };
         let xml = write_external_link_xml(&link);
         let xml_str = String::from_utf8(xml).unwrap();
 
-        assert!(xml_str.contains("<oleLink progId=\"Excel.Sheet.12\"/>"));
+        assert!(xml_str.contains("xmlns:r="));
+        assert!(xml_str.contains("<oleLink progId=\"Excel.Sheet.12\" r:id=\"rId1\">"));
+        assert!(xml_str.contains("<oleItem name=\"Sheet1\" icon=\"1\" advise=\"1\"/>"));
     }
 }

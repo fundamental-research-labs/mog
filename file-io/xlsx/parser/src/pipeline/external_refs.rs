@@ -44,23 +44,28 @@ pub(crate) fn rewrite_all_external_refs(
         return;
     }
 
-    // Build external link index: link ID (1-based string) → metadata for resolution.
-    // The `[N]` in formulas is 1-based, matching the externalLink file numbering.
-    let ext_link_map: HashMap<&str, ExtLinkInfo<'_>> = external_links
+    // Build external link index: formula ordinal (1-based string) → metadata for resolution.
+    // The `[N]` in formulas is 1-based workbook externalReferences order, not
+    // necessarily the externalLink part filename suffix.
+    let ext_link_map: HashMap<String, ExtLinkInfo<'_>> = external_links
         .iter()
-        .map(|link| {
+        .filter_map(|link| {
+            let ordinal = link
+                .imported_identity
+                .as_ref()
+                .map(|identity| identity.excel_ordinal)?;
             let is_path_missing = link.file_path_rel_type.as_deref().is_some_and(
                 crate::infra::opc::is_missing_external_workbook_path_relationship_type,
             );
             let has_external_path = link.file_path.as_ref().map_or(false, |p| !p.is_empty());
-            (
-                link.id.as_str(),
+            Some((
+                ordinal.to_string(),
                 ExtLinkInfo {
                     sheet_names: link.sheet_names.as_slice(),
                     is_path_missing,
                     has_external_path,
                 },
-            )
+            ))
         })
         .collect();
 
@@ -154,7 +159,7 @@ pub(crate) fn rewrite_all_external_refs(
 fn rewrite_in_place(
     formula: &mut String,
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) {
     match rewrite_formula_external_refs(formula, local_sheets, ext_links) {
         Cow::Borrowed(_) => {} // no change
@@ -166,7 +171,7 @@ fn rewrite_in_place(
 fn rewrite_chart_ex_external_refs(
     chart_ex_parts: &mut [crate::output::results::ParsedChartEx],
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) {
     use ooxml_types::chart_ex::ChartExDimension;
 
@@ -205,7 +210,7 @@ fn rewrite_chart_ex_external_refs(
 pub(crate) fn rewrite_formula_external_refs<'a>(
     formula: &'a str,
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) -> Cow<'a, str> {
     // Fast path: no bracket at all.
     if !formula.contains('[') {
@@ -315,7 +320,7 @@ fn try_rewrite_unquoted_external_ref(
     formula: &str,
     pos: usize,
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) -> Option<(String, usize)> {
     let bytes = formula.as_bytes();
     let len = bytes.len();
@@ -399,7 +404,7 @@ fn try_rewrite_quoted_external_ref(
     formula: &str,
     pos: usize,
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) -> Option<(String, usize)> {
     let bytes = formula.as_bytes();
     let len = bytes.len();
@@ -504,7 +509,7 @@ fn should_resolve(
     bracket_content: &str,
     sheet_name: &str,
     local_sheets: &HashSet<UniCase<String>>,
-    ext_links: &HashMap<&str, ExtLinkInfo<'_>>,
+    ext_links: &HashMap<String, ExtLinkInfo<'_>>,
 ) -> bool {
     let sheet_key = UniCase::new(sheet_name.to_string());
 
@@ -628,12 +633,12 @@ mod tests {
             ExtLinks { _storage: storage }
         }
 
-        fn as_map(&self) -> HashMap<&str, ExtLinkInfo<'_>> {
+        fn as_map(&self) -> HashMap<String, ExtLinkInfo<'_>> {
             self._storage
                 .iter()
                 .map(|(id, sheets, missing, external)| {
                     (
-                        id.as_str(),
+                        id.clone(),
                         ExtLinkInfo {
                             sheet_names: sheets.as_slice(),
                             is_path_missing: *missing,

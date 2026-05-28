@@ -799,7 +799,14 @@ fn parse_xlsx_full_native_impl(
         orphan_entries.sort();
         for entry_name in orphan_entries {
             if let Ok(xml_data) = archive.read_file(&entry_name) {
-                let link_id = (links.len() + 1).to_string();
+                let link_id = entry_name
+                    .rsplit('/')
+                    .next()
+                    .and_then(|file_name| file_name.strip_prefix("externalLink"))
+                    .and_then(|file_name| file_name.strip_suffix(".xml"))
+                    .filter(|suffix| !suffix.is_empty())
+                    .unwrap_or("orphan")
+                    .to_string();
                 if let Some(mut link) = ExternalLinks::parse_external_link(&xml_data, &link_id) {
                     let rels_path = external_link_rels_path(&entry_name);
                     if let Ok(rels_data) = archive.read_file(&rels_path) {

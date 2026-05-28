@@ -74,6 +74,9 @@ pub struct ExternalLink {
     /// not by the `externalLinkN.xml` file number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imported_identity: Option<ImportedExternalLinkIdentity>,
+    /// Preserved extension-list XML owned by the externalLink part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_lst_xml: Option<String>,
 }
 
 impl ExternalLink {
@@ -99,7 +102,11 @@ impl ExternalLink {
     pub fn dde(id: String, service: String, topic: String) -> Self {
         Self {
             id,
-            link_type: ExternalLinkType::Dde { service, topic },
+            link_type: ExternalLinkType::Dde {
+                service,
+                topic,
+                items: Vec::new(),
+            },
             ..Default::default()
         }
     }
@@ -108,7 +115,11 @@ impl ExternalLink {
     pub fn ole(id: String, prog_id: String) -> Self {
         Self {
             id,
-            link_type: ExternalLinkType::Ole { prog_id },
+            link_type: ExternalLinkType::Ole {
+                prog_id,
+                r_id: None,
+                items: Vec::new(),
+            },
             ..Default::default()
         }
     }
@@ -124,10 +135,71 @@ pub enum ExternalLinkType {
     Dde {
         service: String,
         topic: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        items: Vec<DdeItem>,
     },
     Ole {
         prog_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        r_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        items: Vec<OleItem>,
     },
+}
+
+/// DDE item/channel metadata and cached values.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdeItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub ole: bool,
+    #[serde(default)]
+    pub advise: bool,
+    #[serde(default)]
+    pub prefer_pic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cols: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<DdeValue>,
+}
+
+/// One cached DDE value.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdeValue {
+    #[serde(default)]
+    pub value_type: DdeValueType,
+    #[serde(default)]
+    pub value: String,
+}
+
+/// DDE cached value type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DdeValueType {
+    Nil,
+    Boolean,
+    #[default]
+    Number,
+    Error,
+    String,
+}
+
+/// OLE item metadata exposed by an OLE link.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OleItem {
+    pub name: String,
+    #[serde(default)]
+    pub icon: bool,
+    #[serde(default)]
+    pub advise: bool,
+    #[serde(default)]
+    pub prefer_pic: bool,
 }
 
 /// Extra relationship not matched by standard rId references.

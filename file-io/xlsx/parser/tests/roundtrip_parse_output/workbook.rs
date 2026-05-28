@@ -48,24 +48,32 @@ fn typed_custom_document_properties_roundtrip_from_modeled_state() {
     output.properties = Some(DocumentProperties {
         typed_custom: vec![
             DocumentCustomProperty {
+                fmtid: Some(domain_types::DEFAULT_CUSTOM_PROPERTY_FMTID.to_string()),
+                pid: Some(2),
                 name: "Approved".to_string(),
                 value: DocumentCustomPropertyValue::Bool(true),
-                ..Default::default()
+                link_target: None,
             },
             DocumentCustomProperty {
+                fmtid: Some(domain_types::DEFAULT_CUSTOM_PROPERTY_FMTID.to_string()),
+                pid: Some(3),
                 name: "Revision".to_string(),
                 value: DocumentCustomPropertyValue::I4(7),
-                ..Default::default()
+                link_target: None,
             },
             DocumentCustomProperty {
+                fmtid: Some(domain_types::DEFAULT_CUSTOM_PROPERTY_FMTID.to_string()),
+                pid: Some(4),
                 name: "Confidence".to_string(),
                 value: DocumentCustomPropertyValue::R8(0.875),
-                ..Default::default()
+                link_target: None,
             },
             DocumentCustomProperty {
+                fmtid: Some(domain_types::DEFAULT_CUSTOM_PROPERTY_FMTID.to_string()),
+                pid: Some(5),
                 name: "ReviewedAt".to_string(),
                 value: DocumentCustomPropertyValue::Filetime("2026-05-27T10:00:00Z".to_string()),
-                ..Default::default()
+                link_target: None,
             },
         ],
         ..Default::default()

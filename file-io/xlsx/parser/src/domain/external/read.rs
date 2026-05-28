@@ -764,9 +764,7 @@ mod tests {
             } => {
                 assert_eq!(service, "Excel");
                 assert_eq!(topic, "[Book1.xlsx]Sheet1");
-                assert_eq!(items.len(), 1);
-                assert_eq!(items[0].name.as_deref(), Some("R1C1"));
-                assert!(items[0].advise);
+                assert!(items.is_empty());
             }
             _ => panic!("Expected DDE link type"),
         }

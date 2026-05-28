@@ -130,6 +130,7 @@ pub(super) fn hydrate_workbook_stylesheet(
 ) {
     if let Some(stylesheet) = workbook_stylesheet {
         let stylesheet = stylesheet.normalized();
+        hydrate_dxf_registry(txn, workbook, &stylesheet.dxf_registry);
         let map: MapRef = workbook.insert(
             txn,
             KEY_WORKBOOK_STYLESHEET,
@@ -206,6 +207,26 @@ pub(super) fn hydrate_workbook_stylesheet(
         );
     } else {
         workbook.remove(txn, KEY_WORKBOOK_STYLESHEET);
+        workbook.remove(txn, KEY_DXF_REGISTRY);
+    }
+}
+
+fn hydrate_dxf_registry(
+    txn: &mut yrs::TransactionMut,
+    workbook: &MapRef,
+    registry: &[domain_types::DxfDef],
+) {
+    if registry.is_empty() {
+        workbook.remove(txn, KEY_DXF_REGISTRY);
+        return;
+    }
+
+    let map: MapRef = workbook.insert(txn, KEY_DXF_REGISTRY, MapPrelim::from([] as [(&str, Any); 0]));
+    map.insert(txn, KEY_STYLE_REGISTRY_COUNT, Any::Number(registry.len() as f64));
+    for entry in registry {
+        let json =
+            serde_json::to_string(entry).expect("DXF registry entry serialization should not fail");
+        map.insert(txn, &*entry.id.to_string(), Any::String(Arc::from(json.as_str())));
     }
 }
 

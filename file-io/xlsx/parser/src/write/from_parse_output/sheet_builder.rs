@@ -727,7 +727,7 @@ fn selection_pane_is_compatible(selection_pane: Option<Pane>, pane: Option<&Shee
 fn pane_shape_is_compatible(pane: Option<&SheetPane>, current_pane: Option<&SheetPane>) -> bool {
     match (pane, current_pane) {
         (None, _) => true,
-        (Some(_), None) => false,
+        (Some(pane), None) => !pane.is_frozen(),
         (Some(pane), Some(current_pane)) => {
             (pane.x_split != 0.0) == (current_pane.x_split != 0.0)
                 && (pane.y_split != 0.0) == (current_pane.y_split != 0.0)

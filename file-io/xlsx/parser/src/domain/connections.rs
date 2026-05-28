@@ -65,7 +65,7 @@ pub fn query_table_relationship_for_table(
     let rels_path = table_relationships_path(table_path)?;
     let rels_xml = archive.read_file(&rels_path).ok()?;
     let relationships = parse_owned_relationships(
-        PackageOwner::Part {
+        PackageOwner::CustomPart {
             path: table_path.to_string(),
         },
         &rels_xml,

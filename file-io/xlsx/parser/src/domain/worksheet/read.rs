@@ -8,9 +8,9 @@ use crate::infra::scanner;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use crate::output::results::{ColWidth, MergeRange, Pane, PaneState, RowHeight, SheetPane};
-use domain_types::{WorksheetSemanticContainers, WorksheetSemanticXml};
 use ooxml_types::styles::ColorDef;
 use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetProperties};
+use domain_types::{WorksheetSemanticContainers, WorksheetSemanticXml};
 
 // =============================================================================
 // Merge Cells

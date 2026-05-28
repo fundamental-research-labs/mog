@@ -291,7 +291,9 @@ fn export_single_sheet(
                     _ => None,
                 });
                 let pane = m.get(&txn, "sheetPaneConfig").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
+                    Out::Any(Any::String(s)) => {
+                        serde_json::from_str::<domain_types::SheetPaneConfig>(&s).ok()
+                    }
                     _ => None,
                 });
                 let sels = m

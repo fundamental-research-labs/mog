@@ -319,7 +319,9 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
             top_pt: None,
         },
         z_index: 0,
-        definition: None,
+        definition: Some(domain_types::ChartDefinition::Chart(
+            ooxml_types::charts::ChartSpace::default(),
+        )),
         series: Vec::new(),
         sub_type: None,
         legend: None,

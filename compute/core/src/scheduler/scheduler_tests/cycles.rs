@@ -1,5 +1,7 @@
 use super::*;
 
+static FULL_RECALC_WITH_OPTIONS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 // -----------------------------------------------------------------------
 // Circular reference detection
 // -----------------------------------------------------------------------
@@ -305,6 +307,7 @@ fn self_cycle_snapshot() -> WorkbookSnapshot {
 fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_dirty() {
     use snapshot_types::RecalcOptions;
 
+    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     core.init_from_snapshot(&mut mirror, basic_snapshot())
@@ -336,6 +339,7 @@ fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_
 fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty() {
     use snapshot_types::RecalcOptions;
 
+    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     core.init_from_snapshot_viewport_only(&mut mirror, basic_snapshot())
@@ -371,6 +375,7 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
 fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dirty() {
     use snapshot_types::RecalcOptions;
 
+    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     core.init_from_snapshot(&mut mirror, basic_snapshot())
@@ -404,6 +409,7 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
 fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
     use snapshot_types::RecalcOptions;
 
+    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     core.init_from_snapshot(&mut mirror, self_cycle_snapshot())
@@ -447,6 +453,7 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
 fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
     use snapshot_types::RecalcOptions;
 
+    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     core.init_from_snapshot(&mut mirror, self_cycle_snapshot())

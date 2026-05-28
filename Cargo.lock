@@ -685,6 +685,7 @@ version = "0.1.0"
 dependencies = [
  "cell-types",
  "compute-security",
+ "domain-types",
  "formula-types",
  "rustc-hash",
  "serde",

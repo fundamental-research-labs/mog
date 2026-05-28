@@ -322,6 +322,13 @@ impl PackageGraphBuilder {
                     part.path
                 )));
             }
+            if existing.bytes.is_none()
+                && part.bytes.is_none()
+                && existing.content_type == part.content_type
+                && existing.default_extension == part.default_extension
+            {
+                return Ok(());
+            }
             if existing.bytes.is_some() && part.bytes.is_some() && existing.bytes == part.bytes {
                 return Ok(());
             }
@@ -335,13 +342,6 @@ impl PackageGraphBuilder {
     }
 
     pub fn add_relationship(&mut self, mut relationship: PackageRelationship) {
-            if existing.bytes.is_none()
-                && part.bytes.is_none()
-                && existing.content_type == part.content_type
-                && existing.default_extension == part.default_extension
-            {
-                return Ok(());
-            }
         if let PackageRelationshipTarget::InternalPart { path } = &mut relationship.target {
             *path = normalize_part_path(path);
         }
@@ -819,6 +819,29 @@ pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Resul
     })
 }
 
+pub fn register_ole_embedding_part(
+    graph: &mut PackageGraphBuilder,
+    path: &str,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(path, CT_OLE_OBJECT))
+}
+
+pub fn register_worksheet_ole_object(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    embedding_path: &str,
+    relationship_id_hint: Option<&str>,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: REL_OLE_OBJECT.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(embedding_path),
+        },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+}
+
 pub fn register_drawing_chart_relationship(
     graph: &mut PackageGraphBuilder,
     drawing_path: &str,
@@ -897,29 +920,6 @@ fn register_drawing_relationship(
         target: PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(target_path),
         },
-pub fn register_ole_embedding_part(
-    graph: &mut PackageGraphBuilder,
-    path: &str,
-) -> Result<(), WriteError> {
-    graph.register_part(modeled_part(path, CT_OLE_OBJECT))
-}
-
-pub fn register_worksheet_ole_object(
-    graph: &mut PackageGraphBuilder,
-    sheet_idx: usize,
-    embedding_path: &str,
-    relationship_id_hint: Option<&str>,
-) {
-    graph.add_relationship(PackageRelationship {
-        owner: worksheet_owner(sheet_idx),
-        relationship_type: REL_OLE_OBJECT.to_string(),
-        target: PackageRelationshipTarget::InternalPart {
-            path: normalize_part_path(embedding_path),
-        },
-        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
-    });
-}
-
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
     Ok(())
@@ -1688,6 +1688,8 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_CHART_COLOR_STYLE)
     } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {
         Some(CONTENT_TYPE_CTRL_PROP)
+    } else if path.starts_with("xl/embeddings/") && path.ends_with(".bin") {
+        Some(CT_OLE_OBJECT)
     } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
         Some(CT_PIVOT_TABLE)
     } else if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
@@ -1722,6 +1724,8 @@ fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
         Some(REL_PRINTER_SETTINGS)
     } else if path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml") {
         Some(REL_VML_DRAWING)
+    } else if path.starts_with("xl/embeddings/") && path.ends_with(".bin") {
+        Some(REL_OLE_OBJECT)
     } else {
         None
     }
@@ -1758,7 +1762,3 @@ fn owner_part_path_from_rels_path(owner_rels_path: &str) -> Option<Option<String
         format!("{dir}/{owner_file}")
     }))
 }
-    } else if path.starts_with("xl/embeddings/") && path.ends_with(".bin") {
-        Some(CT_OLE_OBJECT)
-    } else if path.starts_with("xl/embeddings/") && path.ends_with(".bin") {
-        Some(REL_OLE_OBJECT)

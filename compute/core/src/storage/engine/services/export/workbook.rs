@@ -271,6 +271,7 @@ pub(super) fn export_workbook_stylesheet(
                 KEY_STYLE_REGISTRY_ROOT_NAMESPACE_ATTRS,
             ),
             ext_lst_xml: read_style_registry_value(&txn, &map, KEY_STYLE_REGISTRY_EXT_LST_XML),
+            dxf_registry: export_dxf_registry_from_txn(&txn, &workbook),
             stylesheet: ooxml_types::styles::Stylesheet::default(),
         }),
         _ => None,
@@ -298,6 +299,32 @@ pub(super) fn export_workbook_style_palette(stores: &EngineStores) -> Vec<Docume
         values.push(DocumentFormat::from(&cell_format));
     }
     values
+}
+
+fn export_dxf_registry_from_txn(
+    txn: &yrs::Transaction,
+    workbook: &yrs::MapRef,
+) -> Vec<domain_types::DxfDef> {
+    let map = match workbook.get(txn, KEY_DXF_REGISTRY) {
+        Some(Out::YMap(map)) => map,
+        _ => return Vec::new(),
+    };
+
+    let mut entries = Vec::new();
+    for entry in map.iter(txn) {
+        let (key, value) = entry;
+        if key == KEY_STYLE_REGISTRY_COUNT {
+            continue;
+        }
+        let Out::Any(Any::String(json)) = value else {
+            continue;
+        };
+        if let Ok(dxf) = serde_json::from_str::<domain_types::DxfDef>(&json) {
+            entries.push(dxf);
+        }
+    }
+    entries.sort_by_key(|dxf| dxf.id);
+    entries
 }
 
 fn read_style_registry_vec<T: for<'de> serde::Deserialize<'de>>(

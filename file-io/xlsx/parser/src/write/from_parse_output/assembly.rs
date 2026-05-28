@@ -35,10 +35,10 @@ pub(super) struct SheetExtras {
     pub(super) has_printer_settings: bool,
     /// Form controls for this sheet (converted from domain types).
     pub(super) form_controls: Vec<crate::domain::controls::types::FormControl>,
-    /// Clean imported worksheet custom property sidecars.
-    pub(super) custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
     /// OLE objects for this sheet (converted from floating-object state).
     pub(super) ole_objects: Vec<OleObjectExport>,
+    /// Clean imported worksheet custom property sidecars.
+    pub(super) custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
 }
 
 /// Per-chart data needed during ZIP assembly. Includes the original ChartSpec
@@ -107,8 +107,6 @@ pub(super) struct WorksheetFormControlVmlGraphEntry {
     pub(super) relationship_id_hint: Option<String>,
 }
 
-pub(super) struct WorksheetDrawingGraphEntry {
-    pub(super) sheet_idx: usize,
 pub(super) struct WorksheetOleObjectGraphEntry {
     pub(super) sheet_idx: usize,
     pub(super) ole_idx: usize,
@@ -130,6 +128,8 @@ pub(super) struct VmlPreviewRelationshipGraphEntry {
     pub(super) relationship_id_hint: String,
 }
 
+pub(super) struct WorksheetDrawingGraphEntry {
+    pub(super) sheet_idx: usize,
     pub(super) path: String,
     pub(super) target: String,
     pub(super) relationship_id_hint: Option<String>,

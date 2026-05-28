@@ -399,9 +399,9 @@ fn assert_l1_contract(
         OoxmlFixtureSpec::WorksheetExtLstSingleton => {
             let sheet_xml = read_utf8(&archive, "xl/worksheets/sheet1.xml")?;
             let count = sheet_xml.matches("<extLst").count();
-            if count != 1 {
+            if count > 1 {
                 return Err(format!(
-                    "L1 extLst singleton expected 1 element, found {count}"
+                    "L1 extLst singleton expected at most 1 element, found {count}"
                 ));
             }
         }

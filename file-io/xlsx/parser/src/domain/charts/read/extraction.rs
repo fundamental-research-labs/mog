@@ -727,6 +727,7 @@ pub fn extract_chart_spec_from_chart_space(
         chart_frame: None,
         chart_relationships: Vec::new(),
         chart_auxiliary_files: Vec::new(),
+        chart_auxiliary_parts: Vec::new(),
         is_chart_ex: false,
         cnv_pr_name: anchor.cnv_pr_name.clone(),
         cnv_pr_id: anchor.cnv_pr_id,

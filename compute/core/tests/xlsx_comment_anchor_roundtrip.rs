@@ -118,7 +118,7 @@ fn l2_preserves_empty_comment_anchor_identity_without_data_cells() {
     );
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
-    let (reparsed, _ctx, _diagnostics) =
+    let (reparsed, _diagnostics) =
         xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("parse exported xlsx");
     let reparsed_sheet = &reparsed.sheets[0];
     assert_eq!(

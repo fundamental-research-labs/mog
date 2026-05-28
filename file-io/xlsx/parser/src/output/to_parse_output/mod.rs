@@ -62,6 +62,7 @@ use domain_types::{
     TrailingColRange,
 };
 use formula_types::{CellRef, RangeType};
+use value_types::CellValue;
 
 // Parser-internal imports (no re-export indirection)
 use crate::output::results::{FullParseResult, FullParsedSheet};
@@ -283,18 +284,153 @@ pub fn full_parse_result_to_parse_output(
 }
 
 fn populate_dxf_registry_owners(output: &mut ParseOutput) {
-    let Some(stylesheet) = output.workbook_stylesheet.as_mut() else { return; };
+    let Some(stylesheet) = output.workbook_stylesheet.as_mut() else {
+        return;
+    };
+    if stylesheet.dxf_registry.is_empty() {
+        return;
+    }
+
     let mut owners_by_id = HashMap::<u32, Vec<domain_types::DxfOwner>>::new();
     for (sheet_index, sheet) in output.sheets.iter().enumerate() {
         let sheet_index = sheet_index as u32;
         for cf in &sheet.conditional_formats {
             for rule in &cf.rules {
                 if let Some((rule_id, dxf_id)) = cf_rule_dxf(rule) {
-                    owners_by_id.entry(dxf_id).or_default().push(domain_types::DxfOwner::ConditionalFormatRule { sheet_index, format_id: cf.id.clone(), rule_id: rule_id.to_string() });
+                    owners_by_id.entry(dxf_id).or_default().push(
+                        domain_types::DxfOwner::ConditionalFormatRule {
+                            sheet_index,
+                            format_id: cf.id.clone(),
+                            rule_id: rule_id.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+
+        if let Some(auto_filter) = &sheet.auto_filter {
+            for column in &auto_filter.columns {
+                if let Some(domain_types::OoxmlFilterType::Color {
+                    dxf_id: Some(dxf_id),
+                    ..
+                }) = &column.filter_type
+                {
+                    owners_by_id.entry(*dxf_id).or_default().push(
+                        domain_types::DxfOwner::AutoFilter {
+                            sheet_index,
+                            column_id: column.col_index,
+                        },
+                    );
+                }
+            }
+            if let Some(sort) = &auto_filter.sort {
+                for (condition_index, condition) in sort.conditions.iter().enumerate() {
+                    if let Some(dxf_id) = condition.dxf_id {
+                        owners_by_id.entry(dxf_id).or_default().push(
+                            domain_types::DxfOwner::SheetSort {
+                                sheet_index,
+                                condition_index: condition_index as u32,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Some(sort) = &sheet.sort_state {
+            for (condition_index, condition) in sort.conditions.iter().enumerate() {
+                if let Some(dxf_id) = condition.dxf_id {
+                    owners_by_id.entry(dxf_id).or_default().push(
+                        domain_types::DxfOwner::SheetSort {
+                            sheet_index,
+                            condition_index: condition_index as u32,
+                        },
+                    );
+                }
+            }
+        }
+
+        for table in &sheet.tables {
+            for (field, dxf_id) in [
+                ("headerRowDxfId", table.header_row_dxf_id),
+                ("dataDxfId", table.data_dxf_id),
+                ("totalsRowDxfId", table.totals_row_dxf_id),
+                ("headerRowBorderDxfId", table.header_row_border_dxf_id),
+                ("tableBorderDxfId", table.table_border_dxf_id),
+                ("totalsRowBorderDxfId", table.totals_row_border_dxf_id),
+            ] {
+                if let Some(dxf_id) = dxf_id {
+                    owners_by_id.entry(dxf_id).or_default().push(
+                        domain_types::DxfOwner::Table {
+                            sheet_index,
+                            table_name: table.name.clone(),
+                            field: field.to_string(),
+                        },
+                    );
+                }
+            }
+            for column in &table.columns {
+                for (field, dxf_id) in [
+                    ("headerRowDxfId", column.header_row_dxf_id),
+                    ("dataDxfId", column.data_dxf_id),
+                    ("totalsRowDxfId", column.totals_row_dxf_id),
+                ] {
+                    if let Some(dxf_id) = dxf_id {
+                        owners_by_id.entry(dxf_id).or_default().push(
+                            domain_types::DxfOwner::TableColumn {
+                                sheet_index,
+                                table_name: table.name.clone(),
+                                column_name: column.name.clone(),
+                                field: field.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+            for column in &table.filter_columns {
+                if let domain_types::FilterSpec::Color {
+                    dxf_id: Some(dxf_id),
+                    ..
+                } = &column.filter
+                {
+                    owners_by_id.entry(*dxf_id).or_default().push(
+                        domain_types::DxfOwner::TableFilter {
+                            sheet_index,
+                            table_name: table.name.clone(),
+                            column_id: column.col_id,
+                        },
+                    );
+                }
+            }
+            if let Some(sort) = &table.sort_state {
+                for (condition_index, condition) in sort.conditions.iter().enumerate() {
+                    if let Some(dxf_id) = condition.dxf_id {
+                        owners_by_id.entry(dxf_id).or_default().push(
+                            domain_types::DxfOwner::TableSort {
+                                sheet_index,
+                                table_name: table.name.clone(),
+                                condition_index: condition_index as u32,
+                            },
+                        );
+                    }
                 }
             }
         }
     }
+
+    for style in &output.custom_table_styles {
+        for (element_index, element) in style.elements.iter().enumerate() {
+            if let Some(dxf_id) = element.dxf_id {
+                owners_by_id.entry(dxf_id).or_default().push(
+                    domain_types::DxfOwner::TableStyle {
+                        style_name: style.name.clone(),
+                        element_index: element_index as u32,
+                    },
+                );
+            }
+        }
+    }
+
     for entry in &mut stylesheet.dxf_registry {
         entry.owners = owners_by_id.remove(&entry.id).unwrap_or_default();
     }
@@ -310,8 +446,12 @@ fn cf_rule_dxf(rule: &domain_types::CFRule) -> Option<(&str, u32)> {
         | domain_types::CFRule::ContainsText { id, style, .. }
         | domain_types::CFRule::ContainsBlanks { id, style, .. }
         | domain_types::CFRule::ContainsErrors { id, style, .. }
-        | domain_types::CFRule::TimePeriod { id, style, .. } => style.dxf_id.map(|dxf_id| (id.as_str(), dxf_id)),
-        domain_types::CFRule::ColorScale { .. } | domain_types::CFRule::DataBar { .. } | domain_types::CFRule::IconSet { .. } => None,
+        | domain_types::CFRule::TimePeriod { id, style, .. } => {
+            style.dxf_id.map(|dxf_id| (id.as_str(), dxf_id))
+        }
+        domain_types::CFRule::ColorScale { .. }
+        | domain_types::CFRule::DataBar { .. }
+        | domain_types::CFRule::IconSet { .. } => None,
     }
 }
 
@@ -560,6 +700,40 @@ fn is_style_only_cell(cell: &CellData) -> bool {
             .is_none_or(|value| value.is_empty())
 }
 
+fn is_styleless_blank_cell(cell: &CellData) -> bool {
+    cell.value.is_null()
+        && cell.formula.is_none()
+        && cell.rich_string.is_none()
+        && cell.style_id.is_none()
+        && cell.cell_formula.is_none()
+        && !cell.cm
+        && cell.formula_result_type.is_none()
+        && !cell.has_empty_cached_value
+        && cell.vm.is_none()
+        && cell.original_sst_index.is_none()
+        && cell.original_value.is_none()
+}
+
+fn explicit_blank_cell(row: u32, col: u32) -> CellData {
+    CellData {
+        row,
+        col,
+        value: CellValue::Null,
+        rich_string: None,
+        formula: None,
+        array_ref: None,
+        style_id: None,
+        cell_formula: None,
+        cm: false,
+        formula_result_type: None,
+        has_empty_cached_value: false,
+        vm: None,
+        original_sst_index: None,
+        original_value: Some(String::new()),
+        projection_role: domain_types::ImportedCellProjectionRole::Normal,
+    }
+}
+
 fn coalesce_style_only_points(points: &[(u32, u32, u32)]) -> Vec<AuthoredStyleRun> {
     if points.is_empty() {
         return Vec::new();
@@ -616,9 +790,9 @@ fn normalize_authored_style_runs(runs: &mut Vec<AuthoredStyleRun>) {
 }
 
 fn compute_sheet_extent(sheet: &FullParsedSheet) -> (u32, u32) {
-    // Account for dimension data and metadata-only anchors in addition to
-    // concrete <c> cells. Phantom-cell hydration for merges, comments, and
-    // hyperlinks needs row/col identities even when the anchor has no cell data.
+    // Account for dimension data and structural anchors in addition to concrete
+    // <c> cells. Comment-only anchors get durable identities during engine
+    // hydration, but they must not inflate the logical sheet dimensions.
     let (mut rows, mut cols) = compute_dimensions(&sheet.cells);
 
     if let Some(dim_rows) = sheet.row_heights.iter().map(|rh| rh.row + 1).max() {
@@ -636,16 +810,14 @@ fn compute_sheet_extent(sheet: &FullParsedSheet) -> (u32, u32) {
         include_extent_pos(&mut rows, &mut cols, merge.start_row, merge.start_col);
         include_extent_pos(&mut rows, &mut cols, merge.end_row, merge.end_col);
     }
-    for comment in &sheet.comments {
-        if let Some((row, col)) = crate::infra::a1::parse_a1_cell(&comment.cell_ref) {
-            include_extent_pos(&mut rows, &mut cols, row, col);
-        }
-    }
     for hyperlink in &sheet.hyperlinks {
         include_extent_a1_ref(&mut rows, &mut cols, &hyperlink.cell_ref);
     }
     for run in &sheet.authored_style_runs {
         include_extent_pos(&mut rows, &mut cols, run.end_row, run.end_col);
+    }
+    for &(row, col) in &sheet.explicit_blank_cells {
+        include_extent_pos(&mut rows, &mut cols, row, col);
     }
 
     (rows, cols)
@@ -676,11 +848,6 @@ fn extend_sheet_data_extent(sheet: &mut SheetData) {
     for merge in &sheet.merges {
         include_extent_pos(&mut rows, &mut cols, merge.start_row, merge.start_col);
         include_extent_pos(&mut rows, &mut cols, merge.end_row, merge.end_col);
-    }
-    for comment in &sheet.comments {
-        if let Some((row, col)) = crate::infra::a1::parse_a1_cell(&comment.cell_ref) {
-            include_extent_pos(&mut rows, &mut cols, row, col);
-        }
     }
     for hyperlink in &sheet.hyperlinks {
         include_extent_a1_ref(&mut rows, &mut cols, &hyperlink.cell_ref);
@@ -718,6 +885,20 @@ fn build_media_data_url_map(result: &FullParseResult) -> HashMap<String, String>
     data_urls
 }
 
+fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
+    let mut parts = HashMap::new();
+
+    let Some(extensions) = result.extensions.as_ref() else {
+        return parts;
+    };
+
+    for (path, data) in extensions.binary_passthrough.entries() {
+        parts.insert(path.replace('\\', "/"), data.clone());
+    }
+
+    parts
+}
+
 fn image_mime_type_for_path(path: &str) -> &'static str {
     match path
         .rsplit('.')
@@ -748,6 +929,7 @@ fn convert_sheet(
     dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
     media_data_urls: &HashMap<String, String>,
+    binary_parts: &HashMap<String, Vec<u8>>,
 ) -> SheetData {
     // --- Cells ---
     let projection_roles = build_projection_roles(&sheet.cells);
@@ -784,13 +966,24 @@ fn convert_sheet(
         .collect();
     let mut authored_style_points = Vec::new();
     let mut cells = Vec::with_capacity(converted_cells.len());
-    for cell in converted_cells {
+    for mut cell in converted_cells {
         if is_style_only_cell(&cell) {
             authored_style_points.push((cell.row, cell.col, cell.style_id.unwrap_or(0)));
         } else {
+            if is_styleless_blank_cell(&cell) {
+                cell.original_value = Some(String::new());
+            }
             cells.push(cell);
         }
     }
+    let mut occupied_cells: HashSet<(u32, u32)> =
+        cells.iter().map(|cell| (cell.row, cell.col)).collect();
+    for &(row, col) in &sheet.explicit_blank_cells {
+        if occupied_cells.insert((row, col)) {
+            cells.push(explicit_blank_cell(row, col));
+        }
+    }
+    cells.sort_by_key(|cell| (cell.row, cell.col));
     let mut authored_style_runs = sheet.authored_style_runs.clone();
     authored_style_runs.extend(coalesce_style_only_points(&authored_style_points));
     normalize_authored_style_runs(&mut authored_style_runs);
@@ -892,20 +1085,6 @@ fn convert_sheet(
                     thick_top: false,
                     thick_bot: false,
                     descent: Some(d),
-fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
-    let mut parts = HashMap::new();
-
-    let Some(extensions) = result.extensions.as_ref() else {
-        return parts;
-    };
-
-    for (path, data) in extensions.binary_passthrough.entries() {
-        parts.insert(path.replace('\\', "/"), data.clone());
-    }
-
-    parts
-}
-
                     xml_hints: RowXmlHints::default(),
                 });
             }
@@ -936,7 +1115,6 @@ fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
                     best_fit: cw.best_fit,
                     collapsed: cw.collapsed,
                 });
-    binary_parts: &HashMap<String, Vec<u8>>,
             }
         }
         // If the range extends beyond data cols, store the tail as a trailing range
@@ -1516,6 +1694,7 @@ fn merge_threaded_comments(result: &FullParseResult, sheets: &mut [SheetData]) -
                 visible: None,
                 note_height: None,
                 note_width: None,
+                note_shape_anchor: None,
             };
             insert_threaded_comment_in_original_order(&mut sheet_data.comments, comment, &tc_order);
         }

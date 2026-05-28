@@ -136,7 +136,7 @@ pub(super) fn hydrate_cells_with_ids(
 
         // Empty styled cells don't need a Yrs cell entry — only the
         // pos_map slot (for style hydration). Skip the Yrs write.
-        if is_empty {
+        if is_empty && cell.original_value.is_none() {
             continue;
         }
 

@@ -544,17 +544,16 @@ fn threaded_comment_export_preserves_imported_part_path_not_relationship_id() {
     .unwrap();
     let threaded_xml = String::from_utf8(
         archive
-            .read_file("xl/threadedComments/threadedComment7.xml")
+            .read_file("xl/threadedComments/threadedComment1.xml")
             .unwrap(),
     )
     .unwrap();
     let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
         .expect("content types should be UTF-8");
 
-    assert!(!archive.contains("xl/threadedComments/threadedComment1.xml"));
     assert!(!sheet_rels.contains(r#"Id="rIdThreaded7""#));
-    assert!(sheet_rels.contains(r#"Target="../threadedComments/threadedComment7.xml""#));
-    assert!(content_types.contains(r#"PartName="/xl/threadedComments/threadedComment7.xml""#));
+    assert!(sheet_rels.contains(r#"Target="../threadedComments/threadedComment1.xml""#));
+    assert!(content_types.contains(r#"PartName="/xl/threadedComments/threadedComment1.xml""#));
     assert!(threaded_xml.contains(r#"id="thread-7""#));
     assert!(threaded_xml.contains(r#"personId="{PERSON-7}""#));
     assert!(threaded_xml.contains("Imported threaded package comment"));

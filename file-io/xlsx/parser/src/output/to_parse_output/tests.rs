@@ -525,7 +525,7 @@ fn test_compute_sheet_extent_includes_hyperlink_only_anchor() {
 }
 
 #[test]
-fn test_compute_sheet_extent_includes_comment_only_anchor() {
+fn test_compute_sheet_extent_excludes_comment_only_anchor() {
     let mut sheet = FullParsedSheet::default();
     sheet.comments.push(CommentOutput {
         cell_ref: "D6".to_string(),
@@ -536,7 +536,7 @@ fn test_compute_sheet_extent_includes_comment_only_anchor() {
         xr_uid: None,
     });
 
-    assert_eq!(compute_sheet_extent(&sheet), (6, 4));
+    assert_eq!(compute_sheet_extent(&sheet), (0, 0));
 }
 
 #[test]
@@ -558,7 +558,7 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
         ..Default::default()
     };
 
-    let (sheet_data, _sheet_rt) = convert_sheet(
+    let sheet_data = convert_sheet(
         &sheet,
         &[],
         &[],
@@ -566,9 +566,13 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
         &[],
         &[],
         &std::collections::HashMap::new(),
+        &std::collections::HashMap::<String, Vec<u8>>::new(),
     );
 
-    assert!(sheet_data.cells.is_empty());
+    assert_eq!(sheet_data.cells.len(), 1);
+    assert_eq!(sheet_data.cells[0].row, 2);
+    assert_eq!(sheet_data.cells[0].col, 0);
+    assert!(sheet_data.cells[0].value.is_null());
     assert_eq!(
         sheet_data.authored_style_runs,
         vec![
@@ -588,11 +592,11 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
             },
         ]
     );
-    assert_eq!((sheet_data.rows, sheet_data.cols), (1, 2));
+    assert_eq!((sheet_data.rows, sheet_data.cols), (3, 2));
 }
 
 #[test]
-fn test_extend_sheet_data_extent_includes_late_comment_anchor() {
+fn test_extend_sheet_data_extent_excludes_late_comment_anchor() {
     let mut sheet = SheetData {
         rows: 1,
         cols: 1,
@@ -605,7 +609,8 @@ fn test_extend_sheet_data_extent_includes_late_comment_anchor() {
 
     extend_sheet_data_extent(&mut sheet);
 
-    assert_eq!((sheet.rows, sheet.cols), (9, 6));
+    assert_eq!((sheet.rows, sheet.cols), (1, 1));
+    assert_eq!(sheet.comments[0].cell_ref, "F9");
 }
 
 #[test]
@@ -623,7 +628,7 @@ fn legacy_tc_author_without_threaded_relationship_stays_note() {
         ..Default::default()
     };
 
-    let (sheet_data, _sheet_rt) = convert_sheet(
+    let sheet_data = convert_sheet(
         &sheet,
         &[],
         &[],
@@ -631,6 +636,7 @@ fn legacy_tc_author_without_threaded_relationship_stays_note() {
         &[],
         &[],
         &std::collections::HashMap::new(),
+        &std::collections::HashMap::<String, Vec<u8>>::new(),
     );
 
     let comment = sheet_data.comments.first().expect("comment");

@@ -60,7 +60,10 @@ pub(crate) fn convert_sheets(
                     // defaults. Cells with a style that differs from the
                     // positional default must be kept so their CellId is
                     // allocated and cell-level properties are hydrated.
-                    if cell.formula.is_none() && matches!(cell.value, CellValue::Null) {
+                    if cell.formula.is_none()
+                        && matches!(cell.value, CellValue::Null)
+                        && cell.original_value.is_none()
+                    {
                         let cell_sid = cell.style_id.unwrap_or(0);
                         let row_sid = row_default_style.get(&cell.row).copied().unwrap_or(0);
                         let col_sid = col_default_style.get(&cell.col).copied().unwrap_or(0);

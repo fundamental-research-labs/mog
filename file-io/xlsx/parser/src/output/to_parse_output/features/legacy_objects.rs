@@ -153,12 +153,6 @@ pub(crate) fn convert_ole_objects(
                     extent_cy: None,
                 });
             // Build typed ooxml props for round-trip
-            let ooxml = OleObjectOoxmlProps {
-                shape_id: o.shape_id,
-                r_id: o.r_id.clone(),
-                data_path: o.data_path.clone(),
-                name: o.name.clone(),
-                link: o.link.clone(),
             let embedding = o.data_path.as_ref().and_then(|path| {
                 binary_parts.get(path).map(|bytes| OleObjectPackageIdentity {
                     path: path.clone(),
@@ -173,22 +167,28 @@ pub(crate) fn convert_ole_objects(
                     bytes: bytes.clone(),
                 })
             });
+            let ooxml = OleObjectOoxmlProps {
+                shape_id: o.shape_id,
+                r_id: o.r_id.clone(),
+                data_path: o.data_path.clone(),
+                name: o.name.clone(),
+                link: o.link.clone(),
                 dv_aspect: o.dv_aspect.clone(),
                 prog_id: o.prog_id.clone(),
                 ole_update: o.ole_update.clone(),
                 auto_load: o.auto_load,
                 preview_image_rel_id: o.preview_image_rel_id.clone(),
                 preview_image_path: o.preview_image_path.clone(),
+                embedding,
+                preview,
+                vml_drawing_path: None,
+                vml_relationship_id: None,
                 object_pr: o.object_pr.clone(),
             };
             FloatingObject {
                 common: FloatingObjectCommon {
                     id: format!("fobj-ole-{}", idx),
                     sheet_id: String::new(),
-                embedding,
-                preview,
-                vml_drawing_path: None,
-                vml_relationship_id: None,
                     anchor,
                     width: 0.0,
                     height: 0.0,

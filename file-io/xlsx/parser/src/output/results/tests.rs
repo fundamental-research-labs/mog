@@ -384,6 +384,8 @@ fn test_styles_output_camel_case() {
             alignment: None,
             apply_protection: None,
             protection: None,
+            quote_prefix: false,
+            pivot_button: false,
         }],
         cell_style_xfs: vec![],
         cell_styles: vec![],

@@ -775,7 +775,6 @@ pub(super) fn capture_sheet_preserved_elements(
     preserved
 }
 
-
 #[cfg(test)]
 mod preserved_xml_allowlist_tests {
     use super::*;

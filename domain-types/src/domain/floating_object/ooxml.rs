@@ -152,9 +152,6 @@ pub struct ChartOoxmlProps {
     pub is_chart_ex: bool,
 }
 
-/// OOXML round-trip properties for an OLE object.
-///
-/// Mirrors parser `OleObjectOutput` fields for lossless round-trip.
 /// Owned embedded OLE package part.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,6 +184,9 @@ pub struct OleObjectPreviewIdentity {
     pub bytes: Vec<u8>,
 }
 
+/// OOXML round-trip properties for an OLE object.
+///
+/// Mirrors parser `OleObjectOutput` fields for lossless round-trip.
 /// The domain-level `OleObjectData` carries prog_id/dv_aspect/flags;
 /// this struct carries the remaining OOXML-specific data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -216,9 +216,6 @@ pub struct OleObjectOoxmlProps {
     pub preview_image_rel_id: Option<String>,
     /// Resolved path to the preview image.
     pub preview_image_path: Option<String>,
-    /// Object properties from `<objectPr>` child element.
-    ///
-    /// Typed-domain replacement for the former `Option<serde_json::Value>` blob
     /// Owned embedding package identity and bytes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedding: Option<OleObjectPackageIdentity>,
@@ -231,6 +228,9 @@ pub struct OleObjectOoxmlProps {
     /// Worksheet relationship id for the VML drawing, when imported.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vml_relationship_id: Option<String>,
+    /// Object properties from `<objectPr>` child element.
+    ///
+    /// Typed-domain replacement for the former `Option<serde_json::Value>` blob
     /// (typed OOXML preservation); the `OleObjectPropertiesOutput` type used
     /// to live in `xlsx-parser`, forcing the field to carry free-form JSON. It
     /// now lives in `domain-types` as

@@ -316,15 +316,9 @@ pub(super) fn write_zip_package(
 
             // Write VML drawing for form controls and OLE objects (separate from comment VML)
             if sheet_extras[idx].comments.is_none() {
-                let vml_entry = worksheet_form_control_vml_relationships
+                let vml_path = worksheet_form_control_vml_relationships
                     .iter()
                     .find(|entry| entry.sheet_idx == idx)
-                    .ok_or_else(|| {
-                        WriteError::PackageIntegrity(format!(
-                            "missing graph-registered form-control VML part for sheet {}",
-                            idx + 1
-                        ))
-                    })?;
                     .map(|entry| entry.path.as_str())
                     .or_else(|| {
                         worksheet_ole_vml_relationships
@@ -332,6 +326,12 @@ pub(super) fn write_zip_package(
                             .find(|entry| entry.sheet_idx == idx)
                             .map(|entry| entry.path.as_str())
                     })
+                    .ok_or_else(|| {
+                        WriteError::PackageIntegrity(format!(
+                            "missing graph-registered legacy VML part for sheet {}",
+                            idx + 1
+                        ))
+                    })?;
                 let preview_rel_ids =
                     ole_preview_relationship_ids(package_graph, vml_path, &sheet_extras[idx]);
                 let ole_objects = sheet_extras[idx]
@@ -687,21 +687,6 @@ fn add_registered_part(
     Ok(())
 }
 
-fn add_standard_excel_image_default_content_types(content_types: &mut ContentTypesManager) {
-    for (extension, content_type) in [
-        ("jpg", "image/jpg"),
-        ("tiff", "image/tiff"),
-        ("jpeg", "image/jpeg"),
-        ("png", "image/png"),
-        ("bmp", "image/bmp"),
-        ("gif", "image/gif"),
-        ("svg", "image/svg+xml"),
-        ("emf", "image/x-emf"),
-        ("wmf", "image/x-wmf"),
-    ] {
-        content_types.add_default(extension, content_type);
-    }
-}
 fn ole_preview_relationship_ids(
     package_graph: &ResolvedPackageGraph,
     vml_path: &str,
@@ -773,4 +758,20 @@ fn relative_target(owner_path: &str, target_path: &str) -> String {
     let mut result = vec![".."; from_components.len().saturating_sub(common)];
     result.extend(to_components[common..].iter().copied());
     result.join("/")
+}
+
+fn add_standard_excel_image_default_content_types(content_types: &mut ContentTypesManager) {
+    for (extension, content_type) in [
+        ("jpg", "image/jpg"),
+        ("tiff", "image/tiff"),
+        ("jpeg", "image/jpeg"),
+        ("png", "image/png"),
+        ("bmp", "image/bmp"),
+        ("gif", "image/gif"),
+        ("svg", "image/svg+xml"),
+        ("emf", "image/x-emf"),
+        ("wmf", "image/x-wmf"),
+    ] {
+        content_types.add_default(extension, content_type);
+    }
 }

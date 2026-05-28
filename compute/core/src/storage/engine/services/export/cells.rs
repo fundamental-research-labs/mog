@@ -434,7 +434,6 @@ fn build_cell_data_for_cell_id(
         return None;
     }
     if is_empty
-        && !preserve_blank
         && is_imported_style_only_blank(
             style_id,
             cell_props,
@@ -768,8 +767,7 @@ mod tests {
 
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
-        let cells =
-            export_cells_for_sheet(&engine.stores, &engine.mirror, None, &sheet_id, &palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
         assert_eq!(
             cells.len(),
             1,
@@ -788,7 +786,6 @@ mod tests {
         let exported_runs = export_authored_style_runs_for_sheet(
             &engine.stores,
             &engine.mirror,
-            None,
             &sheet_id,
             &palette,
         );
@@ -922,8 +919,7 @@ mod tests {
 
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
-        let cells =
-            export_cells_for_sheet(&engine.stores, &engine.mirror, None, &sheet_id, &palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
         let exported = cells
             .iter()
             .find(|cell| cell.row == 0 && cell.col == 0)
@@ -1206,8 +1202,7 @@ mod tests {
 
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
-        let cells =
-            export_cells_for_sheet(&engine.stores, &engine.mirror, None, &sheet_id, &palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
 
         assert!(
             cells
@@ -1238,8 +1233,7 @@ mod tests {
 
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
-        let cells =
-            export_cells_for_sheet(&engine.stores, &engine.mirror, None, &sheet_id, &palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
         let exported = cells
             .iter()
             .find(|cell| cell.row == 1 && cell.col == 1)
@@ -1279,8 +1273,7 @@ mod tests {
 
         let mut palette = Vec::new();
         let palette = LocalPalette::from_vec(&mut palette);
-        let cells =
-            export_cells_for_sheet(&engine.stores, &engine.mirror, None, &sheet_id, &palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
 
         assert!(
             cells

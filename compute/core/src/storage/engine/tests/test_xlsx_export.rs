@@ -932,7 +932,10 @@ fn xlsx_export_calculation_settings_use_modeled_storage() {
     );
     assert!(!exported.calculation.iterate);
     assert_eq!(exported.calculation.iterate_count, 42);
-    assert_eq!(exported.calculation.calc_id, Some(191029));
+    assert_eq!(exported.calculation.calc_id, Some(0));
+    assert!(exported.calculation.full_calc_on_load);
+    assert!(exported.calculation.force_full_calc);
+    assert!(!exported.calculation.calc_completed);
 }
 
 fn imported_external_link() -> ExternalLink {

@@ -1399,6 +1399,7 @@ mod tests {
             visible: None,
             note_height: None,
             note_width: None,
+            note_shape_anchor: None,
         };
         let json = serde_json::to_string(&comment).unwrap();
         let deserialized: Comment = serde_json::from_str(&json).unwrap();

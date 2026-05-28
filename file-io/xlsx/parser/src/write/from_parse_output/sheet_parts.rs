@@ -410,8 +410,8 @@ pub(super) fn build_sheet_parts(
                 })
                 .collect();
         let form_controls = convert_unified_form_controls(&form_control_fobjs);
-        let custom_properties = None;
         let ole_objects = convert_unified_ole_objects(&sheet_data.floating_objects);
+        let custom_properties = None;
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {
@@ -429,9 +429,9 @@ pub(super) fn build_sheet_parts(
             original_drawing_path,
             has_printer_settings,
             form_controls,
+            ole_objects,
             custom_properties,
         });
-            ole_objects,
     }
 
     BuiltSheetParts {

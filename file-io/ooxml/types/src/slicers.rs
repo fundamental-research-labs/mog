@@ -235,6 +235,19 @@ pub struct SlicerTabularItem {
     pub s: bool,
     /// Whether the item has no data (default: false).
     pub nd: bool,
+    /// Unknown owner-local attributes on the item element.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_attrs: Vec<SlicerUnknownAttribute>,
+}
+
+/// Unknown owner-local slicer attribute.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlicerUnknownAttribute {
+    /// Attribute qualified name as imported.
+    pub name: String,
+    /// Decoded or verbatim attribute value.
+    pub value: String,
 }
 
 // ============================================================================

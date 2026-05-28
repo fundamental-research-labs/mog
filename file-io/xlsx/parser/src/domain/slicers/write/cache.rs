@@ -50,7 +50,7 @@ pub fn write_slicer_cache(cache: &SlicerCacheDef) -> Vec<u8> {
     }
 
     if let Some(ref tsc) = cache.table_slicer_cache {
-        write_table_slicer_cache_ext(&mut w, tsc);
+        write_table_slicer_cache_ext(&mut w, tsc, cache.ext_lst.as_deref());
     }
 
     if cache.table_slicer_cache.is_none() {

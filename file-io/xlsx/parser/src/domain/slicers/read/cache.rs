@@ -1,8 +1,11 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr_with_default, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    decode_xml_entities_string, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
+};
 
 use super::super::types::{
-    SlicerCacheDef, SlicerPivotTableRef, SlicerTabularData, SlicerTabularItem, TableSlicerCache,
+    SlicerCacheDef, SlicerPivotTableRef, SlicerTabularData, SlicerTabularItem,
+    SlicerUnknownAttribute, TableSlicerCache,
 };
 use super::support::{parse_cross_filter_attr, parse_sort_order_attr};
 
@@ -30,7 +33,7 @@ pub fn parse_slicer_cache(xml: &[u8]) -> Option<SlicerCacheDef> {
         pivot_tables: parse_slicer_pivot_tables(body),
         tabular_data: parse_tabular_data(body),
         table_slicer_cache: parse_table_slicer_cache_from_ext(body),
-        ext_lst: extract_ext_lst(body),
+        ext_lst: extract_direct_child_ext_lst(body),
     })
 }
 
@@ -88,7 +91,7 @@ fn parse_tabular_data(body: &[u8]) -> Option<SlicerTabularData> {
         show_missing: parse_bool_attr_with_default(tabular_elem, b"showMissing=\"", false),
         cross_filter: parse_cross_filter_attr(tabular_elem, b"crossFilter=\""),
         items: parse_tabular_items(tabular_body),
-        ext_lst: None,
+        ext_lst: extract_last_ext_lst(tabular_body),
     })
 }
 
@@ -121,7 +124,12 @@ fn parse_tabular_items(body: &[u8]) -> Vec<SlicerTabularItem> {
             if let Some(x) = parse_u32_attr(elem, b"x=\"") {
                 let s = parse_bool_attr_with_default(elem, b"s=\"", false);
                 let nd = parse_bool_attr_with_default(elem, b"nd=\"", false);
-                items.push(SlicerTabularItem { x, s, nd });
+                items.push(SlicerTabularItem {
+                    x,
+                    s,
+                    nd,
+                    unknown_attrs: parse_item_unknown_attrs(elem),
+                });
             }
 
             pos = elem_end;
@@ -131,6 +139,72 @@ fn parse_tabular_items(body: &[u8]) -> Vec<SlicerTabularItem> {
     }
 
     items
+}
+
+fn parse_item_unknown_attrs(elem: &[u8]) -> Vec<SlicerUnknownAttribute> {
+    let mut attrs = Vec::new();
+    let mut pos = tag_name_end(elem, 0);
+
+    while pos < elem.len() {
+        while pos < elem.len() && elem[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        if pos >= elem.len() || matches!(elem[pos], b'/' | b'>') {
+            break;
+        }
+
+        let name_start = pos;
+        while pos < elem.len()
+            && !matches!(elem[pos], b'=' | b'/' | b'>' | b' ' | b'\t' | b'\n' | b'\r')
+        {
+            pos += 1;
+        }
+        let name = &elem[name_start..pos];
+
+        while pos < elem.len() && elem[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        if pos >= elem.len() || elem[pos] != b'=' {
+            continue;
+        }
+        pos += 1;
+        while pos < elem.len() && elem[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        if pos >= elem.len() || !matches!(elem[pos], b'"' | b'\'') {
+            continue;
+        }
+        let quote = elem[pos];
+        pos += 1;
+        let value_start = pos;
+        while pos < elem.len() && elem[pos] != quote {
+            pos += 1;
+        }
+        let value = &elem[value_start..pos];
+        if pos < elem.len() {
+            pos += 1;
+        }
+
+        if should_preserve_item_attr(name) {
+            if let (Ok(name), Ok(value)) = (std::str::from_utf8(name), std::str::from_utf8(value)) {
+                attrs.push(SlicerUnknownAttribute {
+                    name: name.to_string(),
+                    value: decode_xml_entities_string(value),
+                });
+            }
+        }
+    }
+
+    attrs
+}
+
+fn should_preserve_item_attr(name: &[u8]) -> bool {
+    name != b"x"
+        && name != b"s"
+        && name != b"nd"
+        && name != b"r:id"
+        && !name.starts_with(b"xmlns")
+        && !name.ends_with(b":id")
 }
 
 fn is_item_element(xml: &[u8], start: usize) -> bool {
@@ -161,26 +235,93 @@ fn parse_table_slicer_cache_from_ext(body: &[u8]) -> Option<TableSlicerCache> {
         .unwrap_or(body.len());
     let tsc_elem = &body[tsc_start..tsc_elem_end];
 
+    let tsc_close = find_closing_tag(body, b"tableSlicerCache", tsc_start);
+    let tsc_xml_end = tsc_close
+        .and_then(|close_start| find_gt_simd(body, close_start).map(|end| end + 1))
+        .unwrap_or(tsc_elem_end);
+    let tsc_xml = &body[tsc_start..tsc_xml_end];
+
     Some(TableSlicerCache {
         table_id: parse_u32_attr(tsc_elem, b"tableId=\"")?,
         column: parse_u32_attr(tsc_elem, b"column=\"")?,
         sort_order: parse_sort_order_attr(tsc_elem, b"sortOrder=\""),
         custom_list_sort: parse_bool_attr_with_default(tsc_elem, b"customListSort=\"", false),
         cross_filter: parse_cross_filter_attr(tsc_elem, b"crossFilter=\""),
-        ext_lst: None,
+        ext_lst: extract_last_ext_lst(tsc_xml),
     })
 }
 
-fn extract_ext_lst(body: &[u8]) -> Option<String> {
-    let ext_start = find_tag_simd(body, b"extLst", 0)?;
-    let ext_close = find_closing_tag(body, b"extLst", ext_start)?;
-    let close_end = find_gt_simd(body, ext_close)
-        .map(|p| p + 1)
-        .unwrap_or(ext_close);
+fn extract_direct_child_ext_lst(body: &[u8]) -> Option<String> {
+    let mut pos = 0;
 
-    std::str::from_utf8(&body[ext_start..close_end])
-        .ok()
-        .map(|s| s.to_string())
+    while let Some(lt) = memchr::memchr(b'<', &body[pos..]).map(|p| p + pos) {
+        let name_start = lt + 1;
+        if name_start >= body.len() {
+            return None;
+        }
+        if matches!(body[name_start], b'/' | b'!' | b'?') {
+            pos = find_gt_simd(body, lt).map_or(body.len(), |end| end + 1);
+            continue;
+        }
+
+        let tag_end = find_gt_simd(body, lt)?;
+        let name_end = tag_name_end(body, name_start);
+        if local_name(&body[name_start..name_end]) == b"extLst" {
+            let close = find_closing_tag(body, b"extLst", tag_end)?;
+            let close_end = find_gt_simd(body, close)
+                .map(|p| p + 1)
+                .unwrap_or(close);
+            return std::str::from_utf8(&body[lt..close_end])
+                .ok()
+                .map(|s| s.to_string());
+        }
+
+        pos = if tag_end > lt && body[tag_end - 1] == b'/' {
+            tag_end + 1
+        } else {
+            let close = find_closing_tag(body, local_name(&body[name_start..name_end]), tag_end)?;
+            find_gt_simd(body, close).map_or(body.len(), |end| end + 1)
+        };
+    }
+
+    None
+}
+
+fn extract_last_ext_lst(body: &[u8]) -> Option<String> {
+    let mut pos = 0;
+    let mut ext = None;
+
+    while let Some(ext_start) = find_tag_simd(body, b"extLst", pos) {
+        let ext_close = match find_closing_tag(body, b"extLst", ext_start) {
+            Some(close) => close,
+            None => break,
+        };
+        let close_end = find_gt_simd(body, ext_close)
+            .map(|p| p + 1)
+            .unwrap_or(ext_close);
+        ext = std::str::from_utf8(&body[ext_start..close_end])
+            .ok()
+            .map(|s| s.to_string());
+        pos = close_end;
+    }
+
+    ext
+}
+
+fn tag_name_end(xml: &[u8], mut pos: usize) -> usize {
+    while pos < xml.len() {
+        if matches!(xml[pos], b'>' | b'/' | b' ' | b'\t' | b'\n' | b'\r') {
+            break;
+        }
+        pos += 1;
+    }
+    pos
+}
+
+fn local_name(name: &[u8]) -> &[u8] {
+    name.iter()
+        .rposition(|b| *b == b':')
+        .map_or(name, |idx| &name[idx + 1..])
 }
 
 #[cfg(test)]
@@ -314,7 +455,9 @@ mod tests {
     #[test]
     fn ext_lst_extraction_preserves_nested_xml_and_closing_tag() {
         let ext =
-            extract_ext_lst(br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#)
+            extract_last_ext_lst(
+                br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#
+            )
                 .unwrap();
         assert_eq!(ext, r#"<extLst><ext><nested value="1"/></ext></extLst>"#);
     }

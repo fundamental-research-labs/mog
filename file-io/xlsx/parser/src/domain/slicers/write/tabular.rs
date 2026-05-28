@@ -37,12 +37,29 @@ pub(super) fn write_tabular_data(w: &mut XmlWriter, data: &SlicerTabularData) {
             if item.nd {
                 w.attr("nd", "1");
             }
+            for attr in &item.unknown_attrs {
+                if is_safe_item_attr_name(&attr.name) {
+                    w.attr(&attr.name, &attr.value);
+                }
+            }
             w.self_close();
         }
 
         w.end_element("items");
     }
 
+    if let Some(ref ext_lst) = data.ext_lst {
+        if !crate::infra::xml::raw_xml_contains_relationship_attr(ext_lst) {
+            w.raw_str(ext_lst);
+        }
+    }
+
     w.end_element("tabular");
     w.end_element("data");
+}
+
+fn is_safe_item_attr_name(name: &str) -> bool {
+    !matches!(name, "x" | "s" | "nd" | "r:id")
+        && !name.starts_with("xmlns")
+        && !name.ends_with(":id")
 }

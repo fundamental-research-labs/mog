@@ -1,4 +1,4 @@
-use crate::infra::scanner::{find_gt_simd, find_tag_simd};
+use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_with_default, parse_string_attr, parse_u32_attr};
 
 use super::super::types::SlicerDef;
@@ -19,11 +19,20 @@ pub fn parse_slicer_part(xml: &[u8]) -> Vec<SlicerDef> {
             .unwrap_or(xml.len());
         let elem = &xml[slicer_start..elem_end];
 
-        if let Some(slicer) = parse_single_slicer(elem) {
+        let slicer_end = if elem_end > slicer_start && xml[elem_end - 2] == b'/' {
+            elem_end
+        } else {
+            find_closing_tag(xml, b"slicer", elem_end)
+                .and_then(|close_start| find_gt_simd(xml, close_start).map(|end| end + 1))
+                .unwrap_or(elem_end)
+        };
+        let slicer_xml = &xml[slicer_start..slicer_end];
+
+        if let Some(slicer) = parse_single_slicer(elem, slicer_xml) {
             slicers.push(slicer);
         }
 
-        pos = elem_end;
+        pos = slicer_end;
     }
 
     slicers
@@ -86,7 +95,7 @@ fn is_slicer_element(xml: &[u8], pos: usize) -> bool {
     }
 }
 
-fn parse_single_slicer(elem: &[u8]) -> Option<SlicerDef> {
+fn parse_single_slicer(elem: &[u8], slicer_xml: &[u8]) -> Option<SlicerDef> {
     let name = parse_string_attr(elem, b"name=\"")?;
     let cache = parse_string_attr(elem, b"cache=\"")?;
 
@@ -102,8 +111,20 @@ fn parse_single_slicer(elem: &[u8]) -> Option<SlicerDef> {
         locked_position: parse_bool_attr_with_default(elem, b"lockedPosition=\"", false),
         row_height: parse_u32_attr(elem, b"rowHeight=\""),
         uid: parse_string_attr(elem, b"xr10:uid=\"").or_else(|| parse_string_attr(elem, b"uid=\"")),
-        ext_lst: None,
+        ext_lst: extract_ext_lst(slicer_xml),
     })
+}
+
+fn extract_ext_lst(xml: &[u8]) -> Option<String> {
+    let ext_start = find_tag_simd(xml, b"extLst", 0)?;
+    let ext_close = find_closing_tag(xml, b"extLst", ext_start)?;
+    let close_end = find_gt_simd(xml, ext_close)
+        .map(|p| p + 1)
+        .unwrap_or(ext_close);
+
+    std::str::from_utf8(&xml[ext_start..close_end])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]

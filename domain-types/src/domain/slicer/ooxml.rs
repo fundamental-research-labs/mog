@@ -276,6 +276,7 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
                     x: i as u32,
                     s: true,
                     nd: false,
+                    unknown_attrs: Vec::new(),
                 })
                 .collect();
             OoxmlSlicerCacheDef {

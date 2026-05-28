@@ -1,3 +1,4 @@
+use crate::infra::xml::raw_xml_contains_relationship_attr;
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::slicers::SlicerDef;
 
@@ -68,6 +69,15 @@ fn write_slicer_element(w: &mut XmlWriter, s: &SlicerDef) {
     }
     if let Some(row_height) = s.row_height {
         w.attr("rowHeight", &row_height.to_string());
+    }
+
+    if let Some(ref ext_lst) = s.ext_lst {
+        if !raw_xml_contains_relationship_attr(ext_lst) {
+            w.end_attrs();
+            w.raw_str(ext_lst);
+            w.end_element("slicer");
+            return;
+        }
     }
 
     w.self_close();

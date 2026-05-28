@@ -54,24 +54,24 @@ fn theme_fixture_xlsx() -> Vec<u8> {
   <Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
 </Types>"#
             .to_vec(),
-    )
-    .add_file(
+    );
+    zip.add_file(
         "_rels/.rels",
         br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>"#
             .to_vec(),
-    )
-    .add_file(
+    );
+    zip.add_file(
         "xl/workbook.xml",
         br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
 </workbook>"#
             .to_vec(),
-    )
-    .add_file(
+    );
+    zip.add_file(
         "xl/_rels/workbook.xml.rels",
         br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -79,17 +79,17 @@ fn theme_fixture_xlsx() -> Vec<u8> {
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
 </Relationships>"#
             .to_vec(),
-    )
-    .add_file(
+    );
+    zip.add_file(
         "xl/worksheets/sheet1.xml",
         br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>
 </worksheet>"#
             .to_vec(),
-    )
-    .add_file("xl/theme/theme1.xml", theme_xml().into_bytes())
-    .finish()
+    );
+    zip.add_file("xl/theme/theme1.xml", theme_xml().into_bytes());
+    zip.finish().expect("theme fixture xlsx should be written")
 }
 
 fn theme_xml() -> String {

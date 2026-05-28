@@ -412,19 +412,6 @@ fn relationship_owner_path(rels_path: &str) -> Option<String> {
     })
 }
 
-fn default_extension_for_path(path: &str) -> Option<(String, String)> {
-    if path.ends_with(".rels") {
-        Some((
-            "rels".to_string(),
-            "application/vnd.openxmlformats-package.relationships+xml".to_string(),
-        ))
-    } else if path.ends_with(".xml") {
-        Some(("xml".to_string(), "application/xml".to_string()))
-    } else {
-        None
-    }
-}
-
 fn normalize_path(path: &str) -> String {
     path.trim_start_matches('/').replace('\\', "/")
 }

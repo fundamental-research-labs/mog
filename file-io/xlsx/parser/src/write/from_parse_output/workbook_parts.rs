@@ -130,25 +130,9 @@ pub(super) fn build_workbook_xml(
     let workbook_rels = package_graph
         .relationship_manager_for_owner(&crate::write::package_graph::PackageOwner::Workbook);
     // Pivot cache workbook rels + pivotCaches XML for workbook.xml.
-    // Clean imported cache entries come from the typed package sidecar and keep
-    // their original relationship IDs/targets; generated entries are appended.
+    // Pivot caches are generated from modeled pivot state; the removed legacy
+    // round-trip sidecar must not contribute workbook cache entries.
     let mut pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
-    for entry in &pivot_data.preserved_workbook_cache_entries {
-        let r_id = package_graph
-            .relationship_id(
-                &crate::write::package_graph::PackageOwner::Workbook,
-                REL_PIVOT_CACHE,
-                &entry.relationship_target,
-            )
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing workbook relationship for preserved pivot cache {}",
-                    entry.relationship_target
-                ))
-            })?
-            .to_string();
-        pivot_cache_xml_entries.push((entry.cache_id, r_id));
-    }
     for entry in &pivot_data.pivot_cache_entries {
         let target = format!("pivotCache/pivotCacheDefinition{}.xml", entry.global_idx);
         let r_id = package_graph

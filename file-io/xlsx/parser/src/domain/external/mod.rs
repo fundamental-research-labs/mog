@@ -4,4 +4,5 @@ pub mod read;
 pub mod types;
 pub mod write;
 
-pub use read::*;
+pub use read::external_book_rid;
+pub use types::ExternalLinks;

@@ -4,6 +4,12 @@ pub(super) fn build_package_fidelity_metadata(
     result: &FullParseResult,
 ) -> Option<domain_types::PackageFidelityMetadata> {
     let mut metadata = domain_types::PackageFidelityMetadata {
+        package_profile: result.package_inventory.as_ref().map(|inventory| {
+            domain_types::PackageProfileHint {
+                profile: inventory.profile.as_str().to_string(),
+                evidence: inventory.profile_evidence.clone(),
+            }
+        }),
         content_type_defaults: result
             .content_type_defaults
             .iter()
@@ -39,6 +45,22 @@ pub(super) fn build_package_fidelity_metadata(
             .collect(),
         sheet_workbook_r_ids: result.sheet_workbook_r_ids.clone(),
         opaque_parts: Vec::new(),
+        diagnostics: result
+            .package_inventory
+            .as_ref()
+            .map(|inventory| {
+                inventory
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| domain_types::PackageFidelityDiagnostic {
+                        code: diagnostic.code.to_string(),
+                        message: diagnostic.message.clone(),
+                        part: diagnostic.part.clone(),
+                        relationship_id: diagnostic.relationship_id.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     };
 
     let mut raw_parts = Vec::<(String, Vec<u8>)>::new();
@@ -66,7 +88,27 @@ fn build_opaque_package_part_hints(
     raw_parts: Vec<(String, Vec<u8>)>,
 ) -> Vec<domain_types::OpaquePackagePartHint> {
     let mut relationship_sidecars: HashMap<String, Vec<domain_types::PackageRelationshipHint>> =
-        HashMap::new();
+        result
+            .package_inventory
+            .as_ref()
+            .map(crate::infra::opc_inventory::relationships_by_owner)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(owner, relationships)| {
+                (
+                    owner,
+                    relationships
+                        .into_iter()
+                        .map(|relationship| domain_types::PackageRelationshipHint {
+                            id: relationship.id,
+                            relationship_type: relationship.relationship_type,
+                            target: relationship.target,
+                            target_mode: relationship.target_mode,
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
     let mut part_bytes = Vec::<(String, Vec<u8>)>::new();
 
     for (path, bytes) in raw_parts {

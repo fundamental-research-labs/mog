@@ -87,6 +87,7 @@ pub const KEY_STYLE_PALETTE: &str = "stylePalette";
 pub const KEY_WORKBOOK_STYLESHEET: &str = "workbookStylesheet";
 pub const KEY_DXF_REGISTRY: &str = "differentialFormatRegistry";
 pub const KEY_SHARED_STRING_HINTS: &str = "sharedStringHints";
+pub const KEY_PACKAGE_FIDELITY_METADATA: &str = "packageFidelityMetadata";
 pub const KEY_WORKBOOK_SETTINGS: &str = "workbookSettings";
 pub const KEY_WORKBOOK_IDENTITY: &str = "workbookIdentity";
 pub const KEY_WORKBOOK_LINKS: &str = "workbookLinks";
@@ -288,6 +289,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_IMPORTED_EXTERNAL_CACHE, empty());
     workbook.insert(&mut txn, KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE, empty());
     workbook.insert(&mut txn, KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS, empty());
+    workbook.insert(&mut txn, KEY_PACKAGE_FIDELITY_METADATA, empty());
     workbook.insert(&mut txn, KEY_NAMED_RANGES, empty());
     workbook.insert(&mut txn, KEY_TABLES, empty());
     workbook.insert(&mut txn, KEY_SLICERS, empty());
@@ -488,6 +490,7 @@ mod tests {
             KEY_IMPORTED_EXTERNAL_CACHE,
             KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE,
             KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS,
+            KEY_PACKAGE_FIDELITY_METADATA,
             KEY_EXTENDED_DOCUMENT_PROPERTIES,
             KEY_XLSX_METADATA,
             KEY_NAMED_RANGES,

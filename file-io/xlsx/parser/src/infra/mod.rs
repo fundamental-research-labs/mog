@@ -7,6 +7,7 @@ pub mod error;
 pub mod imported_parts;
 pub mod json;
 pub mod opc;
+pub mod opc_inventory;
 pub mod package_integrity;
 pub mod scanner;
 pub mod xml;

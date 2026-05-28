@@ -388,6 +388,11 @@ pub(super) fn parse_xlsx_full_native_impl(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let package_inventory = crate::infra::opc_inventory::build_opc_package_inventory(
+        &archive,
+        &content_type_defaults,
+        &content_type_overrides,
+    );
     let workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
         &sheet_infos,
         &workbook_relationships,
@@ -838,6 +843,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         rich_data,
         content_type_defaults,
         content_type_overrides,
+        package_inventory: Some(package_inventory),
         root_relationships,
         workbook_relationships,
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),

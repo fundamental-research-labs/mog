@@ -472,6 +472,24 @@ pub(super) fn hydrate_shared_string_hints(
     }
 }
 
+pub(super) fn hydrate_package_fidelity_metadata(
+    workbook: &MapRef,
+    package_fidelity: &Option<domain_types::PackageFidelityMetadata>,
+    txn: &mut yrs::TransactionMut,
+) {
+    let Some(package_fidelity) = package_fidelity else {
+        return;
+    };
+    if package_fidelity.is_empty() {
+        return;
+    }
+    let fidelity_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_PACKAGE_FIDELITY_METADATA);
+    if let Ok(json) = serde_json::to_string(package_fidelity) {
+        fidelity_map.insert(txn, "data", Any::String(Arc::from(json.as_str())));
+    }
+}
+
 /// Hydrate slicers into the workbook-level `KEY_SLICERS` Y.Map as `StoredSlicer` JSON.
 ///
 /// Merges per-sheet slicer definitions and anchors with workbook-level slicer

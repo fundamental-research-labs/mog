@@ -34,12 +34,12 @@ pub struct ParseOutput {
     pub style_palette: Vec<DocumentFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workbook_stylesheet: Option<WorkbookStylesheet>,
-    /// Writer-only OPC package fidelity hints captured from imported XLSX.
+    /// Production-safe OPC package fidelity facts captured from imported XLSX.
     ///
-    /// This is deliberately skipped from public serialized parse output. The
-    /// writer may use these facts only as validated identity/formatting hints
-    /// for current emitted graph nodes, never as an export manifest.
-    #[serde(default, skip)]
+    /// These facts are a durable sidecar for inert package content only. Writers
+    /// must still validate ownership, relationship closure, content types, and
+    /// stale/unsafe disposition before reusing imported bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_fidelity: Option<PackageFidelityMetadata>,
     /// Legacy import hints for shared-string entries.
     ///
@@ -95,28 +95,60 @@ pub struct ParseOutput {
     pub persons: Vec<PersonInfo>,
 }
 
-/// Writer-only package metadata captured during import.
+/// Durable package metadata captured during import.
 ///
 /// All fields are hints for current graph construction. Export must validate
-/// owner, relationship type, target identity, and content-type requirements
-/// before reusing any imported value.
-#[derive(Debug, Clone, PartialEq, Default)]
+/// owner, relationship type, target identity, content-type requirements, and
+/// stale/unsafe disposition before reusing any imported value.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageFidelityMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_profile: Option<PackageProfileHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_defaults: Vec<PackageContentTypeDefaultHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_overrides: Vec<PackageContentTypeOverrideHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_relationships: Vec<PackageRelationshipHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_relationships: Vec<PackageRelationshipHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet_workbook_r_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub opaque_parts: Vec<OpaquePackagePartHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<PackageFidelityDiagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageProfileHint {
+    pub profile: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageFidelityDiagnostic {
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageContentTypeDefaultHint {
     pub extension: String,
     pub content_type: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageContentTypeOverrideHint {
     /// Normalized package part path without a leading slash.
     pub part_name: String,
@@ -125,7 +157,8 @@ pub struct PackageContentTypeOverrideHint {
     pub content_type: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageRelationshipHint {
     pub id: String,
     pub relationship_type: String,
@@ -133,7 +166,8 @@ pub struct PackageRelationshipHint {
     pub target_mode: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpaquePackagePartHint {
     /// Normalized ZIP package path without a leading slash.
     pub path: String,
@@ -215,6 +249,8 @@ impl PackageFidelityMetadata {
             && self.workbook_relationships.is_empty()
             && self.sheet_workbook_r_ids.is_empty()
             && self.opaque_parts.is_empty()
+            && self.diagnostics.is_empty()
+            && self.package_profile.is_none()
     }
 
     #[must_use]

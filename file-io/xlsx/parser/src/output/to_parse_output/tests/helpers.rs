@@ -237,6 +237,7 @@ pub(super) fn threading_result(
         rich_data: None,
         content_type_defaults: Vec::new(),
         content_type_overrides: Vec::new(),
+        package_inventory: None,
         root_relationships: Vec::new(),
         workbook_relationships: Vec::new(),
         sheet_workbook_r_ids: Vec::new(),

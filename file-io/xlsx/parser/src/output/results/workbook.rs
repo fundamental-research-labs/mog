@@ -633,6 +633,10 @@ pub struct FullParseResult {
     /// from the source file so that round-trip writing maintains fidelity.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub content_type_overrides: Vec<(String, String)>,
+    /// Complete import-time OPC package inventory used to project durable,
+    /// policy-filtered package fidelity into ParseOutput.
+    #[serde(skip)]
+    pub package_inventory: Option<crate::infra::opc_inventory::OpcPackageInventory>,
     /// Original OPC relationships from `_rels/.rels`, preserved for round-trip fidelity.
     /// When present, the writer replays these instead of regenerating relationship IDs.
     #[serde(skip)]

@@ -194,6 +194,28 @@ pub(super) fn export_shared_string_hints(
     serde_json::from_str::<Vec<domain_types::SharedStringHint>>(&json_str).unwrap_or_default()
 }
 
+pub(super) fn export_package_fidelity_metadata(
+    stores: &EngineStores,
+) -> Option<domain_types::PackageFidelityMetadata> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let fidelity_map = match workbook.get(&txn, KEY_PACKAGE_FIDELITY_METADATA) {
+        Some(Out::YMap(m)) => m,
+        _ => return None,
+    };
+
+    let json_str = match fidelity_map.get(&txn, "data") {
+        Some(Out::Any(Any::String(s))) => s,
+        _ => return None,
+    };
+
+    serde_json::from_str::<domain_types::PackageFidelityMetadata>(&json_str)
+        .ok()
+        .filter(|metadata| !metadata.is_empty())
+}
+
 pub(super) fn export_workbook_connections(
     stores: &EngineStores,
 ) -> domain_types::domain::connections::WorkbookConnectionSet {

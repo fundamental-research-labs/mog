@@ -1,3 +1,4 @@
+use super::ole_objects::OleObjectExport;
 use super::worksheet_custom_properties;
 
 /// Per-sheet extra data needed for ZIP assembly (comments, tables, rels).
@@ -34,6 +35,8 @@ pub(super) struct SheetExtras {
     pub(super) form_controls: Vec<crate::domain::controls::types::FormControl>,
     /// Clean imported worksheet custom property sidecars.
     pub(super) custom_properties: Option<worksheet_custom_properties::WorksheetCustomProperties>,
+    /// OLE objects for this sheet (converted from floating-object state).
+    pub(super) ole_objects: Vec<OleObjectExport>,
 }
 
 /// Per-chart data needed during ZIP assembly. Includes the original ChartSpec
@@ -104,6 +107,27 @@ pub(super) struct WorksheetFormControlVmlGraphEntry {
 
 pub(super) struct WorksheetDrawingGraphEntry {
     pub(super) sheet_idx: usize,
+pub(super) struct WorksheetOleObjectGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) ole_idx: usize,
+    pub(super) embedding_path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
+pub(super) struct WorksheetOleVmlGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
+pub(super) struct VmlPreviewRelationshipGraphEntry {
+    pub(super) vml_path: String,
+    pub(super) preview_path: String,
+    pub(super) relationship_id_hint: String,
+}
+
     pub(super) path: String,
     pub(super) target: String,
     pub(super) relationship_id_hint: Option<String>,

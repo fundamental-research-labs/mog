@@ -8,8 +8,9 @@ use crate::infra::opc::opc_target_to_zip_path;
 use domain_types::domain::floating_object::{
     AnchorMode, ChartDrawingFrameOoxmlProps, ConnectorBinding, ConnectorData, ConnectorOoxmlProps,
     FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
-    FormControlData, FormControlOoxmlProps, OleObjectData, OleObjectOoxmlProps, PictureData,
-    PictureOoxmlProps, ShapeData, ShapeOoxmlProps,
+    FormControlData, FormControlOoxmlProps, OleObjectData, OleObjectOoxmlProps,
+    OleObjectPackageIdentity, OleObjectPreviewIdentity, PictureData, PictureOoxmlProps, ShapeData,
+    ShapeOoxmlProps,
 };
 use domain_types::{
     AxisBound, AxisBoundLabel, CFCellRange, CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar,

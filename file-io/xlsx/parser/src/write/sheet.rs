@@ -112,6 +112,8 @@ pub struct SheetWriter {
     sheet_protection_xml: Option<String>,
     /// Raw mc:AlternateContent controls XML for form controls.
     controls_xml: Option<String>,
+    /// Modeled worksheet `<oleObjects>` XML.
+    ole_objects_xml: Option<String>,
     /// Raw tableParts XML for verbatim passthrough.
     table_parts_xml: Option<String>,
     /// Relationship IDs for generated worksheet pivot table references.
@@ -154,6 +156,7 @@ impl SheetWriter {
             hyperlinks: Vec::new(),
             sheet_protection_xml: None,
             controls_xml: None,
+            ole_objects_xml: None,
             table_parts_xml: None,
             pivot_table_r_ids: Vec::new(),
             ext_lst_xml: None,
@@ -773,6 +776,12 @@ impl SheetWriter {
         if self.should_skip_preserved_pivot_table_definition(&elem.raw_xml) {
             return false;
         }
+    /// Set modeled worksheet `<oleObjects>` XML.
+    pub fn set_ole_objects_xml(&mut self, xml: String) -> &mut Self {
+        self.ole_objects_xml = Some(xml);
+        self
+    }
+
         let Some(replay_xml) =
             crate::roundtrip::preserved_xml_policy::worksheet_preserved_xml_for_replay(
                 &elem.raw_xml,
@@ -1164,7 +1173,7 @@ impl SheetWriter {
         }
 
         // Drain preserved elements positioned after legacyDrawingHF (e.g. ignoredErrors)
-        // Skip controls mc:AlternateContent if we have explicit controls_xml to avoid duplication.
+        // Skip explicitly modeled controls and never replay OLE objects from preservation.
         let skip_controls = self.controls_xml.is_some();
         if let Some(ref preserved) = self.preserved_elements {
             for elem in preserved.get_after("worksheet", "legacyDrawing") {
@@ -1191,6 +1200,9 @@ impl SheetWriter {
                 "sheetData",
                 "mergeCells",
                 "printOptions",
+                if elem.raw_xml.contains("<oleObjects") {
+                    continue;
+                }
                 "pageMargins",
                 "pageSetup",
                 "headerFooter",
@@ -1223,10 +1235,18 @@ impl SheetWriter {
         // Write generated pivot table references. The sheet relationship file
         // resolves each r:id to a pivotTable part; the worksheet XML marker is
         // the structured ownership contract for Excel-compatible consumers.
+                if elem.raw_xml.contains("<oleObjects") {
+                    continue;
+                }
         for r_id in &self.pivot_table_r_ids {
             w.start_element("pivotTableDefinition")
                 .attr("r:id", r_id)
                 .self_close();
+        // Write OLE worksheet references from modeled floating-object state.
+        if let Some(ref ole_objects) = self.ole_objects_xml {
+            w.raw_str(ole_objects);
+        }
+
         }
 
         // Write extLst (OOXML order: after tableParts, last child of worksheet)

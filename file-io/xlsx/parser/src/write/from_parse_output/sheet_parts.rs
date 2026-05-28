@@ -3,6 +3,7 @@ use domain_types::Hyperlink;
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
 use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
+use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::{chart_allows_auxiliary_replay, sheet_preservation, should_reconstruct_chart_space};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
@@ -409,6 +410,7 @@ pub(super) fn build_sheet_parts(
                 .collect();
         let form_controls = convert_unified_form_controls(&form_control_fobjs);
         let custom_properties = None;
+        let ole_objects = convert_unified_ole_objects(&sheet_data.floating_objects);
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {
@@ -427,6 +429,7 @@ pub(super) fn build_sheet_parts(
             form_controls,
             custom_properties,
         });
+            ole_objects,
     }
 
     BuiltSheetParts {

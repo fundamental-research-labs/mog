@@ -152,6 +152,38 @@ pub struct ChartOoxmlProps {
 /// OOXML round-trip properties for an OLE object.
 ///
 /// Mirrors parser `OleObjectOutput` fields for lossless round-trip.
+/// Owned embedded OLE package part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+#[derive(Default)]
+pub struct OleObjectPackageIdentity {
+    /// ZIP package path, e.g. `xl/embeddings/oleObject1.bin`.
+    pub path: String,
+    /// Imported worksheet relationship id, reused as a hint when valid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+    /// Raw embedded object bytes owned by this floating object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bytes: Vec<u8>,
+}
+
+/// Owned OLE preview media part referenced by the VML shape.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+#[derive(Default)]
+pub struct OleObjectPreviewIdentity {
+    /// ZIP package path, e.g. `xl/media/image1.emf`.
+    pub path: String,
+    /// Imported VML relationship id, reused as a hint when valid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship_id: Option<String>,
+    /// Raw preview image bytes owned by this floating object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bytes: Vec<u8>,
+}
+
 /// The domain-level `OleObjectData` carries prog_id/dv_aspect/flags;
 /// this struct carries the remaining OOXML-specific data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -184,6 +216,18 @@ pub struct OleObjectOoxmlProps {
     /// Object properties from `<objectPr>` child element.
     ///
     /// Typed-domain replacement for the former `Option<serde_json::Value>` blob
+    /// Owned embedding package identity and bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<OleObjectPackageIdentity>,
+    /// Owned preview media identity and bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<OleObjectPreviewIdentity>,
+    /// VML drawing path that owns the preview shape, when imported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vml_drawing_path: Option<String>,
+    /// Worksheet relationship id for the VML drawing, when imported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vml_relationship_id: Option<String>,
     /// (typed OOXML preservation); the `OleObjectPropertiesOutput` type used
     /// to live in `xlsx-parser`, forcing the field to carry free-form JSON. It
     /// now lives in `domain-types` as

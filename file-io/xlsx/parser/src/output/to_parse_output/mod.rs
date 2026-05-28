@@ -104,6 +104,7 @@ pub fn full_parse_result_to_parse_output(
         .unwrap_or(&[]);
     let theme_colors = styles::extract_theme_color_palette(result);
     let media_data_urls = build_media_data_url_map(result);
+    let binary_parts = build_binary_part_map(result);
 
     for (sheet_idx, sheet) in result.sheets.iter().enumerate() {
         let mut sd = convert_sheet(
@@ -114,6 +115,7 @@ pub fn full_parse_result_to_parse_output(
             dxfs,
             &theme_colors,
             &media_data_urls,
+            &binary_parts,
         );
         // Assign tables to each sheet (tables are per-sheet data)
         sd.tables = convert_tables(&sheet.tables);
@@ -855,6 +857,20 @@ fn convert_sheet(
                     thick_top: false,
                     thick_bot: false,
                     descent: Some(d),
+fn build_binary_part_map(result: &FullParseResult) -> HashMap<String, Vec<u8>> {
+    let mut parts = HashMap::new();
+
+    let Some(extensions) = result.extensions.as_ref() else {
+        return parts;
+    };
+
+    for (path, data) in extensions.binary_passthrough.entries() {
+        parts.insert(path.replace('\\', "/"), data.clone());
+    }
+
+    parts
+}
+
                     xml_hints: RowXmlHints::default(),
                 });
             }
@@ -885,6 +901,7 @@ fn convert_sheet(
                     best_fit: cw.best_fit,
                     collapsed: cw.collapsed,
                 });
+    binary_parts: &HashMap<String, Vec<u8>>,
             }
         }
         // If the range extends beyond data cols, store the tail as a trailing range
@@ -1166,7 +1183,11 @@ fn convert_sheet(
         convert_floating_objects(sheet.parsed_drawing.as_ref(), media_data_urls);
     floating_objects.extend(convert_connectors(&sheet.connectors));
     floating_objects.extend(convert_form_controls(&sheet.form_controls));
-    floating_objects.extend(convert_ole_objects(&sheet.ole_objects));
+    floating_objects.extend(convert_ole_objects(
+        &sheet.ole_objects,
+        binary_parts,
+        media_data_urls,
+    ));
 
     // --- Header/footer images ---
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.

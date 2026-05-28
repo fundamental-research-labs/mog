@@ -2,7 +2,8 @@ use domain_types::ParseOutput;
 
 use super::assembly::{
     ChartEntry, ChartExEntry, SheetExtras, WorksheetCommentsGraphEntry, WorksheetDrawingGraphEntry,
-    WorksheetFormControlVmlGraphEntry, WorksheetThreadedCommentsGraphEntry,
+    WorksheetFormControlVmlGraphEntry, WorksheetOleVmlGraphEntry,
+    WorksheetThreadedCommentsGraphEntry,
 };
 use super::{
     WriteError, chart_allows_auxiliary_replay, chart_auxiliary, external_links, vml_merge,
@@ -38,6 +39,7 @@ pub(super) fn write_zip_package(
     drawing_xml_data: &[Option<Vec<u8>>],
     worksheet_comments_relationships: &[WorksheetCommentsGraphEntry],
     worksheet_form_control_vml_relationships: &[WorksheetFormControlVmlGraphEntry],
+    worksheet_ole_vml_relationships: &[WorksheetOleVmlGraphEntry],
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
     worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
 ) -> Result<Vec<u8>, WriteError> {
@@ -218,7 +220,9 @@ pub(super) fn write_zip_package(
                 &comments_entry.comments_path,
                 comments_xml.clone(),
             )?;
-            let merged_vml = if !sheet_extras[idx].form_controls.is_empty() {
+            let merged_vml = if !sheet_extras[idx].form_controls.is_empty()
+                || !sheet_extras[idx].ole_objects.is_empty()
+            {
                 let base_shape_id =
                     vml_merge::form_control_base_shape_id(&output.sheets[idx].comments);
                 let form_controls = vml_merge::controls_with_shape_ids(
@@ -226,7 +230,17 @@ pub(super) fn write_zip_package(
                     base_shape_id,
                 );
                 let controls_writer = ControlsWriter::new(form_controls);
-                let form_control_vml = controls_writer.write_vml_form_controls(base_shape_id);
+                let preview_rel_ids =
+                    ole_preview_relationship_ids(package_graph, &comments_entry.vml_path, &sheet_extras[idx]);
+                let form_control_vml = controls_writer.write_vml_with_ole(
+                    base_shape_id,
+                    &sheet_extras[idx]
+                        .ole_objects
+                        .iter()
+                        .map(|entry| entry.object.clone())
+                        .collect::<Vec<_>>(),
+                    &preview_rel_ids,
+                );
                 vml_merge::merge_form_controls_into_comment_vml(vml_xml, &form_control_vml)
                     .ok_or_else(|| {
                         WriteError::PackageIntegrity(format!(
@@ -267,8 +281,9 @@ pub(super) fn write_zip_package(
             }
         }
 
-        // Form controls: ctrlProp XML files and VML drawing
-        if !sheet_extras[idx].form_controls.is_empty() {
+        // Form controls and OLE objects: ctrlProp XML files and shared VML drawing
+        if !sheet_extras[idx].form_controls.is_empty() || !sheet_extras[idx].ole_objects.is_empty()
+        {
             let base_shape_id = if sheet_extras[idx].comments.is_some() {
                 vml_merge::form_control_base_shape_id(&output.sheets[idx].comments)
             } else {
@@ -293,7 +308,7 @@ pub(super) fn write_zip_package(
                 )?;
             }
 
-            // Write VML drawing for form controls (separate from comment VML)
+            // Write VML drawing for form controls and OLE objects (separate from comment VML)
             if sheet_extras[idx].comments.is_none() {
                 let vml_entry = worksheet_form_control_vml_relationships
                     .iter()
@@ -304,8 +319,23 @@ pub(super) fn write_zip_package(
                             idx + 1
                         ))
                     })?;
-                let vml_xml = controls_writer.write_vml_form_controls(base_shape_id);
-                add_registered_part(package_graph, &mut zip, &vml_entry.path, vml_xml)?;
+                    .map(|entry| entry.path.as_str())
+                    .or_else(|| {
+                        worksheet_ole_vml_relationships
+                            .iter()
+                            .find(|entry| entry.sheet_idx == idx)
+                            .map(|entry| entry.path.as_str())
+                    })
+                let preview_rel_ids =
+                    ole_preview_relationship_ids(package_graph, vml_path, &sheet_extras[idx]);
+                let ole_objects = sheet_extras[idx]
+                    .ole_objects
+                    .iter()
+                    .map(|entry| entry.object.clone())
+                    .collect::<Vec<_>>();
+                let vml_xml =
+                    controls_writer.write_vml_with_ole(base_shape_id, &ole_objects, &preview_rel_ids);
+                add_registered_part(package_graph, &mut zip, vml_path, vml_xml)?;
             }
         }
 
@@ -336,6 +366,51 @@ pub(super) fn write_zip_package(
         for extras in sheet_extras {
             for table_xml in &extras.tables {
                 table_global += 1;
+    let mut written_ole_parts = std::collections::BTreeSet::new();
+    let mut vml_paths_with_preview_rels = std::collections::BTreeSet::new();
+    for (idx, extras) in sheet_extras.iter().enumerate() {
+        if extras.ole_objects.is_empty() {
+            continue;
+        }
+        for ole in &extras.ole_objects {
+            if written_ole_parts.insert(ole.embedding_path.clone()) {
+                add_registered_part(
+                    package_graph,
+                    &mut zip,
+                    &ole.embedding_path,
+                    ole.embedding_bytes.clone(),
+                )?;
+            }
+            if let (Some(path), Some(bytes)) = (&ole.preview_path, &ole.preview_bytes)
+                && written_ole_parts.insert(path.clone())
+            {
+                add_registered_part(package_graph, &mut zip, path, bytes.clone())?;
+            }
+        }
+
+        let Some(vml_path) = legacy_vml_path_for_sheet(
+            idx,
+            worksheet_comments_relationships,
+            worksheet_form_control_vml_relationships,
+            worksheet_ole_vml_relationships,
+        ) else {
+            continue;
+        };
+        if vml_paths_with_preview_rels.insert(vml_path.clone()) {
+            let vml_rels = package_graph.relationship_manager_for_owner(
+                &crate::write::package_graph::PackageOwner::Part {
+                    path: vml_path.clone(),
+                },
+            );
+            if !vml_rels.is_empty() {
+                zip.add_file(
+                    &crate::write::package_graph::part_relationships_path(&vml_path),
+                    vml_rels.to_xml(),
+                );
+            }
+        }
+    }
+
                 add_registered_part(
                     package_graph,
                     &mut zip,
@@ -567,4 +642,76 @@ fn add_standard_excel_image_default_content_types(content_types: &mut ContentTyp
     ] {
         content_types.add_default(extension, content_type);
     }
+}
+fn ole_preview_relationship_ids(
+    package_graph: &ResolvedPackageGraph,
+    vml_path: &str,
+    extras: &SheetExtras,
+) -> Vec<String> {
+    let owner = crate::write::package_graph::PackageOwner::Part {
+        path: vml_path.to_string(),
+    };
+    extras
+        .ole_objects
+        .iter()
+        .map(|ole| {
+            let Some(preview_path) = &ole.preview_path else {
+                return String::new();
+            };
+            let target = relative_target(vml_path, preview_path);
+            package_graph
+                .relationship_id(
+                    &owner,
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+                    &target,
+                )
+                .map(str::to_string)
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn legacy_vml_path_for_sheet(
+    sheet_idx: usize,
+    comments: &[WorksheetCommentsGraphEntry],
+    form_controls: &[WorksheetFormControlVmlGraphEntry],
+    ole_vml: &[WorksheetOleVmlGraphEntry],
+) -> Option<String> {
+    comments
+        .iter()
+        .find(|entry| entry.sheet_idx == sheet_idx)
+        .map(|entry| entry.vml_path.clone())
+        .or_else(|| {
+            form_controls
+                .iter()
+                .find(|entry| entry.sheet_idx == sheet_idx)
+                .map(|entry| entry.path.clone())
+        })
+        .or_else(|| {
+            ole_vml
+                .iter()
+                .find(|entry| entry.sheet_idx == sheet_idx)
+                .map(|entry| entry.path.clone())
+        })
+}
+
+fn relative_target(owner_path: &str, target_path: &str) -> String {
+    let from_dir = owner_path.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let from_components: Vec<_> = from_dir
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    let to_components: Vec<_> = target_path
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    let common = from_components
+        .iter()
+        .zip(&to_components)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut result = vec![".."; from_components.len().saturating_sub(common)];
+    result.extend(to_components[common..].iter().copied());
+    result.join("/")
 }

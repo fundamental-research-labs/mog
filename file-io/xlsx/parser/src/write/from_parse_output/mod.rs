@@ -17,6 +17,7 @@ mod external_links;
 mod form_controls;
 mod hyperlink_targets;
 mod metadata;
+mod ole_objects;
 mod pivot_package;
 mod printer_settings;
 mod rich_data;
@@ -44,16 +45,16 @@ use crate::write::pivot_writer;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE, REL_THREADED_COMMENT,
-    REL_VML_DRAWING,
+    REL_HYPERLINK, REL_OLE_OBJECT, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_TABLE,
+    REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 use assembly::{
     ChartAuxiliaryRelationshipGraphEntry, ChartEntry, ChartExEntry, DrawingRelationshipGraphEntry,
-    WorksheetCommentsGraphEntry, WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
-    WorksheetFormControlVmlGraphEntry, WorksheetHeaderFooterVmlGraphEntry,
-    WorksheetHyperlinkGraphEntry, WorksheetPrinterSettingsGraphEntry,
-    WorksheetThreadedCommentsGraphEntry,
+    VmlPreviewRelationshipGraphEntry, WorksheetCommentsGraphEntry,
+    WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry, WorksheetFormControlVmlGraphEntry,
+    WorksheetHeaderFooterVmlGraphEntry, WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry,
+    WorksheetOleVmlGraphEntry, WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
 
 fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -165,6 +166,30 @@ fn register_chart_owned_external_relationships(
     Ok(())
 }
 
+fn worksheet_legacy_vml_path(
+    sheet_idx: usize,
+    comments: &[WorksheetCommentsGraphEntry],
+    form_controls: &[WorksheetFormControlVmlGraphEntry],
+    ole_vml: &[WorksheetOleVmlGraphEntry],
+) -> Option<String> {
+    comments
+        .iter()
+        .find(|entry| entry.sheet_idx == sheet_idx)
+        .map(|entry| entry.vml_path.clone())
+        .or_else(|| {
+            form_controls
+                .iter()
+                .find(|entry| entry.sheet_idx == sheet_idx)
+                .map(|entry| entry.path.clone())
+        })
+        .or_else(|| {
+            ole_vml
+                .iter()
+                .find(|entry| entry.sheet_idx == sheet_idx)
+                .map(|entry| entry.path.clone())
+        })
+}
+
 /// Write an XLSX file from a `ParseOutput`.
 ///
 /// Modeled workbook state is generated from domain types.
@@ -230,6 +255,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_drawing_relationships: Vec<WorksheetDrawingGraphEntry> = Vec::new();
     let mut drawing_relationships: Vec<DrawingRelationshipGraphEntry> = Vec::new();
     let mut chart_auxiliary_relationships: Vec<ChartAuxiliaryRelationshipGraphEntry> = Vec::new();
+    let mut worksheet_ole_object_relationships: Vec<WorksheetOleObjectGraphEntry> = Vec::new();
+    let mut worksheet_ole_vml_relationships: Vec<WorksheetOleVmlGraphEntry> = Vec::new();
+    let mut vml_preview_relationships: Vec<VmlPreviewRelationshipGraphEntry> = Vec::new();
     let mut worksheet_printer_settings_relationships: Vec<WorksheetPrinterSettingsGraphEntry> =
         Vec::new();
     let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
@@ -289,6 +317,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             .any(|e| e.sheet_idx == sheet_idx);
         let has_any_hyperlinks = has_hyperlinks || !sheet_data.hyperlinks.is_empty();
         if !has_comments
+        let has_ole_objects = !extras.ole_objects.is_empty();
             && !has_tables
             && !has_any_hyperlinks
             && !needs_drawing
@@ -303,6 +332,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             drawing_writer_data.push(None);
             continue;
         }
+            && !has_ole_objects
 
         let sheet_num = sheet_idx + 1;
         let mut rels = create_sheet_rels();
@@ -474,6 +504,44 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     sheet_idx,
                     global_tc_idx,
                     &sheet_data.comments,
+        // OLE object worksheet relationships and shared legacy VML drawing.
+        if has_ole_objects {
+            for (ole_idx, ole) in sheet_extras[sheet_idx].ole_objects.iter().enumerate() {
+                let target = worksheet_relative_target(&ole.embedding_path);
+                let r_id = rels.add(REL_OLE_OBJECT, &target);
+                worksheet_ole_object_relationships.push(WorksheetOleObjectGraphEntry {
+                    sheet_idx,
+                    ole_idx,
+                    embedding_path: ole.embedding_path.clone(),
+                    target,
+                    relationship_id_hint: Some(
+                        ole.embedding_relationship_id_hint
+                            .clone()
+                            .unwrap_or(r_id),
+                    ),
+                });
+            }
+
+            if !has_comments && !has_form_controls {
+                global_vml_idx += 1;
+                let path = sheet_extras[sheet_idx]
+                    .original_vml_path
+                    .clone()
+                    .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
+                if let Some(n) = extract_vml_drawing_number(&path) {
+                    global_vml_idx = global_vml_idx.max(n);
+                }
+                let target = worksheet_relative_target(&path);
+                let relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &target));
+                worksheet_ole_vml_relationships.push(WorksheetOleVmlGraphEntry {
+                    sheet_idx,
+                    path,
+                    target,
+                    relationship_id_hint,
+                });
+            }
+        }
+
                     &mut rels,
                 ),
             );
@@ -1030,6 +1098,35 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let Some(hf) = &extras.hf_vml else {
             continue;
         };
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        if extras.ole_objects.is_empty() {
+            continue;
+        }
+        let Some(vml_path) = worksheet_legacy_vml_path(
+            sheet_idx,
+            &worksheet_comments_relationships,
+            &worksheet_form_control_vml_relationships,
+            &worksheet_ole_vml_relationships,
+        ) else {
+            continue;
+        };
+        for ole in &extras.ole_objects {
+            let (Some(preview_path), Some(relationship_id_hint)) = (
+                ole.preview_path.clone(),
+                ole.preview_relationship_id_hint
+                    .clone()
+                    .or_else(|| ole.object.preview_image_rel_id.clone()),
+            ) else {
+                continue;
+            };
+            vml_preview_relationships.push(VmlPreviewRelationshipGraphEntry {
+                vml_path: vml_path.clone(),
+                preview_path,
+                relationship_id_hint,
+            });
+        }
+    }
+
         for (relationship_id, target) in &hf.image_targets {
             let Ok(target_path) =
                 crate::infra::opc::resolve_relationship_target(Some(&hf.vml_path), target)
@@ -1142,6 +1239,38 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         continue;
                     }
                     if registered_chart_auxiliary_parts
+    for entry in &worksheet_ole_vml_relationships {
+        crate::write::package_graph::register_worksheet_vml_drawing(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
+        )?;
+    }
+    for entry in &worksheet_ole_object_relationships {
+        crate::write::package_graph::register_ole_embedding_part(
+            &mut package_graph_builder,
+            &entry.embedding_path,
+        )?;
+        crate::write::package_graph::register_worksheet_ole_object(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.embedding_path,
+            entry.relationship_id_hint.as_deref(),
+        );
+    }
+    for entry in &vml_preview_relationships {
+        crate::write::package_graph::register_media_part(
+            &mut package_graph_builder,
+            &entry.preview_path,
+        )?;
+        crate::write::package_graph::register_part_image_relationship(
+            &mut package_graph_builder,
+            &entry.vml_path,
+            &entry.preview_path,
+            &entry.relationship_id_hint,
+        );
+    }
                         .insert(path.trim_start_matches('/').to_string())
                     {
                         crate::write::package_graph::register_chart_auxiliary_part(
@@ -1540,6 +1669,54 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         if extras.tables.is_empty() {
             continue;
         }
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        if extras.ole_objects.is_empty() {
+            continue;
+        }
+        let owner = crate::write::package_graph::PackageOwner::Worksheet {
+            index: sheet_idx,
+            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+        };
+        let mut ole_r_ids = Vec::with_capacity(extras.ole_objects.len());
+        for entry in worksheet_ole_object_relationships
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+        {
+            let r_id = package_graph
+                .relationship_id(&owner, REL_OLE_OBJECT, &entry.target)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing worksheet OLE relationship for sheet {} target {}",
+                        sheet_idx + 1,
+                        entry.target
+                    ))
+                })?
+                .to_string();
+            ole_r_ids.push((entry.ole_idx, r_id));
+        }
+        ole_r_ids.sort_by_key(|(idx, _)| *idx);
+        let ole_r_ids: Vec<String> = ole_r_ids.into_iter().map(|(_, r_id)| r_id).collect();
+        let ole_xml = ole_objects::write_worksheet_ole_objects(&extras.ole_objects, &ole_r_ids);
+        sheet_writers[sheet_idx].set_ole_objects_xml(String::from_utf8_lossy(&ole_xml).to_string());
+
+        if let Some(vml_entry) = worksheet_ole_vml_relationships
+            .iter()
+            .find(|entry| entry.sheet_idx == sheet_idx)
+        {
+            let r_id = package_graph
+                .relationship_id(&owner, REL_VML_DRAWING, &vml_entry.target)
+                .ok_or_else(|| {
+                    WriteError::PackageIntegrity(format!(
+                        "missing worksheet OLE VML relationship for sheet {} target {}",
+                        sheet_idx + 1,
+                        vml_entry.target
+                    ))
+                })?
+                .to_string();
+            sheet_writers[sheet_idx].set_legacy_drawing_r_id(r_id);
+        }
+    }
+
         let owner = crate::write::package_graph::PackageOwner::Worksheet {
             index: sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
@@ -1663,3 +1840,4 @@ fn extract_vml_drawing_number(path: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests;
+        &worksheet_ole_vml_relationships,

@@ -106,7 +106,11 @@ pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<Float
 // =============================================================================
 
 /// Convert parser `OleObjectOutput` items into unified `FloatingObject` items.
-pub(crate) fn convert_ole_objects(objects: &[OleObjectOutput]) -> Vec<FloatingObject> {
+pub(crate) fn convert_ole_objects(
+    objects: &[OleObjectOutput],
+    binary_parts: &HashMap<String, Vec<u8>>,
+    media_data_urls: &HashMap<String, String>,
+) -> Vec<FloatingObject> {
     objects
         .iter()
         .enumerate()
@@ -149,6 +153,20 @@ pub(crate) fn convert_ole_objects(objects: &[OleObjectOutput]) -> Vec<FloatingOb
                 data_path: o.data_path.clone(),
                 name: o.name.clone(),
                 link: o.link.clone(),
+            let embedding = o.data_path.as_ref().and_then(|path| {
+                binary_parts.get(path).map(|bytes| OleObjectPackageIdentity {
+                    path: path.clone(),
+                    relationship_id: o.r_id.clone(),
+                    bytes: bytes.clone(),
+                })
+            });
+            let preview = o.preview_image_path.as_ref().and_then(|path| {
+                binary_parts.get(path).map(|bytes| OleObjectPreviewIdentity {
+                    path: path.clone(),
+                    relationship_id: o.preview_image_rel_id.clone(),
+                    bytes: bytes.clone(),
+                })
+            });
                 dv_aspect: o.dv_aspect.clone(),
                 prog_id: o.prog_id.clone(),
                 ole_update: o.ole_update.clone(),
@@ -161,6 +179,10 @@ pub(crate) fn convert_ole_objects(objects: &[OleObjectOutput]) -> Vec<FloatingOb
                 common: FloatingObjectCommon {
                     id: format!("fobj-ole-{}", idx),
                     sheet_id: String::new(),
+                embedding,
+                preview,
+                vml_drawing_path: None,
+                vml_relationship_id: None,
                     anchor,
                     width: 0.0,
                     height: 0.0,
@@ -185,10 +207,13 @@ pub(crate) fn convert_ole_objects(objects: &[OleObjectOutput]) -> Vec<FloatingOb
                 },
                 data: FloatingObjectData::OleObject(OleObjectData {
                     prog_id: o.prog_id.clone(),
-                    dv_aspect: "DVASPECT_CONTENT".to_string(),
-                    is_linked: false,
-                    is_embedded: true,
-                    preview_image_src: None,
+                    dv_aspect: o.dv_aspect.clone(),
+                    is_linked: o.link.is_some(),
+                    is_embedded: o.data_path.is_some(),
+                    preview_image_src: o
+                        .preview_image_path
+                        .as_ref()
+                        .and_then(|path| media_data_urls.get(path).cloned()),
                     alt_text: None,
                     ooxml: Some(ooxml),
                 }),

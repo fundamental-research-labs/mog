@@ -10,7 +10,7 @@
  *
  */
 
-import { findLastUsedCell, getUsedRange } from '../../../infra/utils';
+import { findLastUsedCell } from '../../../infra/utils';
 import { cellCoordsToOptimizedRanges } from './special-selections';
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
@@ -54,6 +54,7 @@ async function executeGoToSpecialSelection(
 ) {
   const sheetId = deps.getActiveSheetId();
   const ranges = deps.accessors.selection.getDataBoundedRanges(sheetId);
+  const ws = deps.workbook.getSheetById(sheetId);
 
   // Get current selection as the search range
   // If nothing selected or single cell, use the whole used range (Excel behavior)
@@ -67,16 +68,13 @@ async function executeGoToSpecialSelection(
     // Single cell selected - search the entire used range (Excel parity)
     // Note: getCurrentRegion only finds contiguous data around the cursor,
     // but Go To Special should search ALL data on the sheet
-    const cellValueGetter = createCellValueGetter(deps);
-    const usedRange = getUsedRange(cellValueGetter, 10000, 1000);
+    const usedRange = await ws.getUsedRange();
     if (!usedRange) {
       // Sheet is empty - nothing to find
       return handled();
     }
     searchRanges = [usedRange];
   }
-
-  const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
 
   // Find all matching cells across all selection ranges
   const matchingCells: CellCoord[] = [];

@@ -145,15 +145,10 @@ pub fn write_xlsx_from_parse_output(
     round_trip_ctx: Option<&RoundTripContext>,
 ) -> Result<Vec<u8>, WriteError> {
     // ── 1. Build styles ─────────────────────────────────────────────────
-    // Use the imported stylesheet while export state has not replaced it with a
-    // modeled palette. This also preserves workbook default style records on
-    // empty sheets where no cell references a style id.
-    // Track whether we use the lossless stylesheet path. When true, cellXfs
-    // are passed through directly and cell style_id values should NOT be offset
-    // by +1. When false (lossy palette path), a default is inserted at cellXfs[0]
-    // so cell style_id values must be offset by +1.
+    // Build a modeled stylesheet from the current semantic style palette. Style
+    // ids in cells/rows/columns are generated palette indices, not preserved
+    // source XLSX cellXfs identities.
     let has_style_references = output_references_style_ids(output);
-    let has_lossless_stylesheet = false;
     let style_palette_for_export = if has_style_references {
         output.style_palette.as_slice()
     } else {
@@ -169,12 +164,7 @@ pub fn write_xlsx_from_parse_output(
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
-    } = sheet_parts::build_sheet_parts(
-        output,
-        round_trip_ctx,
-        &mut shared_strings,
-        has_lossless_stylesheet,
-    );
+    } = sheet_parts::build_sheet_parts(output, round_trip_ctx, &mut shared_strings);
 
     // Collected image blobs from floating objects: (zip_path, bytes).
     let mut all_image_blobs: Vec<(String, Vec<u8>)> = Vec::new();

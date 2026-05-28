@@ -167,11 +167,9 @@ fn test_col_styles_roundtrip() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
-    // Test with lossless_styles=true (style_id is raw cellXfs index)
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,
-        true,
         None,
         &no_dt_bodies,
         &no_dt_regions,
@@ -179,27 +177,8 @@ fn test_col_styles_roundtrip() {
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(
-        xml.contains("style=\"15\""),
-        "Expected style=\"15\" on <col> element (lossless path), but got: {}",
+        xml.contains("style=\"16\""),
+        "Expected style=\"16\" on <col> element, but got: {}",
         &xml[..xml.len().min(2000)]
-    );
-
-    // Test with lossless_styles=false (palette index N → cellXfs[N+1])
-    let mut shared_strings2 = SharedStringsWriter::new();
-    let writer2 = build_sheet(
-        &sheet_data,
-        &mut shared_strings2,
-        false,
-        None,
-        &no_dt_bodies,
-        &no_dt_regions,
-        true,
-    );
-    let xml2 = String::from_utf8(writer2.to_xml()).unwrap();
-    // In lossy path, palette index 15 should become cellXfs index 16
-    assert!(
-        xml2.contains("style=\"16\""),
-        "Expected style=\"16\" on <col> element (lossy path), but got: {}",
-        &xml2[..xml2.len().min(2000)]
     );
 }

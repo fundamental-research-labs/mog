@@ -11,15 +11,15 @@ use crate::domain::styles::types::{
 };
 use crate::domain::styles::write::StylesWriter;
 
-/// Build a `StylesWriter` from a flat `DocumentFormat` palette (lossy fallback).
+/// Build a `StylesWriter` from the modeled `DocumentFormat` export palette.
 ///
 /// Each `DocumentFormat` in the palette becomes a cellXf entry. The returned
 /// writer's cellXfs[0] is always the default style (empty `DocumentFormat`);
 /// cellXfs[N] for N >= 1 corresponds to `palette[N-1]`.
 ///
-/// The caller can use `style_id` values from `CellData` directly as indices
-/// into the palette — they get offset by +1 when building `CellData` for the
-/// writer (because cellXfs[0] is the default).
+/// The caller uses `style_id` values from `CellData` as indices into this
+/// generated palette. Sheet writing offsets those ids by +1 because
+/// `cellXfs[0]` is the default.
 pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     let mut writer = StylesWriter::with_defaults();
 
@@ -145,10 +145,8 @@ fn apply_default_style(writer: &mut StylesWriter, default_fmt: &DocumentFormat) 
 
 /// Whether the current modeled workbook references any style IDs.
 ///
-/// Imported stylesheets are useful identity/style hints only while some current
-/// workbook object still points at their raw cellXfs indices. If all style
-/// references disappeared, replaying the imported stylesheet keeps stale style
-/// facts alive after deletion.
+/// If all style references disappeared, emitting the modeled palette would keep
+/// stale style facts alive after deletion.
 pub(super) fn output_references_style_ids(output: &ParseOutput) -> bool {
     output.sheets.iter().any(|sheet| {
         sheet.cells.iter().any(|cell| cell.style_id.is_some())

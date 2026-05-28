@@ -124,10 +124,7 @@ fn read_formula_metadata_from_yrs<T: yrs::ReadTxn>(
     }
 }
 
-fn style_id_for_cell_format(
-    format: &CellFormat,
-    palette: &impl PaletteOps,
-) -> Option<u32> {
+fn style_id_for_cell_format(format: &CellFormat, palette: &impl PaletteOps) -> Option<u32> {
     let doc_fmt = cell_format_to_document_format(format);
     if doc_fmt == DocumentFormat::default() {
         return None;
@@ -146,9 +143,9 @@ fn format_range_style_id_at(
         return None;
     }
 
-    matching.last().and_then(|(_, format)| {
-        style_id_for_cell_format(format, palette)
-    })
+    matching
+        .last()
+        .and_then(|(_, format)| style_id_for_cell_format(format, palette))
 }
 
 // -------------------------------------------------------------------
@@ -216,12 +213,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 if cell.style_id.is_none()
                     && let Some(sheet) = sheet_mirror
                 {
-                    cell.style_id = format_range_style_id_at(
-                        sheet,
-                        row,
-                        col,
-                        palette,
-                    );
+                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
                 }
                 cells_by_pos.insert((row, col), cell);
             }
@@ -241,12 +233,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 }
                 None => {
                     let mut cell = range_payload_cell(row, col, value);
-                    cell.style_id = format_range_style_id_at(
-                        sheet,
-                        row,
-                        col,
-                        palette,
-                    );
+                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
                     cells_by_pos.insert((row, col), cell);
                 }
             }
@@ -295,12 +282,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     continue;
                 }
                 if replacement.style_id.is_none() {
-                    replacement.style_id = format_range_style_id_at(
-                        sheet,
-                        row,
-                        col,
-                        palette,
-                    );
+                    replacement.style_id = format_range_style_id_at(sheet, row, col, palette);
                 }
 
                 if cells_by_pos.get(&(row, col)).is_some_and(|existing| {
@@ -360,7 +342,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 }
 
 pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
-    stores: &EngineStores,
+    _stores: &EngineStores,
     mirror: &CellMirror,
     _round_trip_context: Option<&RoundTripContext>,
     sheet_id: &SheetId,
@@ -507,10 +489,7 @@ fn is_imported_style_only_blank(
         && original_value.is_none_or(|value| value.is_empty())
 }
 
-fn cell_style_id(
-    cell_props: Option<&CellProperties>,
-    palette: &impl PaletteOps,
-) -> Option<u32> {
+fn cell_style_id(cell_props: Option<&CellProperties>, palette: &impl PaletteOps) -> Option<u32> {
     cell_props.and_then(|props| {
         let cell_fmt = props.format.as_ref()?;
         let doc_fmt = cell_format_to_document_format(cell_fmt);
@@ -902,15 +881,13 @@ mod tests {
             &raw_formulas,
             &array_refs,
             &formula_metadata,
-            true,
-            20,
             &palette,
             false,
         );
 
         assert!(
             exported.is_none(),
-            "lossless imported style metadata alone should remain range/style metadata, not a physical blank cell"
+            "imported style metadata alone should remain range/style metadata, not a physical blank cell"
         );
     }
 

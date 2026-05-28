@@ -334,9 +334,8 @@ pub struct CellData {
 /// Compact coverage for authored style-only worksheet cells.
 ///
 /// Bounds are zero-based and inclusive. `style_id` follows the same boundary
-/// contract as [`CellData::style_id`]: raw `cellXfs` index on the lossless
-/// stylesheet path, palette index on lossy/generated style paths. A value of
-/// `0` is meaningful and represents an explicit source `s="0"`.
+/// contract as [`CellData::style_id`]: an index into `ParseOutput.style_palette`.
+/// A value of `0` is meaningful.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthoredStyleRun {
@@ -433,7 +432,7 @@ pub struct TrailingColRange {
     pub best_fit: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
-    /// Column style index from the original XLSX (cellXfs index).
+    /// Column style index into `ParseOutput.style_palette`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,
 }

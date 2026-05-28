@@ -247,10 +247,9 @@ impl YrsComputeEngine {
     /// values from ComputeCore (for recalc'd formulas) or the mirror.
     /// Builds style_palette entries for cells with formatting.
     ///
-    /// When a lossless stylesheet is available (round-trip from XLSX import),
-    /// uses the stored original cellXfs index directly so that cell `s=`
-    /// attributes reference the correct entry in the preserved stylesheet.
-    /// Otherwise, builds a lossy style palette via DocumentFormat deduplication.
+    /// Style ids are derived from the current semantic formats and the generated
+    /// export palette; imported XLSX `cellXfs` indices are not preserved as
+    /// style identity.
     fn export_cells_for_sheet(
         &self,
         sheet_id: &SheetId,
@@ -285,10 +284,9 @@ impl YrsComputeEngine {
 
     /// Export row-level and column-level style overrides for a sheet.
     ///
-    /// When a lossless stylesheet is available (round-trip from XLSX import),
-    /// uses the stored original cellXfs index directly so that row/col `style`
-    /// attributes reference the correct entry in the preserved stylesheet.
-    /// Otherwise, builds a lossy style palette via DocumentFormat deduplication.
+    /// Style ids are derived from the current semantic formats and the generated
+    /// export palette; imported XLSX `cellXfs` indices are not preserved as
+    /// style identity.
     fn export_row_col_styles_for_sheet(
         &self,
         sheet_id: &SheetId,

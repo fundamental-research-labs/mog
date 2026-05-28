@@ -47,6 +47,16 @@ pub fn pivot_table_to_writer(pt: &read::PivotTable) -> PivotTableWriter {
     });
 
     writer.data_on_rows = pt.data_on_rows;
+    writer.grand_total_caption = pt.grand_total_caption.clone();
+    writer.row_header_caption = pt.row_header_caption.clone();
+    writer.col_header_caption = pt.col_header_caption.clone();
+    writer.row_grand_totals = pt.row_grand_totals;
+    writer.col_grand_totals = pt.col_grand_totals;
+    writer.grid_drop_zones = pt.grid_drop_zones;
+    writer.error_caption = pt.error_caption.clone();
+    writer.show_error = pt.show_error;
+    writer.missing_caption = pt.missing_caption.clone();
+    writer.show_missing = pt.show_missing;
 
     // Pivot fields
     for field in &pt.pivot_fields {
@@ -170,6 +180,7 @@ fn convert_data_field(df: &read::DataField) -> DataFieldDef {
         num_fmt_id: df.num_fmt_id,
         base_field: df.base_field,
         base_item: df.base_item,
+        show_data_as: df.show_data_as.clone(),
     }
 }
 
@@ -297,6 +308,16 @@ pub fn pivot_table_def_to_writer(
     });
 
     writer.data_on_rows = def.data_on_rows;
+    writer.grand_total_caption = def.grand_total_caption.clone();
+    writer.row_header_caption = def.row_header_caption.clone();
+    writer.col_header_caption = def.col_header_caption.clone();
+    writer.row_grand_totals = def.row_grand_totals;
+    writer.col_grand_totals = def.col_grand_totals;
+    writer.grid_drop_zones = def.grid_drop_zones;
+    writer.error_caption = def.error_caption.clone();
+    writer.show_error = def.show_error;
+    writer.missing_caption = def.missing_caption.clone();
+    writer.show_missing = def.show_missing;
 
     for f in &def.fields {
         writer.add_field(convert_domain_field(f));
@@ -324,6 +345,7 @@ pub fn pivot_table_def_to_writer(
             num_fmt_id: df.num_fmt_id,
             base_field: df.base_field,
             base_item: df.base_item,
+            show_data_as: df.show_data_as.clone(),
         });
     }
 

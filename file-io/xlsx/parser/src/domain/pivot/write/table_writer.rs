@@ -42,6 +42,26 @@ pub struct PivotTableWriter {
     pub data_on_rows: bool,
     /// Data caption
     pub data_caption: String,
+    /// Custom label for grand total rows/columns.
+    pub grand_total_caption: Option<String>,
+    /// Custom row header caption.
+    pub row_header_caption: Option<String>,
+    /// Custom column header caption.
+    pub col_header_caption: Option<String>,
+    /// Whether row grand totals are shown.
+    pub row_grand_totals: bool,
+    /// Whether column grand totals are shown.
+    pub col_grand_totals: bool,
+    /// Whether classic grid drop zones are enabled.
+    pub grid_drop_zones: bool,
+    /// Caption shown for error values.
+    pub error_caption: Option<String>,
+    /// Whether error captions are displayed.
+    pub show_error: bool,
+    /// Caption shown for missing values.
+    pub missing_caption: Option<String>,
+    /// Whether missing captions are displayed.
+    pub show_missing: bool,
 }
 
 impl PivotTableWriter {
@@ -61,6 +81,16 @@ impl PivotTableWriter {
             style: None,
             data_on_rows: false,
             data_caption: "Values".to_string(),
+            grand_total_caption: None,
+            row_header_caption: None,
+            col_header_caption: None,
+            row_grand_totals: true,
+            col_grand_totals: true,
+            grid_drop_zones: false,
+            error_caption: None,
+            show_error: false,
+            missing_caption: None,
+            show_missing: true,
         }
     }
 
@@ -152,13 +182,35 @@ impl PivotTableWriter {
             .attr_bool("applyAlignmentFormats", false)
             .attr_bool("applyWidthHeightFormats", true)
             .attr("dataCaption", &self.data_caption)
+            .attr_bool("rowGrandTotals", self.row_grand_totals)
+            .attr_bool("colGrandTotals", self.col_grand_totals)
+            .attr_bool("gridDropZones", self.grid_drop_zones)
+            .attr_bool("showError", self.show_error)
+            .attr_bool("showMissing", self.show_missing)
             .attr_num("updatedVersion", 8)
             .attr_num("minRefreshableVersion", 3)
             .attr_bool("useAutoFormatting", true)
             .attr_bool("itemPrintTitles", true)
             .attr_bool("outline", true)
-            .attr_bool("outlineData", true)
-            .end_attrs();
+            .attr_bool("outlineData", true);
+
+        if let Some(ref caption) = self.grand_total_caption {
+            w.attr("grandTotalCaption", caption);
+        }
+        if let Some(ref caption) = self.row_header_caption {
+            w.attr("rowHeaderCaption", caption);
+        }
+        if let Some(ref caption) = self.col_header_caption {
+            w.attr("colHeaderCaption", caption);
+        }
+        if let Some(ref caption) = self.error_caption {
+            w.attr("errorCaption", caption);
+        }
+        if let Some(ref caption) = self.missing_caption {
+            w.attr("missingCaption", caption);
+        }
+
+        w.end_attrs();
 
         // Write location
         self.location.write_xml(&mut w);

@@ -355,7 +355,10 @@ fn compute_with_show_values_as_invalid_config_returns_error() {
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     };

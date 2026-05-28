@@ -228,8 +228,11 @@ pub(crate) fn parsed_pivot_to_config(
     // -- Style --
     let style = pivot.style_info.as_ref().map(|s| PivotTableStyle {
         style_name: s.name.clone(),
+        show_row_headers: Some(s.show_row_headers),
+        show_column_headers: Some(s.show_col_headers),
         show_row_stripes: if s.show_row_stripes { Some(true) } else { None },
         show_column_stripes: if s.show_col_stripes { Some(true) } else { None },
+        show_last_column: Some(s.show_last_column),
     });
 
     // -- OOXML location attributes folded onto the config --
@@ -245,21 +248,29 @@ pub(crate) fn parsed_pivot_to_config(
         .as_ref()
         .map(|r| r.to_a1_string())
         .unwrap_or_default();
-    let has_ooxml_location =
-        !ref_range_str.is_empty() || loc.first_data_row != 0 || loc.first_data_col != 0;
-    let (ref_range, first_data_row, first_data_col) = if has_ooxml_location {
-        (
-            if ref_range_str.is_empty() {
-                None
-            } else {
-                Some(ref_range_str)
-            },
-            Some(loc.first_data_row),
-            Some(loc.first_data_col),
-        )
-    } else {
-        (None, None, None)
-    };
+    let has_ooxml_location = !ref_range_str.is_empty()
+        || loc.first_header_row != 0
+        || loc.first_data_row != 0
+        || loc.first_data_col != 0
+        || loc.rows_per_page != 0
+        || loc.cols_per_page != 0;
+    let (ref_range, first_header_row, first_data_row, first_data_col, rows_per_page, cols_per_page) =
+        if has_ooxml_location {
+            (
+                if ref_range_str.is_empty() {
+                    None
+                } else {
+                    Some(ref_range_str)
+                },
+                Some(loc.first_header_row),
+                Some(loc.first_data_row),
+                Some(loc.first_data_col),
+                (loc.rows_per_page > 0).then_some(loc.rows_per_page),
+                (loc.cols_per_page > 0).then_some(loc.cols_per_page),
+            )
+        } else {
+            (None, None, None, None, None, None)
+        };
 
     // -- Build PivotTableConfig (unified compute + OOXML) --
     let config = PivotTableConfig {
@@ -292,11 +303,12 @@ pub(crate) fn parsed_pivot_to_config(
         cache_id: Some(cache.id),
         ref_range,
         first_data_row,
+        first_header_row,
         first_data_col,
-        // row_items/col_items are not parsed by read.rs today; the writer
-        // reconstructs them from placements.
-        row_items: Vec::new(),
-        col_items: Vec::new(),
+        rows_per_page,
+        cols_per_page,
+        row_items: pivot.row_items.iter().map(convert_row_col_item).collect(),
+        col_items: pivot.col_items.iter().map(convert_row_col_item).collect(),
     };
 
     // Build initial expansion state from OOXML sd="0" (show_details) attributes.
@@ -817,6 +829,15 @@ fn convert_pivot_item(item: &PivotItem) -> PivotFieldItem {
         hidden: item.hidden,
         show_details: item.show_details,
         s: item.s.clone(),
+    }
+}
+
+fn convert_row_col_item(
+    item: &crate::domain::pivot::read::PivotRowColItem,
+) -> domain_types::PivotRowColItem {
+    domain_types::PivotRowColItem {
+        item_type: item.item_type.as_ref().map(convert_item_type),
+        x_values: item.x_values.clone(),
     }
 }
 

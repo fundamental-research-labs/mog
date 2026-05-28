@@ -127,12 +127,21 @@ pub struct PivotTableStyle {
     /// Named style preset (e.g., "`PivotStyleMedium9`").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style_name: Option<String>,
+    /// Whether to apply row header styling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_row_headers: Option<bool>,
+    /// Whether to apply column header styling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_column_headers: Option<bool>,
     /// Whether to apply alternating row stripe styling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_row_stripes: Option<bool>,
     /// Whether to apply alternating column stripe styling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_column_stripes: Option<bool>,
+    /// Whether to apply last-column styling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_last_column: Option<bool>,
 }
 
 /// Options for handling missing/error values in the pivot table.
@@ -318,10 +327,20 @@ pub struct PivotTableConfig {
     /// row within the pivot's rendered area.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_data_row: Option<u32>,
+    /// OOXML `<location firstHeaderRow="…">` — row offset to the first header
+    /// row within the pivot's rendered area.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_header_row: Option<u32>,
     /// OOXML `<location firstDataCol="…">` — column offset to the first data
     /// column within the pivot's rendered area.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_data_col: Option<u32>,
+    /// OOXML `<location rowPageCount="…">` page wrap row count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_per_page: Option<u32>,
+    /// OOXML `<location colPageCount="…">` page wrap column count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cols_per_page: Option<u32>,
     /// Row items array for OOXML layout reconstruction. The writer uses these
     /// to emit `<rowItems>` entries without recomputing layout.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

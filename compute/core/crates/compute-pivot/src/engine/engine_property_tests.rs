@@ -141,7 +141,10 @@ fn property_sum_matches_kahan_sum() {
             cache_id: None,
             ref_range: None,
             first_data_row: None,
+            first_header_row: None,
             first_data_col: None,
+            rows_per_page: None,
+            cols_per_page: None,
             row_items: Vec::new(),
             col_items: Vec::new(),
         };
@@ -265,7 +268,10 @@ fn property_sort_stability() {
             cache_id: None,
             ref_range: None,
             first_data_row: None,
+            first_header_row: None,
             first_data_col: None,
+            rows_per_page: None,
+            cols_per_page: None,
             row_items: Vec::new(),
             col_items: Vec::new(),
         };
@@ -361,7 +367,10 @@ fn property_filter_idempotence() {
                 cache_id: None,
                 ref_range: None,
                 first_data_row: None,
+                first_header_row: None,
                 first_data_col: None,
+                rows_per_page: None,
+                cols_per_page: None,
                 row_items: Vec::new(),
                 col_items: Vec::new(),
             }

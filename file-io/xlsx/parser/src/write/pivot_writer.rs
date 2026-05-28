@@ -323,12 +323,25 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
         Ok(config) => config,
         Err(_) => return domain_types::PivotTableDef::default(),
     };
+    let value_field_ids: Vec<_> = config
+        .placements
+        .iter()
+        .filter(|p| p.area == pivot_types::PivotFieldArea::Value)
+        .map(|p| p.field_id.clone())
+        .collect();
 
     // Build PivotFieldDef for each field.
     let fields: Vec<PivotFieldDef> = config
         .fields
         .iter()
         .map(|field| {
+            let axis_placement = config.placements.iter().find(|p| {
+                p.field_id.as_str() == field.id.as_str()
+                    && matches!(
+                        p.area,
+                        pivot_types::PivotFieldArea::Row | pivot_types::PivotFieldArea::Column
+                    )
+            });
             // Determine axis from placements
             let axis = engine_config
                 .placements
@@ -367,8 +380,25 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
                 compact,
                 outline,
                 show_all: field.show_all.unwrap_or(false),
-                sort_type: None,
-                auto_sort_data_field: None,
+                sort_type: axis_placement.and_then(|p| {
+                    p.sort_order.map(|sort| match sort {
+                        domain_types::domain::analytics::SortDirection::Asc => {
+                            "ascending".to_string()
+                        }
+                        domain_types::domain::analytics::SortDirection::Desc => {
+                            "descending".to_string()
+                        }
+                        _ => "manual".to_string(),
+                    })
+                }),
+                auto_sort_data_field: axis_placement
+                    .and_then(|p| p.sort_by_value.as_ref())
+                    .and_then(|sort| {
+                        value_field_ids
+                            .iter()
+                            .position(|field_id| field_id == &sort.value_field_id)
+                            .map(|index| index as u32)
+                    }),
                 subtotal_top: field.subtotal_top.unwrap_or(true),
                 default_subtotal: field.default_subtotal.unwrap_or(axis.is_some()),
                 subtotals: field.subtotals.clone(),
@@ -459,6 +489,12 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
                 num_fmt_id: field.num_fmt_id,
                 base_field: field.base_field,
                 base_item: field.base_item,
+                show_data_as: match p {
+                    pivot_types::PivotFieldPlacement::Value(value) => {
+                        value.show_values_as.as_ref().map(show_values_as_ooxml)
+                    }
+                    _ => None,
+                },
             })
         })
         .collect();
@@ -492,6 +528,7 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
     });
 
     let first_header_row = 1;
+    let first_header_row = config.first_header_row.unwrap_or(first_header_row);
     let first_data_row = config
         .first_data_row
         .unwrap_or(if col_fields.is_empty() { 1 } else { 2 });
@@ -505,11 +542,11 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
             .style_name
             .clone()
             .unwrap_or_else(|| "PivotStyleLight16".to_string()),
-        show_row_headers: true,
-        show_col_headers: true,
+        show_row_headers: s.show_row_headers.unwrap_or(true),
+        show_col_headers: s.show_column_headers.unwrap_or(true),
         show_row_stripes: s.show_row_stripes.unwrap_or(false),
         show_col_stripes: s.show_column_stripes.unwrap_or(false),
-        show_last_column: true,
+        show_last_column: s.show_last_column.unwrap_or(false),
     });
 
     // Use OOXML row/col items from the config.
@@ -524,8 +561,8 @@ fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
             first_header_row,
             first_data_row,
             first_data_col,
-            rows_per_page: None,
-            cols_per_page: None,
+            rows_per_page: config.rows_per_page,
+            cols_per_page: config.cols_per_page,
         },
         fields,
         row_fields,
@@ -586,6 +623,27 @@ fn func_label(func: &domain_types::domain::pivot::PivotFieldFunction) -> &'stati
         PivotFieldFunction::Var => "Var",
         PivotFieldFunction::VarP => "VarP",
     }
+}
+
+fn show_values_as_ooxml(config: &pivot_types::ShowValuesAsConfig) -> String {
+    use pivot_types::ShowValuesAs;
+    match config.calculation_type {
+        ShowValuesAs::NoCalculation => "normal",
+        ShowValuesAs::Difference => "difference",
+        ShowValuesAs::PercentDifference => "percentDiff",
+        ShowValuesAs::RunningTotal => "runTotal",
+        ShowValuesAs::PercentRunningTotal => "percentOfRunningTotal",
+        ShowValuesAs::PercentOfRowTotal => "percentOfRow",
+        ShowValuesAs::PercentOfColumnTotal => "percentOfCol",
+        ShowValuesAs::PercentOfGrandTotal => "percentOfTotal",
+        ShowValuesAs::PercentOfParentRowTotal => "percentOfParentRow",
+        ShowValuesAs::PercentOfParentColumnTotal => "percentOfParentCol",
+        ShowValuesAs::RankAscending => "rankAscending",
+        ShowValuesAs::RankDescending => "rankDescending",
+        ShowValuesAs::Index => "index",
+        _ => "normal",
+    }
+    .to_string()
 }
 
 /// Convert column index (0-based) to Excel column letters.

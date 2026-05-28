@@ -174,7 +174,10 @@ fn config_to_pivot_table_def_agg_labels_in_data_field_names() {
             cache_id: None,
             ref_range: None,
             first_data_row: None,
+            first_header_row: None,
             first_data_col: None,
+            rows_per_page: None,
+            cols_per_page: None,
             row_items: Vec::new(),
             col_items: Vec::new(),
         };
@@ -215,7 +218,10 @@ fn config_to_pivot_table_def_unknown_field_shows_question_mark() {
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     };

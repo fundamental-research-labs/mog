@@ -74,6 +74,15 @@ mod pivot_keys {
     pub const ALLOW_MULTIPLE_FILTERS: &str = "allowMultipleFiltersPerField";
     pub const AUTO_FORMAT: &str = "autoFormat";
     pub const PRESERVE_FORMATTING: &str = "preserveFormatting";
+    pub const CACHE_ID: &str = "cacheId";
+    pub const REF_RANGE: &str = "refRange";
+    pub const FIRST_DATA_ROW: &str = "firstDataRow";
+    pub const FIRST_HEADER_ROW: &str = "firstHeaderRow";
+    pub const FIRST_DATA_COL: &str = "firstDataCol";
+    pub const ROWS_PER_PAGE: &str = "rowsPerPage";
+    pub const COLS_PER_PAGE: &str = "colsPerPage";
+    pub const ROW_ITEMS: &str = "rowItems";
+    pub const COL_ITEMS: &str = "colItems";
 }
 
 // =============================================================================
@@ -145,14 +154,15 @@ fn pivot_from_yrs_map<T: yrs::ReadTxn>(map: &MapRef, txn: &T) -> Option<PivotTab
         allow_multiple_filters_per_field: read_bool(map, txn, ALLOW_MULTIPLE_FILTERS),
         auto_format: read_bool(map, txn, AUTO_FORMAT),
         preserve_formatting: read_bool(map, txn, PRESERVE_FORMATTING),
-        // OOXML round-trip attributes (typed OOXML preservation): sheet-level API pivots don't
-        // carry these; they live on workbook-level imports instead.
-        cache_id: None,
-        ref_range: None,
-        first_data_row: None,
-        first_data_col: None,
-        row_items: Vec::new(),
-        col_items: Vec::new(),
+        cache_id: read_num(map, txn, CACHE_ID).map(|n| n as u32),
+        ref_range: read_str(map, txn, REF_RANGE),
+        first_data_row: read_num(map, txn, FIRST_DATA_ROW).map(|n| n as u32),
+        first_header_row: read_num(map, txn, FIRST_HEADER_ROW).map(|n| n as u32),
+        first_data_col: read_num(map, txn, FIRST_DATA_COL).map(|n| n as u32),
+        rows_per_page: read_num(map, txn, ROWS_PER_PAGE).map(|n| n as u32),
+        cols_per_page: read_num(map, txn, COLS_PER_PAGE).map(|n| n as u32),
+        row_items: read_json_field(map, txn, ROW_ITEMS).unwrap_or_default(),
+        col_items: read_json_field(map, txn, COL_ITEMS).unwrap_or_default(),
     })
 }
 
@@ -226,6 +236,37 @@ fn write_pivot(parent: &MapRef, txn: &mut yrs::TransactionMut, key: &str, p: &Pi
     }
     if let Some(v) = p.preserve_formatting {
         map.insert(txn, PRESERVE_FORMATTING, Any::Bool(v));
+    }
+    if let Some(cache_id) = p.cache_id {
+        map.insert(txn, CACHE_ID, Any::Number(f64::from(cache_id)));
+    }
+    if let Some(ref ref_range) = p.ref_range {
+        map.insert(txn, REF_RANGE, Any::String(Arc::from(ref_range.as_str())));
+    }
+    if let Some(first_data_row) = p.first_data_row {
+        map.insert(txn, FIRST_DATA_ROW, Any::Number(f64::from(first_data_row)));
+    }
+    if let Some(first_header_row) = p.first_header_row {
+        map.insert(
+            txn,
+            FIRST_HEADER_ROW,
+            Any::Number(f64::from(first_header_row)),
+        );
+    }
+    if let Some(first_data_col) = p.first_data_col {
+        map.insert(txn, FIRST_DATA_COL, Any::Number(f64::from(first_data_col)));
+    }
+    if let Some(rows_per_page) = p.rows_per_page {
+        map.insert(txn, ROWS_PER_PAGE, Any::Number(f64::from(rows_per_page)));
+    }
+    if let Some(cols_per_page) = p.cols_per_page {
+        map.insert(txn, COLS_PER_PAGE, Any::Number(f64::from(cols_per_page)));
+    }
+    if !p.row_items.is_empty() {
+        map.insert(txn, ROW_ITEMS, json_any(&p.row_items));
+    }
+    if !p.col_items.is_empty() {
+        map.insert(txn, COL_ITEMS, json_any(&p.col_items));
     }
 }
 
@@ -402,7 +443,10 @@ mod tests {
             cache_id: None,
             ref_range: None,
             first_data_row: None,
+            first_header_row: None,
             first_data_col: None,
+            rows_per_page: None,
+            cols_per_page: None,
             row_items: Vec::new(),
             col_items: Vec::new(),
             schema_version: 0,
@@ -491,5 +535,43 @@ mod tests {
             Some("00000000000000000000000000000001")
         );
         assert_eq!(loaded.source_sheet_name, "Sheet1");
+    }
+
+    #[test]
+    fn ooxml_pivot_fields_round_trip_through_structured_storage() {
+        let (storage, _mirror, sheet_id) = setup();
+        let id_alloc = cell_types::IdAllocator::with_client_partition(storage.doc().client_id());
+        let mut config = minimal_config("OoxmlPivot", 4);
+        config.cache_id = Some(42);
+        config.ref_range = Some("B2:D9".to_string());
+        config.first_header_row = Some(1);
+        config.first_data_row = Some(2);
+        config.first_data_col = Some(3);
+        config.rows_per_page = Some(4);
+        config.cols_per_page = Some(5);
+        config.row_items = vec![domain_types::PivotRowColItem {
+            item_type: Some(domain_types::PivotItemType::Grand),
+            x_values: vec![None, Some(2)],
+        }];
+
+        let created = create_pivot(
+            storage.doc(),
+            storage.sheets(),
+            &sheet_id,
+            config,
+            &id_alloc,
+        )
+        .expect("create pivot with OOXML fields");
+
+        let loaded = get_pivot(storage.doc(), storage.sheets(), &sheet_id, &created.id)
+            .expect("stored pivot should load");
+        assert_eq!(loaded.cache_id, Some(42));
+        assert_eq!(loaded.ref_range.as_deref(), Some("B2:D9"));
+        assert_eq!(loaded.first_header_row, Some(1));
+        assert_eq!(loaded.first_data_row, Some(2));
+        assert_eq!(loaded.first_data_col, Some(3));
+        assert_eq!(loaded.rows_per_page, Some(4));
+        assert_eq!(loaded.cols_per_page, Some(5));
+        assert_eq!(loaded.row_items, created.row_items);
     }
 }

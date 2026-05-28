@@ -72,7 +72,10 @@ fn config_get_placements_for_area() {
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     };
@@ -154,7 +157,10 @@ fn pivot_table_config_serde_roundtrip() {
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     };

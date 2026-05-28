@@ -230,3 +230,78 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
     assert!(records_xml.contains("<n v=\"10\"/>"));
     assert!(!records_xml.contains("<n v=\"999\"/>"));
 }
+
+#[test]
+fn pivot_table_xml_uses_modeled_layout_style_location_and_items() {
+    let mut config = make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    );
+    config.layout = Some(pivot_types::PivotTableLayout {
+        show_row_grand_totals: Some(false),
+        show_column_grand_totals: Some(false),
+        data_caption: Some("Modeled Values".to_string()),
+        grid_drop_zones: Some(true),
+        grand_total_caption: Some("Modeled Total".to_string()),
+        row_header_caption: Some("Modeled Rows".to_string()),
+        col_header_caption: Some("Modeled Cols".to_string()),
+        error_caption: Some("Modeled Error".to_string()),
+        show_error: Some(true),
+        missing_caption: Some("Modeled Missing".to_string()),
+        show_missing: Some(false),
+        ..Default::default()
+    });
+    config.style = Some(pivot_types::PivotTableStyle {
+        style_name: Some("PivotStyleMedium4".to_string()),
+        show_row_headers: Some(false),
+        show_column_headers: Some(false),
+        show_row_stripes: Some(true),
+        show_column_stripes: Some(true),
+        show_last_column: Some(true),
+    });
+    config.ref_range = Some("C5:F9".to_string());
+    config.first_header_row = Some(2);
+    config.first_data_row = Some(3);
+    config.first_data_col = Some(4);
+    config.rows_per_page = Some(5);
+    config.cols_per_page = Some(6);
+    config.row_items = vec![domain_types::PivotRowColItem {
+        item_type: Some(domain_types::PivotItemType::Grand),
+        x_values: vec![None, Some(1)],
+    }];
+
+    let output = pivot_package_output(vec![config]);
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let pivot_xml =
+        String::from_utf8(archive.read_file("xl/pivotTables/pivotTable1.xml").unwrap()).unwrap();
+
+    assert!(pivot_xml.contains("dataCaption=\"Modeled Values\""));
+    assert!(pivot_xml.contains("rowGrandTotals=\"0\""));
+    assert!(pivot_xml.contains("colGrandTotals=\"0\""));
+    assert!(pivot_xml.contains("gridDropZones=\"1\""));
+    assert!(pivot_xml.contains("grandTotalCaption=\"Modeled Total\""));
+    assert!(pivot_xml.contains("rowHeaderCaption=\"Modeled Rows\""));
+    assert!(pivot_xml.contains("colHeaderCaption=\"Modeled Cols\""));
+    assert!(pivot_xml.contains("errorCaption=\"Modeled Error\""));
+    assert!(pivot_xml.contains("showError=\"1\""));
+    assert!(pivot_xml.contains("missingCaption=\"Modeled Missing\""));
+    assert!(pivot_xml.contains("showMissing=\"0\""));
+    assert!(pivot_xml.contains("ref=\"C5:F9\""));
+    assert!(pivot_xml.contains("firstHeaderRow=\"2\""));
+    assert!(pivot_xml.contains("firstDataRow=\"3\""));
+    assert!(pivot_xml.contains("firstDataCol=\"4\""));
+    assert!(pivot_xml.contains("rowPageCount=\"5\""));
+    assert!(pivot_xml.contains("colPageCount=\"6\""));
+    assert!(pivot_xml.contains("name=\"PivotStyleMedium4\""));
+    assert!(pivot_xml.contains("showRowHeaders=\"0\""));
+    assert!(pivot_xml.contains("showColHeaders=\"0\""));
+    assert!(pivot_xml.contains("showLastColumn=\"1\""));
+    assert!(
+        pivot_xml.contains("<rowItems count=\"1\"><i t=\"grand\"><x/><x v=\"1\"/></i></rowItems>")
+    );
+}

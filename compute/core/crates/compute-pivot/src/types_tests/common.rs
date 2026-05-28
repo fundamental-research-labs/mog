@@ -28,7 +28,10 @@ pub(super) fn make_reorder_config(placements: Vec<PivotFieldPlacement>) -> Pivot
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     }
@@ -172,7 +175,10 @@ pub(super) fn make_test_config_with_fields() -> PivotTableConfig {
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     }

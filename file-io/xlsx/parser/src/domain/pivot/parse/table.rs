@@ -3,6 +3,7 @@
 use crate::domain::pivot::model::{PivotLocation, PivotStyleInfo, PivotTable};
 use crate::domain::pivot::parse::table_fields::{
     parse_data_fields, parse_field_refs, parse_page_fields, parse_pivot_fields,
+    parse_row_col_items,
 };
 use crate::domain::pivot::reader::elements::{child_slice, first_element_span, opening_tag};
 use crate::infra::xml::{
@@ -40,8 +41,14 @@ pub fn parse_pivot_table(xml: &[u8]) -> PivotTable {
     if let Some(row_fields) = child_slice(xml, root, b"rowFields") {
         pivot.row_fields = parse_field_refs(row_fields);
     }
+    if let Some(row_items) = child_slice(xml, root, b"rowItems") {
+        pivot.row_items = parse_row_col_items(row_items);
+    }
     if let Some(col_fields) = child_slice(xml, root, b"colFields") {
         pivot.col_fields = parse_field_refs(col_fields);
+    }
+    if let Some(col_items) = child_slice(xml, root, b"colItems") {
+        pivot.col_items = parse_row_col_items(col_items);
     }
     if let Some(data_fields) = child_slice(xml, root, b"dataFields") {
         pivot.data_fields = parse_data_fields(data_fields);

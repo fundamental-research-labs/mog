@@ -202,7 +202,10 @@ fn make_config(num_rows: usize, placements: Vec<PivotFieldPlacement>) -> PivotTa
         cache_id: None,
         ref_range: None,
         first_data_row: None,
+        first_header_row: None,
         first_data_col: None,
+        rows_per_page: None,
+        cols_per_page: None,
         row_items: Vec::new(),
         col_items: Vec::new(),
     }

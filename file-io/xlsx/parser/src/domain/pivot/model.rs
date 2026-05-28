@@ -19,6 +19,10 @@ pub struct PivotTable {
     pub data_fields: Vec<DataField>,
     /// Page (filter) fields in the pivot table
     pub page_fields: Vec<PageField>,
+    /// Row items describing rendered pivot layout.
+    pub row_items: Vec<PivotRowColItem>,
+    /// Column items describing rendered pivot layout.
+    pub col_items: Vec<PivotRowColItem>,
     /// Pivot field definitions
     pub pivot_fields: Vec<PivotField>,
     /// Style information
@@ -56,6 +60,8 @@ impl Default for PivotTable {
             col_fields: Vec::new(),
             data_fields: Vec::new(),
             page_fields: Vec::new(),
+            row_items: Vec::new(),
+            col_items: Vec::new(),
             pivot_fields: Vec::new(),
             style_info: None,
             grand_total_caption: None,
@@ -264,6 +270,15 @@ pub struct PageField {
     pub name: Option<String>,
     /// Caption (display name)
     pub caption: Option<String>,
+}
+
+/// Row or column layout item in the rendered pivot table.
+#[derive(Debug, Clone, Default)]
+pub struct PivotRowColItem {
+    /// Optional item type.
+    pub item_type: Option<PivotItemType>,
+    /// Field/item references (`<x>` children); `None` means a default `<x/>`.
+    pub x_values: Vec<Option<u32>>,
 }
 
 /// Style information for pivot table

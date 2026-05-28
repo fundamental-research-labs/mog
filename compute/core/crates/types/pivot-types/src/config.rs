@@ -91,9 +91,18 @@ pub struct PivotEngineConfig {
     /// OOXML first data row offset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_data_row: Option<u32>,
+    /// OOXML first header row offset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_header_row: Option<u32>,
     /// OOXML first data column offset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_data_col: Option<u32>,
+    /// OOXML row page count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_per_page: Option<u32>,
+    /// OOXML column page count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cols_per_page: Option<u32>,
     /// Row items array for OOXML layout reconstruction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub row_items: Vec<domain_types::domain::pivot::PivotRowColItem>,
@@ -134,7 +143,10 @@ impl TryFrom<PivotTableConfig> for PivotEngineConfig {
             cache_id: config.cache_id,
             ref_range: config.ref_range,
             first_data_row: config.first_data_row,
+            first_header_row: config.first_header_row,
             first_data_col: config.first_data_col,
+            rows_per_page: config.rows_per_page,
+            cols_per_page: config.cols_per_page,
             row_items: config.row_items,
             col_items: config.col_items,
         })
@@ -171,7 +183,10 @@ impl From<PivotEngineConfig> for PivotTableConfig {
             cache_id: config.cache_id,
             ref_range: config.ref_range,
             first_data_row: config.first_data_row,
+            first_header_row: config.first_header_row,
             first_data_col: config.first_data_col,
+            rows_per_page: config.rows_per_page,
+            cols_per_page: config.cols_per_page,
             row_items: config.row_items,
             col_items: config.col_items,
         }

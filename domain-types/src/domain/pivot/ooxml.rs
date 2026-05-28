@@ -134,6 +134,8 @@ pub struct PivotDataFieldDef {
     pub base_field: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_item: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_data_as: Option<String>,
 }
 
 /// Page (filter) field definition.

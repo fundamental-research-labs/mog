@@ -1,6 +1,8 @@
 //! Pivot table field parsing.
 
-use crate::domain::pivot::model::{DataField, PageField, PivotField, PivotFieldRef, PivotItem};
+use crate::domain::pivot::model::{
+    DataField, PageField, PivotField, PivotFieldRef, PivotItem, PivotRowColItem,
+};
 use crate::domain::pivot::reader::attrs::{
     parse_axis_attr, parse_data_field_sentinel, parse_item_type_attr, parse_sort_attr,
     parse_subtotal_attr,
@@ -192,4 +194,43 @@ pub(crate) fn parse_page_fields(xml: &[u8]) -> Vec<PageField> {
     }
 
     fields
+}
+
+pub(crate) fn parse_row_col_items(xml: &[u8]) -> Vec<PivotRowColItem> {
+    let mut items = Vec::new();
+    let mut pos = 0;
+
+    while let Some(item_start) = find_tag_simd(xml, b"i", pos) {
+        let tag_end = find_gt_simd(xml, item_start).unwrap_or(xml.len());
+        let element = &xml[item_start..tag_end + 1];
+        let item_end = find_closing_tag(xml, b"i", item_start).unwrap_or(tag_end);
+        let body = if item_end > tag_end {
+            &xml[tag_end + 1..item_end]
+        } else {
+            &[][..]
+        };
+
+        items.push(PivotRowColItem {
+            item_type: parse_string_attr(element, b"t=\"").map(|_| parse_item_type_attr(element)),
+            x_values: parse_x_values(body),
+        });
+
+        pos = item_end.saturating_add(1);
+    }
+
+    items
+}
+
+fn parse_x_values(xml: &[u8]) -> Vec<Option<u32>> {
+    let mut values = Vec::new();
+    let mut pos = 0;
+
+    while let Some(x_start) = find_tag_simd(xml, b"x", pos) {
+        let tag_end = find_gt_simd(xml, x_start).unwrap_or(xml.len());
+        let element = &xml[x_start..tag_end + 1];
+        values.push(parse_u32_attr(element, b"v=\""));
+        pos = tag_end.saturating_add(1);
+    }
+
+    values
 }

@@ -438,6 +438,8 @@ pub struct DataFieldDef {
     pub base_field: Option<i32>,
     /// Base item index for calculated data fields
     pub base_item: Option<u32>,
+    /// Show data as transformation.
+    pub show_data_as: Option<String>,
 }
 
 impl DataFieldDef {
@@ -451,6 +453,7 @@ impl DataFieldDef {
             num_fmt_id: None,
             base_field: None,
             base_item: None,
+            show_data_as: None,
         }
     }
 
@@ -464,6 +467,7 @@ impl DataFieldDef {
             num_fmt_id: None,
             base_field: None,
             base_item: None,
+            show_data_as: None,
         }
     }
 
@@ -484,6 +488,9 @@ impl DataFieldDef {
 
         if let Some(base_item) = self.base_item {
             w.attr_num("baseItem", base_item);
+        }
+        if let Some(ref show_data_as) = self.show_data_as {
+            w.attr("showDataAs", show_data_as);
         }
 
         w.self_close();

@@ -114,18 +114,28 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
         emit_text_body(&mut w, tb, "c:txPr");
     }
 
-    // externalData
-    // externalData owns a chart-part relationship; omit until chart rels are
-    // registered and resolved through the package graph.
+    if let Some(ref external_data) = cs.external_data {
+        w.start_element("c:externalData")
+            .attr("r:id", &external_data.r_id)
+            .end_attrs();
+        if let Some(auto_update) = external_data.auto_update {
+            w.start_element("c:autoUpdate")
+                .attr("val", if auto_update { "1" } else { "0" })
+                .self_close();
+        }
+        w.end_element("c:externalData");
+    }
 
     // printSettings
     if let Some(ref ps) = cs.print_settings {
         structure::emit_print_settings(&mut w, ps);
     }
 
-    // userShapes
-    // userShapes also owns a chart-part relationship and is dropped until the
-    // chart relationship graph models it explicitly.
+    if let Some(ref r_id) = cs.user_shapes {
+        w.start_element("c:userShapes")
+            .attr("r:id", r_id)
+            .self_close();
+    }
 
     // extLst
     if !cs.extensions.is_empty() {

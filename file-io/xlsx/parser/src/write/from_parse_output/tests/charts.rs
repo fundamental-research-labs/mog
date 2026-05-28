@@ -68,6 +68,8 @@ fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
         protection: None,
         print_settings: None,
         pivot_source: None,
+        external_data: None,
+        user_shapes: None,
         pivot_fmts: Vec::new(),
         clr_map_ovr: None,
         date1904: None,
@@ -106,6 +108,75 @@ fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
 }
 
 #[test]
+fn reconstructed_chart_exports_typed_chart_owned_relationships() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace::default(),
+    ));
+    imported_chart.rt = Some(domain_types::chart::ChartRoundTripData {
+        external_data: Some(domain_types::chart::ChartExternalData {
+            relationship: domain_types::chart::ChartRelationshipData {
+                r_id: "rIdExternalData".to_string(),
+                relationship_type: Some(
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink"
+                        .to_string(),
+                ),
+                target: Some("externalLinks/externalLink1.xml".to_string()),
+                target_mode: Some("External".to_string()),
+            },
+            auto_update: Some(false),
+        }),
+        user_shapes: Some(domain_types::chart::ChartRelationshipData {
+            r_id: "rIdUserShapes".to_string(),
+            relationship_type: Some(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes"
+                    .to_string(),
+            ),
+            target: Some("../drawings/userShapeDrawing1.xml".to_string()),
+            target_mode: None,
+        }),
+        auxiliary_files: vec![(
+            "xl/drawings/userShapeDrawing1.xml".to_string(),
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"/>"#
+                .to_vec(),
+        )],
+        chart_rels_bytes: Some((
+            "xl/charts/_rels/chart1.xml.rels".to_string(),
+            br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdUserShapes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes" Target="../drawings/userShapeDrawing1.xml"/></Relationships>"#
+                .to_vec(),
+        )),
+        ..Default::default()
+    });
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output, None).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let chart_rels =
+        String::from_utf8(archive.read_file("xl/charts/_rels/chart1.xml.rels").unwrap()).unwrap();
+
+    assert!(chart_xml.contains(r#"<c:externalData r:id="rIdExternalData">"#));
+    assert!(chart_xml.contains(r#"<c:autoUpdate val="0"/>"#));
+    assert!(chart_xml.contains(r#"<c:userShapes r:id="rIdUserShapes"/>"#));
+    assert!(chart_rels.contains(r#"Id="rIdExternalData""#));
+    assert!(chart_rels.contains(r#"TargetMode="External""#));
+    assert!(chart_rels.contains(r#"Id="rIdUserShapes""#));
+    assert!(archive.contains("xl/drawings/userShapeDrawing1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
     let clean_chart_space_extension = ooxml_types::charts::ExtensionEntry {
         uri: "{clean-chart-space}".to_string(),
@@ -139,6 +210,8 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
         protection: None,
         print_settings: None,
         pivot_source: None,
+        external_data: None,
+        user_shapes: None,
         pivot_fmts: Vec::new(),
         clr_map_ovr: None,
         date1904: None,

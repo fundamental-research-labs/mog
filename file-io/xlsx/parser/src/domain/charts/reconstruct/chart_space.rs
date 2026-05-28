@@ -20,12 +20,16 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         chart: build_chart(spec),
         sp_pr: spec.chart_format.as_ref().and_then(build_shape_properties),
         tx_pr: spec.chart_format.as_ref().and_then(build_text_body),
-        // These nodes carry chart-owned r:ids. They are dropped until the XLSX
-        // writer registers and resolves their target relationships through the
-        // package graph.
-        external_data: None,
+        external_data: rt.and_then(|r| {
+            r.external_data
+                .as_ref()
+                .map(|external_data| ooxml_types::charts::ExternalData {
+                    r_id: external_data.relationship.r_id.clone(),
+                    auto_update: external_data.auto_update,
+                })
+        }),
         pivot_source: rt.and_then(|r| r.pivot_source.clone().map(Into::into)),
-        user_shapes: None,
+        user_shapes: rt.and_then(|r| r.user_shapes.as_ref().map(|rel| rel.r_id.clone())),
         print_settings: rt.and_then(|r| r.print_settings.clone().map(Into::into)),
         extensions: rt
             .map(|r| clean_chart_extensions(&r.chart_space_extensions))

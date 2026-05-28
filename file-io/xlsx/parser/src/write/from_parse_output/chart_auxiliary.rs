@@ -7,6 +7,8 @@ use crate::infra::opc::opc_target_to_zip_path;
 const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
 const REL_CHART_COLOR_STYLE: &str =
     "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
+const REL_CHART_USER_SHAPES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
 
 pub(super) struct ChartAuxiliaryDataRef<'a> {
     pub(super) auxiliary_files: &'a [(String, Vec<u8>)],
@@ -75,6 +77,7 @@ pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &
     match auxiliary_kind(target_path) {
         Some(AuxiliaryKind::Style) => rel_type == REL_CHART_STYLE,
         Some(AuxiliaryKind::ColorStyle) => rel_type == REL_CHART_COLOR_STYLE,
+        Some(AuxiliaryKind::UserShapes) => rel_type == REL_CHART_USER_SHAPES,
         None => false,
     }
 }
@@ -104,19 +107,23 @@ fn normalize_path(path: &str) -> String {
 enum AuxiliaryKind {
     Style,
     ColorStyle,
+    UserShapes,
 }
 
 fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
-    if !path.starts_with("xl/charts/") {
-        return None;
-    }
     let file_name = path.rsplit('/').next().unwrap_or(path);
-    if file_name.starts_with("style") && file_name.ends_with(".xml") {
+    if path.starts_with("xl/charts/")
+        && file_name.starts_with("style")
+        && file_name.ends_with(".xml")
+    {
         Some(AuxiliaryKind::Style)
-    } else if (file_name.starts_with("color") || file_name.starts_with("colors"))
+    } else if path.starts_with("xl/charts/")
+        && (file_name.starts_with("color") || file_name.starts_with("colors"))
         && file_name.ends_with(".xml")
     {
         Some(AuxiliaryKind::ColorStyle)
+    } else if path.starts_with("xl/drawings/") && file_name.ends_with(".xml") {
+        Some(AuxiliaryKind::UserShapes)
     } else {
         None
     }

@@ -333,6 +333,10 @@ pub struct ChartRoundTripData {
     pub print_settings: Option<ChartPrintSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pivot_source: Option<ChartPivotSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_data: Option<ChartExternalData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_shapes: Option<ChartRelationshipData>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_fmts: Vec<ChartPivotFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -365,6 +369,30 @@ pub struct ChartRoundTripData {
     pub auxiliary_files: Vec<(String, Vec<u8>)>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chart_rels_bytes: Option<(String, Vec<u8>)>,
+}
+
+/// Chart-owned relationship metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct ChartRelationshipData {
+    pub r_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
+}
+
+/// Chart external data reference.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct ChartExternalData {
+    pub relationship: ChartRelationshipData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update: Option<bool>,
 }
 
 /// Metadata for reconstructing a ChartGroup during export.

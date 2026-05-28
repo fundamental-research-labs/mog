@@ -836,9 +836,12 @@ pub fn is_supported_chart_auxiliary_part(path: &str) -> bool {
 }
 
 fn chart_auxiliary_content_type(path: &str) -> Option<&'static str> {
-    if path.contains("style") {
+    let normalized = normalize_part_path(path);
+    if normalized.starts_with("xl/drawings/") && normalized.ends_with(".xml") {
+        Some(CT_DRAWING)
+    } else if normalized.contains("style") {
         Some(CT_CHART_STYLE)
-    } else if path.contains("colors") || path.contains("color") {
+    } else if normalized.contains("colors") || normalized.contains("color") {
         Some(CT_CHART_COLOR_STYLE)
     } else {
         None
@@ -859,6 +862,25 @@ pub fn register_chart_auxiliary_relationship(
         relationship_type: relationship_type.to_string(),
         target: PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(target_path),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
+pub fn register_chart_external_relationship(
+    graph: &mut PackageGraphBuilder,
+    chart_path: &str,
+    relationship_type: &str,
+    target: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: normalize_part_path(chart_path),
+        },
+        relationship_type: relationship_type.to_string(),
+        target: PackageRelationshipTarget::External {
+            target: target.to_string(),
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });

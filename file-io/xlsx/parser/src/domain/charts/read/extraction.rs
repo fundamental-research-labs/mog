@@ -1423,6 +1423,21 @@ fn build_round_trip_data(
         protection: cs.protection.as_ref().map(Into::into),
         print_settings: cs.print_settings.as_ref().map(Into::into),
         pivot_source: cs.pivot_source.as_ref().map(Into::into),
+        external_data: cs.external_data.as_ref().map(|external_data| {
+            domain_types::chart::ChartExternalData {
+                relationship: domain_types::chart::ChartRelationshipData {
+                    r_id: external_data.r_id.clone(),
+                    ..Default::default()
+                },
+                auto_update: external_data.auto_update,
+            }
+        }),
+        user_shapes: cs.user_shapes.as_ref().map(|r_id| {
+            domain_types::chart::ChartRelationshipData {
+                r_id: r_id.clone(),
+                ..Default::default()
+            }
+        }),
         pivot_fmts: chart.pivot_fmts.iter().map(Into::into).collect(),
         clr_map_ovr: cs.clr_map_ovr.as_ref().map(Into::into),
         date1904: cs.date1904,

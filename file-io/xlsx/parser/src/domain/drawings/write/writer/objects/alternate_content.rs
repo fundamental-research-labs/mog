@@ -81,6 +81,9 @@ impl DrawingWriter {
         w: &mut XmlWriter,
         name: &str,
         original_id: Option<u32>,
+        macro_name: Option<&str>,
+        nv_ext_lst: Option<&str>,
+        fallback: Option<&ooxml_types::timelines::TimelineFallbackShape>,
         object_id: &mut u32,
     ) {
         let id = original_id.unwrap_or(*object_id);
@@ -92,12 +95,22 @@ impl DrawingWriter {
             .attr("Requires", "tsle")
             .end_attrs();
 
-        w.start_element("xdr:graphicFrame").end_attrs();
+        let graphic_frame = w.start_element("xdr:graphicFrame");
+        if let Some(macro_name) = macro_name {
+            graphic_frame.attr("macro", macro_name);
+        }
+        graphic_frame.end_attrs();
         w.start_element("xdr:nvGraphicFramePr").end_attrs();
         w.start_element("xdr:cNvPr")
             .attr_num("id", id)
-            .attr("name", name)
-            .self_close();
+            .attr("name", name);
+        if let Some(nv_ext_lst) = nv_ext_lst {
+            w.end_attrs();
+            self.write_raw_xml(w, nv_ext_lst);
+            w.end_element("xdr:cNvPr");
+        } else {
+            w.self_close();
+        }
         w.start_element("xdr:cNvGraphicFramePr").self_close();
         w.end_element("xdr:nvGraphicFramePr");
 
@@ -124,8 +137,89 @@ impl DrawingWriter {
 
         w.end_element("xdr:graphicFrame");
         w.end_element("mc:Choice");
-        w.start_element("mc:Fallback").self_close();
+        if let Some(fallback) = fallback {
+            self.write_timeline_fallback(w, fallback);
+        } else {
+            w.start_element("mc:Fallback").self_close();
+        }
         w.end_element("mc:AlternateContent");
+    }
+
+    fn write_timeline_fallback(
+        &self,
+        w: &mut XmlWriter,
+        fallback: &ooxml_types::timelines::TimelineFallbackShape,
+    ) {
+        w.start_element("mc:Fallback").end_attrs();
+        let sp = w.start_element("xdr:sp");
+        if let Some(macro_name) = &fallback.macro_name {
+            sp.attr("macro", macro_name);
+        }
+        if let Some(textlink) = &fallback.textlink {
+            sp.attr("textlink", textlink);
+        }
+        sp.end_attrs();
+        w.start_element("xdr:nvSpPr").end_attrs();
+        w.start_element("xdr:cNvPr")
+            .attr_num("id", fallback.c_nv_pr_id)
+            .attr("name", &fallback.c_nv_pr_name)
+            .self_close();
+        w.start_element("xdr:cNvSpPr").end_attrs();
+        w.start_element("a:spLocks")
+            .attr("noTextEdit", "1")
+            .self_close();
+        w.end_element("xdr:cNvSpPr");
+        w.end_element("xdr:nvSpPr");
+
+        w.start_element("xdr:spPr").end_attrs();
+        w.start_element("a:xfrm").end_attrs();
+        w.start_element("a:off")
+            .attr_num("x", fallback.position.x)
+            .attr_num("y", fallback.position.y)
+            .self_close();
+        w.start_element("a:ext")
+            .attr_num("cx", fallback.extent.cx)
+            .attr_num("cy", fallback.extent.cy)
+            .self_close();
+        w.end_element("a:xfrm");
+        w.start_element("a:prstGeom")
+            .attr("prst", "rect")
+            .end_attrs();
+        w.start_element("a:avLst").self_close();
+        w.end_element("a:prstGeom");
+        w.start_element("a:solidFill").end_attrs();
+        w.start_element("a:prstClr")
+            .attr("val", "white")
+            .self_close();
+        w.end_element("a:solidFill");
+        w.start_element("a:ln").attr("w", "1").end_attrs();
+        w.start_element("a:solidFill").end_attrs();
+        w.start_element("a:prstClr")
+            .attr("val", "green")
+            .self_close();
+        w.end_element("a:solidFill");
+        w.end_element("a:ln");
+        w.end_element("xdr:spPr");
+
+        w.start_element("xdr:txBody").end_attrs();
+        w.start_element("a:bodyPr")
+            .attr("vertOverflow", "clip")
+            .attr("horzOverflow", "clip")
+            .self_close();
+        w.start_element("a:lstStyle").self_close();
+        w.start_element("a:p").end_attrs();
+        w.start_element("a:r").end_attrs();
+        w.start_element("a:rPr")
+            .attr("lang", "en-US")
+            .attr("sz", "1100")
+            .self_close();
+        w.start_element("a:t").text(&fallback.text);
+        w.end_element("a:t");
+        w.end_element("a:r");
+        w.end_element("a:p");
+        w.end_element("xdr:txBody");
+        w.end_element("xdr:sp");
+        w.end_element("mc:Fallback");
     }
 
     /// Write a ChartEx anchor as `mc:AlternateContent` with `cx:chart` graphicFrame.

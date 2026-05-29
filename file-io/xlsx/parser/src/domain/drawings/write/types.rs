@@ -650,6 +650,12 @@ pub enum DrawingObject {
         original_id: Option<u32>,
         /// Timeline name (matches TimelineDef.name).
         name: String,
+        /// Optional graphicFrame macro attribute.
+        macro_name: Option<String>,
+        /// Optional cNvPr extension list.
+        nv_ext_lst: Option<String>,
+        /// Optional typed fallback shape for older consumers.
+        fallback: Option<ooxml_types::timelines::TimelineFallbackShape>,
     },
 }
 

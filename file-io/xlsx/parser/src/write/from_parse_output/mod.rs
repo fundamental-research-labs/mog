@@ -583,14 +583,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         },
                         extent: anchor.extent.clone().unwrap_or_default(),
                         client_data: ClientData::default(),
-                        mc_alternate_content: anchor
-                            .raw_anchor_xml
-                            .clone()
-                            .map(|raw_xml| crate::domain::drawings::McAlternateContent { raw_xml }),
+                        mc_alternate_content: None,
                     },
                     DrawingObject::Timeline {
                         original_id: anchor.object_id,
                         name: anchor.timeline_name.clone(),
+                        macro_name: anchor.macro_name.clone(),
+                        nv_ext_lst: anchor.nv_ext_lst.clone(),
+                        fallback: anchor.fallback.clone(),
                     },
                 ));
             }

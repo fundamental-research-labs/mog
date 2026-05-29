@@ -68,7 +68,11 @@ pub struct StoredTimeline {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor_object_id: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub raw_anchor_xml: Option<String>,
+    pub anchor_macro_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_nv_ext_lst_xml: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_shape: Option<ooxml_types::timelines::TimelineFallbackShape>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<String>,
 }
@@ -141,7 +145,9 @@ pub fn xlsx_import_to_stored_timeline(
             extent_cy: anchor.extent.as_ref().map(|extent| extent.cy),
         }),
         anchor_object_id: anchor.and_then(|anchor| anchor.object_id),
-        raw_anchor_xml: anchor.and_then(|anchor| anchor.raw_anchor_xml.clone()),
+        anchor_macro_name: anchor.and_then(|anchor| anchor.macro_name.clone()),
+        anchor_nv_ext_lst_xml: anchor.and_then(|anchor| anchor.nv_ext_lst.clone()),
+        fallback_shape: anchor.and_then(|anchor| anchor.fallback.clone()),
         ext_lst_xml: timeline.ext_lst.clone(),
     }
 }
@@ -209,6 +215,8 @@ pub fn stored_timeline_to_anchor(
             (Some(cx), Some(cy)) => Some(ooxml_types::drawings::Extent { cx, cy }),
             _ => None,
         },
-        raw_anchor_xml: stored.raw_anchor_xml.clone(),
+        macro_name: stored.anchor_macro_name.clone(),
+        nv_ext_lst: stored.anchor_nv_ext_lst_xml.clone(),
+        fallback: stored.fallback_shape.clone(),
     })
 }

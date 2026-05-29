@@ -771,9 +771,21 @@ impl DrawingWriter {
                 name,
                 r_id,
             } => self.write_slicer(w, name, r_id, *original_id, object_id),
-            DrawingObject::Timeline { original_id, name } => {
-                self.write_timeline(w, name, *original_id, object_id)
-            }
+            DrawingObject::Timeline {
+                original_id,
+                name,
+                macro_name,
+                nv_ext_lst,
+                fallback,
+            } => self.write_timeline(
+                w,
+                name,
+                *original_id,
+                macro_name.as_deref(),
+                nv_ext_lst.as_deref(),
+                fallback.as_ref(),
+                object_id,
+            ),
         }
     }
 }

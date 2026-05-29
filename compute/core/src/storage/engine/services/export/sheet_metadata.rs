@@ -639,10 +639,12 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
             })
             .collect();
     timelines.sort_by_key(|timeline| {
-        timeline_positions
-            .get(&timeline.name)
-            .copied()
-            .unwrap_or((u32::MAX, u32::MAX, i64::MAX, i64::MAX))
+        timeline_positions.get(&timeline.name).copied().unwrap_or((
+            u32::MAX,
+            u32::MAX,
+            i64::MAX,
+            i64::MAX,
+        ))
     });
     timeline_anchors.sort_by_key(|anchor| {
         (

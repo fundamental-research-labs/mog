@@ -171,8 +171,84 @@ fn extract_one_cell_anchor(
         to: from,
         object_id: extract_object_id(block),
         extent: parse_extent(anchor_block),
-        raw_anchor_xml: std::str::from_utf8(anchor_block).ok().map(str::to_string),
+        macro_name: extract_graphic_frame_macro(block),
+        nv_ext_lst: extract_cnvpr_ext_lst(block),
+        fallback: extract_fallback_shape(block),
     })
+}
+
+fn extract_graphic_frame_macro(block: &[u8]) -> Option<String> {
+    let start = find_tag_simd(block, b"graphicFrame", 0)?;
+    let end = find_gt_simd(block, start)
+        .map(|p| p + 1)
+        .unwrap_or(block.len());
+    parse_string_attr(&block[start..end], b"macro=\"")
+}
+
+fn extract_cnvpr_ext_lst(block: &[u8]) -> Option<String> {
+    let cnv_start = find_tag_simd(block, b"cNvPr", 0)?;
+    let cnv_close = find_closing_tag(block, b"cNvPr", cnv_start)?;
+    let cnv_end = find_gt_simd(block, cnv_close).map(|p| p + 1)?;
+    extract_ext_lst(&block[cnv_start..cnv_end])
+}
+
+fn extract_fallback_shape(block: &[u8]) -> Option<ooxml_types::timelines::TimelineFallbackShape> {
+    let fallback_start = find_tag_simd(block, b"Fallback", 0)?;
+    let fallback_close = find_closing_tag(block, b"Fallback", fallback_start)?;
+    let fallback_end = find_gt_simd(block, fallback_close).map(|p| p + 1)?;
+    let fallback = &block[fallback_start..fallback_end];
+
+    let sp_start = find_tag_simd(fallback, b"sp", 0)?;
+    let sp_end = find_gt_simd(fallback, sp_start)
+        .map(|p| p + 1)
+        .unwrap_or(fallback.len());
+    let sp_elem = &fallback[sp_start..sp_end];
+
+    let cnv_start = find_tag_simd(fallback, b"cNvPr", sp_end)?;
+    let cnv_end = find_gt_simd(fallback, cnv_start)
+        .map(|p| p + 1)
+        .unwrap_or(fallback.len());
+    let cnv = &fallback[cnv_start..cnv_end];
+
+    let xfrm_start = find_tag_simd(fallback, b"xfrm", cnv_end)?;
+    let xfrm_close = find_closing_tag(fallback, b"xfrm", xfrm_start)?;
+    let xfrm_end = find_gt_simd(fallback, xfrm_close).map(|p| p + 1)?;
+    let xfrm = &fallback[xfrm_start..xfrm_end];
+
+    Some(ooxml_types::timelines::TimelineFallbackShape {
+        macro_name: parse_string_attr(sp_elem, b"macro=\""),
+        textlink: parse_string_attr(sp_elem, b"textlink=\""),
+        c_nv_pr_id: parse_u32_attr(cnv, b"id=\"").unwrap_or(0),
+        c_nv_pr_name: parse_string_attr(cnv, b"name=\"").unwrap_or_default(),
+        position: ooxml_types::drawings::Position {
+            x: parse_tag_i64_attr(xfrm, b"off", b"x=\"").unwrap_or(0),
+            y: parse_tag_i64_attr(xfrm, b"off", b"y=\"").unwrap_or(0),
+        },
+        extent: ooxml_types::drawings::Extent {
+            cx: parse_tag_i64_attr(xfrm, b"ext", b"cx=\"").unwrap_or(0),
+            cy: parse_tag_i64_attr(xfrm, b"ext", b"cy=\"").unwrap_or(0),
+        },
+        text: extract_text(fallback).unwrap_or_else(|| {
+            "Timeline: Works in Excel 2013 or higher. Do not move or resize.".to_string()
+        }),
+    })
+}
+
+fn parse_tag_i64_attr(block: &[u8], tag: &[u8], attr: &[u8]) -> Option<i64> {
+    let start = find_tag_simd(block, tag, 0)?;
+    let end = find_gt_simd(block, start)
+        .map(|p| p + 1)
+        .unwrap_or(block.len());
+    parse_i64_attr(&block[start..end], attr)
+}
+
+fn extract_text(block: &[u8]) -> Option<String> {
+    let start = find_tag_simd(block, b"t", 0)?;
+    let content_start = find_gt_simd(block, start).map(|p| p + 1)?;
+    let close = find_closing_tag(block, b"t", content_start)?;
+    std::str::from_utf8(&block[content_start..close])
+        .ok()
+        .map(str::to_string)
 }
 
 fn extract_object_id(block: &[u8]) -> Option<u32> {

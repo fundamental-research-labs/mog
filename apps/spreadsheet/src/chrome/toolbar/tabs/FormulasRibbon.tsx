@@ -50,6 +50,7 @@ import {
   DateTimeFunctionIcon,
   DefineNameIcon,
   ErrorCheckingIcon,
+  EvaluateFormulaIcon,
   FinancialFunctionIcon,
   LogicalFunctionIcon,
   LookupFunctionIcon,
@@ -59,6 +60,7 @@ import {
   RemoveArrowsIcon,
   TextFunctionIcon,
   UseInFormulaIcon,
+  WatchWindowIcon,
 } from '../primitives/FormulasIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
 import {
@@ -673,8 +675,6 @@ export function FormulasRibbon() {
 
   // Workbook API for recalculation
   const wb = useWorkbook();
-  const setSidePanelContent = useUIStore((s) => s.setSidePanelContent);
-  const setSidePanelVisible = useUIStore((s) => s.setSidePanelVisible);
   const mruFunctions = useUIStore((s) => s.mruFunctions);
 
   // AutoSum dispatch hook
@@ -780,10 +780,17 @@ export function FormulasRibbon() {
     dispatch('TOGGLE_SHOW_FORMULAS', deps);
   }, [deps]);
 
-  const handleFormulaReferences = useCallback(() => {
-    setSidePanelContent('formula-references');
-    setSidePanelVisible(true);
-  }, [setSidePanelContent, setSidePanelVisible]);
+  const handleErrorChecking = useCallback(() => {
+    dispatch('OPEN_ERROR_CHECKING_DIALOG', deps);
+  }, [deps]);
+
+  const handleEvaluateFormula = useCallback(() => {
+    dispatch('OPEN_EVALUATE_FORMULA_DIALOG', deps);
+  }, [deps]);
+
+  const handleWatchWindow = useCallback(() => {
+    dispatch('OPEN_WATCH_WINDOW', deps);
+  }, [deps]);
 
   // Handle Calculation Mode change - uses unified action system
   const handleCalculationModeChange = useCallback(
@@ -1493,11 +1500,35 @@ export function FormulasRibbon() {
             height="full"
             width="normal"
             icon={<ErrorCheckingIcon />}
-            label={'Formula\nReferences'}
-            onClick={handleFormulaReferences}
-            title="Formula References"
-            aria-label="Formula References"
+            label={'Error\nChecking'}
+            onClick={handleErrorChecking}
+            title="Error Checking - Check formulas for errors"
+            aria-label="Error Checking"
             visibilityKey="errorChecking"
+          />
+
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="normal"
+            icon={<EvaluateFormulaIcon />}
+            label={'Evaluate\nFormula'}
+            onClick={handleEvaluateFormula}
+            title="Evaluate Formula - Step through selected formula"
+            aria-label="Evaluate Formula"
+            visibilityKey="evaluateFormula"
+          />
+
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="normal"
+            icon={<WatchWindowIcon />}
+            label={'Watch\nWindow'}
+            onClick={handleWatchWindow}
+            title="Watch Window - Monitor selected cells"
+            aria-label="Watch Window"
+            visibilityKey="watchWindow"
           />
         </div>
       </ToolbarGroup>

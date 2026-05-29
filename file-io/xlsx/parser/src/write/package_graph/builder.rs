@@ -97,6 +97,7 @@ impl PackageGraphBuilder {
             }
             if !is_non_editable_sheet_cluster
                 && !is_quarantined_active
+                && !is_current_printer_settings_payload(&part.path)
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
                     &part.path,
                 )
@@ -343,4 +344,9 @@ fn same_non_editable_sheet_cluster(
 fn same_quarantined_active_cluster(owner_path: &str, target_path: &str) -> bool {
     normalize_part_path(owner_path) == "xl/vbaProject.bin"
         && normalize_part_path(target_path) == "xl/vbaProject.bin"
+}
+
+fn is_current_printer_settings_payload(path: &str) -> bool {
+    let path = normalize_part_path(path);
+    path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin")
 }

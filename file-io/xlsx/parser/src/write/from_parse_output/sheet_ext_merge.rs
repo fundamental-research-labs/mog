@@ -22,7 +22,7 @@ pub(super) fn merge_ext_lst_entries(
         .collect();
     let generated_x14_children = generated_entries
         .iter()
-        .filter(|entry| entry.uri == Some(X14_DV_CF_EXT_URI))
+        .filter(|entry| is_x14_dv_cf_ext_uri(entry.uri))
         .flat_map(|entry| generated_x14_child_xml(entry.xml))
         .collect::<Vec<_>>();
     let mut generated_used = vec![false; generated_entries.len()];
@@ -35,10 +35,10 @@ pub(super) fn merge_ext_lst_entries(
                 if crate::infra::xml::raw_xml_contains_relationship_attr(raw_entry.xml) {
                     continue;
                 }
-                if raw_entry.uri == Some(X14_DV_CF_EXT_URI) && !generated_x14_children.is_empty() {
+                if is_x14_dv_cf_ext_uri(raw_entry.uri) && !generated_x14_children.is_empty() {
                     merged_entries.push(merge_x14_children(raw_entry.xml, &generated_x14_children));
                     for (idx, entry) in generated_entries.iter().enumerate() {
-                        if entry.uri == Some(X14_DV_CF_EXT_URI) {
+                        if is_x14_dv_cf_ext_uri(entry.uri) {
                             generated_used[idx] = true;
                         }
                     }
@@ -64,7 +64,7 @@ pub(super) fn merge_ext_lst_entries(
     if !generated_x14_children.is_empty() && !merged_x14_entry {
         merged_entries.push(synthetic_x14_ext(&generated_x14_children));
         for (idx, entry) in generated_entries.iter().enumerate() {
-            if entry.uri == Some(X14_DV_CF_EXT_URI) {
+            if is_x14_dv_cf_ext_uri(entry.uri) {
                 generated_used[idx] = true;
             }
         }
@@ -81,6 +81,10 @@ pub(super) fn merge_ext_lst_entries(
     }
 
     combine_ext_lst_entries(&merged_entries)
+}
+
+fn is_x14_dv_cf_ext_uri(uri: Option<&str>) -> bool {
+    uri.is_some_and(|uri| uri.eq_ignore_ascii_case(X14_DV_CF_EXT_URI))
 }
 
 fn generated_x14_child_xml(ext_xml: &str) -> Vec<String> {

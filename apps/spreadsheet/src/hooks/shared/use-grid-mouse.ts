@@ -2003,12 +2003,23 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       handleMouseMove(e);
     };
 
-    const handlePointerUp = (_e: PointerEvent) => {
+    const handlePointerUp = (e: PointerEvent) => {
       // Reset page break dragging state
       isPageBreakDraggingRef.current = false;
 
       // Reset range selection drag state
       rangeSelectionDragRef.current = { isDragging: false, mode: 'cell', startCell: null };
+
+      // Shape insertion needs the release position to finalize drag-defined
+      // bounds. Route it through object coordination before the generic
+      // drag terminators, whose shared interface is intentionally positionless.
+      if (isObjectInteractionOwningPointer(coordinator)) {
+        const rect = container.getBoundingClientRect();
+        coordinator.objects.handleObjectMouseUp({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+      }
 
       // Delegate to coordinator for correct state-based event dispatch
       // This queries actual machine state, not potentially-stale React state

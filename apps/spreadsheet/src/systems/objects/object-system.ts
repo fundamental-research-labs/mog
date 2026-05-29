@@ -146,6 +146,10 @@ export class ObjectSystem implements IObjectSystem {
       const isOperating = this.objectAccessor.isOperating();
       if (isOperating) {
         this.objectCommands.cancelOperation();
+        return;
+      }
+      if (this.objectAccessor.isInserting()) {
+        this.objectCommands.cancelInsert();
       }
     },
   };

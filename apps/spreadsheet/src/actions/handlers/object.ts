@@ -766,15 +766,21 @@ export const INSERT_SHAPE: AsyncActionHandler = async (deps, payload): Promise<A
 };
 
 /**
- * Start Shape Insert — enters insertion mode (crosshair cursor, drag to define size).
- * Default gallery path for drawing a shape on the worksheet; INSERT_SHAPE remains
- * the explicit instant smart-position command.
+ * Start Shape Insert — creates the default visible shape and keeps insertion mode armed
+ * so a follow-up worksheet drag can define an explicitly sized shape.
  * Payload: { shapeType: ShapeType }
  */
-export const START_SHAPE_INSERT: ActionHandler = (deps, payload): ActionResult => {
+export const START_SHAPE_INSERT: AsyncActionHandler = async (
+  deps,
+  payload,
+): Promise<ActionResult> => {
   const { shapeType } = payload || {};
   if (!shapeType) {
     return { handled: false, error: 'Missing shapeType' };
+  }
+  const result = await INSERT_SHAPE(deps, payload);
+  if (!result.handled) {
+    return result;
   }
   deps.commands.object.startInsert(shapeType);
   return handled();

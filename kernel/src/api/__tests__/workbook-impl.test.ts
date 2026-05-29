@@ -178,6 +178,10 @@ function createMockComputeBridge() {
     createCustomTableStyle: jest.fn().mockResolvedValue('style1'),
     updateCustomTableStyle: jest.fn().mockResolvedValue(undefined),
     deleteCustomTableStyle: jest.fn().mockResolvedValue(undefined),
+    getDefaultPivotTableStyle: jest.fn().mockResolvedValue(null),
+    setDefaultPivotTableStyle: jest.fn().mockResolvedValue(undefined),
+    getDefaultSlicerStyle: jest.fn().mockResolvedValue(null),
+    setDefaultSlicerStyle: jest.fn().mockResolvedValue(undefined),
     getAllCustomCellStyles: jest.fn().mockResolvedValue([]),
     createCustomCellStyle: jest.fn().mockResolvedValue(undefined),
     updateCustomCellStyle: jest.fn().mockResolvedValue(undefined),
@@ -1728,6 +1732,33 @@ describe('WorkbookImpl - Table Styles & Settings', () => {
 
     const id = await wb.tableStyles.add('Custom', {} as any);
     expect(id).toBe('style-1');
+  });
+
+  it('tableStyles.getDefault() returns canonical built-in style names', async () => {
+    const { wb, ctx } = await createWorkbook();
+    ctx.computeBridge.getWorkbookSettings.mockResolvedValue({ defaultTableStyleId: 'medium4' });
+
+    await expect(wb.tableStyles.getDefault()).resolves.toBe('TableStyleMedium4');
+  });
+
+  it('tableStyles.setDefault() stores canonical built-in style names', async () => {
+    const { wb, ctx } = await createWorkbook();
+
+    await wb.tableStyles.setDefault('medium4');
+
+    expect(ctx.computeBridge.patchWorkbookSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultTableStyleId: 'TableStyleMedium4' }),
+    );
+  });
+
+  it('pivotTableStyles get/set default canonicalizes built-in aliases', async () => {
+    const { wb, ctx } = await createWorkbook();
+    ctx.computeBridge.getDefaultPivotTableStyle.mockResolvedValue('light16');
+
+    await expect(wb.pivotTableStyles.getDefault()).resolves.toBe('PivotStyleLight16');
+
+    await wb.pivotTableStyles.setDefault('medium4');
+    expect(ctx.computeBridge.setDefaultPivotTableStyle).toHaveBeenCalledWith('PivotStyleMedium4');
   });
 
   it('getSettings() delegates to computeBridge', async () => {

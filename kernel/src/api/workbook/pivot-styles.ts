@@ -6,6 +6,10 @@
 import type { WorkbookPivotTableStyles, PivotTableStyleInfo } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import {
+  pivotStyleIdForCompute,
+  publicPivotStyleId,
+} from '../../domain/pivots/style-normalization';
 
 const BUILT_IN_PIVOT_STYLES: string[] = [];
 for (const prefix of ['PivotStyleLight', 'PivotStyleMedium', 'PivotStyleDark']) {
@@ -19,11 +23,11 @@ export class WorkbookPivotTableStylesImpl implements WorkbookPivotTableStyles {
 
   async getDefault(): Promise<string> {
     const style = await this.ctx.computeBridge.getDefaultPivotTableStyle();
-    return style ?? 'PivotStyleLight16';
+    return publicPivotStyleId(style) ?? 'PivotStyleLight16';
   }
 
   async setDefault(style: string | null): Promise<void> {
-    await this.ctx.computeBridge.setDefaultPivotTableStyle(style);
+    await this.ctx.computeBridge.setDefaultPivotTableStyle(pivotStyleIdForCompute(style));
   }
 
   async getCount(): Promise<number> {

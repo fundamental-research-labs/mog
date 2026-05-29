@@ -57,6 +57,7 @@ import {
   type PivotInvalidReference,
 } from '../../errors';
 import { parseCellRange, toA1 } from '../internal/utils';
+import { pivotStyleIdForCompute } from '../../domain/pivots/style-normalization';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type PivotCreateDataConfig = Omit<
@@ -1150,7 +1151,13 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     const pivotId = await this.resolveNameToId(name, 'setStyle');
     const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setStyle');
 
-    const mergedStyle = { ...config.style, ...style };
+    const mergedStyle = {
+      ...config.style,
+      ...style,
+      ...(style.styleName !== undefined
+        ? { styleName: pivotStyleIdForCompute(style.styleName) ?? style.styleName }
+        : {}),
+    };
 
     await this.ctx.pivot.updatePivot(
       this.sheetId,

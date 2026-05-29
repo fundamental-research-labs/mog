@@ -32,6 +32,7 @@ import { hashExcelPassword, verifyExcelPassword } from '@mog/spreadsheet-utils/p
 
 import type { DocumentContext } from '../../context/types';
 import { toComputeWorkbookSettings } from './workbook-settings-wire';
+import { publicTableStyleId, tableStyleIdForCompute } from '../tables/style-normalization';
 
 // =============================================================================
 // Getters (ComputeBridge delegation)
@@ -743,7 +744,7 @@ export async function replaceCustomLists(
  */
 export async function getDefaultTableStyleId(ctx: DocumentContext): Promise<string | undefined> {
   const settings = await getSettings(ctx);
-  return settings.defaultTableStyleId;
+  return publicTableStyleId(settings.defaultTableStyleId);
 }
 
 /**
@@ -758,7 +759,7 @@ export async function setDefaultTableStyleId(
   styleId: string | undefined,
 ): Promise<void> {
   const current = await getSettings(ctx);
-  const updated = { ...current, defaultTableStyleId: styleId };
+  const updated = { ...current, defaultTableStyleId: tableStyleIdForCompute(styleId) ?? styleId };
   void ctx.computeBridge.patchWorkbookSettings(updated);
 }
 

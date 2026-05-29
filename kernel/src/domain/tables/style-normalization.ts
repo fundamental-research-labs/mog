@@ -84,5 +84,5 @@ export function tableStyleForEventConfig(
 export function publicTableStyleId(styleName: string | undefined | null): string | undefined {
   const normalized = normalizeStyleInput(styleName);
   if (!normalized) return undefined;
-  return tableStylePresetFromStyleId(normalized) ?? normalized;
+  return tableStyleIdForCompute(normalized) ?? normalized;
 }

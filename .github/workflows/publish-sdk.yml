@@ -59,6 +59,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Install WASM build prerequisites
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-pack
+          sudo apt-get update
+          sudo apt-get install -y binaryen brotli
+
+      - name: Build declaration prerequisites
+        run: pnpm typecheck || true
+
       - run: pnpm build:public-artifacts
 
       - name: Guard production publishes to release branch

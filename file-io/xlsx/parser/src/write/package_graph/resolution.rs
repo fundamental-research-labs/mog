@@ -55,7 +55,7 @@ pub(super) fn resolve_target(
         }
         PackageRelationshipTarget::InternalPart { path } => {
             let target = match owner {
-                PackageOwner::Root => format!("/{}", normalize_part_path(path)),
+                PackageOwner::Root => normalize_part_path(path),
                 PackageOwner::Workbook => relative_target("xl/workbook.xml", path)?,
                 PackageOwner::Worksheet {
                     path: owner_path, ..

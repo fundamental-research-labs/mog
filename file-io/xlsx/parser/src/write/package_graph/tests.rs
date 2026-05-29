@@ -51,8 +51,10 @@ fn imported_root_order_and_ids_are_reused_only_for_matching_current_set() {
 
     assert_eq!(root_rels[0].id, "rId5");
     assert_eq!(root_rels[0].relationship_type, REL_CORE_PROPERTIES);
+    assert_eq!(root_rels[0].target, "docProps/core.xml");
     assert_eq!(root_rels[1].id, "rId9");
     assert_eq!(root_rels[1].relationship_type, REL_OFFICE_DOCUMENT);
+    assert_eq!(root_rels[1].target, "xl/workbook.xml");
 }
 
 #[test]
@@ -140,7 +142,7 @@ fn inert_custom_xml_cluster_is_registered_with_graph_generated_sidecar() {
     assert!(graph.relationships.iter().any(|rel| {
         rel.owner_rels_path == "_rels/.rels"
             && rel.id == "rId7"
-            && rel.target == "/customXml/item1.xml"
+            && rel.target == "customXml/item1.xml"
     }));
     assert!(graph.relationships.iter().any(|rel| {
         rel.owner_rels_path == "customXml/_rels/item1.xml.rels"
@@ -195,7 +197,7 @@ fn webextension_cluster_is_registered_with_root_and_taskpane_relationships() {
             && rel.id == "rId2"
             && rel.relationship_type
                 == "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes"
-            && rel.target == "/xl/webextensions/taskpanes.xml"
+            && rel.target == "xl/webextensions/taskpanes.xml"
     }));
     assert!(graph.relationships.iter().any(|rel| {
         rel.owner_rels_path == "xl/webextensions/_rels/taskpanes.xml.rels"

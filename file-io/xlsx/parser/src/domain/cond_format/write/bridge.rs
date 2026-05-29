@@ -290,10 +290,10 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.end_element("colorScale");
         }
         CFRule::DataBar {
+            id,
             data_bar,
             priority,
             stop_if_true,
-            ..
         } => {
             w.attr("type", "dataBar");
             w.attr_num("priority", *priority);
@@ -364,9 +364,8 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             }
             w.end_element("dataBar");
             // Write x14:id extension linking to extended databar properties
-            if let Some(ref ext_id) = data_bar.ext_id
-                && data_bar_has_x14_payload(data_bar)
-            {
+            if data_bar_has_x14_payload(data_bar) {
+                let ext_id = data_bar.ext_id.as_deref().unwrap_or(id);
                 w.start_element("extLst").end_attrs();
                 w.start_element("ext")
                     .attr(
@@ -701,6 +700,7 @@ mod tests {
         assert!(xml.contains("<borderColor rgb=\"FF222222\"/>"));
         assert!(xml.contains("<negativeFillColor rgb=\"FFFF0000\"/>"));
         assert!(xml.contains("<axisColor rgb=\"FF000000\"/>"));
+        assert!(xml.contains("<x14:id>rule-1</x14:id>"));
     }
 
     #[test]

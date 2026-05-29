@@ -7,13 +7,11 @@ use super::{CalcMode, CalcSettings};
 /// XLSX export policy: Mog never emits `xl/calcChain.xml`. Calc chains are an
 /// Excel engine cache, not authoritative workbook state. Formula cached results
 /// are emitted from modeled cell values, while workbook calculation flags remain
-/// user/model-controlled settings.
+/// user/model-controlled settings. The typed `calcPr` fields themselves are
+/// authoritative workbook metadata, so an imported `calcId` stays current until
+/// the live calculation settings are changed by the workbook model.
 pub fn calc_settings_from_domain(calc_props: &domain_types::CalculationProperties) -> CalcSettings {
-    let ooxml_calc_pr: ooxml_types::workbook::CalcPr = calc_props.clone().into();
-    ooxml_types::workbook::CalcPr {
-        calc_id: Some(0),
-        ..ooxml_calc_pr
-    }
+    calc_props.clone().into()
 }
 
 /// Write calcPr section.

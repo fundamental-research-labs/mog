@@ -213,6 +213,38 @@ fn imported_calc_chain_is_diagnosed_and_never_replayed() {
 }
 
 #[test]
+fn imported_calc_id_is_typed_workbook_state_while_calc_chain_cache_is_dropped() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![make_formula_cell(
+            0,
+            0,
+            "SUM(B1:C1)",
+            DomainValue::Number(FiniteF64::new(3.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let input_bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let input_bytes = inject_calc_id(&input_bytes, 191029);
+    let input_bytes = inject_stale_calc_chain_part(&input_bytes);
+
+    let (parsed, _diagnostics) =
+        crate::parse_xlsx_to_output(&input_bytes).expect("parse xlsx with calcId");
+    let exported_bytes = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive =
+        crate::XlsxArchive::new(&exported_bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"calcId="191029""#));
+    assert_no_calc_chain_package_parts(&archive, &workbook_rels, &content_types);
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_workbook_rels_without_shared_strings_are_repaired_when_text_cells_emit_sst() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
@@ -249,6 +281,24 @@ fn assert_clean_calc_pr(workbook_xml: &str) {
     assert!(!workbook_xml.contains(r#"fullCalcOnLoad="1""#));
     assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
     assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
+}
+
+fn inject_calc_id(bytes: &[u8], calc_id: u32) -> Vec<u8> {
+    let archive = crate::XlsxArchive::new(bytes).expect("source XLSX should be readable");
+    let mut zip = crate::write::zip_writer::ZipWriter::with_compression(
+        crate::write::CompressionMethod::Deflate(1),
+    );
+    for entry in archive.entries() {
+        let data = if entry.name == "xl/workbook.xml" {
+            let xml = String::from_utf8(archive.read_file(&entry.name).unwrap()).unwrap();
+            xml.replace(r#"calcId="0""#, &format!(r#"calcId="{calc_id}""#))
+                .into_bytes()
+        } else {
+            archive.read_file(&entry.name).unwrap()
+        };
+        zip.add_file(&entry.name, data);
+    }
+    zip.finish().expect("zip workbook calcId fixture")
 }
 
 fn inject_stale_calc_chain_part(bytes: &[u8]) -> Vec<u8> {

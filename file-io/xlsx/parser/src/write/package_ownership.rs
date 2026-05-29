@@ -63,18 +63,6 @@ pub struct CurrentStateOwnerPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FallbackOwnerPolicy {
-    pub owner_id: XlsxPackageOwnerId,
-    pub package_part_patterns: &'static [&'static str],
-    pub export_action: XlsxExportAction,
-    pub diagnostic_code: &'static str,
-    pub diagnostic_severity: XlsxDiagnosticSeverity,
-    pub diagnostic_reason: XlsxDiagnosticReason,
-    pub continuation: XlsxDiagnosticContinuation,
-    pub required_tests: &'static [XlsxOwnerPolicyRequiredTest],
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuxiliaryPackagePartPolicy {
     InertOpaqueAuxiliary,
     TypedOwned,
@@ -113,7 +101,7 @@ pub enum ApiExposureLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OpaqueFallbackPolicy {
+pub enum OpaquePackagePolicy {
     None,
     OwnerScopedInert,
     DiagnosticDrop,
@@ -135,7 +123,7 @@ pub struct OoxmlOwnershipRow {
     pub production_writer: &'static str,
     pub package_feature_owner: Option<PackageFeatureOwner>,
     pub auxiliary_policy: Option<AuxiliaryPackagePartPolicy>,
-    pub opaque_fallback_policy: OpaqueFallbackPolicy,
+    pub opaque_package_policy: OpaquePackagePolicy,
     pub unsupported_diagnostic_policy: &'static str,
     pub dirty_invalidation_triggers: &'static [&'static str],
     pub semantic_references: &'static [&'static str],
@@ -1055,48 +1043,6 @@ pub const CURRENT_STATE_OWNER_POLICY_TABLE: &[CurrentStateOwnerPolicy] = &[
     },
 ];
 
-pub const FALLBACK_OWNER_POLICY_TABLE: &[FallbackOwnerPolicy] = &[
-    FallbackOwnerPolicy {
-        owner_id: XlsxPackageOwnerId::UnknownInertPackageData,
-        package_part_patterns: &[
-            "customXml/*",
-            "docProps/thumbnail.*",
-            "docMetadata/LabelInfo.xml",
-        ],
-        export_action: XlsxExportAction::PreserveInertArtifact,
-        diagnostic_code: "xlsx.unknownInert.preserved",
-        diagnostic_severity: XlsxDiagnosticSeverity::Info,
-        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
-        continuation: XlsxDiagnosticContinuation::ExportContinued,
-        required_tests: ALL_OWNER_POLICY_TESTS,
-    },
-    FallbackOwnerPolicy {
-        owner_id: XlsxPackageOwnerId::ActiveContent,
-        package_part_patterns: &[
-            "xl/vbaProject.bin",
-            "xl/activeX/*",
-            "_xmlsignatures/*",
-            "add-in and executable-capable package adjuncts",
-        ],
-        export_action: XlsxExportAction::BlockedExport,
-        diagnostic_code: "xlsx.activeContent.blocked",
-        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
-        diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
-        continuation: XlsxDiagnosticContinuation::ExportFailed,
-        required_tests: ALL_OWNER_POLICY_TESTS,
-    },
-    FallbackOwnerPolicy {
-        owner_id: XlsxPackageOwnerId::UnknownInertPackageData,
-        package_part_patterns: &["unmatched imported package part"],
-        export_action: XlsxExportAction::DiagnosticDrop,
-        diagnostic_code: "xlsx.ownerPolicy.unmatched",
-        diagnostic_severity: XlsxDiagnosticSeverity::Error,
-        diagnostic_reason: XlsxDiagnosticReason::UnmatchedOwnerPolicy,
-        continuation: XlsxDiagnosticContinuation::ExportFailed,
-        required_tests: ALL_OWNER_POLICY_TESTS,
-    },
-];
-
 pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
     OoxmlOwnershipRow {
         surface: "workbook package, root MCE compatibility attributes, sheets, defined names, calc settings, protection, custom views",
@@ -1124,7 +1070,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::from_parse_output workbook/sheet writers",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::UnsupportedNeedsModel),
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "unsupported MustUnderstand/AlternateContent branches are diagnosed at the MCE resolver; chartsheets/dialogsheets and calcChain gaps use unsupported-needs-model or intentional-recalculation-drop diagnostics",
         dirty_invalidation_triggers: &[
             "sheet add/delete/reorder",
@@ -1165,7 +1111,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::sheet and domain worksheet feature writers",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "typed-owned-partial for partial worksheet models; unsupported-needs-model-dropped for unmodeled active containers",
         dirty_invalidation_triggers: &[
             "cell/range mutation",
@@ -1202,7 +1148,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "domain::styles::write, domain::strings::write, theme writer",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "typed-owned-partial for unsupported style/theme/rich-text children",
         dirty_invalidation_triggers: &[
             "cell style mutation",
@@ -1237,7 +1183,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::from_parse_output::style_remap + sheet_builder",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: None,
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "missing current style IDs are omitted instead of emitting invalid cellXfs references",
         dirty_invalidation_triggers: &[
             "cell style mutation",
@@ -1274,7 +1220,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "domain::tables::write; connection writer when modeled",
         package_feature_owner: Some(PackageFeatureOwner::ConnectionsAndQueryTables),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "unsupported-external-capable-dropped for refresh/external-capable connection behavior",
         dirty_invalidation_triggers: &[
             "table mutation",
@@ -1309,7 +1255,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "drawing/chart writers and package graph",
         package_feature_owner: Some(PackageFeatureOwner::DrawingObjects),
         auxiliary_policy: None,
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "typed-owned-partial for unsupported chart/drawing children; opaque ChartEx replay is unmodified-import preservation only; unsupported-needs-model for chartsheets until plan 01",
         dirty_invalidation_triggers: &[
             "drawing object mutation",
@@ -1343,7 +1289,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "domain comment/control/OLE writers",
         package_feature_owner: Some(PackageFeatureOwner::Comments),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "unsupported-active-dropped for ActiveX/executable controls; typed-owned-partial for comments/OLE gaps",
         dirty_invalidation_triggers: &[
             "comment mutation",
@@ -1379,7 +1325,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::from_parse_output::form_controls and controls/VML writers",
         package_feature_owner: Some(PackageFeatureOwner::Controls),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
-        opaque_fallback_policy: OpaqueFallbackPolicy::None,
+        opaque_package_policy: OpaquePackagePolicy::None,
         unsupported_diagnostic_policy: "macro-bearing controls use security-disabled diagnostics; imported controls are preserved as non-editable typed objects",
         dirty_invalidation_triggers: &[
             "form control add/update/delete",
@@ -1417,7 +1363,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::from_parse_output::ole_objects and OLE/VML writers",
         package_feature_owner: Some(PackageFeatureOwner::OleObjects),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
-        opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
+        opaque_package_policy: OpaquePackagePolicy::OwnerScopedInert,
         unsupported_diagnostic_policy: "linked OLE uses security-disabled diagnostics; missing embedded bytes use missing-part diagnostics",
         dirty_invalidation_triggers: &[
             "OLE object add/delete/update",
@@ -1454,7 +1400,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "diagnostic/drop; never emits enabled ActiveX",
         package_feature_owner: Some(PackageFeatureOwner::Controls),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "security-disabled-active-content diagnostic with package part and relationship fingerprints",
         dirty_invalidation_triggers: &[
             "ActiveX XML detected",
@@ -1496,7 +1442,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "pivot/slicer/metadata writers with owner-scoped richData package emission",
         package_feature_owner: Some(PackageFeatureOwner::PivotTables),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::DiagnosticsOnly),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "unsupported-needs-model-dropped for stale metadata/richData, timelines/data-model/cube gaps until their owners model them",
         dirty_invalidation_triggers: &[
             "pivot mutation",
@@ -1528,7 +1474,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "write::from_parse_output external_links writer",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ExternalCapable),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "orphan external links and unsupported DDE/OLE refresh behaviors are diagnosed; stale opaque externalLink parts are rejected",
         dirty_invalidation_triggers: &[
             "external link add/update/delete",
@@ -1566,7 +1512,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "domain::metadata::write and package graph",
         package_feature_owner: Some(PackageFeatureOwner::DocumentProperties),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
-        opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
+        opaque_package_policy: OpaquePackagePolicy::OwnerScopedInert,
         unsupported_diagnostic_policy: "inert-opaque-preserved for vetted inert custom XML/XML map package parts; unsupported-needs-model for editable XML-map bindings",
         dirty_invalidation_triggers: &[
             "document property mutation",
@@ -1607,7 +1553,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "VBA project quarantine-preserve; external links only when typed owner is available; unsupported active adjuncts diagnostic/drop",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveQuarantined),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "VBA is preserved as quarantined active content with package closure and no interpretation/execution; other unsupported active or external-capable adjuncts are diagnosed/dropped; shared-workbook revisions are diagnostics-only unless a typed revision model owns invalidation",
         dirty_invalidation_triggers: &[
             "external reference mutation",
@@ -1637,7 +1583,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "package graph opaque replay for the closed webextensions cluster",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
-        opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
+        opaque_package_policy: OpaquePackagePolicy::OwnerScopedInert,
         unsupported_diagnostic_policy: "web extension taskpane cluster is preserved opaquely; semantic editing requires a future typed model",
         dirty_invalidation_triggers: &["web extension package mutation"],
         semantic_references: &[
@@ -1676,7 +1622,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         production_writer: "package graph modeled workbook relationship/content type and raw sidecar bytes when valid",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::TypedOwned),
-        opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "malformed or invalidated volatile dependencies are dropped; other adjuncts remain unsupported-needs-model-dropped with package part and relationship fingerprints",
         dirty_invalidation_triggers: &["detected package adjunct", "owning typed feature mutation"],
         semantic_references: &["timeline cache id", "revision id", "XML map id"],
@@ -1705,10 +1651,6 @@ pub fn current_state_owner_policy_for_part(path: &str) -> Option<&'static Curren
 
 pub fn all_current_state_owner_policies() -> &'static [CurrentStateOwnerPolicy] {
     CURRENT_STATE_OWNER_POLICY_TABLE
-}
-
-pub fn fallback_owner_policies() -> &'static [FallbackOwnerPolicy] {
-    FALLBACK_OWNER_POLICY_TABLE
 }
 
 pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {

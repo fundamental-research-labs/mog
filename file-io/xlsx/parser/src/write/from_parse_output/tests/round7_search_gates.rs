@@ -51,6 +51,26 @@ fn review_terms_are_not_old_context_storage_names() {
     );
 }
 
+#[test]
+fn package_owner_policy_has_no_generic_fallback_surface() {
+    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut matches = Vec::new();
+    let terms = [
+        ["Fallback", "Owner", "Policy"].concat(),
+        ["FALLBACK", "_OWNER", "_POLICY"].concat(),
+        ["fallback", "_owner", "_policies"].concat(),
+        ["Opaque", "Fallback", "Policy"].concat(),
+        ["opaque", "_fallback", "_policy"].concat(),
+    ];
+    collect_term_matches(&src_dir, &terms, &mut matches);
+
+    assert!(
+        matches.is_empty(),
+        "generic package fallback policy surfaces must stay removed; use explicit owner-scoped policies:\n{}",
+        matches.join("\n")
+    );
+}
+
 fn collect_term_matches(dir: &Path, terms: &[String], matches: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;

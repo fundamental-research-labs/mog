@@ -57,6 +57,11 @@ pub enum PackageIntegrityIssue {
     MissingOpaquePartBytes {
         part_path: String,
     },
+    MissingOpaqueRelationshipReference {
+        part_path: String,
+        rels_path: String,
+        relationship_id: String,
+    },
 }
 
 impl std::fmt::Display for PackageIntegrityIssue {
@@ -119,6 +124,14 @@ impl std::fmt::Display for PackageIntegrityIssue {
             Self::MissingOpaquePartBytes { part_path } => {
                 write!(f, "opaque part {part_path} has no bytes to emit")
             }
+            Self::MissingOpaqueRelationshipReference {
+                part_path,
+                rels_path,
+                relationship_id,
+            } => write!(
+                f,
+                "opaque part {part_path} references relationship {relationship_id}, but owner relationship part {rels_path} does not define it"
+            ),
         }
     }
 }

@@ -68,6 +68,7 @@ impl ResolvedPackageGraph {
 
         for part in self.parts.values() {
             validate_modeled_part_owner_relationship(part, &self.relationships, &mut errors);
+            validate_opaque_part_relationship_references(part, &self.relationships, &mut errors);
         }
 
         if errors.is_empty() {
@@ -100,12 +101,22 @@ impl ResolvedPackageGraph {
         target: &str,
     ) -> Option<&str> {
         let owner_rels_path = owner_rels_path(owner);
+        let target_part_path = relationship_target_part_path(&owner_rels_path, target)
+            .ok()
+            .flatten();
         self.relationships
             .iter()
             .find(|rel| {
                 rel.owner_rels_path == owner_rels_path
                     && rel.relationship_type == relationship_type
-                    && rel.target == target
+                    && (rel.target == target
+                        || target_part_path.as_ref().is_some_and(|target_part_path| {
+                            relationship_target_part_path(&owner_rels_path, &rel.target)
+                                .ok()
+                                .flatten()
+                                .as_ref()
+                                == Some(target_part_path)
+                        }))
             })
             .map(|rel| rel.id.as_str())
     }

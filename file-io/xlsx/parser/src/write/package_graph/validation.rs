@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
@@ -15,9 +15,14 @@ use super::{
     REL_SHARED_STRINGS, REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE,
     REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
     REL_WORKSHEET_CUSTOM_PROPERTY, ResolvedPackageRelationship, is_external_target_mode,
-    owner_part_path_from_rels_path, relationship_target_part_path,
+    owner_part_path_from_rels_path, owner_rels_path, relationship_target_part_path,
 };
 use crate::infra::opc::OoxmlRelationshipType;
+use quick_xml::events::Event;
+use quick_xml::reader::Reader;
+
+const OFFICE_RELATIONSHIPS_NS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 pub(super) fn validate_required_content_type(
     part: &PackagePart,
@@ -69,6 +74,137 @@ pub(super) fn validate_known_relationship_owner(
         relationship_type: rel.relationship_type.clone(),
         expected_owner: expected_owner_description(&rel_type).to_string(),
     });
+}
+
+pub(super) fn validate_opaque_part_relationship_references(
+    part: &PackagePart,
+    relationships: &[ResolvedPackageRelationship],
+    errors: &mut Vec<PackageIntegrityIssue>,
+) {
+    if !matches!(part.kind, PackagePartKind::Opaque) {
+        return;
+    }
+    if !opaque_part_may_contain_xml_relationship_references(part) {
+        return;
+    }
+    let Some(bytes) = part.bytes.as_deref() else {
+        errors.push(PackageIntegrityIssue::MissingOpaquePartBytes {
+            part_path: part.path.clone(),
+        });
+        return;
+    };
+    let Some(referenced_ids) = xml_relationship_reference_ids(bytes) else {
+        return;
+    };
+    if referenced_ids.is_empty() {
+        return;
+    }
+
+    let owner_rels = owner_rels_path(&super::PackageOwner::Part {
+        path: part.path.clone(),
+    });
+    let defined_ids: HashSet<&str> = relationships
+        .iter()
+        .filter(|relationship| relationship.owner_rels_path == owner_rels)
+        .map(|relationship| relationship.id.as_str())
+        .collect();
+
+    for relationship_id in referenced_ids {
+        if !defined_ids.contains(relationship_id.as_str()) {
+            errors.push(PackageIntegrityIssue::MissingOpaqueRelationshipReference {
+                part_path: part.path.clone(),
+                rels_path: owner_rels.clone(),
+                relationship_id,
+            });
+        }
+    }
+}
+
+fn opaque_part_may_contain_xml_relationship_references(part: &PackagePart) -> bool {
+    let path = part.path.to_ascii_lowercase();
+    if path.ends_with(".xml") || path.ends_with(".vml") {
+        return true;
+    }
+    part.content_type.as_deref().is_some_and(|content_type| {
+        let content_type = content_type.to_ascii_lowercase();
+        content_type.contains("xml") || content_type.contains("vml")
+    })
+}
+
+fn xml_relationship_reference_ids(bytes: &[u8]) -> Option<HashSet<String>> {
+    let mut ids = HashSet::new();
+    let mut relationship_prefixes = HashSet::from(["r".to_string()]);
+    let mut reader = Reader::from_reader(bytes);
+    reader.config_mut().trim_text(false);
+    reader.config_mut().expand_empty_elements = false;
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(start)) | Ok(Event::Empty(start)) => {
+                let attrs: Vec<(Vec<u8>, String)> = start
+                    .attributes()
+                    .flatten()
+                    .filter_map(|attr| {
+                        let key = attr.key.as_ref().to_vec();
+                        let value = attr.unescape_value().ok()?.into_owned();
+                        Some((key, value))
+                    })
+                    .collect();
+
+                for (key, value) in &attrs {
+                    if let Some(prefix) = relationship_namespace_prefix(key, value) {
+                        relationship_prefixes.insert(prefix);
+                    }
+                }
+                for (key, value) in attrs {
+                    if is_relationship_reference_attr(&key, &relationship_prefixes) {
+                        ids.insert(value);
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(
+                Event::End(_)
+                | Event::Text(_)
+                | Event::CData(_)
+                | Event::Comment(_)
+                | Event::Decl(_)
+                | Event::PI(_)
+                | Event::DocType(_),
+            ) => {}
+            Err(_) => return None,
+        }
+        buf.clear();
+    }
+
+    Some(ids)
+}
+
+fn relationship_namespace_prefix(key: &[u8], value: &str) -> Option<String> {
+    if value != OFFICE_RELATIONSHIPS_NS {
+        return None;
+    }
+    key.strip_prefix(b"xmlns:")
+        .and_then(|prefix| std::str::from_utf8(prefix).ok())
+        .filter(|prefix| !prefix.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn is_relationship_reference_attr(key: &[u8], relationship_prefixes: &HashSet<String>) -> bool {
+    let Some(separator) = key.iter().position(|byte| *byte == b':') else {
+        return false;
+    };
+    let (prefix, local_name_with_separator) = key.split_at(separator);
+    let local_name = &local_name_with_separator[1..];
+    let Ok(prefix) = std::str::from_utf8(prefix) else {
+        return false;
+    };
+    relationship_prefixes.contains(prefix)
+        && matches!(
+            local_name,
+            b"id" | b"embed" | b"link" | b"dm" | b"lo" | b"qs" | b"cs"
+        )
 }
 
 fn relationship_owner_kind(

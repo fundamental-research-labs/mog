@@ -44,11 +44,14 @@ pub(super) struct StyleExportPlan {
 #[must_use]
 pub(super) fn uses_imported_workbook_style_authority(output: &ParseOutput) -> bool {
     current_workbook_stylesheet(output).is_some()
+        && (output.style_palette.is_empty() || output_references_cell_style_ids(output))
 }
 
 #[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
-    if let Some(stylesheet) = current_workbook_stylesheet(output) {
+    if uses_imported_workbook_style_authority(output)
+        && let Some(stylesheet) = current_workbook_stylesheet(output)
+    {
         let cell_xfs_count = stylesheet.cell_xfs.len() as u32;
         return StyleExportPlan {
             writer: styles_writer_from_workbook_stylesheet(stylesheet),
@@ -87,7 +90,10 @@ fn current_workbook_stylesheet(output: &ParseOutput) -> Option<WorkbookStyleshee
 fn output_references_cell_style_ids(output: &ParseOutput) -> bool {
     output.sheets.iter().any(|sheet| {
         sheet.cells.iter().any(|cell| cell.style_id.is_some())
-            || !sheet.authored_style_runs.is_empty()
+            || sheet
+                .authored_style_runs
+                .iter()
+                .any(|run| run.style_id != 0 || !sheet.cells.is_empty())
             || !sheet.row_styles.is_empty()
             || !sheet.col_styles.is_empty()
             || sheet

@@ -213,6 +213,7 @@ fn roundtrip_row_and_col_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 3,
@@ -222,6 +223,7 @@ fn roundtrip_row_and_col_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
         ],
         ..Default::default()
@@ -302,6 +304,7 @@ fn roundtrip_hidden_rows_and_cols() {
             best_fit: false,
             collapsed: false,
             phonetic: false,
+            ..Default::default()
         }],
         ..Default::default()
     };

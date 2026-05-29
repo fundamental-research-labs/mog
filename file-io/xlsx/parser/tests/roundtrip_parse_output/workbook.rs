@@ -461,6 +461,7 @@ fn roundtrip_comprehensive() {
                     best_fit: false,
                     collapsed: false,
                     phonetic: false,
+                    ..Default::default()
                 }],
                 ..Default::default()
             },

@@ -311,6 +311,30 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             if let Some(show_value) = data_bar.show_value {
                 w.attr("showValue", if show_value { "1" } else { "0" });
             }
+            if let Some(gradient) = data_bar.gradient {
+                w.attr("gradient", if gradient { "1" } else { "0" });
+            }
+            if let Some(show_border) = data_bar.show_border {
+                w.attr("border", if show_border { "1" } else { "0" });
+            }
+            if let Some(direction) = data_bar.direction {
+                w.attr("direction", direction.to_ooxml());
+            }
+            if let Some(match_positive) = data_bar.match_positive_fill_color {
+                w.attr(
+                    "negativeBarColorSameAsPositive",
+                    if match_positive { "1" } else { "0" },
+                );
+            }
+            if let Some(match_positive) = data_bar.match_positive_border_color {
+                w.attr(
+                    "negativeBarBorderColorSameAsPositive",
+                    if match_positive { "1" } else { "0" },
+                );
+            }
+            if let Some(axis_position) = data_bar.axis_position {
+                w.attr("axisPosition", axis_position.to_ooxml());
+            }
             w.end_attrs();
             write_cfvo_from_color_point(w, &data_bar.min_point);
             write_cfvo_from_color_point(w, &data_bar.max_point);
@@ -318,6 +342,26 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.start_element("color")
                 .attr("rgb", &hex_to_argb(&data_bar.positive_color))
                 .self_close();
+            if let Some(color) = &data_bar.border_color {
+                w.start_element("borderColor")
+                    .attr("rgb", &hex_to_argb(color))
+                    .self_close();
+            }
+            if let Some(color) = &data_bar.negative_color {
+                w.start_element("negativeFillColor")
+                    .attr("rgb", &hex_to_argb(color))
+                    .self_close();
+            }
+            if let Some(color) = &data_bar.negative_border_color {
+                w.start_element("negativeBorderColor")
+                    .attr("rgb", &hex_to_argb(color))
+                    .self_close();
+            }
+            if let Some(color) = &data_bar.axis_color {
+                w.start_element("axisColor")
+                    .attr("rgb", &hex_to_argb(color))
+                    .self_close();
+            }
             w.end_element("dataBar");
             // Write x14:id extension linking to extended databar properties
             if let Some(ref ext_id) = data_bar.ext_id

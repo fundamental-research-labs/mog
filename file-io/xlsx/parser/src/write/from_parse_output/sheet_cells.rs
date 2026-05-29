@@ -88,7 +88,10 @@ pub(super) fn apply_cells(
         writer.add_cell(writer_cell);
     }
     for run in &sheet_data.authored_style_runs {
-        if let Some(style_id) = style_remapper.emitted_cell_xf_id(run.style_id) {
+        if let Some(style_id) = style_remapper
+            .emitted_cell_xf_id(run.style_id)
+            .or_else(|| (run.style_id == 0).then_some(0))
+        {
             writer.add_authored_style_run(AuthoredStyleRun {
                 start_row: run.start_row,
                 start_col: run.start_col,

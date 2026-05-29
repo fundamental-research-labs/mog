@@ -343,6 +343,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 1,
@@ -352,6 +353,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 2,
@@ -361,6 +363,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 3,
@@ -370,6 +373,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 4,
@@ -379,6 +383,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
             ColDimension {
                 col: 5,
@@ -388,6 +393,7 @@ fn roundtrip_spacer_content_dimensions() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             },
         ],
         row_heights: vec![

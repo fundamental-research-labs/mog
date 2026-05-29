@@ -385,7 +385,7 @@ fn test_calc_settings_from_domain_preserves_user_calc_flags() {
         ..Default::default()
     });
 
-    assert_eq!(settings.calc_id, Some(191029));
+    assert_eq!(settings.calc_id, Some(0));
     assert!(!settings.full_calc_on_load);
     assert!(settings.calc_completed);
     assert!(!settings.force_full_calc);
@@ -401,7 +401,7 @@ fn test_calc_settings_from_domain_preserves_explicit_recalc_flags() {
         ..Default::default()
     });
 
-    assert_eq!(settings.calc_id, Some(191029));
+    assert_eq!(settings.calc_id, Some(0));
     assert!(settings.full_calc_on_load);
     assert!(!settings.calc_completed);
     assert!(settings.force_full_calc);

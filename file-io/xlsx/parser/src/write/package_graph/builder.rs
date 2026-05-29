@@ -201,7 +201,7 @@ impl PackageGraphBuilder {
             let owner = PackageOwner::Part {
                 path: part.path.clone(),
             };
-            for hint in &part.relationships {
+            for hint in opaque_part_relationship_hints(metadata, part) {
                 if is_external_target_mode(hint.target_mode.as_deref()) {
                     self.add_relationship(PackageRelationship {
                         owner: owner.clone(),
@@ -449,7 +449,7 @@ fn validated_webextension_cluster_paths(metadata: &PackageFidelityMetadata) -> H
     }
 
     let mut cluster = HashSet::from(["xl/webextensions/taskpanes.xml".to_string()]);
-    for hint in &taskpanes.relationships {
+    for hint in opaque_part_relationship_hints(metadata, taskpanes) {
         if hint.relationship_type != REL_WEB_EXTENSION {
             continue;
         }
@@ -474,4 +474,30 @@ fn validated_webextension_cluster_paths(metadata: &PackageFidelityMetadata) -> H
     }
 
     cluster
+}
+
+fn opaque_part_relationship_hints<'a>(
+    metadata: &'a PackageFidelityMetadata,
+    part: &'a domain_types::OpaquePackagePartHint,
+) -> Vec<&'a domain_types::PackageRelationshipHint> {
+    let normalized_path = normalize_part_path(&part.path);
+    let mut hints: Vec<&domain_types::PackageRelationshipHint> =
+        part.relationships.iter().collect();
+    if let Some(info) = metadata
+        .part_relationships
+        .iter()
+        .find(|info| normalize_part_path(&info.owner_path) == normalized_path)
+    {
+        for hint in &info.relationships {
+            if !hints.iter().any(|existing| {
+                existing.id == hint.id
+                    && existing.relationship_type == hint.relationship_type
+                    && existing.target == hint.target
+                    && existing.target_mode == hint.target_mode
+            }) {
+                hints.push(hint);
+            }
+        }
+    }
+    hints
 }

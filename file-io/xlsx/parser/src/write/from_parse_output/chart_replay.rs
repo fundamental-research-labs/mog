@@ -89,7 +89,8 @@ pub(super) fn chart_ex_allows_opaque_replay(
     let Some(replay) = chart_spec.chart_ex_replay.as_ref() else {
         return false;
     };
-    if replay.original_xml.is_empty() || replay.original_path.trim_start_matches('/') != chart_path {
+    if replay.original_xml.is_empty() || replay.original_path.trim_start_matches('/') != chart_path
+    {
         return false;
     }
     if !chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path) {
@@ -204,12 +205,10 @@ fn chart_ex_relationships_are_policy_allowed(
         else {
             return false;
         };
-        let Some(target_path) = crate::infra::opc::resolve_relationship_target(
-            Some(chart_path),
-            target,
-        )
-        .ok()
-        .map(|path| path.trim_start_matches('/').to_string())
+        let Some(target_path) =
+            crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
+                .ok()
+                .map(|path| path.trim_start_matches('/').to_string())
         else {
             return false;
         };

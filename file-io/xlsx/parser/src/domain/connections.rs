@@ -88,19 +88,14 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
     let refresh_xml =
         extract_direct_child_element_xml(query_table_xml, b"queryTable", b"queryTableRefresh");
     let refresh_bytes = refresh_xml.as_deref().map(str::as_bytes);
-    let refresh_tag = refresh_bytes.and_then(|refresh| {
-        find_gt_simd(refresh, 0).map(|end| &refresh[..end])
-    });
+    let refresh_tag =
+        refresh_bytes.and_then(|refresh| find_gt_simd(refresh, 0).map(|end| &refresh[..end]));
 
     let fields_xml = refresh_bytes.and_then(|refresh| {
         extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"queryTableFields")
     });
     let deleted_fields_xml = refresh_bytes.and_then(|refresh| {
-        extract_direct_child_element_xml(
-            refresh,
-            b"queryTableRefresh",
-            b"queryTableDeletedFields",
-        )
+        extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"queryTableDeletedFields")
     });
 
     let mut fields = Vec::new();
@@ -195,8 +190,7 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
         headers_in_last_refresh: refresh_tag
             .and_then(|t| parse_bool_attr_opt(t, b"headersInLastRefresh=\""))
             .unwrap_or(false),
-        unbound_columns_left: refresh_tag
-            .and_then(|t| parse_u32_attr(t, b"unboundColumnsLeft=\"")),
+        unbound_columns_left: refresh_tag.and_then(|t| parse_u32_attr(t, b"unboundColumnsLeft=\"")),
         unbound_columns_right: refresh_tag
             .and_then(|t| parse_u32_attr(t, b"unboundColumnsRight=\"")),
         sort_state_xml: refresh_bytes.and_then(|refresh| {
@@ -261,11 +255,7 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
             attr_bool(&mut xml, "sendLocale", olap.send_locale);
             attr_u32(&mut xml, "rowDrillCount", olap.row_drill_count);
             attr_bool_opt(&mut xml, "serverFill", olap.server_fill);
-            attr_bool_opt(
-                &mut xml,
-                "serverNumberFormat",
-                olap.server_number_format,
-            );
+            attr_bool_opt(&mut xml, "serverNumberFormat", olap.server_number_format);
             attr_bool_opt(&mut xml, "serverFont", olap.server_font);
             attr_bool_opt(&mut xml, "serverFontColor", olap.server_font_color);
             xml.push_str("/>");
@@ -837,10 +827,7 @@ fn write_text_pr(xml: &mut String, text_pr: &TextConnectionProperties) {
         return;
     }
     xml.push('>');
-    xml.push_str(&format!(
-        r#"<textFields count="{}">"#,
-        text_pr.fields.len()
-    ));
+    xml.push_str(&format!(r#"<textFields count="{}">"#, text_pr.fields.len()));
     for field in &text_pr.fields {
         xml.push_str("<textField");
         attr_opt(xml, "type", field.field_type.as_deref());

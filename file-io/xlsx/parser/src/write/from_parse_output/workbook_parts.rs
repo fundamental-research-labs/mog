@@ -7,8 +7,7 @@ use crate::write::package_graph::{PackageOwner, ResolvedPackageGraph};
 use crate::write::pivot_writer;
 use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{
-    DefinedNameDef, REL_EXTERNAL_LINK, REL_SLICER_CACHE, REL_WORKSHEET, SheetDef,
-    WorkbookWriter,
+    DefinedNameDef, REL_EXTERNAL_LINK, REL_SLICER_CACHE, REL_WORKSHEET, SheetDef, WorkbookWriter,
 };
 
 pub(super) struct WorkbookXmlParts {
@@ -125,11 +124,7 @@ pub(super) fn build_workbook_xml(
         .filter_map(|(idx, _)| {
             let target = format!("slicerCaches/slicerCache{}.xml", idx + 1);
             package_graph
-                .relationship_id(
-                    &PackageOwner::Workbook,
-                    REL_SLICER_CACHE,
-                    &target,
-                )
+                .relationship_id(&PackageOwner::Workbook, REL_SLICER_CACHE, &target)
                 .map(str::to_string)
         })
         .collect();
@@ -216,10 +211,7 @@ fn add_inventory_sheet_defs(
         {
             continue;
         }
-        let relationship_type = entry
-            .relationship_type
-            .as_deref()
-            .unwrap_or(REL_WORKSHEET);
+        let relationship_type = entry.relationship_type.as_deref().unwrap_or(REL_WORKSHEET);
         let target = workbook_relative_target(part_path);
         let r_id = package_graph
             .relationship_id(&PackageOwner::Workbook, relationship_type, &target)

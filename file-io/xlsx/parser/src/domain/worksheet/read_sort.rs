@@ -46,7 +46,9 @@ fn parse_sort_state_element(
     }
 
     let closing = crate::infra::scanner::find_closing_tag(slice, b"sortState", 0)?;
-    let full_end = find_gt_simd(slice, closing).map(|p| p + 1).unwrap_or(slice.len());
+    let full_end = find_gt_simd(slice, closing)
+        .map(|p| p + 1)
+        .unwrap_or(slice.len());
     state.ext_lst_raw =
         extract_direct_child_element_xml(&slice[..full_end], b"sortState", b"extLst");
     let inner = &slice[tag_end_offset + 1..closing];

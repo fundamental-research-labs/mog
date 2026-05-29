@@ -95,12 +95,9 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         object: ole,
         embedding_path: embedding.path.clone(),
         embedding_bytes: embedding.bytes.clone(),
-        embedding_content_type: embedding
-            .content_type
-            .clone()
-            .unwrap_or_else(|| {
-                crate::infra::imported_parts::infer_content_type(&embedding.path).to_string()
-            }),
+        embedding_content_type: embedding.content_type.clone().unwrap_or_else(|| {
+            crate::infra::imported_parts::infer_content_type(&embedding.path).to_string()
+        }),
         embedding_relationship_type: embedding_relationship_type(&embedding.kind).to_string(),
         embedding_relationship_id_hint: embedding
             .relationship_id

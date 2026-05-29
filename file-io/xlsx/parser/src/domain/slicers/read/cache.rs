@@ -268,9 +268,7 @@ fn extract_direct_child_ext_lst(body: &[u8]) -> Option<String> {
         let name_end = tag_name_end(body, name_start);
         if local_name(&body[name_start..name_end]) == b"extLst" {
             let close = find_closing_tag(body, b"extLst", tag_end)?;
-            let close_end = find_gt_simd(body, close)
-                .map(|p| p + 1)
-                .unwrap_or(close);
+            let close_end = find_gt_simd(body, close).map(|p| p + 1).unwrap_or(close);
             return std::str::from_utf8(&body[lt..close_end])
                 .ok()
                 .map(|s| s.to_string());
@@ -454,11 +452,10 @@ mod tests {
 
     #[test]
     fn ext_lst_extraction_preserves_nested_xml_and_closing_tag() {
-        let ext =
-            extract_last_ext_lst(
-                br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#
-            )
-                .unwrap();
+        let ext = extract_last_ext_lst(
+            br#"<before/><extLst><ext><nested value="1"/></ext></extLst><after/>"#,
+        )
+        .unwrap();
         assert_eq!(ext, r#"<extLst><ext><nested value="1"/></ext></extLst>"#);
     }
 }

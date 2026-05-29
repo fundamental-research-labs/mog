@@ -1,8 +1,8 @@
 use crate::infra::scanner::{find_gt_simd, find_lt_simd, find_tag_simd};
-use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml::{
     parse_bool_attr, parse_bool_attr_with_default, parse_string_attr, parse_u32_attr,
 };
+use crate::infra::xml_fragment::extract_element_bounds;
 
 use super::super::types::*;
 
@@ -75,10 +75,7 @@ pub(super) fn extract_direct_child_element_xml(xml: &[u8], tag: &[u8]) -> Option
 
         let mut name_end = name_start;
         while name_end < xml.len()
-            && !matches!(
-                xml[name_end],
-                b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/'
-            )
+            && !matches!(xml[name_end], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/')
         {
             name_end += 1;
         }

@@ -301,7 +301,7 @@ fn roundtrip_hidden_rows_and_cols() {
             hidden: true,
             best_fit: false,
             collapsed: false,
-                phonetic: false,
+            phonetic: false,
         }],
         ..Default::default()
     };

@@ -4,8 +4,8 @@
 //! definition XML files.
 
 use super::types::*;
-use domain_types::domain::pivot::{PivotRawXmlAttribute, PivotTableOoxmlPreservation};
 use crate::write::xml_writer::XmlWriter;
+use domain_types::domain::pivot::{PivotRawXmlAttribute, PivotTableOoxmlPreservation};
 
 /// SpreadsheetML namespace URI
 const SPREADSHEETML_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -176,7 +176,10 @@ impl PivotTableWriter {
         // Start pivotTableDefinition
         w.start_element("pivotTableDefinition")
             .attr("xmlns", SPREADSHEETML_NS)
-            .apply_preserved_attrs(&self.ooxml_preservation.root_namespace_declarations, &["xmlns"])
+            .apply_preserved_attrs(
+                &self.ooxml_preservation.root_namespace_declarations,
+                &["xmlns"],
+            )
             .attr("name", &self.name)
             .attr_num("cacheId", self.cache_id)
             .attr_bool("dataOnRows", self.data_on_rows)

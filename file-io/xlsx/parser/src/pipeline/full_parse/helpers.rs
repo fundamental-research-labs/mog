@@ -283,7 +283,8 @@ mod tests {
 
     #[test]
     fn stylesheet_ext_capture_returns_direct_root_child_only() {
-        let xml = br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        let xml =
+            br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
             <cellXfs count="1"><xf><extLst><ext uri="xf"/></extLst></xf></cellXfs>
             <x:extLst xmlns:x="urn:test"><x:ext uri="root"/></x:extLst>
         </styleSheet>"#;

@@ -19,8 +19,7 @@ pub const REL_THEME: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
 
 /// Strict relationship type for theme.
-pub const REL_THEME_STRICT: &str =
-    "http://purl.oclc.org/ooxml/officeDocument/relationships/theme";
+pub const REL_THEME_STRICT: &str = "http://purl.oclc.org/ooxml/officeDocument/relationships/theme";
 
 pub fn is_theme_relationship_type(rel_type: &str) -> bool {
     rel_type == REL_THEME || rel_type == REL_THEME_STRICT

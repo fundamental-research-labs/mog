@@ -113,7 +113,13 @@ pub(super) fn validate_modeled_part_invariants(
     for entry in archive.entries() {
         let path = entry.name.as_str();
         if path.starts_with("xl/theme/") && path.ends_with(".xml") {
-            require_relationship(relationships_by_part, workbook_rels, REL_THEME, path, errors);
+            require_relationship(
+                relationships_by_part,
+                workbook_rels,
+                REL_THEME,
+                path,
+                errors,
+            );
             require_content_type(archive, path, CT_THEME, errors);
         }
         if is_relationship_reference_part(path) && !is_worksheet_part(path) {

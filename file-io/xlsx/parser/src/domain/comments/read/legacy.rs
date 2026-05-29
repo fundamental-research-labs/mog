@@ -193,8 +193,7 @@ fn parse_child_text(xml: &[u8], tag_name: &[u8]) -> Option<String> {
     let start = find_tag_simd(xml, tag_name, 0)?;
     let open_end = find_gt_simd(xml, start)?;
     let close_start = find_closing_tag(xml, tag_name, start)?;
-    (open_end < close_start)
-        .then(|| decode_xml_entities(&xml[open_end + 1..close_start]))
+    (open_end < close_start).then(|| decode_xml_entities(&xml[open_end + 1..close_start]))
 }
 
 #[cfg(test)]

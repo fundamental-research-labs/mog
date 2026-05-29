@@ -7,10 +7,10 @@ use crate::output::results::{
     CELL_TYPE_VAL_FORMULA as CELL_TYPE_FORMULA, CELL_TYPE_VAL_NUMBER as CELL_TYPE_NUMBER,
     CELL_TYPE_VAL_STRING as CELL_TYPE_STRING,
 };
-use crate::output::results::{FullCellData, FullParsedSheet};
 use crate::output::results::{
     CellMetadataBlock, CellMetadataRecord, MetadataOutput, MetadataTypeOutput,
 };
+use crate::output::results::{FullCellData, FullParsedSheet};
 use domain_types::ImportedCellProjectionRole;
 use value_types::{CellError, CellValue};
 

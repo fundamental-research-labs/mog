@@ -245,7 +245,10 @@ impl PivotTableOoxmlPreservation {
         self.root_namespace_declarations.is_empty()
             && self.root_attributes.is_empty()
             && self.children.is_empty()
-            && self.fields.iter().all(PivotFieldOoxmlPreservation::is_empty)
+            && self
+                .fields
+                .iter()
+                .all(PivotFieldOoxmlPreservation::is_empty)
             && self.row_item_attributes.iter().all(Vec::is_empty)
             && self.col_item_attributes.iter().all(Vec::is_empty)
             && self.relationship.is_none()

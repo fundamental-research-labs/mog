@@ -4,8 +4,8 @@
 //! canonical `ooxml_types` types, providing full OOXML fidelity for round-trip.
 
 use ooxml_types::drawings::{
-    BlipFill, ColorTransform, CompoundLine, CompressionState, DashStyle, DrawingColor,
-    DrawingFill, Emu, FillMode, GradientFill, GradientPathType, GradientStop, LineCap, LineDash,
+    BlipFill, ColorTransform, CompoundLine, CompressionState, DashStyle, DrawingColor, DrawingFill,
+    Emu, FillMode, GradientFill, GradientPathType, GradientStop, LineCap, LineDash,
     LineEndProperties, LineEndSize, LineEndType, LineFill, LineJoin, Outline, PatternFill,
     PenAlignment, PresetColorVal, PresetPatternVal, RelativeRect, SchemeColor, SolidFill,
     SourceRect, StAngle, StPercentage, StPositiveFixedPercentageDecimal, SystemColorVal,

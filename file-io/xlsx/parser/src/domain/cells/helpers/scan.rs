@@ -81,7 +81,8 @@ pub(crate) fn scan_cell<'a>(
             // Self-closing <c ... />
             let end = pos + 2;
 
-            if has_explicit_s && cm_val.is_none() && vm_val.is_none() && !has_ph && !has_explicit_t {
+            if has_explicit_s && cm_val.is_none() && vm_val.is_none() && !has_ph && !has_explicit_t
+            {
                 return Some(ScanResult {
                     cell: None,
                     end,

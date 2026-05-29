@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 9] =
-    ["id", "embed", "link", "dm", "lo", "qs", "cs", "blip", "relid"];
+const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 9] = [
+    "id", "embed", "link", "dm", "lo", "qs", "cs", "blip", "relid",
+];
 
 /// Returns true when raw XML contains a namespaced relationship-bearing
 /// attribute such as `r:id`, `r:embed`, `r:link`, SmartArt `r:dm`/`r:lo`

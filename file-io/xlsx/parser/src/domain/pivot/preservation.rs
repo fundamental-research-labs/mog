@@ -6,7 +6,7 @@ use crate::infra::scanner::{
 };
 use crate::infra::xml::decode_xml_entities_string;
 use domain_types::domain::pivot::{
-    PivotFieldOoxmlPreservation, PivotRawXmlBlock, PivotRawXmlAttribute,
+    PivotFieldOoxmlPreservation, PivotRawXmlAttribute, PivotRawXmlBlock,
     PivotTableOoxmlPreservation,
 };
 
@@ -64,7 +64,10 @@ const TYPED_ROOT_CHILDREN: &[&str] = &[
     "pivotTableStyleInfo",
 ];
 
-pub(crate) fn capture_root_preservation(xml: &[u8], root: ElementSpan) -> PivotTableOoxmlPreservation {
+pub(crate) fn capture_root_preservation(
+    xml: &[u8],
+    root: ElementSpan,
+) -> PivotTableOoxmlPreservation {
     let root_tag = &xml[root.start..root.tag_end];
     let mut preservation = PivotTableOoxmlPreservation {
         root_namespace_declarations: collect_attrs(root_tag, &[], true),
@@ -135,7 +138,9 @@ pub(crate) fn collect_attrs(
 }
 
 pub(crate) fn local_name(name: &str) -> &str {
-    name.rsplit_once(':').map(|(_, local)| local).unwrap_or(name)
+    name.rsplit_once(':')
+        .map(|(_, local)| local)
+        .unwrap_or(name)
 }
 
 fn collect_direct_children(
@@ -207,7 +212,11 @@ fn collect_item_attrs(xml: &[u8], field: ElementSpan) -> Vec<Vec<PivotRawXmlAttr
         let Some(tag_end) = find_gt_simd(xml, start) else {
             break;
         };
-        out.push(collect_attrs(&xml[start..tag_end + 1], ITEM_TYPED_ATTRS, false));
+        out.push(collect_attrs(
+            &xml[start..tag_end + 1],
+            ITEM_TYPED_ATTRS,
+            false,
+        ));
         pos = tag_end + 1;
     }
     out
@@ -257,9 +266,7 @@ fn element_name_at(xml: &[u8], lt: usize) -> Option<String> {
         return None;
     }
     let start = pos;
-    while pos < xml.len()
-        && !matches!(xml[pos], b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'>')
-    {
+    while pos < xml.len() && !matches!(xml[pos], b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'>') {
         pos += 1;
     }
     (pos > start).then(|| String::from_utf8_lossy(&xml[start..pos]).to_string())

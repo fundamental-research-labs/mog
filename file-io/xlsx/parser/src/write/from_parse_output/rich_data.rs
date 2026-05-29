@@ -40,12 +40,8 @@ pub(super) fn register_parts(
 }
 
 fn metadata_preserves_rich_data_cluster(output: &ParseOutput) -> bool {
-    output
-        .metadata
-        .as_ref()
-        .is_some_and(|metadata| {
-            super::metadata::imported_metadata_xml_is_current(output, metadata)
-                || (!metadata.value_metadata.is_empty()
-                    && metadata.imported_metadata_xml.is_none())
-        })
+    output.metadata.as_ref().is_some_and(|metadata| {
+        super::metadata::imported_metadata_xml_is_current(output, metadata)
+            || (!metadata.value_metadata.is_empty() && metadata.imported_metadata_xml.is_none())
+    })
 }

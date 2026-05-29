@@ -1,7 +1,10 @@
 const X14_DV_CF_EXT_URI: &str = "{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}";
 const X14_GENERATED_CHILDREN: &[&str] = &["dataValidations", "conditionalFormattings"];
 
-pub(super) fn merge_ext_lst_entries(raw_ext_lst: Option<&str>, generated_parts: &[String]) -> String {
+pub(super) fn merge_ext_lst_entries(
+    raw_ext_lst: Option<&str>,
+    generated_parts: &[String],
+) -> String {
     if let Some(raw_xml) = raw_ext_lst
         && generated_parts.is_empty()
         && is_self_closing_ext_lst(raw_xml)
@@ -140,7 +143,9 @@ fn find_first_child_bounds_by_local_name(xml: &str, local_name: &str) -> Option<
     while let Some(rel) = xml[pos..].find('<') {
         let start = pos + rel;
         if matches!(xml.as_bytes().get(start + 1), Some(b'/' | b'!' | b'?')) {
-            pos = xml[start..].find('>').map_or(xml.len(), |end| start + end + 1);
+            pos = xml[start..]
+                .find('>')
+                .map_or(xml.len(), |end| start + end + 1);
             continue;
         }
         let tag_end = xml[start..].find('>').map(|end| start + end + 1)?;

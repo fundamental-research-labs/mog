@@ -53,9 +53,7 @@ pub use crate::domain::content_types::write::{
     CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS, CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_SLICER,
     CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME, CT_VBA,
     CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, CT_XML, ContentTypeDefault,
-    ContentTypeOverride,
-    ContentTypesManager,
-    create_xlsx_content_types,
+    ContentTypeOverride, ContentTypesManager, create_xlsx_content_types,
 };
 pub use crate::domain::controls::write::{
     CONTENT_TYPE_CTRL_PROP, ControlsWriter, REL_CTRL_PROP, ctrl_prop_relationship_target,
@@ -114,8 +112,8 @@ pub use relationships::{
     REL_PERSON, REL_PIVOT_CACHE, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS,
     REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THEME,
     REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET, RELATIONSHIPS_NS, Relationship,
-    RelationshipManager, create_root_rels, create_root_rels_full, create_root_rels_full_with_custom,
-    create_sheet_rels, create_workbook_rels,
+    RelationshipManager, create_root_rels, create_root_rels_full,
+    create_root_rels_full_with_custom, create_sheet_rels, create_workbook_rels,
 };
 pub use sheet::{
     CellData, CellValue, ColWidth, MergeRange, RowDef, Selection, SheetFormatPr, SheetPane,

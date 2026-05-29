@@ -216,11 +216,8 @@ pub fn full_parse_result_to_parse_output(
     if let Some(raw_metadata_xml) = result.raw_metadata_xml.as_ref() {
         let metadata_for_import =
             metadata.get_or_insert_with(domain_types::WorkbookMetadata::default);
-        let imported = imported_metadata_xml(
-            raw_metadata_xml,
-            metadata_for_import,
-            &sheet_data_vec,
-        );
+        let imported =
+            imported_metadata_xml(raw_metadata_xml, metadata_for_import, &sheet_data_vec);
         metadata_for_import.imported_metadata_xml = Some(imported);
     }
 

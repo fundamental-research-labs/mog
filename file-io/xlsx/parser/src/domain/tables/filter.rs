@@ -8,8 +8,8 @@
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    extract_direct_child_element_xml,
-    parse_bool_attr_opt, parse_bytes_attr, parse_f64_attr, parse_string_attr, parse_u32_attr,
+    extract_direct_child_element_xml, parse_bool_attr_opt, parse_bytes_attr, parse_f64_attr,
+    parse_string_attr, parse_u32_attr,
 };
 
 use super::sort::SortState;
@@ -323,11 +323,15 @@ impl FilterColumn {
             col.filters = Filters::parse(child.as_bytes());
         }
 
-        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"customFilters") {
+        if let Some(child) =
+            extract_direct_child_element_xml(xml, b"filterColumn", b"customFilters")
+        {
             col.custom_filters = CustomFilters::parse(child.as_bytes());
         }
 
-        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"dynamicFilter") {
+        if let Some(child) =
+            extract_direct_child_element_xml(xml, b"filterColumn", b"dynamicFilter")
+        {
             col.dynamic_filter = DynamicFilter::parse(child.as_bytes());
         }
 
@@ -335,7 +339,8 @@ impl FilterColumn {
             col.top10 = Top10Filter::parse(child.as_bytes());
         }
 
-        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"colorFilter") {
+        if let Some(child) = extract_direct_child_element_xml(xml, b"filterColumn", b"colorFilter")
+        {
             col.color_filter = ColorFilter::parse(child.as_bytes());
         }
 
@@ -389,7 +394,9 @@ impl AutoFilter {
         // Find the end of autoFilter element
         let af_end = find_closing_tag(xml, b"autoFilter", af_tag_end).unwrap_or(xml.len());
         let content = &xml[af_tag_end + 1..af_end];
-        let full_end = find_gt_simd(xml, af_end).map(|p| p + 1).unwrap_or(xml.len());
+        let full_end = find_gt_simd(xml, af_end)
+            .map(|p| p + 1)
+            .unwrap_or(xml.len());
         auto_filter.ext_lst_raw =
             extract_direct_child_element_xml(&xml[af_start..full_end], b"autoFilter", b"extLst");
 

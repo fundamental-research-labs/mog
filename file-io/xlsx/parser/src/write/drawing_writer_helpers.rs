@@ -102,9 +102,7 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                         &position,
                         &size,
                         ooxml.edit_as.as_deref(),
-                        ooxml
-                            .extent_emu_cx
-                            .zip(ooxml.extent_emu_cy),
+                        ooxml.extent_emu_cx.zip(ooxml.extent_emu_cy),
                         drawing_obj,
                     );
                     let restored_client_data = crate::domain::drawings::write::ClientData {

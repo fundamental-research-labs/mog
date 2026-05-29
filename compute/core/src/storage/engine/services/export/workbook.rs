@@ -687,8 +687,7 @@ pub(super) fn export_custom_workbook_views_xml(stores: &EngineStores) -> Option<
         _ => return None,
     };
 
-    let Some(Out::Any(Any::String(json))) =
-        settings_map.get(&txn, KEY_CUSTOM_WORKBOOK_VIEWS_XML)
+    let Some(Out::Any(Any::String(json))) = settings_map.get(&txn, KEY_CUSTOM_WORKBOOK_VIEWS_XML)
     else {
         return None;
     };

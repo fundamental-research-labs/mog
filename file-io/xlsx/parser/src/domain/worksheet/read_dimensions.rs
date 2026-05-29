@@ -17,7 +17,8 @@ fn parse_cols(xml: &[u8]) -> Vec<ColWidth> {
     let mut col_widths = Vec::new();
     let mut pos = 0;
     while let Some(cols_start) = find_tag_simd(xml, b"cols", pos) {
-        let Some((_, cols_end)) = crate::infra::xml_fragment::extract_element_bounds(xml, cols_start)
+        let Some((_, cols_end)) =
+            crate::infra::xml_fragment::extract_element_bounds(xml, cols_start)
         else {
             break;
         };

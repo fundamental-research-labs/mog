@@ -1,9 +1,9 @@
 use super::outcome::ConversionStatus;
 use super::*;
 use crate::domain::drawings::{
-    Connection as ReadConnection, ConnectorNonVisual, DrawingColor, Fill, NonVisualProps, Outline,
-    OpaqueDrawingContent, PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle, SolidFill,
-    SpreadsheetConnector, StyleRef as ReadStyleRef, Transform2D as ReadXf,
+    Connection as ReadConnection, ConnectorNonVisual, DrawingColor, Fill, NonVisualProps,
+    OpaqueDrawingContent, Outline, PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle,
+    SolidFill, SpreadsheetConnector, StyleRef as ReadStyleRef, Transform2D as ReadXf,
 };
 use ooxml_types::drawings as ooxml;
 use ooxml_types::drawings::{
@@ -840,8 +840,7 @@ fn conversion_outcome_reports_opaque_unknown_as_passthrough() {
         kind_hint: Some("widget".into()),
     };
 
-    let outcome =
-        convert_drawing_content_with_outcome(&DrawingContent::OpaqueUnknown(opaque));
+    let outcome = convert_drawing_content_with_outcome(&DrawingContent::OpaqueUnknown(opaque));
 
     assert_eq!(outcome.status, ConversionStatus::OpaquePassthrough);
     assert_eq!(outcome.relationship_ids, ["rIdWidget", "rIdData"]);

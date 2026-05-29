@@ -27,8 +27,8 @@ use super::xml_writer::XmlWriter;
 use crate::domain::print::write::PrintWriter;
 use domain_types::{AuthoredStyleRun, WorksheetSemanticContainers};
 pub use ooxml_types::worksheet::{
-    ColWidth, MergeRange, OutlineProperties, Selection, SheetPane, SheetProperties, SheetView,
-    SheetCalcPr, SheetViewType,
+    ColWidth, MergeRange, OutlineProperties, Selection, SheetCalcPr, SheetPane, SheetProperties,
+    SheetView, SheetViewType,
 };
 use std::collections::BTreeMap;
 

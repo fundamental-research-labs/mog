@@ -9,8 +9,8 @@ use crate::domain::pivot::reader::attrs::{
 };
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{
-    parse_bool_attr, parse_bool_attr_opt, parse_bool_attr_with_default, parse_i32_attr, parse_string_attr,
-    parse_u32_attr,
+    parse_bool_attr, parse_bool_attr_opt, parse_bool_attr_with_default, parse_i32_attr,
+    parse_string_attr, parse_u32_attr,
 };
 
 pub(crate) fn parse_pivot_fields(xml: &[u8]) -> Vec<PivotField> {

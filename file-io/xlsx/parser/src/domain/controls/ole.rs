@@ -356,9 +356,8 @@ fn enrich_ole_relationships(
             if let Some((path, kind)) = relationships::ole_embedding_target(&relationships, r_id) {
                 obj.data_path = Some(path.to_string());
                 obj.embedding_kind = Some(kind.as_str().to_string());
-                obj.embedding_content_type = Some(
-                    crate::infra::imported_parts::infer_content_type(path).to_string(),
-                );
+                obj.embedding_content_type =
+                    Some(crate::infra::imported_parts::infer_content_type(path).to_string());
             }
         }
     }

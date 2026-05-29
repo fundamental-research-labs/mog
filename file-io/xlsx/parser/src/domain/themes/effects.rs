@@ -6,8 +6,8 @@
 use ooxml_types::drawings::{
     Bevel, BevelPresetType, BlurEffect, Camera, EffectContainer, EffectContainerType, EffectList,
     EffectProperties, Glow, InnerShadow, LightRig, LightRigDirection, LightRigType, OuterShadow,
-    PresetCameraType, PresetMaterialType, PresetShadow, PresetShadowVal, RectAlignment,
-    Reflection, Rotation3D, Scene3D, Shape3D, SoftEdge, StAngle, StFixedAngle, StPercentage,
+    PresetCameraType, PresetMaterialType, PresetShadow, PresetShadowVal, RectAlignment, Reflection,
+    Rotation3D, Scene3D, Shape3D, SoftEdge, StAngle, StFixedAngle, StPercentage,
     StPositiveCoordinate, StPositiveFixedAngle, StPositiveFixedPercentageDecimal,
 };
 use ooxml_types::themes::EffectStyleItem;
@@ -79,8 +79,9 @@ pub fn parse_effect_style_list_canonical(xml: &[u8]) -> Vec<EffectStyleItem> {
 }
 
 fn is_self_closing_start_tag(xml: &[u8], start: usize) -> bool {
-    find_gt_simd(xml, start)
-        .is_some_and(|gt| gt > start && xml[..gt].iter().rev().find(|&&b| !b" \t\r\n".contains(&b)) == Some(&b'/'))
+    find_gt_simd(xml, start).is_some_and(|gt| {
+        gt > start && xml[..gt].iter().rev().find(|&&b| !b" \t\r\n".contains(&b)) == Some(&b'/')
+    })
 }
 
 fn parse_effect_container(xml: &[u8]) -> EffectContainer {

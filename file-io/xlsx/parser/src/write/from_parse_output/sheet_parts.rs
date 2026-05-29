@@ -207,8 +207,10 @@ pub(super) fn build_sheet_parts(
             .as_deref()
             .is_some_and(|value| value.eq_ignore_ascii_case("strict"));
         if let Some(ref af) = sheet_data.auto_filter {
-            let xml =
-                crate::domain::auto_filter::write::write_auto_filter_xml_with_strict(af, strict_output);
+            let xml = crate::domain::auto_filter::write::write_auto_filter_xml_with_strict(
+                af,
+                strict_output,
+            );
             sheet_writer.set_auto_filter_xml(xml);
         }
 
@@ -408,18 +410,16 @@ pub(super) fn build_sheet_parts(
                 global_chart_ex_idx
             };
             let chart_path = format!("xl/charts/chartEx{idx}.xml");
-            let chart_ex_xml = if chart_replay::chart_ex_allows_opaque_replay(
-                chart_spec,
-                &chart_path,
-            ) {
-                chart_spec
-                    .chart_ex_replay
-                    .as_ref()
-                    .map(|replay| replay.original_xml.clone())
-                    .unwrap_or_else(|| serialize_chart_ex_space(chart_ex_space))
-            } else {
-                serialize_chart_ex_space(chart_ex_space)
-            };
+            let chart_ex_xml =
+                if chart_replay::chart_ex_allows_opaque_replay(chart_spec, &chart_path) {
+                    chart_spec
+                        .chart_ex_replay
+                        .as_ref()
+                        .map(|replay| replay.original_xml.clone())
+                        .unwrap_or_else(|| serialize_chart_ex_space(chart_ex_space))
+                } else {
+                    serialize_chart_ex_space(chart_ex_space)
+                };
             chart_ex_entries_for_sheet.push(ChartExEntry {
                 global_idx: idx,
                 source_idx,

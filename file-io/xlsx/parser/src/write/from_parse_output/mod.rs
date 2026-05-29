@@ -727,9 +727,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     ) {
                         chart_frame
                             .and_then(|frame| frame.raw_alternate_content.clone())
-                            .map(|raw_xml| crate::domain::drawings::McAlternateContent {
-                                raw_xml,
-                            })
+                            .map(|raw_xml| crate::domain::drawings::McAlternateContent { raw_xml })
                     } else {
                         None
                     };
@@ -1090,7 +1088,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             crate::write::package_graph::ModeledWorkbookGraphOptions {
                 sheet_count: output.sheets.len(),
                 has_theme,
-                theme_part_path: output.theme.as_ref().and_then(|theme| theme.theme_part_path.clone()),
+                theme_part_path: output
+                    .theme
+                    .as_ref()
+                    .and_then(|theme| theme.theme_part_path.clone()),
                 theme_relationship_id_hint: output
                     .theme
                     .as_ref()
@@ -1950,8 +1951,7 @@ fn reject_unsupported_package_profile(output: &ParseOutput) -> Result<(), WriteE
     }
 
     let strict_profile = profile.is_some_and(|value| value.eq_ignore_ascii_case("Strict"));
-    let strict_conformance =
-        conformance.is_some_and(|value| value.eq_ignore_ascii_case("strict"));
+    let strict_conformance = conformance.is_some_and(|value| value.eq_ignore_ascii_case("strict"));
     if strict_profile || strict_conformance {
         return Err(WriteError::PackageIntegrity(
             "OOXML Strict package export is not enabled for the full modeled XLSX surface"

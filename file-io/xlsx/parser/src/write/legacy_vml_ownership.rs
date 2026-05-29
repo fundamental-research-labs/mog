@@ -15,15 +15,9 @@ pub(crate) enum LegacyVmlOwnerKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LegacyVmlDisposition {
-    Modeled {
-        owner: LegacyVmlOwnerKind,
-    },
-    MixedModeledLegacyVml {
-        owners: Vec<LegacyVmlOwnerKind>,
-    },
-    UnsupportedLegacyVml {
-        reason: &'static str,
-    },
+    Modeled { owner: LegacyVmlOwnerKind },
+    MixedModeledLegacyVml { owners: Vec<LegacyVmlOwnerKind> },
+    UnsupportedLegacyVml { reason: &'static str },
 }
 
 pub(crate) fn classify_legacy_vml_part(
@@ -32,7 +26,8 @@ pub(crate) fn classify_legacy_vml_part(
 ) -> LegacyVmlDisposition {
     let mut owners = Vec::new();
 
-    if has_header_footer_image_shape(xml) || role == LegacyVmlRelationshipRole::LegacyDrawingHeaderFooter
+    if has_header_footer_image_shape(xml)
+        || role == LegacyVmlRelationshipRole::LegacyDrawingHeaderFooter
     {
         push_owner(&mut owners, LegacyVmlOwnerKind::HeaderFooterImages);
     }
@@ -128,8 +123,7 @@ fn has_header_footer_image_shape(xml: &[u8]) -> bool {
         b"id=\"CF\"",
         b"id=\"RF\"",
     ];
-    position_ids.iter().any(|needle| contains(xml, needle))
-        && contains(xml, b"o:relid=\"")
+    position_ids.iter().any(|needle| contains(xml, needle)) && contains(xml, b"o:relid=\"")
 }
 
 fn contains_vml_shape(xml: &[u8]) -> bool {

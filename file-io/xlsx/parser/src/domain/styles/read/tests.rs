@@ -431,7 +431,10 @@ fn test_parse_cell_styles_with_ext_lst() {
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].effective_name(), "Normal");
     assert_eq!(
-        result[0].ext_lst.as_ref().and_then(|e| e.raw_xml.as_deref()),
+        result[0]
+            .ext_lst
+            .as_ref()
+            .and_then(|e| e.raw_xml.as_deref()),
         Some(r#"<extLst><ext uri="style"/></extLst>"#)
     );
 }
@@ -455,7 +458,10 @@ fn test_parse_dxfs_with_ext_lst() {
     let result = parse_dxfs(xml);
     assert_eq!(result.len(), 1);
     assert_eq!(
-        result[0].ext_lst.as_ref().and_then(|e| e.raw_xml.as_deref()),
+        result[0]
+            .ext_lst
+            .as_ref()
+            .and_then(|e| e.raw_xml.as_deref()),
         Some(r#"<extLst><ext uri="dxf"/></extLst>"#)
     );
 }

@@ -93,21 +93,21 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
     let workbook_relationships = WorkbookRelationships::new(&workbook_relationships);
     let rels_map: std::collections::HashMap<String, (String, String, String)> =
         workbook_relationships
-        .pivot_cache_definitions()
-        .into_iter()
-        .filter_map(|rel| {
-            rel.target.path().map(|path| {
-                (
-                    rel.id.clone(),
+            .pivot_cache_definitions()
+            .into_iter()
+            .filter_map(|rel| {
+                rel.target.path().map(|path| {
                     (
-                        rel.rel_type_uri.clone(),
-                        rel.target.raw().to_string(),
-                        workbook_pivot_cache_definition_path(rel.target.raw(), path),
-                    ),
-                )
+                        rel.id.clone(),
+                        (
+                            rel.rel_type_uri.clone(),
+                            rel.target.raw().to_string(),
+                            workbook_pivot_cache_definition_path(rel.target.raw(), path),
+                        ),
+                    )
+                })
             })
-        })
-        .collect();
+            .collect();
 
     for (cache_id, r_id) in extract_pivot_cache_entries(&workbook_xml) {
         let Some((workbook_relationship_type, workbook_relationship_target, def_path)) =

@@ -119,10 +119,7 @@ fn append_suppressed_auxiliary_diagnostics<'a>(
     }
 }
 
-fn append_workbook_disposition_diagnostics(
-    result: &FullParseResult,
-    dropped: &mut Vec<String>,
-) {
+fn append_workbook_disposition_diagnostics(result: &FullParseResult, dropped: &mut Vec<String>) {
     dropped.extend(
         result
             .unsupported_workbook_elements

@@ -257,7 +257,8 @@ fn pivot_cache_source_binding_matches(
     if fidelity.source_sheet.is_none() && fidelity.source_range.is_none() {
         return true;
     }
-    fidelity.source_sheet == cache_src.source_sheet && fidelity.source_range == cache_src.source_range
+    fidelity.source_sheet == cache_src.source_sheet
+        && fidelity.source_range == cache_src.source_range
 }
 
 fn build_pivot_table_entries(

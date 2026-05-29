@@ -96,7 +96,9 @@ impl SortState {
 
         // Parse child sortCondition elements
         let sort_end = find_closing_tag(xml, b"sortState", tag_end).unwrap_or(xml.len());
-        let full_end = find_gt_simd(xml, sort_end).map(|p| p + 1).unwrap_or(xml.len());
+        let full_end = find_gt_simd(xml, sort_end)
+            .map(|p| p + 1)
+            .unwrap_or(xml.len());
         sort_state.ext_lst_raw =
             extract_direct_child_element_xml(&xml[..full_end], b"sortState", b"extLst");
         let content = &xml[tag_end + 1..sort_end];

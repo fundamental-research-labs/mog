@@ -22,8 +22,8 @@ use crate::write::sheet::SheetFormatPr;
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::styles::ColorDef;
 use ooxml_types::worksheet::{
-    ColWidth, MergeRange, OutlineProperties, PageSetupProperties, Selection, SheetPane,
-    SheetCalcPr, SheetProperties, SheetView,
+    ColWidth, MergeRange, OutlineProperties, PageSetupProperties, Selection, SheetCalcPr,
+    SheetPane, SheetProperties, SheetView,
 };
 
 // ============================================================================

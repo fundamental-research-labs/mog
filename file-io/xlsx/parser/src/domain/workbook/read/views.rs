@@ -44,11 +44,8 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
         let parse_string = |attr: &[u8]| -> Option<String> {
             find_attr_simd(elem, attr, 0).and_then(|p| {
                 let vs = p + attr.len();
-                extract_quoted_value(elem, vs).and_then(|(s, e)| {
-                    std::str::from_utf8(&elem[s..e])
-                        .ok()
-                        .map(ToOwned::to_owned)
-                })
+                extract_quoted_value(elem, vs)
+                    .and_then(|(s, e)| std::str::from_utf8(&elem[s..e]).ok().map(ToOwned::to_owned))
             })
         };
 
@@ -78,9 +75,10 @@ pub fn parse_workbook_views(xml: &[u8]) -> Vec<WorkbookView> {
                 .and_then(|(s, e)| std::str::from_utf8(&elem[s..e]).ok().map(|s| s.to_string()))
         });
         view.auto_filter_date_grouping = parse_bool(b"autoFilterDateGrouping=\"", true);
-        view.ext_lst = extract_direct_ext_lst(full_elem).map(|raw_xml| ooxml_types::ExtensionList {
-            raw_xml: Some(raw_xml),
-        });
+        view.ext_lst =
+            extract_direct_ext_lst(full_elem).map(|raw_xml| ooxml_types::ExtensionList {
+                raw_xml: Some(raw_xml),
+            });
 
         views.push(view);
         offset = elem_end;
@@ -153,10 +151,16 @@ mod tests {
 </bookViews></workbook>"#;
 
         let views = parse_workbook_views(xml);
-        assert_eq!(views[0].visibility, ooxml_types::workbook::Visibility::Hidden);
+        assert_eq!(
+            views[0].visibility,
+            ooxml_types::workbook::Visibility::Hidden
+        );
         assert!(views[0].minimized);
         assert_eq!(
-            views[0].ext_lst.as_ref().and_then(|ext| ext.raw_xml.as_deref()),
+            views[0]
+                .ext_lst
+                .as_ref()
+                .and_then(|ext| ext.raw_xml.as_deref()),
             Some("<extLst><ext uri=\"{u}\"/></extLst>")
         );
     }

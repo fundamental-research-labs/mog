@@ -90,8 +90,8 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
                 let choice_end = extract_element_bounds(xml, choice_start)
                     .map(|(_, end)| end)
                     .unwrap_or(xml.len());
-                let content_end = closing_start_before(xml, content_start, choice_end)
-                    .unwrap_or(choice_end);
+                let content_end =
+                    closing_start_before(xml, content_start, choice_end).unwrap_or(choice_end);
 
                 return McAlternateContentOutcome::ChoiceSelected(McBranch {
                     start: content_start,
@@ -100,10 +100,7 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
                 });
             }
 
-            diagnostics.push(format!(
-                "unsupported mc:Choice Requires='{}'",
-                requires
-            ));
+            diagnostics.push(format!("unsupported mc:Choice Requires='{}'", requires));
         } else {
             diagnostics.push("mc:Choice missing Requires".to_string());
         }
@@ -126,8 +123,8 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
         let fallback_end = extract_element_bounds(xml, fb_start)
             .map(|(_, end)| end)
             .unwrap_or(xml.len());
-        let content_end = closing_start_before(xml, content_start, fallback_end)
-            .unwrap_or(fallback_end);
+        let content_end =
+            closing_start_before(xml, content_start, fallback_end).unwrap_or(fallback_end);
 
         return McAlternateContentOutcome::FallbackSelected(McBranch {
             start: content_start,
@@ -152,8 +149,7 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
 }
 
 fn closing_start_before(xml: &[u8], content_start: usize, element_end: usize) -> Option<usize> {
-    memchr::memrchr(b'<', xml.get(content_start..element_end)?)
-        .map(|offset| content_start + offset)
+    memchr::memrchr(b'<', xml.get(content_start..element_end)?).map(|offset| content_start + offset)
 }
 
 pub fn resolve_mc_alternate_content(
@@ -283,8 +279,8 @@ pub fn resolve_mc_alternate_content_v2(
                 let choice_end = extract_element_bounds(xml, choice_start)
                     .map(|(_, end)| end)
                     .unwrap_or(xml.len());
-                let content_end = closing_start_before(xml, content_start, choice_end)
-                    .unwrap_or(choice_end);
+                let content_end =
+                    closing_start_before(xml, content_start, choice_end).unwrap_or(choice_end);
 
                 return McResolution::Resolved(McBranch {
                     start: content_start,
@@ -318,8 +314,8 @@ pub fn resolve_mc_alternate_content_v2(
         let fallback_end = extract_element_bounds(xml, fb_start)
             .map(|(_, end)| end)
             .unwrap_or(xml.len());
-        let content_end = closing_start_before(xml, content_start, fallback_end)
-            .unwrap_or(fallback_end);
+        let content_end =
+            closing_start_before(xml, content_start, fallback_end).unwrap_or(fallback_end);
 
         return McResolution::Resolved(McBranch {
             start: content_start,
@@ -332,11 +328,13 @@ pub fn resolve_mc_alternate_content_v2(
 }
 
 fn namespace_for_prefix<'a>(prefix: &str, namespaces: Option<&'a NamespaceMap>) -> Option<&'a str> {
-    namespaces.and_then(|ns| ns.get_uri(prefix)).or_else(|| match prefix {
-        "x14" => Some(NS_X14),
-        "x15" => Some(NS_X15),
-        _ => None,
-    })
+    namespaces
+        .and_then(|ns| ns.get_uri(prefix))
+        .or_else(|| match prefix {
+            "x14" => Some(NS_X14),
+            "x15" => Some(NS_X15),
+            _ => None,
+        })
 }
 
 fn parse_mce_processing_diagnostics(
@@ -357,10 +355,7 @@ fn parse_mce_processing_diagnostics(
                 let supported = namespace_for_prefix(prefix, namespaces)
                     .is_some_and(|uri| supported_namespaces.contains(&uri));
                 if !supported {
-                    diagnostics.push(format!(
-                        "unsupported mc:{} prefix '{}'",
-                        label, prefix
-                    ));
+                    diagnostics.push(format!("unsupported mc:{} prefix '{}'", label, prefix));
                 }
             }
         }
@@ -413,8 +408,8 @@ fn resolve_mc_alternate_content_with_policy(
                 let choice_end = extract_element_bounds(xml, choice_start)
                     .map(|(_, end)| end)
                     .unwrap_or(xml.len());
-                let content_end = closing_start_before(xml, content_start, choice_end)
-                    .unwrap_or(choice_end);
+                let content_end =
+                    closing_start_before(xml, content_start, choice_end).unwrap_or(choice_end);
 
                 return McResolution::Resolved(McBranch {
                     start: content_start,
@@ -454,8 +449,8 @@ fn resolve_mc_alternate_content_with_policy(
         let fallback_end = extract_element_bounds(xml, fb_start)
             .map(|(_, end)| end)
             .unwrap_or(xml.len());
-        let content_end = closing_start_before(xml, content_start, fallback_end)
-            .unwrap_or(fallback_end);
+        let content_end =
+            closing_start_before(xml, content_start, fallback_end).unwrap_or(fallback_end);
 
         return McResolution::Resolved(McBranch {
             start: content_start,

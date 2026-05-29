@@ -106,7 +106,9 @@ pub fn build_opc_package_inventory(
 
     collect_content_type_diagnostics(&mut inventory, content_type_overrides, &package_paths);
     classify_profile(&mut inventory);
-    inventory.entries.sort_by(|a, b| a.normalized_path.cmp(&b.normalized_path));
+    inventory
+        .entries
+        .sort_by(|a, b| a.normalized_path.cmp(&b.normalized_path));
     inventory
         .relationships
         .sort_by(|a, b| a.owner.cmp(&b.owner).then(a.id.cmp(&b.id)));
@@ -117,9 +119,7 @@ fn collect_disposition_diagnostic(inventory: &mut OpcPackageInventory, path: &st
     if is_digital_signature_path(path) {
         inventory.diagnostics.push(OpcInventoryDiagnostic {
             code: "digital_signature_dropped",
-            message: format!(
-                "digital signature package content is invalidated by rewrite: {path}"
-            ),
+            message: format!("digital signature package content is invalidated by rewrite: {path}"),
             part: Some(path.to_string()),
             relationship_id: None,
         });
@@ -129,7 +129,9 @@ fn collect_disposition_diagnostic(inventory: &mut OpcPackageInventory, path: &st
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden) => {
             inventory.diagnostics.push(OpcInventoryDiagnostic {
                 code: "active_content_dropped",
-                message: format!("active package content is not eligible for opaque replay: {path}"),
+                message: format!(
+                    "active package content is not eligible for opaque replay: {path}"
+                ),
                 part: Some(path.to_string()),
                 relationship_id: None,
             });
@@ -221,7 +223,10 @@ fn collect_relationship_sidecar(
                 Err(_) => {
                     inventory.diagnostics.push(OpcInventoryDiagnostic {
                         code: "invalid_internal_target",
-                        message: format!("relationship {} has invalid target {}", rel.id, rel.target),
+                        message: format!(
+                            "relationship {} has invalid target {}",
+                            rel.id, rel.target
+                        ),
                         part: Some(rels_path.to_string()),
                         relationship_id: Some(rel.id.clone()),
                     });
@@ -304,7 +309,10 @@ fn collect_content_type_diagnostics(
         if entry.content_type.is_none() {
             inventory.diagnostics.push(OpcInventoryDiagnostic {
                 code: "missing_content_type",
-                message: format!("package part has no content type: {}", entry.normalized_path),
+                message: format!(
+                    "package part has no content type: {}",
+                    entry.normalized_path
+                ),
                 part: Some(entry.normalized_path),
                 relationship_id: None,
             });
@@ -321,9 +329,10 @@ fn classify_profile(inventory: &mut OpcPackageInventory) {
             .contains("schemas.openxmlformats.org/officeDocument/2006/relationships")
         {
             transitional = true;
-            inventory
-                .profile_evidence
-                .push(format!("transitional relationship {}", rel.relationship_type));
+            inventory.profile_evidence.push(format!(
+                "transitional relationship {}",
+                rel.relationship_type
+            ));
         }
         if rel
             .relationship_type

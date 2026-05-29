@@ -496,9 +496,15 @@ fn validate_mce_prefix_list(
 
     for token in value.split_whitespace() {
         if token == "mc" || token == "xmlns" || token.is_empty() {
-            diagnostics.push(format!("mc:{} contains reserved prefix '{}'", attr_name, token));
+            diagnostics.push(format!(
+                "mc:{} contains reserved prefix '{}'",
+                attr_name, token
+            ));
         } else if !is_xml_prefix_token(token) {
-            diagnostics.push(format!("mc:{} contains invalid prefix '{}'", attr_name, token));
+            diagnostics.push(format!(
+                "mc:{} contains invalid prefix '{}'",
+                attr_name, token
+            ));
         } else if !namespaces.has_prefix(token) {
             diagnostics.push(format!(
                 "mc:{} references undeclared prefix '{}'",

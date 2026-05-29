@@ -13,11 +13,11 @@ use super::relationships;
 use super::types::{ControlAnchor, FormControl, ModernAnchorResult, WorksheetControlRef};
 use super::vml;
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml::{
     MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, parse_string_attr, parse_u32_attr,
     resolve_mc_alternate_content_with_namespace_context,
 };
+use crate::infra::xml_fragment::extract_element_bounds;
 use crate::output::results::FormControlOutput;
 use crate::write::xml_writer::XmlWriter;
 

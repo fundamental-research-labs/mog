@@ -274,7 +274,8 @@ impl DrawingWriter {
                 gf.raw_xml = crate::infra::xml::remap_relationship_attrs(&gf.raw_xml, resolved_ids);
             }
             DrawingObject::OpaqueRaw(raw) => {
-                raw.raw_xml = crate::infra::xml::remap_relationship_attrs(&raw.raw_xml, resolved_ids);
+                raw.raw_xml =
+                    crate::infra::xml::remap_relationship_attrs(&raw.raw_xml, resolved_ids);
             }
             DrawingObject::ContentPart(content_part) => {
                 if let Some(resolved) = resolved_ids.get(&content_part.r_id) {

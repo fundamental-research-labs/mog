@@ -1,7 +1,6 @@
 use crate::domain::styles::write::{
-    AlignmentDef, BorderDef, DxfDef, FillDef, FontDef, GradientStop, GradientType,
-    HorizontalAlign, NumberFormatDef, ProtectionDef, StylesWriter, UnderlineStyle,
-    VerticalAlignRun,
+    AlignmentDef, BorderDef, DxfDef, FillDef, FontDef, GradientStop, GradientType, HorizontalAlign,
+    NumberFormatDef, ProtectionDef, StylesWriter, UnderlineStyle, VerticalAlignRun,
 };
 
 use super::fixtures::{assert_contains_all, assert_in_order, solid_fill, thin_side, xml_string};

@@ -15,9 +15,7 @@ use super::filter::AutoFilter;
 use super::style::{TableStyleInfo, parse_table_style_info};
 
 // Re-export canonical enum types from ooxml_types.
-pub use ooxml_types::tables::{
-    SortOrder, TableFormula, TableType, TotalsRowFunction, XmlColumnPr,
-};
+pub use ooxml_types::tables::{SortOrder, TableFormula, TableType, TotalsRowFunction, XmlColumnPr};
 
 // Typed range refs: custom serde serializer for `Option<compute_parser::RangeRef>`.
 //
@@ -176,8 +174,7 @@ fn extract_ext_lst(xml: &[u8]) -> Option<String> {
     let end = if open_end >= 2 && xml[open_end - 2] == b'/' {
         open_end
     } else {
-        find_closing_tag(xml, b"extLst", start)
-            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))?
+        find_closing_tag(xml, b"extLst", start).and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))?
     };
     String::from_utf8(xml[start..end].to_vec()).ok()
 }

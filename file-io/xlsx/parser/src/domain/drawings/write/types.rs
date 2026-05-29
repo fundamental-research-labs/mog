@@ -14,8 +14,8 @@ pub use ooxml_types::drawings::{
     SourceRect, StyleRef,
 };
 // Re-export geometry/anchor types from ooxml-types.
-pub use ooxml_types::drawings::{CellAnchor, Connection, Extent, Position, Transform2D};
 pub use ooxml_types::drawings::ContentPartRef;
+pub use ooxml_types::drawings::{CellAnchor, Connection, Extent, Position, Transform2D};
 
 // Re-export shared text types from ooxml-types.
 pub use ooxml_types::drawings::{

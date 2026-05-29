@@ -11,8 +11,8 @@
 //! `showButton` attributes that typed OOXML preservation restored).
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr_opt, parse_f64_attr, parse_string_attr, parse_u32_attr};
 use crate::infra::xml::extract_direct_child_element_xml;
+use crate::infra::xml::{parse_bool_attr_opt, parse_f64_attr, parse_string_attr, parse_u32_attr};
 use domain_types::{
     AutoFilter, CalendarType, DateGroupItem, DateTimeGrouping, FilterColumn, OoxmlFilterCondition,
     OoxmlFilterType,
@@ -47,7 +47,10 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
     let af_end = find_closing_tag(slice, b"autoFilter", 0).unwrap_or(slice.len());
     let content = &slice[af_tag_end_local + 1..af_end];
     auto_filter.ext_lst_raw = extract_direct_child_element_xml(
-        &slice[..af_end + b"</autoFilter>".len().min(slice.len().saturating_sub(af_end))],
+        &slice[..af_end
+            + b"</autoFilter>"
+                .len()
+                .min(slice.len().saturating_sub(af_end))],
         b"autoFilter",
         b"extLst",
     );
@@ -77,7 +80,10 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
     // parser in `worksheet::read`, this one intentionally scans inside the
     // autoFilter element — the two parsers are complementary.
     if let Some(sort_xml) = extract_direct_child_element_xml(
-        &slice[..af_end + b"</autoFilter>".len().min(slice.len().saturating_sub(af_end))],
+        &slice[..af_end
+            + b"</autoFilter>"
+                .len()
+                .min(slice.len().saturating_sub(af_end))],
         b"autoFilter",
         b"sortState",
     ) {
@@ -86,10 +92,8 @@ pub fn parse_auto_filter(post_sd: &[u8]) -> Option<AutoFilter> {
             // Reuse the typed sort-state parser from the worksheet module
             // so behavior stays consistent. We pass the slice starting at
             // `<sortState`.
-            auto_filter.sort = super::super::worksheet::read::parse_sort_state_slice(
-                sort_bytes,
-                ss_tag_end,
-            );
+            auto_filter.sort =
+                super::super::worksheet::read::parse_sort_state_slice(sort_bytes, ss_tag_end);
         }
     }
 

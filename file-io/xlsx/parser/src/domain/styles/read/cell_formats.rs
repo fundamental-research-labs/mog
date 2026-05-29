@@ -101,9 +101,7 @@ pub(super) fn parse_cell_styles(xml: &[u8]) -> Vec<CellStyleDef> {
     let mut pos = 0;
 
     while let Some(start) = find_tag_simd(xml, b"cellStyle", pos) {
-        let open_end = find_gt_simd(xml, start)
-            .map(|p| p + 1)
-            .unwrap_or(xml.len());
+        let open_end = find_gt_simd(xml, start).map(|p| p + 1).unwrap_or(xml.len());
 
         if let Some(raw) = RawCellStyle::xml_parse(&xml[start..open_end]) {
             let mut style: CellStyleDef = raw.into();

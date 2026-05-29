@@ -75,12 +75,10 @@ fn is_preservable_non_editable_sheet(entry: &WorkbookSheetPackageInfo) -> bool {
         return false;
     }
 
-    !entry.diagnostics.iter().any(|diag| {
-        !matches!(
-            diag.code.as_str(),
-            "workbook_sheet_unsupported_kind"
-        )
-    })
+    !entry
+        .diagnostics
+        .iter()
+        .any(|diag| !matches!(diag.code.as_str(), "workbook_sheet_unsupported_kind"))
 }
 
 fn is_allowed_cluster_part(path: &str) -> bool {

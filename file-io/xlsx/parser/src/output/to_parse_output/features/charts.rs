@@ -319,7 +319,8 @@ fn chart_drawing_frame_from_anchor(
     anchor_index: usize,
     chart_ex: bool,
 ) -> Option<(AnchorPosition, ChartDrawingFrameOoxmlProps)> {
-    let (position, content, extent_emu, edit_as, client_data, raw_alternate_content) = match anchor {
+    let (position, content, extent_emu, edit_as, client_data, raw_alternate_content) = match anchor
+    {
         DrawingAnchor::TwoCell(tc) => (
             AnchorPosition {
                 anchor_row: tc.from.row,

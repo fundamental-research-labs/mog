@@ -3,7 +3,9 @@ use super::types::SheetFormatPrParsed;
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_bool_attr_opt, parse_string_attr, parse_u32_attr};
 use ooxml_types::styles::ColorDef;
-use ooxml_types::worksheet::{OutlineProperties, PageSetupProperties, SheetCalcPr, SheetProperties};
+use ooxml_types::worksheet::{
+    OutlineProperties, PageSetupProperties, SheetCalcPr, SheetProperties,
+};
 
 /// Parse `<sheetPr><outlinePr .../></sheetPr>` from worksheet XML.
 pub fn parse_outline_properties(xml: &[u8]) -> Option<OutlineProperties> {

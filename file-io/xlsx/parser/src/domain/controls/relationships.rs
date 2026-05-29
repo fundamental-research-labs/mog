@@ -51,9 +51,10 @@ pub(crate) fn ole_embedding_target<'a>(
     WorksheetRelationships::new(relationships)
         .by_id(r_id)
         .and_then(|rel| match rel.rel_type {
-            OoxmlRelationshipType::OleObject => {
-                rel.target.path().map(|path| (path, OleEmbeddingKind::OleBinary))
-            }
+            OoxmlRelationshipType::OleObject => rel
+                .target
+                .path()
+                .map(|path| (path, OleEmbeddingKind::OleBinary)),
             OoxmlRelationshipType::EmbeddedPackage => rel
                 .target
                 .path()

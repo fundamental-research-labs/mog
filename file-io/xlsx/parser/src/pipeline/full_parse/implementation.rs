@@ -43,8 +43,8 @@ use crate::domain::worksheet::read::{
     parse_sheet_calc_pr, parse_sheet_format_pr, parse_sheet_views, parse_sheet_views_ext_lst,
 };
 use crate::infra::error::{ParseContext, ParseMode};
-use crate::infra::opc::opc_target_to_zip_path;
 use crate::infra::opc::REL_HYPERLINK;
+use crate::infra::opc::opc_target_to_zip_path;
 #[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
 use crate::output::results::{
     CommentOutput, ConnectorOutput, FormControlOutput, OleObjectOutput, ParsedTable,
@@ -390,9 +390,11 @@ pub(super) fn parse_xlsx_full_native_impl(
         theme_ext_lst_xml,
         theme_cust_clr_lst_xml,
         theme_root_sibling_order,
-    ) = if let Some(theme_part) =
-        discover_workbook_theme_part(&archive, &workbook_relationships, parsed_content_types.as_ref())
-    {
+    ) = if let Some(theme_part) = discover_workbook_theme_part(
+        &archive,
+        &workbook_relationships,
+        parsed_content_types.as_ref(),
+    ) {
         ctx.set_current_part(&theme_part.path);
         let theme_xml = archive
             .read_file(&theme_part.path)
@@ -413,7 +415,9 @@ pub(super) fn parse_xlsx_full_native_impl(
             theme.root_sibling_order.clone(),
         )
     } else {
-        (None, None, None, None, None, None, None, None, None, None, None, None)
+        (
+            None, None, None, None, None, None, None, None, None, None, None, None,
+        )
     };
     ensure_no_archive_safety_error(&archive)?;
 
@@ -598,12 +602,7 @@ pub(super) fn parse_xlsx_full_native_impl(
                 MAX_WORKSHEET_CELLS,
             )?;
 
-            let (
-                comments,
-                comment_authors,
-                comments_root_namespace_attrs,
-                comments_ext_lst_xml,
-            ) =
+            let (comments, comment_authors, comments_root_namespace_attrs, comments_ext_lst_xml) =
                 parse_comments_for_sheet(&archive, sheet_num);
             let (tables, table_xml_passthroughs) = parse_tables_for_sheet(&archive, sheet_num);
             ensure_count_limit("table", tables.len(), MAX_TABLES)?;
@@ -884,8 +883,11 @@ pub(super) fn parse_xlsx_full_native_impl(
         .ok()
         .map(|xml| crate::domain::calc::count_calc_chain_entries(&xml))
         .unwrap_or(0);
-    let volatile_dependency_part =
-        collect_workbook_volatile_dependency_part(&archive, &workbook_relationships, &content_type_overrides);
+    let volatile_dependency_part = collect_workbook_volatile_dependency_part(
+        &archive,
+        &workbook_relationships,
+        &content_type_overrides,
+    );
     let connections = crate::domain::connections::parse_connections(&archive);
 
     // Build result
@@ -1697,12 +1699,7 @@ fn parse_sheets_sequential(
 
         // Parse comments (requires ZIP reads for comment XML files)
         let az_t0 = tick(timings);
-        let (
-            comments_output,
-            comment_authors,
-            comments_root_namespace_attrs,
-            comments_ext_lst_xml,
-        ) =
+        let (comments_output, comment_authors, comments_root_namespace_attrs, comments_ext_lst_xml) =
             parse_comments_for_sheet(archive, sheet_num);
 
         // Parse tables (requires ZIP reads for table XML files and .rels)

@@ -107,12 +107,7 @@ pub(super) fn write_zip_package(
             .and_then(|theme| theme.theme_part_path.as_deref())
             .unwrap_or("xl/theme/theme1.xml")
             .trim_start_matches('/');
-        add_registered_part(
-            package_graph,
-            &mut zip,
-            theme_path,
-            theme.clone(),
-        )?;
+        add_registered_part(package_graph, &mut zip, theme_path, theme.clone())?;
     }
 
     // Document Properties

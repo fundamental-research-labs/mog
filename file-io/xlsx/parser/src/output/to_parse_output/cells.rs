@@ -99,9 +99,9 @@ pub(super) fn classify_projection_role(
     spill_ranges: &[(u32, u32, u32, u32)],
     metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> ImportedCellProjectionRole {
-    let has_dynamic_array_metadata =
-        cell.cell_metadata_index
-            .is_some_and(|cm| metadata.is_some_and(|m| cell_metadata_is_dynamic_array(m, cm)));
+    let has_dynamic_array_metadata = cell
+        .cell_metadata_index
+        .is_some_and(|cm| metadata.is_some_and(|m| cell_metadata_is_dynamic_array(m, cm)));
 
     if cell.formula.is_some() {
         if has_dynamic_array_metadata && cell.array_ref.is_some() {

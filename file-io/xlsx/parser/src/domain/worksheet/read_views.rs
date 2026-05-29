@@ -64,9 +64,7 @@ pub fn parse_sheet_views(xml: &[u8]) -> Vec<SheetView> {
 pub fn parse_sheet_views_ext_lst(xml: &[u8]) -> Option<String> {
     let block = first_element_block(xml, b"sheetViews")?;
     let open_end = find_gt_simd(block, 0)? + 1;
-    let close_start = block
-        .len()
-        .saturating_sub(b"</sheetViews>".len());
+    let close_start = block.len().saturating_sub(b"</sheetViews>".len());
     if open_end > close_start {
         return None;
     }

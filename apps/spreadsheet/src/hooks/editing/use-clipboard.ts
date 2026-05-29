@@ -46,11 +46,14 @@ import type {
   ExternalPastePayload,
   PasteSpecialOptions,
 } from '@mog-sdk/contracts/actors';
+import type { Comment } from '@mog-sdk/contracts/api';
 import { clipboardSelectors } from '../../selectors';
 import type { ClipboardState } from '@mog-sdk/contracts/actors';
-import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import { cellId, type CellId } from '@mog-sdk/contracts/cell-identity';
+import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { ClipboardSnapshot } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
+import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { blobToDataUrl } from '../../utils/blob-to-data-url';
 import { withHandlerErrors } from '../../devtools/handler-error-boundary';
 import { useActiveSheetId, useReadOnly, useWorkbook } from '../../infra/context';
@@ -127,6 +130,11 @@ function clipboardStateEqual(a: ClipboardStateSlice, b: ClipboardStateSlice): bo
     rangesEqual(a.copySource, b.copySource) &&
     coordEqual(a.pastePreviewTarget, b.pastePreviewTarget)
   );
+}
+
+function toCellRawValue(value: CellValue | null | undefined): CellRawValue {
+  if (value == null) return null;
+  return typeof value === 'object' ? null : value;
 }
 
 // =============================================================================
@@ -411,21 +419,22 @@ async function prefetchSparseClipboardData(
 ) {
   const ws = wb.getSheetById(activeSheetId);
   const mutableRanges = [...ranges] as CellRange[];
-  const allComments = await ws.comments.list().catch(() => []);
+  const allComments = await ws.comments.list().catch((): Comment[] => []);
   const commentPositions = await ws._internal
     .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
     .catch(() => new Map<string, { row: number; col: number }>());
-  const commentsByCellId = new Map<string, typeof allComments>();
-  const cellIdByPosition = new Map<string, string>();
+  const commentsByCellId = new Map<CellId, Comment[]>();
+  const cellIdByPosition = new Map<string, CellId>();
   for (const comment of allComments) {
     const position = commentPositions.get(comment.cellRef);
     if (!position || !isCellInAnyRange(position.row, position.col, mutableRanges)) continue;
-    cellIdByPosition.set(`${position.row},${position.col}`, comment.cellRef);
-    const existing = commentsByCellId.get(comment.cellRef);
+    const id = cellId(comment.cellRef);
+    cellIdByPosition.set(`${position.row},${position.col}`, id);
+    const existing = commentsByCellId.get(id);
     if (existing) {
       existing.push(comment);
     } else {
-      commentsByCellId.set(comment.cellRef, [comment]);
+      commentsByCellId.set(id, [comment]);
     }
   }
 
@@ -443,9 +452,12 @@ async function prefetchSparseClipboardData(
       row: cell.row,
       col: cell.col,
       cellData: {
-        raw: cell.value ?? undefined,
+        id: cellId(cell.cellId),
+        row: cell.row,
+        col: cell.col,
+        raw: toCellRawValue(cell.value),
         computed: cell.value ?? undefined,
-        formula: cell.formulaText,
+        formula: cell.formulaText ? ensureFormulaA1(cell.formulaText) : undefined,
       },
     });
   }

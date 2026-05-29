@@ -46,6 +46,12 @@ export interface RelativeComment {
   createdAt: number;
   /** Whether the comment was resolved */
   resolved?: boolean;
+  /** Comment kind from the worksheet API. */
+  commentType?: 'note' | 'threadedComment';
+  /** Thread grouping for threaded comments. */
+  threadId?: string | null;
+  /** Parent comment ID for replies. */
+  parentId?: string | null;
 }
 
 /**

@@ -28,8 +28,11 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
+import type { Comment } from '@mog-sdk/contracts/api';
 import type { ClipboardData } from '@mog-sdk/contracts/actors';
-import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import { cellId, type CellId } from '@mog-sdk/contracts/cell-identity';
+import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
+import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 // Cell/merge reads and row/col visibility migrated to Worksheet API.
 import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
 
@@ -40,6 +43,7 @@ import {
   hasFullShapeIntent,
   unifiedPaste,
   writeToSystemClipboard,
+  type ClipboardStoreReader,
   type SparseClipboardCellEntry,
 } from '../../domain/clipboard';
 import { blobToDataUrl } from '../../utils/blob-to-data-url';
@@ -70,6 +74,11 @@ function isEditing(deps: ActionDependencies): boolean {
   return deps.accessors.editor.isEditing() || deps.accessors.editor.isImeComposing();
 }
 
+function toCellRawValue(value: CellValue | null | undefined): CellRawValue {
+  if (value == null) return null;
+  return typeof value === 'object' ? null : value;
+}
+
 // =============================================================================
 // Clipboard Data Building Helpers (for unified copy/cut)
 // =============================================================================
@@ -91,22 +100,23 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   }
 
   const usedRange = await ws.getUsedRange().catch(() => null);
-  const allComments = await ws.comments.list().catch(() => []);
+  const allComments = await ws.comments.list().catch((): Comment[] => []);
   const commentPositions = await ws._internal
     .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
     .catch(() => new Map<string, { row: number; col: number }>());
-  const commentsByCellId = new Map<string, typeof allComments>();
-  const cellIdByPosition = new Map<string, string>();
+  const commentsByCellId = new Map<CellId, Comment[]>();
+  const cellIdByPosition = new Map<string, CellId>();
   for (const comment of allComments) {
     const position = commentPositions.get(comment.cellRef);
     if (!position) continue;
     if (!isCellInAnyRange(position.row, position.col, ranges)) continue;
-    cellIdByPosition.set(`${position.row},${position.col}`, comment.cellRef);
-    const existing = commentsByCellId.get(comment.cellRef);
+    const id = cellId(comment.cellRef);
+    cellIdByPosition.set(`${position.row},${position.col}`, id);
+    const existing = commentsByCellId.get(id);
     if (existing) {
       existing.push(comment);
     } else {
-      commentsByCellId.set(comment.cellRef, [comment]);
+      commentsByCellId.set(id, [comment]);
     }
   }
 
@@ -208,12 +218,12 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   }
 
   // Create store reader for buildClipboardData using pre-fetched data
-  const storeReader = {
-    getCellData: (_sid: string, row: number, col: number) =>
+  const storeReader: ClipboardStoreReader = {
+    getCellData: (_sid, row, col) =>
       cellDataLookup.get(`${row},${col}`) ?? undefined,
-    getCellFormat: (_sid: string, row: number, col: number) =>
+    getCellFormat: (_sid, row, col) =>
       formatLookup.get(`${row},${col}`) ?? undefined,
-    getMergedRegions: (_sid: string) =>
+    getMergedRegions: (_sid) =>
       allMerges.map((m) => ({
         startRow: m.startRow,
         startCol: m.startCol,
@@ -222,13 +232,13 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         rowSpan: m.endRow - m.startRow + 1,
         colSpan: m.endCol - m.startCol + 1,
       })),
-    isRowHidden: (_sid: string, row: number) => hiddenRowsMap.get(row) ?? false,
-    isColHidden: (_sid: string, col: number) => hiddenColsMap.get(col) ?? false,
-    getRangeSchemas: (_sid: string) => rangeSchemas,
-    getConditionalFormats: (_sid: string) => conditionalFormats,
-    getCellIdAt: (_sid: string, row: number, col: number) =>
+    isRowHidden: (_sid, row) => hiddenRowsMap.get(row) ?? false,
+    isColHidden: (_sid, col) => hiddenColsMap.get(col) ?? false,
+    getRangeSchemas: (_sid) => rangeSchemas,
+    getConditionalFormats: (_sid) => conditionalFormats,
+    getCellIdAt: (_sid, row, col) =>
       cellIdByPosition.get(`${row},${col}`) ?? null,
-    getCommentsForCell: (_sid: string, cellId: string) => commentsByCellId.get(cellId) ?? [],
+    getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
   };
 
   // Export options using pre-fetched data
@@ -283,22 +293,23 @@ async function createSparseFullShapeCopyCutDeps(
   ranges: CellRange[],
 ) {
   const ws = deps.workbook.getSheetById(sheetId);
-  const allComments = await ws.comments.list().catch(() => []);
+  const allComments = await ws.comments.list().catch((): Comment[] => []);
   const commentPositions = await ws._internal
     .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
     .catch(() => new Map<string, { row: number; col: number }>());
 
-  const commentsByCellId = new Map<string, typeof allComments>();
-  const cellIdByPosition = new Map<string, string>();
+  const commentsByCellId = new Map<CellId, Comment[]>();
+  const cellIdByPosition = new Map<string, CellId>();
   for (const comment of allComments) {
     const position = commentPositions.get(comment.cellRef);
     if (!position || !isCellInAnyRange(position.row, position.col, ranges)) continue;
-    cellIdByPosition.set(`${position.row},${position.col}`, comment.cellRef);
-    const existing = commentsByCellId.get(comment.cellRef);
+    const id = cellId(comment.cellRef);
+    cellIdByPosition.set(`${position.row},${position.col}`, id);
+    const existing = commentsByCellId.get(id);
     if (existing) {
       existing.push(comment);
     } else {
-      commentsByCellId.set(comment.cellRef, [comment]);
+      commentsByCellId.set(id, [comment]);
     }
   }
 
@@ -317,9 +328,12 @@ async function createSparseFullShapeCopyCutDeps(
       row: cell.row,
       col: cell.col,
       cellData: {
-        raw: cell.value ?? undefined,
+        id: cellId(cell.cellId),
+        row: cell.row,
+        col: cell.col,
+        raw: toCellRawValue(cell.value),
         computed: cell.value ?? undefined,
-        formula: cell.formulaText,
+        formula: cell.formulaText ? ensureFormulaA1(cell.formulaText) : undefined,
       },
     });
   }
@@ -357,12 +371,12 @@ async function createSparseFullShapeCopyCutDeps(
     ws.conditionalFormats.list().catch(() => []),
   ]);
 
-  const storeReader = {
-    getCellData: (_sid: string, row: number, col: number) =>
+  const storeReader: ClipboardStoreReader = {
+    getCellData: (_sid, row, col) =>
       entriesByPosition.get(`${row},${col}`)?.cellData ?? undefined,
-    getCellFormat: (_sid: string, row: number, col: number) =>
+    getCellFormat: (_sid, row, col) =>
       (formatLookup.get(`${row},${col}`) as SparseClipboardCellEntry['format']) ?? undefined,
-    getMergedRegions: (_sid: string) =>
+    getMergedRegions: (_sid) =>
       allMerges.map((m) => ({
         startRow: m.startRow,
         startCol: m.startCol,
@@ -371,11 +385,11 @@ async function createSparseFullShapeCopyCutDeps(
         rowSpan: m.endRow - m.startRow + 1,
         colSpan: m.endCol - m.startCol + 1,
       })),
-    getRangeSchemas: (_sid: string) => rangeSchemas,
-    getConditionalFormats: (_sid: string) => conditionalFormats,
-    getCellIdAt: (_sid: string, row: number, col: number) =>
+    getRangeSchemas: (_sid) => rangeSchemas,
+    getConditionalFormats: (_sid) => conditionalFormats,
+    getCellIdAt: (_sid, row, col) =>
       cellIdByPosition.get(`${row},${col}`) ?? null,
-    getCommentsForCell: (_sid: string, cellId: string) => commentsByCellId.get(cellId) ?? [],
+    getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
   };
 
   return {

@@ -1,5 +1,5 @@
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
-import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { CleanupManager } from '../../../shared/cleanup-manager';
 import type { ReadableStoreApi } from '../../../shared/types';
@@ -52,6 +52,44 @@ function contains(bounds: Bounds, row: number, col: number): boolean {
   return row >= bounds.startRow && row <= bounds.endRow && col >= bounds.startCol && col <= bounds.endCol;
 }
 
+async function findEditablePivotAtActiveCell(
+  workbook: WorkbookInternal,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+): Promise<string | null> {
+  try {
+    const editablePivots = await workbook.pivot.getAllPivots(sheetId);
+    const worksheet = workbook.getSheetById(sheetId);
+    for (const pivot of editablePivots) {
+      const range = await worksheet.pivots.getRange(pivot.name).catch(() => null);
+      const bounds = range ?? (pivot.refRange ? parseA1Range(pivot.refRange) : null);
+      if (bounds && contains(bounds, row, col)) {
+        return pivot.id;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function findImportedPivotAtActiveCell(
+  workbook: WorkbookInternal,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+): Promise<string | null> {
+  try {
+    const importedPivot = await (
+      workbook as WorkbookWithImportedPivots
+    ).importedPivots?.findRenderedImportedPivotAt(sheetId, row, col);
+    return importedPivot?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function setupPivotSelectionCoordination(
   config: PivotSelectionCoordinationConfig,
   cleanups: CleanupManager,
@@ -64,10 +102,17 @@ export function setupPivotSelectionCoordination(
 
   const setSelectedPivot = (pivotId: string | null): void => {
     const state = uiStoreApi.getState();
-    if (state.pivot.selectedPivotId !== pivotId) {
-      state.selectPivot(pivotId);
+    if (pivotId != null) {
+      if (state.pivot.selectedPivotId !== pivotId || state.pivot.editingPivotId !== pivotId) {
+        state.startEditingPivot(pivotId);
+      }
+      return;
     }
-    if (pivotId == null && state.pivot.editingPivotId != null) {
+
+    if (state.pivot.selectedPivotId !== null) {
+      state.selectPivot(null);
+    }
+    if (state.pivot.editingPivotId != null) {
       state.stopEditingPivot();
     }
   };
@@ -78,30 +123,26 @@ export function setupPivotSelectionCoordination(
     const sheetId = toSheetId(getActiveSheetId());
 
     void (async () => {
-      try {
-        const editablePivots = await workbook.pivot.getAllPivots(sheetId);
-        const worksheet = workbook.getSheetById(sheetId);
-        if (disposed || generation !== refreshGeneration) return;
-        for (const pivot of editablePivots) {
-          const range = await worksheet.pivots.getRange(pivot.name).catch(() => null);
-          const bounds = range ?? (pivot.refRange ? parseA1Range(pivot.refRange) : null);
-          if (bounds && contains(bounds, activeCell.row, activeCell.col)) {
-            setSelectedPivot(pivot.id);
-            return;
-          }
-        }
-
-        const importedPivot = await (workbook as WorkbookWithImportedPivots).importedPivots?.findRenderedImportedPivotAt(
-          sheetId,
-          activeCell.row,
-          activeCell.col,
-        );
-        if (disposed || generation !== refreshGeneration) return;
-        setSelectedPivot(importedPivot?.id ?? null);
-      } catch {
-        if (disposed || generation !== refreshGeneration) return;
-        setSelectedPivot(null);
+      const editablePivotId = await findEditablePivotAtActiveCell(
+        workbook,
+        sheetId,
+        activeCell.row,
+        activeCell.col,
+      );
+      if (disposed || generation !== refreshGeneration) return;
+      if (editablePivotId != null) {
+        setSelectedPivot(editablePivotId);
+        return;
       }
+
+      const importedPivotId = await findImportedPivotAtActiveCell(
+        workbook,
+        sheetId,
+        activeCell.row,
+        activeCell.col,
+      );
+      if (disposed || generation !== refreshGeneration) return;
+      setSelectedPivot(importedPivotId);
     })();
   };
 

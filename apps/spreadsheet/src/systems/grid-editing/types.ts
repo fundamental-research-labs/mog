@@ -109,6 +109,8 @@ export interface GridEditingUIStore {
   pivot: { selectedPivotId: string | null; editingPivotId: string | null };
   /** Set the currently selected pivot */
   selectPivot: (pivotId: string | null) => void;
+  /** Open pivot field editing */
+  startEditingPivot: (pivotId: string) => void;
   /** Close pivot field editing */
   stopEditingPivot: () => void;
 

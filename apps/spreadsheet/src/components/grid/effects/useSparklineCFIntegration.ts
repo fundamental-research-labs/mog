@@ -24,7 +24,7 @@
 import { useEffect } from 'react';
 
 import type { ConditionalFormatCache } from '@mog-sdk/contracts/api';
-import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import type { SparklineManager } from '../../../coordinator/sparklines/sparkline-manager';
 import { setupSparklineSelectionCoordination } from '../../../systems/renderer/coordination';
@@ -41,7 +41,7 @@ export interface UseSparklineCFIntegrationOptions {
   /** Conditional formatting manager */
   cfManager: ConditionalFormatCache;
   /** The active sheet ID */
-  activeSheetId: string;
+  activeSheetId: SheetId;
 }
 
 /**

@@ -16,6 +16,7 @@ import type { TraceArrow } from '@mog-sdk/contracts/trace-arrows';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore, useWorkbook } from '../../../infra/context';
+import type { UIState } from '../../../ui-store/types';
 
 interface UseTraceArrowsForRenderOptions {
   activeSheetId: SheetId;
@@ -46,7 +47,7 @@ export function useTraceArrowsForRender(
   const [positionVersion, setPositionVersion] = useState(0);
 
   // Get trace arrows for the active sheet from UIStore
-  const traceArrowsBySheet = useUIStore((s) => s.traceArrows);
+  const traceArrowsBySheet = useUIStore((s: UIState) => s.traceArrows);
 
   /**
    * Get trace arrows for the active sheet.
@@ -56,9 +57,9 @@ export function useTraceArrowsForRender(
   }, [traceArrowsBySheet, activeSheetId]);
 
   useEffect(() => {
-    const arrows = traceArrowsBySheet[activeSheetId] ?? [];
+    const arrows: TraceArrow[] = traceArrowsBySheet[activeSheetId] ?? [];
     const cellIds = Array.from(
-      new Set(arrows.flatMap((arrow) => [arrow.fromCellId, arrow.toCellId])),
+      new Set<string>(arrows.flatMap((arrow) => [arrow.fromCellId, arrow.toCellId])),
     );
 
     if (cellIds.length === 0) {

@@ -19,7 +19,7 @@
  */
 
 import * as RadixPopover from '@radix-ui/react-popover';
-import type { ReactNode, RefObject } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode, RefObject } from 'react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { usePortalContainer } from '../../../contexts/PortalContainerContext';
 
@@ -46,6 +46,8 @@ export type PointerDownOutsideEvent = CustomEvent<{ originalEvent: PointerEvent 
 export type InteractOutsideEvent =
   | PointerDownOutsideEvent
   | CustomEvent<{ originalEvent: FocusEvent }>;
+
+type RadixPopoverContentProps = ComponentPropsWithoutRef<typeof RadixPopover.Content>;
 
 // =============================================================================
 // Context for Popover Hierarchy
@@ -359,6 +361,10 @@ export interface PopoverContentProps {
    * Useful for hover-based interactions (e.g., comment popover safe zones).
    */
   onMouseLeave?: React.MouseEventHandler<HTMLDivElement>;
+  /** Handler called when pointer down starts inside the popover content. */
+  onPointerDown?: RadixPopoverContentProps['onPointerDown'];
+  /** Handler called when a key is pressed while focus is inside the popover content. */
+  onKeyDown?: RadixPopoverContentProps['onKeyDown'];
   /**
    * When true, uses picker-specific content classes that omit overflow-x-hidden
    * and max-h constraints. Use for picker panels (BorderPicker, ColorPicker, etc.)
@@ -413,6 +419,8 @@ export function PopoverContent({
   closeOnScroll: _closeOnScroll, // Legacy prop - accepted for API compatibility
   onMouseEnter,
   onMouseLeave,
+  onPointerDown,
+  onKeyDown,
   disableScrollConstraints,
 }: PopoverContentProps) {
   const portalContainer = usePortalContainer();
@@ -476,6 +484,8 @@ export function PopoverContent({
         data-testid={dataTestId}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
       >
         {children}
       </RadixPopover.Content>

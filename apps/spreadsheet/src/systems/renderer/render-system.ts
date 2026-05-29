@@ -33,6 +33,7 @@ import type {
   RendererAccessor,
   RendererState as RendererSelectorState,
 } from '@mog-sdk/contracts/actors';
+import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   CellCoord,
   FrozenPanes,
@@ -429,7 +430,9 @@ export class RenderSystem implements IRenderSystem {
     this.setZoom(target.zoom);
     const sheetId = this.getRenderCapability()?.getCurrentSheetId();
     if (sheetId) {
-      this.config.sheetSwitchDeps?.uiStoreApi.getState().setZoomLevel?.(sheetId, target.zoom);
+      this.config.sheetSwitchDeps?.uiStoreApi
+        .getState()
+        .setZoomLevel?.(toSheetId(sheetId), target.zoom);
     }
     const targetScroll = viewport.clampScrollPosition({ x: target.scrollX, y: target.scrollY });
     this.rendererExecution?.setScrollPosition(targetScroll);

@@ -121,7 +121,7 @@ function createPdfDataProvider(
     let set = hiddenRowSets.get(sheetId);
     if (!set) {
       const ws = wb.getSheetById(sheetId);
-      set = await ws.layout.getHiddenRowsBitmap();
+      set = (await ws.layout.getHiddenRowsBitmap()) ?? new Set<number>();
       hiddenRowSets.set(sheetId, set);
     }
     return set;
@@ -131,7 +131,7 @@ function createPdfDataProvider(
     let set = hiddenColSets.get(sheetId);
     if (!set) {
       const ws = wb.getSheetById(sheetId);
-      set = await ws.layout.getHiddenColumnsBitmap();
+      set = (await ws.layout.getHiddenColumnsBitmap()) ?? new Set<number>();
       hiddenColSets.set(sheetId, set);
     }
     return set;
@@ -264,6 +264,13 @@ type DownloadablePdfResult = PdfExportResult & {
   bytes?: Uint8Array | ArrayBuffer | number[];
 };
 
+function copyViewToArrayBuffer(view: ArrayBufferView): ArrayBuffer {
+  const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function getPdfBlob(result: PdfExportResult): Blob | null {
   const downloadable = result as DownloadablePdfResult;
   if (downloadable.blob instanceof Blob) {
@@ -274,9 +281,9 @@ function getPdfBlob(result: PdfExportResult): Blob | null {
       return new Blob([downloadable.bytes], { type: 'application/pdf' });
     }
     if (ArrayBuffer.isView(downloadable.bytes)) {
-      return new Blob([downloadable.bytes], { type: 'application/pdf' });
+      return new Blob([copyViewToArrayBuffer(downloadable.bytes)], { type: 'application/pdf' });
     }
-    return new Blob([new Uint8Array(downloadable.bytes)], { type: 'application/pdf' });
+    return new Blob([new Uint8Array(downloadable.bytes).buffer], { type: 'application/pdf' });
   }
   return null;
 }

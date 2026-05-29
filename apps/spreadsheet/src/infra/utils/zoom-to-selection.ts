@@ -9,6 +9,7 @@
 
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { HeaderVisibility as RendererHeaderVisibility } from '@mog-sdk/contracts/rendering';
+import type { HeaderVisibility as SheetViewHeaderVisibility } from '@mog-sdk/sheet-view';
 import { getEffectiveHeaderDimensions } from '@mog/spreadsheet-utils/rendering/constants';
 import { clampZoom } from './zoom-utils';
 
@@ -49,26 +50,15 @@ export interface ZoomToSelectionPositionDimensions {
   getColWidth(col: number): number;
 }
 
-export type ZoomToSelectionHeaderVisibility =
-  | RendererHeaderVisibility
-  | {
-      readonly rowHeaders?: boolean;
-      readonly colHeaders?: boolean;
-    };
+export type ZoomToSelectionHeaderVisibility = SheetViewHeaderVisibility;
 
 function toRendererHeaderVisibility(
   headerVisibility: ZoomToSelectionHeaderVisibility | undefined,
 ): RendererHeaderVisibility | undefined {
   if (!headerVisibility) return undefined;
   return {
-    showRowHeaders:
-      'showRowHeaders' in headerVisibility
-        ? headerVisibility.showRowHeaders
-        : headerVisibility.rowHeaders,
-    showColumnHeaders:
-      'showColumnHeaders' in headerVisibility
-        ? headerVisibility.showColumnHeaders
-        : headerVisibility.colHeaders,
+    showRowHeaders: headerVisibility.rowHeaders,
+    showColumnHeaders: headerVisibility.colHeaders,
   };
 }
 

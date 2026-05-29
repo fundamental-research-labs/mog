@@ -10,7 +10,7 @@ import {
   ROW_HEADER_WIDTH,
   COL_HEADER_HEIGHT,
 } from '@mog-sdk/contracts/rendering/constants';
-import type { HeaderVisibility } from '@mog-sdk/contracts/rendering/constants';
+import type { HeaderVisibility } from '@mog-sdk/contracts/rendering';
 
 /**
  * Get the appropriate hit area size based on pointer type.

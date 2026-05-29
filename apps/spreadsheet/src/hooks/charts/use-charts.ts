@@ -154,7 +154,7 @@ function isOnlyPositionChange(prev: SerializedChart, next: SerializedChart): boo
  */
 function createCellAccessor(
   ws: WorksheetWithInternals,
-  _sheetId: SheetId,
+  _sheetId: string,
   sourceSheets?: Map<string, WorksheetWithInternals>,
 ): CellDataAccessor {
   return {

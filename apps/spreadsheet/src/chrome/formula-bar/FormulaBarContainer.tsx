@@ -35,6 +35,7 @@ import {
 import type { FormulaA1 } from '@mog-sdk/contracts/cells';
 import type { CellFormat, CellValue } from '@mog-sdk/contracts/core';
 import { toA1 } from '@mog/spreadsheet-utils/a1';
+import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { dispatch } from '../../actions';
 import { FormulaArgumentHint } from '../../components/editor/FormulaArgumentHint';
 import type { ReferenceColorRange } from '../../components/editor/FormulaHighlighter';
@@ -291,7 +292,8 @@ function FormulaBarContainerImpl() {
         wb,
       );
       if (cancelled) return;
-      const formula = calculatedColumnContext?.calculatedFormula ?? rawData.formula ?? undefined;
+      const formulaText = calculatedColumnContext?.calculatedFormula ?? rawData.formula;
+      const formula = formulaText ? ensureFormulaA1(formulaText) : undefined;
       if (cell.value === null && !formula) {
         setCellData(undefined);
         return;

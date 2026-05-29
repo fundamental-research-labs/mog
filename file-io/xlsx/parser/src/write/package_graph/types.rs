@@ -28,6 +28,7 @@ pub struct PackagePart {
     pub content_type: Option<String>,
     pub default_extension: Option<(String, String)>,
     pub kind: PackagePartKind,
+    pub semantic_kind: Option<domain_types::XlsxPackagePartKind>,
     pub bytes: Option<Vec<u8>>,
 }
 

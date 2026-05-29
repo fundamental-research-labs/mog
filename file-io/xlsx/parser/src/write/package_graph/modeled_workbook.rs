@@ -1,4 +1,4 @@
-use domain_types::PackageFidelityMetadata;
+use domain_types::{PackageFidelityMetadata, XlsxPackagePartKind};
 
 use super::{
     CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DOC_METADATA_LABEL_INFO, CT_EXTENDED_PROPERTIES,
@@ -242,6 +242,64 @@ pub fn modeled_part(path: &str, content_type: &str) -> PackagePart {
         content_type: Some(content_type.to_string()),
         default_extension: None,
         kind: PackagePartKind::Modeled,
+        semantic_kind: semantic_kind_for_modeled_part(path),
         bytes: None,
+    }
+}
+
+fn semantic_kind_for_modeled_part(path: &str) -> Option<XlsxPackagePartKind> {
+    let path = normalize_part_path(path);
+    if path == "xl/workbook.xml" {
+        Some(XlsxPackagePartKind::Workbook)
+    } else if path.starts_with("xl/worksheets/") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Worksheet)
+    } else if path == "xl/sharedStrings.xml" {
+        Some(XlsxPackagePartKind::SharedStrings)
+    } else if path == "xl/styles.xml" {
+        Some(XlsxPackagePartKind::Styles)
+    } else if path.starts_with("xl/theme/") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Theme)
+    } else if path == "xl/metadata.xml" {
+        Some(XlsxPackagePartKind::Metadata)
+    } else if path.starts_with("xl/charts/chartEx") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ChartEx)
+    } else if path.starts_with("xl/charts/chart") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Chart)
+    } else if path.starts_with("xl/charts/style") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ChartStyle)
+    } else if path.starts_with("xl/charts/color") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ChartColorStyle)
+    } else if path.starts_with("xl/drawings/") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ChartUserShapes)
+    } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Comments)
+    } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ThreadedComments)
+    } else if path.starts_with("xl/tables/tableSingleCells") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::TableSingleCells)
+    } else if path.starts_with("xl/tables/table") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Table)
+    } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::PivotTable)
+    } else if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::PivotCacheDefinition)
+    } else if path.starts_with("xl/pivotCache/pivotCacheRecords") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::PivotCacheRecords)
+    } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::Slicer)
+    } else if path.starts_with("xl/slicerCaches/slicerCache") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::SlicerCache)
+    } else if path.starts_with("xl/queryTables/queryTable") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::QueryTable)
+    } else if path == "xl/connections.xml" {
+        Some(XlsxPackagePartKind::Connections)
+    } else if path.starts_with("xl/ctrlProps/ctrlProp") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ControlProperties)
+    } else if path.starts_with("xl/embeddings/") {
+        Some(XlsxPackagePartKind::OleObject)
+    } else if path.starts_with("xl/externalLinks/externalLink") && path.ends_with(".xml") {
+        Some(XlsxPackagePartKind::ExternalLink)
+    } else {
+        None
     }
 }

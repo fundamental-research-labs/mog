@@ -236,6 +236,10 @@ pub const REL_CHART_STYLE: &str =
 pub const REL_CHART_COLOR_STYLE: &str =
     "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
 
+/// Relationship type for chart user-shapes sidecar drawing parts.
+pub const REL_CHART_USER_SHAPES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+
 /// Relationship type for images.
 pub const REL_IMAGE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
@@ -309,6 +313,7 @@ pub enum OoxmlRelationshipType {
     ChartEx,
     ChartStyle,
     ChartColorStyle,
+    ChartUserShapes,
     Image,
     Table,
     TableSingleCells,
@@ -373,6 +378,7 @@ impl OoxmlRelationshipType {
             REL_CHART_EX => Self::ChartEx,
             REL_CHART_STYLE => Self::ChartStyle,
             REL_CHART_COLOR_STYLE => Self::ChartColorStyle,
+            REL_CHART_USER_SHAPES => Self::ChartUserShapes,
             REL_IMAGE => Self::Image,
             REL_TABLE => Self::Table,
             REL_TABLE_SINGLE_CELLS => Self::TableSingleCells,
@@ -433,6 +439,7 @@ impl OoxmlRelationshipType {
             Self::ChartEx => REL_CHART_EX,
             Self::ChartStyle => REL_CHART_STYLE,
             Self::ChartColorStyle => REL_CHART_COLOR_STYLE,
+            Self::ChartUserShapes => REL_CHART_USER_SHAPES,
             Self::Image => REL_IMAGE,
             Self::Table => REL_TABLE,
             Self::TableSingleCells => REL_TABLE_SINGLE_CELLS,

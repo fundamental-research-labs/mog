@@ -31,6 +31,7 @@ pub(super) fn imported_opaque_part(
         content_type,
         default_extension,
         kind: PackagePartKind::Opaque,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::OpaqueInert),
         bytes: Some(bytes),
     }
 }

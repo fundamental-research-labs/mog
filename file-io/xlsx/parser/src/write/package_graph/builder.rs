@@ -46,6 +46,12 @@ impl PackageGraphBuilder {
                     part.path
                 )));
             }
+            if existing.semantic_kind != part.semantic_kind {
+                return Err(WriteError::PackageIntegrity(format!(
+                    "package part path {} is claimed as both {:?} and {:?}",
+                    part.path, existing.semantic_kind, part.semantic_kind
+                )));
+            }
             if existing.bytes.is_none()
                 && part.bytes.is_none()
                 && existing.content_type == part.content_type
@@ -76,6 +82,21 @@ impl PackageGraphBuilder {
         self.next_relationship_key += 1;
         self.relationships.push((key, relationship));
         key
+    }
+
+    pub fn add_relationship_if_absent(
+        &mut self,
+        relationship: PackageRelationship,
+    ) -> RegisteredRelationshipKey {
+        let relationship = normalize_relationship_target(relationship);
+        if let Some((key, _)) = self.relationships.iter().find(|(_, existing)| {
+            existing.owner == relationship.owner
+                && existing.relationship_type == relationship.relationship_type
+                && existing.target == relationship.target
+        }) {
+            return *key;
+        }
+        self.add_relationship(relationship)
     }
 
     pub fn contains_part(&self, path: &str) -> bool {
@@ -340,6 +361,13 @@ impl PackageGraphBuilder {
             package_fidelity: self.package_fidelity,
         })
     }
+}
+
+fn normalize_relationship_target(mut relationship: PackageRelationship) -> PackageRelationship {
+    if let PackageRelationshipTarget::InternalPart { path } = &mut relationship.target {
+        *path = normalize_part_path(path);
+    }
+    relationship
 }
 
 fn non_editable_sheet_cluster_paths(metadata: &PackageFidelityMetadata) -> HashSet<String> {

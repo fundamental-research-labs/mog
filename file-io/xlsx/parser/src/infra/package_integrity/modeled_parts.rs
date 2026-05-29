@@ -6,10 +6,10 @@ use crate::domain::web_extensions::read::{
     CT_WEB_EXTENSION_TASKPANES, REL_WEB_EXTENSION_TASKPANES,
 };
 use crate::infra::opc::{
-    REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CUSTOM_PROPERTIES, REL_DRAWING,
-    REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
-    REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
-    relationship_owner_from_rels_path, resolve_relationship_target,
+    REL_CHART, REL_CHART_EX, REL_CHART_USER_SHAPES, REL_COMMENTS, REL_CORE_PROPERTIES,
+    REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_OFFICE_DOCUMENT,
+    REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_WORKSHEET, relationship_owner_from_rels_path, resolve_relationship_target,
 };
 use crate::write::{
     CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
@@ -153,7 +153,16 @@ pub(super) fn validate_modeled_part_invariants(
             );
             require_content_type(archive, path, CT_THREADED_COMMENTS, errors);
         } else if is_drawing_part(path) {
-            require_any_relationship_to_path(relationships_by_part, REL_DRAWING, path, errors);
+            if has_any_relationship_to_path(relationships_by_part, REL_CHART_USER_SHAPES, path) {
+                require_any_relationship_to_path(
+                    relationships_by_part,
+                    REL_CHART_USER_SHAPES,
+                    path,
+                    errors,
+                );
+            } else {
+                require_any_relationship_to_path(relationships_by_part, REL_DRAWING, path, errors);
+            }
             require_content_type(archive, path, CT_DRAWING, errors);
         } else if is_chart_ex_part(path) {
             require_any_relationship_to_path(relationships_by_part, REL_CHART_EX, path, errors);
@@ -198,6 +207,16 @@ fn require_any_relationship_to_path(
         rel_type,
         target_path: target_path.to_string(),
     });
+}
+
+fn has_any_relationship_to_path(
+    relationships_by_part: &HashMap<String, Vec<OpcRelationship>>,
+    rel_type: &str,
+    target_path: &str,
+) -> bool {
+    relationships_by_part.keys().any(|rels_path| {
+        has_relationship_to_path(relationships_by_part, rels_path, rel_type, target_path)
+    })
 }
 
 fn has_relationship_to_path(

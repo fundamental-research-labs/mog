@@ -76,6 +76,71 @@ pub(super) fn validate_known_relationship_owner(
     });
 }
 
+pub(super) fn validate_relationship_target_semantic_kind(
+    rel: &ResolvedPackageRelationship,
+    target_path: &str,
+    parts: &BTreeMap<String, PackagePart>,
+    errors: &mut Vec<PackageIntegrityIssue>,
+) {
+    let Some(owner_kind) = relationship_owner_kind(&rel.owner_rels_path, parts) else {
+        return;
+    };
+    let expected_kind = match (
+        owner_kind,
+        OoxmlRelationshipType::from_uri(&rel.relationship_type),
+    ) {
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::Drawing) => {
+            Some(domain_types::XlsxPackagePartKind::WorksheetDrawing)
+        }
+        (RelationshipOwnerKind::Chart, OoxmlRelationshipType::ChartUserShapes) => {
+            Some(domain_types::XlsxPackagePartKind::ChartUserShapes)
+        }
+        (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::Chart) => {
+            Some(domain_types::XlsxPackagePartKind::Chart)
+        }
+        (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::ChartEx) => {
+            Some(domain_types::XlsxPackagePartKind::ChartEx)
+        }
+        (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::Image)
+        | (RelationshipOwnerKind::Chart, OoxmlRelationshipType::Image)
+        | (RelationshipOwnerKind::VmlDrawing, OoxmlRelationshipType::Image) => {
+            Some(domain_types::XlsxPackagePartKind::Media)
+        }
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::Comments) => {
+            Some(domain_types::XlsxPackagePartKind::Comments)
+        }
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::ThreadedComments) => {
+            Some(domain_types::XlsxPackagePartKind::ThreadedComments)
+        }
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::VmlDrawing) => {
+            Some(domain_types::XlsxPackagePartKind::VmlDrawing)
+        }
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::Table) => {
+            Some(domain_types::XlsxPackagePartKind::Table)
+        }
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::PivotTable) => {
+            Some(domain_types::XlsxPackagePartKind::PivotTable)
+        }
+        _ => None,
+    };
+    let Some(expected_kind) = expected_kind else {
+        return;
+    };
+    let actual_kind = parts.get(target_path).and_then(|part| part.semantic_kind);
+    if actual_kind == Some(expected_kind) {
+        return;
+    }
+    errors.push(PackageIntegrityIssue::InvalidRelationshipTargetKind {
+        rels_path: rel.owner_rels_path.clone(),
+        relationship_type: rel.relationship_type.clone(),
+        target_path: target_path.to_string(),
+        actual_kind: actual_kind
+            .map(|kind| format!("{kind:?}"))
+            .unwrap_or_else(|| "Unclassified".to_string()),
+        expected_kind: format!("{expected_kind:?}"),
+    });
+}
+
 pub(super) fn validate_opaque_part_relationship_references(
     part: &PackagePart,
     relationships: &[ResolvedPackageRelationship],
@@ -310,7 +375,9 @@ fn relationship_type_allowed_for_owner(
         | Rel::DiagramColors
         | Rel::DiagramQuickStyle
         | Rel::DiagramDrawing => owner == RelationshipOwnerKind::Drawing,
-        Rel::ChartStyle | Rel::ChartColorStyle => owner == RelationshipOwnerKind::Chart,
+        Rel::ChartStyle | Rel::ChartColorStyle | Rel::ChartUserShapes => {
+            owner == RelationshipOwnerKind::Chart
+        }
         Rel::PivotCacheRecords => owner == RelationshipOwnerKind::PivotCache,
         Rel::ExternalLinkPath
         | Rel::ExternalLinkLongPath
@@ -370,7 +437,7 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::DiagramColors
         | Rel::DiagramQuickStyle
         | Rel::DiagramDrawing => "drawing relationships",
-        Rel::ChartStyle | Rel::ChartColorStyle => "chart relationships",
+        Rel::ChartStyle | Rel::ChartColorStyle | Rel::ChartUserShapes => "chart relationships",
         Rel::PivotCacheRecords => "pivot cache relationships",
         Rel::ExternalLinkPath
         | Rel::ExternalLinkLongPath
@@ -394,7 +461,7 @@ pub(super) fn validate_modeled_part_owner_relationship(
     if !matches!(part.kind, PackagePartKind::Modeled) {
         return;
     }
-    let Some(required) = required_owner_relationship_for_modeled_part(&part.path) else {
+    let Some(required) = required_owner_relationship_for_modeled_part(part) else {
         return;
     };
     let found = relationships.iter().any(|rel| {
@@ -428,7 +495,10 @@ struct RequiredRelationship {
     relationship_type: &'static str,
 }
 
-fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRelationship> {
+fn required_owner_relationship_for_modeled_part(
+    part: &PackagePart,
+) -> Option<RequiredRelationship> {
+    let path = part.path.as_str();
     let workbook_rels = "xl/_rels/workbook.xml.rels";
 
     if path == "xl/workbook.xml" {
@@ -525,6 +595,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
         return Some(RequiredRelationship {
             rels_path: Some(workbook_rels.to_string()),
             relationship_type: crate::infra::opc::REL_TIMELINE_CACHE,
+        });
+    }
+    if part.semantic_kind == Some(domain_types::XlsxPackagePartKind::ChartUserShapes) {
+        return Some(RequiredRelationship {
+            rels_path: None,
+            relationship_type: crate::infra::opc::REL_CHART_USER_SHAPES,
         });
     }
     if let Some(relationship_type) = relationship_type_for_worksheet_child(path) {

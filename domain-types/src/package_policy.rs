@@ -2,6 +2,114 @@ use serde::{Deserialize, Serialize};
 
 pub const CURRENT_PACKAGE_PROVENANCE_SCHEMA_VERSION: u32 = 1;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum XlsxObjectOwnerKey {
+    ObjectId(String),
+    SheetScopedImportedOrdinal {
+        sheet_id: cell_types::SheetId,
+        imported_anchor_ordinal: u32,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum XlsxPackageOwnerKey {
+    Root,
+    Workbook,
+    Worksheet {
+        sheet_id: cell_types::SheetId,
+    },
+    WorksheetDrawing {
+        sheet_id: cell_types::SheetId,
+    },
+    Chart {
+        owner_key: XlsxObjectOwnerKey,
+    },
+    ChartEx {
+        owner_key: XlsxObjectOwnerKey,
+    },
+    ChartUserShapes {
+        owner_key: XlsxObjectOwnerKey,
+    },
+    VmlDrawing {
+        sheet_id: cell_types::SheetId,
+        role: String,
+    },
+    Comments {
+        sheet_id: cell_types::SheetId,
+    },
+    ThreadedComments {
+        sheet_id: cell_types::SheetId,
+    },
+    Table {
+        table_id: String,
+    },
+    PivotCache {
+        cache_id: String,
+    },
+    PivotTable {
+        pivot_id: String,
+    },
+    Slicer {
+        slicer_id: String,
+    },
+    SlicerCache {
+        cache_id: String,
+    },
+    QueryTable {
+        query_id: String,
+    },
+    ExternalLink {
+        link_id: String,
+    },
+    Media {
+        media_id: String,
+    },
+    OpaqueQuarantined {
+        stable_key: String,
+    },
+    OpaqueInert {
+        stable_key: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum XlsxPackagePartKind {
+    Workbook,
+    Worksheet,
+    SharedStrings,
+    Styles,
+    Theme,
+    Metadata,
+    WorksheetDrawing,
+    Chart,
+    ChartEx,
+    ChartStyle,
+    ChartColorStyle,
+    ChartUserShapes,
+    VmlDrawing,
+    Comments,
+    ThreadedComments,
+    Table,
+    TableSingleCells,
+    PivotCacheDefinition,
+    PivotCacheRecords,
+    PivotTable,
+    Slicer,
+    SlicerCache,
+    QueryTable,
+    Connections,
+    PrinterSettings,
+    ControlProperties,
+    OleObject,
+    Media,
+    ExternalLink,
+    OpaqueInert,
+    OpaqueQuarantined,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageProvenanceVersion {

@@ -277,6 +277,7 @@ fn imported_binary_default_cannot_retype_current_printer_settings_part() {
                 crate::write::CT_PRINTER_SETTINGS.to_string(),
             )),
             kind: PackagePartKind::Modeled,
+            semantic_kind: Some(domain_types::XlsxPackagePartKind::PrinterSettings),
             bytes: None,
         })
         .unwrap();
@@ -337,11 +338,91 @@ fn rich_data_parts_can_own_image_relationships() {
 }
 
 #[test]
-fn duplicate_same_target_relationships_keep_distinct_resolved_keys() {
+fn worksheet_drawing_relationship_cannot_target_chart_user_shapes_part() {
     let mut builder = PackageGraphBuilder::new();
     builder
-        .register_part(modeled_part("xl/drawings/drawing1.xml", CT_DRAWING))
+        .register_part(modeled_part("xl/workbook.xml", CT_WORKBOOK))
         .unwrap();
+    builder
+        .register_part(modeled_part("xl/worksheets/sheet1.xml", CT_WORKSHEET))
+        .unwrap();
+    register_chart_auxiliary_part(&mut builder, "xl/drawings/drawing1.xml").unwrap();
+    builder.add_relationship(PackageRelationship {
+        owner: PackageOwner::Worksheet {
+            index: 0,
+            path: "xl/worksheets/sheet1.xml".to_string(),
+        },
+        relationship_type: REL_DRAWING.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "xl/drawings/drawing1.xml".to_string(),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new("rId1")),
+    });
+
+    let graph = builder.resolve().unwrap();
+    let err = graph.validate_for_export().unwrap_err();
+    let WriteError::PackageIntegrityIssues(issues) = err else {
+        panic!("expected package integrity issues");
+    };
+    assert!(issues.iter().any(|issue| {
+        matches!(
+            issue,
+            PackageIntegrityIssue::InvalidRelationshipTargetKind {
+                relationship_type,
+                expected_kind,
+                actual_kind,
+                ..
+            } if relationship_type == REL_DRAWING
+                && expected_kind == "WorksheetDrawing"
+                && actual_kind == "ChartUserShapes"
+        )
+    }));
+}
+
+#[test]
+fn chart_user_shapes_relationship_cannot_target_worksheet_drawing_part() {
+    let mut builder = PackageGraphBuilder::new();
+    register_worksheet_drawing(&mut builder, 0, "xl/drawings/drawing1.xml", None).unwrap();
+    register_chart(&mut builder, 1).unwrap();
+    register_drawing_chart_relationship(
+        &mut builder,
+        "xl/drawings/drawing1.xml",
+        "xl/charts/chart1.xml",
+        "rId1",
+    )
+    .unwrap();
+    register_chart_auxiliary_relationship(
+        &mut builder,
+        "xl/charts/chart1.xml",
+        crate::infra::opc::REL_CHART_USER_SHAPES,
+        "xl/drawings/drawing1.xml",
+        "rId2",
+    );
+
+    let graph = builder.resolve().unwrap();
+    let err = graph.validate_for_export().unwrap_err();
+    let WriteError::PackageIntegrityIssues(issues) = err else {
+        panic!("expected package integrity issues");
+    };
+    assert!(issues.iter().any(|issue| {
+        matches!(
+            issue,
+            PackageIntegrityIssue::InvalidRelationshipTargetKind {
+                relationship_type,
+                expected_kind,
+                actual_kind,
+                ..
+            } if relationship_type == crate::infra::opc::REL_CHART_USER_SHAPES
+                && expected_kind == "ChartUserShapes"
+                && actual_kind == "WorksheetDrawing"
+        )
+    }));
+}
+
+#[test]
+fn duplicate_same_target_relationships_keep_distinct_resolved_keys() {
+    let mut builder = PackageGraphBuilder::new();
+    register_worksheet_drawing(&mut builder, 0, "xl/drawings/drawing1.xml", None).unwrap();
     register_media_part(&mut builder, "xl/media/image1.png").unwrap();
 
     let first = register_drawing_image_relationship(

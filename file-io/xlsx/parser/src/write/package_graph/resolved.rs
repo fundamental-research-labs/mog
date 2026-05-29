@@ -48,13 +48,22 @@ impl ResolvedPackageGraph {
             }
 
             match relationship_target_part_path(&rel.owner_rels_path, &rel.target) {
-                Ok(Some(target_path)) if !self.parts.contains_key(&target_path) => {
-                    errors.push(PackageIntegrityIssue::MissingRelationshipTarget {
-                        rels_path: rel.owner_rels_path.clone(),
-                        id: rel.id.clone(),
-                        target: rel.target.clone(),
-                        resolved_path: target_path,
-                    });
+                Ok(Some(target_path)) => {
+                    if !self.parts.contains_key(&target_path) {
+                        errors.push(PackageIntegrityIssue::MissingRelationshipTarget {
+                            rels_path: rel.owner_rels_path.clone(),
+                            id: rel.id.clone(),
+                            target: rel.target.clone(),
+                            resolved_path: target_path,
+                        });
+                    } else {
+                        validate_relationship_target_semantic_kind(
+                            rel,
+                            &target_path,
+                            &self.parts,
+                            &mut errors,
+                        );
+                    }
                 }
                 Ok(_) => {}
                 Err(reason) => errors.push(PackageIntegrityIssue::InvalidRelationshipTarget {

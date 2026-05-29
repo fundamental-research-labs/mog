@@ -323,7 +323,9 @@ pub fn register_worksheet_drawing(
     drawing_path: &str,
     relationship_id_hint: Option<&str>,
 ) -> Result<(), WriteError> {
-    graph.register_part(modeled_part(drawing_path, CT_DRAWING))?;
+    let mut part = modeled_part(drawing_path, CT_DRAWING);
+    part.semantic_kind = Some(domain_types::XlsxPackagePartKind::WorksheetDrawing);
+    graph.register_part(part)?;
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_DRAWING.to_string(),
@@ -359,24 +361,37 @@ pub fn register_chart_auxiliary_part(
     graph: &mut PackageGraphBuilder,
     path: &str,
 ) -> Result<(), WriteError> {
-    let Some(content_type) = chart_auxiliary_content_type(path) else {
+    let Some((content_type, semantic_kind)) = chart_auxiliary_part_kind(path) else {
         return Ok(());
     };
-    graph.register_part(modeled_part(path, content_type))
+    let mut part = modeled_part(path, content_type);
+    part.semantic_kind = Some(semantic_kind);
+    graph.register_part(part)
 }
 
 pub fn is_supported_chart_auxiliary_part(path: &str) -> bool {
-    chart_auxiliary_content_type(path).is_some()
+    chart_auxiliary_part_kind(path).is_some()
 }
 
-fn chart_auxiliary_content_type(path: &str) -> Option<&'static str> {
+fn chart_auxiliary_part_kind(
+    path: &str,
+) -> Option<(&'static str, domain_types::XlsxPackagePartKind)> {
     let normalized = normalize_part_path(path);
     if normalized.starts_with("xl/drawings/") && normalized.ends_with(".xml") {
-        Some(CT_DRAWING)
+        Some((
+            CT_DRAWING,
+            domain_types::XlsxPackagePartKind::ChartUserShapes,
+        ))
     } else if normalized.contains("style") {
-        Some(CT_CHART_STYLE)
+        Some((
+            CT_CHART_STYLE,
+            domain_types::XlsxPackagePartKind::ChartStyle,
+        ))
     } else if normalized.contains("colors") || normalized.contains("color") {
-        Some(CT_CHART_COLOR_STYLE)
+        Some((
+            CT_CHART_COLOR_STYLE,
+            domain_types::XlsxPackagePartKind::ChartColorStyle,
+        ))
     } else {
         None
     }
@@ -389,7 +404,7 @@ pub fn register_chart_auxiliary_relationship(
     target_path: &str,
     relationship_id_hint: &str,
 ) {
-    graph.add_relationship(PackageRelationship {
+    graph.add_relationship_if_absent(PackageRelationship {
         owner: PackageOwner::Part {
             path: normalize_part_path(chart_path),
         },
@@ -442,6 +457,7 @@ pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Resul
         content_type: None,
         default_extension: Some((extension, content_type)),
         kind: PackagePartKind::Modeled,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::Media),
         bytes: None,
     })
 }
@@ -670,6 +686,7 @@ pub fn register_worksheet_printer_settings_payload(
         content_type: Some(CT_PRINTER_SETTINGS.to_string()),
         default_extension: None,
         kind: PackagePartKind::Opaque,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::PrinterSettings),
         bytes: Some(bytes),
     })?;
     graph.add_relationship(PackageRelationship {
@@ -706,6 +723,7 @@ pub fn register_worksheet_comments(
         content_type: None,
         default_extension: Some(("vml".to_string(), CT_VML_DRAWING.to_string())),
         kind: PackagePartKind::Modeled,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::VmlDrawing),
         bytes: None,
     })?;
     graph.add_relationship(PackageRelationship {
@@ -730,6 +748,7 @@ pub fn register_worksheet_vml_drawing(
         content_type: None,
         default_extension: Some(("vml".to_string(), CT_VML_DRAWING.to_string())),
         kind: PackagePartKind::Modeled,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::VmlDrawing),
         bytes: None,
     })?;
     graph.add_relationship(PackageRelationship {

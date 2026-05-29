@@ -524,7 +524,7 @@ fn export_single_sheet(
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols, legacy_comment_authors, comment_package) = {
+    let (stored_rows, stored_cols, legacy_comment_authors, comment_package, drawing_package) = {
         let txn = stores.storage.doc().transact();
         if let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) {
             let rows = match meta.get(&txn, KEY_ROWS) {
@@ -543,9 +543,19 @@ fn export_single_sheet(
                 Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).ok(),
                 _ => None,
             };
-            (rows, cols, legacy_comment_authors, comment_package)
+            let drawing_package = match meta.get(&txn, "drawingPackage") {
+                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).ok(),
+                _ => None,
+            };
+            (
+                rows,
+                cols,
+                legacy_comment_authors,
+                comment_package,
+                drawing_package,
+            )
         } else {
-            (None, None, Vec::new(), None)
+            (None, None, Vec::new(), None, None)
         }
     };
     let rows = stored_rows.unwrap_or(100).max(max_row);
@@ -776,7 +786,7 @@ fn export_single_sheet(
         comments: comments_out,
         legacy_comment_authors,
         comment_package,
-        drawing_package: None,
+        drawing_package,
         conditional_formats,
         hyperlinks: hyperlinks_out,
         data_validations,

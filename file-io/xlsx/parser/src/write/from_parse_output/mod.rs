@@ -122,6 +122,95 @@ fn imported_worksheet_hyperlink_relationship_id(
         .map(|relationship| relationship.id.clone())
 }
 
+#[derive(Debug, Default)]
+struct DrawingPathAllocator {
+    reserved: std::collections::BTreeSet<String>,
+    used: std::collections::BTreeSet<String>,
+    next_idx: usize,
+}
+
+impl DrawingPathAllocator {
+    fn from_output(
+        output: &ParseOutput,
+        all_chart_entries: &[Vec<ChartEntry>],
+        all_chart_ex_entries: &[Vec<ChartExEntry>],
+    ) -> Self {
+        let mut allocator = Self {
+            next_idx: 1,
+            ..Self::default()
+        };
+        if let Some(package_fidelity) = &output.package_fidelity {
+            for part in &package_fidelity.opaque_parts {
+                allocator.reserve_if_drawing_family(&part.path);
+            }
+        }
+        for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
+            for entry in chart_entries {
+                let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
+                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                allocator.reserve_chart_auxiliary_paths(chart_spec, &chart_path);
+            }
+        }
+        for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
+            for entry in chart_ex_entries {
+                let chart_path = format!("xl/charts/chartEx{}.xml", entry.global_idx);
+                let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                allocator.reserve_chart_auxiliary_paths(chart_spec, &chart_path);
+            }
+        }
+        allocator
+    }
+
+    fn reserve_chart_auxiliary_paths(
+        &mut self,
+        chart_spec: &domain_types::ChartSpec,
+        chart_path: &str,
+    ) {
+        if !chart_replay::chart_allows_auxiliary_replay(chart_spec) {
+            return;
+        }
+        let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) else {
+            return;
+        };
+        for path in chart_auxiliary::supported_auxiliary_file_paths(&aux, chart_path) {
+            self.reserve_if_drawing_family(&path);
+        }
+    }
+
+    fn reserve_if_drawing_family(&mut self, path: &str) {
+        let normalized = domain_types::normalize_package_path(path);
+        if Self::drawing_family_index(&normalized).is_some() {
+            self.reserved.insert(normalized);
+        }
+    }
+
+    fn allocate(&mut self, preferred_path: Option<&str>) -> String {
+        if let Some(path) = preferred_path.map(domain_types::normalize_package_path)
+            && Self::drawing_family_index(&path).is_some()
+            && !self.reserved.contains(&path)
+            && self.used.insert(path.clone())
+        {
+            return path;
+        }
+        loop {
+            let path = format!("xl/drawings/drawing{}.xml", self.next_idx);
+            self.next_idx += 1;
+            if self.reserved.contains(&path) {
+                continue;
+            }
+            if self.used.insert(path.clone()) {
+                return path;
+            }
+        }
+    }
+
+    fn drawing_family_index(path: &str) -> Option<usize> {
+        let file_name = path.rsplit('/').next()?;
+        let number = file_name.strip_prefix("drawing")?.strip_suffix(".xml")?;
+        number.parse().ok()
+    }
+}
+
 /// Write an XLSX file from a `ParseOutput`.
 ///
 /// Modeled workbook state is generated from domain types.
@@ -175,6 +264,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
     // Track which sheets have drawings (for content types).
     let mut sheets_with_drawings: Vec<usize> = Vec::new();
+    let mut drawing_path_allocator =
+        DrawingPathAllocator::from_output(output, &all_chart_entries, &all_chart_ex_entries);
 
     // Global VML drawing counter for archive paths (xl/drawings/vmlDrawing{N}.vml).
     // Excel numbers VML drawings sequentially across all sheets (1, 2, 3...),
@@ -552,10 +643,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             global_drawing_idx += 1;
             let _chart_entries = &all_chart_entries[sheet_idx];
 
-            let drawing_path = sheet_extras[sheet_idx]
-                .original_drawing_path
-                .clone()
-                .unwrap_or_else(|| format!("xl/drawings/drawing{}.xml", global_drawing_idx));
+            let drawing_path = drawing_path_allocator
+                .allocate(sheet_extras[sheet_idx].original_drawing_path.as_deref());
             let drawing_target = worksheet_relative_target(&drawing_path);
             worksheet_drawing_relationships.push(WorksheetDrawingGraphEntry {
                 sheet_idx,

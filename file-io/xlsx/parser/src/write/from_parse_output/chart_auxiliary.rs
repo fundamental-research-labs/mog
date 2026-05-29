@@ -8,8 +8,7 @@ use crate::infra::opc::opc_target_to_zip_path;
 const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
 const REL_CHART_COLOR_STYLE: &str =
     "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
-const REL_CHART_USER_SHAPES: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+use crate::infra::opc::REL_CHART_USER_SHAPES;
 
 pub(super) struct ChartAuxiliaryDataRef<'a> {
     pub(super) auxiliary_files: &'a [(String, Vec<u8>)],

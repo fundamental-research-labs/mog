@@ -325,6 +325,11 @@ pub(crate) fn hydrate_sheet(
     {
         sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
     }
+    if let Some(drawing_package) = &sheet.drawing_package
+        && let Ok(json) = serde_json::to_string(drawing_package)
+    {
+        sheet_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
+    }
 
     // --- Comments (yrs_schema::comment) ---
     // Resolve A1 cell_refs to stable CellId hex strings via the authoritative
@@ -725,6 +730,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
         && let Ok(json) = serde_json::to_string(comment_package)
     {
         sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
+    }
+    if let Some(drawing_package) = &sheet.drawing_package
+        && let Ok(json) = serde_json::to_string(drawing_package)
+    {
+        sheet_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
     }
     hydrate_comments(txn, &comments_map, &pos_map, &sheet.comments, persons);
     hydrate_sparklines(

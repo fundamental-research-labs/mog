@@ -42,6 +42,13 @@ pub enum PackageIntegrityIssue {
         relationship_type: String,
         expected_owner: String,
     },
+    InvalidRelationshipTargetKind {
+        rels_path: String,
+        relationship_type: String,
+        target_path: String,
+        actual_kind: String,
+        expected_kind: String,
+    },
     MissingRequiredRelationship {
         rels_path: String,
         relationship_type: String,
@@ -102,6 +109,16 @@ impl std::fmt::Display for PackageIntegrityIssue {
             } => write!(
                 f,
                 "relationship type {relationship_type} in {rels_path} is not valid for that owner; expected {expected_owner}"
+            ),
+            Self::InvalidRelationshipTargetKind {
+                rels_path,
+                relationship_type,
+                target_path,
+                actual_kind,
+                expected_kind,
+            } => write!(
+                f,
+                "relationship type {relationship_type} in {rels_path} targets {target_path} with semantic kind {actual_kind}; expected {expected_kind}"
             ),
             Self::MissingRequiredRelationship {
                 rels_path,

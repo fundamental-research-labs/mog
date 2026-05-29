@@ -34,6 +34,13 @@ export const DEFAULT_CALCULATION_SETTINGS: CalculationSettings = {
   fullPrecision: true,
   r1c1Mode: false,
   fullCalcOnLoad: false,
+  calcCompleted: true,
+  calcOnSave: true,
+  concurrentCalc: true,
+  concurrentManualCount: null,
+  forceFullCalc: false,
+  hasExplicitIterateCount: false,
+  hasExplicitIterateDelta: false,
 };
 
 // =============================================================================

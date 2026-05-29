@@ -179,20 +179,68 @@ impl Default for CultureInfo {
 impl CultureInfo {
     /// Derive date component ordering from `short_date_pattern`.
     pub fn date_order(&self) -> DateOrder {
-        for ch in self.short_date_pattern.chars() {
-            match ch {
-                'M' => return DateOrder::MDY,
-                'd' => return DateOrder::DMY,
-                'y' => return DateOrder::YMD,
-                _ => {}
-            }
+        match first_pattern_token(&self.short_date_pattern, &['M', 'd', 'y']) {
+            Some('d') => DateOrder::DMY,
+            Some('y') => DateOrder::YMD,
+            _ => DateOrder::MDY,
         }
-        DateOrder::MDY // fallback
     }
 
     /// Derive 24-hour preference from `short_time_pattern`.
     /// If pattern contains 't' (AM/PM marker), it's 12-hour.
     pub fn use_24_hour(&self) -> bool {
-        !self.short_time_pattern.contains('t')
+        first_pattern_token(&self.short_time_pattern, &['t']).is_none()
     }
+}
+
+fn first_pattern_token(pattern: &str, tokens: &[char]) -> Option<char> {
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut quote = None;
+    let mut index = 0;
+
+    while index < chars.len() {
+        let ch = chars[index];
+
+        if let Some(quote_ch) = quote {
+            if ch == quote_ch {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            index += 1;
+            continue;
+        }
+
+        if ch == '\\' {
+            index += 2;
+            continue;
+        }
+
+        if tokens.contains(&ch) {
+            let start = index;
+            while index < chars.len() && chars[index] == ch {
+                index += 1;
+            }
+
+            let previous = start.checked_sub(1).map(|prev| chars[prev]);
+            let next = chars.get(index).copied();
+            if !is_ascii_letter(previous) && !is_ascii_letter(next) {
+                return Some(ch);
+            }
+
+            continue;
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
+fn is_ascii_letter(ch: Option<char>) -> bool {
+    ch.is_some_and(|ch| ch.is_ascii_alphabetic())
 }

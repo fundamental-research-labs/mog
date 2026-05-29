@@ -937,6 +937,7 @@ export interface StoredSlicer {
   name?: string;
   style: SlicerStyle;
   position?: unknown;
+  level: number;
   zIndex: number;
   locked: boolean;
   showHeader: boolean;

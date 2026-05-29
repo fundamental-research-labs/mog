@@ -859,6 +859,56 @@ export interface CalculationSettings {
    * Default: false
    */
   fullCalcOnLoad: boolean;
+
+  /**
+   * Whether the workbook's last calculation completed.
+   * Preserved for XLSX calculation metadata fidelity.
+   * Default: true
+   */
+  calcCompleted: boolean;
+
+  /**
+   * Whether Excel should recalculate when saving.
+   * Default: true
+   */
+  calcOnSave: boolean;
+
+  /**
+   * Whether concurrent calculation is enabled.
+   * Default: true
+   */
+  concurrentCalc: boolean;
+
+  /**
+   * Explicit concurrent calculation thread count, when present.
+   * Default: null
+   */
+  concurrentManualCount: number | null;
+
+  /**
+   * Whether to force a full recalculation.
+   * Default: false
+   */
+  forceFullCalc: boolean;
+
+  /**
+   * Excel calculation engine version (`calcId` in OOXML).
+   */
+  calcId?: number;
+
+  /**
+   * Whether `iterateCount` was explicitly present in the source workbook.
+   * Preserved for XLSX round-trip fidelity.
+   * Default: false
+   */
+  hasExplicitIterateCount: boolean;
+
+  /**
+   * Whether `iterateDelta` was explicitly present in the source workbook.
+   * Preserved for XLSX round-trip fidelity.
+   * Default: false
+   */
+  hasExplicitIterateDelta: boolean;
 }
 
 // DEFAULT_CALCULATION_SETTINGS moved to @mog-sdk/kernel/defaults/core

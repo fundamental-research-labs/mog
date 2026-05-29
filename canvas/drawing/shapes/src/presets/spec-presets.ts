@@ -23,7 +23,7 @@ import {
   registerUnfilled,
 } from './registry';
 
-import presetShapeData from './preset-shape-data.json';
+import presetShapeData from './preset-shape-data.json' with { type: 'json' };
 
 // ─── OOXML Category Mapping ─────────────────────────────────────────────────
 

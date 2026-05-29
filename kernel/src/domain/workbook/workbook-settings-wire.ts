@@ -14,6 +14,13 @@ export function toComputeWorkbookSettings(settings: WorkbookSettings): ComputeWo
     ...defaults.automaticConversionPolicy,
     ...settings.automaticConversionPolicy,
   };
+  const calculationSettings =
+    settings.calculationSettings !== undefined
+      ? {
+          ...defaults.calculationSettings,
+          ...settings.calculationSettings,
+        }
+      : undefined;
 
   return {
     showHorizontalScrollbar: settings.showHorizontalScrollbar ?? defaults.showHorizontalScrollbar,
@@ -40,9 +47,7 @@ export function toComputeWorkbookSettings(settings: WorkbookSettings): ComputeWo
     ...(settings.workbookProtectionOptions !== undefined
       ? { workbookProtectionOptions: settings.workbookProtectionOptions }
       : {}),
-    ...(settings.calculationSettings !== undefined
-      ? { calculationSettings: settings.calculationSettings }
-      : {}),
+    ...(calculationSettings !== undefined ? { calculationSettings } : {}),
     date1904: settings.date1904 ?? defaults.date1904 ?? false,
     ...(settings.defaultTableStyleId !== undefined
       ? { defaultTableStyleId: settings.defaultTableStyleId }

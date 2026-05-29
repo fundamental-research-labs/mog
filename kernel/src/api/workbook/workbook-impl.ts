@@ -84,6 +84,7 @@ import type { AccessPrincipal } from '@mog-sdk/contracts/security';
 import type { DocumentContext } from '../../context';
 import { FormControlManager } from '../../domain/form-controls';
 import { getName, getOrder } from '../../domain/sheets/sheet-meta';
+import { DEFAULT_CALCULATION_SETTINGS } from '../../domain/workbook/core-defaults';
 import { toComputeWorkbookSettings } from '../../domain/workbook/workbook-settings-wire';
 import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { createCheckpointManager } from '../../services/checkpoint';
@@ -896,12 +897,8 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async setCalculationMode(mode: 'auto' | 'autoNoTable' | 'manual'): Promise<void> {
     this._ensureWritable('workbook.setCalculationMode');
-    const settings = await this.ctx.computeBridge.getWorkbookSettings();
     await this.setSettings({
-      calculationSettings: {
-        ...settings.calculationSettings,
-        calcMode: mode,
-      } as WorkbookSettings['calculationSettings'],
+      calculationSettings: await this.mergeCalculationSettings({ calcMode: mode }),
     });
     if (mode !== 'manual') {
       await this.calculate();
@@ -915,34 +912,24 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async setIterativeCalculation(enabled: boolean): Promise<void> {
     this._ensureWritable('workbook.setIterativeCalculation');
-    const settings = await this.ctx.computeBridge.getWorkbookSettings();
     await this.setSettings({
-      calculationSettings: {
-        ...settings.calculationSettings,
+      calculationSettings: await this.mergeCalculationSettings({
         enableIterativeCalculation: enabled,
-      } as WorkbookSettings['calculationSettings'],
+      }),
     });
   }
 
   async setMaxIterations(n: number): Promise<void> {
     this._ensureWritable('workbook.setMaxIterations');
-    const settings = await this.ctx.computeBridge.getWorkbookSettings();
     await this.setSettings({
-      calculationSettings: {
-        ...settings.calculationSettings,
-        maxIterations: n,
-      } as WorkbookSettings['calculationSettings'],
+      calculationSettings: await this.mergeCalculationSettings({ maxIterations: n }),
     });
   }
 
   async setConvergenceThreshold(threshold: number): Promise<void> {
     this._ensureWritable('workbook.setConvergenceThreshold');
-    const settings = await this.ctx.computeBridge.getWorkbookSettings();
     await this.setSettings({
-      calculationSettings: {
-        ...settings.calculationSettings,
-        maxChange: threshold,
-      } as WorkbookSettings['calculationSettings'],
+      calculationSettings: await this.mergeCalculationSettings({ maxChange: threshold }),
     });
   }
 
@@ -953,13 +940,20 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async setUsePrecisionAsDisplayed(value: boolean): Promise<void> {
     this._ensureWritable('workbook.setUsePrecisionAsDisplayed');
-    const settings = await this.ctx.computeBridge.getWorkbookSettings();
     await this.setSettings({
-      calculationSettings: {
-        ...settings.calculationSettings,
-        fullPrecision: !value,
-      } as WorkbookSettings['calculationSettings'],
+      calculationSettings: await this.mergeCalculationSettings({ fullPrecision: !value }),
     });
+  }
+
+  private async mergeCalculationSettings(
+    patch: Partial<NonNullable<WorkbookSettings['calculationSettings']>>,
+  ): Promise<NonNullable<WorkbookSettings['calculationSettings']>> {
+    const settings = await this.ctx.computeBridge.getWorkbookSettings();
+    return {
+      ...DEFAULT_CALCULATION_SETTINGS,
+      ...settings.calculationSettings,
+      ...patch,
+    };
   }
 
   // ===========================================================================

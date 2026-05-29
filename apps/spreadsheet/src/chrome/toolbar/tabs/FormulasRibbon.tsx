@@ -25,6 +25,7 @@ import {
 } from '../../../internal-api';
 
 import { ChevronDownSvg } from '@mog/icons';
+import type { CalculationSettings } from '@mog-sdk/contracts/core';
 import {
   CALCULATION_COLLAPSE_CONFIG,
   DEFINED_NAMES_COLLAPSE_CONFIG,
@@ -657,10 +658,10 @@ export function FormulasRibbon() {
   const deps = useActionDependencies();
   const activeSheetId = useActiveSheetId();
   const { viewOptions } = useSheetViewOptions(activeSheetId);
-  const { settings: workbookSettings, setSetting } = useWorkbookSettings();
+  const { settings: workbookSettings } = useWorkbookSettings();
 
   // UI Store - READ ONLY selectors (mutations go through dispatch)
-  const calculationSettings = workbookSettings.calculationSettings ?? {
+  const calculationSettings: CalculationSettings = workbookSettings.calculationSettings ?? {
     enableIterativeCalculation: false,
     maxIterations: 100,
     maxChange: 0.001,
@@ -668,6 +669,13 @@ export function FormulasRibbon() {
     fullPrecision: true,
     r1c1Mode: false,
     fullCalcOnLoad: false,
+    calcCompleted: true,
+    calcOnSave: true,
+    concurrentCalc: true,
+    concurrentManualCount: null,
+    forceFullCalc: false,
+    hasExplicitIterateCount: false,
+    hasExplicitIterateDelta: false,
   };
   const calculationMode = calculationSettings.calcMode === 'manual' ? 'manual' : 'auto';
   const iterativeCalculationEnabled = calculationSettings.enableIterativeCalculation === true;
@@ -804,19 +812,10 @@ export function FormulasRibbon() {
 
   const handleIterativeCalculationChange = useCallback(
     async (enabled: boolean) => {
-      await setSetting('calculationSettings', {
-        ...calculationSettings,
-        enableIterativeCalculation: enabled,
-        maxIterations: calculationSettings.maxIterations ?? 100,
-        maxChange: calculationSettings.maxChange ?? 0.001,
-        calcMode: calculationSettings.calcMode ?? 'auto',
-        fullPrecision: calculationSettings.fullPrecision ?? true,
-        r1c1Mode: calculationSettings.r1c1Mode ?? false,
-        fullCalcOnLoad: calculationSettings.fullCalcOnLoad ?? false,
-      });
+      await wb.setIterativeCalculation(enabled);
       await wb.calculate();
     },
-    [calculationSettings, setSetting, wb],
+    [wb],
   );
 
   // Handle Calculate Now (F9)

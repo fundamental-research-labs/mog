@@ -125,7 +125,7 @@ fn projection_role_controls_spill_target_snapshot_filtering_not_cm() {
                     col: 0,
                     value: CellValue::number(1.0),
                     formula: Some("=SEQUENCE(1,2)".into()),
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::DynamicArraySource,
                     ..Default::default()
                 },
@@ -133,7 +133,7 @@ fn projection_role_controls_spill_target_snapshot_filtering_not_cm() {
                     row: 0,
                     col: 1,
                     value: CellValue::number(2.0),
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::DynamicArraySpillTarget,
                     ..Default::default()
                 },
@@ -141,7 +141,7 @@ fn projection_role_controls_spill_target_snapshot_filtering_not_cm() {
                     row: 5,
                     col: 5,
                     value: CellValue::number(35.676741130091997),
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::UnknownCellMetadata,
                     ..Default::default()
                 },
@@ -279,7 +279,7 @@ fn phantom_cells_filtered_from_snapshot() {
                     col: 0,
                     value: CellValue::Text("Business Development".into()),
                     formula: Some("UNIQUE(C1:C100)".into()),
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::DynamicArraySource,
                     ..Default::default()
                 },
@@ -289,7 +289,7 @@ fn phantom_cells_filtered_from_snapshot() {
                     col: 0,
                     value: CellValue::Text("Engineering".into()),
                     formula: None,
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::DynamicArraySpillTarget,
                     ..Default::default()
                 },
@@ -299,7 +299,7 @@ fn phantom_cells_filtered_from_snapshot() {
                     col: 0,
                     value: CellValue::Text("Sales".into()),
                     formula: None,
-                    cm: true,
+                    cell_metadata_index: Some(1),
                     projection_role: ImportedCellProjectionRole::DynamicArraySpillTarget,
                     ..Default::default()
                 },
@@ -309,7 +309,6 @@ fn phantom_cells_filtered_from_snapshot() {
                     col: 1,
                     value: CellValue::number(100.0),
                     formula: None,
-                    cm: false,
                     ..Default::default()
                 },
             ],

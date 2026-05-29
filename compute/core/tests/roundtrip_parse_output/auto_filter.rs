@@ -25,6 +25,7 @@ fn roundtrip_auto_filter_basic() {
         columns: vec![],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     });
     // Should not panic -- the writer produces valid XLSX even with auto_filter set.
     let rt = roundtrip(&output);
@@ -60,6 +61,7 @@ fn roundtrip_auto_filter_with_column_filter() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     });
     // Should not panic -- the writer handles filter columns correctly.
     let rt = roundtrip(&output);

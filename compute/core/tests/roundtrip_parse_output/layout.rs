@@ -80,6 +80,7 @@ fn roundtrip_row_and_col_dimensions() {
                 hidden: false,
                 best_fit: false,
                 collapsed: false,
+                phonetic: false,
             },
             ColDimension {
                 col: 3,
@@ -88,6 +89,7 @@ fn roundtrip_row_and_col_dimensions() {
                 hidden: false,
                 best_fit: false,
                 collapsed: false,
+                phonetic: false,
             },
         ],
         ..Default::default()

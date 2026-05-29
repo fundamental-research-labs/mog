@@ -60,6 +60,7 @@ fn rich_auto_filter() -> AutoFilter {
                         date_time_grouping: DateTimeGrouping::Day,
                     }],
                 }),
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 1,
@@ -71,6 +72,7 @@ fn rich_auto_filter() -> AutoFilter {
                     value: 15.0,
                     filter_val: Some(73.5),
                 }),
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 2,
@@ -84,6 +86,7 @@ fn rich_auto_filter() -> AutoFilter {
                     }],
                     and_logic: false,
                 }),
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 3,
@@ -96,6 +99,7 @@ fn rich_auto_filter() -> AutoFilter {
                     value_iso: Some("2025-04-23T10:00:00Z".to_string()),
                     max_value_iso: None,
                 }),
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 4,
@@ -105,6 +109,7 @@ fn rich_auto_filter() -> AutoFilter {
                     dxf_id: Some(7),
                     cell_color: false,
                 }),
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 5,
@@ -114,6 +119,7 @@ fn rich_auto_filter() -> AutoFilter {
                     icon_set: Some("3TrafficLights1".to_string()),
                     icon_id: 2,
                 }),
+                ext_lst_raw: None,
             },
         ],
         sort: Some(SortState {
@@ -133,6 +139,7 @@ fn rich_auto_filter() -> AutoFilter {
             ..Default::default()
         }),
         xr_uid: Some("{DEADBEEF-0000-0000-0000-000000000042}".to_string()),
+        ext_lst_raw: None,
     }
 }
 
@@ -265,6 +272,7 @@ fn childless_and_explicit_empty_values_filters_survive_hydrate_export_roundtrip(
                 hidden_button: true,
                 show_button: false,
                 filter_type: None,
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 1,
@@ -279,6 +287,7 @@ fn childless_and_explicit_empty_values_filters_survive_hydrate_export_roundtrip(
         ],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let parse_output = build_parse_output_with_filter(af.clone());
     let xlsx_bytes =
@@ -317,6 +326,7 @@ fn simple_auto_filter_survives_when_no_column_filters() {
         columns: Vec::new(),
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let parse_output = build_parse_output_with_filter(af.clone());
 

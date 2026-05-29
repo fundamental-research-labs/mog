@@ -256,6 +256,7 @@ pub(super) fn threading_result(
         raw_doc_metadata_label_info: None,
         external_links: Vec::new(),
         connections: Default::default(),
+        feature_properties: Default::default(),
         custom_xml_parts: Vec::new(),
         raw_persons_xml,
         raw_threaded_comments,

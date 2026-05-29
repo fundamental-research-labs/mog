@@ -28,7 +28,7 @@ fn test_get_all_properties_resolves_compact_and_skips_malformed_entries() {
         &styled_hex,
         r#"{"s":5,"formulaResultType":2,"hasEmptyCachedValue":true,"sstIndex":7,"originalValue":"42"}"#,
     );
-    insert_compact_cell_properties(&storage, &sid, &metadata_hex, r#"{"cm":true,"vm":3}"#);
+    insert_compact_cell_properties(&storage, &sid, &metadata_hex, r#"{"cm":1,"vm":3}"#);
     insert_compact_cell_properties(&storage, &sid, "not-a-cell-id", r#"{"s":5}"#);
     insert_compact_cell_properties(
         &storage,
@@ -64,7 +64,7 @@ fn test_get_all_properties_resolves_compact_and_skips_malformed_entries() {
 
     let metadata = all.get(&metadata_cell).unwrap();
     assert!(metadata.format.is_none());
-    assert!(metadata.cm);
+    assert_eq!(metadata.cell_metadata_index, Some(1));
     assert_eq!(metadata.vm, Some(3));
 }
 
@@ -138,5 +138,5 @@ fn test_iter_formatted_property_cell_ids_reports_structured_and_compact_formats_
     let mut ids = iter_formatted_property_cell_ids(doc, sheets, &sid);
     ids.sort();
 
-    assert_eq!(ids, vec![compact_hex, structured_hex]);
+    assert_eq!(ids, vec![structured_hex, compact_hex]);
 }

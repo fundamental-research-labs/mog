@@ -37,18 +37,24 @@ pub(super) fn decode_sheet_hyperlink<T: yrs::ReadTxn>(
     fallback_cell_ref: String,
 ) -> Option<(u32, Hyperlink)> {
     let raw_url = read_hyperlink_url(txn, cell_map)?;
-    let stored_target_kind = read_target_kind(txn, cell_map);
-    let target_kind = stored_target_kind.or_else(|| {
-        if raw_url.is_empty() {
-            None
-        } else if raw_url.starts_with('#') {
-            Some(HyperlinkTargetKind::InlineLocation)
-        } else {
-            Some(HyperlinkTargetKind::Relationship)
-        }
-    });
-    let (target, location_from_url) =
-        target_and_location_from_stored_url(&raw_url, target_kind, stored_target_kind.is_some());
+    let stored_target_kind_raw = read_string_key(txn, cell_map, KEY_HYPERLINK_TARGET_KIND);
+    let stored_target_kind = stored_target_kind_raw
+        .as_deref()
+        .and_then(target_kind_from_str);
+    let target_kind = if stored_target_kind_raw.is_some() {
+        stored_target_kind
+    } else if raw_url.is_empty() {
+        None
+    } else if raw_url.starts_with('#') {
+        Some(HyperlinkTargetKind::InlineLocation)
+    } else {
+        Some(HyperlinkTargetKind::Relationship)
+    };
+    let (target, location_from_url) = target_and_location_from_stored_url(
+        &raw_url,
+        target_kind,
+        stored_target_kind_raw.is_some(),
+    );
 
     let location = read_string_key(txn, cell_map, KEY_HYPERLINK_LOCATION).or(location_from_url);
     let cell_ref =

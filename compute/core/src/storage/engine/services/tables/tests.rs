@@ -107,7 +107,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 2,
@@ -138,7 +138,7 @@ mod tests {
         let (_, result) = engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 2,
@@ -151,7 +151,7 @@ mod tests {
         let sheet_filters = engine.get_filters_in_sheet(&sid);
         let table_filter = sheet_filters
             .iter()
-            .find(|filter| filter.table_id.as_deref() == Some("T1"))
+            .find(|filter| filter.table_id.as_deref() == Some("Table1"))
             .expect("table filter");
         assert_eq!(table_filter.filter_kind, filters::FilterKind::TableFilter);
 
@@ -163,7 +163,7 @@ mod tests {
         assert_eq!(change.filter_kind.as_deref(), Some("tableFilter"));
         assert_eq!(change.action.as_deref(), Some("created"));
 
-        engine.delete_table("T1").expect("delete_table");
+        engine.delete_table("Table1").expect("delete_table");
         assert!(
             engine.get_filters_in_sheet(&sid).is_empty(),
             "deleting a table must remove its owned table filter"
@@ -391,7 +391,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 2,
@@ -401,15 +401,15 @@ mod tests {
             )
             .expect("create_table");
 
-        engine.delete_table("T1").expect("delete_table");
+        engine.delete_table("Table1").expect("delete_table");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1");
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1");
         assert!(
             json.is_none(),
-            "rangeBindings[table:T1] must be removed after delete_table"
+            "rangeBindings[table:Table1] must be removed after delete_table"
         );
     }
 
@@ -463,7 +463,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -474,12 +474,14 @@ mod tests {
             .expect("create_table");
 
         // Expand columns
-        engine.resize_table("T1", 0, 0, 3, 2).expect("resize_table");
+        engine
+            .resize_table("Table1", 0, 0, 3, 2)
+            .expect("resize_table");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1")
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
             .expect("binding must exist");
         let binding: domain_types::domain::table::TableBinding =
             serde_json::from_str(&json).unwrap();
@@ -499,7 +501,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -509,12 +511,12 @@ mod tests {
             )
             .expect("create_table");
 
-        engine.toggle_totals_row("T1").expect("toggle_totals");
+        engine.toggle_totals_row("Table1").expect("toggle_totals");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1")
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
             .expect("binding must exist");
         let binding: domain_types::domain::table::TableBinding =
             serde_json::from_str(&json).unwrap();
@@ -533,7 +535,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -544,13 +546,13 @@ mod tests {
             .expect("create_table");
 
         engine
-            .rename_table_column("T1", 0, "Alpha")
+            .rename_table_column("Table1", 0, "Alpha")
             .expect("rename_column");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1")
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
             .expect("binding must exist");
         let binding: domain_types::domain::table::TableBinding =
             serde_json::from_str(&json).unwrap();
@@ -569,7 +571,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -592,7 +594,7 @@ mod tests {
         engine.redo().expect("redo");
         let tables = engine.get_all_tables_in_sheet(&sid);
         assert_eq!(tables.len(), 1, "table must be back after redo");
-        assert_eq!(tables[0].name, "T1");
+        assert_eq!(tables[0].name, "Table1");
         assert_eq!(tables[0].columns.len(), 2);
         assert_eq!(tables[0].columns[0].name, "Col1");
     }
@@ -717,8 +719,8 @@ mod tests {
 
         let table = CanonicalTable {
             id: "1".to_string(),
-            name: "T1".to_string(),
-            display_name: "T1".to_string(),
+            name: "Table1".to_string(),
+            display_name: "Table1".to_string(),
             sheet_id: "s1".to_string(),
             range: cell_types::SheetRange::new(0, 0, 5, 2),
             columns: vec![
@@ -784,7 +786,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 2,
@@ -795,13 +797,19 @@ mod tests {
             .expect("create_table");
 
         // Check index via mirror
-        assert_eq!(engine.mirror().table_range_id("T1"), Some("table:T1"),);
+        assert_eq!(
+            engine.mirror().table_range_id("Table1"),
+            Some("table:Table1"),
+        );
         // Case-insensitive
-        assert_eq!(engine.mirror().table_range_id("t1"), Some("table:T1"),);
+        assert_eq!(
+            engine.mirror().table_range_id("table1"),
+            Some("table:Table1"),
+        );
 
         // Delete should clean up index
-        engine.delete_table("T1").expect("delete_table");
-        assert_eq!(engine.mirror().table_range_id("T1"), None);
+        engine.delete_table("Table1").expect("delete_table");
+        assert_eq!(engine.mirror().table_range_id("Table1"), None);
     }
 
     /// Single-row table (header only, no data rows) binding roundtrip.
@@ -890,7 +898,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -901,14 +909,15 @@ mod tests {
             .expect("create_table");
 
         engine
-            .convert_table_to_range("T1")
+            .convert_table_to_range("Table1")
             .expect("convert_to_range");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
         assert!(
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1").is_none(),
+            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
+                .is_none(),
             "binding must be cleaned up after convert_to_range"
         );
     }
@@ -922,7 +931,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -934,16 +943,16 @@ mod tests {
 
         // Change style options
         engine
-            .set_table_bool_option("T1", "bandedColumns", true)
+            .set_table_bool_option("Table1", "bandedColumns", true)
             .expect("set banded columns");
         engine
-            .set_table_bool_option("T1", "bandedRows", false)
+            .set_table_bool_option("Table1", "bandedRows", false)
             .expect("set banded rows");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1")
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
             .expect("binding must exist");
         let binding: domain_types::domain::table::TableBinding =
             serde_json::from_str(&json).unwrap();
@@ -960,7 +969,7 @@ mod tests {
         engine
             .create_table(
                 &sid,
-                "T1".into(),
+                "Table1".into(),
                 0,
                 0,
                 3,
@@ -971,20 +980,22 @@ mod tests {
             .expect("create_table");
 
         engine
-            .set_table_auto_expand("T1", false)
+            .set_table_auto_expand("Table1", false)
             .expect("set auto expand policy");
         engine
-            .set_table_auto_calculated_columns("T1", false)
+            .set_table_auto_calculated_columns("Table1", false)
             .expect("set calculated columns policy");
 
-        let table = engine.get_table_by_name("T1").expect("table must exist");
+        let table = engine
+            .get_table_by_name("Table1")
+            .expect("table must exist");
         assert!(!table.auto_expand);
         assert!(!table.auto_calculated_columns);
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:T1")
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
             .expect("binding must exist");
         let binding: domain_types::domain::table::TableBinding =
             serde_json::from_str(&json).unwrap();

@@ -100,6 +100,7 @@ fn test_color_scale_rule_serde() {
         priority: 1,
         stop_if_true: None,
         color_scale: CFColorScale {
+            points: Vec::new(),
             min_point: cp(CfvoType::Min, "#63BE7B"),
             mid_point: Some(cp_val(CfvoType::Percentile, 50.0, "#FFEB84")),
             max_point: cp(CfvoType::Max, "#F8696B"),

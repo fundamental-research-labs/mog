@@ -10,6 +10,7 @@ fn test_cell_comment_serde_roundtrip() {
         author_email: None,
         created_at: Some(1700000000000),
         modified_at: Some(1700000001000),
+        comment_pr: None,
         runs: vec![
             RichTextRun {
                 text: "Hello ".to_string(),

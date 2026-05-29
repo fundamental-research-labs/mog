@@ -94,6 +94,7 @@ fn roundtrip_comprehensive() {
                     hidden: false,
                     best_fit: false,
                     collapsed: false,
+                    phonetic: false,
                 }],
                 ..Default::default()
             },

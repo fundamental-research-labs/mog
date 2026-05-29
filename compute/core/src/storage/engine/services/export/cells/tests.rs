@@ -325,7 +325,7 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         col: 0,
         value: number(1.0),
         formula: Some("SEQUENCE(1,2)".to_string()),
-        cm: true,
+        cell_metadata_index: Some(1),
         projection_role: domain_types::ImportedCellProjectionRole::DynamicArraySource,
         ..Default::default()
     };
@@ -333,7 +333,7 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         row: 0,
         col: 1,
         value: number(2.0),
-        cm: true,
+        cell_metadata_index: Some(1),
         original_value: Some("2".to_string()),
         projection_role: domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget,
         ..Default::default()

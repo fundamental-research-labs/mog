@@ -138,7 +138,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                                     break;
                                 }
                             } else {
-                                CellValue::Error(CellError::Ref, None)
+                                CellValue::Null
                             }
                         } else {
                             // Non-single-column return range -- need materialization
@@ -211,7 +211,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                 .unwrap_or(CellValue::Null);
             match xlookup_match_in_materialized(&elem, &lookup_flat, match_mode, search_mode) {
                 Some(idx) => {
-                    let row_result = get_return_value(&return_arr, idx);
+                    let row_result = get_xlookup_return_value(&return_arr, idx);
                     match row_result {
                         CellValue::Array(arr) => results.extend(arr.iter().cloned()),
                         scalar => results.push(scalar),
@@ -298,9 +298,11 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                         try_extract_single_col_range(&args[2], evaluator.meta)
                     {
                         let ret_row = ret_start + (row - start_row);
-                        if ret_row <= ret_end
-                            && let Some(col_vals) =
-                                evaluator.meta.get_column_values(&ret_sheet, ret_col)
+                        if ret_row > ret_end {
+                            return Ok(CellValue::Null);
+                        }
+                        if let Some(col_vals) =
+                            evaluator.meta.get_column_values(&ret_sheet, ret_col)
                         {
                             let val = col_vals
                                 .get(ret_row as usize)
@@ -315,7 +317,10 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                     if let CellValue::Error(e, _) = return_arr {
                         return Ok(CellValue::Error(e, None));
                     }
-                    return Ok(get_return_value(&return_arr, (row - start_row) as usize));
+                    return Ok(get_xlookup_return_value(
+                        &return_arr,
+                        (row - start_row) as usize,
+                    ));
                 }
                 // Row outside range — fall through to materialization
             }
@@ -359,7 +364,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
     let match_idx = xlookup_match_in_materialized(&lookup, &lookup_arr, match_mode, search_mode);
 
     match match_idx {
-        Some(idx) => Ok(get_return_value(&return_arr, idx)),
+        Some(idx) => Ok(get_xlookup_return_value(&return_arr, idx)),
         None => {
             // Whole-column/row references are clamped to sheet.rows,
             // so trailing empties beyond the data extent are lost.
@@ -375,6 +380,16 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                 Ok(CellValue::Error(CellError::Na, None))
             }
         }
+    }
+}
+
+fn get_xlookup_return_value(return_arr: &CellValue, idx: usize) -> CellValue {
+    match return_arr {
+        CellValue::Array(arr) if arr.rows() == 1 && idx >= arr.cols() => CellValue::Null,
+        CellValue::Array(arr) if arr.rows() > 1 && idx >= arr.rows() => CellValue::Null,
+        CellValue::Array(_) => get_return_value(return_arr, idx),
+        _ if idx == 0 => get_return_value(return_arr, idx),
+        _ => CellValue::Null,
     }
 }
 

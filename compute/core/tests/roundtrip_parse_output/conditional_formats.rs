@@ -127,6 +127,7 @@ fn roundtrip_conditional_format_color_scale() {
             priority: 1,
             stop_if_true: None,
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: CFColorPoint {
                     value: CFValueRef::Min,
                     color: "#FF0000".to_string(),
@@ -213,6 +214,7 @@ fn roundtrip_conditional_format_data_bar() {
                 positive_color: "#638EC6".to_string(),
                 negative_color: None,
                 border_color: None,
+                negative_border_color: None,
                 show_border: None,
                 gradient: None,
                 direction: None,
@@ -266,21 +268,25 @@ fn roundtrip_conditional_format_icon_set() {
                 icon_set_name: IconSetType::ThreeTrafficLights1,
                 reverse_order: None,
                 show_icon_only: None,
+                percent: None,
                 thresholds: vec![
                     CFIconThreshold {
                         value_type: CfvoType::Percent,
                         value: Some("0".to_string()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     CFIconThreshold {
                         value_type: CfvoType::Percent,
                         value: Some("33".to_string()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     CFIconThreshold {
                         value_type: CfvoType::Percent,
                         value: Some("67".to_string()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                 ],
                 custom_icons: Vec::new(),

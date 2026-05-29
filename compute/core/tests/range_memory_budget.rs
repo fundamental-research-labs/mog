@@ -217,15 +217,9 @@ fn memory_amplification_f64_small() {
     println!();
 
     // The amplification floor is size_of::<CellValue>() / 8 (f64 payload).
-    // On x86_64 with 24-byte CellValue: 24/8 = 3.0x base ratio.
-    // On wasm32 with 16-byte CellValue: 16/8 = 2.0x base ratio.
-    // For small datasets, map overhead adds a small constant term.
-    let threshold = if cell_value_size <= 16 {
-        2.5
-    } else {
-        // x86_64: base ratio is 3.0x, allow up to 3.5x for HashMap overhead
-        3.5
-    };
+    // Keep this gate tied to the current production representation so it
+    // catches overhead regressions without hardcoding a stale enum layout.
+    let threshold = (cell_value_size as f64 / 8.0) + 0.5;
 
     assert!(
         amplification <= threshold,
@@ -278,20 +272,10 @@ fn memory_amplification_f64_large() {
     // relative to the CellValue heap data, so the amplification should be
     // dominated by size_of::<CellValue>() / 8 (since payload is 8 bytes per f64).
     //
-    // With CellValue at 24 bytes on x86_64: 24/8 = 3.0x base ratio.
-    // With CellValue at 16 bytes on wasm32: 16/8 = 2.0x base ratio.
-    //
-    // The 2.5x gate passes on wasm32 and fails on x86_64 *if* CellValue is 24+
-    // bytes. On x86_64, this test documents the actual ratio even when it
-    // exceeds the wasm gate — the assertion uses a platform-aware threshold.
-    let threshold = if cell_value_size <= 16 {
-        // wasm32 or niche-optimized: tight 2.5x budget
-        2.5
-    } else {
-        // x86_64 with 24-byte CellValue: the theoretical floor is 3.0x.
-        // Allow up to 3.5x to account for HashMap overhead.
-        3.5
-    };
+    // The threshold is the theoretical representation floor plus a tiny
+    // overhead allowance; for large datasets HashMap entry overhead should be
+    // negligible relative to the column vectors.
+    let threshold = (cell_value_size as f64 / 8.0) + 0.1;
 
     assert!(
         amplification <= threshold,

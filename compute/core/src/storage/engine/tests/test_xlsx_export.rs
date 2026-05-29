@@ -206,6 +206,8 @@ fn ole_owner_parse_output() -> ParseOutput {
                         preview_image_path: Some("xl/media/image1.png".to_string()),
                         embedding: Some(OleObjectPackageIdentity {
                             path: "xl/embeddings/oleObject1.bin".to_string(),
+                            kind: "oleObject".to_string(),
+                            content_type: None,
                             relationship_id: Some("rIdOle1".to_string()),
                             bytes: b"owned ole bytes".to_vec(),
                         }),
@@ -605,6 +607,7 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
             assign: true,
             coerce: true,
             cell_meta: true,
+            ..Default::default()
         }],
         future_metadata: vec![domain_types::FutureMetadataGroup {
             name: "XLDAPR".to_string(),
@@ -688,6 +691,36 @@ fn l2_xlsx_export_preserves_threaded_comment_persons() {
 }
 
 #[test]
+fn l2_xlsx_export_preserves_empty_threaded_comment_persons_part() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Comments".to_string(),
+            rows: 1,
+            cols: 1,
+            ..Default::default()
+        }],
+        has_persons_part: true,
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_parse = engine
+        .export_to_parse_output()
+        .expect("production Yrs export should succeed")
+        .parse_output;
+    assert!(exported_parse.has_persons_part);
+    assert!(exported_parse.persons.is_empty());
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let parsed = xlsx_api::parse(&exported_bytes)
+        .expect("exported XLSX should parse")
+        .output;
+
+    assert!(parsed.has_persons_part);
+    assert!(parsed.persons.is_empty());
+}
+
+#[test]
 fn build_parse_output_from_yrs_preserves_workbook_views() {
     let output = ParseOutput {
         sheets: vec![SheetData {
@@ -709,6 +742,7 @@ fn build_parse_output_from_yrs_preserves_workbook_views() {
             window_height: Some(12225),
             tab_ratio: Some(600.0),
             uid: Some("{1A2B3C4D-0000-0000-0000-000000000000}".to_string()),
+            ext_lst_raw: None,
         }],
         ..Default::default()
     };
@@ -737,6 +771,8 @@ fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
             allow_png: Some(true),
             target_screen_size: Some(ooxml_types::web_publish::TargetScreenSize::Size1600x1200),
             dpi: Some(192),
+            code_page: None,
+            character_set: None,
         }),
         ..Default::default()
     };

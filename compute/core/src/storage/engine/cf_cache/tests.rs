@@ -171,6 +171,7 @@ fn test_convert_color_scale_rule() {
         priority: 1,
         stop_if_true: None,
         color_scale: cf::CFColorScale {
+            points: Vec::new(),
             min_point: cf::CFColorPoint {
                 value: cf::CFValueRef::Min,
                 ooxml_value: None,
@@ -179,6 +180,7 @@ fn test_convert_color_scale_rule() {
                 color_tint: None,
                 color_indexed: None,
                 color_auto: None,
+                ext_lst_xml: None,
             },
             mid_point: None,
             max_point: cf::CFColorPoint {
@@ -189,6 +191,7 @@ fn test_convert_color_scale_rule() {
                 color_tint: None,
                 color_indexed: None,
                 color_auto: None,
+                ext_lst_xml: None,
             },
         },
     };
@@ -229,6 +232,7 @@ fn test_convert_data_bar_rule_accepts_ooxml_blank_threshold_colors() {
             positive_color: "004472C4".to_string(),
             negative_color: None,
             border_color: None,
+            negative_border_color: None,
             show_border: None,
             gradient: None,
             direction: None,

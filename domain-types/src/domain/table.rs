@@ -1,5 +1,5 @@
 use ooxml_types::cond_format::IconSetType;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::filter::{SortConditionBy, SortMethod};
 
@@ -245,7 +245,7 @@ fn is_true_default(v: &bool) -> bool {
 }
 
 /// The filter type and settings for a single column.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum FilterSpec {
     /// Discrete value filter (CT_Filters)
@@ -299,6 +299,124 @@ pub enum FilterSpec {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         icon_id: Option<u32>,
     },
+}
+
+impl<'de> Deserialize<'de> for FilterSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("type").is_none()
+            && let Some(object) = value.as_object()
+            && object.len() == 1
+            && let Some((legacy_kind, legacy_payload)) = object.iter().next()
+        {
+            let mut payload = legacy_payload.clone();
+            if let Some(payload_object) = payload.as_object_mut() {
+                payload_object.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(legacy_kind.clone()),
+                );
+                value = payload;
+            }
+        }
+
+        #[derive(Deserialize)]
+        #[serde(tag = "type", rename_all = "camelCase")]
+        enum TaggedFilterSpec {
+            Values {
+                #[serde(default)]
+                blank: bool,
+                values: Vec<String>,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                calendar_type: Option<super::filter::CalendarType>,
+                #[serde(default, skip_serializing_if = "Vec::is_empty")]
+                date_group_items: Vec<super::filter::DateGroupItem>,
+            },
+            Custom {
+                #[serde(default)]
+                and: bool,
+                filters: Vec<CustomFilterSpec>,
+            },
+            Top10 {
+                #[serde(default = "default_true")]
+                top: bool,
+                #[serde(default)]
+                percent: bool,
+                val: f64,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                filter_val: Option<f64>,
+            },
+            Dynamic {
+                kind: String,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                val: Option<f64>,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                max_val: Option<f64>,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                val_iso: Option<String>,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                max_val_iso: Option<String>,
+            },
+            Color {
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                dxf_id: Option<u32>,
+                #[serde(default = "default_true")]
+                cell_color: bool,
+            },
+            Icon {
+                icon_set: String,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                icon_id: Option<u32>,
+            },
+        }
+
+        Ok(
+            match serde_json::from_value(value).map_err(serde::de::Error::custom)? {
+                TaggedFilterSpec::Values {
+                    blank,
+                    values,
+                    calendar_type,
+                    date_group_items,
+                } => Self::Values {
+                    blank,
+                    values,
+                    calendar_type,
+                    date_group_items,
+                },
+                TaggedFilterSpec::Custom { and, filters } => Self::Custom { and, filters },
+                TaggedFilterSpec::Top10 {
+                    top,
+                    percent,
+                    val,
+                    filter_val,
+                } => Self::Top10 {
+                    top,
+                    percent,
+                    val,
+                    filter_val,
+                },
+                TaggedFilterSpec::Dynamic {
+                    kind,
+                    val,
+                    max_val,
+                    val_iso,
+                    max_val_iso,
+                } => Self::Dynamic {
+                    kind,
+                    val,
+                    max_val,
+                    val_iso,
+                    max_val_iso,
+                },
+                TaggedFilterSpec::Color { dxf_id, cell_color } => {
+                    Self::Color { dxf_id, cell_color }
+                }
+                TaggedFilterSpec::Icon { icon_set, icon_id } => Self::Icon { icon_set, icon_id },
+            },
+        )
+    }
 }
 
 fn default_true() -> bool {

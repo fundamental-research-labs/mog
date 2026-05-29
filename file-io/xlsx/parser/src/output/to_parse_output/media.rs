@@ -61,6 +61,9 @@ mod tests {
 
     #[test]
     fn image_mime_type_for_bytes_recognizes_jpeg_jfif_payload() {
-        assert_eq!(image_mime_type_for_bytes(b"\xff\xd8\xff\xe0"), Some("image/jpeg"));
+        assert_eq!(
+            image_mime_type_for_bytes(b"\xff\xd8\xff\xe0"),
+            Some("image/jpeg")
+        );
     }
 }

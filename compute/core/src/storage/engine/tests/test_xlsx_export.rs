@@ -7,10 +7,10 @@ use crate::snapshot::{
 };
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use domain_types::{
-    AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
     domain::comment::{Comment, CommentType, PersonInfo},
     domain::external_link::{ExternalLink, ImportedExternalLinkIdentity},
     domain::workbook::{WorkbookView, WorkbookViewVisibility, WorkbookWebPublishing},
+    AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
 };
 use formula_types::CellRef;
 use std::sync::Arc;
@@ -860,7 +860,7 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
 
 fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {
     use crate::storage::infra::hydration::{
-        DefaultIdAllocator, HydrationIdMap, allocate_sheet_ids,
+        allocate_sheet_ids, DefaultIdAllocator, HydrationIdMap,
     };
 
     let mut allocator = DefaultIdAllocator::new();

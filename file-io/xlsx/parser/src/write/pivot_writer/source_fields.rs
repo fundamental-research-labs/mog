@@ -1,5 +1,5 @@
-use domain_types::SheetData;
 use domain_types::domain::pivot::ParsedPivotTable;
+use domain_types::SheetData;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use value_types::CellValue;

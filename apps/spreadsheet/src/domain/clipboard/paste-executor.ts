@@ -222,6 +222,17 @@ export interface PasteStoreOperations {
     | Promise<{ success: boolean; movedCount: number; error?: string }>
     | { success: boolean; movedCount: number; error?: string };
   /**
+   * Move whole-table metadata when a cut-paste moves the table's entire range.
+   * Implementations should be a no-op if the backing engine already moved it.
+   */
+  moveTablesForCutPaste?(
+    sourceSheetId: SheetId,
+    sourceRange: CellRange,
+    targetSheetId: SheetId,
+    targetRow: number,
+    targetCol: number,
+  ): Promise<void> | void;
+  /**
    * Get CellId at a given position.
    * Comments in Clipboard - needed to attach comments to pasted cells.
    */

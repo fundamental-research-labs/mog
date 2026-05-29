@@ -30,6 +30,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   textBoxAdd: jest.Mock;
   checkboxAdd: jest.Mock;
   comboBoxAdd: jest.Mock;
+  setCell: jest.Mock;
   pictureUpdate: jest.Mock;
   canDoStructureOp: jest.Mock;
   uiState: {
@@ -44,6 +45,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   const textBoxAdd = jest.fn(async () => ({ id: 'textbox-new-1' }));
   const checkboxAdd = jest.fn(async () => ({ id: 'checkbox-new-1' }));
   const comboBoxAdd = jest.fn(async () => ({ id: 'combobox-new-1' }));
+  const setCell = jest.fn(async () => undefined);
   const pictureUpdate = jest.fn(async () => undefined);
   const canDoStructureOp = jest.fn(async () => true);
   const uiState = {
@@ -75,6 +77,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
         addCheckbox: checkboxAdd,
         addComboBox: comboBoxAdd,
       },
+      setCell,
       protection: {
         canDoStructureOp,
       },
@@ -102,6 +105,8 @@ function createMockDeps(picture: PictureOverrides = {}): {
     uiStore: { getState: () => uiState },
     accessors: {
       selection: {
+        getActiveCell: () => ({ row: 0, col: 0 }),
+        getRanges: () => [{ startRow: 1, startCol: 2, endRow: 1, endCol: 2 }],
         getDataBoundedRanges: () => [{ startRow: 1, startCol: 2, endRow: 1, endCol: 2 }],
       },
       object: {
@@ -121,6 +126,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
     textBoxAdd,
     checkboxAdd,
     comboBoxAdd,
+    setCell,
     pictureUpdate,
     canDoStructureOp,
     uiState,
@@ -214,19 +220,20 @@ describe('object picture handlers', () => {
 
   describe('form control insertion', () => {
     it('inserts a checkbox form control through the worksheet API', async () => {
-      const { deps, checkboxAdd, canDoStructureOp } = createMockDeps();
+      const { deps, checkboxAdd, setCell, canDoStructureOp } = createMockDeps();
 
       const result = await ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps);
 
       expect(result.handled).toBe(true);
       expect(deps.workbook.setPendingUndoDescription).toHaveBeenCalledWith('Insert checkbox');
       expect(checkboxAdd).toHaveBeenCalledWith({
-        anchor: { row: 2, col: 2 },
-        linkedCell: { row: 2, col: 2 },
+        anchor: { row: 0, col: 0 },
+        linkedCell: { row: 0, col: 0 },
         label: 'Check Box',
         width: 96,
         height: 20,
       });
+      expect(setCell).toHaveBeenCalledWith(0, 0, false);
       expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
     });
 
@@ -238,8 +245,8 @@ describe('object picture handlers', () => {
       expect(result.handled).toBe(true);
       expect(deps.workbook.setPendingUndoDescription).toHaveBeenCalledWith('Insert combo box');
       expect(comboBoxAdd).toHaveBeenCalledWith({
-        anchor: { row: 2, col: 2 },
-        linkedCell: { row: 2, col: 2 },
+        anchor: { row: 0, col: 0 },
+        linkedCell: { row: 0, col: 0 },
         items: ['Option 1', 'Option 2', 'Option 3'],
         placeholder: 'Select',
         width: 140,

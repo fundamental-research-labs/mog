@@ -30,6 +30,20 @@ import type { clipboardMachine } from '../machines/clipboard-machine';
 export type ClipboardActor = ActorRefFrom<typeof clipboardMachine>;
 export type ClipboardState = SnapshotFrom<typeof clipboardMachine>;
 type MaybePromise<T> = T | Promise<T>;
+type PendingClipboardPasteGlobal = typeof globalThis & {
+  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+};
+
+function trackPendingClipboardPaste(promise: Promise<void>): void {
+  const global = globalThis as PendingClipboardPasteGlobal;
+  const tracked = promise.catch(() => undefined);
+  global.__MOG_PENDING_CLIPBOARD_PASTE__ = tracked;
+  void tracked.finally(() => {
+    if (global.__MOG_PENDING_CLIPBOARD_PASTE__ === tracked) {
+      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
+    }
+  });
+}
 
 function hasAnyCellFormat(data: NonNullable<ClipboardState['context']['data']>): boolean {
   return Object.values(data.cells).some(
@@ -256,7 +270,9 @@ export function setupClipboardPasteIntegration(
     previousState = state;
 
     if (!wasPasting && isPasting) {
-      void handlePaste(state);
+      const pending = handlePaste(state);
+      trackPendingClipboardPaste(pending);
+      void pending;
     }
   });
 
@@ -518,7 +534,6 @@ export function setupClipboardPasteIntegration(
         // Cut-paste: Use cell relocation to preserve CellIds
         // This is architecturally correct - formulas referencing moved cells automatically work
         const sourceRange = sourceRanges[0]; // Currently only single-range cut supported
-
         const result = await store.relocateCells(
           toSheetId(data.sourceSheetId),
           sourceRange,
@@ -528,6 +543,13 @@ export function setupClipboardPasteIntegration(
         );
 
         if (result.success) {
+          await store.moveTablesForCutPaste?.(
+            toSheetId(data.sourceSheetId),
+            sourceRange,
+            sheetId,
+            pastePreviewTarget.row,
+            pastePreviewTarget.col,
+          );
           clipboardActor.send({ type: 'PASTE_COMPLETE' });
 
           // Calculate affected range for render invalidation
@@ -578,6 +600,16 @@ export function setupClipboardPasteIntegration(
 
         if (result.success) {
           if (isCut && sourceRanges && sourceRanges.length > 0 && data.sourceSheetId) {
+            for (const sourceRange of sourceRanges) {
+              await store.moveTablesForCutPaste?.(
+                toSheetId(data.sourceSheetId),
+                sourceRange,
+                sheetId,
+                pastePreviewTarget.row,
+                pastePreviewTarget.col,
+              );
+            }
+
             // Unmerge merges in source ranges
             if (store.getMergesInRange && store.unmergeRange) {
               for (const sourceRange of sourceRanges) {

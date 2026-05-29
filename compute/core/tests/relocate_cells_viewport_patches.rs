@@ -356,6 +356,46 @@ fn relocate_same_sheet_emits_patches_with_clear_and_write() {
 }
 
 #[test]
+fn relocate_whole_table_moves_table_binding() {
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+
+    engine
+        .create_table_lifecycle(
+            &sid,
+            Some("Table1".to_string()),
+            0,
+            0,
+            2,
+            1,
+            vec!["Region".to_string(), "Revenue".to_string()],
+            true,
+            None,
+        )
+        .expect("create table");
+
+    let (_patches, result) = engine
+        .relocate_cells_yrs(&sid, 0, 0, 2, 1, &sid, 0, 3)
+        .expect("relocate_cells_yrs");
+
+    let table = engine
+        .get_table_by_name("Table1")
+        .expect("table should still exist after cut-paste");
+    assert_eq!(table.range.start_row(), 0);
+    assert_eq!(table.range.start_col(), 3);
+    assert_eq!(table.range.end_row(), 2);
+    assert_eq!(table.range.end_col(), 4);
+    assert!(
+        result
+            .table_changes
+            .iter()
+            .any(|change| change.name == "Table1" && change.sheet_id == sid.to_uuid_string()),
+        "relocate should report a table change for viewport/object refresh"
+    );
+}
+
+#[test]
 fn relocate_cross_sheet_emits_patches_on_both_sheets() {
     let (mut engine, _) =
         YrsComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");

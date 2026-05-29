@@ -16,7 +16,7 @@
 
 import { forwardRef, useCallback, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
-import { ChevronDownSvg, ChevronUpSvg } from '@mog/icons';
+import { ChevronDownSvg, SelectAllSvg } from '@mog/icons';
 
 import { cn, Input } from '@mog/shell';
 
@@ -26,8 +26,8 @@ import { useUIStore } from '../../infra/context/document-context';
 // Icons
 // =============================================================================
 
-function CollapseIcon() {
-  return <ChevronUpSvg style={{ width: 14, height: 14 }} />;
+function RangeSelectionIcon() {
+  return <SelectAllSvg style={{ width: 14, height: 14 }} />;
 }
 
 function ExpandIcon() {
@@ -198,7 +198,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
           aria-label={isInRangeSelectionMode ? 'Expand dialog' : 'Select range from sheet'}
           title={isInRangeSelectionMode ? 'Expand dialog (Enter)' : 'Select range from sheet'}
         >
-          {isInRangeSelectionMode ? <ExpandIcon /> : <CollapseIcon />}
+          {isInRangeSelectionMode ? <ExpandIcon /> : <RangeSelectionIcon />}
           <span className="sr-only">
             {isInRangeSelectionMode ? 'Expand dialog' : 'Select range from sheet'}
           </span>

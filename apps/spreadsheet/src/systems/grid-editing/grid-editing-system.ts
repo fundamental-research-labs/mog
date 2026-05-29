@@ -119,6 +119,24 @@ function getOppositeDirection(dir: Direction | 'none'): Direction | 'none' {
   }
 }
 
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol
+  );
+}
+
+function rangeContainsRange(container: CellRange, candidate: CellRange): boolean {
+  return (
+    candidate.startRow >= container.startRow &&
+    candidate.endRow <= container.endRow &&
+    candidate.startCol >= container.startCol &&
+    candidate.endCol <= container.endCol
+  );
+}
+
 // =============================================================================
 // HELPER: Build EditorSnapshot from raw actor states
 // =============================================================================
@@ -1373,15 +1391,18 @@ export class GridEditingSystem implements IGridEditingSystem {
       },
       relocateCells: async (sourceSheetId, sourceRange, targetSheetId, targetRow, targetCol) => {
         try {
+          const sourceSheet = workbook.getSheetById(sourceSheetId);
           if (sourceSheetId === targetSheetId) {
-            await workbook
-              .getSheetById(sourceSheetId)
-              ._internal.relocateCells(sourceRange, targetRow, targetCol);
+            await sourceSheet._internal.relocateCells(sourceRange, targetRow, targetCol);
           } else {
-            await workbook
-              .getSheetById(sourceSheetId)
-              ._internal.relocateCellsToSheet(sourceRange, targetSheetId, targetRow, targetCol);
+            await sourceSheet._internal.relocateCellsToSheet(
+              sourceRange,
+              targetSheetId,
+              targetRow,
+              targetCol,
+            );
           }
+
           const movedCount =
             (sourceRange.endRow - sourceRange.startRow + 1) *
             (sourceRange.endCol - sourceRange.startCol + 1);
@@ -1390,6 +1411,78 @@ export class GridEditingSystem implements IGridEditingSystem {
           const error = err instanceof Error ? err.message : 'relocateCells failed';
           return { success: false, movedCount: 0, error };
         }
+      },
+      moveTablesForCutPaste: async (
+        sourceSheetId,
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+      ) => {
+        if (sourceSheetId !== targetSheetId) return;
+
+        const sheet = workbook.getSheetById(sourceSheetId);
+        const bridge = (
+          sheet as unknown as {
+            ctx?: {
+              computeBridge?: {
+                getAllTablesInSheet(
+                  sheetId: SheetId,
+                ): Promise<Array<{ name: string; range: CellRange }>>;
+                resizeTable(
+                  tableName: string,
+                  newStartRow: number,
+                  newStartCol: number,
+                  newEndRow: number,
+                  newEndCol: number,
+                ): Promise<unknown>;
+              };
+            };
+          }
+        ).ctx?.computeBridge;
+        if (!bridge) return;
+
+        const tables = await bridge.getAllTablesInSheet(sourceSheetId);
+        const tableMoves = tables
+          .filter(
+            (table) =>
+              rangesEqual(table.range, sourceRange) || rangeContainsRange(sourceRange, table.range),
+          )
+          .map((table) => {
+            const rowOffset = table.range.startRow - sourceRange.startRow;
+            const colOffset = table.range.startCol - sourceRange.startCol;
+            const targetStartRow = targetRow + rowOffset;
+            const targetStartCol = targetCol + colOffset;
+            return {
+              name: table.name,
+              sourceRange: table.range,
+              targetRange: {
+                startRow: targetStartRow,
+                startCol: targetStartCol,
+                endRow: targetStartRow + (table.range.endRow - table.range.startRow),
+                endCol: targetStartCol + (table.range.endCol - table.range.startCol),
+              },
+            };
+          });
+        const tableMoveByName = new Map(tableMoves.map((move) => [move.name, move]));
+
+        await Promise.all(
+          tables
+            .filter((table) => {
+              const move = tableMoveByName.get(table.name);
+              return Boolean(move && rangesEqual(table.range, move.sourceRange));
+            })
+            .map((table) => {
+              const move = tableMoveByName.get(table.name)!;
+              return bridge.resizeTable(
+                table.name,
+                move.targetRange.startRow,
+                move.targetRange.startCol,
+                move.targetRange.endRow,
+                move.targetRange.endCol,
+              );
+            }),
+        );
       },
       copyRange: async (
         sourceSheetId,

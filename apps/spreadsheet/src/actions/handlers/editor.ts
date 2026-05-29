@@ -44,7 +44,7 @@ import {
   singleCellRange,
 } from '../../systems/shared/types';
 
-import { letterToCol } from '@mog/spreadsheet-utils/a1';
+import { letterToCol, parseA1Range as parseA1RangeNotation } from '@mog/spreadsheet-utils/a1';
 
 import { getRelativeCommandColumn, resolveDataCommandTarget } from '../data-command-target';
 import { guardBridgeMutation } from './bridge-error-guard';
@@ -509,6 +509,56 @@ async function clearCommentsInRange(ws: WorksheetWithInternals, range: CellRange
   await Promise.all(removals);
 }
 
+function normalizedRange(range: CellRange): CellRange {
+  return {
+    startRow: Math.min(range.startRow, range.endRow),
+    startCol: Math.min(range.startCol, range.endCol),
+    endRow: Math.max(range.startRow, range.endRow),
+    endCol: Math.max(range.startCol, range.endCol),
+  };
+}
+
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  const left = normalizedRange(a);
+  const right = normalizedRange(b);
+  return (
+    left.startRow === right.startRow &&
+    left.startCol === right.startCol &&
+    left.endRow === right.endRow &&
+    left.endCol === right.endCol
+  );
+}
+
+function rangeContainsRange(container: CellRange, candidate: CellRange): boolean {
+  const outer = normalizedRange(container);
+  const inner = normalizedRange(candidate);
+  return (
+    inner.startRow >= outer.startRow &&
+    inner.endRow <= outer.endRow &&
+    inner.startCol >= outer.startCol &&
+    inner.endCol <= outer.endCol
+  );
+}
+
+function parseTableRange(range: string): CellRange | null {
+  const localRange = range.includes('!') ? range.slice(range.lastIndexOf('!') + 1) : range;
+  try {
+    return parseA1RangeNotation(localRange.replace(/\$/g, ''));
+  } catch {
+    return null;
+  }
+}
+
+async function removeTablesContainedByRange(ws: Worksheet, range: CellRange): Promise<void> {
+  const tables = await ws.tables.list();
+  for (const table of tables) {
+    const tableRange = parseTableRange(table.range);
+    if (tableRange && (rangesEqual(tableRange, range) || rangeContainsRange(range, tableRange))) {
+      await ws.tables.remove(table.name);
+    }
+  }
+}
+
 /**
  * Clear formats only from selected cells.
  *
@@ -763,6 +813,7 @@ export const CLEAR_AND_EDIT: AsyncActionHandler = async (deps) => {
     let cleared = true;
     await deps.workbook.undoGroup(async () => {
       for (const range of ranges) {
+        await removeTablesContainedByRange(ws, range);
         const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
         if (!ok) {
           cleared = false;

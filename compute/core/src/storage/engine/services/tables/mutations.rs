@@ -138,6 +138,11 @@ pub(in crate::storage::engine) fn create_table(
         visible_row_count: None,
         kind: ChangeKind::Set,
     });
+    result.table_changes.push(TableChange {
+        name: table.name,
+        sheet_id: sheet_id.to_uuid_string(),
+        kind: ChangeKind::Set,
+    });
     Ok(result)
 }
 

@@ -62,6 +62,49 @@ function deferred(): ActionResult {
   return { handled: false, reason: 'disabled' };
 }
 
+const POST_PASTE_SETTLE_MS = 250;
+type PendingClipboardPasteGlobal = typeof globalThis & {
+  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+};
+
+function trackPendingClipboardPaste<T>(promise: Promise<T>): Promise<T> {
+  const global = globalThis as PendingClipboardPasteGlobal;
+  const tracked = promise.catch(() => undefined);
+  global.__MOG_PENDING_CLIPBOARD_PASTE__ = tracked;
+  void tracked.finally(() => {
+    if (global.__MOG_PENDING_CLIPBOARD_PASTE__ === tracked) {
+      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
+    }
+  });
+  return promise;
+}
+
+async function waitForClipboardPasteToSettle(deps: ActionDependencies): Promise<void> {
+  const deadline = Date.now() + 2000;
+  const idleDeadline = Date.now() + 100;
+  let sawPasteActivity = false;
+
+  while (Date.now() < deadline) {
+    const snapshot = deps.accessors.clipboard.getSnapshot();
+    const matches = snapshot.matches?.bind(snapshot);
+    const isPasting = matches?.('pasting') === true;
+    const isPreviewing =
+      matches?.('pastePreview') === true || Boolean(snapshot.context.pastePreviewTarget);
+    const isComplete = matches?.('empty') === true || matches?.('pasteError') === true;
+
+    sawPasteActivity ||= isPasting || isPreviewing;
+
+    if (isComplete || (sawPasteActivity && !isPasting && !isPreviewing)) return;
+    if (!sawPasteActivity && Date.now() >= idleDeadline) return;
+
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+}
+
+async function waitForPostPasteEffects(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, POST_PASTE_SETTLE_MS));
+}
+
 /**
  * Check if currently editing a cell.
  * When editing, clipboard operations should use native browser behavior
@@ -722,7 +765,9 @@ function emitClipboardSettlement(
  * Announces "Pasted" for screen reader accessibility.
  *
  */
-export const PASTE: AsyncActionHandler = async (deps) => {
+export const PASTE: AsyncActionHandler = (deps) => trackPendingClipboardPaste(runPaste(deps));
+
+const runPaste: AsyncActionHandler = async (deps) => {
   // In edit mode, let native browser handle text paste at cursor
   if (isEditing(deps)) {
     return deferred();
@@ -754,6 +799,8 @@ export const PASTE: AsyncActionHandler = async (deps) => {
       });
     },
   });
+  await waitForClipboardPasteToSettle(deps);
+  await waitForPostPasteEffects();
 
   // Accessibility announcement for paste operation
   uiStore.getState().announce('Pasted', 'polite');

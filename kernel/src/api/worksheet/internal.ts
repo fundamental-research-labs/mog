@@ -14,6 +14,7 @@ import type {
 import type { IdentityFormula } from '@mog-sdk/contracts/cell-identity';
 import type { RangeSchema } from '@mog-sdk/contracts/schema';
 import type { RangeSchema as BridgeRangeSchema } from '../../bridges/compute/compute-bridge';
+import type { Table as CanonicalTable } from '../../bridges/compute/compute-types.gen';
 import type { TableConfig } from '@mog-sdk/contracts/tables';
 
 import {
@@ -64,6 +65,166 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       }
     }
     await Promise.all(checks);
+  }
+
+  private isSameRange(a: CellRange, b: CellRange): boolean {
+    return (
+      a.startRow === b.startRow &&
+      a.startCol === b.startCol &&
+      a.endRow === b.endRow &&
+      a.endCol === b.endCol
+    );
+  }
+
+  private rangeContainsRange(container: CellRange, candidate: CellRange): boolean {
+    return (
+      candidate.startRow >= container.startRow &&
+      candidate.endRow <= container.endRow &&
+      candidate.startCol >= container.startCol &&
+      candidate.endCol <= container.endCol
+    );
+  }
+
+  private async waitForTableAtCell(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+  ): Promise<CanonicalTable | null> {
+    const deadline = Date.now() + 500;
+    while (Date.now() < deadline) {
+      const table = await this.ctx.computeBridge.getTableAtCell(sheetId, row, col);
+      if (table) return table;
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    return this.ctx.computeBridge.getTableAtCell(sheetId, row, col);
+  }
+
+  private async getTableDefinitionsForRange(sourceRange: CellRange): Promise<CanonicalTable[]> {
+    const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    return tables.filter(
+      (table) =>
+        this.isSameRange(table.range, sourceRange) ||
+        this.rangeContainsRange(sourceRange, table.range),
+    );
+  }
+
+  private async copyTableDefinitionsToTarget(
+    tables: CanonicalTable[],
+    sourceRange: CellRange,
+    targetSheetId: SheetId,
+    targetRow: number,
+    targetCol: number,
+    options: { checkExisting?: boolean } = {},
+  ): Promise<void> {
+    for (const table of tables) {
+      const rowOffset = table.range.startRow - sourceRange.startRow;
+      const colOffset = table.range.startCol - sourceRange.startCol;
+      const targetStartRow = targetRow + rowOffset;
+      const targetStartCol = targetCol + colOffset;
+      const targetEndRow = targetStartRow + (table.range.endRow - table.range.startRow);
+      const targetEndCol = targetStartCol + (table.range.endCol - table.range.startCol);
+
+      const existing =
+        options.checkExisting === false
+          ? null
+          : await this.ctx.computeBridge.getTableAtCell(
+              targetSheetId,
+              targetStartRow,
+              targetStartCol,
+            );
+      if (!existing) {
+        await this.ctx.computeBridge.createTableLifecycle(
+          targetSheetId,
+          null,
+          targetStartRow,
+          targetStartCol,
+          targetEndRow,
+          targetEndCol,
+          table.columns.map((column) => column.name),
+          table.hasHeaderRow,
+          table.style,
+        );
+      }
+
+      const created =
+        existing ?? (await this.waitForTableAtCell(targetSheetId, targetStartRow, targetStartCol));
+      if (!created) continue;
+
+      const boolOptions = [
+        ['bandedRows', table.bandedRows],
+        ['bandedColumns', table.bandedColumns],
+        ['emphasizeFirstColumn', table.emphasizeFirstColumn],
+        ['emphasizeLastColumn', table.emphasizeLastColumn],
+        ['showFilterButtons', table.showFilterButtons],
+      ] as const;
+
+      for (const [option, value] of boolOptions) {
+        await this.ctx.computeBridge.setTableBoolOption(created.name, option, value);
+      }
+      if (created.hasTotalsRow !== table.hasTotalsRow) {
+        await this.ctx.computeBridge.toggleTotalsRow(created.name);
+      }
+      if (created.hasHeaderRow !== table.hasHeaderRow) {
+        await this.ctx.computeBridge.toggleHeaderRow(created.name);
+      }
+      await this.ctx.computeBridge.setTableAutoExpand(created.name, table.autoExpand);
+      await this.ctx.computeBridge.setTableAutoCalculatedColumns(
+        created.name,
+        table.autoCalculatedColumns,
+      );
+    }
+  }
+
+  private async moveTableDefinitionsForRange(
+    sourceRange: CellRange,
+    targetRow: number,
+    targetCol: number,
+  ): Promise<void> {
+    const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    const tableMoves = tables
+      .filter(
+        (table) =>
+          this.isSameRange(table.range, sourceRange) ||
+          this.rangeContainsRange(sourceRange, table.range),
+      )
+      .map((table) => {
+        const rowOffset = table.range.startRow - sourceRange.startRow;
+        const colOffset = table.range.startCol - sourceRange.startCol;
+        const targetStartRow = targetRow + rowOffset;
+        const targetStartCol = targetCol + colOffset;
+        return {
+          name: table.name,
+          sourceRange: table.range,
+          targetRange: {
+            startRow: targetStartRow,
+            startCol: targetStartCol,
+            endRow: targetStartRow + (table.range.endRow - table.range.startRow),
+            endCol: targetStartCol + (table.range.endCol - table.range.startCol),
+          },
+        };
+      });
+    if (tableMoves.length === 0) return;
+
+    const postRelocateTables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    const moveByName = new Map(tableMoves.map((move) => [move.name, move]));
+
+    await Promise.all(
+      postRelocateTables
+        .filter((table) => {
+          const move = moveByName.get(table.name);
+          return Boolean(move && this.isSameRange(table.range, move.sourceRange));
+        })
+        .map((table) => {
+          const move = moveByName.get(table.name)!;
+          return this.ctx.computeBridge.resizeTable(
+            table.name,
+            move.targetRange.startRow,
+            move.targetRange.startCol,
+            move.targetRange.endRow,
+            move.targetRange.endCol,
+          );
+        }),
+    );
   }
 
   async getCellIdAt(row: number, col: number): Promise<string | null> {
@@ -162,6 +323,7 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       row: targetRow,
       col: targetCol,
     });
+    await this.moveTableDefinitionsForRange(sourceRange, targetRow, targetCol);
   }
 
   async relocateCellsToSheet(
@@ -245,6 +407,22 @@ export class WorksheetInternalImpl implements WorksheetInternal {
   ): Promise<void> {
     const sourceRowCount = sourceRange.endRow - sourceRange.startRow + 1;
     const sourceColCount = sourceRange.endCol - sourceRange.startCol + 1;
+    const shouldCopyTables = copyType === 'all' && !skipBlanks && !transpose;
+    const tablesToCopy = shouldCopyTables
+      ? await this.getTableDefinitionsForRange(sourceRange)
+      : [];
+
+    if (tablesToCopy.length > 0) {
+      await this.copyTableDefinitionsToTarget(
+        tablesToCopy,
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+        { checkExisting: false },
+      );
+    }
+
     await this.ensureTargetRangeEditable(
       targetSheetId,
       targetRow,
@@ -252,6 +430,7 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       transpose ? sourceColCount : sourceRowCount,
       transpose ? sourceRowCount : sourceColCount,
     );
+
     // Cross-sheet relocate generalization: the Rust `compute_copy_range` mutation
     // handler now rebuilds the target sheet's viewport binary on cross-
     // sheet copies (in addition to the incremental flush on the source
@@ -269,6 +448,16 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       skipBlanks,
       transpose,
     );
+
+    if (tablesToCopy.length > 0) {
+      await this.copyTableDefinitionsToTarget(
+        tablesToCopy,
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+      );
+    }
   }
 
   /** Tear down the CF cache if it was created. Called by WorksheetImpl.dispose(). */

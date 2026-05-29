@@ -72,5 +72,9 @@ packages:
   - 'ui'
   - 'views/sheet-view'
 
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - esbuild

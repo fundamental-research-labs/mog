@@ -87,12 +87,20 @@ export interface FilterDropdownItem {
   readonly selected: boolean;
 }
 
+export type FilterDropdownColumnType = 'number' | 'text' | 'date' | 'mixed';
+
 export interface FilterDropdownData {
   readonly items: readonly FilterDropdownItem[];
   readonly hasBlank: boolean;
   readonly blankCount: number;
   readonly blankSelected: boolean;
   readonly totalRowCount: number;
+  /**
+   * Predominant value type for this filter column, derived from both cell
+   * values and resolved number formats. Numeric Excel serials are only
+   * classified as dates when their cells carry a date/time number format.
+   */
+  readonly columnType?: FilterDropdownColumnType;
 }
 
 /** Sub-API for filter operations on a worksheet. */

@@ -1531,24 +1531,16 @@ export class GridEditingSystem implements IGridEditingSystem {
               },
             };
           });
-        const tableMoveByName = new Map(tableMoves.map((move) => [move.name, move]));
-
         await Promise.all(
-          tables
-            .filter((table) => {
-              const move = tableMoveByName.get(table.name);
-              return Boolean(move && rangesEqual(table.range, move.sourceRange));
-            })
-            .map((table) => {
-              const move = tableMoveByName.get(table.name)!;
-              return bridge.resizeTable(
-                table.name,
-                move.targetRange.startRow,
-                move.targetRange.startCol,
-                move.targetRange.endRow,
-                move.targetRange.endCol,
-              );
-            }),
+          tableMoves.map((move) =>
+            bridge.resizeTable(
+              move.name,
+              move.targetRange.startRow,
+              move.targetRange.startCol,
+              move.targetRange.endRow,
+              move.targetRange.endCol,
+            ),
+          ),
         );
       },
       copyRange: async (

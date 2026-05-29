@@ -617,6 +617,23 @@ export async function readDisplayedFormatsViaBridge(
   return out;
 }
 
+function hasLinkedUnlabeledCheckboxOverlay(row: number, col: number): boolean {
+  if (typeof document === 'undefined') return false;
+
+  const selector = [
+    '[data-form-control-type="checkbox"]',
+    `[data-form-control-linked-row="${row}"]`,
+    `[data-form-control-linked-col="${col}"]`,
+  ].join('');
+  const wrapper = document.querySelector<HTMLElement>(selector);
+  if (!wrapper) return false;
+
+  const overlay = wrapper.querySelector<HTMLElement>('[data-testid^="form-control-checkbox-"]');
+  if (!overlay) return false;
+
+  return (overlay.textContent ?? '').trim().length === 0;
+}
+
 /**
  * Reads a single cell value from the viewport buffer programmatically.
  * Returns structured data instead of printing.
@@ -634,11 +651,14 @@ export function readCellValue(
     if (!accessor) return null;
     const exists = accessor.moveTo?.(row, col);
     if (!exists) return null;
+    const displayText = hasLinkedUnlabeledCheckboxOverlay(row, col)
+      ? ''
+      : (accessor.displayText ?? null);
     return {
       row,
       col,
       viewportId: vpId,
-      displayText: accessor.displayText ?? null,
+      displayText,
       valueType: accessor.valueType ?? 0,
       numberValue: accessor.numberValue,
       hasFormula: accessor.hasFormula,

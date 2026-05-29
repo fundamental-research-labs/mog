@@ -20,7 +20,7 @@
  *
  */
 
-import type { ActionHandler, ActionResult } from '@mog-sdk/contracts/actions';
+import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 
 import { handled, notHandled } from './handler-utils';
 
@@ -140,17 +140,15 @@ export const TOGGLE_END_MODE: ActionHandler = (deps): ActionResult => {
  * - Blocks javascript:, file:, data: URLs
  * - Opens in new tab with noopener,noreferrer
  */
-export const OPEN_HYPERLINK: ActionHandler = (deps): ActionResult => {
+export const OPEN_HYPERLINK: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const activeCell = deps.accessors.selection.getActiveCell();
 
   if (!activeCell) {
     return notHandled('disabled');
   }
 
-  // Get hyperlink from the active cell via viewport (sync, viewport-scoped)
-  const ws = deps.workbook.activeSheet;
-  const cellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
-  const hyperlink = cellData?.hyperlinkUrl ?? null;
+  const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
+  const hyperlink = await ws.hyperlinks.get(activeCell.row, activeCell.col);
 
   if (!hyperlink) {
     return notHandled('disabled');

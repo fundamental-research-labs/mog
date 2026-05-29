@@ -2,7 +2,7 @@ use tiny_skia::{
     Color, FillRule, LineCap, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CssRect {
     pub x: f32,
     pub y: f32,

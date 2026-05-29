@@ -914,8 +914,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               break;
             }
 
-            // Ctrl+click on hyperlink opens the link
-            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && onHyperlinkClick) {
+            // Excel opens hyperlinks on a plain click.
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey && onHyperlinkClick) {
               if (onHyperlinkClick(cell)) {
                 return;
               }

@@ -170,7 +170,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Get UI Store API for per-sheet scroll position restoration
   const uiStoreApi = useUIStoreApi();
 
-  // Get hyperlink handling for Ctrl+click
+  // Get hyperlink handling for click activation
   const hyperlinks = useHyperlinks();
 
   // Get sparkline manager (Sparklines)
@@ -356,7 +356,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     activeSheetId,
     containerRef,
     coordinator,
-    onHyperlinkClick: hyperlinks.handleCtrlClick,
+    onHyperlinkClick: hyperlinks.handleClick,
     onContextMenu: openContextMenu,
     groupingActions: {
       maxRowLevel: groupingState.maxRowLevel,

@@ -150,6 +150,10 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
         await wsRef.setCell(targetRow, targetCol, trimmedDisplayText);
       }
       await wsRef.hyperlinks.set(targetRow, targetCol, trimmedUrl);
+      await wsRef.formats.set(targetRow, targetCol, {
+        fontColor: '#0563C1',
+        underlineType: 'single',
+      });
     })();
 
     // Call callback if provided

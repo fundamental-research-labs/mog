@@ -76,6 +76,7 @@ export type {
   AdvancedFilterOptions,
   AdvancedFilterResult,
   FilterByColorOptions,
+  FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
   WorksheetFormControls,

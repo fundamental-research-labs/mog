@@ -46,6 +46,11 @@ export interface MonthNode {
 /**
  * Detect the predominant data type in a column of values.
  *
+ * Date classification requires a resolved number-format signal from the
+ * worksheet API. Without that metadata, numeric values are treated as numbers;
+ * otherwise ordinary counts like 1, 2, 3 are indistinguishable from early
+ * Excel date serials and render as bogus 1900/January buckets.
+ *
  * @param values - Array of cell values from the column
  * @returns The detected column type
  */
@@ -54,7 +59,6 @@ export function detectColumnType(values: CellValue[]): ColumnType {
 
   let numberCount = 0;
   let textCount = 0;
-  let dateCount = 0;
 
   for (const value of values) {
     if (value === null || value === undefined || value === '') {
@@ -67,12 +71,7 @@ export function detectColumnType(values: CellValue[]): ColumnType {
     }
 
     if (typeof value === 'number') {
-      // Check if it's a valid date serial
-      if (isValidDateSerial(value)) {
-        dateCount++;
-      } else {
-        numberCount++;
-      }
+      numberCount++;
       continue;
     }
 
@@ -88,10 +87,9 @@ export function detectColumnType(values: CellValue[]): ColumnType {
   }
 
   // Determine predominant type (>50% threshold)
-  const total = numberCount + textCount + dateCount;
+  const total = numberCount + textCount;
   if (total === 0) return 'mixed';
 
-  if (dateCount / total > 0.5) return 'date';
   if (numberCount / total > 0.5) return 'number';
   if (textCount / total > 0.5) return 'text';
 
@@ -101,8 +99,8 @@ export function detectColumnType(values: CellValue[]): ColumnType {
 /**
  * Check if a column contains date values.
  *
- * Uses a 50% threshold - if more than half of non-blank numeric values
- * are valid date serials, the column is considered a date column.
+ * Uses the value-only fallback classifier. Production filter dropdowns should
+ * prefer the Worksheet API's format-aware `FilterDropdownData.columnType`.
  *
  * @param values - Array of cell values from the column
  * @returns true if column contains predominantly date values

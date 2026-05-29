@@ -396,6 +396,46 @@ fn relocate_whole_table_moves_table_binding() {
 }
 
 #[test]
+fn relocate_containing_range_moves_embedded_table_binding() {
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+
+    engine
+        .create_table_lifecycle(
+            &sid,
+            Some("Table1".to_string()),
+            1,
+            1,
+            3,
+            2,
+            vec!["Region".to_string(), "Revenue".to_string()],
+            true,
+            None,
+        )
+        .expect("create table");
+
+    let (_patches, result) = engine
+        .relocate_cells_yrs(&sid, 0, 0, 4, 3, &sid, 0, 5)
+        .expect("relocate_cells_yrs");
+
+    let table = engine
+        .get_table_by_name("Table1")
+        .expect("embedded table should still exist after containing-range cut-paste");
+    assert_eq!(table.range.start_row(), 1);
+    assert_eq!(table.range.start_col(), 6);
+    assert_eq!(table.range.end_row(), 3);
+    assert_eq!(table.range.end_col(), 7);
+    assert!(
+        result
+            .table_changes
+            .iter()
+            .any(|change| change.name == "Table1" && change.sheet_id == sid.to_uuid_string()),
+        "containing-range relocate should report embedded table change"
+    );
+}
+
+#[test]
 fn relocate_cross_sheet_emits_patches_on_both_sheets() {
     let (mut engine, _) =
         YrsComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");

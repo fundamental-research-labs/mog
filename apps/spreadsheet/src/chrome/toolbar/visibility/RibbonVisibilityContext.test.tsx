@@ -56,13 +56,13 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(merged, ['pageLayout', 'themes'])).toBe(true);
   });
 
-  it('hides staged public chrome and tabs in the public profile', () => {
+  it('keeps public checkbox visible while hiding staged public Insert chrome', () => {
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'pivotTable']),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'checkBox']),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'comboBox']),
     ).toBe(false);
@@ -75,7 +75,9 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'sparklines'])).toBe(
       false,
     );
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(false);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(
+      true,
+    );
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'text'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'charts'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'links'])).toBe(true);
@@ -89,8 +91,22 @@ describe('ribbon visibility config', () => {
         'controls',
         'toggleAiFormulaBar',
       ]),
+    ).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, [
+        'formulaBar',
+        'controls',
+        'expandCollapse',
+      ]),
     ).toBe(true);
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, [
+        'collaboration',
+        'tabBar',
+        'collaborate',
+      ]),
+    ).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['home'])).toBe(true);
   });
 

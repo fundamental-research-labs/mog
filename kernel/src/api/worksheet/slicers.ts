@@ -96,8 +96,18 @@ function extractCellValue(v: unknown): CellValue {
   if (typeof v === 'object' && v !== null && 'type' in v) {
     const obj = v as Record<string, unknown>;
     if (obj.type === 'text') return String(obj.value ?? '');
+    if (obj.type === 'number' && typeof obj.value === 'number') return obj.value;
+    if (obj.type === 'boolean' && typeof obj.value === 'boolean') return obj.value;
+    if (obj.type === 'blank' || obj.type === 'empty' || obj.type === 'null') return null;
     if (obj.type === 'error') return null;
-    // number, boolean come through as primitives in JSON
+    if (
+      'value' in obj &&
+      (typeof obj.value === 'string' ||
+        typeof obj.value === 'number' ||
+        typeof obj.value === 'boolean')
+    ) {
+      return obj.value;
+    }
   }
   return null;
 }
@@ -107,6 +117,23 @@ function validateSlicerId(slicerId: string, operation: string): void {
     throw new KernelError('COMPUTE_ERROR', `${operation}: slicerId must be a non-empty string`);
   }
 }
+
+type ResolvedTableSlicerColumn = {
+  absCol: number;
+};
+
+type TableSlicerColumnSource = {
+  range: {
+    startRow: number;
+    startCol: number;
+    endCol: number;
+  };
+  columns: Array<{
+    id: string;
+    name: string;
+    index: number;
+  }>;
+};
 
 export class WorksheetSlicersImpl implements WorksheetSlicers {
   constructor(
@@ -291,43 +318,9 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     const table = await this.ctx.computeBridge.getTableByName(stored.source.tableId);
     if (!table) return [];
 
-    // 3. Find column index by matching header cell values
-    const columnName = (stored.source as { type: 'table'; columnCellId: string }).columnCellId;
-    let absCol = -1;
-
-    // First try table.columns if populated
-    if (table.columns.length > 0) {
-      const colIndex = table.columns.findIndex((c) => c.name === columnName || c.id === columnName);
-      if (colIndex >= 0) absCol = table.range.startCol + colIndex;
-    }
-
-    // Fall back to scanning header row cells
-    if (absCol < 0 && table.hasHeaderRow) {
-      const headerRow = table.range.startRow;
-      const headerCells = (await this.ctx.computeBridge.getCellsInRangeYrs(
-        this.sheetId,
-        headerRow,
-        table.range.startCol,
-        headerRow,
-        table.range.endCol,
-      )) as Array<{ row: number; col: number; value?: unknown }>;
-      for (const cell of headerCells) {
-        const v = cell.value;
-        // getCellsInRangeYrs returns Rust CellValue as {type:"text",value:"..."} objects
-        const text =
-          typeof v === 'string'
-            ? v
-            : v && typeof v === 'object' && 'value' in v
-              ? String((v as Record<string, unknown>).value)
-              : String(v ?? '');
-        if (text === columnName) {
-          absCol = cell.col;
-          break;
-        }
-      }
-    }
-
-    if (absCol < 0) return [];
+    // 3. Resolve the slicer's stable source reference to a current table column.
+    const resolvedColumn = await this.resolveTableSlicerColumn(table, stored.source.columnCellId);
+    if (!resolvedColumn) return [];
 
     // 4. Compute data row range (skip header, skip totals)
     const dataStartRow = table.range.startRow + (table.hasHeaderRow ? 1 : 0);
@@ -338,9 +331,9 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     const cellsJson = (await this.ctx.computeBridge.getCellsInRangeYrs(
       this.sheetId,
       dataStartRow,
-      absCol,
+      resolvedColumn.absCol,
       dataEndRow,
-      absCol,
+      resolvedColumn.absCol,
     )) as Array<{ row: number; col: number; value?: unknown }>;
     const columnData: CellValue[] = [];
     for (let r = dataStartRow; r <= dataEndRow; r++) {
@@ -463,20 +456,22 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       );
     }
 
-    const sourceColumn = stored.source.columnCellId;
-    const column = table.columns.find((c) => c.id === sourceColumn || c.name === sourceColumn);
-    if (!column) return;
-    const absCol = table.range.startCol + column.index;
+    const resolvedColumn = await this.resolveTableSlicerColumn(table, stored.source.columnCellId);
+    if (!resolvedColumn) return;
 
     if (selectedValues.length === 0) {
       // Clear filter (show all)
-      await this.ctx.computeBridge.clearColumnFilter(tableSheetId, filter.id, absCol);
+      await this.ctx.computeBridge.clearColumnFilter(
+        tableSheetId,
+        filter.id,
+        resolvedColumn.absCol,
+      );
     } else {
       // Set filter to show only selected values
       await this.ctx.computeBridge.setColumnFilter(
         tableSheetId,
         filter.id,
-        absCol,
+        resolvedColumn.absCol,
         columnFilterCriteriaToCompute({
           type: 'value',
           values: selectedValues,
@@ -584,13 +579,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     if (stored.source.type === 'table') {
       const table = await this.ctx.computeBridge.getTableByName(stored.source.tableId);
       if (!table) return false;
-      // Verify the column still exists in the table
-      const columnName = stored.source.columnCellId;
-      if (table.columns.length > 0) {
-        return table.columns.some((c) => c.name === columnName || c.id === columnName);
-      }
-      // If no column metadata, assume connected if table exists
-      return true;
+      return (await this.resolveTableSlicerColumn(table, stored.source.columnCellId)) !== null;
     }
 
     if (stored.source.type === 'pivot') {
@@ -602,6 +591,44 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     }
 
     return false;
+  }
+
+  private async resolveTableSlicerColumn(
+    table: TableSlicerColumnSource,
+    sourceColumnRef: string,
+  ): Promise<ResolvedTableSlicerColumn | null> {
+    const directColumn = table.columns.find(
+      (c) => c.name === sourceColumnRef || c.id === sourceColumnRef,
+    );
+    if (directColumn) {
+      return {
+        absCol: table.range.startCol + directColumn.index,
+      };
+    }
+
+    const headerPosition = await this.ctx.computeBridge.getCellPosition(
+      this.sheetId,
+      sourceColumnRef,
+    );
+    if (
+      headerPosition &&
+      headerPosition.row === table.range.startRow &&
+      headerPosition.col >= table.range.startCol &&
+      headerPosition.col <= table.range.endCol
+    ) {
+      const columnIndex = headerPosition.col - table.range.startCol;
+      const column =
+        table.columns.find((candidate) => candidate.index === columnIndex) ??
+        table.columns[columnIndex] ??
+        null;
+      if (column) {
+        return {
+          absCol: headerPosition.col,
+        };
+      }
+    }
+
+    return null;
   }
 
   async getState(slicerId: string): Promise<SlicerState> {

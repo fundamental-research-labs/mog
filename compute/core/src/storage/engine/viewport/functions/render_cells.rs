@@ -4,6 +4,7 @@ use compute_wire::flags as render_flags;
 use value_types::CellValue;
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
+use super::materialized_cells::build_materialized_cell_material;
 use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
@@ -341,6 +342,21 @@ pub(super) fn build_render_cell_materials(
                             formatted,
                             error,
                         });
+                    }
+                    crate::projection::CellRender::Materialized(materialized) => {
+                        cells.push(build_materialized_cell_material(
+                            stores,
+                            mirror,
+                            settings,
+                            cf_cache_entry,
+                            sheet_id,
+                            row,
+                            col,
+                            materialized.value,
+                            sparkline_flag,
+                            hyperlink_flag,
+                            resolve_table_format,
+                        ));
                     }
                     crate::projection::CellRender::Empty => {
                         let mut positional_fmt = if let Some(cell_id) = grid.cell_id_at(row, col) {

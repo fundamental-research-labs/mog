@@ -166,6 +166,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
                     },
                 }
             }),
+            crate::projection::CellRender::Materialized(_) => None,
             crate::projection::CellRender::Empty => None,
         },
         None => None,

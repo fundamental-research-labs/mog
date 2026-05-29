@@ -3,6 +3,10 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::SheetSnapshot;
+use compute_pivot::types::{
+    FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
+};
+use value_types::CellValue;
 
 // -------------------------------------------------------------------
 // Test 23: register_viewport and get_registered_viewports
@@ -192,4 +196,73 @@ fn test_register_viewport_replaces_existing() {
     assert_eq!(viewports.len(), 1);
     let (_, _, sr, sc, er, ec) = &viewports[0];
     assert_eq!((*sr, *sc, *er, *ec), (10, 5, 60, 25));
+}
+
+#[test]
+fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let anchor_row = 0;
+    let anchor_col = 4;
+    let result = PivotTableResult {
+        column_headers: vec![],
+        rows: vec![PivotRow {
+            key: "row_north".to_string(),
+            headers: vec![PivotHeader {
+                key: "T:north".to_string(),
+                value: CellValue::from("North"),
+                field_id: FieldId::from("field_0"),
+                depth: 0,
+                span: 1,
+                is_expandable: false,
+                is_expanded: true,
+                is_subtotal: false,
+                is_grand_total: false,
+                parent_key: None,
+                child_keys: None,
+            }],
+            values: vec![CellValue::number(250.0)],
+            depth: 0,
+            is_subtotal: false,
+            is_grand_total: false,
+            source_row_indices: None,
+        }],
+        grand_totals: PivotGrandTotals {
+            row: Some(vec![CellValue::number(250.0)]),
+            column: None,
+            grand: Some(vec![CellValue::number(250.0)]),
+            row_label: Some("Grand Total".to_string()),
+        },
+        rendered_bounds: PivotRenderedBounds {
+            total_rows: 3,
+            total_cols: 2,
+            first_data_row: 1,
+            first_data_col: 1,
+            num_data_cols: 1,
+        },
+        source_row_count: 1,
+        measure_descriptors: vec![],
+        value_records: vec![],
+        errors: None,
+    };
+
+    engine.mirror.materialize_pivot(
+        &sid,
+        anchor_row,
+        anchor_col,
+        &result,
+        &["Region".to_string()],
+    );
+
+    let viewport = engine.build_viewport_render_data(&sid, 0, 0, 4, 8);
+
+    let cell =
+        |row: usize, col: usize| &viewport.cells[row * viewport.viewport_cols as usize + col];
+    assert_eq!(cell(0, 4).formatted.as_deref(), Some("Region"));
+    assert_eq!(cell(1, 4).formatted.as_deref(), Some("North"));
+    assert_eq!(cell(1, 5).formatted.as_deref(), Some("250"));
+    assert_eq!(cell(2, 4).formatted.as_deref(), Some("Grand Total"));
+    assert_eq!(cell(2, 5).formatted.as_deref(), Some("250"));
 }

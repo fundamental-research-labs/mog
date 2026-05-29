@@ -3,7 +3,8 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::projection::{
-    CellRender, PlainCellView, ProjectionRegistry, ProjectionView, RegionKind, RegionRef,
+    CellRender, MaterializedCellView, PlainCellView, ProjectionRegistry, ProjectionView,
+    RegionKind, RegionRef,
 };
 use cell_types::{CellId, ColId, RowId, SheetId};
 use domain_types::domain::table::Table as CanonicalTable;
@@ -294,11 +295,22 @@ impl CellMirror {
             }
         }
 
-        // No CellId at this position. If a region rectangle covers it
-        // anyway (theoretically possible if hydration is inconsistent),
-        // we still return `Empty` — the consumer cannot render a cell
-        // without a CellId. The region case is logged via the type
-        // shape and surfaces if a future region kind requires it.
+        if let Some(sheet_mirror) = self.sheets.get(sheet)
+            && let Some(value) = sheet_mirror
+                .col_data
+                .get(&col)
+                .and_then(|v| v.get(row as usize))
+                .filter(|cv| !cv.is_null())
+        {
+            return CellRender::Materialized(MaterializedCellView { value });
+        }
+
+        // No CellId or materialized value at this position. If a region
+        // rectangle covers it anyway (theoretically possible if hydration is
+        // inconsistent), we still return `Empty` - the consumer cannot infer
+        // region semantics without a value or identity. The region case is
+        // logged via the type shape and surfaces if a future region kind
+        // requires it.
         let _ = region;
         CellRender::Empty
     }

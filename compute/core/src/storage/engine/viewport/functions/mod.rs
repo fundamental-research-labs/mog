@@ -7,6 +7,7 @@ mod active_cell;
 mod cf_extras;
 mod cf_format;
 mod format_io;
+mod materialized_cells;
 mod patch_cells;
 mod registry_ops;
 mod render_cells;

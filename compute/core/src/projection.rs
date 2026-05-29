@@ -64,6 +64,17 @@ pub struct PlainCellView<'a> {
     pub region: Option<RegionRef>,
 }
 
+/// View of a materialized positional value with no CellId.
+///
+/// Pivot output and other generated grid projections can live in `col_data`
+/// without allocating editable cell identities. They are still first-class
+/// renderable grid values and must flow through the same mirror chokepoint as
+/// CellId-backed cells.
+#[derive(Debug)]
+pub struct MaterializedCellView<'a> {
+    pub value: &'a CellValue,
+}
+
 /// Discriminant for region-membership kinds surfaced through `cell_render_at`.
 ///
 /// `DataTable` is the only kind today; the enum exists so consumers
@@ -116,6 +127,7 @@ pub struct RegionRef {
 pub enum CellRender<'a> {
     Projection(ProjectionView<'a>),
     Plain(PlainCellView<'a>),
+    Materialized(MaterializedCellView<'a>),
     Empty,
 }
 

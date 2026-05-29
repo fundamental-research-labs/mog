@@ -35,15 +35,31 @@ function makePublicPivotResult(overrides?: Record<string, unknown>): any {
 }
 
 function createMockCtx(): any {
+  const handlers = new Map<string, Array<(event: any) => void>>();
   return {
     computeBridge: {
       getMutationHandler: jest.fn(() => null),
       pivotCreate: jest.fn(async (config: unknown) => ({ data: config })),
       pivotComputeFromSource: jest.fn().mockResolvedValue(makePivotResult()),
       pivotMaterialize: jest.fn().mockResolvedValue(makePivotResult()),
+      forceRefreshAllViewports: jest.fn().mockResolvedValue(undefined),
     },
     eventBus: {
-      on: jest.fn(() => () => {}),
+      handlers,
+      on: jest.fn((type: string, handler: (event: any) => void) => {
+        const list = handlers.get(type) ?? [];
+        list.push(handler);
+        handlers.set(type, list);
+        return () => {
+          const next = (handlers.get(type) ?? []).filter((entry) => entry !== handler);
+          handlers.set(type, next);
+        };
+      }),
+      emit: jest.fn((event: any) => {
+        for (const handler of handlers.get(event.type) ?? []) {
+          handler(event);
+        }
+      }),
     },
     pivotExpansionProvider: {
       getExpansionState: jest.fn(() => ({
@@ -70,6 +86,7 @@ describe('PivotBridge read vs refresh paths', () => {
       expandedColumns: {},
     });
     expect(ctx.computeBridge.pivotMaterialize).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
     expect(subscriber).not.toHaveBeenCalled();
   });
 
@@ -87,8 +104,56 @@ describe('PivotBridge read vs refresh paths', () => {
       expandedRows: {},
       expandedColumns: {},
     });
+    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
     expect(subscriber).toHaveBeenCalledWith('pivot-1', result, undefined);
+  });
+
+  it('refreshAndMaterialize pivot events use the materialization path even without subscribers', async () => {
+    const ctx = createMockCtx();
+    new PivotBridge(ctx);
+
+    ctx.eventBus.emit({
+      type: 'pivot:updated',
+      sheetId: SHEET_ID,
+      outputSheetId: SHEET_ID,
+      sourceSheetId: SHEET_ID,
+      pivotId: 'pivot-1',
+      update: { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
+      source: 'user',
+      timestamp: Date.now(),
+    });
+
+    await Promise.resolve();
+
+    expect(ctx.computeBridge.pivotMaterialize).toHaveBeenCalledWith(SHEET_ID, 'pivot-1', {
+      expandedRows: {},
+      expandedColumns: {},
+    });
+    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
+  });
+
+  it('dirtyOnly pivot events invalidate without materializing', async () => {
+    const ctx = createMockCtx();
+    new PivotBridge(ctx);
+
+    ctx.eventBus.emit({
+      type: 'pivot:updated',
+      sheetId: SHEET_ID,
+      outputSheetId: SHEET_ID,
+      sourceSheetId: SHEET_ID,
+      pivotId: 'pivot-1',
+      update: { reason: 'sourceRangeChanged', refreshPolicy: 'dirtyOnly' },
+      source: 'user',
+      timestamp: Date.now(),
+    });
+
+    await Promise.resolve();
+
+    expect(ctx.computeBridge.pivotMaterialize).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
   });
 });
 

@@ -114,6 +114,7 @@ pub(in crate::storage::engine) fn region_json(
                     },
                 }
             }),
+            crate::projection::CellRender::Materialized(_) => None,
             crate::projection::CellRender::Empty => None,
         };
 

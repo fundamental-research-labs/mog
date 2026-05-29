@@ -1200,6 +1200,7 @@ export class PivotBridge implements IPivotBridge {
       const result = toPublicPivotTableResult(
         await this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null),
       );
+      await this.ctx.computeBridge.forceRefreshAllViewports();
 
       this.cache.set(pivotId, {
         result,
@@ -1486,20 +1487,19 @@ export class PivotBridge implements IPivotBridge {
   private setupObservers(): void {
     // Observe pivot config changes via EventBus (replaces former PivotStore.subscribe)
     const handlePivotChange = (event: PivotEvent) => {
-      if ('pivotId' in event && event.pivotId) {
-        this.invalidateCache(event.pivotId);
-        const shouldRefresh =
-          event.type !== 'pivot:updated' || event.update.refreshPolicy === 'refreshAndMaterialize';
-        // Recompute if there are subscribers and the producer explicitly requested it.
-        if (
-          shouldRefresh &&
-          this.subscribers.has(event.pivotId) &&
-          'outputSheetId' in event &&
-          event.outputSheetId
-        ) {
-          void this.compute(toSheetId(event.outputSheetId as string), event.pivotId);
-        }
+      if (!('pivotId' in event) || !event.pivotId) return;
+
+      this.invalidateCache(event.pivotId);
+
+      if (event.type === 'pivot:deleted') return;
+
+      const shouldMaterialize =
+        event.type !== 'pivot:updated' || event.update.refreshPolicy === 'refreshAndMaterialize';
+      if (!shouldMaterialize || !('outputSheetId' in event) || !event.outputSheetId) {
+        return;
       }
+
+      void this.refresh(toSheetId(event.outputSheetId as string), event.pivotId);
     };
 
     this.eventUnsubscribes.push(

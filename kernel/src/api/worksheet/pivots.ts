@@ -2239,7 +2239,17 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     const result: PivotTableResult | null = await this.ctx.pivot.compute(this.sheetId, pivotId);
     if (!result) return null;
 
-    // Derive bounds from the result structure
+    if (result.renderedBounds.totalRows > 0 && result.renderedBounds.totalCols > 0) {
+      return {
+        config,
+        totalRows: result.renderedBounds.totalRows,
+        totalCols: result.renderedBounds.totalCols,
+        firstDataRow: result.renderedBounds.firstDataRow,
+        firstDataCol: result.renderedBounds.firstDataCol,
+      };
+    }
+
+    // Legacy fallback for older compute results without rendered bounds.
     const rowFieldCount = config.placements.filter((p) => p.area === 'row').length;
     const colFieldCount = config.placements.filter((p) => p.area === 'column').length;
     const valueFieldCount = config.placements.filter((p) => p.area === 'value').length;

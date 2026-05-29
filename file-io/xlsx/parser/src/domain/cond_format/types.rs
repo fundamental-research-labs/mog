@@ -3,8 +3,12 @@
 //! This module re-exports structural types from ooxml-types and provides
 //! byte-parsing helpers for the XML reader path.
 
-use crate::infra::scanner::{extract_quoted_value, find_attr_simd};
-use crate::infra::xml::{parse_bool_attr, parse_f64_attr, parse_string_attr, parse_u32_attr};
+use crate::infra::scanner::{
+    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+};
+use crate::infra::xml::{
+    decode_xml_entities_string, parse_bool_attr, parse_f64_attr, parse_string_attr, parse_u32_attr,
+};
 
 // =============================================================================
 // Re-exports from ooxml-types
@@ -114,6 +118,8 @@ pub fn parse_cfvo(xml: &[u8]) -> Cfvo {
     // Parse val attribute
     if let Some(val) = parse_string_attr(xml, b"val=\"") {
         cfvo.val = Some(val);
+    } else if let Some(val) = parse_cfvo_child_formula(xml) {
+        cfvo.val = Some(val);
     }
 
     // Parse gte attribute (default true)
@@ -128,6 +134,20 @@ pub fn parse_cfvo(xml: &[u8]) -> Cfvo {
     cfvo.ext_lst_xml = crate::infra::xml::extract_direct_child_element_xml(xml, b"cfvo", b"extLst");
 
     cfvo
+}
+
+fn parse_cfvo_child_formula(xml: &[u8]) -> Option<String> {
+    let open_end = find_gt_simd(xml, 0)?;
+    if open_end > 0 && xml.get(open_end.saturating_sub(1)) == Some(&b'/') {
+        return None;
+    }
+    let close_start = find_closing_tag(xml, b"cfvo", open_end)?;
+    let body = &xml[open_end + 1..close_start];
+    let f_start = find_tag_simd(body, b"f", 0)?;
+    let f_open_end = find_gt_simd(body, f_start)?;
+    let f_close_start = find_closing_tag(body, b"f", f_open_end)?;
+    let raw = std::str::from_utf8(&body[f_open_end + 1..f_close_start]).ok()?;
+    Some(decode_xml_entities_string(raw))
 }
 
 // =============================================================================

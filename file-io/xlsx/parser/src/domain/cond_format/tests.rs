@@ -293,6 +293,14 @@ fn test_cfvo_parse_formula() {
 }
 
 #[test]
+fn test_cfvo_parse_x14_child_formula_value() {
+    let xml = br#"<x14:cfvo type="num"><xm:f>1</xm:f></x14:cfvo>"#;
+    let cfvo = parse_cfvo(xml);
+    assert_eq!(cfvo.cfvo_type, CfvoType::Num);
+    assert_eq!(cfvo.val, Some("1".to_string()));
+}
+
+#[test]
 fn test_cfvo_parse_gte_false() {
     let xml = b"<cfvo type=\"num\" val=\"50\" gte=\"0\"/>";
     let cfvo = parse_cfvo(xml);
@@ -406,6 +414,22 @@ fn test_data_bar_x14_extensions() {
     assert!(db.border_color.is_some());
     assert!(db.negative_fill_color.is_some());
     assert!(db.axis_color.is_some());
+}
+
+#[test]
+fn test_data_bar_x14_cfvo_child_formula_values() {
+    let xml = br#"<x14:dataBar gradient="0">
+        <x14:cfvo type="num"><xm:f>0</xm:f></x14:cfvo>
+        <x14:cfvo type="num"><xm:f>1</xm:f></x14:cfvo>
+        <x14:negativeFillColor rgb="FFFF0000"/>
+        <x14:axisColor rgb="FF000000"/>
+    </x14:dataBar>"#;
+    let db = parse_data_bar(xml);
+    assert_eq!(db.cfvo.len(), 2);
+    assert_eq!(db.cfvo[0].cfvo_type, CfvoType::Num);
+    assert_eq!(db.cfvo[0].val.as_deref(), Some("0"));
+    assert_eq!(db.cfvo[1].cfvo_type, CfvoType::Num);
+    assert_eq!(db.cfvo[1].val.as_deref(), Some("1"));
 }
 
 // -------------------------------------------------------------------------

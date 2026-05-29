@@ -29,11 +29,10 @@ pub fn parse_color_scale(xml: &[u8]) -> ColorScale {
     let mut colors = Vec::new();
     let mut pos = 0;
 
-    // Parse all cfvo elements
+    // Parse all cfvo elements. Use the full element so x14 thresholds that
+    // carry their value as a child <xm:f> can be preserved.
     while let Some(cfvo_start) = find_tag_simd(xml, b"cfvo", pos) {
-        let cfvo_end = find_gt_simd(xml, cfvo_start)
-            .map(|p| p + 1)
-            .unwrap_or(xml.len());
+        let cfvo_end = cfvo_element_end(xml, cfvo_start);
         let cfvo_xml = &xml[cfvo_start..cfvo_end];
         cfvos.push(parse_cfvo(cfvo_xml));
         pos = cfvo_end;
@@ -123,12 +122,11 @@ pub fn parse_data_bar(xml: &[u8]) -> DataBar {
         data_bar.axis_position = axis_position_from_bytes(axis);
     }
 
-    // Parse CFVO elements
+    // Parse CFVO elements. Use the full element so x14 thresholds that carry
+    // their value as a child <xm:f> can be preserved.
     let mut pos = 0;
     while let Some(cfvo_start) = find_tag_simd(xml, b"cfvo", pos) {
-        let cfvo_end = find_gt_simd(xml, cfvo_start)
-            .map(|p| p + 1)
-            .unwrap_or(xml.len());
+        let cfvo_end = cfvo_element_end(xml, cfvo_start);
         let cfvo_xml = &xml[cfvo_start..cfvo_end];
         data_bar.cfvo.push(parse_cfvo(cfvo_xml));
         pos = cfvo_end;
@@ -246,12 +244,11 @@ pub fn parse_icon_set(xml: &[u8]) -> IconSet {
         icon_set.custom = true;
     }
 
-    // Parse CFVO elements
+    // Parse CFVO elements. Use the full element so x14 thresholds that carry
+    // their value as a child <xm:f> can be preserved.
     let mut pos = 0;
     while let Some(cfvo_start) = find_tag_simd(xml, b"cfvo", pos) {
-        let cfvo_end = find_gt_simd(xml, cfvo_start)
-            .map(|p| p + 1)
-            .unwrap_or(xml.len());
+        let cfvo_end = cfvo_element_end(xml, cfvo_start);
         let cfvo_xml = &xml[cfvo_start..cfvo_end];
         icon_set.cfvo.push(parse_cfvo(cfvo_xml));
         pos = cfvo_end;
@@ -269,6 +266,18 @@ pub fn parse_icon_set(xml: &[u8]) -> IconSet {
     }
 
     icon_set
+}
+
+fn cfvo_element_end(xml: &[u8], cfvo_start: usize) -> usize {
+    let Some(open_end) = find_gt_simd(xml, cfvo_start) else {
+        return xml.len();
+    };
+    if open_end > cfvo_start && xml.get(open_end.saturating_sub(1)) == Some(&b'/') {
+        return open_end + 1;
+    }
+    find_closing_tag(xml, b"cfvo", open_end)
+        .and_then(|close_start| find_gt_simd(xml, close_start).map(|end| end + 1))
+        .unwrap_or(open_end + 1)
 }
 
 // =============================================================================

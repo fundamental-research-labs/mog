@@ -119,6 +119,31 @@ fn data_bar_min_max_cfvo_val_is_preserved_for_roundtrip() {
 }
 
 #[test]
+fn data_bar_x14_numeric_threshold_values_survive_domain_conversion() {
+    let mut data_bar = basic_ooxml_data_bar();
+    data_bar.cfvo[0].cfvo_type = CfvoType::Num;
+    data_bar.cfvo[0].val = Some("0".to_string());
+    data_bar.cfvo[1].cfvo_type = CfvoType::Num;
+    data_bar.cfvo[1].val = Some("1".to_string());
+
+    let converted = convert_cf_rule(&data_bar_rule(data_bar), &[], &[]);
+
+    let CFRule::DataBar { data_bar, .. } = converted else {
+        panic!("expected data bar rule");
+    };
+    assert_eq!(
+        data_bar.min_point.value,
+        domain_types::CFValueRef::Number { value: 0.0 }
+    );
+    assert_eq!(data_bar.min_point.ooxml_value.as_deref(), Some("0"));
+    assert_eq!(
+        data_bar.max_point.value,
+        domain_types::CFValueRef::Number { value: 1.0 }
+    );
+    assert_eq!(data_bar.max_point.ooxml_value.as_deref(), Some("1"));
+}
+
+#[test]
 fn chart_ref_extent_uses_one_cell_anchor_extent_not_graphic_frame_extent() {
     let mut spec = fallback_chart_spec();
     spec.position = AnchorPosition {

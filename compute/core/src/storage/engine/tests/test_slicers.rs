@@ -43,6 +43,8 @@ fn table_slicer(id: &str) -> StoredSlicer {
         cache_ext_lst_xml: None,
         position: None,
         anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 0,
         locked: false,
         show_header: true,

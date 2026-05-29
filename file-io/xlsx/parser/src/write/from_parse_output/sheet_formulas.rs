@@ -142,7 +142,12 @@ fn formulas_match(current: &str, imported: &str) -> bool {
 }
 
 fn formula_identity_text(formula: &str) -> String {
-    compute_parser::normalize_xlsx_formula(formula)
+    let normalized = compute_parser::normalize_xlsx_formula(formula);
+    if let Ok(parsed) = compute_parser::parse_formula(&normalized, None) {
+        return parsed.into_inner().to_string();
+    }
+
+    normalized
         .strip_prefix('=')
         .unwrap_or_else(|| formula.strip_prefix('=').unwrap_or(formula))
         .to_string()
@@ -176,4 +181,17 @@ pub(super) fn is_data_table_body_formula(
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case("TABLE("))
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::formulas_match;
+
+    #[test]
+    fn formula_identity_treats_optional_sheet_quotes_as_equivalent() {
+        assert!(formulas_match(
+            "=UNIQUE(FILTER(Time_Capture!W2:Time_Capture!W99999, Time_Capture!W2:Time_Capture!W99999<>\"\"))",
+            "=UNIQUE(FILTER(Time_Capture!W2:'Time_Capture'!W99999, Time_Capture!W2:'Time_Capture'!W99999<>\"\"))",
+        ));
+    }
 }

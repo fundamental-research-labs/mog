@@ -243,6 +243,14 @@ fn imported_ooxml_picture_emits_modeled_media_blob() {
         PictureOoxmlProps {
             picture,
             image_path: Some("../media/image7.png".to_string()),
+            relationships: vec![ooxml_types::shared::OpcRelationship {
+                id: "rId5".to_string(),
+                rel_type:
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+                        .to_string(),
+                target: "../media/image7.png".to_string(),
+                target_mode: None,
+            }],
             ..Default::default()
         },
     );
@@ -251,12 +259,61 @@ fn imported_ooxml_picture_emits_modeled_media_blob() {
 
     assert_eq!(
         result.image_rels,
-        vec![("rId1".to_string(), "../media/image7.png".to_string())]
+        vec![("rId5".to_string(), "../media/image7.png".to_string())]
     );
     assert_eq!(
         result.image_blobs,
         vec![("../media/image7.png".to_string(), vec![1, 2, 3, 4])]
     );
+}
+
+#[test]
+fn imported_ooxml_pictures_reuse_shared_image_relationship() {
+    let rel = ooxml_types::shared::OpcRelationship {
+        id: "rId2".to_string(),
+        rel_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            .to_string(),
+        target: "../media/image7.png".to_string(),
+        target_mode: None,
+    };
+
+    let mut picture_a = ooxml_types::drawings::SpreadsheetPicture::default();
+    picture_a.blip_fill.embed_id = Some("rId2".to_string());
+    let mut picture_b = ooxml_types::drawings::SpreadsheetPicture::default();
+    picture_b.blip_fill.embed_id = Some("rId2".to_string());
+
+    let first = picture_with_ooxml(
+        make_common("Picture 1"),
+        PictureOoxmlProps {
+            picture: picture_a,
+            image_path: Some("../media/image7.png".to_string()),
+            relationships: vec![rel.clone()],
+            ..Default::default()
+        },
+    );
+    let second = picture_with_ooxml(
+        make_common("Picture 2"),
+        PictureOoxmlProps {
+            picture: picture_b,
+            image_path: Some("../media/image7.png".to_string()),
+            relationships: vec![rel],
+            ..Default::default()
+        },
+    );
+
+    let result = build_sheet_drawing_data(&[first, second]);
+
+    assert_eq!(
+        result.image_rels,
+        vec![("rId2".to_string(), "../media/image7.png".to_string())]
+    );
+    assert!(result.drawing_rels.is_empty());
+    for (_, anchor) in result.anchors {
+        let DrawingAnchor::TwoCell(_, DrawingObject::Picture(image)) = anchor else {
+            panic!("expected picture anchor");
+        };
+        assert_eq!(image.r_id, "rId2");
+    }
 }
 
 #[test]

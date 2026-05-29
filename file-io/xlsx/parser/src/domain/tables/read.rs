@@ -18,6 +18,13 @@ use crate::output::results::{
 };
 use crate::zip::XlsxArchive;
 
+#[derive(Debug, Clone)]
+struct TableRelationshipRef {
+    id: String,
+    target: String,
+    path: String,
+}
+
 /// Parse tables for a sheet, returning both the structured `ParsedTable` list and
 /// raw XML bytes keyed by their archive path (for round-trip passthrough).
 ///
@@ -33,8 +40,8 @@ pub fn parse_tables_for_sheet(
 
     // Read the relationship file for this sheet
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
-    let mut table_paths = if let Ok(rels_xml) = archive.read_file(&rels_path) {
-        extract_table_paths_for_sheet(sheet_num, &rels_xml)
+    let mut table_relationships = if let Ok(rels_xml) = archive.read_file(&rels_path) {
+        extract_table_relationships_for_sheet(sheet_num, &rels_xml)
     } else {
         Vec::new()
     };
@@ -43,10 +50,11 @@ pub fn parse_tables_for_sheet(
     // of how the .rels XML orders the Relationship elements. Without this,
     // tables get written to wrong file paths when the rels order differs from
     // the natural table numbering (e.g., rels lists table9 before table3).
-    table_paths.sort_by_key(|path| extract_table_number(path).unwrap_or(u32::MAX));
+    table_relationships.sort_by_key(|rel| extract_table_number(&rel.path).unwrap_or(u32::MAX));
 
     // Parse each referenced table
-    for table_rel_path in &table_paths {
+    for table_rel in &table_relationships {
+        let table_rel_path = &table_rel.path;
         if let Ok(table_xml) = archive.read_file(table_rel_path) {
             // Store raw bytes for round-trip passthrough before parsing
             raw_passthroughs.push((table_rel_path.clone(), table_xml.clone()));
@@ -65,6 +73,9 @@ pub fn parse_tables_for_sheet(
 
             if let Some(table) = tables::Table::parse(&table_xml) {
                 if let Some(mut parsed) = convert_table_to_parsed(&table) {
+                    parsed.worksheet_relationship_id_hint = Some(table_rel.id.clone());
+                    parsed.table_part_path_hint = Some(table_rel.path.clone());
+                    parsed.worksheet_relationship_target_hint = Some(table_rel.target.clone());
                     parsed.query_table =
                         crate::domain::connections::query_table_relationship_for_table(
                             archive,
@@ -86,7 +97,10 @@ pub fn parse_tables_for_sheet(
     (tables_vec, raw_passthroughs)
 }
 
-fn extract_table_paths_for_sheet(sheet_num: usize, rels_xml: &[u8]) -> Vec<String> {
+fn extract_table_relationships_for_sheet(
+    sheet_num: usize,
+    rels_xml: &[u8],
+) -> Vec<TableRelationshipRef> {
     let relationships = parse_owned_relationships(
         PackageOwner::Worksheet {
             sheet_index: sheet_num,
@@ -97,7 +111,13 @@ fn extract_table_paths_for_sheet(sheet_num: usize, rels_xml: &[u8]) -> Vec<Strin
     WorksheetRelationships::new(&relationships)
         .tables()
         .into_iter()
-        .filter_map(|rel| rel.target.path().map(ToOwned::to_owned))
+        .filter_map(|rel| {
+            rel.target.path().map(|path| TableRelationshipRef {
+                id: rel.id.clone(),
+                target: rel.target.raw().to_string(),
+                path: path.to_string(),
+            })
+        })
         .collect()
 }
 
@@ -267,6 +287,9 @@ fn convert_table_to_parsed(table: &tables::Table) -> Option<ParsedTable> {
         sort_state: convert_table_sort_state(table),
         filter_columns: convert_filter_columns(table),
         query_table: None,
+        worksheet_relationship_id_hint: None,
+        table_part_path_hint: None,
+        worksheet_relationship_target_hint: None,
     })
 }
 

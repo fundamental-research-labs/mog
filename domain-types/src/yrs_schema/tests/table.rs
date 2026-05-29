@@ -1,6 +1,8 @@
 use cell_types::SheetRange;
 
-use crate::domain::table::{Table, TableColumn, TableColumnSpec, TableSpec, TotalsFunction};
+use crate::domain::table::{
+    FilterColumnSpec, FilterSpec, Table, TableColumn, TableColumnSpec, TableSpec, TotalsFunction,
+};
 use crate::yrs_schema::table;
 
 use super::support::roundtrip_map;
@@ -69,4 +71,72 @@ fn canonical_table_round_trips_runtime_entrypoint() {
             table::from_yrs_map_to_table(map, txn)
         },)
     );
+}
+
+#[test]
+fn table_filter_show_button_default_true_survives_yrs_json_storage() {
+    let original = TableSpec {
+        id: 1,
+        name: "Table1".to_string(),
+        display_name: "Table1".to_string(),
+        range_ref: "A1:A2".to_string(),
+        columns: vec![TableColumnSpec {
+            id: 1,
+            name: "Status".to_string(),
+            ..Default::default()
+        }],
+        filter_columns: vec![FilterColumnSpec {
+            col_id: 0,
+            hidden_button: false,
+            show_button: true,
+            filter: FilterSpec::Values {
+                blank: false,
+                values: vec!["Open".to_string()],
+                calendar_type: None,
+                date_group_items: Vec::new(),
+            },
+            ext_lst_raw: None,
+        }],
+        ..Default::default()
+    };
+
+    let round_tripped = roundtrip_map(table::to_yrs_prelim(&original), |map, txn| {
+        table::from_yrs_map(map, txn)
+    });
+
+    assert!(round_tripped.filter_columns[0].show_button);
+}
+
+#[test]
+fn table_filter_show_button_explicit_false_survives_yrs_json_storage() {
+    let original = TableSpec {
+        id: 1,
+        name: "Table1".to_string(),
+        display_name: "Table1".to_string(),
+        range_ref: "A1:A2".to_string(),
+        columns: vec![TableColumnSpec {
+            id: 1,
+            name: "Status".to_string(),
+            ..Default::default()
+        }],
+        filter_columns: vec![FilterColumnSpec {
+            col_id: 0,
+            hidden_button: false,
+            show_button: false,
+            filter: FilterSpec::Values {
+                blank: false,
+                values: vec!["Open".to_string()],
+                calendar_type: None,
+                date_group_items: Vec::new(),
+            },
+            ext_lst_raw: None,
+        }],
+        ..Default::default()
+    };
+
+    let round_tripped = roundtrip_map(table::to_yrs_prelim(&original), |map, txn| {
+        table::from_yrs_map(map, txn)
+    });
+
+    assert!(!round_tripped.filter_columns[0].show_button);
 }

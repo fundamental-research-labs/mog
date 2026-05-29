@@ -80,6 +80,17 @@ pub struct TableSpec {
     /// external workbook connection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_table: Option<super::connections::QueryTable>,
+    /// Imported worksheet relationship id for this table, when the table still
+    /// maps to the same live table relationship on export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_id_hint: Option<String>,
+    /// Imported package path for the table part, retained as typed provenance
+    /// for graph-owned export decisions and diagnostics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_part_path_hint: Option<String>,
+    /// Imported worksheet relationship target spelling for this table part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_target_hint: Option<String>,
 }
 
 /// Sort state for a table (for round-trip fidelity).
@@ -168,6 +179,9 @@ impl Default for TableSpec {
             sort_state: None,
             filter_columns: Vec::new(),
             query_table: None,
+            worksheet_relationship_id_hint: None,
+            table_part_path_hint: None,
+            worksheet_relationship_target_hint: None,
         }
     }
 }
@@ -932,14 +946,49 @@ mod tests {
         let spec: FilterColumnSpec = serde_json::from_value(serde_json::json!({
             "colId": 0,
             "filter": {
-                "values": {
-                    "blank": false,
-                    "values": ["A"]
-                }
+                "type": "values",
+                "blank": false,
+                "values": ["A"]
             }
         }))
         .unwrap();
 
         assert!(spec.show_button);
+    }
+
+    #[test]
+    fn filter_column_show_button_explicit_true_uses_skip_true_policy() {
+        let spec: FilterColumnSpec = serde_json::from_value(serde_json::json!({
+            "colId": 0,
+            "showButton": true,
+            "filter": {
+                "type": "values",
+                "blank": false,
+                "values": ["A"]
+            }
+        }))
+        .unwrap();
+
+        assert!(spec.show_button);
+        let value = serde_json::to_value(&spec).unwrap();
+        assert!(value.get("showButton").is_none());
+    }
+
+    #[test]
+    fn filter_column_show_button_explicit_false_serializes_false() {
+        let spec: FilterColumnSpec = serde_json::from_value(serde_json::json!({
+            "colId": 0,
+            "showButton": false,
+            "filter": {
+                "type": "values",
+                "blank": false,
+                "values": ["A"]
+            }
+        }))
+        .unwrap();
+
+        assert!(!spec.show_button);
+        let value = serde_json::to_value(&spec).unwrap();
+        assert_eq!(value.get("showButton"), Some(&serde_json::json!(false)));
     }
 }

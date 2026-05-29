@@ -177,6 +177,15 @@ pub struct ParsedTable {
     /// external workbook connection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_table: Option<domain_types::domain::connections::QueryTable>,
+    /// Imported worksheet relationship id that pointed at this table part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_id_hint: Option<String>,
+    /// Resolved imported package path for this table part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_part_path_hint: Option<String>,
+    /// Original worksheet relationship target spelling for this table part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_target_hint: Option<String>,
 }
 
 /// Sort state for a table (simplified representation for round-trip).

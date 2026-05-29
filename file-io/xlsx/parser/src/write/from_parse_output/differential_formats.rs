@@ -392,3 +392,221 @@ fn border_side(
         color,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry_entry(id: u32) -> domain_types::DxfDef {
+        domain_types::DxfDef {
+            id,
+            font: Some(FontDef {
+                bold: Some(id % 2 == 0),
+                color: Some(ColorDef::Rgb {
+                    val: format!("FF{id:06X}"),
+                    tint: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn remap_for_export_covers_all_table_and_filter_dxf_consumers() {
+        let reachable_ids = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
+        let mut output = ParseOutput {
+            workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+                dxf_registry: std::iter::once(999)
+                    .chain(reachable_ids.iter().copied())
+                    .map(registry_entry)
+                    .collect(),
+                ..Default::default()
+            }),
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                conditional_formats: vec![domain_types::ConditionalFormat {
+                    id: "cf-1".to_string(),
+                    sheet_id: "sheet-1".to_string(),
+                    pivot: None,
+                    ranges: vec![cell_types::SheetRange::single(0, 0)],
+                    range_identities: None,
+                    rules: vec![CFRule::CellValue {
+                        id: "rule-1".to_string(),
+                        priority: 1,
+                        stop_if_true: None,
+                        operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                        value1: serde_json::json!(1),
+                        value2: None,
+                        style: CFStyle {
+                            dxf_id: Some(10),
+                            ..Default::default()
+                        },
+                        text: None,
+                    }],
+                }],
+                auto_filter: Some(domain_types::AutoFilter {
+                    range_ref: "A1:B5".to_string(),
+                    columns: vec![domain_types::FilterColumn {
+                        col_index: 0,
+                        filter_type: Some(domain_types::OoxmlFilterType::Color {
+                            dxf_id: Some(20),
+                            cell_color: true,
+                        }),
+                        ..Default::default()
+                    }],
+                    sort: Some(domain_types::SortState {
+                        range_ref: "A1:B5".to_string(),
+                        conditions: vec![domain_types::SortCondition {
+                            range_ref: "A1:A5".to_string(),
+                            dxf_id: Some(30),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                sort_state: Some(domain_types::SortState {
+                    range_ref: "A1:B5".to_string(),
+                    conditions: vec![domain_types::SortCondition {
+                        range_ref: "B1:B5".to_string(),
+                        dxf_id: Some(40),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                tables: vec![domain_types::TableSpec {
+                    name: "Table1".to_string(),
+                    display_name: "Table1".to_string(),
+                    range_ref: "A1:B5".to_string(),
+                    header_row_dxf_id: Some(50),
+                    data_dxf_id: Some(60),
+                    totals_row_dxf_id: Some(70),
+                    header_row_border_dxf_id: Some(80),
+                    table_border_dxf_id: Some(90),
+                    totals_row_border_dxf_id: Some(100),
+                    columns: vec![domain_types::TableColumnSpec {
+                        name: "A".to_string(),
+                        header_row_dxf_id: Some(110),
+                        data_dxf_id: Some(120),
+                        totals_row_dxf_id: Some(130),
+                        ..Default::default()
+                    }],
+                    filter_columns: vec![domain_types::FilterColumnSpec {
+                        col_id: 0,
+                        hidden_button: false,
+                        show_button: true,
+                        filter: domain_types::FilterSpec::Color {
+                            dxf_id: Some(140),
+                            cell_color: true,
+                        },
+                        ext_lst_raw: None,
+                    }],
+                    sort_state: Some(domain_types::TableSortState {
+                        ref_range: "A1:B5".to_string(),
+                        column_sort: false,
+                        case_sensitive: false,
+                        sort_method: domain_types::SortMethod::None,
+                        conditions: vec![domain_types::TableSortCondition {
+                            ref_range: "A1:A5".to_string(),
+                            descending: false,
+                            sort_by: domain_types::SortConditionBy::CellColor,
+                            custom_list: None,
+                            dxf_id: Some(150),
+                            icon_set: None,
+                            icon_id: None,
+                        }],
+                        ext_lst_raw: None,
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            custom_table_styles: vec![ooxml_types::styles::TableStyleDef {
+                name: "CustomTableStyle".to_string(),
+                pivot: Some(false),
+                table: Some(true),
+                count: Some(1),
+                elements: vec![ooxml_types::styles::TableStyleElementDef {
+                    style_type: ooxml_types::styles::TableStyleType::WholeTable,
+                    dxf_id: Some(150),
+                    size: None,
+                }],
+                xr_uid: None,
+            }],
+            ..Default::default()
+        };
+
+        let (remapped, dxfs) = remap_for_export(&output);
+
+        assert_eq!(dxfs.len(), reachable_ids.len());
+        assert_eq!(dxfs[0], registry_entry(10).to_ooxml());
+        assert_eq!(dxfs.last(), Some(&registry_entry(150).to_ooxml()));
+        let sheet = &remapped.sheets[0];
+        assert_eq!(
+            rule_style(&sheet.conditional_formats[0].rules[0]).and_then(|style| style.dxf_id),
+            Some(0)
+        );
+        assert_eq!(
+            sheet.auto_filter.as_ref().and_then(|filter| {
+                filter.columns.first().and_then(|column| match &column.filter_type {
+                    Some(domain_types::OoxmlFilterType::Color { dxf_id, .. }) => *dxf_id,
+                    _ => None,
+                })
+            }),
+            Some(1)
+        );
+        assert_eq!(
+            sheet.auto_filter.as_ref().and_then(|filter| {
+                filter
+                    .sort
+                    .as_ref()
+                    .and_then(|sort| sort.conditions.first())
+                    .and_then(|condition| condition.dxf_id)
+            }),
+            Some(2)
+        );
+        assert_eq!(
+            sheet.sort_state
+                .as_ref()
+                .and_then(|sort| sort.conditions.first())
+                .and_then(|condition| condition.dxf_id),
+            Some(3)
+        );
+
+        let table = &sheet.tables[0];
+        assert_eq!(table.header_row_dxf_id, Some(4));
+        assert_eq!(table.data_dxf_id, Some(5));
+        assert_eq!(table.totals_row_dxf_id, Some(6));
+        assert_eq!(table.header_row_border_dxf_id, Some(7));
+        assert_eq!(table.table_border_dxf_id, Some(8));
+        assert_eq!(table.totals_row_border_dxf_id, Some(9));
+        assert_eq!(table.columns[0].header_row_dxf_id, Some(10));
+        assert_eq!(table.columns[0].data_dxf_id, Some(11));
+        assert_eq!(table.columns[0].totals_row_dxf_id, Some(12));
+        assert!(matches!(
+            table.filter_columns[0].filter,
+            domain_types::FilterSpec::Color {
+                dxf_id: Some(13),
+                ..
+            }
+        ));
+        assert_eq!(
+            table
+                .sort_state
+                .as_ref()
+                .and_then(|sort| sort.conditions.first())
+                .and_then(|condition| condition.dxf_id),
+            Some(14)
+        );
+        assert_eq!(remapped.custom_table_styles[0].elements[0].dxf_id, Some(14));
+
+        output.sheets[0].tables[0].data_dxf_id = Some(999);
+        let (remapped_with_preceding_reachable, dxfs_with_preceding) = remap_for_export(&output);
+        assert_eq!(dxfs_with_preceding[0], registry_entry(999).to_ooxml());
+        assert_eq!(
+            remapped_with_preceding_reachable.sheets[0].tables[0].data_dxf_id,
+            Some(0)
+        );
+    }
+}

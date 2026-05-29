@@ -56,6 +56,9 @@ pub const KEY_PUBLISHED: &str = "published";
 pub const KEY_OOXML_COLUMNS: &str = "ooxmlColumns";
 pub const KEY_OOXML_META: &str = "ooxmlMeta";
 pub const KEY_QUERY_TABLE: &str = "queryTable";
+pub const KEY_WORKSHEET_RELATIONSHIP_ID_HINT: &str = "worksheetRelationshipIdHint";
+pub const KEY_TABLE_PART_PATH_HINT: &str = "tablePartPathHint";
+pub const KEY_WORKSHEET_RELATIONSHIP_TARGET_HINT: &str = "worksheetRelationshipTargetHint";
 
 /// Write a TableSpec to Y.Map prelim entries.
 pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
@@ -173,6 +176,21 @@ pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
         && let Ok(json) = serde_json::to_string(query_table)
     {
         entries.push((KEY_QUERY_TABLE, Any::String(Arc::from(json.as_str()))));
+    }
+    if let Some(s) = &table.worksheet_relationship_id_hint {
+        entries.push((
+            KEY_WORKSHEET_RELATIONSHIP_ID_HINT,
+            Any::String(Arc::from(s.as_str())),
+        ));
+    }
+    if let Some(s) = &table.table_part_path_hint {
+        entries.push((KEY_TABLE_PART_PATH_HINT, Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(s) = &table.worksheet_relationship_target_hint {
+        entries.push((
+            KEY_WORKSHEET_RELATIONSHIP_TARGET_HINT,
+            Any::String(Arc::from(s.as_str())),
+        ));
     }
 
     entries
@@ -300,6 +318,17 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
             .unwrap_or_default(),
         query_table: read_string(map, txn, KEY_QUERY_TABLE)
             .and_then(|s| serde_json::from_str(&s).ok()),
+        worksheet_relationship_id_hint: read_string(
+            map,
+            txn,
+            KEY_WORKSHEET_RELATIONSHIP_ID_HINT,
+        ),
+        table_part_path_hint: read_string(map, txn, KEY_TABLE_PART_PATH_HINT),
+        worksheet_relationship_target_hint: read_string(
+            map,
+            txn,
+            KEY_WORKSHEET_RELATIONSHIP_TARGET_HINT,
+        ),
     })
 }
 

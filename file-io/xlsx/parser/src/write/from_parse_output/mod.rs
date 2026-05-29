@@ -135,7 +135,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
     let mut worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry> =
         Vec::new();
-    let mut worksheet_table_relationships: Vec<(usize, usize)> = Vec::new();
+    let mut worksheet_table_relationships: Vec<(usize, usize, Option<String>)> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
     let mut worksheet_slicer_relationships: Vec<(usize, usize)> = Vec::new();
 
@@ -463,7 +463,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
             for i in 0..extras.tables.len() {
                 let global_idx = tables_before + i + 1;
-                worksheet_table_relationships.push((sheet_idx, global_idx));
+                let target = format!("../tables/table{global_idx}.xml");
+                let relationship_id_hint =
+                    if let Some(hint) = &extras.source_tables[i].worksheet_relationship_id_hint {
+                        rels.add_with_id(hint, REL_TABLE, &target);
+                        Some(hint.clone())
+                    } else {
+                        Some(rels.add(REL_TABLE, &target))
+                    };
+                worksheet_table_relationships.push((sheet_idx, global_idx, relationship_id_hint));
             }
         }
 
@@ -1469,12 +1477,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.relationship_id_hint.as_deref(),
         )?;
     }
-    for (sheet_idx, global_idx) in &worksheet_table_relationships {
+    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_table_relationships {
         crate::write::package_graph::register_worksheet_table(
             &mut package_graph_builder,
             *sheet_idx,
             *global_idx,
-            None,
+            relationship_id_hint.as_deref(),
         )?;
     }
     let mut query_table_global_idx = 0usize;

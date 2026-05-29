@@ -280,6 +280,9 @@ fn test_parsed_table_serialization() {
         published: false,
         filter_columns: vec![],
         query_table: None,
+        worksheet_relationship_id_hint: None,
+        table_part_path_hint: None,
+        worksheet_relationship_target_hint: None,
         sort_state: None,
         xr_uid: None,
     };

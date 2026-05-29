@@ -69,6 +69,9 @@ pub(crate) fn convert_tables(tables: &[ParsedTable]) -> Vec<TableSpec> {
             xr_uid: t.xr_uid.clone(),
             filter_columns: t.filter_columns.clone(),
             query_table: t.query_table.clone(),
+            worksheet_relationship_id_hint: t.worksheet_relationship_id_hint.clone(),
+            table_part_path_hint: t.table_part_path_hint.clone(),
+            worksheet_relationship_target_hint: t.worksheet_relationship_target_hint.clone(),
             sort_state: t.sort_state.as_ref().map(|ss| {
                 domain_types::domain::table::TableSortState {
                     ref_range: ss.ref_range.clone(),

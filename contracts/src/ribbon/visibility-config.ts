@@ -579,16 +579,19 @@ export type RibbonVisibilityPath = readonly [RibbonVisibilityRootKey, string?, s
 export const PUBLIC_RIBBON_VISIBILITY_CONFIG = {
   insert: {
     tables: {
-      pivotTable: false,
-      checkBox: false,
       comboBox: false,
     },
     illustrations: false,
     sparklines: false,
-    filters: false,
     text: false,
   },
   pageLayout: false,
+  formulaBar: {
+    controls: {
+      toggleAiFormulaBar: false,
+    },
+  },
+  collaboration: false,
 } satisfies RibbonVisibilityConfig;
 
 export const APP_EVAL_RIBBON_VISIBILITY_CONFIG = {

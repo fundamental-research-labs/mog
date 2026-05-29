@@ -1,6 +1,7 @@
 pub mod borders;
 pub mod canvas;
 pub mod cells;
+pub mod charts;
 pub mod colors;
 pub mod grid;
 pub mod headers;
@@ -14,6 +15,7 @@ pub(crate) mod test_helpers;
 pub use options::ScreenshotOptions;
 
 use canvas::SheetCanvas;
+use charts::{ChartOverlay, render_chart_overlays};
 use compute_text_measurement::FontDb;
 use compute_wire::ViewportRenderData;
 
@@ -31,6 +33,16 @@ pub fn render_sheet_to_png(
     viewport_data: &ViewportRenderData,
     font_db: &FontDb,
     options: &ScreenshotOptions,
+) -> Vec<u8> {
+    render_sheet_to_png_with_charts(viewport_data, font_db, options, &[])
+}
+
+/// Render a sheet region plus floating chart overlays to a PNG buffer.
+pub fn render_sheet_to_png_with_charts(
+    viewport_data: &ViewportRenderData,
+    font_db: &FontDb,
+    options: &ScreenshotOptions,
+    charts: &[ChartOverlay],
 ) -> Vec<u8> {
     let row_positions = &viewport_data.row_positions;
     let col_positions = &viewport_data.col_positions;
@@ -104,7 +116,10 @@ pub fn render_sheet_to_png(
         font_db,
     );
 
-    // 4. Headers (over data area edges)
+    // 4. Floating chart objects (over cells, under headers).
+    render_chart_overlays(&mut canvas, charts, offset_x, offset_y);
+
+    // 5. Headers (over data area edges)
     if options.show_headers {
         headers::render_corner(&mut canvas, header_width, header_height);
         headers::render_col_headers(

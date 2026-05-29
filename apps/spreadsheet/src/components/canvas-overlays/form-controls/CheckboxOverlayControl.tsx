@@ -67,6 +67,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
   onCellValueChange,
 }: CheckboxOverlayControlProps) {
   const checked = isChecked(cellValue);
+  const hasLabel = Boolean(control.label);
 
   const handleChange = useCallback(() => {
     if (!control.enabled) return;
@@ -85,13 +86,13 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
 
   return (
     <div
-      className="flex items-center gap-1"
+      className={hasLabel ? 'flex items-center gap-1' : 'flex items-center justify-center'}
       style={{
         width,
         height,
         pointerEvents: 'auto',
-        justifyContent: control.label ? 'flex-start' : 'center',
         overflow: 'hidden',
+        backgroundColor: hasLabel ? undefined : 'var(--color-ss-bg, #fff)',
       }}
       data-testid={`form-control-checkbox-${control.id}`}
     >
@@ -113,7 +114,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
             : `Checkbox${checked ? ' (checked)' : ' (unchecked)'}`
         }
       />
-      {control.label && (
+      {hasLabel && (
         <span
           className="text-xs select-none truncate"
           style={{

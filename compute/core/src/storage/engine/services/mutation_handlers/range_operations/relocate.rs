@@ -308,30 +308,34 @@ fn relocate_whole_tables(
 ) -> Vec<TableChange> {
     let source_sheet_hex = source_sheet_id.to_uuid_string();
     let target_sheet_hex = target_sheet_id.to_uuid_string();
-    let row_span = src_end_row.saturating_sub(src_start_row);
-    let col_span = src_end_col.saturating_sub(src_start_col);
-
     let tables_to_move: Vec<_> = mirror
         .all_tables()
         .iter()
         .filter(|table| {
             table.sheet_id == source_sheet_hex
-                && table.range.start_row() == src_start_row
-                && table.range.start_col() == src_start_col
-                && table.range.end_row() == src_end_row
-                && table.range.end_col() == src_end_col
+                && table.range.start_row() >= src_start_row
+                && table.range.start_col() >= src_start_col
+                && table.range.end_row() <= src_end_row
+                && table.range.end_col() <= src_end_col
         })
         .cloned()
         .collect();
 
     let mut changes = Vec::with_capacity(tables_to_move.len());
     for mut table in tables_to_move {
+        let row_offset = table.range.start_row().saturating_sub(src_start_row);
+        let col_offset = table.range.start_col().saturating_sub(src_start_col);
+        let table_row_span = table.range.end_row().saturating_sub(table.range.start_row());
+        let table_col_span = table.range.end_col().saturating_sub(table.range.start_col());
+        let target_start_row = target_row + row_offset;
+        let target_start_col = target_col + col_offset;
+
         table.sheet_id = target_sheet_hex.clone();
         table.range = cell_types::SheetRange::new(
-            target_row,
-            target_col,
-            target_row + row_span,
-            target_col + col_span,
+            target_start_row,
+            target_start_col,
+            target_start_row + table_row_span,
+            target_start_col + table_col_span,
         );
         stores.compute.set_table(mirror, table.clone());
         super::super::super::tables::persist_table_to_yrs(stores, &table);

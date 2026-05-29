@@ -63,6 +63,22 @@ function createMockComputeBridge() {
     // Table queries (used by getItems/checkSlicerConnectivity)
     getTableByName: jest.fn().mockResolvedValue(null),
     getCellsInRangeYrs: jest.fn().mockResolvedValue([]),
+    getCellPosition: jest.fn().mockResolvedValue(null),
+    getFiltersInSheet: jest.fn().mockResolvedValue([
+      {
+        id: 'f-1',
+        tableId: 'SalesTable',
+        type: 'tableFilter',
+        startRow: 0,
+        startCol: 0,
+        endRow: 3,
+        endCol: 1,
+        columnFilters: {},
+      },
+    ]),
+    setColumnFilter: jest.fn().mockResolvedValue(undefined),
+    clearColumnFilter: jest.fn().mockResolvedValue(undefined),
+    applyFilter: jest.fn().mockResolvedValue(undefined),
 
     // Pivot queries (used by checkSlicerConnectivity for pivot slicers)
     pivotGet: jest.fn().mockResolvedValue(null),
@@ -435,6 +451,132 @@ describe('WorksheetSlicersImpl', () => {
       expect(state.items.map((i) => i.value)).toEqual(expect.arrayContaining(['East', 'West']));
       expect(state.items.find((i) => i.value === 'East')?.count).toBe(2);
       expect(state.items.find((i) => i.value === 'West')?.count).toBe(1);
+    });
+
+    it('resolves table slicer items from a header CellId source', async () => {
+      bridge.getSlicerState.mockResolvedValue({
+        id: 'slicer-cell-id',
+        caption: 'Region',
+        source: {
+          type: 'table',
+          tableId: 'SalesTable',
+          columnCellId: 'header-region-cell-id',
+        },
+        selectedValues: [],
+        position: { x: 0, y: 0, width: 200, height: 300 },
+        style: null,
+        zIndex: 0,
+        locked: false,
+        showHeader: true,
+      });
+      bridge.getTableByName.mockResolvedValue({
+        id: 'SalesTable',
+        columns: [
+          { name: 'Region', id: 'col-1', index: 0 },
+          { name: 'Amount', id: 'col-2', index: 1 },
+        ],
+        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
+      bridge.getCellPosition.mockResolvedValue({ row: 0, col: 0 });
+      bridge.getCellsInRangeYrs.mockResolvedValue([
+        { row: 1, col: 0, value: { type: 'text', value: 'East' } },
+        { row: 2, col: 0, value: { type: 'text', value: 'West' } },
+        { row: 3, col: 0, value: { type: 'text', value: 'East' } },
+      ]);
+
+      const state = await slicers.getState('slicer-cell-id');
+
+      expect(state.isConnected).toBe(true);
+      expect(bridge.getCellPosition).toHaveBeenCalledWith(SHEET_ID, 'header-region-cell-id');
+      expect(bridge.getCellsInRangeYrs).toHaveBeenCalledWith(SHEET_ID, 1, 0, 3, 0);
+      expect(state.items.map((item) => item.value)).toEqual(
+        expect.arrayContaining(['East', 'West']),
+      );
+    });
+
+    it('returns numeric slicer items from Rust number cell values', async () => {
+      bridge.getSlicerState.mockResolvedValue({
+        id: 'slicer-amount',
+        caption: 'Amount',
+        source: {
+          type: 'table',
+          tableId: 'SalesTable',
+          columnCellId: 'header-amount-cell-id',
+        },
+        selectedValues: [],
+        position: { x: 0, y: 0, width: 200, height: 300 },
+        style: null,
+        zIndex: 0,
+        locked: false,
+        showHeader: true,
+      });
+      bridge.getTableByName.mockResolvedValue({
+        id: 'SalesTable',
+        columns: [
+          { name: 'Region', id: 'col-1', index: 0 },
+          { name: 'Amount', id: 'col-2', index: 1 },
+        ],
+        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
+      bridge.getCellPosition.mockResolvedValue({ row: 0, col: 1 });
+      bridge.getCellsInRangeYrs.mockResolvedValue([
+        { row: 1, col: 1, value: { type: 'number', value: 10 } },
+        { row: 2, col: 1, value: { type: 'number', value: 20 } },
+        { row: 3, col: 1, value: { type: 'number', value: 10 } },
+      ]);
+
+      const state = await slicers.getState('slicer-amount');
+
+      expect(state.isConnected).toBe(true);
+      expect(state.items.map((item) => item.value)).toEqual(expect.arrayContaining([10, 20]));
+      expect(state.items.find((item) => item.value === 10)?.count).toBe(2);
+      expect(state.items.find((item) => item.value === 20)?.count).toBe(1);
+    });
+
+    it('applies slicer selection to the resolved CellId-backed table column', async () => {
+      bridge.getSlicerState.mockResolvedValue({
+        id: 'slicer-cell-id',
+        caption: 'Region',
+        source: {
+          type: 'table',
+          tableId: 'SalesTable',
+          columnCellId: 'header-region-cell-id',
+        },
+        selectedValues: [],
+        position: { x: 0, y: 0, width: 200, height: 300 },
+        style: null,
+        zIndex: 0,
+        locked: false,
+        showHeader: true,
+      });
+      bridge.getTableByName.mockResolvedValue({
+        id: 'SalesTable',
+        name: 'SalesTable',
+        sheetId: SHEET_ID,
+        columns: [
+          { name: 'Region', id: 'col-1', index: 0 },
+          { name: 'Amount', id: 'col-2', index: 1 },
+        ],
+        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
+      bridge.getCellPosition.mockResolvedValue({ row: 0, col: 0 });
+
+      await slicers.setSelection('slicer-cell-id', ['West']);
+
+      expect(bridge.clearSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-cell-id');
+      expect(bridge.toggleSlicerItem).toHaveBeenCalledWith(SHEET_ID, 'slicer-cell-id', 'West');
+      expect(bridge.setColumnFilter).toHaveBeenCalledWith(
+        SHEET_ID,
+        'f-1',
+        0,
+        expect.objectContaining({ type: 'values', values: ['West'] }),
+      );
     });
 
     it('getState returns isConnected=false when table is missing', async () => {

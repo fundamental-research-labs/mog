@@ -3,7 +3,7 @@
  *
  * Shows the hyperlink URL when hovering over a cell that contains a hyperlink.
  * Excel displays this as a tooltip showing the URL that the user will navigate to
- * if they Ctrl+click the cell.
+ * if they click the cell.
  *
  * Architecture:
  * - Uses mouse hover state to track hovered cell
@@ -47,9 +47,7 @@ export function HyperlinkTooltip({ url, position, visible }: HyperlinkTooltipPro
       style={{ position: 'fixed', left: position.x, top: position.y }}
     >
       <div className="text-ss-text-secondary break-all">{displayUrl}</div>
-      <div className="text-ss-text-tertiary text-ribbon-compact mt-0.5">
-        Ctrl+click to follow link
-      </div>
+      <div className="text-ss-text-tertiary text-ribbon-compact mt-0.5">Click to follow link</div>
     </div>
   );
 }

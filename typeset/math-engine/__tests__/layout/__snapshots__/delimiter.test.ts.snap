@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`Delimiter Layout — TeXbook Rule 19 snapshot: delimiter layout with null delimiters 1`] = `
 {

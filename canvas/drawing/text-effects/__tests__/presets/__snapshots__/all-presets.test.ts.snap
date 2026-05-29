@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`Preset Snapshots (default adjustment) preset "textArchDown" bottom guide snapshot 1`] = `"M 0 50 C 110.45694995999999 16.675000000000004 89.54305004000001 16.675000000000004 200 50"`;
 

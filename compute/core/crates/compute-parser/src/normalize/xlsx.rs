@@ -97,33 +97,16 @@ fn needs_xlsx_prefix_strip(s: &str) -> bool {
 /// The prefixes are matched case-insensitively.
 fn strip_xlsx_prefixes(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.char_indices().peekable();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
 
-    while let Some(&(i, ch)) = chars.peek() {
+    while i < len {
         // Inside a double-quoted string — copy verbatim until closing quote
-        if ch == '"' {
-            out.push('"');
-            chars.next();
-            while let Some(&(_, qch)) = chars.peek() {
-                if qch == '"' {
-                    out.push('"');
-                    chars.next();
-                    // Doubled quote ("") is an escape inside Excel strings
-                    if let Some(&(_, next_ch)) = chars.peek() {
-                        if next_ch == '"' {
-                            out.push('"');
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                } else {
-                    out.push(qch);
-                    chars.next();
-                }
-            }
+        if bytes[i] == b'"' {
+            let end = skip_double_quoted(bytes, i + 1);
+            out.push_str(&s[i..end]);
+            i = end;
             continue;
         }
 
@@ -135,21 +118,17 @@ fn strip_xlsx_prefixes(s: &str) -> String {
                 .get(..12)
                 .is_some_and(|p| p.eq_ignore_ascii_case("_xlfn._xlws."))
         {
-            // Advance past the 12-byte prefix (all ASCII, so 12 chars)
-            for _ in 0..12 {
-                chars.next();
-            }
+            i += 12;
         } else if remaining.len() >= 6
             && remaining.get(..6).is_some_and(|p| {
                 p.eq_ignore_ascii_case("_xlfn.") || p.eq_ignore_ascii_case("_xlpm.")
             })
         {
-            for _ in 0..6 {
-                chars.next();
-            }
+            i += 6;
         } else {
+            let ch = s[i..].chars().next().unwrap();
             out.push(ch);
-            chars.next();
+            i += ch.len_utf8();
         }
     }
     out

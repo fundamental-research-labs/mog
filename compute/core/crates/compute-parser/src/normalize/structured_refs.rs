@@ -1,6 +1,8 @@
 // Structured-ref scanning splits only at ASCII formula syntax bytes.
 #![allow(clippy::string_slice)]
 
+use super::scan::skip_double_quoted;
+
 /// Qualify implicit structured references by prepending the table name.
 ///
 /// Rewrites `[@Column]` to `TableName[@Column]` throughout the formula.
@@ -53,25 +55,9 @@ pub fn qualify_implicit_structured_refs(formula: &str, table_name: Option<&str>)
     while i < len {
         // Skip double-quoted strings
         if bytes[i] == b'"' {
-            out.push('"');
-            i += 1;
-            while i < len {
-                if bytes[i] == b'"' {
-                    out.push('"');
-                    i += 1;
-                    if i < len && bytes[i] == b'"' {
-                        // Escaped quote
-                        out.push('"');
-                        i += 1;
-                    } else {
-                        break;
-                    }
-                } else {
-                    let ch = formula[i..].chars().next().unwrap();
-                    out.push(ch);
-                    i += ch.len_utf8();
-                }
-            }
+            let end = skip_double_quoted(bytes, i + 1);
+            out.push_str(&formula[i..end]);
+            i = end;
             continue;
         }
 

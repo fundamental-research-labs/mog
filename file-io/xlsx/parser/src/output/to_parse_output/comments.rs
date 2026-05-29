@@ -3,7 +3,10 @@ use super::*;
 pub(super) fn build_sheet_comment_package_info(
     sheet: &FullParsedSheet,
 ) -> Option<domain_types::SheetCommentPackageInfo> {
-    let owner_path = format!("xl/worksheets/sheet{}.xml", sheet.index + 1);
+    let owner_path = sheet
+        .owner_part_path
+        .clone()
+        .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", sheet.index + 1));
     let mut info = domain_types::SheetCommentPackageInfo {
         comments_root_namespace_attrs: sheet.comments_root_namespace_attrs.clone(),
         comments_ext_lst_xml: sheet.comments_ext_lst_xml.clone(),
@@ -39,4 +42,84 @@ pub(super) fn build_sheet_comment_package_info(
     }
 
     (!info.is_empty()).then_some(info)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infra::opc::{REL_COMMENTS, REL_THREADED_COMMENT, REL_VML_DRAWING};
+    use crate::output::results::FullParsedSheet;
+
+    fn rel(id: &str, rel_type: &str, target: &str) -> ooxml_types::shared::OpcRelationship {
+        ooxml_types::shared::OpcRelationship {
+            id: id.to_string(),
+            rel_type: rel_type.to_string(),
+            target: target.to_string(),
+            target_mode: None,
+        }
+    }
+
+    #[test]
+    fn comment_package_paths_resolve_against_actual_worksheet_owner_path() {
+        let sheet = FullParsedSheet {
+            index: 0,
+            owner_part_path: Some("xl/worksheets/sheet6.xml".to_string()),
+            legacy_drawing_r_id: Some("rIdVml".to_string()),
+            comments_root_namespace_attrs: vec![
+                (
+                    "xmlns".to_string(),
+                    "http://schemas.openxmlformats.org/spreadsheetml/2006/main".to_string(),
+                ),
+                (
+                    "xmlns:mc".to_string(),
+                    "http://schemas.openxmlformats.org/markup-compatibility/2006".to_string(),
+                ),
+                ("mc:Ignorable".to_string(), "xr".to_string()),
+                (
+                    "xmlns:xr".to_string(),
+                    "http://schemas.microsoft.com/office/spreadsheetml/2014/revision".to_string(),
+                ),
+            ],
+            sheet_opc_rels: vec![
+                rel("rIdComments", REL_COMMENTS, "../comments6.xml"),
+                rel("rIdVml", REL_VML_DRAWING, "../drawings/vmlDrawing6.vml"),
+                rel(
+                    "rIdThreaded",
+                    REL_THREADED_COMMENT,
+                    "../threadedComments/threadedComment6.xml",
+                ),
+            ],
+            raw_vml_drawings: vec![(
+                "xl/drawings/vmlDrawing6.vml".to_string(),
+                Vec::new(),
+                None,
+            )],
+            ..Default::default()
+        };
+
+        let package = build_sheet_comment_package_info(&sheet).expect("comment package");
+
+        assert_eq!(package.comments_path_hint.as_deref(), Some("xl/comments6.xml"));
+        assert_eq!(
+            package.comments_relationship_id_hint.as_deref(),
+            Some("rIdComments")
+        );
+        assert_eq!(
+            package.vml_path_hint.as_deref(),
+            Some("xl/drawings/vmlDrawing6.vml")
+        );
+        assert_eq!(
+            package.vml_relationship_id_hint.as_deref(),
+            Some("rIdVml")
+        );
+        assert_eq!(
+            package.threaded_comments_path_hint.as_deref(),
+            Some("xl/threadedComments/threadedComment6.xml")
+        );
+        assert_eq!(
+            package.threaded_comments_relationship_id_hint.as_deref(),
+            Some("rIdThreaded")
+        );
+        assert_eq!(package.comments_root_namespace_attrs.len(), 4);
+    }
 }

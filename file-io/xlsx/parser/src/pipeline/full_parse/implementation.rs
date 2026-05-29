@@ -786,6 +786,9 @@ pub(super) fn parse_xlsx_full_native_impl(
         let mut par_sheet_namespaces = Vec::with_capacity(sorted.len());
         for r in sorted {
             let mut s = r.sheet;
+            s.owner_part_path = sheet_package_contexts
+                .get(s.index)
+                .and_then(|ctx| ctx.owner_part_path.clone());
             s.sheet_id = sheet_package_contexts
                 .get(s.index)
                 .and_then(|ctx| ctx.sheet_id);
@@ -1355,6 +1358,7 @@ fn process_sheet_core(
     let sheet = FullParsedSheet {
         name: sheet_name,
         index: sheet_idx,
+        owner_part_path: None,
         sheet_id: None,            // Set later from SheetInfo at assembly time
         state: Default::default(), // Set later from SheetInfo at assembly time
         cells,
@@ -1889,6 +1893,7 @@ fn parse_sheets_sequential(
         sheets.push(FullParsedSheet {
             name: sheet_name,
             index: sheet_idx,
+            owner_part_path: sheet_context.owner_part_path.clone(),
             sheet_id: sheet_context.sheet_id,
             state: sheet_context.visibility,
             cells,

@@ -171,6 +171,11 @@ pub struct FullParsedSheet {
     pub name: String,
     /// 0-based sheet index
     pub index: usize,
+    /// Actual worksheet package part path that owns this sheet, for resolving
+    /// sheet-scoped relationships without assuming workbook order matches
+    /// `xl/worksheets/sheetN.xml`.
+    #[serde(skip)]
+    pub owner_part_path: Option<String>,
     /// Original sheetId from workbook.xml (preserved for round-trip fidelity).
     #[serde(skip)]
     pub sheet_id: Option<u32>,

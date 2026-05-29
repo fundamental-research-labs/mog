@@ -33,13 +33,6 @@ pub(super) fn append_dropped_import_diagnostics(
     if result
         .sheets
         .iter()
-        .any(|sheet| !sheet.comments_root_namespace_attrs.is_empty())
-    {
-        dropped.push("comments root namespace declarations".to_string());
-    }
-    if result
-        .sheets
-        .iter()
         .any(|sheet| !sheet.table_xml_passthroughs.is_empty())
     {
         dropped.push("table XML passthrough package parts".to_string());

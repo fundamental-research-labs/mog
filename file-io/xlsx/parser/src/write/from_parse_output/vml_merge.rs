@@ -7,21 +7,6 @@ pub(super) fn form_control_base_shape_id(comments: &[Comment]) -> u32 {
         .count() as u32
 }
 
-pub(super) fn controls_with_shape_ids(
-    controls: &[crate::domain::controls::types::FormControl],
-    base_shape_id: u32,
-) -> Vec<crate::domain::controls::types::FormControl> {
-    controls
-        .iter()
-        .enumerate()
-        .map(|(idx, control)| {
-            let mut control = control.clone();
-            control.shape_id = Some(base_shape_id + idx as u32);
-            control
-        })
-        .collect()
-}
-
 pub(super) fn merge_form_controls_into_comment_vml(
     comment_vml: &[u8],
     form_control_vml: &[u8],

@@ -1,3 +1,4 @@
+use super::form_control_export_plan::FormControlExportDiagnostic;
 use super::ole_objects::OleObjectExport;
 use super::worksheet_custom_properties;
 
@@ -39,6 +40,9 @@ pub(super) struct SheetExtras {
     pub(super) has_printer_settings: bool,
     /// Form controls for this sheet (converted from domain types).
     pub(super) form_controls: Vec<crate::domain::controls::types::FormControl>,
+    /// Shape-ID planning diagnostics for form-control package artifacts.
+    #[allow(dead_code)]
+    pub(super) form_control_diagnostics: Vec<FormControlExportDiagnostic>,
     /// OLE objects for this sheet (converted from floating-object state).
     pub(super) ole_objects: Vec<OleObjectExport>,
     /// Clean imported worksheet custom property sidecars.

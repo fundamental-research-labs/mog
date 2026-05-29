@@ -15,6 +15,7 @@ mod chart_replay;
 mod differential_formats;
 mod doc_props;
 mod export_context;
+mod form_control_export_plan;
 mod external_links;
 mod form_controls;
 mod hyperlink_targets;
@@ -1665,14 +1666,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 .to_string();
             ctrl_prop_r_ids.push(r_id);
         }
-        let form_controls = if extras.comments.is_some() {
-            let base_shape_id =
-                vml_merge::form_control_base_shape_id(&output.sheets[sheet_idx].comments);
-            vml_merge::controls_with_shape_ids(&extras.form_controls, base_shape_id)
-        } else {
-            extras.form_controls.clone()
-        };
-        let controls_writer = ControlsWriter::new(form_controls);
+        let controls_writer = ControlsWriter::new(extras.form_controls.clone());
         let base_shape_id = if extras.comments.is_some() {
             vml_merge::form_control_base_shape_id(&output.sheets[sheet_idx].comments)
         } else {

@@ -249,11 +249,7 @@ pub(super) fn write_zip_package(
             {
                 let base_shape_id =
                     vml_merge::form_control_base_shape_id(&output.sheets[idx].comments);
-                let form_controls = vml_merge::controls_with_shape_ids(
-                    &sheet_extras[idx].form_controls,
-                    base_shape_id,
-                );
-                let controls_writer = ControlsWriter::new(form_controls);
+                let controls_writer = ControlsWriter::new(sheet_extras[idx].form_controls.clone());
                 let preview_rel_ids = ole_preview_relationship_ids(
                     package_graph,
                     &comments_entry.vml_path,
@@ -316,11 +312,7 @@ pub(super) fn write_zip_package(
             } else {
                 1025
             };
-            let controls = if sheet_extras[idx].comments.is_some() {
-                vml_merge::controls_with_shape_ids(&sheet_extras[idx].form_controls, base_shape_id)
-            } else {
-                sheet_extras[idx].form_controls.clone()
-            };
+            let controls = sheet_extras[idx].form_controls.clone();
             let controls_writer = ControlsWriter::new(controls.clone());
 
             // Write ctrlProp XML files

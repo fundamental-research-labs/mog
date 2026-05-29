@@ -3,6 +3,7 @@ use domain_types::Hyperlink;
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
 use super::chart_auxiliary;
 use super::form_controls::convert_unified_form_controls;
+use super::form_control_export_plan::build_form_control_export_plan;
 use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::sheet_ext_merge::merge_ext_lst_entries;
@@ -467,6 +468,8 @@ pub(super) fn build_sheet_parts(
                 .collect();
         let form_controls = convert_unified_form_controls(&form_control_fobjs);
         let ole_objects = convert_unified_ole_objects(&sheet_data.floating_objects);
+        let form_control_plan =
+            build_form_control_export_plan(&form_controls, &sheet_data.comments, &ole_objects);
         let custom_properties = None;
 
         sheet_writers.push(sheet_writer);
@@ -500,7 +503,8 @@ pub(super) fn build_sheet_parts(
             hf_vml,
             original_drawing_path,
             has_printer_settings,
-            form_controls,
+            form_controls: form_control_plan.controls,
+            form_control_diagnostics: form_control_plan.diagnostics,
             ole_objects,
             custom_properties,
         });

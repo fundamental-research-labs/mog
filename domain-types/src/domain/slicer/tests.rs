@@ -547,7 +547,10 @@ fn xlsx_import_tabular_slicer_without_pivot_table_refs_stays_pivot_backed() {
         if pivot_id.is_empty() && field_name == "Fiscal Year")
     );
     assert_eq!(stored.pivot_cache_id, Some(452406247));
-    assert_eq!(stored.pivot_tabular_items, cache.tabular_data.unwrap().items);
+    assert_eq!(
+        stored.pivot_tabular_items,
+        cache.tabular_data.unwrap().items
+    );
 
     let exported = stored_slicer_to_cache_def(&stored);
     assert!(exported.table_slicer_cache.is_none());

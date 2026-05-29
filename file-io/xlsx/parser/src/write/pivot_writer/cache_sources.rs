@@ -75,6 +75,7 @@ pub(super) fn assign_cache_sources(
                     .map(|source| (*source).clone())
                     .unwrap_or(PivotCacheSourceDef {
                         cache_id,
+                        workbook_ref_scope: Default::default(),
                         source_name: pt.ooxml_preservation.cache_source_name.clone(),
                         source_sheet: Some(config.source_sheet_name.clone()),
                         source_range: Some(source_range),

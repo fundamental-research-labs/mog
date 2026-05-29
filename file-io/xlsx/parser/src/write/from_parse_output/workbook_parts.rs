@@ -108,6 +108,8 @@ pub(super) fn build_workbook_xml(
     // Pivot caches are generated from modeled pivot state; the removed legacy
     // round-trip sidecar must not contribute workbook cache entries.
     let mut pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
+    let mut x14_pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
+    let mut x15_timeline_pivot_cache_xml_entries: Vec<(u32, String)> = Vec::new();
     for entry in &pivot_data.pivot_cache_entries {
         let target = workbook_relative_target(&entry.definition_path);
         let r_id = package_graph
@@ -122,11 +124,32 @@ pub(super) fn build_workbook_xml(
                 ))
             })?
             .to_string();
-        pivot_cache_xml_entries.push((entry.cache_id, r_id));
+        match entry.workbook_ref_scope {
+            domain_types::domain::pivot::PivotCacheWorkbookRefScope::WorkbookPivotCaches => {
+                pivot_cache_xml_entries.push((entry.cache_id, r_id));
+            }
+            domain_types::domain::pivot::PivotCacheWorkbookRefScope::X14PivotCaches => {
+                x14_pivot_cache_xml_entries.push((entry.cache_id, r_id));
+            }
+            domain_types::domain::pivot::PivotCacheWorkbookRefScope::X15TimelineCachePivotCaches => {
+                x15_timeline_pivot_cache_xml_entries.push((entry.cache_id, r_id));
+            }
+        }
     }
     if !pivot_cache_xml_entries.is_empty() {
         let pivot_caches_xml = pivot_writer::build_pivot_caches_xml(&pivot_cache_xml_entries);
         workbook_writer.set_pivot_caches_xml(pivot_caches_xml);
+    }
+    let x14_pivot_caches_xml =
+        pivot_writer::build_x14_pivot_caches_ext_xml(&x14_pivot_cache_xml_entries);
+    if !x14_pivot_caches_xml.is_empty() {
+        workbook_writer.add_ext_lst_entry(x14_pivot_caches_xml);
+    }
+    let x15_timeline_pivot_caches_xml = pivot_writer::build_x15_timeline_cache_pivot_caches_ext_xml(
+        &x15_timeline_pivot_cache_xml_entries,
+    );
+    if !x15_timeline_pivot_caches_xml.is_empty() {
+        workbook_writer.add_ext_lst_entry(x15_timeline_pivot_caches_xml);
     }
 
     let slicer_cache_r_ids: Vec<String> = output

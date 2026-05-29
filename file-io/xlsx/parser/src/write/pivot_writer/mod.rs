@@ -11,7 +11,10 @@ mod part_paths;
 mod source_fields;
 mod workbook_xml;
 
-pub use workbook_xml::{build_pivot_cache_rels_xml, build_pivot_caches_xml};
+pub use workbook_xml::{
+    build_pivot_cache_rels_xml, build_pivot_caches_xml, build_x14_pivot_caches_ext_xml,
+    build_x15_timeline_cache_pivot_caches_ext_xml,
+};
 
 use crate::domain::pivot::write::convert::pivot_table_def_to_writer;
 use crate::write::pivot_writer::cache_data::build_cache;
@@ -23,6 +26,7 @@ use crate::write::pivot_writer::part_paths::{
 use crate::write::pivot_writer::source_fields::derive_missing_fields;
 use domain_types::ParseOutput;
 use domain_types::domain::pivot::ParsedPivotTable;
+use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
 use std::collections::{HashMap, HashSet};
 
 /// All generated pivot data ready for ZIP assembly.
@@ -49,6 +53,7 @@ pub struct PivotTableEntry {
 pub struct PivotCacheEntry {
     pub global_idx: usize,
     pub cache_id: u32,
+    pub workbook_ref_scope: PivotCacheWorkbookRefScope,
     pub definition_path: String,
     pub records_path: Option<String>,
     pub workbook_relationship_id_hint: Option<String>,
@@ -92,10 +97,12 @@ pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
     );
 
     let mut generated_part_paths = HashSet::new();
+    let cache_sources =
+        cache_sources_for_export(&assigned_caches.sources, &output.pivot_cache_sources);
     let pivot_cache_entries = build_pivot_cache_entries(
         output,
         &sheet_name_to_idx,
-        &assigned_caches.sources,
+        &cache_sources,
         &mut generated_part_paths,
     );
     let pivot_table_entries = build_pivot_table_entries(
@@ -109,6 +116,24 @@ pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
         pivot_cache_entries,
         generated_part_paths,
     }
+}
+
+fn cache_sources_for_export(
+    assigned_sources: &[domain_types::PivotCacheSourceDef],
+    live_sources: &[domain_types::PivotCacheSourceDef],
+) -> Vec<domain_types::PivotCacheSourceDef> {
+    let mut cache_sources = assigned_sources.to_vec();
+    let mut seen_cache_ids: HashSet<u32> =
+        cache_sources.iter().map(|source| source.cache_id).collect();
+    for source in live_sources {
+        if source.workbook_ref_scope == PivotCacheWorkbookRefScope::WorkbookPivotCaches {
+            continue;
+        }
+        if seen_cache_ids.insert(source.cache_id) {
+            cache_sources.push(source.clone());
+        }
+    }
+    cache_sources
 }
 
 fn empty_pivot_write_data() -> PivotWriteData {
@@ -200,6 +225,7 @@ fn build_pivot_cache_entries(
             PivotCacheEntry {
                 global_idx,
                 cache_id: cache_src.cache_id,
+                workbook_ref_scope: cache_src.workbook_ref_scope,
                 definition_path,
                 records_path: Some(records_path),
                 workbook_relationship_id_hint: fidelity

@@ -248,7 +248,8 @@ pub fn full_parse_result_to_parse_output(
                 (!rows.is_empty()).then_some((*cache_id, rows))
             })
             .collect();
-    let pivot_cache_sources = build_pivot_cache_sources(result.pivot_caches.iter());
+    let pivot_cache_sources =
+        build_pivot_cache_sources(result.pivot_caches.iter(), &result.pivot_cache_packages);
 
     // 9. Build ParseOutput
     let workbook_stylesheet = result.parsed_stylesheet.clone().map(|stylesheet| {

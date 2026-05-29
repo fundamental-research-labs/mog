@@ -1,11 +1,17 @@
 use domain_types::PivotCacheSourceDef;
+use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
 use value_types::{CellValue, FiniteF64};
 
 use crate::domain::pivot::types::ParsedPivotCache;
 
 pub(super) fn build_pivot_cache_sources<'a>(
     pivot_caches: impl Iterator<Item = (&'a u32, &'a ParsedPivotCache)>,
+    packages: &[domain_types::PivotCachePackageFidelity],
 ) -> Vec<PivotCacheSourceDef> {
+    let scopes_by_cache_id: std::collections::HashMap<u32, PivotCacheWorkbookRefScope> = packages
+        .iter()
+        .map(|package| (package.cache_id, package.workbook_ref_scope))
+        .collect();
     let mut sources: Vec<_> = pivot_caches
         .map(|(cache_id, parsed_cache)| {
             let worksheet_source = parsed_cache
@@ -15,6 +21,10 @@ pub(super) fn build_pivot_cache_sources<'a>(
                 .as_ref();
             PivotCacheSourceDef {
                 cache_id: *cache_id,
+                workbook_ref_scope: scopes_by_cache_id
+                    .get(cache_id)
+                    .copied()
+                    .unwrap_or_default(),
                 source_name: worksheet_source.and_then(|source| source.name.clone()),
                 source_sheet: worksheet_source.and_then(|source| source.sheet.clone()),
                 source_range: worksheet_source.and_then(|source| source.r#ref.clone()),

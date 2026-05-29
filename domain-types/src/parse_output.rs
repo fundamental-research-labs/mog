@@ -679,6 +679,11 @@ pub struct RawDocPropsHint {
 #[serde(rename_all = "camelCase")]
 pub struct PivotCachePackageFidelity {
     pub cache_id: u32,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::domain::pivot::PivotCacheWorkbookRefScope::is_default"
+    )]
+    pub workbook_ref_scope: crate::domain::pivot::PivotCacheWorkbookRefScope,
     pub definition_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub records_path: Option<String>,

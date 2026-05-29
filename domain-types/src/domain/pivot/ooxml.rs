@@ -290,6 +290,12 @@ pub struct PivotStyleDef {
 #[serde(rename_all = "camelCase")]
 pub struct PivotCacheSourceDef {
     pub cache_id: u32,
+    /// Workbook-level reference scope that owns the cache relationship.
+    #[serde(
+        default,
+        skip_serializing_if = "PivotCacheWorkbookRefScope::is_default"
+    )]
+    pub workbook_ref_scope: PivotCacheWorkbookRefScope,
     /// Named range/table source from pivot cache `<worksheetSource name="...">`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_name: Option<String>,
@@ -305,6 +311,24 @@ pub struct PivotCacheSourceDef {
     /// Used to resolve PivotFieldItem.value indices to actual CellValues for filtering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_items: Vec<Vec<value_types::CellValue>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PivotCacheWorkbookRefScope {
+    /// Standard workbook `<pivotCaches>` child.
+    #[default]
+    WorkbookPivotCaches,
+    /// Office 2010 workbook extension `<x14:pivotCaches>`.
+    X14PivotCaches,
+    /// Office 2013 timeline extension `<x15:timelineCachePivotCaches>`.
+    X15TimelineCachePivotCaches,
+}
+
+impl PivotCacheWorkbookRefScope {
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::WorkbookPivotCaches)
+    }
 }
 
 /// A parsed pivot table: unified compute + OOXML config.

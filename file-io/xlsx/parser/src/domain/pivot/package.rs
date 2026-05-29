@@ -9,6 +9,7 @@ use crate::infra::opc::{
     OoxmlRelationshipType, PackageOwner, WorkbookRelationships, WorksheetRelationships,
     parse_owned_relationships,
 };
+use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
 use domain_types::domain::pivot::PivotTableRelationshipPreservation;
 
 pub type PivotCacheMap =
@@ -35,6 +36,7 @@ pub struct PivotCacheRecordsLink {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PivotCachePackageLink {
     pub cache_id: u32,
+    pub workbook_ref_scope: PivotCacheWorkbookRefScope,
     pub workbook_relationship_id: String,
     pub workbook_relationship_target: String,
     pub definition_path: String,
@@ -109,7 +111,9 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
             })
             .collect();
 
-    for (cache_id, r_id) in extract_pivot_cache_entries(&workbook_xml) {
+    for cache_ref in extract_pivot_cache_refs(&workbook_xml) {
+        let cache_id = cache_ref.cache_id;
+        let r_id = cache_ref.relationship_id;
         let Some((workbook_relationship_type, workbook_relationship_target, def_path)) =
             rels_map.get(&r_id).cloned()
         else {
@@ -141,6 +145,7 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
         };
         let link = PivotCachePackageLink {
             cache_id,
+            workbook_ref_scope: cache_ref.scope,
             workbook_relationship_id: r_id,
             workbook_relationship_target,
             definition_path: def_path,
@@ -153,6 +158,7 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
             .fidelity
             .push(domain_types::PivotCachePackageFidelity {
                 cache_id,
+                workbook_ref_scope: link.workbook_ref_scope,
                 definition_path: link.definition_path.clone(),
                 records_path: link.records.records_path.clone(),
                 definition_xml: cache_xml,
@@ -348,18 +354,90 @@ fn resolve_cache_records_link(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, String)> {
-    use crate::infra::scanner::{
-        extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd,
-    };
+    extract_pivot_cache_refs(workbook_xml)
+        .into_iter()
+        .map(|cache_ref| (cache_ref.cache_id, cache_ref.relationship_id))
+        .collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PivotCacheWorkbookRef {
+    pub cache_id: u32,
+    pub relationship_id: String,
+    pub scope: PivotCacheWorkbookRefScope,
+}
+
+pub(crate) fn extract_pivot_cache_refs(workbook_xml: &[u8]) -> Vec<PivotCacheWorkbookRef> {
+    use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
     let mut entries = Vec::new();
 
     let mut pos = 0;
-    while let Some(pc_start) = find_tag_simd(workbook_xml, b"pivotCache", pos) {
-        let pc_end = find_gt_simd(workbook_xml, pc_start)
+    while let Some(container_start) = find_tag_simd(workbook_xml, b"pivotCaches", pos) {
+        let container_end = find_gt_simd(workbook_xml, container_start)
             .map(|p| p + 1)
             .unwrap_or(workbook_xml.len());
-        let pc_elem = &workbook_xml[pc_start..pc_end];
+        let container_elem = &workbook_xml[container_start..container_end];
+        if !is_pivot_caches_element(container_elem) {
+            pos = container_start + 1;
+            continue;
+        }
+        let scope = if element_prefix(container_elem) == Some(b"x14" as &[u8]) {
+            PivotCacheWorkbookRefScope::X14PivotCaches
+        } else {
+            PivotCacheWorkbookRefScope::WorkbookPivotCaches
+        };
+        let section_end = find_closing_tag(workbook_xml, b"pivotCaches", container_start)
+            .unwrap_or(workbook_xml.len());
+        collect_pivot_cache_refs_in_section(
+            &workbook_xml[container_start..section_end],
+            scope,
+            &mut entries,
+        );
+        pos = section_end.saturating_add(1);
+    }
+
+    pos = 0;
+    while let Some(container_start) = find_tag_simd(workbook_xml, b"timelineCachePivotCaches", pos)
+    {
+        let container_end = find_gt_simd(workbook_xml, container_start)
+            .map(|p| p + 1)
+            .unwrap_or(workbook_xml.len());
+        let container_elem = &workbook_xml[container_start..container_end];
+        if !element_local_name_is(container_elem, b"timelineCachePivotCaches") {
+            pos = container_start + 1;
+            continue;
+        }
+        let section_end =
+            find_closing_tag(workbook_xml, b"timelineCachePivotCaches", container_start)
+                .unwrap_or(workbook_xml.len());
+        collect_pivot_cache_refs_in_section(
+            &workbook_xml[container_start..section_end],
+            PivotCacheWorkbookRefScope::X15TimelineCachePivotCaches,
+            &mut entries,
+        );
+        pos = section_end.saturating_add(1);
+    }
+
+    entries
+}
+
+fn collect_pivot_cache_refs_in_section(
+    section: &[u8],
+    scope: PivotCacheWorkbookRefScope,
+    entries: &mut Vec<PivotCacheWorkbookRef>,
+) {
+    use crate::infra::scanner::{
+        extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd,
+    };
+
+    let mut pos = 0;
+    while let Some(pc_start) = find_tag_simd(section, b"pivotCache", pos) {
+        let pc_end = find_gt_simd(section, pc_start)
+            .map(|p| p + 1)
+            .unwrap_or(section.len());
+        let pc_elem = &section[pc_start..pc_end];
         if !is_pivot_cache_element(pc_elem) {
             pos = pc_start + 1;
             continue;
@@ -374,26 +452,54 @@ pub(crate) fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, Stri
                     .ok()
             })
         });
-
-        let r_id = find_attr_simd(pc_elem, b"r:id=\"", 0).and_then(|p| {
+        let relationship_id = find_attr_simd(pc_elem, b"r:id=\"", 0).and_then(|p| {
             let vs = p + 6;
             extract_quoted_value(pc_elem, vs)
                 .and_then(|(s, e)| std::str::from_utf8(&pc_elem[s..e]).ok().map(str::to_string))
         });
 
-        if let (Some(cid), Some(rid)) = (cache_id, r_id) {
-            entries.push((cid, rid));
+        if let (Some(cache_id), Some(relationship_id)) = (cache_id, relationship_id) {
+            entries.push(PivotCacheWorkbookRef {
+                cache_id,
+                relationship_id,
+                scope,
+            });
         }
 
         pos = pc_start + 1;
     }
-
-    entries
 }
 
 fn is_pivot_cache_element(element: &[u8]) -> bool {
+    element_local_name_is(element, b"pivotCache")
+}
+
+fn is_pivot_caches_element(element: &[u8]) -> bool {
+    element_local_name_is(element, b"pivotCaches")
+}
+
+fn element_local_name_is(element: &[u8], expected: &[u8]) -> bool {
+    element_local_name(element) == Some(expected)
+}
+
+fn element_prefix(element: &[u8]) -> Option<&[u8]> {
+    let name = element_name(element)?;
+    name.iter().position(|b| *b == b':').map(|idx| &name[..idx])
+}
+
+fn element_local_name(element: &[u8]) -> Option<&[u8]> {
+    let name = element_name(element)?;
+    Some(
+        name.iter()
+            .rposition(|b| *b == b':')
+            .map(|idx| &name[idx + 1..])
+            .unwrap_or(name),
+    )
+}
+
+fn element_name(element: &[u8]) -> Option<&[u8]> {
     let Some(open) = element.iter().position(|b| *b == b'<') else {
-        return false;
+        return None;
     };
     let mut name_start = open + 1;
     if element.get(name_start) == Some(&b'/') {
@@ -406,13 +512,7 @@ fn is_pivot_cache_element(element: &[u8]) -> bool {
         }
         name_end += 1;
     }
-    let name = &element[name_start..name_end];
-    let local_name = name
-        .iter()
-        .rposition(|b| *b == b':')
-        .map(|idx| &name[idx + 1..])
-        .unwrap_or(name);
-    local_name == b"pivotCache"
+    Some(&element[name_start..name_end])
 }
 
 pub(crate) fn extract_pivot_table_paths_for_sheet(
@@ -505,6 +605,19 @@ mod tests {
                 (184, "rId35".to_string()),
                 (183, "rId36".to_string()),
                 (185, "rId40".to_string()),
+            ]
+        );
+        assert_eq!(
+            extract_pivot_cache_refs(xml)
+                .into_iter()
+                .map(|cache_ref| (cache_ref.cache_id, cache_ref.scope))
+                .collect::<Vec<_>>(),
+            vec![
+                (181, PivotCacheWorkbookRefScope::WorkbookPivotCaches),
+                (182, PivotCacheWorkbookRefScope::WorkbookPivotCaches),
+                (184, PivotCacheWorkbookRefScope::X14PivotCaches),
+                (183, PivotCacheWorkbookRefScope::X14PivotCaches),
+                (185, PivotCacheWorkbookRefScope::X15TimelineCachePivotCaches),
             ]
         );
     }

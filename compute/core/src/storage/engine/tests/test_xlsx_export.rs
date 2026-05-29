@@ -435,6 +435,7 @@ fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
         .pivot_cache_sources
         .push(domain_types::PivotCacheSourceDef {
             cache_id: 7,
+            workbook_ref_scope: Default::default(),
             source_name: None,
             source_sheet: Some("Data".to_string()),
             source_range: Some("A1:B3".to_string()),

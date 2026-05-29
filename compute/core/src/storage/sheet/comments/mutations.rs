@@ -88,6 +88,7 @@ pub fn add_comment(
         note_height: None,
         note_width: None,
         note_shape_anchor: None,
+        comment_pr: None,
     };
     let prelim: MapPrelim = comment_schema::to_yrs_prelim(&comment)
         .into_iter()

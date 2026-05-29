@@ -607,6 +607,8 @@ pub(super) fn export_workbook_named_ranges(
             help: dn.help,
             status_bar: dn.status_bar,
             xlm: dn.xlm,
+            function_group_id: None,
+            shortcut_key: None,
             function: dn.function,
             vb_procedure: dn.vb_procedure,
             publish_to_server: dn.publish_to_server,

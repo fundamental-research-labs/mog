@@ -51,6 +51,60 @@ fn pivot_package_generation_filters_stale_original_parts_and_rels() {
 }
 
 #[test]
+fn pivot_cache_definition_r_id_matches_generated_records_relationship() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.package_fidelity = Some(domain_types::PackageFidelityMetadata {
+        pivot_cache_packages: vec![domain_types::PivotCachePackageFidelity {
+            cache_id: 11,
+            definition_path: "xl/pivotCache/pivotCacheDefinition11.xml".to_string(),
+            records_path: Some("xl/pivotCache/pivotCacheRecords11.xml".to_string()),
+            workbook_relationship_id: "rIdPivotCache11".to_string(),
+            workbook_relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
+                    .to_string(),
+            workbook_relationship_target: "pivotCache/pivotCacheDefinition11.xml".to_string(),
+            records_relationship_id: Some("rIdImportedRecords".to_string()),
+            records_relationship_type: Some(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
+                    .to_string(),
+            ),
+            records_relationship_target: Some("pivotCacheRecords11.xml".to_string()),
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A1:B3".to_string()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    });
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let definition_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheDefinition11.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let definition_rels = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/_rels/pivotCacheDefinition11.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(definition_xml.contains(r#"r:id="rIdImportedRecords""#));
+    assert!(definition_rels.contains(r#"Id="rIdImportedRecords""#));
+    assert!(definition_rels.contains("pivotCacheRecords11.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn skipped_generated_pivot_does_not_emit_stale_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",

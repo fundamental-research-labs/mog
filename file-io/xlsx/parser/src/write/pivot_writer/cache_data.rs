@@ -12,8 +12,12 @@ pub(super) fn build_cache(
     cache_src: &PivotCacheSourceDef,
     sheets: &[SheetData],
     sheet_name_to_idx: &HashMap<&str, usize>,
+    records_relationship_id: Option<&str>,
 ) -> (Vec<u8>, Vec<u8>) {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
+    if let Some(records_relationship_id) = records_relationship_id {
+        cache_writer.records_relationship_id = records_relationship_id.to_string();
+    }
 
     if let Some(source_name) = &cache_src.source_name {
         cache_writer.source = CacheSource {

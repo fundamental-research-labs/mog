@@ -147,17 +147,20 @@ fn build_pivot_cache_entries(
         .enumerate()
         .map(|(idx, cache_src)| {
             let global_idx = idx + 1;
-            let (definition_xml, records_xml) = build_cache(
-                cache_src,
-                &output.sheets,
-                sheet_name_to_idx,
-            );
             let fidelity = output
                 .package_fidelity
                 .as_ref()
                 .into_iter()
                 .flat_map(|fidelity| fidelity.pivot_cache_packages.iter())
                 .find(|package| package_matches_cache_source(package, cache_src));
+            let records_relationship_id_hint = fidelity
+                .and_then(|package| package.records_relationship_id.clone());
+            let (definition_xml, records_xml) = build_cache(
+                cache_src,
+                &output.sheets,
+                sheet_name_to_idx,
+                records_relationship_id_hint.as_deref(),
+            );
             let definition_path = fidelity
                 .and_then(|package| {
                     select_imported_path(&package.definition_path, &mut selected_paths)
@@ -179,7 +182,12 @@ fn build_pivot_cache_entries(
                         .and_then(|path| select_imported_path(path, &mut selected_paths))
                 })
                 .unwrap_or_else(|| {
-                    allocate_generated_path(global_idx, &reserved_paths, &mut selected_paths, pivot_cache_records_path)
+                    allocate_generated_path(
+                        global_idx,
+                        &reserved_paths,
+                        &mut selected_paths,
+                        pivot_cache_records_path,
+                    )
                 });
             reserved_paths.insert(records_path.clone());
             let rels_path = pivot_cache_rels_path_for_definition(&definition_path);
@@ -202,8 +210,7 @@ fn build_pivot_cache_entries(
                         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
                             .to_string()
                     }),
-                records_relationship_id_hint: fidelity
-                    .and_then(|package| package.records_relationship_id.clone()),
+                records_relationship_id_hint,
                 records_relationship_type: fidelity
                     .and_then(|package| package.records_relationship_type.clone())
                     .or_else(|| {

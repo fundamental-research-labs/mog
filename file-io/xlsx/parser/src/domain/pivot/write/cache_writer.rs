@@ -32,6 +32,8 @@ pub struct PivotCacheWriter {
     pub refreshed_by: Option<String>,
     /// Refreshed date (as Excel serial date)
     pub refreshed_date: Option<f64>,
+    /// Relationship id from this cache definition to its records part.
+    pub records_relationship_id: String,
 }
 
 impl PivotCacheWriter {
@@ -44,6 +46,7 @@ impl PivotCacheWriter {
             record_count: None,
             refreshed_by: None,
             refreshed_date: None,
+            records_relationship_id: "rId1".to_string(),
         }
     }
 
@@ -75,8 +78,7 @@ impl PivotCacheWriter {
             .attr("xmlns", SPREADSHEETML_NS)
             .attr("xmlns:r", RELATIONSHIPS_NS);
 
-        // r:id attribute for relationship
-        w.attr("r:id", "rId1");
+        w.attr("r:id", &self.records_relationship_id);
 
         // Tell Excel to refresh pivot data when the workbook is opened.
         w.attr_bool("refreshOnLoad", true);

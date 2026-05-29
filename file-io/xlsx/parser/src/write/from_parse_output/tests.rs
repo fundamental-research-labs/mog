@@ -153,6 +153,81 @@ fn shared_string_phonetic_hint_does_not_capture_plain_cells_with_same_text() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn drawing_export_preserves_distinct_image_relationships_to_same_media_part() {
+    use domain_types::domain::floating_object::{
+        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
+        PictureData, PictureOoxmlProps,
+    };
+
+    fn picture(id: &str, anchor_col: u32) -> FloatingObject {
+        let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
+        picture.blip_fill.embed_id = Some("rIdImported".to_string());
+        FloatingObject {
+            common: FloatingObjectCommon {
+                id: id.to_string(),
+                name: id.to_string(),
+                width: 100.0,
+                height: 40.0,
+                anchor: FloatingObjectAnchor {
+                    anchor_col,
+                    end_col: Some(anchor_col + 1),
+                    end_row: Some(1),
+                    anchor_mode: AnchorMode::TwoCell,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            data: FloatingObjectData::Picture(PictureData {
+                src: "data:image/png;base64,AQIDBA==".to_string(),
+                original_width: None,
+                original_height: None,
+                crop: None,
+                adjustments: None,
+                border: None,
+                color_type: None,
+                ooxml: Some(PictureOoxmlProps {
+                    picture,
+                    image_path: Some("../media/image1.png".to_string()),
+                    ..Default::default()
+                }),
+            }),
+        }
+    }
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![picture("Picture 1", 0), picture("Picture 2", 2)],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(
+        &archive
+            .read_file("xl/drawings/_rels/drawing1.xml.rels")
+            .unwrap(),
+    );
+
+    assert!(drawing_xml.contains(r#"r:embed="rId1""#));
+    assert!(drawing_xml.contains(r#"r:embed="rId2""#));
+    let image_rels: Vec<_> = drawing_rels
+        .iter()
+        .filter(|rel| rel.rel_type == crate::infra::opc::REL_IMAGE)
+        .collect();
+    assert_eq!(image_rels.len(), 2);
+    assert!(image_rels.iter().any(|rel| rel.id == "rId1"));
+    assert!(image_rels.iter().any(|rel| rel.id == "rId2"));
+    assert!(
+        image_rels
+            .iter()
+            .all(|rel| rel.target == "../media/image1.png")
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn make_formula_cell(row: u32, col: u32, formula: &str, cached: DomainValue) -> DomainCellData {
     DomainCellData {
         row,

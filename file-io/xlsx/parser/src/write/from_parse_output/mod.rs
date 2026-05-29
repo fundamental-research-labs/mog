@@ -563,7 +563,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 // Register provisional image ids before chart rels so later
                 // graph-resolution can remap drawing XML without local id collisions.
                 for (r_id, image_path) in &drawing_data.image_rels {
-                    if drawing_rels.find_by_target(image_path).is_none() {
+                    if drawing_rels.get_by_id(r_id).is_none() {
                         drawing_rels.add_with_id(
                             r_id,
                             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
@@ -1513,33 +1513,42 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 path: drawing_path.to_string(),
             },
         );
+        let mut resolved_relationship_ids_by_target: std::collections::HashMap<
+            (String, String, Option<String>),
+            std::collections::VecDeque<String>,
+        > = std::collections::HashMap::new();
+        for rel in drawing_rels.relationships() {
+            let target_path =
+                if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+                {
+                    rel.target.clone()
+                } else {
+                    crate::infra::opc::resolve_relationship_target(Some(drawing_path), &rel.target)
+                        .map_err(|err| {
+                            WriteError::PackageIntegrity(format!(
+                                "invalid resolved drawing relationship target for {}: {} ({:?})",
+                                drawing_path, rel.target, err
+                            ))
+                        })?
+                };
+            resolved_relationship_ids_by_target
+                .entry((rel.rel_type.clone(), target_path, rel.target_mode.clone()))
+                .or_default()
+                .push_back(rel.id.clone());
+        }
+
         let mut resolved_ids = std::collections::HashMap::new();
         for entry in drawing_relationships
             .iter()
             .filter(|entry| entry.drawing_path == drawing_path)
         {
-            let resolved_id = drawing_rels
-                .relationships()
-                .iter()
-                .find(|rel| {
-                    rel.rel_type == entry.rel_type
-                        && if crate::write::package_graph::is_external_target_mode(
-                            entry.target_mode.as_deref(),
-                        ) {
-                            rel.target == entry.target_path
-                                && crate::write::package_graph::is_external_target_mode(
-                                    rel.target_mode.as_deref(),
-                                )
-                        } else {
-                            crate::infra::opc::resolve_relationship_target(
-                                Some(drawing_path),
-                                &rel.target,
-                            )
-                            .map(|target| target == entry.target_path)
-                            .unwrap_or(false)
-                        }
-                })
-                .map(|rel| rel.id.clone())
+            let resolved_id = resolved_relationship_ids_by_target
+                .get_mut(&(
+                    entry.rel_type.clone(),
+                    entry.target_path.clone(),
+                    entry.target_mode.clone(),
+                ))
+                .and_then(|ids| ids.pop_front())
                 .ok_or_else(|| {
                     WriteError::PackageIntegrity(format!(
                         "missing resolved drawing relationship for {} target {}",

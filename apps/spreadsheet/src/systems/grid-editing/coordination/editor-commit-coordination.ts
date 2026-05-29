@@ -315,7 +315,11 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
       // production dependencies. Formula syntax runs first so malformed
       // formulas never reach the cell mutation path.
       void (async () => {
-        if (shouldValidateFormulaSyntax(value) && validateFormulaSyntax) {
+        if (
+          !state.context.formulaInputIsLiteral &&
+          shouldValidateFormulaSyntax(value) &&
+          validateFormulaSyntax
+        ) {
           const syntaxResult = await validateFormulaSyntax(
             toSheetId(sheetId),
             value,
@@ -378,7 +382,11 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
           }
         }
 
-        if (shouldValidateCircularReference(value) && validateCircularReference) {
+        if (
+          !state.context.formulaInputIsLiteral &&
+          shouldValidateCircularReference(value) &&
+          validateCircularReference
+        ) {
           const circularReferenceResult = await validateCircularReference(
             toSheetId(sheetId),
             editingCell.row,

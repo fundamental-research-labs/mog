@@ -33,6 +33,7 @@ export const EditorEvents = {
     mergedRegion?: CellRange,
     entryMode?: EditorEntryMode,
     cursorPosition?: number,
+    formulaInputIsLiteral?: boolean,
     openDropdown?: boolean,
     preEditSelectionRanges?: CellRange[],
   ): EditorEvent => ({
@@ -43,6 +44,7 @@ export const EditorEvents = {
     mergedRegion,
     entryMode,
     cursorPosition,
+    formulaInputIsLiteral,
     openDropdown,
     preEditSelectionRanges,
   }),

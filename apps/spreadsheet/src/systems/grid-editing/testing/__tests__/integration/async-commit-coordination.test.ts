@@ -401,6 +401,47 @@ describe('commitCellValue invoke awaits bridge call', () => {
     cleanup();
   });
 
+  it('commits formula-shaped input literally in text-formatted cells', async () => {
+    const testSheet = makeSheetId('test-sheet');
+    const setCellValue = jest.fn();
+    const validateFormulaSyntax = jest.fn().mockResolvedValue(null);
+    const validateCircularReference = jest
+      .fn()
+      .mockResolvedValue({ cellAddress: 'A1', formula: '=A1+B1' });
+    const system = new GridEditingSystem({
+      initialSheetId: 'test-sheet',
+      workbook: createEditableTestWorkbook({
+        sheetId: testSheet,
+        formats: { '0,0': { numberFormat: '@' } },
+      }) as any,
+      editorDeps: {
+        setCellValue,
+        validateFormulaSyntax,
+        validateCircularReference,
+      },
+    });
+    system.start();
+
+    try {
+      const cell = system.access.accessors.selection.getActiveCell();
+      await system.beginEditSession({
+        sheetId: testSheet,
+        cell,
+        entryMode: 'typing',
+        initialTextHint: '=A1+B1',
+      });
+      system.commitEdit('none');
+      await flushMicrotasks();
+
+      expect(validateFormulaSyntax).not.toHaveBeenCalled();
+      expect(validateCircularReference).not.toHaveBeenCalled();
+      expect(setCellValue).toHaveBeenCalledWith(testSheet, 0, 0, '=A1+B1');
+      expect((system as any).editorActor.getSnapshot().matches('inactive')).toBe(true);
+    } finally {
+      system.dispose();
+    }
+  });
+
   it('does not run circular detection when formula syntax validation fails', async () => {
     const validateCircularReference = jest
       .fn()

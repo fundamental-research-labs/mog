@@ -50,6 +50,12 @@ export interface EditorContext {
   mergeBounds: CellRange | null;
   /** Current editor value (may include partial formulas) */
   value: string;
+  /**
+   * True when the edited cell's effective number format is Text (`@`).
+   * In that mode formula-shaped input is literal text, so editor formula
+   * mode and formula pre-validation must not run.
+   */
+  formulaInputIsLiteral: boolean;
   /** Cursor position within the value string */
   cursorPosition: number;
 
@@ -295,6 +301,7 @@ export type EditorEvent =
        * to end of value (Edit Mode) or 0 (Enter Mode).
        */
       cursorPosition?: number;
+      formulaInputIsLiteral?: boolean;
       /**
        * Data Validation - Signal to open dropdown immediately.
        * When true, the editor should open the dropdown picker after activating.
@@ -442,6 +449,7 @@ export const initialEditorContext: EditorContext = {
   sheetId: null,
   mergeBounds: null,
   value: '',
+  formulaInputIsLiteral: false,
   cursorPosition: 0,
   selectionAnchor: 0,
   hasSelection: false,

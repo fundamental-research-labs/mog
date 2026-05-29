@@ -76,6 +76,7 @@ export const initializeEditing = assign(({ event }) => {
     sheetId: event.sheetId,
     mergeBounds: event.mergedRegion ?? null,
     value: initialValue,
+    formulaInputIsLiteral: event.formulaInputIsLiteral ?? false,
     cursorPosition,
     hasConflict: false,
     errorMessage: null,

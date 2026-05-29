@@ -3,6 +3,7 @@ import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { protectionError, successResult } from '@mog/spreadsheet-utils/protection';
 
 import type { ClipboardActor } from './machines/clipboard-machine';
@@ -18,6 +19,7 @@ export interface BeginEditSessionRequest {
   initialTextHint?: string;
   cursorPositionHint?: number;
   mergedRegion?: CellRange;
+  formulaInputIsLiteral?: boolean;
   openDropdown?: boolean;
 }
 
@@ -126,6 +128,15 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
 
       const mergedRegion =
         request.mergedRegion ?? options.getMergedRegion?.(request.sheetId, request.cell);
+      let formulaInputIsLiteral = request.formulaInputIsLiteral ?? false;
+      if (request.formulaInputIsLiteral === undefined && ws.formats.get) {
+        try {
+          const format = await ws.formats.get(request.cell.row, request.cell.col);
+          formulaInputIsLiteral = detectFormatType(format.numberFormat ?? 'General') === 'text';
+        } catch {
+          formulaInputIsLiteral = false;
+        }
+      }
 
       options.selectionActor.send({
         type: 'BEGIN_CELL_EDIT',
@@ -139,6 +150,7 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
         mergedRegion,
         entryMode: request.entryMode,
         cursorPosition: request.cursorPositionHint,
+        formulaInputIsLiteral,
         openDropdown: request.openDropdown,
         preEditSelectionRanges,
       });

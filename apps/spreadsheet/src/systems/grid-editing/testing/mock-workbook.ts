@@ -17,6 +17,7 @@ interface TestWorkbookConfig extends TestSheetConfig {
       end_col: number;
     }>;
   };
+  formats?: Record<string, { numberFormat?: string | null }>;
 }
 
 function normalizeSheetId(sheetId: string | SheetId | undefined): SheetId {
@@ -134,6 +135,7 @@ export function createEditableTestWorkbook(config: TestWorkbookConfig = {}): Wor
     },
     formats: {
       set: async () => {},
+      get: async (row: number, col: number) => config.formats?.[`${row},${col}`] ?? {},
     },
     conditionalFormats: {
       add: async () => ({ id: 'cf-test' }),

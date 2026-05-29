@@ -26,13 +26,21 @@ function isFormula(value: string): boolean {
 /**
  * Check if value starts with formula prefix (=, +, or -)
  */
-export const isFormulaGuard = ({ context }: { context: EditorContext }) => isFormula(context.value);
+export const isFormulaGuard = ({ context }: { context: EditorContext }) =>
+  !context.formulaInputIsLiteral && isFormula(context.value);
 
 /**
  * Check if input would start a formula (=, +, or -)
  */
-export const inputStartsFormula = ({ event }: { event: EditorEvent }) => {
+export const inputStartsFormula = ({
+  context,
+  event,
+}: {
+  context: EditorContext;
+  event: EditorEvent;
+}) => {
   if (event.type !== 'INPUT') return false;
+  if (context.formulaInputIsLiteral) return false;
   const firstChar = event.value.charAt(0);
   return firstChar === '=' || firstChar === '+' || firstChar === '-';
 };

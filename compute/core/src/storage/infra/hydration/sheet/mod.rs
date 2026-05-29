@@ -547,6 +547,12 @@ pub(crate) fn hydrate_sheet_with_allocation(
     if let Some(ref uid) = sheet.uid {
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
+    if let Some(properties) = &sheet.sheet_properties {
+        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
+        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
+            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
+        }
+    }
 
     // Cells map
     let cells_prelim = MapPrelim::from([] as [(&str, Any); 0]);

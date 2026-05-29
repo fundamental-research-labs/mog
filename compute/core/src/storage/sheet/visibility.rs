@@ -10,6 +10,7 @@ use yrs::{Any, Doc, Map, MapRef, Origin, Transact};
 
 use cell_types::SheetId;
 use compute_document::undo::ORIGIN_USER_EDIT;
+use domain_types::yrs_schema;
 
 use super::yrs_helpers::{
     KEY_ENABLE_CALCULATION, KEY_HIDDEN, KEY_TAB_COLOR, get_meta_map, meta_bool, read_sheet_order,
@@ -23,6 +24,49 @@ pub(crate) fn set_tab_color(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, colo
             Some(c) => meta.insert(&mut txn, KEY_TAB_COLOR, Any::String(Arc::from(c))),
             None => meta.insert(&mut txn, KEY_TAB_COLOR, Any::Null),
         };
+        update_modeled_tab_color(&mut txn, &meta, color);
+    }
+}
+
+fn update_modeled_tab_color(
+    txn: &mut yrs::TransactionMut,
+    meta: &MapRef,
+    color: Option<&str>,
+) {
+    let existing = meta
+        .get(txn, yrs_schema::sheet_properties::PROPERTY_KEY)
+        .and_then(|v| match v {
+            yrs::Out::YMap(map) => yrs_schema::sheet_properties::from_yrs_map(&map, txn),
+            _ => None,
+        });
+
+    let Some(color) = color else {
+        if let Some(mut properties) = existing {
+            properties.tab_color = None;
+            if properties == Default::default() {
+                meta.remove(txn, yrs_schema::sheet_properties::PROPERTY_KEY);
+            } else {
+                yrs_schema::sheet_properties::insert(txn, meta, &properties);
+            }
+        }
+        return;
+    };
+
+    let mut properties = existing.unwrap_or_default();
+    properties.tab_color = Some(tab_color_to_ooxml_color(color));
+    yrs_schema::sheet_properties::insert(txn, meta, &properties);
+}
+
+fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
+    let hex = color.strip_prefix('#').unwrap_or(color);
+    let argb = if hex.len() == 6 {
+        format!("FF{hex}")
+    } else {
+        hex.to_string()
+    };
+    ooxml_types::styles::ColorDef::Rgb {
+        val: argb,
+        tint: None,
     }
 }
 

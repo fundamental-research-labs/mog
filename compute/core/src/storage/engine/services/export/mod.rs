@@ -667,7 +667,9 @@ fn export_single_sheet(
                 });
                 if let Some(tab_color) = tab_color {
                     let properties = sheet_properties.get_or_insert_with(Default::default);
-                    properties.tab_color = Some(tab_color_to_ooxml_color(&tab_color));
+                    if properties.tab_color.is_none() {
+                        properties.tab_color = Some(tab_color_to_ooxml_color(&tab_color));
+                    }
                 }
                 let worksheet_semantic_containers = m
                     .get(&txn, "worksheetSemanticContainers")

@@ -66,8 +66,8 @@ impl DrawingWriter {
         hlink: &ooxml_types::drawings::Hyperlink,
     ) {
         w.start_element(tag);
-        if !self.suppress_unregistered_relationships {
-            if let Some(ref r_id) = hlink.r_id {
+        if let Some(ref r_id) = hlink.r_id {
+            if self.can_write_relationship_id(r_id) {
                 w.attr("r:id", r_id);
             }
         }

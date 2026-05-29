@@ -5,6 +5,7 @@
 
 mod anchors;
 mod connectors;
+mod hyperlinks;
 mod images;
 mod objects;
 mod ooxml_props;
@@ -68,6 +69,12 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                     &mut image_rels,
                     &mut drawing_rels,
                 ) {
+                    let mut anchor = anchor;
+                    hyperlinks::register_anchor_hyperlink_relationships(
+                        &mut anchor,
+                        &mut drawing_rels,
+                        &image_rels,
+                    );
                     anchors.push((anchor_index, anchor));
                 }
             }
@@ -117,12 +124,22 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                         DrawingAnchor::OneCell(oc, _) => oc.client_data = restored_client_data,
                         DrawingAnchor::Absolute(abs, _) => abs.client_data = restored_client_data,
                     }
+                    hyperlinks::register_anchor_hyperlink_relationships(
+                        &mut anchor,
+                        &mut drawing_rels,
+                        &image_rels,
+                    );
                     anchors.push((ooxml.anchor_index.map(|idx| idx as usize), anchor));
                 }
             }
             FloatingObjectData::Connector(conn_data) => {
-                let anchor =
+                let mut anchor =
                     connectors::convert_unified_connector_to_anchor(&obj.common, conn_data);
+                hyperlinks::register_anchor_hyperlink_relationships(
+                    &mut anchor,
+                    &mut drawing_rels,
+                    &image_rels,
+                );
                 anchors.push((anchor_index, anchor));
             }
             FloatingObjectData::Diagram(diagram_data) => {

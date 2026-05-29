@@ -22,6 +22,7 @@
 pub mod convert;
 pub mod facts;
 mod helpers;
+mod hyperlinks;
 mod images;
 mod parse;
 mod reader;
@@ -38,6 +39,7 @@ pub use types::*;
 
 // Re-export parsing functions that may be needed externally
 pub use helpers::{decode_xml_entities, decode_xml_entities_string};
+pub(crate) use hyperlinks::resolve_drawing_hyperlink_targets;
 pub use parse::drawing::parse_drawing;
 pub use parse::non_visual::parse_nv_props;
 pub use parse::pictures::parse_blip_fill;

@@ -10,6 +10,7 @@ use super::shapes::{convert_shape, convert_text_box, parse_shape_preset};
 use super::smartart::convert_unified_smartart;
 use super::*;
 use crate::domain::drawings::write::{DrawingAnchor, DrawingObject, ShapePreset};
+use crate::infra::opc::REL_HYPERLINK;
 
 fn make_common(name: &str) -> FloatingObjectCommon {
     FloatingObjectCommon {
@@ -255,6 +256,40 @@ fn imported_ooxml_picture_emits_modeled_media_blob() {
     assert_eq!(
         result.image_blobs,
         vec![("../media/image7.png".to_string(), vec![1, 2, 3, 4])]
+    );
+}
+
+#[test]
+fn imported_shape_hyperlink_url_emits_drawing_relationship() {
+    let mut shape = ooxml_types::drawings::SpreadsheetShape::default();
+    shape.nv_sp_pr.c_nv_pr.hlink_click = Some(ooxml_types::drawings::Hyperlink {
+        url: Some("#Nav_Description".to_string()),
+        r_id: Some("rId7".to_string()),
+        tooltip: Some("Description".to_string()),
+        ..Default::default()
+    });
+    let obj = shape_with_ooxml(
+        make_common("Linked Rectangle"),
+        ShapeOoxmlProps {
+            shape,
+            ..Default::default()
+        },
+    );
+
+    let result = build_sheet_drawing_data(&[obj]);
+
+    assert_eq!(result.drawing_rels.len(), 1);
+    assert_eq!(result.drawing_rels[0].id, "rId7");
+    assert_eq!(result.drawing_rels[0].rel_type, REL_HYPERLINK);
+    assert_eq!(result.drawing_rels[0].target, "#Nav_Description");
+    assert_eq!(result.drawing_rels[0].target_mode, None);
+
+    let DrawingAnchor::TwoCell(_, DrawingObject::TextBox(text_box)) = &result.anchors[0].1 else {
+        panic!("expected textbox anchor");
+    };
+    assert_eq!(
+        text_box.hlink_click.as_ref().unwrap().r_id.as_deref(),
+        Some("rId7")
     );
 }
 

@@ -497,6 +497,10 @@ pub fn register_drawing_relationship_with_target_mode(
         PackageRelationshipTarget::External {
             target: target.to_string(),
         }
+    } else if relationship_type == REL_HYPERLINK && target.starts_with('#') {
+        PackageRelationshipTarget::InternalPath {
+            target: target.to_string(),
+        }
     } else {
         PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(target),

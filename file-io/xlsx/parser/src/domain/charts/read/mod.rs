@@ -96,7 +96,7 @@ pub fn parse_drawing_and_charts_for_sheet(
     Vec<crate::domain::charts::Chart>,
 ) {
     use crate::domain::charts::Chart;
-    use crate::domain::drawings::parse_drawing;
+    use crate::domain::drawings::{parse_drawing, resolve_drawing_hyperlink_targets};
 
     // Step 1: Read sheet .rels to find drawing reference
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
@@ -135,6 +135,7 @@ pub fn parse_drawing_and_charts_for_sheet(
 
     // Store drawing OPC relationships for round-trip fidelity (image refs, etc.)
     drawing.opc_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_xml);
+    resolve_drawing_hyperlink_targets(&mut drawing);
 
     // Step 5: Find chart references and parse each chart
     let chart_refs = extract_chart_refs_from_drawing(&drawing_xml, &rels_map);

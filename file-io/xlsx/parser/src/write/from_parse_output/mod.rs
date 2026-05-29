@@ -991,7 +991,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 for rel in drawing_rels.relationships() {
                     let target_path = if crate::write::package_graph::is_external_target_mode(
                         rel.target_mode.as_deref(),
-                    ) {
+                    ) || (rel.rel_type == REL_HYPERLINK
+                        && rel.target.starts_with('#'))
+                    {
                         rel.target.clone()
                     } else {
                         crate::infra::opc::resolve_relationship_target(
@@ -1530,6 +1532,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         for rel in drawing_rels.relationships() {
             let target_path =
                 if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+                    || (rel.rel_type == REL_HYPERLINK && rel.target.starts_with('#'))
                 {
                     rel.target.clone()
                 } else {

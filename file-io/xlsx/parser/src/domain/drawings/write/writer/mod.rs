@@ -83,6 +83,10 @@ impl DrawingWriter {
         self.suppress_unregistered_relationships = suppress;
     }
 
+    pub(super) fn can_write_relationship_id(&self, r_id: &str) -> bool {
+        !self.suppress_unregistered_relationships || self.registered_relationship_ids.contains(r_id)
+    }
+
     /// Set the original root element namespace declarations for round-trip fidelity.
     ///
     /// When set, these declarations are emitted on the root `<xdr:wsDr>` element
@@ -237,6 +241,8 @@ impl DrawingWriter {
                         image.r_id = resolved.clone();
                     }
                 }
+                Self::remap_hyperlink_relationship_id(&mut image.hlink_click, resolved_ids);
+                Self::remap_hyperlink_relationship_id(&mut image.hlink_hover, resolved_ids);
                 if let Some(link_id) = &mut image.link_id {
                     if let Some(resolved) = resolved_ids.get(link_id) {
                         *link_id = resolved.clone();
@@ -256,6 +262,8 @@ impl DrawingWriter {
                     .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
             }
             DrawingObject::Chart(chart) => {
+                Self::remap_hyperlink_relationship_id(&mut chart.hlink_click, resolved_ids);
+                Self::remap_hyperlink_relationship_id(&mut chart.hlink_hover, resolved_ids);
                 if let Some(resolved) = resolved_ids.get(&chart.r_id) {
                     chart.r_id = resolved.clone();
                 }
@@ -283,6 +291,8 @@ impl DrawingWriter {
                 }
             }
             DrawingObject::GroupShape(group) => {
+                Self::remap_hyperlink_relationship_id(&mut group.hlink_click, resolved_ids);
+                Self::remap_hyperlink_relationship_id(&mut group.hlink_hover, resolved_ids);
                 group.nv_ext_lst = group
                     .nv_ext_lst
                     .as_ref()
@@ -295,8 +305,90 @@ impl DrawingWriter {
                     Self::remap_object_relationship_ids(child, resolved_ids);
                 }
             }
+            DrawingObject::TextBox(text_box) => {
+                Self::remap_hyperlink_relationship_id(&mut text_box.hlink_click, resolved_ids);
+                Self::remap_hyperlink_relationship_id(&mut text_box.hlink_hover, resolved_ids);
+                if let Some(text_body) = &mut text_box.text_body {
+                    Self::remap_text_body_hyperlink_relationship_ids(text_body, resolved_ids);
+                }
+            }
+            DrawingObject::Connector(connector) => {
+                Self::remap_hyperlink_relationship_id(&mut connector.hlink_click, resolved_ids);
+                Self::remap_hyperlink_relationship_id(&mut connector.hlink_hover, resolved_ids);
+            }
             _ => {}
         }
+    }
+
+    fn remap_hyperlink_relationship_id(
+        hlink: &mut Option<ooxml_types::drawings::Hyperlink>,
+        resolved_ids: &HashMap<String, String>,
+    ) {
+        let Some(hlink) = hlink else {
+            return;
+        };
+        let Some(r_id) = &mut hlink.r_id else {
+            return;
+        };
+        if let Some(resolved) = resolved_ids.get(r_id) {
+            *r_id = resolved.clone();
+        }
+    }
+
+    fn remap_text_body_hyperlink_relationship_ids(
+        text_body: &mut ooxml_types::drawings::TextBody,
+        resolved_ids: &HashMap<String, String>,
+    ) {
+        for paragraph in &mut text_body.paragraphs {
+            if let Some(props) = paragraph.props.def_run_props.as_deref_mut() {
+                Self::remap_run_property_hyperlink_relationship_ids(props, resolved_ids);
+            }
+            if let Some(props) = &mut paragraph.end_para_rpr {
+                Self::remap_run_property_hyperlink_relationship_ids(props, resolved_ids);
+            }
+            for run in &mut paragraph.runs {
+                match run {
+                    ooxml_types::drawings::TextRunContent::Run(run) => {
+                        Self::remap_run_property_hyperlink_relationship_ids(
+                            &mut run.props,
+                            resolved_ids,
+                        );
+                    }
+                    ooxml_types::drawings::TextRunContent::LineBreak { props: Some(props) } => {
+                        Self::remap_run_property_hyperlink_relationship_ids(props, resolved_ids);
+                    }
+                    ooxml_types::drawings::TextRunContent::Field {
+                        run_props,
+                        para_props,
+                        ..
+                    } => {
+                        if let Some(props) = run_props {
+                            Self::remap_run_property_hyperlink_relationship_ids(
+                                props,
+                                resolved_ids,
+                            );
+                        }
+                        if let Some(para_props) = para_props {
+                            if let Some(props) = para_props.def_run_props.as_deref_mut() {
+                                Self::remap_run_property_hyperlink_relationship_ids(
+                                    props,
+                                    resolved_ids,
+                                );
+                            }
+                        }
+                    }
+                    ooxml_types::drawings::TextRunContent::LineBreak { props: None } => {}
+                }
+            }
+        }
+    }
+
+    fn remap_run_property_hyperlink_relationship_ids(
+        props: &mut ooxml_types::drawings::RunProperties,
+        resolved_ids: &HashMap<String, String>,
+    ) {
+        Self::remap_hyperlink_relationship_id(&mut props.hlink_click, resolved_ids);
+        Self::remap_hyperlink_relationship_id(&mut props.hlink_mouse_over, resolved_ids);
     }
 
     /// Insert a drawing anchor at a specific position.
@@ -353,10 +445,79 @@ impl DrawingWriter {
             DrawingObject::OpaqueRaw(_) => true,
             DrawingObject::ContentPart(_) => true,
             // Group shapes need r: if any child does
-            DrawingObject::GroupShape(g) => g.children.iter().any(Self::object_needs_r_namespace),
-            // Shapes, TextBoxes, Connectors, Slicers don't inherently use r:
+            DrawingObject::GroupShape(g) => {
+                Self::hyperlink_needs_r_namespace(&g.hlink_click)
+                    || Self::hyperlink_needs_r_namespace(&g.hlink_hover)
+                    || g.children.iter().any(Self::object_needs_r_namespace)
+            }
+            DrawingObject::TextBox(text_box) => {
+                Self::hyperlink_needs_r_namespace(&text_box.hlink_click)
+                    || Self::hyperlink_needs_r_namespace(&text_box.hlink_hover)
+                    || text_box
+                        .text_body
+                        .as_ref()
+                        .is_some_and(Self::text_body_needs_r_namespace)
+            }
+            DrawingObject::Connector(connector) => {
+                Self::hyperlink_needs_r_namespace(&connector.hlink_click)
+                    || Self::hyperlink_needs_r_namespace(&connector.hlink_hover)
+            }
+            // Shapes and Slicers don't inherently use r:
             _ => false,
         }
+    }
+
+    fn hyperlink_needs_r_namespace(hlink: &Option<ooxml_types::drawings::Hyperlink>) -> bool {
+        hlink
+            .as_ref()
+            .and_then(|hlink| hlink.r_id.as_deref())
+            .is_some_and(|r_id| Self::is_relationship_id_writable_static(r_id))
+    }
+
+    fn is_relationship_id_writable_static(r_id: &str) -> bool {
+        !r_id.is_empty()
+    }
+
+    fn text_body_needs_r_namespace(text_body: &ooxml_types::drawings::TextBody) -> bool {
+        text_body.paragraphs.iter().any(|paragraph| {
+            paragraph
+                .props
+                .def_run_props
+                .as_deref()
+                .is_some_and(Self::run_properties_need_r_namespace)
+                || paragraph
+                    .end_para_rpr
+                    .as_ref()
+                    .is_some_and(Self::run_properties_need_r_namespace)
+                || paragraph.runs.iter().any(|run| match run {
+                    ooxml_types::drawings::TextRunContent::Run(run) => {
+                        Self::run_properties_need_r_namespace(&run.props)
+                    }
+                    ooxml_types::drawings::TextRunContent::LineBreak { props } => props
+                        .as_ref()
+                        .is_some_and(Self::run_properties_need_r_namespace),
+                    ooxml_types::drawings::TextRunContent::Field {
+                        run_props,
+                        para_props,
+                        ..
+                    } => {
+                        run_props
+                            .as_ref()
+                            .is_some_and(Self::run_properties_need_r_namespace)
+                            || para_props.as_ref().is_some_and(|para_props| {
+                                para_props
+                                    .def_run_props
+                                    .as_deref()
+                                    .is_some_and(Self::run_properties_need_r_namespace)
+                            })
+                    }
+                })
+        })
+    }
+
+    fn run_properties_need_r_namespace(props: &ooxml_types::drawings::RunProperties) -> bool {
+        Self::hyperlink_needs_r_namespace(&props.hlink_click)
+            || Self::hyperlink_needs_r_namespace(&props.hlink_mouse_over)
     }
 
     /// Check if any anchor in this drawing needs the `xmlns:r` namespace declaration.

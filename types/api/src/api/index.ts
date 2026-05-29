@@ -48,6 +48,7 @@ export type {
   Worksheet,
   WorksheetWithInternals,
   ActiveCellEditSource,
+  FormulaCircularReferenceValidation,
   FormulaSyntaxValidationError,
   SortByColorOptions,
   CellRecord,

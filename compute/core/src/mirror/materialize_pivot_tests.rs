@@ -76,6 +76,26 @@ fn pivot_row(label: &str, field_id: &str, values: Vec<CellValue>) -> PivotRow {
     }
 }
 
+fn pivot_row_with_headers(
+    key: &str,
+    headers: Vec<(&str, &str, usize)>,
+    values: Vec<CellValue>,
+) -> PivotRow {
+    let depth = headers.last().map(|(_, _, depth)| *depth).unwrap_or(0);
+    PivotRow {
+        key: key.into(),
+        headers: headers
+            .into_iter()
+            .map(|(label, field_id, depth)| row_header(text(label), field_id, depth))
+            .collect(),
+        values,
+        depth,
+        is_subtotal: false,
+        is_grand_total: false,
+        source_row_indices: None,
+    }
+}
+
 const ANCHOR_ROW: u32 = 0;
 const ANCHOR_COL: u32 = 5; // column F — typical pivot anchor in the corpus
 
@@ -158,6 +178,89 @@ fn materialize_pivot_writes_transformed_grand_total_branches() {
             .cloned(),
         Some(num(1.0)),
         "corner grand total must use the transformed value",
+    );
+}
+
+#[test]
+fn materialize_compact_multi_row_fields_writes_deepest_visible_label() {
+    let (mut mirror, sheet_id) = fresh_mirror_with_sheet(20, 20);
+
+    let result = PivotTableResult {
+        column_headers: vec![],
+        rows: vec![
+            pivot_row_with_headers("North", vec![("North", "region", 0)], vec![num(200.0)]),
+            pivot_row_with_headers(
+                "North|Gadget",
+                vec![("North", "region", 0), ("Gadget", "product", 1)],
+                vec![num(40.0)],
+            ),
+            pivot_row_with_headers(
+                "North|Widget",
+                vec![("North", "region", 0), ("Widget", "product", 1)],
+                vec![num(160.0)],
+            ),
+        ],
+        grand_totals: PivotGrandTotals {
+            row: Some(vec![num(200.0)]),
+            column: None,
+            grand: None,
+            row_label: Some("Grand Total".to_string()),
+        },
+        rendered_bounds: PivotRenderedBounds {
+            total_rows: 5,
+            total_cols: 2,
+            first_data_row: 1,
+            first_data_col: 1,
+            num_data_cols: 1,
+        },
+        source_row_count: 3,
+        measure_descriptors: vec![],
+        value_records: vec![],
+        errors: None,
+    };
+
+    mirror.materialize_pivot(
+        &sheet_id,
+        ANCHOR_ROW,
+        ANCHOR_COL,
+        &result,
+        &["Region".to_string(), "Product".to_string()],
+    );
+
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW, ANCHOR_COL))
+            .cloned(),
+        Some(text("Region")),
+        "compact layout exposes one row-header column before data",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 1, ANCHOR_COL))
+            .cloned(),
+        Some(text("North")),
+        "outer group rows keep their outer label",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 2, ANCHOR_COL))
+            .cloned(),
+        Some(text("Gadget")),
+        "child rows must show the deepest row-field label in the compact column",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 2, ANCHOR_COL + 1))
+            .cloned(),
+        Some(num(40.0)),
+        "child row value stays in the first data column instead of overwriting the label",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 3, ANCHOR_COL))
+            .cloned(),
+        Some(text("Widget")),
+        "sibling child rows also show their deepest label",
     );
 }
 

@@ -121,8 +121,14 @@ impl CellMirror {
                 cols_touched.push(col);
             }
 
-            // Write row field labels in the header row (e.g., "Region" at F1)
-            for (h_idx, name) in row_field_names.iter().enumerate() {
+            // Write row field labels in the header row. Compact layout collapses
+            // multiple row fields into `first_data_col` visible header columns,
+            // so only write labels that fit before the data region.
+            for (h_idx, name) in row_field_names
+                .iter()
+                .take(first_data_col as usize)
+                .enumerate()
+            {
                 if !name.is_empty() {
                     let row = anchor_row;
                     let col = anchor_col + h_idx as u32;
@@ -173,8 +179,14 @@ impl CellMirror {
             // Write row headers and data values
             for (row_idx, pivot_row) in result.rows.iter().enumerate() {
                 let row_idx = row_idx as u32;
-                // Row headers
-                for (h_idx, header) in pivot_row.headers.iter().enumerate() {
+                // Row headers. In compact layout the engine still carries the
+                // full ancestor chain, but `first_data_col` is the number of
+                // visible row-header columns. Write the deepest visible headers
+                // so child labels do not get overwritten by data values.
+                let visible_header_count =
+                    (first_data_col as usize).min(pivot_row.headers.len());
+                let hidden_prefix = pivot_row.headers.len().saturating_sub(visible_header_count);
+                for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
                     let row = anchor_row + first_data_row + row_idx;
                     let col = anchor_col + h_idx as u32;
                     if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)

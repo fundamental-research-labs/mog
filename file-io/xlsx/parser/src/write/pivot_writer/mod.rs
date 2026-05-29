@@ -144,23 +144,10 @@ fn build_pivot_cache_entries(
         .enumerate()
         .map(|(idx, cache_src)| {
             let global_idx = idx + 1;
-            if let Some(entry) =
-                preserved_cache_entry(output, cache_src, global_idx, cache_sources.len())
-            {
-                generated_part_paths.insert(entry.definition_path.clone());
-                if let Some(path) = &entry.records_path {
-                    generated_part_paths.insert(path.clone());
-                }
-                generated_part_paths.insert(pivot_cache_rels_path(global_idx));
-                return entry;
-            }
-
-            let imported_records = output.pivot_cache_records.get(&cache_src.cache_id);
             let (definition_xml, records_xml) = build_cache(
                 cache_src,
                 &output.sheets,
                 sheet_name_to_idx,
-                imported_records,
             );
 
             generated_part_paths.insert(pivot_cache_definition_path(global_idx));
@@ -186,79 +173,6 @@ fn build_pivot_cache_entries(
             }
         })
         .collect()
-}
-
-fn preserved_cache_entry(
-    output: &ParseOutput,
-    cache_src: &domain_types::PivotCacheSourceDef,
-    global_idx: usize,
-    cache_count: usize,
-) -> Option<PivotCacheEntry> {
-    let fidelity = output
-        .package_fidelity
-        .as_ref()?
-        .pivot_cache_packages
-        .iter()
-        .find(|fidelity| fidelity.cache_id == cache_src.cache_id)?;
-    if !pivot_cache_source_binding_matches(fidelity, cache_src) {
-        return None;
-    }
-    if pivot_cache_path_conflicts_with_generated_slot(fidelity, global_idx, cache_count) {
-        return None;
-    }
-
-    Some(PivotCacheEntry {
-        global_idx,
-        cache_id: cache_src.cache_id,
-        definition_path: fidelity.definition_path.clone(),
-        records_path: fidelity.records_path.clone(),
-        workbook_relationship_id_hint: Some(fidelity.workbook_relationship_id.clone()),
-        workbook_relationship_type: fidelity.workbook_relationship_type.clone(),
-        records_relationship_id_hint: fidelity.records_relationship_id.clone(),
-        records_relationship_type: fidelity.records_relationship_type.clone().or_else(|| {
-            fidelity.records_path.as_ref().map(|_| {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
-                    .to_string()
-            })
-        }),
-        definition_xml: fidelity.definition_xml.clone(),
-        records_xml: fidelity.records_xml.clone(),
-    })
-}
-
-fn pivot_cache_path_conflicts_with_generated_slot(
-    fidelity: &domain_types::PivotCachePackageFidelity,
-    global_idx: usize,
-    cache_count: usize,
-) -> bool {
-    let canonical_definition = pivot_cache_definition_path(global_idx);
-    if fidelity.definition_path != canonical_definition {
-        for idx in 1..=cache_count {
-            if idx != global_idx && fidelity.definition_path == pivot_cache_definition_path(idx) {
-                return true;
-            }
-        }
-    }
-
-    let Some(records_path) = fidelity.records_path.as_ref() else {
-        return false;
-    };
-    let canonical_records = pivot_cache_records_path(global_idx);
-    if records_path == &canonical_records {
-        return false;
-    }
-    (1..=cache_count).any(|idx| idx != global_idx && records_path == &pivot_cache_records_path(idx))
-}
-
-fn pivot_cache_source_binding_matches(
-    fidelity: &domain_types::PivotCachePackageFidelity,
-    cache_src: &domain_types::PivotCacheSourceDef,
-) -> bool {
-    if fidelity.source_sheet.is_none() && fidelity.source_range.is_none() {
-        return true;
-    }
-    fidelity.source_sheet == cache_src.source_sheet
-        && fidelity.source_range == cache_src.source_range
 }
 
 fn build_pivot_table_entries(

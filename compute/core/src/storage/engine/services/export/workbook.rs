@@ -881,7 +881,11 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
         let txn = doc.transact();
         let workbook = stores.storage.workbook_map();
         if let Some(Out::YMap(pivot_map)) = workbook.get(&txn, KEY_PIVOT_SPECS) {
-            for (_, value) in pivot_map.iter(&txn) {
+            let mut entries: Vec<_> = pivot_map.iter(&txn).collect();
+            entries.sort_by(|(left, _), (right, _)| {
+                pivot_spec_order_key(left.as_ref()).cmp(&pivot_spec_order_key(right.as_ref()))
+            });
+            for (_, value) in entries {
                 if let Out::Any(Any::String(json_str)) = value {
                     match serde_json::from_str::<ParsedPivotTable>(&json_str) {
                         Ok(pt) => result.push(pt),
@@ -917,4 +921,10 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     }
 
     result
+}
+
+fn pivot_spec_order_key(key: &str) -> (u32, &str) {
+    key.rsplit_once('_')
+        .and_then(|(prefix, suffix)| suffix.parse::<u32>().ok().map(|idx| (idx, prefix)))
+        .unwrap_or((u32::MAX, key))
 }

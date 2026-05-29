@@ -745,6 +745,7 @@ mod tests {
                     icon_id: None,
                 },
             ],
+            ext_lst: None,
         };
         let json = serde_json::to_string(&ss).expect("serialize");
         let deserialized: SortState = serde_json::from_str(&json).expect("deserialize");

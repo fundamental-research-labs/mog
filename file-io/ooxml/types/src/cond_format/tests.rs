@@ -370,6 +370,7 @@ fn cfvo_with_value() {
         cfvo_type: CfvoType::Percent,
         val: Some("50".to_string()),
         gte: false,
+        ext_lst_xml: None,
     };
     assert_eq!(cfvo.cfvo_type, CfvoType::Percent);
     assert_eq!(cfvo.val.as_deref(), Some("50"));
@@ -422,11 +423,13 @@ fn color_scale_two_color() {
                 cfvo_type: CfvoType::Min,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Max,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
         ],
         colors: vec![
@@ -452,16 +455,19 @@ fn color_scale_three_color() {
                 cfvo_type: CfvoType::Min,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Percentile,
                 val: Some("50".to_string()),
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Max,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
         ],
         colors: vec![
@@ -527,22 +533,26 @@ fn icon_set_with_custom_icons() {
         icon_set: IconSetType::ThreeArrows,
         show_value: false,
         percent: true,
+        percent_attr_present: false,
         reverse: false,
         cfvo: vec![
             Cfvo {
                 cfvo_type: CfvoType::Percent,
                 val: Some("0".to_string()),
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Percent,
                 val: Some("33".to_string()),
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Percent,
                 val: Some("67".to_string()),
                 gte: true,
+                ext_lst_xml: None,
             },
         ],
         custom: true,
@@ -630,11 +640,13 @@ fn conditional_formatting_with_color_scale() {
                         cfvo_type: CfvoType::Min,
                         val: None,
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     Cfvo {
                         cfvo_type: CfvoType::Max,
                         val: None,
                         gte: true,
+                        ext_lst_xml: None,
                     },
                 ],
                 colors: vec![
@@ -669,11 +681,13 @@ fn conditional_formatting_with_data_bar() {
                         cfvo_type: CfvoType::Min,
                         val: None,
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     Cfvo {
                         cfvo_type: CfvoType::Max,
                         val: None,
                         gte: true,
+                        ext_lst_xml: None,
                     },
                 ],
                 color: CfColor {

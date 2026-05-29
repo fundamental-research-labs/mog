@@ -794,7 +794,7 @@ fn sheet_properties_with_all_children() {
 
 #[test]
 fn integration_data_validation_auto_filter_sort_hyperlink() {
-    use crate::tables::{DynamicFilterType, FilterOperator, SortBy};
+    use crate::tables::{FilterOperator, SortBy};
 
     // DataValidation with list type
     let dv = DataValidation {
@@ -849,6 +849,7 @@ fn integration_data_validation_auto_filter_sort_hyperlink() {
             }],
             ..SortState::default()
         }),
+        ext_lst: None,
     };
     assert!(af.filter_column[0].show_button);
     assert_eq!(

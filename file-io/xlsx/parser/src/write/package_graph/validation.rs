@@ -45,6 +45,7 @@ enum RelationshipOwnerKind {
     Drawing,
     Chart,
     VmlDrawing,
+    RichData,
     PivotTable,
     PivotCache,
     ExternalLink,
@@ -92,6 +93,8 @@ fn relationship_owner_kind(
         Some(RelationshipOwnerKind::Drawing)
     } else if path.starts_with("xl/charts/") && path.ends_with(".xml") {
         Some(RelationshipOwnerKind::Chart)
+    } else if path.starts_with("xl/richData/") && path.ends_with(".xml") {
+        Some(RelationshipOwnerKind::RichData)
     } else if path.starts_with("xl/pivotTables/") && path.ends_with(".xml") {
         Some(RelationshipOwnerKind::PivotTable)
     } else if path.starts_with("xl/pivotCache/pivotCacheDefinition") && path.ends_with(".xml") {
@@ -159,6 +162,7 @@ fn relationship_type_allowed_for_owner(
             RelationshipOwnerKind::Drawing
                 | RelationshipOwnerKind::Chart
                 | RelationshipOwnerKind::VmlDrawing
+                | RelationshipOwnerKind::RichData
         ),
         Rel::Chart
         | Rel::ChartEx
@@ -219,7 +223,7 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::Slicer
         | Rel::Timeline => "worksheet relationships",
         Rel::ActiveXControlBinary => "ActiveX control relationships",
-        Rel::Image => "drawing, chart, or VML drawing relationships",
+        Rel::Image => "drawing, chart, VML drawing, or rich data relationships",
         Rel::Chart
         | Rel::ChartEx
         | Rel::DiagramData

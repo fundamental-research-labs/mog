@@ -1070,6 +1070,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let custom_props_xml = doc_props_xml.custom;
     let metadata_xml = metadata::metadata_xml_for_export(output);
     let rich_data_parts = rich_data::parts_for_export(output);
+    let rich_data_related_parts = rich_data::related_parts_for_export(output);
     let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
         Some(crate::domain::comments::write::persons_xml_from_domain(
             &output.persons,
@@ -1132,7 +1133,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.records_relationship_id_hint.as_deref(),
         )?;
     }
-    rich_data::register_parts(&mut package_graph_builder, &rich_data_parts)?;
+    rich_data::register_parts(
+        &mut package_graph_builder,
+        &rich_data_parts,
+        &rich_data_related_parts,
+    )?;
     for entry in &worksheet_hyperlink_relationships {
         crate::write::package_graph::register_worksheet_hyperlink(
             &mut package_graph_builder,
@@ -1931,6 +1936,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         custom_props_xml,
         metadata_xml,
         rich_data_parts,
+        rich_data_related_parts,
         persons_xml,
         &all_chart_entries,
         &all_chart_ex_entries,

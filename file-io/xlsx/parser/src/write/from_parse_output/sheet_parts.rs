@@ -268,10 +268,11 @@ pub(super) fn build_sheet_parts(
             }
         }
         if sheet_data.worksheet_ext_lst_xml.is_some() || !ext_entries.is_empty() {
-            sheet_writer.set_ext_lst_xml(merge_ext_lst_entries(
-                sheet_data.worksheet_ext_lst_xml.as_deref(),
-                &ext_entries,
-            ));
+            let merged_ext_lst =
+                merge_ext_lst_entries(sheet_data.worksheet_ext_lst_xml.as_deref(), &ext_entries);
+            if !merged_ext_lst.is_empty() {
+                sheet_writer.set_ext_lst_xml(merged_ext_lst);
+            }
         }
 
         // ── Comments ────────────────────────────────────────────────────

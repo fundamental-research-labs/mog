@@ -62,9 +62,12 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
             FloatingObjectData::Picture(_)
             | FloatingObjectData::Shape(_)
             | FloatingObjectData::Textbox(_) => {
-                if let Some(anchor) =
-                    objects::convert_floating_object(obj, &mut image_blobs, &mut image_rels)
-                {
+                if let Some(anchor) = objects::convert_floating_object(
+                    obj,
+                    &mut image_blobs,
+                    &mut image_rels,
+                    &mut drawing_rels,
+                ) {
                     anchors.push((anchor_index, anchor));
                 }
             }

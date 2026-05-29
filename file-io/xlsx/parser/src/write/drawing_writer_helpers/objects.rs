@@ -17,6 +17,7 @@ pub(super) fn convert_floating_object(
     obj: &FloatingObject,
     image_blobs: &mut Vec<(String, Vec<u8>)>,
     image_rels: &mut Vec<(String, String)>,
+    drawing_rels: &mut Vec<ooxml_types::shared::OpcRelationship>,
 ) -> Option<DrawingAnchor> {
     let drawing_obj = match &obj.data {
         FloatingObjectData::Picture(pic_data) => {
@@ -29,6 +30,16 @@ pub(super) fn convert_floating_object(
                     image_rels.push((r_id, image_path.clone()));
                     push_image_blob_if_data_url(image_blobs, image_path, &pic_data.src);
                 }
+                drawing_rels.extend(
+                    ooxml
+                        .relationships
+                        .iter()
+                        .filter(|relationship| {
+                            Some(relationship.id.as_str())
+                                != ooxml.picture.blip_fill.embed_id.as_deref()
+                        })
+                        .cloned(),
+                );
                 DrawingObject::Picture(image_props)
             } else {
                 convert_image(&obj.common, &pic_data.src, image_blobs, image_rels)?

@@ -30,6 +30,7 @@ pub(super) fn write_zip_package(
     custom_props_xml: Option<Vec<u8>>,
     metadata_xml: Option<Vec<u8>>,
     rich_data_parts: Vec<domain_types::RichDataPart>,
+    rich_data_related_parts: Vec<domain_types::RichDataRelatedPart>,
     persons_xml: Option<Vec<u8>>,
     all_chart_entries: &[Vec<ChartEntry>],
     all_chart_ex_entries: &[Vec<ChartExEntry>],
@@ -145,15 +146,19 @@ pub(super) fn write_zip_package(
     }
     for part in rich_data_parts {
         add_registered_part(package_graph, &mut zip, &part.path, part.data)?;
-        if !part.relationships.is_empty() {
-            let rels = crate::write::relationships::RelationshipManager::from_original(
-                &part.relationships,
-            );
+        let owner = crate::write::package_graph::PackageOwner::Part {
+            path: part.path.clone(),
+        };
+        let rels = package_graph.relationship_manager_for_owner(&owner);
+        if !rels.is_empty() {
             zip.add_file(
                 &crate::write::package_graph::part_relationships_path(&part.path),
                 rels.to_xml(),
             );
         }
+    }
+    for part in rich_data_related_parts {
+        add_registered_part(package_graph, &mut zip, &part.path, part.data)?;
     }
     // Persons (threaded comments author list)
     if let Some(ref persons) = persons_xml {

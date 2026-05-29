@@ -26,15 +26,75 @@ pub(super) fn parts_for_export(output: &ParseOutput) -> Vec<RichDataPart> {
     Vec::new()
 }
 
+pub(super) fn related_parts_for_export(
+    output: &ParseOutput,
+) -> Vec<domain_types::RichDataRelatedPart> {
+    if parts_for_export(output).is_empty() {
+        return Vec::new();
+    }
+    output
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.rich_data.as_ref())
+        .map(|rich_data| rich_data.related_parts.clone())
+        .unwrap_or_default()
+}
+
 pub(super) fn register_parts(
     graph: &mut crate::write::package_graph::PackageGraphBuilder,
     parts: &[RichDataPart],
+    related_parts: &[domain_types::RichDataRelatedPart],
 ) -> Result<(), WriteError> {
     for part in parts {
         graph.register_part(crate::write::package_graph::modeled_part(
             &part.path,
             &part.content_type,
         ))?;
+        for relationship in &part.relationships {
+            let target = if crate::write::package_graph::is_external_target_mode(
+                relationship.target_mode.as_deref(),
+            ) {
+                crate::write::package_graph::PackageRelationshipTarget::External {
+                    target: relationship.target.clone(),
+                }
+            } else {
+                let target_path = crate::infra::opc::resolve_relationship_target(
+                    Some(&part.path),
+                    &relationship.target,
+                )
+                .map_err(|err| {
+                    WriteError::PackageIntegrity(format!(
+                        "invalid richData relationship target for {}: {} ({:?})",
+                        part.path, relationship.target, err
+                    ))
+                })?;
+                crate::write::package_graph::PackageRelationshipTarget::InternalPart {
+                    path: target_path,
+                }
+            };
+            graph.add_relationship(crate::write::package_graph::PackageRelationship {
+                owner: crate::write::package_graph::PackageOwner::Part {
+                    path: part.path.clone(),
+                },
+                relationship_type: relationship.rel_type.clone(),
+                target,
+                identity_hint: Some(crate::write::package_graph::RelationshipIdentityHint::new(
+                    relationship.id.as_str(),
+                )),
+            });
+        }
+    }
+    for part in related_parts {
+        if part.path.starts_with("xl/media/") {
+            crate::write::package_graph::register_media_part(graph, &part.path)?;
+        } else {
+            graph.register_part(crate::write::package_graph::modeled_part(
+                &part.path,
+                part.content_type
+                    .as_deref()
+                    .unwrap_or("application/octet-stream"),
+            ))?;
+        }
     }
     Ok(())
 }

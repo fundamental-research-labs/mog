@@ -35,6 +35,15 @@ pub struct PictureOoxmlProps {
     pub mc_alternate_content_raw_xml: Option<String>,
     /// Image path resolved from OPC relationships (e.g., "../media/image1.png").
     pub image_path: Option<String>,
+    /// Drawing relationships referenced by this picture's OOXML.
+    ///
+    /// `image_path` carries the current embedded image owner separately because
+    /// Mog may regenerate image relationship ids from current media bytes.
+    /// Other relationship-bearing picture state such as external `r:link`
+    /// targets and non-visual hyperlinks must remain owner-scoped here so the
+    /// drawing package graph can register and remap them consistently.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<ooxml_types::shared::OpcRelationship>,
 }
 
 /// OOXML round-trip properties for a shape floating object.

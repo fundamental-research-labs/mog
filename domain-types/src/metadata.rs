@@ -104,13 +104,24 @@ pub struct RichDataPart {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RichDataRelatedPart {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkbookRichData {
     pub parts: Vec<RichDataPart>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_parts: Vec<RichDataRelatedPart>,
 }
 
 impl WorkbookRichData {
     pub fn is_empty(&self) -> bool {
-        self.parts.is_empty()
+        self.parts.is_empty() && self.related_parts.is_empty()
     }
 }
 

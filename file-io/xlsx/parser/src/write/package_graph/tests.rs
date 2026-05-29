@@ -105,6 +105,37 @@ fn imported_default_mime_preference_updates_existing_current_default() {
 }
 
 #[test]
+fn rich_data_parts_can_own_image_relationships() {
+    let mut builder = PackageGraphBuilder::new();
+    builder
+        .register_part(modeled_part(
+            "xl/richData/richValueRel.xml",
+            "application/vnd.ms-excel.rdrichvaluerel+xml",
+        ))
+        .unwrap();
+    register_media_part(&mut builder, "xl/media/image1.png").unwrap();
+    builder.add_relationship(PackageRelationship {
+        owner: PackageOwner::Part {
+            path: "xl/richData/richValueRel.xml".to_string(),
+        },
+        relationship_type: REL_IMAGE.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "xl/media/image1.png".to_string(),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new("rId1")),
+    });
+
+    let graph = builder.resolve().unwrap();
+
+    assert!(graph.relationships.iter().any(|relationship| {
+        relationship.owner_rels_path == "xl/richData/_rels/richValueRel.xml.rels"
+            && relationship.id == "rId1"
+            && relationship.relationship_type == REL_IMAGE
+            && relationship.target == "../media/image1.png"
+    }));
+}
+
+#[test]
 fn inert_custom_xml_cluster_is_registered_with_graph_generated_sidecar() {
     let metadata = PackageFidelityMetadata {
         root_relationships: vec![relationship_hint(

@@ -145,6 +145,8 @@ fn collect_rich_data_parts(
     content_type_overrides: &[(String, String)],
 ) -> Option<domain_types::WorkbookRichData> {
     let mut parts = Vec::new();
+    let mut related_parts =
+        std::collections::BTreeMap::<String, domain_types::RichDataRelatedPart>::new();
     for entry in archive.entries() {
         let path = entry.name.replace('\\', "/");
         if !path.starts_with("xl/richData/") || !path.ends_with(".xml") || path.contains("/_rels/")
@@ -162,6 +164,13 @@ fn collect_rich_data_parts(
                 .map(|rels| workbook::parse_all_rels(&rels))
                 .unwrap_or_default()
         };
+        collect_rich_data_related_parts(
+            archive,
+            content_type_overrides,
+            &path,
+            &relationships,
+            &mut related_parts,
+        );
         parts.push(domain_types::RichDataPart {
             content_type: content_type_for_part(&path, content_type_overrides)
                 .unwrap_or("application/xml")
@@ -173,7 +182,50 @@ fn collect_rich_data_parts(
     }
 
     parts.sort_by(|a, b| a.path.cmp(&b.path));
-    (!parts.is_empty()).then_some(domain_types::WorkbookRichData { parts })
+    let related_parts = related_parts.into_values().collect();
+    (!parts.is_empty()).then_some(domain_types::WorkbookRichData {
+        parts,
+        related_parts,
+    })
+}
+
+fn collect_rich_data_related_parts(
+    archive: &XlsxArchive<'_>,
+    content_type_overrides: &[(String, String)],
+    owner_path: &str,
+    relationships: &[ooxml_types::shared::OpcRelationship],
+    related_parts: &mut std::collections::BTreeMap<String, domain_types::RichDataRelatedPart>,
+) {
+    for relationship in relationships {
+        if crate::write::package_graph::is_external_target_mode(relationship.target_mode.as_deref())
+        {
+            continue;
+        }
+        let Ok(target_path) =
+            crate::infra::opc::resolve_relationship_target(Some(owner_path), &relationship.target)
+        else {
+            continue;
+        };
+        if !rich_data_owned_related_part(&target_path) || related_parts.contains_key(&target_path) {
+            continue;
+        }
+        let Ok(data) = archive.read_file(&target_path) else {
+            continue;
+        };
+        related_parts.insert(
+            target_path.clone(),
+            domain_types::RichDataRelatedPart {
+                content_type: content_type_for_part(&target_path, content_type_overrides)
+                    .map(ToOwned::to_owned),
+                path: target_path,
+                data,
+            },
+        );
+    }
+}
+
+fn rich_data_owned_related_part(path: &str) -> bool {
+    path.starts_with("xl/media/")
 }
 
 fn content_type_for_part<'a>(

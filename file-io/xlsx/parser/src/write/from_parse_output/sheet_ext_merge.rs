@@ -5,6 +5,10 @@ pub(super) fn merge_ext_lst_entries(
     raw_ext_lst: Option<&str>,
     generated_parts: &[String],
 ) -> String {
+    if raw_ext_lst.is_none() && generated_parts.is_empty() {
+        return String::new();
+    }
+
     if let Some(raw_xml) = raw_ext_lst
         && generated_parts.is_empty()
         && is_self_closing_ext_lst(raw_xml)
@@ -28,6 +32,9 @@ pub(super) fn merge_ext_lst_entries(
     if let Some(raw_xml) = raw_ext_lst {
         if !is_self_closing_ext_lst(raw_xml) {
             for raw_entry in split_ext_entries(raw_xml) {
+                if crate::infra::xml::raw_xml_contains_relationship_attr(raw_entry.xml) {
+                    continue;
+                }
                 if raw_entry.uri == Some(X14_DV_CF_EXT_URI) && !generated_x14_children.is_empty() {
                     merged_entries.push(merge_x14_children(raw_entry.xml, &generated_x14_children));
                     for (idx, entry) in generated_entries.iter().enumerate() {
@@ -67,6 +74,10 @@ pub(super) fn merge_ext_lst_entries(
         if !generated_used[idx] {
             merged_entries.push(generated_entry.xml.to_string());
         }
+    }
+
+    if merged_entries.is_empty() {
+        return String::new();
     }
 
     combine_ext_lst_entries(&merged_entries)

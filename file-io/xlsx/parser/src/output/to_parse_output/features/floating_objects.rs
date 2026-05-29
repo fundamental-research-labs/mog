@@ -398,6 +398,7 @@ pub(crate) fn convert_floating_objects(
                         .find(|r| r.id == embed_id)
                         .map(|r| r.target.clone())
                 });
+                let relationships = picture_relationships(pic, &drawing.opc_rels);
 
                 // Build typed ooxml props — no more JSON blob!
                 let ooxml_props = PictureOoxmlProps {
@@ -410,6 +411,7 @@ pub(crate) fn convert_floating_objects(
                     client_data_prints_with_sheet: cd_prints,
                     mc_alternate_content_raw_xml: mc_alt_raw.clone(),
                     image_path: image_path.clone(),
+                    relationships,
                 };
 
                 let src = image_path
@@ -711,4 +713,41 @@ pub(crate) fn convert_floating_objects(
     }
 
     objects
+}
+
+fn picture_relationships(
+    pic: &crate::domain::drawings::SpreadsheetPicture,
+    drawing_relationships: &[ooxml_types::shared::OpcRelationship],
+) -> Vec<ooxml_types::shared::OpcRelationship> {
+    let mut ids = std::collections::BTreeSet::new();
+    if let Some(id) = pic.blip_fill.embed_id.as_deref() {
+        ids.insert(id.to_string());
+    }
+    if let Some(id) = pic.blip_fill.link_id.as_deref() {
+        ids.insert(id.to_string());
+    }
+    if let Some(id) = pic
+        .nv_pic_pr
+        .c_nv_pr
+        .hlink_click
+        .as_ref()
+        .and_then(|hlink| hlink.r_id.as_deref())
+    {
+        ids.insert(id.to_string());
+    }
+    if let Some(id) = pic
+        .nv_pic_pr
+        .c_nv_pr
+        .hlink_hover
+        .as_ref()
+        .and_then(|hlink| hlink.r_id.as_deref())
+    {
+        ids.insert(id.to_string());
+    }
+
+    drawing_relationships
+        .iter()
+        .filter(|relationship| ids.contains(&relationship.id))
+        .cloned()
+        .collect()
 }

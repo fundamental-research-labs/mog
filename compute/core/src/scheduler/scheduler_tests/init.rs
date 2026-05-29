@@ -33,6 +33,66 @@ fn test_init_from_snapshot_formula_stored() {
 }
 
 #[test]
+fn test_no_recalc_init_does_not_apply_user_entry_rewrites_to_imported_formulas() {
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    let formula_id = cid(0x12);
+    let imported_formula = r#"=IFERROR(A1,{""})"#;
+    let cached_value = CellValue::Text("cached".into());
+
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid(1).to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                CellData {
+                    cell_id: cid(0x10).to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::number(1.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: formula_id.to_uuid_string(),
+                    row: 0,
+                    col: 1,
+                    value: cached_value.clone(),
+                    formula: Some(imported_formula.to_string()),
+                    identity_formula: None,
+                    array_ref: Some("B1".to_string()),
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+
+    core.init_from_snapshot_no_recalc(&mut mirror, snap)
+        .unwrap();
+
+    assert_eq!(core.get_formula(&formula_id), Some(imported_formula));
+    assert_eq!(
+        *core.get_cell_value(&mirror, &formula_id).unwrap(),
+        cached_value
+    );
+    assert!(
+        core.ast_cache.contains_key(&formula_id),
+        "imported formula should parse without user-entry normalization",
+    );
+}
+
+#[test]
 fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
     fn cell_ref_ids(mirror: &CellMirror, cell_id: CellId) -> Vec<CellId> {
         mirror

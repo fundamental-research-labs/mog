@@ -431,13 +431,6 @@ impl ComputeCore {
             let formula_count_hint = formula_cells.len();
             let registry = &crate::eval::GLOBAL_REGISTRY;
 
-            // Collect sheet names once for normalization (shared across parallel workers)
-            let sheet_names: Vec<&str> = mirror_ref
-                .sheet_ids()
-                .filter_map(|id| mirror_ref.get_sheet(id).map(|s| s.name.as_str()))
-                .collect();
-            let sheet_names_ref = &sheet_names[..];
-
             let compiled: Vec<_> = {
                 let _span =
                     tracing::info_span!("bulk_phase1_parallel", count = formula_cells.len())
@@ -445,10 +438,6 @@ impl ComputeCore {
                 formula_cells
                     .into_par_iter()
                     .map(|(cell_id, sheet_id, formula)| {
-                        // Normalize before parsing (harmless for XLSX — already quoted)
-                        let formula =
-                            compute_parser::normalize_formula_input(&formula, sheet_names_ref);
-
                         let resolver = CoreResolver {
                             mirror: mirror_ref,
                             current_sheet: sheet_id,
@@ -571,12 +560,6 @@ impl ComputeCore {
             // Per-formula set_precedents is 3-5x slower than bulk_set_precedents due
             // to per-edge graph updates vs pre-sized batch insertion.
             let registry = &crate::eval::GLOBAL_REGISTRY;
-            let sheet_names_owned: Vec<String> = mirror
-                .sheet_ids()
-                .filter_map(|id| mirror.get_sheet(id).map(|s| s.name.clone()))
-                .collect();
-            let sheet_names: Vec<&str> = sheet_names_owned.iter().map(|s| s.as_str()).collect();
-
             let formula_count_hint = formula_cells.len();
             let mut builder = GraphBuilder::with_capacity(formula_count_hint);
             let mut graph_edges: Vec<(CellId, Vec<DepTarget>)> =
@@ -586,7 +569,6 @@ impl ComputeCore {
             );
 
             for (cell_id, sheet_id, formula) in formula_cells {
-                let formula = compute_parser::normalize_formula_input(&formula, &sheet_names);
                 let resolver = CoreResolver {
                     mirror: &*mirror,
                     current_sheet: sheet_id,

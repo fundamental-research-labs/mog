@@ -112,7 +112,7 @@ fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
 }
 
 #[test]
-fn imported_workbook_stylesheet_preserves_positional_dxf_registry() {
+fn imported_workbook_stylesheet_dxf_registry_remaps_to_reachable_live_dxfs() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         conditional_formats: vec![ConditionalFormat {
@@ -178,15 +178,15 @@ fn imported_workbook_stylesheet_preserves_positional_dxf_registry() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(styles_xml.contains(r#"<dxfs count="6">"#), "{styles_xml}");
+    assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
     assert!(
-        sheet_xml.contains(r#"dxfId="5""#),
-        "imported dxfId must remain in workbook registry space, got: {sheet_xml}"
+        sheet_xml.contains(r#"dxfId="0""#),
+        "reachable imported dxfId must be remapped to regenerated dxf table, got: {sheet_xml}"
     );
 }
 
 #[test]
-fn imported_workbook_stylesheet_exports_even_without_sheet_style_refs() {
+fn imported_workbook_stylesheet_without_live_style_refs_regenerates_default_styles() {
     let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
     imported_styles
         .cell_xfs
@@ -226,8 +226,12 @@ fn imported_workbook_stylesheet_exports_even_without_sheet_style_refs() {
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
 
     assert!(
-        styles_xml.contains(r#"<cellXfs count="2">"#),
-        "workbook cellXfs remain observable even without sheet refs, got: {styles_xml}"
+        styles_xml.contains(r#"<cellXfs count="1">"#),
+        "imported cellXfs must not remain stylesheet authority without live refs, got: {styles_xml}"
+    );
+    assert!(
+        !styles_xml.contains(r#"numFmtId="49""#),
+        "imported cellXfs must not be replayed as live styles, got: {styles_xml}"
     );
 }
 
@@ -370,7 +374,7 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
 }
 
 #[test]
-fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
+fn live_palette_style_ids_are_export_authority_even_with_imported_stylesheet() {
     let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
     imported_styles
         .cell_xfs
@@ -399,10 +403,17 @@ fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
             Vec::new(),
             None,
         )),
-        style_palette: vec![DocumentFormat {
-            number_format: Some("this palette must not be export authority".to_string()),
-            ..Default::default()
-        }],
+        style_palette: vec![
+            DocumentFormat::default(),
+            DocumentFormat {
+                fill: Some(FillFormat {
+                    background_color: Some("#FF0000".to_string()),
+                    pattern_type: Some("solid".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
             cells: vec![DomainCellData {
@@ -424,21 +435,25 @@ fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(
-        styles_xml.contains(r#"<cellXfs count="2">"#),
+        styles_xml.contains(r#"<cellXfs count="3">"#),
         "{styles_xml}"
     );
     assert!(
-        styles_xml.contains(r#"<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>"#),
-        "{styles_xml}"
+        styles_xml.to_lowercase().contains("ff0000"),
+        "live palette fill must be regenerated, got: {styles_xml}"
     );
     assert!(
-        sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
-        "workbook style ID 1 must emit as s=\"1\", got: {sheet_xml}"
+        !styles_xml.contains(r#"numFmtId="49""#),
+        "imported cellXfs must not override live palette, got: {styles_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"<c r="A1" s="2"><v>1</v></c>"#),
+        "live palette style ID 1 must emit as s=\"2\" after the default xf, got: {sheet_xml}"
     );
 }
 
 #[test]
-fn imported_workbook_stylesheet_style_ids_emit_for_all_sheet_owners() {
+fn invalid_live_palette_style_ids_are_not_coerced_from_imported_stylesheet() {
     let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
     imported_styles
         .cell_xfs
@@ -458,6 +473,10 @@ fn imported_workbook_stylesheet_style_ids_emit_for_all_sheet_owners() {
             Vec::new(),
             None,
         )),
+        style_palette: vec![DocumentFormat {
+            number_format: Some("#,##0".to_string()),
+            ..Default::default()
+        }],
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
             cells: vec![
@@ -465,7 +484,7 @@ fn imported_workbook_stylesheet_style_ids_emit_for_all_sheet_owners() {
                     row: 0,
                     col: 0,
                     value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
-                    style_id: Some(8),
+                    style_id: Some(0),
                     ..Default::default()
                 },
                 DomainCellData {
@@ -527,18 +546,17 @@ fn imported_workbook_stylesheet_style_ids_emit_for_all_sheet_owners() {
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(
-        sheet_xml.contains(r#"<c r="A1" s="8"><v>1</v></c>"#),
+        sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
         "{sheet_xml}"
     );
     assert!(
         sheet_xml.contains(r#"<c r="B1"><v>2</v></c>"#),
         "invalid workbook style IDs must not be coerced, got: {sheet_xml}"
     );
-    assert!(sheet_xml.contains(r#"<c r="C1" s="162"/>"#), "{sheet_xml}");
-    assert!(sheet_xml.contains(r#"<row r="3""#), "{sheet_xml}");
-    assert!(sheet_xml.contains(r#"s="955""#), "{sheet_xml}");
-    assert!(sheet_xml.contains(r#"style="162""#), "{sheet_xml}");
-    assert!(sheet_xml.contains(r#"style="955""#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"<c r="C1" s="162"/>"#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"s="955""#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"style="162""#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"style="955""#), "{sheet_xml}");
     assert!(!sheet_xml.contains(r#"s="956""#), "{sheet_xml}");
     assert!(!sheet_xml.contains(r#"style="956""#), "{sheet_xml}");
 }

@@ -9,13 +9,15 @@ use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CalcMode,
     CalculationProperties, CellData, ColDimension, Comment, CommentType, ConditionalFormat,
     DocumentCustomProperty, DocumentCustomPropertyValue, DocumentFormat, DocumentProperties,
-    ErrorStyle, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ParseOutput, RefMode,
-    RowDimension, SheetData, SheetDimensions, TableColumnSpec, TableSpec, ValidationOperator,
-    ValidationRule, ValidationSpec,
+    ErrorStyle, FillFormat, FontFormat, FormulaCacheProvenance, FormulaCacheState, FrozenPane,
+    MergeRegion, NamedRange, ParseOutput, RefMode, RowDimension, SheetData, SheetDimensions,
+    TableColumnSpec, TableSpec, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
-use xlsx_parser::write::write_xlsx_from_parse_output;
+use xlsx_parser::write::{
+    ExportDiagnosticCode, write_xlsx_from_parse_output, write_xlsx_from_parse_output_with_report,
+};
 use xlsx_parser::zip::XlsxArchive;
 
 #[test]
@@ -193,6 +195,76 @@ fn calculation_properties_do_not_force_recalc_flags_when_clean() {
     assert!(!workbook_xml.contains(r#"fullCalcOnLoad="1""#));
     assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
     assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn current_cell_recalc_intent_does_not_force_workbook_recalc_flags() {
+    let mut cell = formula_cell(
+        0,
+        0,
+        "A2+1",
+        CellValue::Number(FiniteF64::new(2.0).unwrap()),
+    );
+    cell.formula_cache_provenance = FormulaCacheProvenance {
+        state: FormulaCacheState::ImportedCurrent,
+        force_recalc: true,
+        formula_identity_fingerprint: Some("A2+1".to_string()),
+        ..Default::default()
+    };
+    let output = make_single_sheet("Sheet1", vec![cell]);
+
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(r#"<f ca="1">A2+1</f>"#));
+    assert!(workbook_xml.contains(r#"<calcPr calcId="0"/>"#));
+    assert!(!workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ExportDiagnosticCode::FormulaRecalcIntentPreserved
+    }));
+    assert!(
+        !report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == ExportDiagnosticCode::ConsumerRecalcRequired)
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_imported_formula_cache_forces_workbook_recalc_flags() {
+    let mut cell = formula_cell(
+        0,
+        0,
+        "A2+1",
+        CellValue::Number(FiniteF64::new(2.0).unwrap()),
+    );
+    cell.formula_cache_provenance = FormulaCacheProvenance {
+        state: FormulaCacheState::StaleImported,
+        formula_identity_fingerprint: Some("A2+1".to_string()),
+        ..Default::default()
+    };
+    let output = make_single_sheet("Sheet1", vec![cell]);
+
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"fullCalcOnLoad="1""#));
+    assert!(workbook_xml.contains(r#"calcCompleted="0""#));
+    assert!(workbook_xml.contains(r#"forceFullCalc="1""#));
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == ExportDiagnosticCode::ConsumerRecalcRequired)
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

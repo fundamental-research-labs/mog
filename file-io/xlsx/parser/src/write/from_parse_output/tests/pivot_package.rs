@@ -286,6 +286,59 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
 }
 
 #[test]
+fn live_pivot_cache_source_schema_is_not_truncated_to_source_range_width() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "Data",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output
+        .pivot_cache_sources
+        .push(domain_types::PivotCacheSourceDef {
+            cache_id: 11,
+            source_name: None,
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A1:B3".to_string()),
+            field_names: vec![
+                "Category".to_string(),
+                "Amount".to_string(),
+                "ImportedOnly".to_string(),
+            ],
+            shared_items: vec![
+                vec![
+                    DomainValue::Text(Arc::from("A")),
+                    DomainValue::Text(Arc::from("B")),
+                ],
+                vec![],
+                vec![DomainValue::Text(Arc::from("Legacy"))],
+            ],
+        });
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let definition_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheDefinition1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(definition_xml.contains(r#"<cacheFields count="3">"#));
+    assert!(definition_xml.contains(r#"name="ImportedOnly""#));
+    assert!(definition_xml.contains(r#"<s v="Legacy"/>"#));
+    assert!(records_xml.contains(r#"<x v="0"/><n v="10"/><m/>"#));
+}
+
+#[test]
 fn named_table_pivot_cache_source_regenerates_from_live_table_and_keeps_shared_item_order() {
     let mut output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",

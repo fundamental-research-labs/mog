@@ -177,7 +177,10 @@ fn extract_cache_data(
     cache_field_names: &[String],
     seed_shared_items: &[Vec<CellValue>],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
-    let num_cols = (end_col - start_col + 1) as usize;
+    let source_num_cols = (end_col - start_col + 1) as usize;
+    let num_cols = source_num_cols
+        .max(cache_field_names.len())
+        .max(seed_shared_items.len());
 
     let mut cell_map: HashMap<(u32, u32), &CellValue> = HashMap::new();
     for cell in &sheet.cells {
@@ -198,8 +201,11 @@ fn extract_cache_data(
 
     for row in data_start..=data_end {
         let mut record = Vec::with_capacity(num_cols);
-        for (col_offset, col) in (start_col..=end_col).enumerate() {
-            let value = cell_map.get(&(row, col)).copied();
+        for col_offset in 0..num_cols {
+            let col = start_col + col_offset as u32;
+            let value = (col_offset < source_num_cols)
+                .then(|| cell_map.get(&(row, col)).copied())
+                .flatten();
             let item = cell_value_to_cache_record_item(
                 value.unwrap_or(&CellValue::Null),
                 &mut field_shared_items[col_offset],

@@ -534,6 +534,7 @@ fn make_pivot_config(
         auto_format: None,
         preserve_formatting: None,
         cache_id,
+        data_on_rows: None,
         ref_range: None,
         first_data_row: None,
         first_header_row: None,

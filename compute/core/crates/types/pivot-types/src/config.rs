@@ -85,6 +85,9 @@ pub struct PivotEngineConfig {
     /// Pivot cache ID this table reads from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_id: Option<u32>,
+    /// OOXML data-axis placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_on_rows: Option<bool>,
     /// OOXML rendered pivot range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ref_range: Option<String>,
@@ -141,6 +144,7 @@ impl TryFrom<PivotTableConfig> for PivotEngineConfig {
             auto_format: config.auto_format,
             preserve_formatting: config.preserve_formatting,
             cache_id: config.cache_id,
+            data_on_rows: config.data_on_rows,
             ref_range: config.ref_range,
             first_data_row: config.first_data_row,
             first_header_row: config.first_header_row,
@@ -181,6 +185,7 @@ impl From<PivotEngineConfig> for PivotTableConfig {
             auto_format: config.auto_format,
             preserve_formatting: config.preserve_formatting,
             cache_id: config.cache_id,
+            data_on_rows: config.data_on_rows,
             ref_range: config.ref_range,
             first_data_row: config.first_data_row,
             first_header_row: config.first_header_row,

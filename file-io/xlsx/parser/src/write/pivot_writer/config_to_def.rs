@@ -117,7 +117,9 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
 
     let mut col_fields = col_fields;
     let mut row_fields = row_fields;
-    let data_on_rows = engine_config.value_placements().len() > 1 && col_fields.is_empty();
+    let data_on_rows = config
+        .data_on_rows
+        .unwrap_or_else(|| engine_config.value_placements().len() > 1 && col_fields.is_empty());
     if engine_config.value_placements().len() > 1 {
         if data_on_rows {
             row_fields.push(-2);

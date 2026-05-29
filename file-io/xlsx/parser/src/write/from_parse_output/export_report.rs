@@ -64,7 +64,6 @@ pub(super) fn build_export_report(output: &ParseOutput) -> ExportReport {
         for cell in &sheet.cells {
             let provenance = &cell.formula_cache_provenance;
             if provenance.state.is_current() && provenance.force_recalc {
-                requires_consumer_recalc = true;
                 diagnostics.push(ExportDiagnostic {
                     code: ExportDiagnosticCode::FormulaRecalcIntentPreserved,
                     artifact: "formula.ca".to_string(),
@@ -97,8 +96,7 @@ pub(super) fn requires_consumer_recalc(output: &ParseOutput) -> bool {
     output.sheets.iter().any(|sheet| {
         sheet.cells.iter().any(|cell| {
             let provenance = &cell.formula_cache_provenance;
-            (provenance.state.is_current() && provenance.force_recalc)
-                || matches!(provenance.state, FormulaCacheState::StaleImported)
+            matches!(provenance.state, FormulaCacheState::StaleImported)
         })
     })
 }

@@ -421,6 +421,37 @@ fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
 }
 
 #[test]
+fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
+    let mut input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 3,
+            cols: 2,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    input
+        .pivot_cache_sources
+        .push(domain_types::PivotCacheSourceDef {
+            cache_id: 7,
+            source_name: None,
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A1:B3".to_string()),
+            field_names: vec!["Category".to_string(), "Amount".to_string()],
+            shared_items: vec![
+                vec![CellValue::Text(Arc::from("A"))],
+                vec![CellValue::Number(FiniteF64::new(42.0).unwrap())],
+            ],
+        });
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.build_parse_output_from_yrs();
+
+    assert_eq!(exported.pivot_cache_sources, input.pivot_cache_sources);
+}
+
+#[test]
 fn modeled_export_does_not_recreate_absent_pivot_cache_records() {
     let input = ParseOutput {
         sheets: vec![SheetData {

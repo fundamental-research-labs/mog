@@ -26,6 +26,7 @@ mod features;
 mod media;
 mod metadata;
 mod package_fidelity;
+mod pivot_cache_sources;
 pub(crate) mod pivot_convert;
 mod sheet;
 mod sheet_extents;
@@ -46,6 +47,7 @@ use dxf_registry::populate_dxf_registry_owners;
 use features::*;
 use media::{build_binary_part_map, build_media_data_url_map};
 use package_fidelity::build_package_fidelity_metadata;
+use pivot_cache_sources::build_pivot_cache_sources;
 use sheet::convert_sheet;
 use sheet_extents::*;
 use styles::*;
@@ -246,6 +248,7 @@ pub fn full_parse_result_to_parse_output(
                 (!rows.is_empty()).then_some((*cache_id, rows))
             })
             .collect();
+    let pivot_cache_sources = build_pivot_cache_sources(result.pivot_caches.iter());
 
     // 9. Build ParseOutput
     let workbook_stylesheet = result.parsed_stylesheet.clone().map(|stylesheet| {
@@ -278,6 +281,7 @@ pub fn full_parse_result_to_parse_output(
         shared_string_hints: Vec::new(),
         named_ranges,
         pivot_tables: all_parsed_pivots,
+        pivot_cache_sources,
         pivot_cache_records,
         data_table_regions: all_data_table_regions,
         slicer_caches,

@@ -108,8 +108,9 @@ pub(crate) fn convert_pivot_tables(
                 })
                 .collect();
 
-            let data_on_rows =
-                config.value_placements().len() > 1 && config.column_placements().is_empty();
+            let data_on_rows = config.data_on_rows.unwrap_or_else(|| {
+                config.value_placements().len() > 1 && config.column_placements().is_empty()
+            });
 
             Some(PivotTableDef {
                 id: config.id.clone(),

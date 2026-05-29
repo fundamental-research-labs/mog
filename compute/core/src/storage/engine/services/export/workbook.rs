@@ -479,6 +479,21 @@ pub(super) fn export_pivot_cache_records(
     yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn)
 }
 
+pub(super) fn export_pivot_cache_sources(
+    stores: &EngineStores,
+) -> Vec<domain_types::domain::pivot::PivotCacheSourceDef> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let sources_map = match workbook.get(&txn, KEY_PIVOT_CACHE_SOURCES) {
+        Some(Out::YMap(m)) => m,
+        _ => return Default::default(),
+    };
+
+    yrs_schema::pivot_cache_records::sources_from_yrs_map(&sources_map, &txn)
+}
+
 pub(super) fn export_extended_document_properties(
     stores: &EngineStores,
 ) -> Option<domain_types::ExtendedDocumentProperties> {

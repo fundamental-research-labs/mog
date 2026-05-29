@@ -500,6 +500,7 @@ mod tests {
             KEY_TIMELINES,
             KEY_POWER_QUERY,
             KEY_SCENARIOS,
+            KEY_PIVOT_CACHE_SOURCES,
             KEY_PIVOT_CACHE_RECORDS,
             KEY_RANGE_BINDINGS,
         ] {

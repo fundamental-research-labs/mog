@@ -319,6 +319,13 @@ pub struct PivotTableConfig {
     /// `ParseOutput.pivot_cache_records`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_id: Option<u32>,
+    /// OOXML `dataOnRows` data-axis placement.
+    ///
+    /// When absent for newly authored pivots, exporters may choose a default
+    /// from current placements. Imported pivots set this explicitly so multiple
+    /// value fields round-trip on the original row/column data axis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_on_rows: Option<bool>,
     /// OOXML `<location ref="…">` — the full A1 range the rendered pivot
     /// occupies (e.g., "A3:G20"). `None` for API-created pivots.
     #[serde(default, skip_serializing_if = "Option::is_none")]

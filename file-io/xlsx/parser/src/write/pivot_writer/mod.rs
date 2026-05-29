@@ -84,7 +84,7 @@ pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
         return empty_pivot_write_data();
     }
 
-    let assigned_caches = assign_cache_sources(&resolved_pivots);
+    let assigned_caches = assign_cache_sources(&resolved_pivots, &output.pivot_cache_sources);
     debug_assert_eq!(
         resolved_pivots.len(),
         assigned_caches.pivot_cache_ids.len(),

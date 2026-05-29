@@ -198,6 +198,13 @@ pub struct ParseOutput {
     pub shared_string_hints: Vec<SharedStringHint>,
     pub named_ranges: Vec<NamedRange>,
     pub pivot_tables: Vec<ParsedPivotTable>,
+    /// Workbook-owned live pivot cache schema/source state.
+    ///
+    /// This is current typed state, not package replay. Export uses it to
+    /// regenerate pivot cache definitions and to decide whether cache records can
+    /// be rederived from live source rows without changing the cache schema.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_cache_sources: Vec<PivotCacheSourceDef>,
     /// Pivot cache record data for eval-only use (cache_id → rows of cell values).
     /// Not consumed by the snapshot/hydration path. Populated from the OOXML
     /// pivot cache records so formula-eval can feed compute-pivot with the same
@@ -914,6 +921,7 @@ impl ParseOutput {
             &self.connections,
             &self.external_links,
             &self.pivot_tables,
+            &self.pivot_cache_sources,
             &self.pivot_cache_records,
             &self.slicer_caches,
             &self.metadata,
@@ -929,6 +937,11 @@ impl ParseOutput {
         self.connections = data_features.connections;
         self.external_links = data_features.external_links;
         self.pivot_tables = data_features.pivot_tables;
+        self.pivot_cache_sources = data_features
+            .pivot_caches
+            .iter()
+            .filter_map(|cache| cache.source.clone())
+            .collect();
         self.pivot_cache_records = data_features
             .pivot_caches
             .into_iter()

@@ -21,8 +21,13 @@ pub(super) struct AssignedCacheSources {
 
 pub(super) fn assign_cache_sources(
     resolved_pivots: &[(usize, &ParsedPivotTable)],
+    live_cache_sources: &[PivotCacheSourceDef],
 ) -> AssignedCacheSources {
     let mut sources = Vec::new();
+    let live_sources_by_id: HashMap<u32, &PivotCacheSourceDef> = live_cache_sources
+        .iter()
+        .map(|source| (source.cache_id, source))
+        .collect();
     let mut seen_cache_identities: HashMap<CacheIdentity, u32> = HashMap::new();
     let mut pivot_cache_ids = Vec::with_capacity(resolved_pivots.len());
     let mut next_generated_cache_id = resolved_pivots
@@ -64,14 +69,19 @@ pub(super) fn assign_cache_sources(
                 }
             };
             seen_cache_identities.insert(identity, cache_id);
-            sources.push(PivotCacheSourceDef {
-                cache_id,
-                source_name: pt.ooxml_preservation.cache_source_name.clone(),
-                source_sheet: Some(config.source_sheet_name.clone()),
-                source_range: Some(source_range),
-                field_names,
-                shared_items: pt.ooxml_preservation.cache_shared_items.clone(),
-            });
+            sources.push(
+                live_sources_by_id
+                    .get(&cache_id)
+                    .map(|source| (*source).clone())
+                    .unwrap_or(PivotCacheSourceDef {
+                        cache_id,
+                        source_name: pt.ooxml_preservation.cache_source_name.clone(),
+                        source_sheet: Some(config.source_sheet_name.clone()),
+                        source_range: Some(source_range),
+                        field_names,
+                        shared_items: pt.ooxml_preservation.cache_shared_items.clone(),
+                    }),
+            );
             cache_id
         };
         pivot_cache_ids.push(cache_id);

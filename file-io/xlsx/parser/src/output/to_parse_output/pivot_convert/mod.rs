@@ -156,6 +156,7 @@ pub(crate) fn parsed_pivot_to_config(
         auto_format: None,
         preserve_formatting: None,
         cache_id: Some(cache.id),
+        data_on_rows: Some(pivot.data_on_rows),
         ref_range,
         first_data_row,
         first_header_row,

@@ -75,6 +75,7 @@ mod pivot_keys {
     pub const AUTO_FORMAT: &str = "autoFormat";
     pub const PRESERVE_FORMATTING: &str = "preserveFormatting";
     pub const CACHE_ID: &str = "cacheId";
+    pub const DATA_ON_ROWS: &str = "dataOnRows";
     pub const REF_RANGE: &str = "refRange";
     pub const FIRST_DATA_ROW: &str = "firstDataRow";
     pub const FIRST_HEADER_ROW: &str = "firstHeaderRow";
@@ -155,6 +156,7 @@ fn pivot_from_yrs_map<T: yrs::ReadTxn>(map: &MapRef, txn: &T) -> Option<PivotTab
         auto_format: read_bool(map, txn, AUTO_FORMAT),
         preserve_formatting: read_bool(map, txn, PRESERVE_FORMATTING),
         cache_id: read_num(map, txn, CACHE_ID).map(|n| n as u32),
+        data_on_rows: read_bool(map, txn, DATA_ON_ROWS),
         ref_range: read_str(map, txn, REF_RANGE),
         first_data_row: read_num(map, txn, FIRST_DATA_ROW).map(|n| n as u32),
         first_header_row: read_num(map, txn, FIRST_HEADER_ROW).map(|n| n as u32),
@@ -239,6 +241,9 @@ fn write_pivot(parent: &MapRef, txn: &mut yrs::TransactionMut, key: &str, p: &Pi
     }
     if let Some(cache_id) = p.cache_id {
         map.insert(txn, CACHE_ID, Any::Number(f64::from(cache_id)));
+    }
+    if let Some(data_on_rows) = p.data_on_rows {
+        map.insert(txn, DATA_ON_ROWS, Any::Bool(data_on_rows));
     }
     if let Some(ref ref_range) = p.ref_range {
         map.insert(txn, REF_RANGE, Any::String(Arc::from(ref_range.as_str())));
@@ -441,6 +446,7 @@ mod tests {
             auto_format: None,
             preserve_formatting: None,
             cache_id: None,
+            data_on_rows: None,
             ref_range: None,
             first_data_row: None,
             first_header_row: None,

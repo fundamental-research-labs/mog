@@ -654,3 +654,19 @@ pub(super) fn hydrate_workbook_pivot_cache_records(
         records_map.insert(txn, &*key, value);
     }
 }
+
+pub(super) fn hydrate_workbook_pivot_cache_sources(
+    workbook: &MapRef,
+    sources: &[domain_types::domain::pivot::PivotCacheSourceDef],
+    txn: &mut yrs::TransactionMut,
+) {
+    if sources.is_empty() {
+        return;
+    }
+    let sources_map =
+        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_PIVOT_CACHE_SOURCES);
+    let prelim = yrs_schema::pivot_cache_records::sources_to_yrs_prelim(sources);
+    for (key, value) in prelim {
+        sources_map.insert(txn, &*key, value);
+    }
+}

@@ -3,7 +3,7 @@ use value_types::CellValue;
 
 use super::connections::{QueryTable, WorkbookConnectionSet};
 use super::external_link::ExternalLink;
-use super::pivot::ParsedPivotTable;
+use super::pivot::{ParsedPivotTable, PivotCacheSourceDef};
 use super::table::TableSpec;
 use crate::{DataTableRegion, SheetData, WorkbookMetadata};
 
@@ -77,6 +77,7 @@ impl WorkbookDataFeatures {
         connections: &WorkbookConnectionSet,
         external_links: &[ExternalLink],
         pivot_tables: &[ParsedPivotTable],
+        pivot_cache_sources: &[PivotCacheSourceDef],
         pivot_cache_records: &std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
         slicer_caches: &[ooxml_types::slicers::SlicerCacheDef],
         metadata: &Option<WorkbookMetadata>,
@@ -121,15 +122,31 @@ impl WorkbookDataFeatures {
             }
         }
 
-        let mut pivot_caches: Vec<_> = pivot_cache_records
+        let mut pivot_caches: Vec<_> = pivot_cache_sources
             .iter()
-            .map(|(cache_id, records)| WorkbookPivotCacheFeature {
-                cache_id: *cache_id,
-                records: records.clone(),
+            .map(|source| WorkbookPivotCacheFeature {
+                cache_id: source.cache_id,
+                source: Some(source.clone()),
+                records: pivot_cache_records
+                    .get(&source.cache_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 package: None,
                 unsupported: Vec::new(),
             })
             .collect();
+        for (cache_id, records) in pivot_cache_records {
+            if pivot_caches.iter().any(|cache| cache.cache_id == *cache_id) {
+                continue;
+            }
+            pivot_caches.push(WorkbookPivotCacheFeature {
+                cache_id: *cache_id,
+                source: None,
+                records: records.clone(),
+                package: None,
+                unsupported: Vec::new(),
+            });
+        }
         pivot_caches.sort_by_key(|cache| cache.cache_id);
 
         Self {
@@ -322,6 +339,8 @@ pub struct CustomXmlPayloadBinding {
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookPivotCacheFeature {
     pub cache_id: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<PivotCacheSourceDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub records: Vec<Vec<CellValue>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -144,7 +144,7 @@ fn coercion_fallback_should_still_check_constraints() {
 }
 
 #[test]
-fn constraints_are_not_rechecked_after_coercion_fallback() {
+fn constraints_are_checked_after_coercion_fallback() {
     let schema = make_schema_with_constraints(
         SchemaType::Number,
         SchemaConstraints {
@@ -153,9 +153,14 @@ fn constraints_are_not_rechecked_after_coercion_fallback() {
         },
     );
     let result = validate(&CellValue::Boolean(true), &schema);
-    assert!(result.valid);
+    assert!(!result.valid);
     assert!(result.coerced_value.is_some());
-    assert!(result.errors.is_empty());
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == ValidationErrorCode::MinValue)
+    );
 }
 
 #[test]

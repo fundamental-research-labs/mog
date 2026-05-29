@@ -1,4 +1,4 @@
-use value_types::CellValue;
+use value_types::{CellValue, FiniteF64};
 
 use crate::coercion;
 use crate::inference;
@@ -46,10 +46,22 @@ pub(super) fn validate(value: &CellValue, schema: &ColumnSchema) -> ValidationRe
     let mut coerced_value = None;
     if has_type_errors {
         let coercion_result = coercion::coerce(value, schema.schema_type);
-        if coercion_result.success {
-            coerced_value = coercion_result.value;
-            // Clear type mismatch errors since coercion succeeded
+        if coercion_result.success
+            && let Some(value_result) = coercion_result.value
+        {
+            let constraint_value = cell_value_result_to_cell_value(&value_result);
+            coerced_value = Some(value_result);
+            // Clear type mismatch errors since coercion succeeded.
             errors.retain(|e| e.code != ValidationErrorCode::TypeMismatch);
+            if errors.is_empty()
+                && schema.constraints.is_some()
+                && let Some(constraint_value) = constraint_value
+            {
+                errors.extend(constraint_dispatch::validate_constraints(
+                    &constraint_value,
+                    schema,
+                ));
+            }
         }
     }
 
@@ -67,6 +79,15 @@ pub(super) fn is_empty(value: &CellValue) -> bool {
         CellValue::Null => true,
         CellValue::Text(s) => s.is_empty(),
         _ => false,
+    }
+}
+
+fn cell_value_result_to_cell_value(value: &crate::types::CellValueResult) -> Option<CellValue> {
+    match value {
+        crate::types::CellValueResult::Number(n) => FiniteF64::new(*n).map(CellValue::Number),
+        crate::types::CellValueResult::Text(s) => Some(CellValue::Text(s.clone().into())),
+        crate::types::CellValueResult::Boolean(b) => Some(CellValue::Boolean(*b)),
+        crate::types::CellValueResult::Null => Some(CellValue::Null),
     }
 }
 

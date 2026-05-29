@@ -31,7 +31,7 @@ pub(super) fn validate_column(
         if let Some(ref mut set) = seen
             && !scalar::is_empty(value)
         {
-            let key = value_to_string(value);
+            let key = value_to_unique_key(value);
             if !set.insert(key) {
                 errs.push(ValidationError {
                     code: ValidationErrorCode::Unique,
@@ -55,13 +55,26 @@ pub(super) fn validate_column(
     }
 }
 
-fn value_to_string(value: &CellValue) -> String {
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+enum UniqueKey<'a> {
+    Number(u64),
+    Text(&'a str),
+    Boolean(bool),
+    Unsupported,
+}
+
+fn value_to_unique_key(value: &CellValue) -> UniqueKey<'_> {
     match value {
-        CellValue::Number(n) => format!("{}", n.get()),
-        CellValue::Text(s) => s.to_string(),
-        CellValue::Boolean(b) => format!("{}", b),
-        _ => String::new(),
+        CellValue::Number(n) => UniqueKey::Number(f64_to_unique_bits(n.get())),
+        CellValue::Text(s) => UniqueKey::Text(s),
+        CellValue::Boolean(b) => UniqueKey::Boolean(*b),
+        _ => UniqueKey::Unsupported,
     }
+}
+
+fn f64_to_unique_bits(n: f64) -> u64 {
+    let n = if n == 0.0 { 0.0 } else { n };
+    n.to_bits()
 }
 
 /// Result of validating an entire column.

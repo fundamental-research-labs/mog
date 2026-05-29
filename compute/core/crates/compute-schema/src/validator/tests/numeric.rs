@@ -144,7 +144,7 @@ fn percentage_text_numeric_extraction_for_bounds() {
 }
 
 #[test]
-fn plain_numeric_percentage_text_uses_current_extraction_behavior() {
+fn plain_numeric_percentage_text_uses_percentage_coercion_for_bounds() {
     let schema = make_schema_with_constraints(
         SchemaType::Percentage,
         SchemaConstraints {
@@ -154,5 +154,6 @@ fn plain_numeric_percentage_text_uses_current_extraction_behavior() {
         },
     );
     assert!(validate(&text("0.5"), &schema).valid);
-    assert!(!validate(&text("50"), &schema).valid);
+    assert!(validate(&text("50"), &schema).valid);
+    assert!(!validate(&text("80"), &schema).valid);
 }

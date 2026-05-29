@@ -414,6 +414,12 @@ pub fn generate_constants_ts() -> String {
     .unwrap();
     writeln!(
         out,
+        "export const VALUE_TYPE_IMAGE = {};",
+        flags::VALUE_TYPE_IMAGE
+    )
+    .unwrap();
+    writeln!(
+        out,
         "export const HAS_FORMULA = 0x{:x};",
         flags::HAS_FORMULA
     )
@@ -460,6 +466,12 @@ pub fn generate_constants_ts() -> String {
         flags::HAS_CF_EXTRAS
     )
     .unwrap();
+    writeln!(
+        out,
+        "export const HAS_CELL_IMAGE = 0x{:x};",
+        flags::HAS_CELL_IMAGE
+    )
+    .unwrap();
     writeln!(out).unwrap();
     writeln!(
         out,
@@ -472,6 +484,7 @@ pub fn generate_constants_ts() -> String {
     writeln!(out, "  Text = {},", flags::VALUE_TYPE_TEXT).unwrap();
     writeln!(out, "  Bool = {},", flags::VALUE_TYPE_BOOL).unwrap();
     writeln!(out, "  Error = {},", flags::VALUE_TYPE_ERROR).unwrap();
+    writeln!(out, "  Image = {},", flags::VALUE_TYPE_IMAGE).unwrap();
     writeln!(out, "}}").unwrap();
     writeln!(out).unwrap();
 

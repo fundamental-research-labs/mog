@@ -6,7 +6,7 @@ use crate::domain::cond_format::{
 use crate::infra::scanner::{self, find_gt_simd, find_tag_simd};
 use crate::output::results::CfSummary;
 use ooxml_types::cond_format::{
-    CfRule, CfRuleX14, CfRuleType, ConditionalFormatting, ConditionalFormattingX14,
+    CfRule, CfRuleType, CfRuleX14, ConditionalFormatting, ConditionalFormattingX14,
 };
 
 /// Parse conditional formats from worksheet XML.

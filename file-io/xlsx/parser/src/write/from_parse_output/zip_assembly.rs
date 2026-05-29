@@ -145,9 +145,10 @@ pub(super) fn write_zip_package(
         .map(|metadata| &metadata.feature_properties)
         .filter(|feature_properties| {
             !feature_properties.bags.is_empty()
-                && feature_properties.bags.iter().all(|bag| {
-                    bag.kind != domain_types::FeaturePropertyBagKind::Unknown
-                })
+                && feature_properties
+                    .bags
+                    .iter()
+                    .all(|bag| bag.kind != domain_types::FeaturePropertyBagKind::Unknown)
         })
     {
         let path = feature_properties

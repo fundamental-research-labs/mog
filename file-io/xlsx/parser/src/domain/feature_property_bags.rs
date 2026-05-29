@@ -173,7 +173,9 @@ pub fn parse_feature_property_bags_xml(xml: &[u8]) -> Result<WorkbookFeatureProp
                     if let Some(bag) = current_bag.take() {
                         bags.push(bag);
                     }
-                } else if current_bag.is_some() && let Some(element) = stack.pop() {
+                } else if current_bag.is_some()
+                    && let Some(element) = stack.pop()
+                {
                     push_element(&mut stack, current_bag.as_mut(), element);
                 }
             }
@@ -223,11 +225,18 @@ pub fn write_feature_property_bags_xml(feature_properties: &WorkbookFeaturePrope
         for attribute in &bag.attributes {
             writer.attr(&attribute.name, &attribute.value);
         }
-        if !bag.attributes.iter().any(|attribute| attribute.name == "type") {
+        if !bag
+            .attributes
+            .iter()
+            .any(|attribute| attribute.name == "type")
+        {
             writer.attr("type", &bag.bag_type);
         }
         if let Some(ext_ref) = bag.ext_ref.as_deref()
-            && !bag.attributes.iter().any(|attribute| attribute.name == "extRef")
+            && !bag
+                .attributes
+                .iter()
+                .any(|attribute| attribute.name == "extRef")
         {
             writer.attr("extRef", ext_ref);
         }

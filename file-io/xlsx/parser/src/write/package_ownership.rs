@@ -1080,11 +1080,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
         unsupported_diagnostic_policy: "malformed or invalidated volatile dependencies are dropped; other adjuncts remain unsupported-needs-model-dropped with package part and relationship fingerprints",
         dirty_invalidation_triggers: &["detected package adjunct", "owning typed feature mutation"],
-        semantic_references: &[
-            "timeline cache id",
-            "revision id",
-            "XML map id",
-        ],
+        semantic_references: &["timeline cache id", "revision id", "XML map id"],
         user_visible_behavior: "functional but currently unmodeled OOXML surfaces that must not be stale-replayed",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plans 02/05",
     },

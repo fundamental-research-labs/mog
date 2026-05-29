@@ -15,8 +15,8 @@ mod chart_replay;
 mod differential_formats;
 mod doc_props;
 mod export_context;
-mod form_control_export_plan;
 mod external_links;
+mod form_control_export_plan;
 mod form_controls;
 mod hyperlink_targets;
 mod metadata;
@@ -1154,9 +1154,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         .map(|metadata| &metadata.feature_properties)
         .filter(|feature_properties| {
             !feature_properties.bags.is_empty()
-                && feature_properties.bags.iter().all(|bag| {
-                    bag.kind != domain_types::FeaturePropertyBagKind::Unknown
-                })
+                && feature_properties
+                    .bags
+                    .iter()
+                    .all(|bag| bag.kind != domain_types::FeaturePropertyBagKind::Unknown)
         });
     if let Some(feature_properties) = feature_properties {
         crate::write::package_graph::register_workbook_feature_property_bags(

@@ -157,7 +157,10 @@ pub struct WorkbookMetadata {
     pub rich_data: Option<WorkbookRichData>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imported_metadata_xml: Option<ImportedMetadataXml>,
-    #[serde(default, skip_serializing_if = "crate::WorkbookFeatureProperties::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::WorkbookFeatureProperties::is_empty"
+    )]
     pub feature_properties: crate::WorkbookFeatureProperties,
 }
 

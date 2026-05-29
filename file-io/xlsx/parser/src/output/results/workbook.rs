@@ -719,6 +719,9 @@ pub struct FullParseResult {
     /// Parsed workbook data connections from `xl/connections.xml`.
     #[serde(skip)]
     pub connections: domain_types::domain::connections::WorkbookConnectionSet,
+    /// Typed workbook feature-property bags from `xl/featurePropertyBag/*`.
+    #[serde(skip)]
+    pub feature_properties: domain_types::WorkbookFeatureProperties,
     /// Raw `customXml/` parts for verbatim round-trip passthrough.
     /// Stores all `customXml/item*.xml`, `customXml/itemProps*.xml`, and
     /// `customXml/_rels/item*.xml.rels` entries keyed by their ZIP path.

@@ -80,6 +80,7 @@ pub(super) fn metadata_to_domain(
             .collect(),
         rich_data: None,
         imported_metadata_xml: None,
+        feature_properties: Default::default(),
     };
 
     (!result.is_empty()).then_some(result)

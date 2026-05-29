@@ -10,6 +10,7 @@ pub(super) fn append_dropped_import_diagnostics(
     diagnostics: &mut ParseDiagnostics,
 ) {
     let mut dropped: Vec<String> = Vec::new();
+    append_feature_property_diagnostics(result, diagnostics);
 
     if let Some(ext) = result.extensions.as_ref() {
         append_suppressed_auxiliary_diagnostics(ext.imported_parts.paths(), &mut dropped);
@@ -96,6 +97,31 @@ pub(super) fn append_dropped_import_diagnostics(
         col: None,
     });
     diagnostics.import_report = Some(diagnostics.clone().into_import_report());
+}
+
+fn append_feature_property_diagnostics(
+    result: &FullParseResult,
+    diagnostics: &mut ParseDiagnostics,
+) {
+    let initial_count = diagnostics.errors.len();
+    for diagnostic in &result.feature_properties.diagnostics {
+        diagnostics.errors.push(domain_types::ParseError {
+            code: 9002,
+            severity: match diagnostic.severity {
+                domain_types::DataFeatureDiagnosticSeverity::Info => "info",
+                domain_types::DataFeatureDiagnosticSeverity::Warning => "warning",
+                domain_types::DataFeatureDiagnosticSeverity::Error => "error",
+            }
+            .to_string(),
+            message: diagnostic.summary.clone(),
+            part: diagnostic.package_path.clone(),
+            row: None,
+            col: None,
+        });
+    }
+    if diagnostics.errors.len() != initial_count {
+        diagnostics.import_report = Some(diagnostics.clone().into_import_report());
+    }
 }
 
 fn append_suppressed_auxiliary_diagnostics<'a>(

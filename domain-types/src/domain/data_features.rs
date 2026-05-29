@@ -42,6 +42,8 @@ pub struct WorkbookDataFeatures {
     pub metadata: Option<WorkbookMetadata>,
     #[serde(default, skip_serializing_if = "WorkbookWhatIfFeatures::is_empty")]
     pub what_if: WorkbookWhatIfFeatures,
+    #[serde(default, skip_serializing_if = "WorkbookFeatureProperties::is_empty")]
+    pub feature_properties: WorkbookFeatureProperties,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unsupported: Vec<DataFeatureDiagnostic>,
 }
@@ -65,6 +67,7 @@ impl WorkbookDataFeatures {
                 .as_ref()
                 .is_none_or(WorkbookMetadata::is_empty)
             && self.what_if.is_empty()
+            && self.feature_properties.is_empty()
             && self.unsupported.is_empty()
     }
 
@@ -147,9 +150,103 @@ impl WorkbookDataFeatures {
                 scenarios: Vec::new(),
                 data_consolidations: Vec::new(),
             },
+            feature_properties: metadata
+                .as_ref()
+                .map(|metadata| metadata.feature_properties.clone())
+                .unwrap_or_default(),
             unsupported: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookFeatureProperties {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bags: Vec<FeaturePropertyBag>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DataFeatureDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<FeaturePropertyBagPackageIdentity>,
+}
+
+impl WorkbookFeatureProperties {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bags.is_empty() && self.diagnostics.is_empty() && self.package.is_none()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturePropertyBagPackageIdentity {
+    pub path: String,
+    pub content_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_relationship_id: Option<String>,
+    pub workbook_relationship_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_relationship_target: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturePropertyBag {
+    pub stable_id: String,
+    pub imported_ordinal: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_bag_id: Option<u32>,
+    pub bag_type: String,
+    pub kind: FeaturePropertyBagKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<FeaturePropertyAttribute>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ext_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<FeaturePropertyBagElement>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FeaturePropertyBagKind {
+    Checkbox,
+    XfControls,
+    XfComplement,
+    XfComplements,
+    #[default]
+    Unknown,
+}
+
+impl FeaturePropertyBagKind {
+    #[must_use]
+    pub fn from_bag_type(value: &str) -> Self {
+        match value {
+            "Checkbox" => Self::Checkbox,
+            "XFControls" => Self::XfControls,
+            "XFComplement" => Self::XfComplement,
+            "XFComplements" => Self::XfComplements,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturePropertyAttribute {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturePropertyBagElement {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<FeaturePropertyAttribute>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<FeaturePropertyBagElement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -327,6 +424,11 @@ pub enum DataFeatureDiagnosticCode {
     UnsupportedDataModel,
     UnsupportedCubeMetadata,
     UnsupportedFeaturePropertyBag,
+    MissingFeaturePropertyBagPart,
+    MissingFeaturePropertyBagContentType,
+    WrongFeaturePropertyBagContentType,
+    MalformedFeaturePropertyBagXml,
+    InvalidFeaturePropertyBagReference,
     OrphanExternalLink,
     BrokenQueryTableRelationship,
     MissingConnectionId,

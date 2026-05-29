@@ -89,6 +89,10 @@ const CT_QUERY_TABLE: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml";
 const REL_VOLATILE_DEPENDENCIES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/volatileDependencies";
+const CT_FEATURE_PROPERTY_BAG: &str =
+    crate::domain::feature_property_bags::FEATURE_PROPERTY_BAG_CONTENT_TYPE;
+const REL_FEATURE_PROPERTY_BAG: &str =
+    crate::domain::feature_property_bags::FEATURE_PROPERTY_BAG_REL_TYPE;
 
 pub(crate) fn is_external_target_mode(mode: Option<&str>) -> bool {
     mode.is_some_and(|mode| mode.eq_ignore_ascii_case("External"))

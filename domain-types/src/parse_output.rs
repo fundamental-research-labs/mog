@@ -443,6 +443,11 @@ impl ParseOutput {
             .collect();
         self.slicer_caches = data_features.slicer_caches;
         self.metadata = data_features.metadata;
+        if !data_features.feature_properties.is_empty() {
+            self.metadata
+                .get_or_insert_with(WorkbookMetadata::default)
+                .feature_properties = data_features.feature_properties;
+        }
         self.data_table_regions = data_features.what_if.data_table_regions;
 
         for sheet in &mut self.sheets {

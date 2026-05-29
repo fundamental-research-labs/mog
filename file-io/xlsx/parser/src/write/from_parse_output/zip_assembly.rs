@@ -139,6 +139,31 @@ pub(super) fn write_zip_package(
             );
         }
     }
+    if let Some(feature_properties) = output
+        .metadata
+        .as_ref()
+        .map(|metadata| &metadata.feature_properties)
+        .filter(|feature_properties| {
+            !feature_properties.bags.is_empty()
+                && feature_properties.bags.iter().all(|bag| {
+                    bag.kind != domain_types::FeaturePropertyBagKind::Unknown
+                })
+        })
+    {
+        let path = feature_properties
+            .package
+            .as_ref()
+            .map(|package| package.path.as_str())
+            .unwrap_or(crate::domain::feature_property_bags::DEFAULT_FEATURE_PROPERTY_BAG_PATH);
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            path,
+            crate::domain::feature_property_bags::write_feature_property_bags_xml(
+                feature_properties,
+            ),
+        )?;
+    }
 
     // Metadata passthrough
     if let Some(ref meta) = metadata_xml {

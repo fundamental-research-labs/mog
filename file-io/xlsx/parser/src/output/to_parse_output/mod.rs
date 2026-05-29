@@ -220,6 +220,11 @@ pub fn full_parse_result_to_parse_output(
             imported_metadata_xml(raw_metadata_xml, metadata_for_import, &sheet_data_vec);
         metadata_for_import.imported_metadata_xml = Some(imported);
     }
+    if !result.feature_properties.is_empty() {
+        metadata
+            .get_or_insert_with(domain_types::WorkbookMetadata::default)
+            .feature_properties = result.feature_properties.clone();
+    }
 
     // 8. Slicer caches (workbook-level) — already ooxml-types, pass through directly
     let slicer_caches = result.slicer_caches.clone();

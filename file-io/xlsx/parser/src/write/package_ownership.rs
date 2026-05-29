@@ -983,12 +983,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plans 01/05",
     },
     OoxmlOwnershipRow {
-        surface: "external links, web publishing, VBA/macros, revisions, feature property bags, smart tags",
+        surface: "external links, web publishing, VBA/macros, revisions, and smart tags",
         package_part_patterns: &[
             "xl/externalLinks/externalLink*.xml",
             "xl/vbaProject.bin",
             "xl/revisions/*",
-            "xl/featurePropertyBag/*",
             "xl/smartTags.xml",
         ],
         ooxml_modules: &[
@@ -1069,11 +1068,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         canonical_type_status: CanonicalTypeStatus::InventoryOnly,
         classification: OoxmlOwnershipClassification::TypedViewOnly,
-        production_reader: "package inventory and volatile dependency workbook relationship scanner",
-        private_parser_adapter: "workbook-owned volatile dependency sidecar plus unsupported adjunct detectors",
-        full_parse_result_field: "volatile_dependency_part, unsupported package diagnostics",
-        parse_output_domain_owner: "ParseOutput.volatile_dependency_part for valid passive sidecar preservation",
-        yrs_app_persistence_owner: "workbook volatileDependencyPackagePart JSON sidecar",
+        production_reader: "package inventory, volatile dependency scanner, and feature-property-bag parser",
+        private_parser_adapter: "workbook-owned volatile dependency sidecar plus typed feature-property bag scanner",
+        full_parse_result_field: "volatile_dependency_part, feature_properties, unsupported package diagnostics",
+        parse_output_domain_owner: "ParseOutput.volatile_dependency_part and WorkbookMetadata.feature_properties",
+        yrs_app_persistence_owner: "workbook volatileDependencyPackagePart JSON sidecar and workbook metadata JSON",
         api_exposure: ApiExposureLevel::DiagnosticOnly,
         production_writer: "package graph modeled workbook relationship/content type and raw sidecar bytes when valid",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
@@ -1084,7 +1083,6 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         semantic_references: &[
             "timeline cache id",
             "revision id",
-            "feature property bag id",
             "XML map id",
         ],
         user_visible_behavior: "functional but currently unmodeled OOXML surfaces that must not be stale-replayed",
@@ -1120,6 +1118,8 @@ pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {
         || (path.starts_with("xl/queryTables/queryTable") && path.ends_with(".xml"))
     {
         Some(PackageFeatureOwner::ConnectionsAndQueryTables)
+    } else if path.starts_with("xl/featurePropertyBag/") && path.ends_with(".xml") {
+        Some(PackageFeatureOwner::CoreWorkbook)
     } else if (path.starts_with("xl/embeddings/oleObject")
         || path.starts_with("xl/embeddings/package"))
         && path.ends_with(".bin")
@@ -1208,10 +1208,11 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || path.starts_with("_xmlsignatures/sig")
     {
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden)
+    } else if path.starts_with("xl/featurePropertyBag/") {
+        Some(AuxiliaryPackagePartPolicy::TypedOwned)
     } else if path.starts_with("xl/revisions/")
         || path.starts_with("xl/timelineCaches/")
         || path.starts_with("xl/timelines/")
-        || path.starts_with("xl/featurePropertyBag/")
     {
         Some(AuxiliaryPackagePartPolicy::DiagnosticsOnly)
     } else {

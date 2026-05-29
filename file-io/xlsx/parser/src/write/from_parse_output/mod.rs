@@ -1148,6 +1148,22 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     if !output.connections.is_empty() {
         crate::write::package_graph::register_workbook_connections(&mut package_graph_builder)?;
     }
+    let feature_properties = output
+        .metadata
+        .as_ref()
+        .map(|metadata| &metadata.feature_properties)
+        .filter(|feature_properties| {
+            !feature_properties.bags.is_empty()
+                && feature_properties.bags.iter().all(|bag| {
+                    bag.kind != domain_types::FeaturePropertyBagKind::Unknown
+                })
+        });
+    if let Some(feature_properties) = feature_properties {
+        crate::write::package_graph::register_workbook_feature_property_bags(
+            &mut package_graph_builder,
+            feature_properties,
+        )?;
+    }
     for entry in &pivot_data.pivot_cache_entries {
         crate::write::package_graph::register_pivot_cache(
             &mut package_graph_builder,

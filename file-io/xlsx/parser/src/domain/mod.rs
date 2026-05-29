@@ -14,6 +14,7 @@ pub mod content_types;
 pub mod controls;
 pub mod drawings;
 pub mod external;
+pub mod feature_property_bags;
 pub mod hyperlinks;
 pub mod metadata;
 pub mod names;

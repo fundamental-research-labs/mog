@@ -941,6 +941,11 @@ pub(super) fn parse_xlsx_full_native_impl(
         &content_type_overrides,
     );
     let connections = crate::domain::connections::parse_connections(&archive);
+    let feature_properties = crate::domain::feature_property_bags::read_workbook_feature_properties(
+        &archive,
+        &workbook_relationships,
+        &content_type_overrides,
+    );
 
     // Build result
     let result = FullParseResult {
@@ -1008,6 +1013,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         raw_doc_metadata_label_info,
         external_links,
         connections,
+        feature_properties,
         volatile_dependency_part,
         custom_xml_parts,
         raw_persons_xml,
@@ -1038,7 +1044,6 @@ pub(super) fn parse_xlsx_full_native_impl(
             );
             for entry in archive.entries() {
                 if entry.name.starts_with("xl/printerSettings/")
-                    || entry.name.starts_with("xl/featurePropertyBag/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
                     || entry.name.starts_with("xl/timelineCaches/")

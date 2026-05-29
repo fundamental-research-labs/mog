@@ -617,6 +617,8 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
         }],
         value_metadata: vec![],
         rich_data: None,
+        imported_metadata_xml: None,
+        feature_properties: Default::default(),
     });
 
     let engine = engine_from_parse_output_normal(&output);

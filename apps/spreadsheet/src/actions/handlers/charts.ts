@@ -38,6 +38,7 @@ import { type SheetId, sheetId } from '@mog-sdk/contracts/core';
 
 import { normalizeChartConfig } from '../../adapters/charts/chart-config-adapter';
 import { pasteChartFromClipboard } from './chart-clipboard';
+import { deselectChartObjects, selectChartObject } from './chart-selection';
 import { expandToDataRegion } from './expand-to-data-region';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
@@ -128,8 +129,7 @@ export const EDIT_CHART: ActionHandler = (deps, payload): ActionResult => {
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  // Send event to chart machine to enter editing state
-  deps.commands.chart.select(chartId);
+  selectChartObject(deps, chartId);
   deps.commands.chart.startEdit();
 
   return handled();
@@ -147,9 +147,8 @@ export const EDIT_CHART_TITLE: ActionHandler = (deps, payload): ActionResult => 
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  // Send event to chart machine to enter title editing state
   // Start title edit with empty string as original value (will be populated by the UI)
-  deps.commands.chart.select(chartId);
+  selectChartObject(deps, chartId);
   deps.commands.chart.startTitleEdit('');
 
   return handled();
@@ -221,9 +220,8 @@ export const DUPLICATE_CHART: AsyncActionHandler = async (deps, payload): Promis
       anchorCol: (existing.anchorCol ?? 0) + 2,
     });
 
-    // Select the newly duplicated chart
     if (newChart?.id) {
-      deps.commands.chart.select(newChart.id);
+      selectChartObject(deps, newChart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
@@ -253,8 +251,7 @@ export const DELETE_CHART: AsyncActionHandler = async (deps, payload): Promise<A
     return { handled: false, error: e.message ?? String(e) };
   }
 
-  // Deselect chart after deletion
-  deps.commands.chart.deselect();
+  deselectChartObjects(deps);
 
   return handled();
 };
@@ -464,7 +461,7 @@ export const SELECT_CHART: ActionHandler = (deps, payload): ActionResult => {
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  deps.commands.chart.select(chartId);
+  selectChartObject(deps, chartId);
 
   return handled();
 };
@@ -479,8 +476,7 @@ export const DESELECT_CHART: ActionHandler = (deps, payload): ActionResult => {
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  // Note: The chart machine's DESELECT event doesn't take chartId - it deselects current selection
-  deps.commands.chart.deselect();
+  deselectChartObjects(deps);
 
   return handled();
 };
@@ -490,7 +486,7 @@ export const DESELECT_CHART: ActionHandler = (deps, payload): ActionResult => {
  * No payload required.
  */
 export const DESELECT_ALL_CHARTS: ActionHandler = (deps): ActionResult => {
-  deps.commands.chart.deselectAll();
+  deselectChartObjects(deps);
 
   return handled();
 };
@@ -505,7 +501,7 @@ export const ADD_CHART_TO_SELECTION: ActionHandler = (deps, payload): ActionResu
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  deps.commands.chart.addToSelection(chartId);
+  deps.commands.object.selectObject(chartId, true, false);
 
   return handled();
 };
@@ -520,7 +516,7 @@ export const TOGGLE_CHART_SELECTION: ActionHandler = (deps, payload): ActionResu
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  deps.commands.chart.toggleSelection(chartId);
+  deps.commands.object.selectObject(chartId, false, true);
 
   return handled();
 };
@@ -736,7 +732,7 @@ export const CYCLE_NEXT_CHART: AsyncActionHandler = async (
   const currentChartId = payload?.currentChartId;
   if (!currentChartId || charts.length === 1) {
     // No current chart or only one chart - select first
-    deps.commands.chart.select(charts[0].id);
+    selectChartObject(deps, charts[0].id);
     return handled();
   }
 
@@ -744,13 +740,13 @@ export const CYCLE_NEXT_CHART: AsyncActionHandler = async (
   const currentIndex = charts.findIndex((c) => c.id === currentChartId);
   if (currentIndex === -1) {
     // Current chart not found - select first
-    deps.commands.chart.select(charts[0].id);
+    selectChartObject(deps, charts[0].id);
     return handled();
   }
 
   // Select next chart (wrap around to first)
   const nextIndex = (currentIndex + 1) % charts.length;
-  deps.commands.chart.select(charts[nextIndex].id);
+  selectChartObject(deps, charts[nextIndex].id);
 
   return handled();
 };
@@ -776,7 +772,7 @@ export const CYCLE_PREVIOUS_CHART: AsyncActionHandler = async (
   const currentChartId = payload?.currentChartId;
   if (!currentChartId || charts.length === 1) {
     // No current chart or only one chart - select last
-    deps.commands.chart.select(charts[charts.length - 1].id);
+    selectChartObject(deps, charts[charts.length - 1].id);
     return handled();
   }
 
@@ -784,13 +780,13 @@ export const CYCLE_PREVIOUS_CHART: AsyncActionHandler = async (
   const currentIndex = charts.findIndex((c) => c.id === currentChartId);
   if (currentIndex === -1) {
     // Current chart not found - select last
-    deps.commands.chart.select(charts[charts.length - 1].id);
+    selectChartObject(deps, charts[charts.length - 1].id);
     return handled();
   }
 
   // Select previous chart (wrap around to last)
   const prevIndex = currentIndex === 0 ? charts.length - 1 : currentIndex - 1;
-  deps.commands.chart.select(charts[prevIndex].id);
+  selectChartObject(deps, charts[prevIndex].id);
 
   return handled();
 };
@@ -885,7 +881,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     if (!ranges || ranges.length === 0) {
       // No selection - use smart positioning with default position
       const position = await getSmartChartPosition(deps, null, DEFAULT_POSITION, sheetId);
-      await ws.charts.add({
+      const newChart = await ws.charts.add({
         type: chartType,
         subType: chartSubType,
         dataRange: '',
@@ -894,6 +890,9 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
         width: DEFAULT_WIDTH_CELLS,
         height: DEFAULT_HEIGHT_CELLS,
       });
+      if (newChart?.id) {
+        selectChartObject(deps, newChart.id);
+      }
       return handled();
     }
 
@@ -906,7 +905,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     // Use smart positioning to ensure chart is visible
     const position = await getSmartChartPosition(deps, range, DEFAULT_POSITION, sheetId);
 
-    await ws.charts.add({
+    const newChart = await ws.charts.add({
       type: chartType,
       subType: chartSubType,
       dataRange,
@@ -915,6 +914,9 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
       width: DEFAULT_WIDTH_CELLS,
       height: DEFAULT_HEIGHT_CELLS,
     });
+    if (newChart?.id) {
+      selectChartObject(deps, newChart.id);
+    }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -1047,7 +1049,7 @@ export const INSERT_CHART_FROM_WIZARD: AsyncActionHandler = async (deps): Promis
   // Create chart via unified Worksheet API
   // Note: ChartConfig uses 'axis' property with xAxis/yAxis sub-properties
   try {
-    await ws.charts.add(
+    const newChart = await ws.charts.add(
       normalizeChartConfig({
         type: dialogState.chartType,
         subType: dialogState.variantId as ChartConfig['subType'],
@@ -1081,6 +1083,9 @@ export const INSERT_CHART_FROM_WIZARD: AsyncActionHandler = async (deps): Promis
         height: DEFAULT_HEIGHT_CELLS,
       }),
     );
+    if (newChart?.id) {
+      selectChartObject(deps, newChart.id);
+    }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }

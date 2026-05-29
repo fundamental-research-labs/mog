@@ -642,14 +642,15 @@ export class KeyboardCoordinator {
    * This enables mode-specific keyboard handling (Enter Mode vs Edit Mode).
    *
    * The cascade order, top-down, is:
-   * 1. objectSelected (with editing inside object text)
+   * 1. editing inside object text
    * 2. formulaEditMode / formulaEnterMode
    * 3. editMode / enterMode
    * 4. flashFillPreview
-   * 5. **keyTipMode** — only when a chord is pending AND nothing
-   * above is active. The chord buffer is preempted (cleared) by
-   * anything above; see {@link preemptChordIfNeeded}.
-   * 6. grid (default).
+   * 5. **keyTipMode** — when a chord is pending and no editing/dialog-like
+   * mode is active. Plain object/chart selection does not block Excel
+   * ribbon keytips.
+   * 6. objectSelected
+   * 7. grid (default).
    *
    */
   private getCurrentContext(): ShortcutContext {
@@ -661,7 +662,6 @@ export class KeyboardCoordinator {
       if (this.deps.isEditingObjectText?.()) {
         return 'editing';
       }
-      return 'objectSelected';
     }
 
     // Check editor state - Use isEditMode context to determine Enter/Edit Mode
@@ -697,6 +697,10 @@ export class KeyboardCoordinator {
       return 'keyTipMode';
     }
 
+    if (this.deps.hasObjectSelection?.()) {
+      return 'objectSelected';
+    }
+
     return 'grid';
   }
 
@@ -708,17 +712,17 @@ export class KeyboardCoordinator {
    * coordinator's transition code rather than implicitly via cascade
    * ordering.
    *
-   * Excel parity: opening a dialog or starting cell-edit during keytip
-   * mode cancels keytips. Same rule for object-selection focus and
-   * flash-fill preview. The chord is cleared regardless of whether any
-   * shortcut for the active context fires next.
+   * Excel parity: opening a dialog, starting cell-edit, editing object text,
+   * or showing flash-fill preview during keytip mode cancels keytips. Plain
+   * object/chart selection keeps keytips active so contextual ribbon chords
+   * like Alt+J,C can target Chart Design.
    */
   private preemptChordIfNeeded(): void {
     if (this.chordPending === null) return;
     if (!this.deps) return;
 
-    if (this.deps.hasObjectSelection?.()) {
-      this.cancelChord('preempted-by-object-selection');
+    if (this.deps.hasObjectSelection?.() && this.deps.isEditingObjectText?.()) {
+      this.cancelChord('preempted-by-object-text-edit');
       return;
     }
     const editorState = this.deps.editorActor.getSnapshot();
@@ -970,8 +974,10 @@ export class KeyboardCoordinator {
    * - The detector is currently armed (`armedAt` is non-null).
    * - No keydown intervened between the Alt-down and this Alt-up.
    * - Elapsed wall-clock time ≤ {@link ALT_TAP_MAX_MS}.
-   * - No more-specific cascade context is active (object selection,
-   * editing, flashFillPreview).
+   * - No editing/dialog-like cascade context is active (object text editing,
+   * cell editing, flashFillPreview). Plain object/chart selection is allowed
+   * because Excel keytips remain available while contextual objects are
+   * selected.
    *
    * On success, set `chordPending` to an empty buffer (no leader keystroke
    * yet — the user hasn't typed `KeyH`/`KeyN`/etc.). The subsequent
@@ -992,7 +998,7 @@ export class KeyboardCoordinator {
     }
     // Cascade gate: a more-specific mode forbids entering keytip mode.
     if (this.deps) {
-      if (this.deps.hasObjectSelection?.()) {
+      if (this.deps.hasObjectSelection?.() && this.deps.isEditingObjectText?.()) {
         this.altTap = { armedAt: null, hadInterveningKeydown: false };
         return false;
       }

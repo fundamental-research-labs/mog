@@ -182,6 +182,7 @@ function makeCoordinator(
   shortcuts: KeyboardShortcut[],
   options?: {
     hasObjectSelection?: () => boolean;
+    isEditingObjectText?: () => boolean;
     isFlashFillPreviewActive?: () => boolean;
     editorMatches?: (state: string) => boolean;
     dispatch?: jest.Mock;
@@ -216,6 +217,7 @@ function makeCoordinator(
     paneFocusActor: { getSnapshot: () => ({}) } as never,
     getActiveSheetId: () => 'sheet1',
     hasObjectSelection: options?.hasObjectSelection,
+    isEditingObjectText: options?.isEditingObjectText,
     isFlashFillPreviewActive: options?.isFlashFillPreviewActive,
     dispatch: dispatchMock as never,
     uiStore: {
@@ -655,7 +657,7 @@ describe('KeyboardCoordinator chord — priority pre-emption', () => {
     expect(coordinator.isChordPending()).toBe(false);
   });
 
-  it('object-selection becoming active clears chord', () => {
+  it('object-selection keeps keytip chord active for contextual ribbon tabs', () => {
     let objectSelected = false;
     const { coordinator } = makeCoordinator([chord('open-cf', 'KeyH', 'KeyL')], {
       hasObjectSelection: () => objectSelected,
@@ -667,7 +669,36 @@ describe('KeyboardCoordinator chord — priority pre-emption', () => {
 
     objectSelected = true;
     coordinator.preemptChordForCascadeChange();
+    expect(coordinator.isChordPending()).toBe(true);
+    expect(coordinator.getContext()).toBe('keyTipMode');
+  });
+
+  it('object text editing becoming active clears chord', () => {
+    let objectSelected = false;
+    let editingObjectText = false;
+    const { coordinator } = makeCoordinator([chord('open-cf', 'KeyH', 'KeyL')], {
+      hasObjectSelection: () => objectSelected,
+      isEditingObjectText: () => editingObjectText,
+    });
+
+    altTap(coordinator);
+    coordinator.handleKeyboardEvent(evt({ code: 'KeyH', key: 'h', altKey: true }));
+    expect(coordinator.isChordPending()).toBe(true);
+
+    objectSelected = true;
+    editingObjectText = true;
+    coordinator.preemptChordForCascadeChange();
     expect(coordinator.isChordPending()).toBe(false);
+  });
+
+  it('Alt-tap while an object is selected enters keytip mode', () => {
+    const { coordinator } = makeCoordinator([chord('open-cf', 'KeyH', 'KeyL')], {
+      hasObjectSelection: () => true,
+    });
+
+    altTap(coordinator);
+    expect(coordinator.isChordPending()).toBe(true);
+    expect(coordinator.getContext()).toBe('keyTipMode');
   });
 
   it('Alt-tap while a dialog is already open is a no-op (cascade gate)', () => {

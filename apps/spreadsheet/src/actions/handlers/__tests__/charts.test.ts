@@ -65,7 +65,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
     charts: {
       get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
-      add: jest.fn().mockResolvedValue('new-chart-id'),
+      add: jest.fn().mockResolvedValue({ id: 'new-chart-id' }),
       update: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined),
     },
@@ -297,6 +297,9 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
     },
     chart: mockChartCommands,
     object: {
+      selectObject: jest.fn(),
+      selectMultiple: jest.fn(),
+      deselectAll: jest.fn(),
       select: jest.fn(),
       deselect: jest.fn(),
       addToSelection: jest.fn(),
@@ -346,11 +349,11 @@ describe('Chart Handlers - Editing Actions', () => {
       expect(result.handled).toBe(true);
     });
 
-    it('should call chart commands to select and start editing', () => {
+    it('should select the chart object and start editing', () => {
       const deps = createMockDeps();
       ChartHandlers.EDIT_CHART(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
       expect(deps.commands.chart.startEdit).toHaveBeenCalled();
     });
 
@@ -371,11 +374,11 @@ describe('Chart Handlers - Editing Actions', () => {
   });
 
   describe('EDIT_CHART_TITLE', () => {
-    it('should call chart commands to select and start title editing', () => {
+    it('should select the chart object and start title editing', () => {
       const deps = createMockDeps();
       ChartHandlers.EDIT_CHART_TITLE(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
       expect(deps.commands.chart.startTitleEdit).toHaveBeenCalledWith('');
     });
 
@@ -513,11 +516,11 @@ describe('Chart Handlers - Clipboard Actions', () => {
 
 describe('Chart Handlers - Selection Actions', () => {
   describe('SELECT_CHART', () => {
-    it('should call chart.select command', () => {
+    it('should select through the object interaction actor', () => {
       const deps = createMockDeps();
       ChartHandlers.SELECT_CHART(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.select).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
     });
 
     it('should return not handled when chartId is missing', () => {
@@ -529,38 +532,38 @@ describe('Chart Handlers - Selection Actions', () => {
   });
 
   describe('DESELECT_CHART', () => {
-    it('should call chart.deselect command', () => {
+    it('should deselect through the object interaction actor', () => {
       const deps = createMockDeps();
       ChartHandlers.DESELECT_CHART(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.deselect).toHaveBeenCalled();
+      expect(deps.commands.object.deselectAll).toHaveBeenCalled();
     });
   });
 
   describe('DESELECT_ALL_CHARTS', () => {
-    it('should call chart.deselectAll command', () => {
+    it('should deselect all through the object interaction actor', () => {
       const deps = createMockDeps();
       ChartHandlers.DESELECT_ALL_CHARTS(deps);
 
-      expect(deps.commands.chart.deselectAll).toHaveBeenCalled();
+      expect(deps.commands.object.deselectAll).toHaveBeenCalled();
     });
   });
 
   describe('ADD_CHART_TO_SELECTION', () => {
-    it('should call chart.addToSelection command', () => {
+    it('should add to object selection', () => {
       const deps = createMockDeps();
       ChartHandlers.ADD_CHART_TO_SELECTION(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.addToSelection).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', true, false);
     });
   });
 
   describe('TOGGLE_CHART_SELECTION', () => {
-    it('should call chart.toggleSelection command', () => {
+    it('should toggle object selection', () => {
       const deps = createMockDeps();
       ChartHandlers.TOGGLE_CHART_SELECTION(deps, { chartId: 'chart-123' });
 
-      expect(deps.commands.chart.toggleSelection).toHaveBeenCalledWith('chart-123');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, true);
     });
   });
 });
@@ -733,6 +736,7 @@ describe('Chart Handlers - Creation Actions', () => {
       // Handler uses ws.addChart via unified API
       const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
       expect(result.handled).toBe(true);
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('new-chart-id', false, false);
     });
   });
 });

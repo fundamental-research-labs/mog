@@ -8,6 +8,7 @@
 import type { ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import { sheetId } from '@mog-sdk/contracts/core';
 
+import { selectChartObject } from './chart-selection';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
 export const pasteChartFromClipboard: AsyncActionHandler = async (deps): Promise<ActionResult> => {
@@ -47,7 +48,7 @@ export const pasteChartFromClipboard: AsyncActionHandler = async (deps): Promise
     }
 
     if (newChart?.id) {
-      deps.commands.chart.select(newChart.id);
+      selectChartObject(deps, newChart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };

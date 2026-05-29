@@ -39,6 +39,8 @@ pub struct WorkbookWriter {
     pub(super) root_namespaces: Option<crate::infra::xml_namespaces::NamespaceMap>,
     /// Workbook root `conformance` attribute from import/domain state.
     pub(super) conformance: Option<String>,
+    /// Workbook direct-child ordering and inert payload evidence from import.
+    pub(super) workbook_xml_fidelity: Option<domain_types::WorkbookXmlFidelity>,
 }
 
 impl WorkbookWriter {
@@ -201,6 +203,14 @@ impl WorkbookWriter {
     /// Set workbook root conformance.
     pub fn set_conformance(&mut self, conformance: Option<String>) -> &mut Self {
         self.conformance = conformance;
+        self
+    }
+
+    pub fn set_workbook_xml_fidelity(
+        &mut self,
+        fidelity: domain_types::WorkbookXmlFidelity,
+    ) -> &mut Self {
+        self.workbook_xml_fidelity = (!fidelity.is_empty()).then_some(fidelity);
         self
     }
 

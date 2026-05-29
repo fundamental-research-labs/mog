@@ -109,7 +109,7 @@ fn known_fonts_suppresses_duplicate_x14ac_namespace_and_deduplicates_ignorable()
 }
 
 #[test]
-fn root_ext_lst_raw_passes_through_after_colors() {
+fn unsupported_root_ext_lst_raw_is_not_replayed() {
     let mut writer = StylesWriter::with_defaults();
     writer.colors = Some(ColorsDef {
         indexed_colors: vec!["FF000000".to_string()],
@@ -118,14 +118,8 @@ fn root_ext_lst_raw_passes_through_after_colors() {
     writer.ext_lst_raw = Some(b"<extLst><ext uri=\"root\"/></extLst>".to_vec());
 
     let xml = xml_string(&writer);
-    assert_in_order(
-        &xml,
-        &[
-            "<colors>",
-            "<extLst><ext uri=\"root\"/></extLst>",
-            "</styleSheet>",
-        ],
-    );
+    assert!(xml.contains("<colors>"));
+    assert!(!xml.contains("<extLst>"));
 }
 
 #[test]

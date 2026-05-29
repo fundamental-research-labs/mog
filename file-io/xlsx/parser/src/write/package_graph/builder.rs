@@ -3,19 +3,21 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use domain_types::PackageFidelityMetadata;
 
 use super::{
-    AuxiliaryPackagePartPolicy, PackageOwner, PackagePart, PackagePartKind, PackageRelationship,
-    PackageRelationshipTarget, RelationshipIdentityHint, ResolvedPackageGraph,
-    ResolvedPackageRelationship, allocate_relationship_id, current_relationship_hint_id,
-    imported_internal_target, imported_opaque_part, imported_order_eligible_by_owner,
-    imported_relationship_order, is_external_target_mode, normalize_part_path, owner_rels_path,
-    resolve_target, same_inert_cluster, validate_internal_target_is_registered,
+    AuxiliaryPackagePartPolicy, CT_PRINTER_SETTINGS, PackageOwner, PackagePart, PackagePartKind,
+    PackageRelationship, PackageRelationshipTarget, RegisteredRelationshipKey,
+    RelationshipIdentityHint, ResolvedPackageGraph, ResolvedPackageRelationship,
+    allocate_relationship_id, imported_internal_target, imported_opaque_part,
+    imported_relationship_match, is_external_target_mode, normalize_part_path, owner_rels_path,
+    relationship_current_occurrence, resolve_target, same_inert_cluster,
+    validate_internal_target_is_registered,
 };
 use crate::write::write_error::WriteError;
 
 #[derive(Debug, Default)]
 pub struct PackageGraphBuilder {
     parts: BTreeMap<String, PackagePart>,
-    relationships: Vec<PackageRelationship>,
+    relationships: Vec<(RegisteredRelationshipKey, PackageRelationship)>,
+    next_relationship_key: usize,
     package_fidelity: Option<PackageFidelityMetadata>,
 }
 
@@ -63,15 +65,53 @@ impl PackageGraphBuilder {
         Ok(())
     }
 
-    pub fn add_relationship(&mut self, mut relationship: PackageRelationship) {
+    pub fn add_relationship(
+        &mut self,
+        mut relationship: PackageRelationship,
+    ) -> RegisteredRelationshipKey {
         if let PackageRelationshipTarget::InternalPart { path } = &mut relationship.target {
             *path = normalize_part_path(path);
         }
-        self.relationships.push(relationship);
+        let key = RegisteredRelationshipKey(self.next_relationship_key);
+        self.next_relationship_key += 1;
+        self.relationships.push((key, relationship));
+        key
     }
 
     pub fn contains_part(&self, path: &str) -> bool {
         self.parts.contains_key(&normalize_part_path(path))
+    }
+
+    pub fn register_imported_print_settings_part(
+        &mut self,
+        path: &str,
+    ) -> Result<bool, WriteError> {
+        let normalized_path = normalize_part_path(path);
+        if self.contains_part(&normalized_path) {
+            return Ok(true);
+        }
+        let Some(metadata) = self.package_fidelity.as_ref() else {
+            return Ok(false);
+        };
+        let Some((part_path, bytes)) = metadata
+            .opaque_parts
+            .iter()
+            .find(|part| normalize_part_path(&part.path) == normalized_path)
+            .map(|part| (part.path.clone(), part.bytes.clone()))
+        else {
+            return Ok(false);
+        };
+        if crate::write::package_ownership::modeled_owner_for_part(&normalized_path)
+            != Some(crate::write::package_ownership::PackageFeatureOwner::PrintSettings)
+        {
+            return Ok(false);
+        }
+        self.register_part(imported_opaque_part(
+            &part_path,
+            Some(CT_PRINTER_SETTINGS.to_string()),
+            bytes,
+        ))?;
+        Ok(true)
     }
 
     pub fn register_imported_opaque_parts(&mut self) -> Result<(), WriteError> {
@@ -79,10 +119,17 @@ impl PackageGraphBuilder {
             return Ok(());
         };
         let non_editable_sheet_cluster = non_editable_sheet_cluster_paths(&metadata);
+        let webextension_cluster = validated_webextension_cluster_paths(&metadata);
 
         for part in &metadata.opaque_parts {
+            let normalized_path = normalize_part_path(&part.path);
+            if normalized_path.starts_with("xl/webextensions/")
+                && !webextension_cluster.contains(&normalized_path)
+            {
+                continue;
+            }
             let is_non_editable_sheet_cluster =
-                non_editable_sheet_cluster.contains(&normalize_part_path(&part.path));
+                non_editable_sheet_cluster.contains(&normalized_path);
             let is_inert_auxiliary =
                 crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
                     == Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary);
@@ -97,7 +144,6 @@ impl PackageGraphBuilder {
             }
             if !is_non_editable_sheet_cluster
                 && !is_quarantined_active
-                && !is_current_printer_settings_payload(&part.path)
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
                     &part.path,
                 )
@@ -162,6 +208,7 @@ impl PackageGraphBuilder {
                         relationship_type: hint.relationship_type.clone(),
                         target: PackageRelationshipTarget::External {
                             target: hint.target.clone(),
+                            target_mode: hint.target_mode.clone(),
                         },
                         identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
                     });
@@ -210,7 +257,7 @@ impl PackageGraphBuilder {
         path: &str,
     ) -> bool {
         let normalized = normalize_part_path(path);
-        self.relationships.iter().any(|rel| {
+        self.relationships.iter().any(|(_, rel)| {
             &rel.owner == owner
                 && rel.relationship_type == relationship_type
                 && matches!(
@@ -230,39 +277,55 @@ impl PackageGraphBuilder {
         let mut used_ids_by_owner: HashMap<String, HashSet<String>> = HashMap::new();
         let mut next_id_by_owner: HashMap<String, u32> = HashMap::new();
         let mut relationships = Vec::with_capacity(self.relationships.len());
-        let imported_order_eligible =
-            imported_order_eligible_by_owner(self.package_fidelity.as_ref(), &self.relationships);
-
-        let mut pending: Vec<_> = self.relationships.iter().enumerate().collect();
-        pending.sort_by_key(|(index, relationship)| {
-            (
-                imported_relationship_order(
+        let mut pending: Vec<_> = self
+            .relationships
+            .iter()
+            .enumerate()
+            .map(|(index, (source_key, relationship))| {
+                let current_occurrence =
+                    relationship_current_occurrence(&self.relationships, index);
+                let imported_match = imported_relationship_match(
                     self.package_fidelity.as_ref(),
-                    &imported_order_eligible,
                     relationship,
-                ),
+                    current_occurrence,
+                );
+                (index, source_key, relationship, imported_match)
+            })
+            .collect();
+        pending.sort_by_key(|(index, _, _, imported_match)| {
+            (
+                imported_match
+                    .as_ref()
+                    .map(|matched| matched.order)
+                    .unwrap_or(usize::MAX),
                 *index,
             )
         });
 
-        for (_, relationship) in pending {
+        for (_, source_key, relationship, imported_match) in pending {
             validate_internal_target_is_registered(relationship, &self.parts)?;
             let owner_rels_path = owner_rels_path(&relationship.owner);
-            let hinted_id = relationship
-                .identity_hint
-                .as_ref()
-                .map(|hint| hint.id.as_str())
-                .or_else(|| {
-                    current_relationship_hint_id(self.package_fidelity.as_ref(), relationship)
-                });
+            let hinted_id = imported_match.map(|matched| matched.id).or_else(|| {
+                relationship
+                    .identity_hint
+                    .as_ref()
+                    .map(|hint| hint.id.as_str())
+            });
             let id = allocate_relationship_id(
                 &owner_rels_path,
                 hinted_id,
                 &mut used_ids_by_owner,
                 &mut next_id_by_owner,
             );
-            let (target, target_mode) = resolve_target(&relationship.owner, &relationship.target)?;
+            let (target, target_mode) = match (&relationship.target, imported_match) {
+                (PackageRelationshipTarget::InternalPart { .. }, Some(imported_match)) => (
+                    imported_match.target.to_string(),
+                    imported_match.target_mode.cloned(),
+                ),
+                _ => resolve_target(&relationship.owner, &relationship.target)?,
+            };
             relationships.push(ResolvedPackageRelationship {
+                source_key: *source_key,
                 owner_rels_path,
                 id,
                 relationship_type: relationship.relationship_type.clone(),
@@ -346,7 +409,69 @@ fn same_quarantined_active_cluster(owner_path: &str, target_path: &str) -> bool 
         && normalize_part_path(target_path) == "xl/vbaProject.bin"
 }
 
-fn is_current_printer_settings_payload(path: &str) -> bool {
-    let path = normalize_part_path(path);
-    path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin")
+const REL_WEB_EXTENSION_TASKPANES: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes";
+const REL_WEB_EXTENSION: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/webextension";
+const CT_WEB_EXTENSION_TASKPANES: &str = "application/vnd.ms-office.webextensiontaskpanes+xml";
+const CT_WEB_EXTENSION: &str = "application/vnd.ms-office.webextension+xml";
+
+fn validated_webextension_cluster_paths(metadata: &PackageFidelityMetadata) -> HashSet<String> {
+    let opaque_by_path: HashMap<String, &domain_types::OpaquePackagePartHint> = metadata
+        .opaque_parts
+        .iter()
+        .map(|part| (normalize_part_path(&part.path), part))
+        .collect();
+
+    if !opaque_by_path
+        .keys()
+        .any(|path| path.starts_with("xl/webextensions/"))
+    {
+        return HashSet::new();
+    }
+
+    let has_root_relationship = metadata.root_relationships.iter().any(|hint| {
+        hint.relationship_type == REL_WEB_EXTENSION_TASKPANES
+            && !is_external_target_mode(hint.target_mode.as_deref())
+            && imported_internal_target(None, hint).is_some_and(|target| {
+                normalize_part_path(&target) == "xl/webextensions/taskpanes.xml"
+            })
+    });
+    if !has_root_relationship {
+        return HashSet::new();
+    }
+
+    let Some(taskpanes) = opaque_by_path.get("xl/webextensions/taskpanes.xml") else {
+        return HashSet::new();
+    };
+    if taskpanes.content_type.as_deref() != Some(CT_WEB_EXTENSION_TASKPANES) {
+        return HashSet::new();
+    }
+
+    let mut cluster = HashSet::from(["xl/webextensions/taskpanes.xml".to_string()]);
+    for hint in &taskpanes.relationships {
+        if hint.relationship_type != REL_WEB_EXTENSION {
+            continue;
+        }
+        if is_external_target_mode(hint.target_mode.as_deref()) {
+            continue;
+        }
+        let Some(target) = imported_internal_target(Some("xl/webextensions/taskpanes.xml"), hint)
+        else {
+            return HashSet::new();
+        };
+        let target = normalize_part_path(&target);
+        if !target.starts_with("xl/webextensions/") {
+            return HashSet::new();
+        }
+        let Some(part) = opaque_by_path.get(&target) else {
+            return HashSet::new();
+        };
+        if part.content_type.as_deref() != Some(CT_WEB_EXTENSION) {
+            return HashSet::new();
+        }
+        cluster.insert(target);
+    }
+
+    cluster
 }

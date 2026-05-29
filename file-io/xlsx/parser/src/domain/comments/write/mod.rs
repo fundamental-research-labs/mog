@@ -54,7 +54,8 @@ mod types;
 mod vml;
 
 pub use from_domain::{
-    comments_from_domain, persons_xml_from_domain, threaded_comments_xml_from_domain,
+    comments_from_domain, comments_from_domain_with_package, persons_xml_from_domain,
+    threaded_comments_xml_from_domain,
 };
 pub use helpers::generate_guid;
 pub use legacy::CommentsWriter;

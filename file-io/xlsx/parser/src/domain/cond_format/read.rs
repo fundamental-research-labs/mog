@@ -148,7 +148,8 @@ fn overlay_x14_data_bar(
     base.negative_bar_color_same_as_positive = x14.negative_bar_color_same_as_positive;
     base.negative_bar_color_same_as_positive_attr_present =
         x14.negative_bar_color_same_as_positive_attr_present;
-    base.negative_bar_border_color_same_as_positive = x14.negative_bar_border_color_same_as_positive;
+    base.negative_bar_border_color_same_as_positive =
+        x14.negative_bar_border_color_same_as_positive;
     base.negative_bar_border_color_same_as_positive_attr_present =
         x14.negative_bar_border_color_same_as_positive_attr_present;
     base.axis_position = x14.axis_position;

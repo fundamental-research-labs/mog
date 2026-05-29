@@ -8,12 +8,156 @@ use crate::domain::*;
 use crate::format::DocumentFormat;
 use crate::metadata::WorkbookMetadata;
 use crate::properties::DocumentProperties;
+use crate::{PackageProvenanceVersion, RelationshipProvenance, XlsxPackageDiagnostic};
 use ooxml_types::slicers::{
     SlicerAnchor as OoxmlSlicerAnchor, SlicerCacheDef as OoxmlSlicerCacheDef,
     SlicerDef as OoxmlSlicerDef,
 };
 use ooxml_types::workbook::SheetState;
 use value_types::CellValue;
+
+/// Workbook-scoped currentness for an imported `calcPr.calcId`.
+///
+/// Missing provenance is treated as absent/unknown by export. That keeps legacy
+/// parse outputs conservative: the writer may use live calculation flags, but
+/// it must not treat an imported engine `calcId` as current without explicit
+/// provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CalcIdProvenanceState {
+    ImportedCurrent,
+    MogCanonical,
+    Invalidated,
+    #[default]
+    AbsentOrUnknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalcIdProvenance {
+    #[serde(
+        default,
+        skip_serializing_if = "CalcIdProvenanceState::is_absent_or_unknown"
+    )]
+    pub state: CalcIdProvenanceState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_calc_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula_graph_generation: Option<u64>,
+}
+
+impl CalcIdProvenanceState {
+    pub fn is_absent_or_unknown(&self) -> bool {
+        matches!(self, Self::AbsentOrUnknown)
+    }
+}
+
+impl CalcIdProvenance {
+    pub fn imported_current(calc_id: u32) -> Self {
+        Self {
+            state: CalcIdProvenanceState::ImportedCurrent,
+            imported_calc_id: Some(calc_id),
+            ..Default::default()
+        }
+    }
+
+    pub fn is_absent_or_unknown(&self) -> bool {
+        self.state.is_absent_or_unknown()
+            && self.imported_calc_id.is_none()
+            && self.workbook_generation.is_none()
+            && self.formula_graph_generation.is_none()
+    }
+}
+
+/// Per-cell formula-cache provenance and currentness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FormulaCacheState {
+    ImportedCurrent,
+    MogComputedCurrent,
+    StaleImported,
+    #[default]
+    AbsentOrUnknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FormulaCachedValuePresence {
+    #[default]
+    Absent,
+    ExplicitEmpty,
+    NonEmpty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaCacheProvenance {
+    #[serde(
+        default,
+        skip_serializing_if = "FormulaCacheState::is_absent_or_unknown"
+    )]
+    pub state: FormulaCacheState,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub force_recalc: bool,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub advanced_calc: bool,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub formula_preserve_space: bool,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub value_preserve_space: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_value_kind: Option<u8>,
+    #[serde(default, skip_serializing_if = "FormulaCachedValuePresence::is_absent")]
+    pub cached_value_presence: FormulaCachedValuePresence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_value_lexeme: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula_identity_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula_metadata_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_semantic_value_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_generation: Option<u64>,
+}
+
+impl FormulaCacheState {
+    pub fn is_absent_or_unknown(&self) -> bool {
+        matches!(self, Self::AbsentOrUnknown)
+    }
+
+    pub fn is_current(&self) -> bool {
+        matches!(self, Self::ImportedCurrent | Self::MogComputedCurrent)
+    }
+}
+
+impl FormulaCachedValuePresence {
+    pub fn is_absent(&self) -> bool {
+        matches!(self, Self::Absent)
+    }
+}
+
+impl FormulaCacheProvenance {
+    pub fn is_absent_or_unknown(&self) -> bool {
+        self.state.is_absent_or_unknown()
+            && !self.force_recalc
+            && !self.advanced_calc
+            && !self.formula_preserve_space
+            && !self.value_preserve_space
+            && self.cached_value_kind.is_none()
+            && self.cached_value_presence.is_absent()
+            && self.cached_value_lexeme.is_none()
+            && self.formula_identity_fingerprint.is_none()
+            && self.formula_metadata_fingerprint.is_none()
+            && self.cached_semantic_value_fingerprint.is_none()
+            && self.owner_generation.is_none()
+            && self.workbook_generation.is_none()
+    }
+}
 
 /// Position-keyed parse output — the shared container for parser → writer data flow.
 /// No UUIDs, no identity formulas — those are allocated by the hydration layer.
@@ -75,6 +219,11 @@ pub struct ParseOutput {
     pub extended_properties: Option<crate::properties::ExtendedDocumentProperties>,
     pub protection: Option<WorkbookProtection>,
     pub calculation: CalculationProperties,
+    #[serde(
+        default,
+        skip_serializing_if = "CalcIdProvenance::is_absent_or_unknown"
+    )]
+    pub calc_id_provenance: CalcIdProvenance,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<WorkbookMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -143,6 +292,118 @@ pub struct VolatileDependencyPackagePart {
     pub relationships: Vec<PackageRelationshipHint>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlFidelity {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slots: Vec<WorkbookXmlChildSlot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_children: Vec<WorkbookXmlRawChild>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<WorkbookXmlFidelityDiagnostic>,
+}
+
+impl WorkbookXmlFidelity {
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty() && self.raw_children.is_empty() && self.diagnostics.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlChildSlot {
+    pub kind: WorkbookXmlChildKind,
+    pub owner_policy: WorkbookXmlOwnerPolicy,
+    pub provenance_status: WorkbookXmlProvenanceStatus,
+    pub fallback_action: WorkbookXmlFallbackAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkbookXmlChildKind {
+    FileVersion,
+    FileSharing,
+    WorkbookPr,
+    WorkbookProtection,
+    BookViews,
+    CustomWorkbookViews,
+    Sheets,
+    FunctionGroups,
+    ExternalReferences,
+    DefinedNames,
+    CalcPr,
+    OleSize,
+    PivotCaches,
+    SmartTagPr,
+    SmartTagTypes,
+    WebPublishing,
+    FileRecoveryPr,
+    WebPublishObjects,
+    ExtLst,
+    AlternateContent,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkbookXmlOwnerPolicy {
+    TypedRegenerated,
+    TypedWithValidatedProvenance,
+    InertDirectChildPayload,
+    ExtensionOwnerRegistry,
+    MceFailClosed,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkbookXmlProvenanceStatus {
+    Current,
+    SafeInert,
+    UnsafeRelationshipReference,
+    Unsupported,
+    DuplicateModeledChild,
+    Malformed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkbookXmlFallbackAction {
+    Regenerate,
+    Preserve,
+    Omit,
+    Block,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlRawChild {
+    pub payload_id: String,
+    pub kind: WorkbookXmlChildKind,
+    pub q_name: String,
+    pub local_name: String,
+    pub xml: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationship_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkbookXmlFidelityDiagnostic {
+    pub artifact: String,
+    pub owner_policy: WorkbookXmlOwnerPolicy,
+    pub provenance_status: WorkbookXmlProvenanceStatus,
+    pub action: WorkbookXmlFallbackAction,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationship_ids: Vec<String>,
+    pub semantics_changed: bool,
+}
+
 /// Durable package metadata captured during import.
 ///
 /// All fields are hints for current graph construction. Export must validate
@@ -151,6 +412,14 @@ pub struct VolatileDependencyPackagePart {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageFidelityMetadata {
+    #[serde(default)]
+    pub provenance_version: PackageProvenanceVersion,
+    /// Workbook direct-child provenance captured from `xl/workbook.xml`.
+    ///
+    /// This is ordering and owner-scoped inert payload evidence for the workbook
+    /// writer. Modeled children are still regenerated from current domain state.
+    #[serde(default, skip_serializing_if = "WorkbookXmlFidelity::is_empty")]
+    pub workbook_xml_fidelity: WorkbookXmlFidelity,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_profile: Option<PackageProfileHint>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -159,10 +428,25 @@ pub struct PackageFidelityMetadata {
     pub content_type_defaults: Vec<PackageContentTypeDefaultHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_type_overrides: Vec<PackageContentTypeOverrideHint>,
+    /// Export-time disposition for imported `[Content_Types].xml` rows.
+    ///
+    /// This is diagnostic output only. Writers must recompute it from the
+    /// current package graph and must not use an imported disposition report as
+    /// authority for a later export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_type_manifest_dispositions: Vec<PackageContentTypeManifestDisposition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_relationships: Vec<PackageRelationshipHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_relationships: Vec<PackageRelationshipHint>,
+    /// Imported relationship hints keyed by normalized owner package part path.
+    ///
+    /// This is owner-scoped provenance for current-state graph construction,
+    /// not permission to replay `.rels` files. Writers may reuse an id/order
+    /// only when the current modeled owner emits the same safe relationship
+    /// target and package closure remains valid.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub part_relationships: Vec<PartRelationshipPackageInfo>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet_workbook_r_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -172,18 +456,73 @@ pub struct PackageFidelityMetadata {
     /// Pivot-owned imported cache package facts for writer-only no-edit
     /// preservation. These are not generic opaque parts: export must validate
     /// cache identity and source binding before reusing imported bytes.
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_cache_packages: Vec<PivotCachePackageFidelity>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationship_provenance: Vec<RelationshipProvenance>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<PackageFidelityDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub package_diagnostics: Vec<XlsxPackageDiagnostic>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedStringTableFidelity {
+    /// Imported `<sst count="...">` value, when present.
+    ///
+    /// Generated output must recompute counts from the final emitted table; this
+    /// value is provenance for diagnostics and validated export planning only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_count: Option<u32>,
+    /// Imported `<sst uniqueCount="...">` value, when present.
+    ///
+    /// Generated output must recompute unique counts from the final emitted
+    /// table unless a typed planner proves this value still matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_unique_count: Option<u32>,
+    /// Ordered imported `<si>` entry facts.
+    ///
+    /// These are typed provenance records. Export may use them only through an
+    /// owner/currentness check against live cell state; unused entries are not
+    /// live workbook state by default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<SharedStringEntryFidelity>,
     /// Safe root-level `<extLst>` XML from `xl/sharedStrings.xml`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ext_lst_xml: Vec<u8>,
+}
+
+impl SharedStringTableFidelity {
+    pub fn is_empty(&self) -> bool {
+        self.declared_count.is_none()
+            && self.declared_unique_count.is_none()
+            && self.entries.is_empty()
+            && self.ext_lst_xml.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedStringEntryFidelity {
+    /// Zero-based imported SST slot.
+    pub index: u32,
+    /// Plain text projection of the entry after OOXML text decoding.
+    pub text: String,
+    /// Imported entry body kind.
+    pub kind: SharedStringEntryKind,
+    /// Whether the imported entry carried phonetic children.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub has_phonetic: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SharedStringEntryKind {
+    #[default]
+    PlainText,
+    RichText,
+    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -222,6 +561,69 @@ pub struct PackageContentTypeOverrideHint {
     pub content_type: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageContentTypeManifestRowKind {
+    Default,
+    Override,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageContentTypeManifestDispositionKind {
+    Preserved,
+    Rewritten,
+    StaleDropped,
+    UnsupportedDropped,
+    SecurityDropped,
+    TypedOwnerDropped,
+    PathRenumbered,
+    ConflictDropped,
+    UnusedDefaultDropped,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageContentTypeManifestSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageContentTypeManifestExportOutcome {
+    Succeeded,
+    SucceededWithLoss,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageContentTypeManifestDisposition {
+    pub row_kind: PackageContentTypeManifestRowKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_name: Option<String>,
+    pub imported_content_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emitted_content_type: Option<String>,
+    pub feature_owner: String,
+    pub owner_policy_class: String,
+    pub disposition: PackageContentTypeManifestDispositionKind,
+    pub reason_code: String,
+    pub severity: PackageContentTypeManifestSeverity,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affected_relationships: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affected_content_type_rows: Vec<String>,
+    pub semantic_impact: String,
+    pub export_outcome: PackageContentTypeManifestExportOutcome,
+    pub diagnostic_code: String,
+    pub diagnostic_message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageRelationshipHint {
@@ -229,6 +631,15 @@ pub struct PackageRelationshipHint {
     pub relationship_type: String,
     pub target: String,
     pub target_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartRelationshipPackageInfo {
+    /// Normalized ZIP package path for the relationship owner, without a leading slash.
+    pub owner_path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<PackageRelationshipHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -341,7 +752,7 @@ impl MceAttributes {
 /// These values are not payload preservation. Writers may use them to allocate
 /// current modeled parts and relationships when still valid, while generating
 /// XML from the current comment/person model.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetCommentPackageInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -361,12 +772,36 @@ pub struct SheetCommentPackageInfo {
     pub vml_path_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vml_relationship_id_hint: Option<String>,
+    /// Owner-scoped VML note geometry facts parsed from the worksheet VML
+    /// drawing. These are typed provenance for current comment-owned VML
+    /// generation, not authority to replay the original VML part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vml_note_shapes: Vec<SheetVmlNoteShapeInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub threaded_comments_path_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub threaded_comments_relationship_id_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub threaded_comments_root_namespace_attrs: Vec<(String, String)>,
+}
+
+/// Typed package identity hints for a worksheet-owned DrawingML part.
+///
+/// These fields describe the worksheet relationship that owned the imported
+/// drawing part. Export may use them only for a currently modeled drawing on
+/// the same worksheet; if the sheet no longer has drawing-owned live state, the
+/// relationship and `<drawing>` reference must be omitted.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetDrawingPackageInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing_path_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing_relationship_target_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub worksheet_relationships_file_present: bool,
 }
 
 impl SheetCommentPackageInfo {
@@ -378,9 +813,53 @@ impl SheetCommentPackageInfo {
             && self.comments_ext_lst_xml.is_none()
             && self.vml_path_hint.is_none()
             && self.vml_relationship_id_hint.is_none()
+            && self.vml_note_shapes.is_empty()
             && self.threaded_comments_path_hint.is_none()
             && self.threaded_comments_relationship_id_hint.is_none()
             && self.threaded_comments_root_namespace_attrs.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetVmlNoteShapeInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vml_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<VmlStyleDimensionInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<VmlStyleDimensionInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VmlStyleDimensionStatus {
+    Supported,
+    UnitlessZero,
+    UnsupportedUnit,
+    Malformed,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VmlStyleDimensionInfo {
+    /// Original style property value, trimmed but otherwise kept as lexical
+    /// provenance for a validated current note owner.
+    pub raw: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized_pt: Option<f64>,
+    pub status: VmlStyleDimensionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+impl Default for VmlStyleDimensionStatus {
+    fn default() -> Self {
+        Self::Malformed
     }
 }
 
@@ -388,14 +867,19 @@ impl PackageFidelityMetadata {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.content_type_defaults.is_empty()
+            && self.workbook_xml_fidelity.is_empty()
             && self.content_type_overrides.is_empty()
+            && self.content_type_manifest_dispositions.is_empty()
             && self.root_relationships.is_empty()
             && self.workbook_relationships.is_empty()
+            && self.part_relationships.is_empty()
             && self.sheet_workbook_r_ids.is_empty()
             && self.opaque_parts.is_empty()
             && self.raw_doc_props.is_empty()
             && self.pivot_cache_packages.is_empty()
+            && self.relationship_provenance.is_empty()
             && self.diagnostics.is_empty()
+            && self.package_diagnostics.is_empty()
             && self.package_profile.is_none()
             && self.shared_string_table.is_none()
     }
@@ -532,8 +1016,8 @@ pub struct WorkbookStylesheet {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub differential_formats: Vec<ooxml_types::styles::DxfDef>,
     /// Stable workbook-level differential format registry. References stored
-    /// as `dxf_id` in CF, filters, sorts, and tables point at these stable IDs,
-    /// not at the transient OOXML `<dxfs>` array positions written on export.
+    /// as `dxf_id` in CF, filters, sorts, and tables point at these stable
+    /// workbook IDs, which export serializes as positional OOXML `<dxfs>` slots.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dxf_registry: Vec<DxfDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -604,7 +1088,7 @@ impl WorkbookStylesheet {
         }
 
         let dxfs = if self.differential_formats.is_empty() {
-            self.dxf_registry.iter().map(DxfDef::to_ooxml).collect()
+            dxf_registry_to_positional_dxfs(&self.dxf_registry)
         } else {
             self.differential_formats.clone()
         };
@@ -659,6 +1143,18 @@ impl WorkbookStylesheet {
             && self.default_pivot_style.is_none()
             && !self.known_fonts
     }
+}
+
+fn dxf_registry_to_positional_dxfs(registry: &[DxfDef]) -> Vec<ooxml_types::styles::DxfDef> {
+    let Some(max_id) = registry.iter().map(|dxf| dxf.id).max() else {
+        return Vec::new();
+    };
+
+    let mut dxfs = vec![ooxml_types::styles::DxfDef::default(); max_id as usize + 1];
+    for dxf in registry {
+        dxfs[dxf.id as usize] = dxf.to_ooxml();
+    }
+    dxfs
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -848,8 +1344,12 @@ pub struct SheetData {
     pub worksheet_ext_lst_xml: Option<String>,
     /// Authored worksheet `<dimension ref="...">` value.
     ///
-    /// This is advisory used-range metadata carried through import/export. It
-    /// is not a dense grid allocation request.
+    /// This is worksheet-owned imported provenance, not package replay and not
+    /// a dense grid allocation request. Writers may reuse the exact lexical
+    /// value only after parsing it as a valid A1 single-cell/range dimension
+    /// and proving it matches the current live cell coordinates they will
+    /// emit. Missing, malformed, stale, duplicated, or otherwise unsupported
+    /// authored dimensions must be regenerated from live sheet state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worksheet_dimension_ref: Option<String>,
     /// Original sheetId from workbook.xml (1-based). Preserved for round-trip fidelity.
@@ -892,6 +1392,9 @@ pub struct SheetData {
     /// Package identity and root-namespace hints for modeled comment artifacts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment_package: Option<SheetCommentPackageInfo>,
+    /// Package identity hints for the worksheet-owned drawing relationship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing_package: Option<SheetDrawingPackageInfo>,
     pub hyperlinks: Vec<Hyperlink>,
     pub data_validations: Vec<ValidationSpec>,
     /// Source count attribute on `<dataValidations>`, when imported.
@@ -1056,6 +1559,15 @@ pub struct CellData {
     /// When true, the writer emits `<v/>` even though the cached value is null/empty.
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub has_empty_cached_value: bool,
+    /// Typed owner for imported or Mog-computed formula-cache metadata.
+    ///
+    /// Legacy missing state means absent/unknown, so export must not preserve
+    /// cache-only metadata such as `ca` unless this owner says it is current.
+    #[serde(
+        default,
+        skip_serializing_if = "FormulaCacheProvenance::is_absent_or_unknown"
+    )]
+    pub formula_cache_provenance: FormulaCacheProvenance,
     /// Value metadata index from the `vm` attribute on the `<c>` element.
     /// Used for rich value types (linked data types, images-in-cells).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1147,6 +1659,9 @@ pub struct SheetDimensions {
 pub struct RowDimension {
     pub row: u32,
     pub height: f64,
+    /// Authored `ht` lexical text, preserved when the row height is current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_str: Option<String>,
     pub custom_height: bool,
     pub hidden: bool,
     /// Whether the row had an explicit hidden attribute. This distinguishes an
@@ -1205,15 +1720,39 @@ impl RowXmlHints {
 pub struct ColDimension {
     pub col: u32,
     pub width: f64,
+    /// Authored `width` lexical text, preserved when this column dimension is current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_str: Option<String>,
+    /// Authored width presence. `Some(false)` preserves a width-less `<col>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_present: Option<bool>,
     pub custom_width: bool,
+    /// Authored customWidth attribute. `Some(false)` preserves customWidth="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_width_attr: Option<bool>,
     pub hidden: bool,
+    /// Authored hidden attribute. `Some(false)` preserves hidden="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_attr: Option<bool>,
     pub best_fit: bool,
+    /// Authored bestFit attribute. `Some(false)` preserves bestFit="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best_fit_attr: Option<bool>,
+    /// Authored outline level. `Some(0)` preserves outlineLevel="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_level: Option<u8>,
     /// Whether the outline group is collapsed at this column.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// Authored collapsed attribute. `Some(false)` preserves collapsed="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collapsed_attr: Option<bool>,
     /// Column-level phonetic display flag (`phonetic` on `<col>`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub phonetic: bool,
+    /// Authored phonetic attribute. `Some(false)` preserves phonetic="0".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_attr: Option<bool>,
 }
 
 /// A column range that extends beyond the data region, preserved for round-trip fidelity.
@@ -1222,7 +1761,7 @@ pub struct ColDimension {
 /// from `min` through XFD (the last column)". These ranges cannot be stored as
 /// individual ColDimension entries because no ColIds are allocated beyond the
 /// data region. Instead they are stored as opaque metadata through Yrs.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrailingColRange {
     /// Start column (1-indexed, as in OOXML `<col min>`).
@@ -1230,16 +1769,32 @@ pub struct TrailingColRange {
     /// End column (1-indexed, as in OOXML `<col max>`). 16384 = XFD = last column.
     pub max: u32,
     pub width: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_str: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_present: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_width: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_width_attr: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_attr: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub best_fit: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best_fit_attr: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_level: Option<u8>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collapsed_attr: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub phonetic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phonetic_attr: Option<bool>,
     /// Column style index into `ParseOutput.style_palette`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_id: Option<u32>,

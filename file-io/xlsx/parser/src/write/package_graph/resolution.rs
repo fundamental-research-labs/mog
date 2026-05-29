@@ -20,6 +20,7 @@ pub(super) fn allocate_relationship_id(
         .or_insert(1);
 
     if let Some(hinted_id) = hinted_id
+        && is_valid_relationship_id(hinted_id)
         && used.insert(hinted_id.to_string())
     {
         bump_next_id(next_id, hinted_id);
@@ -33,6 +34,17 @@ pub(super) fn allocate_relationship_id(
             return id;
         }
     }
+}
+
+fn is_valid_relationship_id(id: &str) -> bool {
+    let mut chars = id.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !matches!(first, 'A'..='Z' | 'a'..='z' | '_') {
+        return false;
+    }
+    chars.all(|ch| matches!(ch, 'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | '-' | '.'))
 }
 
 pub(super) fn bump_next_id(next_id: &mut u32, id: &str) {
@@ -50,9 +62,13 @@ pub(super) fn resolve_target(
 ) -> Result<(String, Option<String>), WriteError> {
     match target {
         PackageRelationshipTarget::InternalPath { target } => Ok((target.clone(), None)),
-        PackageRelationshipTarget::External { target } => {
-            Ok((target.clone(), Some("External".to_string())))
-        }
+        PackageRelationshipTarget::External {
+            target,
+            target_mode,
+        } => Ok((
+            target.clone(),
+            Some(target_mode.as_deref().unwrap_or("External").to_string()),
+        )),
         PackageRelationshipTarget::InternalPart { path } => {
             let target = match owner {
                 PackageOwner::Root => normalize_part_path(path),

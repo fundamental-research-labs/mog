@@ -42,6 +42,11 @@ pub(super) struct StyleExportPlan {
 }
 
 #[must_use]
+pub(super) fn uses_imported_workbook_style_authority(output: &ParseOutput) -> bool {
+    current_workbook_stylesheet(output).is_some()
+}
+
+#[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     if let Some(stylesheet) = current_workbook_stylesheet(output) {
         let cell_xfs_count = stylesheet.cell_xfs.len() as u32;
@@ -73,7 +78,7 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
 
 fn current_workbook_stylesheet(output: &ParseOutput) -> Option<WorkbookStylesheet> {
     let stylesheet = output.workbook_stylesheet.as_ref()?.normalized();
-    if stylesheet.cell_xfs.is_empty() || !output_references_cell_style_ids(output) {
+    if stylesheet.cell_xfs.is_empty() {
         return None;
     }
     Some(stylesheet)
@@ -103,11 +108,7 @@ fn styles_writer_from_workbook_stylesheet(stylesheet: WorkbookStylesheet) -> Sty
     writer.cell_xfs = stylesheet.cell_xfs;
     writer.cell_styles = stylesheet.named_cell_styles;
     writer.dxfs = if stylesheet.differential_formats.is_empty() {
-        stylesheet
-            .dxf_registry
-            .iter()
-            .map(|dxf| dxf.to_ooxml())
-            .collect()
+        dxf_registry_to_positional_dxfs(&stylesheet.dxf_registry)
     } else {
         stylesheet.differential_formats
     };
@@ -147,6 +148,20 @@ fn styles_writer_from_workbook_stylesheet(stylesheet: WorkbookStylesheet) -> Sty
     }
 
     writer
+}
+
+fn dxf_registry_to_positional_dxfs(
+    registry: &[domain_types::DxfDef],
+) -> Vec<ooxml_types::styles::DxfDef> {
+    let Some(max_id) = registry.iter().map(|dxf| dxf.id).max() else {
+        return Vec::new();
+    };
+
+    let mut dxfs = vec![ooxml_types::styles::DxfDef::default(); max_id as usize + 1];
+    for dxf in registry {
+        dxfs[dxf.id as usize] = dxf.to_ooxml();
+    }
+    dxfs
 }
 
 #[cfg(test)]

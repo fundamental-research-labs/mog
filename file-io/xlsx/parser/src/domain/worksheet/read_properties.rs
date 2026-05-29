@@ -118,8 +118,29 @@ pub fn parse_dimension_ref_with_text(xml: &[u8]) -> Option<SheetDimensionImport>
     let ref_str = std::str::from_utf8(&elem[s..e]).ok()?;
     Some(SheetDimensionImport {
         ref_range: ref_str.to_owned(),
-        parsed_range: crate::infra::a1::parse_a1_range(ref_str),
+        parsed_range: parse_dimension_ref_value(ref_str),
     })
+}
+
+/// Parse worksheet `<dimension ref>` as advisory used-range metadata.
+///
+/// XLSX dimensions allow either a single A1 cell (`A1`) or a rectangular range
+/// (`A1:C3`). The imported lexical string is export provenance only; callers
+/// must validate this parsed extent against the live cells they will emit
+/// before reusing the authored text.
+pub fn parse_dimension_ref_value(ref_str: &str) -> Option<(u32, u32, u32, u32)> {
+    if ref_str.contains(',') || ref_str.split(':').count() > 2 {
+        return None;
+    }
+    if let Some((row, col)) = crate::infra::a1::parse_a1_cell(ref_str) {
+        return Some((row, col, row, col));
+    }
+    let (start_row, start_col, end_row, end_col) = crate::infra::a1::parse_a1_range(ref_str)?;
+    if start_row <= end_row && start_col <= end_col {
+        Some((start_row, start_col, end_row, end_col))
+    } else {
+        None
+    }
 }
 
 /// Parse typed worksheet calculation properties from `<sheetCalcPr>`.
@@ -162,5 +183,23 @@ pub fn parse_sheet_format_pr(xml: &[u8]) -> SheetFormatPrParsed {
             || find_attr_simd(elem, b"thickTop=\"true\"", 0).is_some(),
         thick_bottom: find_attr_simd(elem, b"thickBottom=\"1\"", 0).is_some()
             || find_attr_simd(elem, b"thickBottom=\"true\"", 0).is_some(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worksheet_dimension_ref_accepts_single_cell_and_range() {
+        assert_eq!(parse_dimension_ref_value("A1"), Some((0, 0, 0, 0)));
+        assert_eq!(parse_dimension_ref_value("$B$2:$D$5"), Some((1, 1, 4, 3)));
+    }
+
+    #[test]
+    fn worksheet_dimension_ref_rejects_malformed_multi_and_reversed_ranges() {
+        assert_eq!(parse_dimension_ref_value("A1,C3"), None);
+        assert_eq!(parse_dimension_ref_value("not-a-ref"), None);
+        assert_eq!(parse_dimension_ref_value("D5:B2"), None);
     }
 }

@@ -18,8 +18,7 @@ use crate::write::pivot_writer::cache_data::build_cache;
 use crate::write::pivot_writer::cache_sources::assign_cache_sources;
 use crate::write::pivot_writer::config_to_def::parsed_pivot_to_def;
 use crate::write::pivot_writer::part_paths::{
-    pivot_cache_definition_path, pivot_cache_records_path, pivot_cache_rels_path, pivot_table_path,
-    pivot_table_rels_path,
+    pivot_cache_definition_path, pivot_cache_records_path, pivot_table_path,
 };
 use crate::write::pivot_writer::source_fields::derive_missing_fields;
 use domain_types::ParseOutput;
@@ -38,6 +37,8 @@ pub struct PivotWriteData {
 
 pub struct PivotTableEntry {
     pub global_idx: usize,
+    pub path: String,
+    pub rels_path: String,
     /// Sheet index (0-based) this pivot table belongs to.
     pub sheet_idx: usize,
     pub cache_id: u32,
@@ -139,6 +140,8 @@ fn build_pivot_cache_entries(
     cache_sources: &[domain_types::PivotCacheSourceDef],
     generated_part_paths: &mut HashSet<String>,
 ) -> Vec<PivotCacheEntry> {
+    let mut reserved_paths = reserved_pivot_cache_paths(output);
+    let mut selected_paths = HashSet::new();
     cache_sources
         .iter()
         .enumerate()
@@ -149,25 +152,66 @@ fn build_pivot_cache_entries(
                 &output.sheets,
                 sheet_name_to_idx,
             );
+            let fidelity = output
+                .package_fidelity
+                .as_ref()
+                .into_iter()
+                .flat_map(|fidelity| fidelity.pivot_cache_packages.iter())
+                .find(|package| package_matches_cache_source(package, cache_src));
+            let definition_path = fidelity
+                .and_then(|package| {
+                    select_imported_path(&package.definition_path, &mut selected_paths)
+                })
+                .unwrap_or_else(|| {
+                    allocate_generated_path(
+                        global_idx,
+                        &reserved_paths,
+                        &mut selected_paths,
+                        pivot_cache_definition_path,
+                    )
+                });
+            reserved_paths.insert(definition_path.clone());
+            let records_path = fidelity
+                .and_then(|package| {
+                    package
+                        .records_path
+                        .as_deref()
+                        .and_then(|path| select_imported_path(path, &mut selected_paths))
+                })
+                .unwrap_or_else(|| {
+                    allocate_generated_path(global_idx, &reserved_paths, &mut selected_paths, pivot_cache_records_path)
+                });
+            reserved_paths.insert(records_path.clone());
+            let rels_path = pivot_cache_rels_path_for_definition(&definition_path);
+            selected_paths.insert(rels_path.clone());
 
-            generated_part_paths.insert(pivot_cache_definition_path(global_idx));
-            generated_part_paths.insert(pivot_cache_records_path(global_idx));
-            generated_part_paths.insert(pivot_cache_rels_path(global_idx));
+            generated_part_paths.insert(definition_path.clone());
+            generated_part_paths.insert(records_path.clone());
+            generated_part_paths.insert(rels_path);
 
             PivotCacheEntry {
                 global_idx,
                 cache_id: cache_src.cache_id,
-                definition_path: pivot_cache_definition_path(global_idx),
-                records_path: Some(pivot_cache_records_path(global_idx)),
-                workbook_relationship_id_hint: None,
-                workbook_relationship_type:
-                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
-                        .to_string(),
-                records_relationship_id_hint: None,
-                records_relationship_type: Some(
-                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
-                        .to_string(),
-                ),
+                definition_path,
+                records_path: Some(records_path),
+                workbook_relationship_id_hint: fidelity
+                    .map(|package| package.workbook_relationship_id.clone()),
+                workbook_relationship_type: fidelity
+                    .map(|package| package.workbook_relationship_type.clone())
+                    .unwrap_or_else(|| {
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
+                            .to_string()
+                    }),
+                records_relationship_id_hint: fidelity
+                    .and_then(|package| package.records_relationship_id.clone()),
+                records_relationship_type: fidelity
+                    .and_then(|package| package.records_relationship_type.clone())
+                    .or_else(|| {
+                        Some(
+                            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
+                                .to_string(),
+                        )
+                    }),
                 definition_xml,
                 records_xml: Some(records_xml),
             }
@@ -180,21 +224,51 @@ fn build_pivot_table_entries(
     pivot_cache_ids: &[u32],
     generated_part_paths: &mut HashSet<String>,
 ) -> Vec<PivotTableEntry> {
+    let mut reserved_paths: HashSet<String> = resolved_pivots
+        .iter()
+        .filter_map(|(_, pt)| {
+            pt.ooxml_preservation
+                .relationship
+                .as_ref()
+                .and_then(|rel| rel.part_path.as_deref())
+                .map(part_paths::normalize_part_path)
+        })
+        .collect();
+    let mut selected_paths = HashSet::new();
     resolved_pivots
         .iter()
         .zip(pivot_cache_ids.iter())
         .enumerate()
         .map(|(idx, ((sheet_idx, pt), cache_id))| {
             let global_idx = idx + 1;
+            let imported_path = pt
+                .ooxml_preservation
+                .relationship
+                .as_ref()
+                .and_then(|rel| rel.part_path.as_deref());
+            let path = imported_path
+                .and_then(|path| select_imported_path(path, &mut selected_paths))
+                .unwrap_or_else(|| {
+                    allocate_generated_path(
+                        global_idx,
+                        &reserved_paths,
+                        &mut selected_paths,
+                        pivot_table_path,
+                    )
+                });
+            reserved_paths.insert(path.clone());
+            let rels_path = pivot_table_rels_path_for_table(&path);
             let def = parsed_pivot_to_def(pt);
             let writer = pivot_table_def_to_writer(&pt.config.name, *cache_id, &def);
             let xml = writer.to_xml();
 
-            generated_part_paths.insert(pivot_table_path(global_idx));
-            generated_part_paths.insert(pivot_table_rels_path(global_idx));
+            generated_part_paths.insert(path.clone());
+            generated_part_paths.insert(rels_path.clone());
 
             PivotTableEntry {
                 global_idx,
+                path,
+                rels_path,
                 sheet_idx: *sheet_idx,
                 cache_id: *cache_id,
                 cache_relationship_id_hint: pt
@@ -206,4 +280,71 @@ fn build_pivot_table_entries(
             }
         })
         .collect()
+}
+
+fn package_matches_cache_source(
+    package: &domain_types::PivotCachePackageFidelity,
+    cache_src: &domain_types::PivotCacheSourceDef,
+) -> bool {
+    package.cache_id == cache_src.cache_id
+        && package.source_sheet.as_ref() == cache_src.source_sheet.as_ref()
+        && package.source_range.as_ref() == cache_src.source_range.as_ref()
+}
+
+fn reserved_pivot_cache_paths(output: &ParseOutput) -> HashSet<String> {
+    let mut paths = HashSet::new();
+    for package in output
+        .package_fidelity
+        .as_ref()
+        .into_iter()
+        .flat_map(|fidelity| fidelity.pivot_cache_packages.iter())
+    {
+        paths.insert(part_paths::normalize_part_path(&package.definition_path));
+        paths.insert(pivot_cache_rels_path_for_definition(
+            &package.definition_path,
+        ));
+        if let Some(records_path) = &package.records_path {
+            paths.insert(part_paths::normalize_part_path(records_path));
+        }
+    }
+    paths
+}
+
+fn select_imported_path(path: &str, selected_paths: &mut HashSet<String>) -> Option<String> {
+    let path = part_paths::normalize_part_path(path);
+    if selected_paths.insert(path.clone()) {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn allocate_generated_path(
+    first_idx: usize,
+    reserved_paths: &HashSet<String>,
+    selected_paths: &mut HashSet<String>,
+    path_for_idx: fn(usize) -> String,
+) -> String {
+    let mut idx = first_idx;
+    loop {
+        let path = path_for_idx(idx);
+        if !reserved_paths.contains(&path) && selected_paths.insert(path.clone()) {
+            return path;
+        }
+        idx += 1;
+    }
+}
+
+fn pivot_cache_rels_path_for_definition(definition_path: &str) -> String {
+    let (dir, file) = definition_path
+        .rsplit_once('/')
+        .unwrap_or(("xl/pivotCache", definition_path));
+    part_paths::normalize_part_path(&format!("{dir}/_rels/{file}.rels"))
+}
+
+fn pivot_table_rels_path_for_table(table_path: &str) -> String {
+    let (dir, file) = table_path
+        .rsplit_once('/')
+        .unwrap_or(("xl/pivotTables", table_path));
+    part_paths::normalize_part_path(&format!("{dir}/_rels/{file}.rels"))
 }

@@ -53,24 +53,21 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
         for (_, bytes, _) in &sheet.raw_vml_drawings {
             for shape in parse_vml_shapes(bytes) {
                 if let Some(ref cell_ref) = shape.cell_ref {
-                    shape_by_cell.insert(
-                        cell_ref.clone(),
-                        ShapeData {
-                            visible: shape.visible,
-                            note_height: shape.note_height,
-                            note_width: shape.note_width,
-                            note_shape_anchor: domain_types::domain::comment::NoteShapeAnchor {
-                                left_column: shape.left_column,
-                                left_offset: shape.left_offset,
-                                top_row: shape.top_row,
-                                top_offset: shape.top_offset,
-                                right_column: shape.right_column,
-                                right_offset: shape.right_offset,
-                                bottom_row: shape.bottom_row,
-                                bottom_offset: shape.bottom_offset,
-                            },
+                    shape_by_cell.entry(cell_ref.clone()).or_insert(ShapeData {
+                        visible: shape.visible,
+                        note_height: shape.note_height,
+                        note_width: shape.note_width,
+                        note_shape_anchor: domain_types::domain::comment::NoteShapeAnchor {
+                            left_column: shape.left_column,
+                            left_offset: shape.left_offset,
+                            top_row: shape.top_row,
+                            top_offset: shape.top_offset,
+                            right_column: shape.right_column,
+                            right_offset: shape.right_offset,
+                            bottom_row: shape.bottom_row,
+                            bottom_offset: shape.bottom_offset,
                         },
-                    );
+                    });
                 }
             }
         }

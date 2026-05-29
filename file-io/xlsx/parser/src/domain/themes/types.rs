@@ -492,7 +492,8 @@ impl ThemeRootSibling {
     }
 
     fn inner_range(&self) -> Option<std::ops::Range<usize>> {
-        self.close_start.map(|close_start| self.open_end..close_start)
+        self.close_start
+            .map(|close_start| self.open_end..close_start)
     }
 }
 
@@ -1255,7 +1256,11 @@ mod tests {
         assert_eq!(
             theme.root_sibling_order.as_deref(),
             Some(
-                ["objectDefaults".to_string(), "extraClrSchemeLst".to_string()].as_slice()
+                [
+                    "objectDefaults".to_string(),
+                    "extraClrSchemeLst".to_string()
+                ]
+                .as_slice()
             )
         );
     }

@@ -1,10 +1,8 @@
-use std::collections::{HashMap, HashSet};
-
 use domain_types::PackageFidelityMetadata;
 
 use super::{
     PackageOwner, PackageRelationship, PackageRelationshipTarget, RelationshipIdentityHint,
-    RelationshipOwnerPath, is_external_target_mode, normalize_part_path, owner_rels_path,
+    is_external_target_mode, normalize_part_path,
 };
 
 pub(super) fn imported_relationship_identity_hint(
@@ -17,22 +15,6 @@ pub(super) fn imported_relationship_identity_hint(
         .map(|hint| RelationshipIdentityHint::new(hint.id.as_str()))
 }
 
-pub(super) fn current_relationship_hint_id<'a>(
-    metadata: Option<&'a PackageFidelityMetadata>,
-    relationship: &PackageRelationship,
-) -> Option<&'a str> {
-    let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
-        return None;
-    };
-    imported_relationship_hint(
-        metadata,
-        &relationship.owner,
-        &relationship.relationship_type,
-        path,
-    )
-    .map(|hint| hint.id.as_str())
-}
-
 pub(super) fn imported_relationship_hint<'a>(
     metadata: Option<&'a PackageFidelityMetadata>,
     owner: &PackageOwner,
@@ -40,14 +22,7 @@ pub(super) fn imported_relationship_hint<'a>(
     target_path: &str,
 ) -> Option<&'a domain_types::PackageRelationshipHint> {
     let metadata = metadata?;
-    let (owner_part, hints) = match owner {
-        PackageOwner::Root => (None, metadata.root_relationships.as_slice()),
-        PackageOwner::Workbook => (
-            Some("xl/workbook.xml"),
-            metadata.workbook_relationships.as_slice(),
-        ),
-        _ => return None,
-    };
+    let (owner_part, hints) = relationship_hints_for_owner(metadata, owner)?;
     let normalized_target = normalize_part_path(target_path);
     hints.iter().find(|hint| {
         hint.relationship_type == relationship_type
@@ -57,100 +32,63 @@ pub(super) fn imported_relationship_hint<'a>(
     })
 }
 
-pub(super) fn imported_relationship_order(
-    metadata: Option<&PackageFidelityMetadata>,
-    eligible_by_owner: &HashMap<RelationshipOwnerPath, bool>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ImportedRelationshipMatch<'a> {
+    pub order: usize,
+    pub id: &'a str,
+    pub target: &'a str,
+    pub target_mode: Option<&'a String>,
+}
+
+pub(super) fn imported_relationship_match<'a>(
+    metadata: Option<&'a PackageFidelityMetadata>,
     relationship: &PackageRelationship,
+    current_occurrence: usize,
+) -> Option<ImportedRelationshipMatch<'a>> {
+    let metadata = metadata?;
+    let (owner_part, hints) = relationship_hints_for_owner(metadata, &relationship.owner)?;
+    let target_key = relationship_target_key(&relationship.target)?;
+    let mut occurrence = 0;
+    hints.iter().enumerate().find_map(|(order, hint)| {
+        if hint.relationship_type != relationship.relationship_type {
+            return None;
+        }
+        let hint_key = imported_relationship_target_key(owner_part, hint)?;
+        if hint_key != target_key {
+            return None;
+        }
+        let matched_occurrence = occurrence;
+        occurrence += 1;
+        if matched_occurrence == current_occurrence {
+            Some(ImportedRelationshipMatch {
+                order,
+                id: hint.id.as_str(),
+                target: hint.target.as_str(),
+                target_mode: hint.target_mode.as_ref(),
+            })
+        } else {
+            None
+        }
+    })
+}
+
+pub(super) fn relationship_current_occurrence(
+    relationships: &[(super::RegisteredRelationshipKey, PackageRelationship)],
+    index: usize,
 ) -> usize {
-    let Some(metadata) = metadata else {
-        return usize::MAX;
+    let relationship = &relationships[index].1;
+    let Some(target_key) = relationship_target_key(&relationship.target) else {
+        return 0;
     };
-    let owner_rels_path = owner_rels_path(&relationship.owner);
-    if !eligible_by_owner
-        .get(&owner_rels_path)
-        .copied()
-        .unwrap_or(false)
-    {
-        return usize::MAX;
-    }
-    let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
-        return usize::MAX;
-    };
-    let (owner_part, hints) = match &relationship.owner {
-        PackageOwner::Root => (None, metadata.root_relationships.as_slice()),
-        PackageOwner::Workbook => (
-            Some("xl/workbook.xml"),
-            metadata.workbook_relationships.as_slice(),
-        ),
-        _ => return usize::MAX,
-    };
-    let normalized_target = normalize_part_path(path);
-    hints
+    relationships[..index]
         .iter()
-        .position(|hint| {
-            hint.relationship_type == relationship.relationship_type
-                && !is_external_target_mode(hint.target_mode.as_deref())
-                && imported_internal_target(owner_part, hint)
-                    .is_some_and(|target| target == normalized_target)
+        .map(|(_, candidate)| candidate)
+        .filter(|candidate| {
+            candidate.owner == relationship.owner
+                && candidate.relationship_type == relationship.relationship_type
+                && relationship_target_key(&candidate.target).as_ref() == Some(&target_key)
         })
-        .unwrap_or(usize::MAX)
-}
-
-pub(super) fn imported_order_eligible_by_owner(
-    metadata: Option<&PackageFidelityMetadata>,
-    relationships: &[PackageRelationship],
-) -> HashMap<RelationshipOwnerPath, bool> {
-    let mut result = HashMap::new();
-    let Some(metadata) = metadata else {
-        return result;
-    };
-    result.insert(
-        owner_rels_path(&PackageOwner::Root),
-        imported_owner_set_matches_current(None, &metadata.root_relationships, relationships),
-    );
-    result.insert(
-        owner_rels_path(&PackageOwner::Workbook),
-        imported_owner_set_matches_current(
-            Some("xl/workbook.xml"),
-            &metadata.workbook_relationships,
-            relationships,
-        ),
-    );
-    result
-}
-
-pub(super) fn imported_owner_set_matches_current(
-    owner_part: Option<&str>,
-    imported: &[domain_types::PackageRelationshipHint],
-    relationships: &[PackageRelationship],
-) -> bool {
-    let owner = if owner_part.is_none() {
-        PackageOwner::Root
-    } else {
-        PackageOwner::Workbook
-    };
-    let current_set: HashSet<(String, String)> = relationships
-        .iter()
-        .filter(|relationship| relationship.owner == owner)
-        .filter_map(|relationship| {
-            let PackageRelationshipTarget::InternalPart { path } = &relationship.target else {
-                return None;
-            };
-            Some((
-                relationship.relationship_type.clone(),
-                normalize_part_path(path),
-            ))
-        })
-        .collect();
-    let imported_set: HashSet<(String, String)> = imported
-        .iter()
-        .filter(|hint| !is_external_target_mode(hint.target_mode.as_deref()))
-        .filter_map(|hint| {
-            imported_internal_target(owner_part, hint)
-                .map(|target| (hint.relationship_type.clone(), normalize_part_path(&target)))
-        })
-        .collect();
-    current_set == imported_set
+        .count()
 }
 
 pub(super) fn imported_internal_target(
@@ -161,4 +99,51 @@ pub(super) fn imported_internal_target(
         return None;
     }
     crate::infra::opc::resolve_relationship_target(owner_part, &hint.target).ok()
+}
+
+fn relationship_target_key(target: &PackageRelationshipTarget) -> Option<(u8, String)> {
+    match target {
+        PackageRelationshipTarget::InternalPart { path } => Some((0, normalize_part_path(path))),
+        PackageRelationshipTarget::External { target, .. } => Some((1, target.clone())),
+        PackageRelationshipTarget::InternalPath { target } => Some((2, target.clone())),
+    }
+}
+
+fn imported_relationship_target_key(
+    owner_part: Option<&str>,
+    hint: &domain_types::PackageRelationshipHint,
+) -> Option<(u8, String)> {
+    if is_external_target_mode(hint.target_mode.as_deref()) {
+        return Some((1, hint.target.clone()));
+    }
+    if hint.target.starts_with('#') {
+        return Some((2, hint.target.clone()));
+    }
+    imported_internal_target(owner_part, hint).map(|target| (0, normalize_part_path(&target)))
+}
+
+fn relationship_hints_for_owner<'a>(
+    metadata: &'a PackageFidelityMetadata,
+    owner: &PackageOwner,
+) -> Option<(Option<&'a str>, &'a [domain_types::PackageRelationshipHint])> {
+    match owner {
+        PackageOwner::Root => Some((None, metadata.root_relationships.as_slice())),
+        PackageOwner::Workbook => Some((
+            Some("xl/workbook.xml"),
+            metadata.workbook_relationships.as_slice(),
+        )),
+        PackageOwner::Worksheet { path, .. } | PackageOwner::Part { path } => {
+            let owner_path = normalize_part_path(path);
+            metadata
+                .part_relationships
+                .iter()
+                .find(|info| normalize_part_path(&info.owner_path) == owner_path)
+                .map(|info| {
+                    (
+                        Some(info.owner_path.as_str()),
+                        info.relationships.as_slice(),
+                    )
+                })
+        }
+    }
 }

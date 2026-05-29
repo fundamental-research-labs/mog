@@ -22,9 +22,10 @@ fn vba_project_active_content_is_quarantined_in_package_fidelity() {
         });
 
     let mut extensions = crate::pipeline::import_extensions::ImportExtensionParts::new();
-    extensions
-        .imported_parts
-        .record("xl/vbaProject.bin".to_string(), vec![0xD0, 0xCF, 0x11, 0xE0]);
+    extensions.imported_parts.record(
+        "xl/vbaProject.bin".to_string(),
+        vec![0xD0, 0xCF, 0x11, 0xE0],
+    );
     result.extensions = Some(extensions);
 
     let (output, diagnostics) = full_parse_result_to_parse_output(&result);

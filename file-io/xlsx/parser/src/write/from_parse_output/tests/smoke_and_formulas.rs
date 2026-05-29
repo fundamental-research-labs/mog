@@ -81,23 +81,34 @@ fn modeled_formula_metadata_decorates_current_formula_cell() {
 }
 
 #[test]
-fn shared_formula_range_is_not_replayed_without_modeled_group() {
-    let mut formula_cell = make_formula_cell(
+fn shared_formula_range_is_preserved_when_group_matches_live_formulas() {
+    let mut master = make_formula_cell(
         0,
         0,
-        "SUM(A2:A10)",
-        DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+        "A1+1",
+        DomainValue::Number(FiniteF64::new(2.0).unwrap()),
     );
-    formula_cell.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+    master.cell_formula = Some(ooxml_types::worksheet::CellFormula {
         t: ooxml_types::worksheet::CellFormulaType::Shared,
         si: Some(7),
         r#ref: Some("A1:A2".to_string()),
-        text: "SUM(A2:A10)".to_string(),
+        text: "A1+1".to_string(),
+        ..Default::default()
+    });
+    let mut follower = make_formula_cell(
+        1,
+        0,
+        "A2+1",
+        DomainValue::Number(FiniteF64::new(3.0).unwrap()),
+    );
+    follower.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Shared,
+        si: Some(7),
         ..Default::default()
     });
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
-        cells: vec![formula_cell],
+        cells: vec![master, follower],
         ..Default::default()
     }]);
 
@@ -106,11 +117,13 @@ fn shared_formula_range_is_not_replayed_without_modeled_group() {
     let sheet_xml =
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(sheet_xml.contains("<f>SUM(A2:A10)</f>"));
-    assert!(!sheet_xml.contains(r#"t="shared""#));
-    assert!(!sheet_xml.contains(r#"si="7""#));
+    assert!(sheet_xml.contains(r#"<f t="shared" si="7" ref="A1:A2">A1+1</f>"#));
+    assert!(sheet_xml.contains(r#"<f t="shared" si="7"/>"#));
+    assert!(sheet_xml.contains(r#"<v>2</v>"#));
+    assert!(sheet_xml.contains(r#"<v>3</v>"#));
     assert!(!sheet_xml.contains(r#"ca="1""#));
     assert!(!sheet_xml.contains(r#"xml:space="preserve""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
@@ -146,23 +159,34 @@ fn array_formula_range_is_not_replayed_without_modeled_group() {
 }
 
 #[test]
-fn modeled_shared_formula_range_is_not_replayed_without_modeled_group() {
-    let mut formula_cell = make_formula_cell(
+fn stale_shared_formula_range_decompacts_to_current_plain_formulas() {
+    let mut master = make_formula_cell(
         0,
         0,
         "SUM(A2:A10)",
         DomainValue::Number(FiniteF64::new(100.0).unwrap()),
     );
-    formula_cell.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+    master.cell_formula = Some(ooxml_types::worksheet::CellFormula {
         t: ooxml_types::worksheet::CellFormulaType::Shared,
         si: Some(7),
         r#ref: Some("A1:A2".to_string()),
         text: "SUM(A2:A10)".to_string(),
         ..Default::default()
     });
+    let mut follower = make_formula_cell(
+        1,
+        0,
+        "SUM(B2:B10)",
+        DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+    );
+    follower.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Shared,
+        si: Some(7),
+        ..Default::default()
+    });
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
-        cells: vec![formula_cell],
+        cells: vec![master, follower],
         ..Default::default()
     }]);
 
@@ -172,6 +196,7 @@ fn modeled_shared_formula_range_is_not_replayed_without_modeled_group() {
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(sheet_xml.contains("<f>SUM(A2:A10)</f>"));
+    assert!(sheet_xml.contains("<f>SUM(B2:B10)</f>"));
     assert!(!sheet_xml.contains(r#"t="shared""#));
     assert!(!sheet_xml.contains(r#"si="7""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
@@ -365,6 +390,7 @@ fn test_col_widths_and_row_heights() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             }],
             row_heights: vec![RowDimension {
                 row: 0,

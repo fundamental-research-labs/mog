@@ -73,11 +73,7 @@ fn register_modeled_workbook_graph(
             owner: PackageOwner::Workbook,
             relationship_type: REL_WORKSHEET.to_string(),
             target: PackageRelationshipTarget::InternalPart { path },
-            identity_hint: options
-                .package_fidelity
-                .as_ref()
-                .and_then(|metadata| metadata.sheet_workbook_r_ids.get(sheet_idx))
-                .map(RelationshipIdentityHint::new),
+            identity_hint: None,
         });
     }
 

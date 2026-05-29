@@ -2,16 +2,61 @@ use crate::write::xml_writer::XmlWriter;
 
 use super::{CalcMode, CalcSettings};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CalcIdExportDisposition {
+    PreservedImported,
+    CanonicalizedMog,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CalcSettingsExportDecision {
+    pub settings: CalcSettings,
+    pub calc_id_disposition: CalcIdExportDisposition,
+}
+
 /// Convert `domain_types::CalculationProperties` into an `ooxml_types::CalcPr` for the workbook writer.
 ///
 /// XLSX export policy: Mog never emits `xl/calcChain.xml`. Calc chains are an
 /// Excel engine cache, not authoritative workbook state. Formula cached results
 /// are emitted from modeled cell values, while workbook calculation flags remain
-/// user/model-controlled settings. The typed `calcPr` fields themselves are
-/// authoritative workbook metadata, so an imported `calcId` stays current until
-/// the live calculation settings are changed by the workbook model.
+/// user/model-controlled settings.
 pub fn calc_settings_from_domain(calc_props: &domain_types::CalculationProperties) -> CalcSettings {
-    calc_props.clone().into()
+    calc_settings_for_export(calc_props, None, false).settings
+}
+
+pub fn calc_settings_for_export(
+    calc_props: &domain_types::CalculationProperties,
+    calc_id_provenance: Option<&domain_types::CalcIdProvenance>,
+    requires_consumer_recalc: bool,
+) -> CalcSettingsExportDecision {
+    let ooxml_calc_pr: ooxml_types::workbook::CalcPr = calc_props.clone().into();
+    let imported_calc_id_is_current = calc_id_provenance.is_some_and(|provenance| {
+        provenance.state == domain_types::CalcIdProvenanceState::ImportedCurrent
+            && provenance.imported_calc_id == calc_props.calc_id
+            && provenance.workbook_generation.is_some()
+            && provenance.formula_graph_generation.is_some()
+    });
+
+    if imported_calc_id_is_current && !requires_consumer_recalc {
+        CalcSettingsExportDecision {
+            settings: ooxml_calc_pr,
+            calc_id_disposition: CalcIdExportDisposition::PreservedImported,
+        }
+    } else {
+        let mut settings = ooxml_types::workbook::CalcPr {
+            calc_id: Some(0),
+            ..ooxml_calc_pr
+        };
+        if requires_consumer_recalc {
+            settings.full_calc_on_load = true;
+            settings.force_full_calc = true;
+            settings.calc_completed = false;
+        }
+        CalcSettingsExportDecision {
+            settings,
+            calc_id_disposition: CalcIdExportDisposition::CanonicalizedMog,
+        }
+    }
 }
 
 /// Write calcPr section.

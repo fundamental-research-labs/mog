@@ -1,16 +1,17 @@
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
     CT_COMMENTS, CT_CONNECTIONS, CT_DRAWING, CT_EMF, CT_FEATURE_PROPERTY_BAG, CT_GIF, CT_JPEG,
-    CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_QUERY_TABLE, CT_SLICER,
-    CT_SLICER_CACHE, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THREADED_COMMENTS, CT_VML_DRAWING,
-    CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder,
-    PackageOwner, PackagePart, PackagePartKind, PackageRelationship, PackageRelationshipTarget,
-    REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING,
-    REL_EXTERNAL_LINK, REL_FEATURE_PROPERTY_BAG, REL_HYPERLINK, REL_IMAGE, REL_PIVOT_CACHE,
-    REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS,
-    REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE, REL_TABLE, REL_TABLE_SINGLE_CELLS,
-    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_VOLATILE_DEPENDENCIES,
-    REL_WORKSHEET_CUSTOM_PROPERTY, RelationshipIdentityHint, is_external_target_mode, modeled_part,
+    CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS,
+    CT_QUERY_TABLE, CT_SLICER, CT_SLICER_CACHE, CT_TABLE, CT_TABLE_SINGLE_CELLS,
+    CT_THREADED_COMMENTS, CT_VML_DRAWING, CT_VOLATILE_DEPENDENCIES, CT_WMF,
+    CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind,
+    PackageRelationship, PackageRelationshipTarget, REL_CHART, REL_CHART_EX, REL_COMMENTS,
+    REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK, REL_FEATURE_PROPERTY_BAG,
+    REL_HYPERLINK, REL_IMAGE, REL_PIVOT_CACHE, REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS,
+    REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE,
+    REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_VOLATILE_DEPENDENCIES, REL_WORKSHEET_CUSTOM_PROPERTY, RegisteredRelationshipKey,
+    RelationshipIdentityHint, is_external_target_mode, modeled_part,
     normalize_external_link_part_path, normalize_part_path,
 };
 use crate::write::write_error::WriteError;
@@ -68,6 +69,7 @@ pub fn register_external_link_relationship(
     part_name: &str,
     relationship_type: &str,
     target: &str,
+    target_mode: Option<&str>,
     identity_hint: Option<&str>,
 ) {
     graph.add_relationship(PackageRelationship {
@@ -77,6 +79,7 @@ pub fn register_external_link_relationship(
         relationship_type: relationship_type.to_string(),
         target: PackageRelationshipTarget::External {
             target: target.to_string(),
+            target_mode: target_mode.map(str::to_string),
         },
         identity_hint: identity_hint.map(RelationshipIdentityHint::new),
     });
@@ -221,6 +224,7 @@ pub fn register_workbook_volatile_dependencies(
             relationship_type: hint.relationship_type.clone(),
             target: PackageRelationshipTarget::External {
                 target: hint.target.clone(),
+                target_mode: hint.target_mode.clone(),
             },
             identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
         });
@@ -378,6 +382,7 @@ pub fn register_chart_external_relationship(
         relationship_type: relationship_type.to_string(),
         target: PackageRelationshipTarget::External {
             target: target.to_string(),
+            target_mode: Some("External".to_string()),
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
@@ -393,6 +398,7 @@ pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Resul
         "jpg" | "jpeg" => CT_JPEG.to_string(),
         "gif" => CT_GIF.to_string(),
         "bmp" => "image/bmp".to_string(),
+        "svg" => "image/svg+xml".to_string(),
         "tif" | "tiff" => "image/tiff".to_string(),
         "emf" => CT_EMF.to_string(),
         "wmf" => CT_WMF.to_string(),
@@ -437,7 +443,7 @@ pub fn register_drawing_chart_relationship(
     drawing_path: &str,
     chart_path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     register_drawing_relationship(
         graph,
         drawing_path,
@@ -452,7 +458,7 @@ pub fn register_drawing_chart_ex_relationship(
     drawing_path: &str,
     chart_ex_path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     register_drawing_relationship(
         graph,
         drawing_path,
@@ -467,7 +473,7 @@ pub fn register_drawing_image_relationship(
     drawing_path: &str,
     image_path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     register_drawing_relationship(
         graph,
         drawing_path,
@@ -501,8 +507,8 @@ fn register_drawing_relationship(
     relationship_type: &str,
     target_path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
-    graph.add_relationship(PackageRelationship {
+) -> Result<RegisteredRelationshipKey, WriteError> {
+    let key = graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Part {
             path: normalize_part_path(drawing_path),
         },
@@ -512,7 +518,7 @@ fn register_drawing_relationship(
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
-    Ok(())
+    Ok(key)
 }
 
 pub fn register_drawing_relationship_with_target_mode(
@@ -522,10 +528,11 @@ pub fn register_drawing_relationship_with_target_mode(
     target: &str,
     target_mode: Option<&str>,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     let target = if is_external_target_mode(target_mode) {
         PackageRelationshipTarget::External {
             target: target.to_string(),
+            target_mode: target_mode.map(str::to_string),
         }
     } else if relationship_type == REL_HYPERLINK && target.starts_with('#') {
         PackageRelationshipTarget::InternalPath {
@@ -536,7 +543,7 @@ pub fn register_drawing_relationship_with_target_mode(
             path: normalize_part_path(target),
         }
     };
-    graph.add_relationship(PackageRelationship {
+    let key = graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Part {
             path: normalize_part_path(drawing_path),
         },
@@ -544,7 +551,7 @@ pub fn register_drawing_relationship_with_target_mode(
         target,
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
-    Ok(())
+    Ok(key)
 }
 
 pub fn register_worksheet_hyperlink(
@@ -552,11 +559,12 @@ pub fn register_worksheet_hyperlink(
     sheet_idx: usize,
     target: &str,
     target_mode: Option<&str>,
-    relationship_id_hint: &str,
+    relationship_id_hint: Option<&str>,
 ) {
     let target = if is_external_target_mode(target_mode) {
         PackageRelationshipTarget::External {
             target: target.to_string(),
+            target_mode: target_mode.map(str::to_string),
         }
     } else if target.starts_with('#') {
         PackageRelationshipTarget::InternalPath {
@@ -565,13 +573,14 @@ pub fn register_worksheet_hyperlink(
     } else {
         PackageRelationshipTarget::External {
             target: target.to_string(),
+            target_mode: Some("External".to_string()),
         }
     };
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_HYPERLINK.to_string(),
         target,
-        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
 }
 
@@ -610,12 +619,26 @@ pub fn register_worksheet_custom_property(
     Ok(())
 }
 
-pub fn register_worksheet_printer_settings(
+pub fn register_worksheet_printer_settings_payload(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
     path: &str,
+    bytes: Vec<u8>,
+    content_type: &str,
     relationship_id_hint: &str,
-) {
+) -> Result<(), WriteError> {
+    if content_type != CT_PRINTER_SETTINGS {
+        return Err(WriteError::PackageIntegrity(format!(
+            "printer settings part {path} has invalid content type {content_type}"
+        )));
+    }
+    graph.register_part(PackagePart {
+        path: normalize_part_path(path),
+        content_type: Some(CT_PRINTER_SETTINGS.to_string()),
+        default_extension: None,
+        kind: PackagePartKind::Opaque,
+        bytes: Some(bytes),
+    })?;
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_PRINTER_SETTINGS.to_string(),
@@ -624,6 +647,7 @@ pub fn register_worksheet_printer_settings(
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
     });
+    Ok(())
 }
 
 pub fn register_worksheet_comments(
@@ -711,11 +735,22 @@ pub fn register_generated_worksheet_pivot_table(
     relationship_id_hint: Option<&str>,
 ) -> Result<(), WriteError> {
     let path = format!("xl/pivotTables/pivotTable{global_idx}.xml");
-    graph.register_part(modeled_part(&path, CT_PIVOT_TABLE))?;
+    register_worksheet_pivot_table(graph, sheet_idx, &path, relationship_id_hint)
+}
+
+pub fn register_worksheet_pivot_table(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    path: &str,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    graph.register_part(modeled_part(path, CT_PIVOT_TABLE))?;
     graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_PIVOT_TABLE.to_string(),
-        target: PackageRelationshipTarget::InternalPart { path },
+        target: PackageRelationshipTarget::InternalPart {
+            path: path.to_string(),
+        },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
     Ok(())
@@ -741,9 +776,23 @@ pub fn register_pivot_table_cache_relationship(
     cache_definition_path: &str,
     relationship_id_hint: Option<&str>,
 ) {
+    register_pivot_table_cache_relationship_for_path(
+        graph,
+        &format!("xl/pivotTables/pivotTable{pivot_table_global_idx}.xml"),
+        cache_definition_path,
+        relationship_id_hint,
+    );
+}
+
+pub fn register_pivot_table_cache_relationship_for_path(
+    graph: &mut PackageGraphBuilder,
+    pivot_table_path: &str,
+    cache_definition_path: &str,
+    relationship_id_hint: Option<&str>,
+) {
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Part {
-            path: format!("xl/pivotTables/pivotTable{pivot_table_global_idx}.xml"),
+            path: pivot_table_path.to_string(),
         },
         relationship_type: REL_PIVOT_CACHE_DEFINITION.to_string(),
         target: PackageRelationshipTarget::InternalPart {

@@ -41,6 +41,19 @@ pub(super) fn build_sheet_comment_package_info(
         }
     }
 
+    for (vml_path, bytes, _) in &sheet.raw_vml_drawings {
+        for shape in crate::domain::comments::read::parse_vml_shapes(bytes) {
+            info.vml_note_shapes
+                .push(domain_types::SheetVmlNoteShapeInfo {
+                    vml_path: Some(vml_path.clone()),
+                    cell_ref: shape.cell_ref,
+                    shape_id: (!shape.id.is_empty()).then_some(shape.id),
+                    width: shape.note_width_style,
+                    height: shape.note_height_style,
+                });
+        }
+    }
+
     (!info.is_empty()).then_some(info)
 }
 
@@ -89,17 +102,16 @@ mod tests {
                     "../threadedComments/threadedComment6.xml",
                 ),
             ],
-            raw_vml_drawings: vec![(
-                "xl/drawings/vmlDrawing6.vml".to_string(),
-                Vec::new(),
-                None,
-            )],
+            raw_vml_drawings: vec![("xl/drawings/vmlDrawing6.vml".to_string(), Vec::new(), None)],
             ..Default::default()
         };
 
         let package = build_sheet_comment_package_info(&sheet).expect("comment package");
 
-        assert_eq!(package.comments_path_hint.as_deref(), Some("xl/comments6.xml"));
+        assert_eq!(
+            package.comments_path_hint.as_deref(),
+            Some("xl/comments6.xml")
+        );
         assert_eq!(
             package.comments_relationship_id_hint.as_deref(),
             Some("rIdComments")
@@ -108,10 +120,7 @@ mod tests {
             package.vml_path_hint.as_deref(),
             Some("xl/drawings/vmlDrawing6.vml")
         );
-        assert_eq!(
-            package.vml_relationship_id_hint.as_deref(),
-            Some("rIdVml")
-        );
+        assert_eq!(package.vml_relationship_id_hint.as_deref(), Some("rIdVml"));
         assert_eq!(
             package.threaded_comments_path_hint.as_deref(),
             Some("xl/threadedComments/threadedComment6.xml")

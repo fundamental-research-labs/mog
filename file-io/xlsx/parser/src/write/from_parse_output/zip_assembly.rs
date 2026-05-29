@@ -42,27 +42,11 @@ pub(super) fn write_zip_package(
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
     worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
 ) -> Result<Vec<u8>, WriteError> {
-    // Build content types with knowledge of comments, tables, theme, and props.
-    let has_any_comments = sheet_extras.iter().any(|e| e.comments.is_some());
+    // Build content types from the resolved package graph. Imported manifest
+    // hints may update graph-required rows, but cannot add stale rows.
     let _total_table_count: usize = sheet_extras.iter().map(|e| e.tables.len()).sum();
 
     let mut content_types = ContentTypesManager::new();
-    content_types.add_default(
-        "bin",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings",
-    );
-    content_types.add_default(
-        "rels",
-        "application/vnd.openxmlformats-package.relationships+xml",
-    );
-    content_types.add_default("xml", "application/xml");
-    add_standard_excel_image_default_content_types(&mut content_types);
-    if has_any_comments {
-        content_types.add_default(
-            "vml",
-            "application/vnd.openxmlformats-officedocument.vmlDrawing",
-        );
-    }
     package_graph.add_content_types_to(&mut content_types);
     package_graph.apply_content_type_preferences_to(&mut content_types);
     // Comments, VML comment drawings, and threaded comments are registered
@@ -523,26 +507,14 @@ pub(super) fn write_zip_package(
 
     // Pivot table and cache XML files
     for entry in &pivot_data.pivot_table_entries {
-        let pivot_table_path = format!("xl/pivotTables/pivotTable{}.xml", entry.global_idx);
-        add_registered_part(
-            package_graph,
-            &mut zip,
-            &pivot_table_path,
-            entry.xml.clone(),
-        )?;
+        add_registered_part(package_graph, &mut zip, &entry.path, entry.xml.clone())?;
         let pt_rels = package_graph.relationship_manager_for_owner(
             &crate::write::package_graph::PackageOwner::Part {
-                path: pivot_table_path,
+                path: entry.path.clone(),
             },
         );
         if !pt_rels.is_empty() {
-            zip.add_file(
-                &format!(
-                    "xl/pivotTables/_rels/pivotTable{}.xml.rels",
-                    entry.global_idx
-                ),
-                pt_rels.to_xml(),
-            );
+            zip.add_file(&entry.rels_path, pt_rels.to_xml());
         }
     }
     for entry in &pivot_data.pivot_cache_entries {
@@ -817,20 +789,4 @@ fn relative_target(owner_path: &str, target_path: &str) -> String {
     let mut result = vec![".."; from_components.len().saturating_sub(common)];
     result.extend(to_components[common..].iter().copied());
     result.join("/")
-}
-
-fn add_standard_excel_image_default_content_types(content_types: &mut ContentTypesManager) {
-    for (extension, content_type) in [
-        ("jpg", "image/jpg"),
-        ("tiff", "image/tiff"),
-        ("jpeg", "image/jpeg"),
-        ("png", "image/png"),
-        ("bmp", "image/bmp"),
-        ("gif", "image/gif"),
-        ("svg", "image/svg+xml"),
-        ("emf", "image/x-emf"),
-        ("wmf", "image/x-wmf"),
-    ] {
-        content_types.add_default(extension, content_type);
-    }
 }

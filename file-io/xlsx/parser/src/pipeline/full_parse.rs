@@ -11,6 +11,7 @@ mod non_editable_sheets;
 mod theme_discovery;
 mod timing;
 mod workbook_disposition;
+mod workbook_xml_fidelity;
 
 pub(crate) use helpers::extract_attr_value;
 

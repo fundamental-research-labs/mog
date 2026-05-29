@@ -60,6 +60,7 @@ use std::collections::HashSet;
 use domain_types::{
     AuthoredStyleRun,
     // Round-trip types
+    CalcIdProvenance,
     CalculationProperties,
     // Parse output types
     CellData,
@@ -287,6 +288,10 @@ pub fn full_parse_result_to_parse_output(
         properties,
         extended_properties: result.doc_props_app.clone(),
         protection,
+        calc_id_provenance: calculation
+            .calc_id
+            .map(CalcIdProvenance::imported_current)
+            .unwrap_or_default(),
         calculation,
         metadata,
         workbook_views: result

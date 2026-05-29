@@ -23,6 +23,25 @@ pub fn comments_from_domain(
     root_namespace_attrs: Option<&[(String, String)]>,
     root_ext_lst_xml: Option<&str>,
 ) -> (Vec<u8>, Vec<u8>) {
+    comments_from_domain_with_package(
+        _sheet_num,
+        comments,
+        _original_authors,
+        root_namespace_attrs,
+        root_ext_lst_xml,
+        None,
+    )
+}
+
+/// Build comments XML and VML drawing XML using owner-scoped package metadata.
+pub fn comments_from_domain_with_package(
+    _sheet_num: usize,
+    comments: &[domain_types::Comment],
+    _original_authors: Option<&[String]>,
+    root_namespace_attrs: Option<&[(String, String)]>,
+    root_ext_lst_xml: Option<&str>,
+    comment_package: Option<&domain_types::SheetCommentPackageInfo>,
+) -> (Vec<u8>, Vec<u8>) {
     let mut cw = CommentsWriter::new();
 
     if let Some(attrs) = root_namespace_attrs {
@@ -148,6 +167,16 @@ pub fn comments_from_domain(
         shape.visible = visible;
         shape.note_height = comment.note_height;
         shape.note_width = comment.note_width;
+        if let Some(vml_shape) = comment_package.and_then(|package| {
+            package
+                .vml_note_shapes
+                .iter()
+                .find(|vml_shape| vml_shape.cell_ref.as_deref() == Some(comment.cell_ref.as_str()))
+        }) {
+            shape.has_vml_note_provenance = true;
+            shape.note_height_style = vml_shape.height.clone();
+            shape.note_width_style = vml_shape.width.clone();
+        }
         if let Some(anchor) = &comment.note_shape_anchor {
             shape.left_col = anchor.left_column;
             shape.left_offset = anchor.left_offset as f64;

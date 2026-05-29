@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use domain_types::{DataTableRegion, OutlineGroup, SheetData};
+use domain_types::{AuthoredStyleRun, DataTableRegion, OutlineGroup, SheetData};
 
 use super::super::SharedStringsWriter;
 use super::sheet_cells;
@@ -33,7 +33,7 @@ pub(super) fn build_sheet(
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
 
-    if let Some(dimension_ref) = &sheet_data.worksheet_dimension_ref {
+    if let Some(dimension_ref) = compatible_authored_dimension_ref(sheet_data) {
         writer.set_dimension_ref(dimension_ref.clone());
     }
     if let Some(sheet_calc_pr) = &sheet_data.sheet_calc_pr {
@@ -56,6 +56,55 @@ pub(super) fn build_sheet(
     sheet_views::apply_sheet_views(&mut writer, sheet_data);
 
     writer
+}
+
+fn compatible_authored_dimension_ref(sheet_data: &SheetData) -> Option<&String> {
+    let dimension_ref = sheet_data.worksheet_dimension_ref.as_ref()?;
+    let parsed = crate::domain::worksheet::read::parse_dimension_ref_value(dimension_ref.as_str())?;
+    if parsed == live_emitted_cell_extent(sheet_data) {
+        Some(dimension_ref)
+    } else {
+        None
+    }
+}
+
+fn live_emitted_cell_extent(sheet_data: &SheetData) -> (u32, u32, u32, u32) {
+    let mut extent = CellExtent::default();
+    for cell in &sheet_data.cells {
+        extent.include(cell.row, cell.col);
+    }
+    for run in &sheet_data.authored_style_runs {
+        extent.include_authored_style_run(run);
+    }
+    extent.into_dimension().unwrap_or((0, 0, 0, 0))
+}
+
+#[derive(Default)]
+struct CellExtent {
+    min_row: Option<u32>,
+    min_col: Option<u32>,
+    max_row: u32,
+    max_col: u32,
+}
+
+impl CellExtent {
+    fn include(&mut self, row: u32, col: u32) {
+        self.min_row = Some(self.min_row.map_or(row, |min| min.min(row)));
+        self.min_col = Some(self.min_col.map_or(col, |min| min.min(col)));
+        self.max_row = self.max_row.max(row);
+        self.max_col = self.max_col.max(col);
+    }
+
+    fn include_authored_style_run(&mut self, run: &AuthoredStyleRun) {
+        if run.start_row <= run.end_row && run.start_col <= run.end_col {
+            self.include(run.start_row, run.start_col);
+            self.include(run.end_row, run.end_col);
+        }
+    }
+
+    fn into_dimension(self) -> Option<(u32, u32, u32, u32)> {
+        Some((self.min_row?, self.min_col?, self.max_row, self.max_col))
+    }
 }
 
 fn apply_sheet_properties(writer: &mut SheetWriter, sheet_data: &SheetData) {

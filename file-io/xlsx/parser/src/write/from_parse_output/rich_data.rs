@@ -56,6 +56,7 @@ pub(super) fn register_parts(
             ) {
                 crate::write::package_graph::PackageRelationshipTarget::External {
                     target: relationship.target.clone(),
+                    target_mode: relationship.target_mode.clone(),
                 }
             } else {
                 let target_path = crate::infra::opc::resolve_relationship_target(

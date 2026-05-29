@@ -33,6 +33,7 @@ pub(super) struct SheetExtras {
     /// Original drawing ZIP path from round-trip context (e.g. "xl/drawings/drawing1.xml").
     /// When set, this path is used instead of sequential numbering.
     pub(super) original_drawing_path: Option<String>,
+    pub(super) original_drawing_relationship_id: Option<String>,
     /// Parsed header/footer image VML data (from legacyDrawingHF).
     /// Stored as domain types — the writer generates VML XML from these.
     pub(super) hf_vml: Option<crate::domain::print::hf_images::ParsedHfVml>,
@@ -84,7 +85,7 @@ pub(super) struct WorksheetHyperlinkGraphEntry {
     pub(super) hyperlink_idx: usize,
     pub(super) target: String,
     pub(super) target_mode: Option<String>,
-    pub(super) relationship_id_hint: String,
+    pub(super) relationship_id_hint: Option<String>,
 }
 
 pub(super) struct WorksheetControlPropertyGraphEntry {
@@ -165,6 +166,8 @@ pub(super) struct WorksheetPrinterSettingsGraphEntry {
     pub(super) path: String,
     pub(super) target: String,
     pub(super) relationship_id_hint: String,
+    pub(super) bytes: Vec<u8>,
+    pub(super) content_type: String,
 }
 
 pub(super) struct WorksheetThreadedCommentsGraphEntry {

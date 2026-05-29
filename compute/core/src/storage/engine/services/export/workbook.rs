@@ -38,6 +38,7 @@ const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
 const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
 const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
 const KEY_STYLE_REGISTRY_TABLE_STYLES: &str = "tableStyles";
+const KEY_THREADED_COMMENT_PERSON_ORDER: &str = "threadedCommentPersonOrder";
 const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
 const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
 const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
@@ -745,7 +746,31 @@ pub(in crate::storage::engine) fn export_workbook_threaded_comment_persons(
             }
         }
     }
-    persons.sort_by(|a, b| a.id.cmp(&b.id));
+    let imported_order = workbook
+        .get(&txn, KEY_THREADED_COMMENT_PERSON_ORDER)
+        .and_then(|value| match value {
+            Out::Any(Any::String(json)) => serde_json::from_str::<Vec<String>>(&json).ok(),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let imported_rank: std::collections::HashMap<&str, usize> = imported_order
+        .iter()
+        .enumerate()
+        .map(|(idx, id)| (id.as_str(), idx))
+        .collect();
+    persons.sort_by(|a, b| {
+        imported_rank
+            .get(a.id.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+            .cmp(
+                &imported_rank
+                    .get(b.id.as_str())
+                    .copied()
+                    .unwrap_or(usize::MAX),
+            )
+            .then_with(|| a.id.cmp(&b.id))
+    });
     persons
 }
 

@@ -65,6 +65,9 @@ export type {
   ExternalDefinedName,
   ExternalLink,
   ExternalLinkExtraRel,
+  ExternalLinkRelationship,
+  ExternalLinkRelationshipCurrentness,
+  ExternalLinkRelationshipRole,
   ExternalLinkType,
 } from '@mog/bridge-ts/generated/xlsx-types';
 

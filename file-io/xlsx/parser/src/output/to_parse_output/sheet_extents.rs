@@ -32,6 +32,7 @@ pub(super) fn is_style_only_cell(cell: &CellData) -> bool {
         && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
+        && cell.formula_cache_provenance.is_absent_or_unknown()
         && cell.vm.is_none()
         && !cell.phonetic
         && cell.date_lexical_value.is_none()
@@ -51,6 +52,7 @@ pub(super) fn is_styleless_blank_cell(cell: &CellData) -> bool {
         && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
+        && cell.formula_cache_provenance.is_absent_or_unknown()
         && cell.vm.is_none()
         && !cell.phonetic
         && cell.date_lexical_value.is_none()
@@ -71,6 +73,7 @@ pub(super) fn explicit_blank_cell(row: u32, col: u32) -> CellData {
         cell_metadata_index: None,
         formula_result_type: None,
         has_empty_cached_value: false,
+        formula_cache_provenance: Default::default(),
         vm: None,
         phonetic: false,
         date_lexical_value: None,

@@ -28,12 +28,9 @@ pub(super) fn convert_floating_object(
                     let r_id = reusable_image_relationship_id(ooxml, image_path, image_rels)
                         .unwrap_or_else(|| next_available_image_r_id(image_rels));
                     image_props.r_id = r_id.clone();
-                    if !image_rels
-                        .iter()
-                        .any(|(existing_id, existing_path)| {
-                            existing_id == &r_id && existing_path == image_path
-                        })
-                    {
+                    if !image_rels.iter().any(|(existing_id, existing_path)| {
+                        existing_id == &r_id && existing_path == image_path
+                    }) {
                         image_rels.push((r_id, image_path.clone()));
                     }
                     push_image_blob_if_data_url(image_blobs, image_path, &pic_data.src);
@@ -138,9 +135,10 @@ fn reusable_image_relationship_id(
         .iter()
         .find(|relationship| relationship.id == embed_id && relationship.target == image_path)?;
 
-    if image_rels.iter().any(|(id, target)| {
-        id == &relationship.id && target != &relationship.target
-    }) {
+    if image_rels
+        .iter()
+        .any(|(id, target)| id == &relationship.id && target != &relationship.target)
+    {
         return None;
     }
 

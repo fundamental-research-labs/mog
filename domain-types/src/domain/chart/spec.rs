@@ -308,8 +308,7 @@ impl ChartSpec {
             .map(|o| o.chart_auxiliary_parts.clone())
             .unwrap_or_default();
         let chart_ex_replay = ooxml.and_then(|o| o.chart_ex_replay.clone());
-        let standard_chart_provenance =
-            ooxml.and_then(|o| o.standard_chart_provenance.clone());
+        let standard_chart_provenance = ooxml.and_then(|o| o.standard_chart_provenance.clone());
         let standard_chart_export_authority =
             ooxml.and_then(|o| o.standard_chart_export_authority.clone());
         let is_chart_ex = ooxml.map(|o| o.is_chart_ex).unwrap_or_else(|| {

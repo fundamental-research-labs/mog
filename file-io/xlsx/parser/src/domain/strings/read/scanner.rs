@@ -20,17 +20,29 @@ pub(super) fn find_byte(xml: &[u8], byte: u8, start: usize) -> Option<usize> {
 
 /// Parse the uniqueCount attribute from the <sst> element
 pub(super) fn parse_unique_count(xml: &[u8]) -> Option<usize> {
+    parse_sst_usize_attr(xml, b"uniqueCount")
+}
+
+/// Parse the count attribute from the <sst> element.
+pub(super) fn parse_count(xml: &[u8]) -> Option<usize> {
+    parse_sst_usize_attr(xml, b"count")
+}
+
+fn parse_sst_usize_attr(xml: &[u8], attr_name: &[u8]) -> Option<usize> {
     // Find <sst element
     let sst_pos = find_bytes(xml, b"<sst", 0)?;
     let sst_end = find_byte(xml, b'>', sst_pos)?;
 
-    // Find uniqueCount=" within the <sst> tag
-    let attr_start = find_bytes(xml, b"uniqueCount=\"", sst_pos)?;
+    let mut pattern = Vec::with_capacity(attr_name.len() + 2);
+    pattern.extend_from_slice(attr_name);
+    pattern.extend_from_slice(b"=\"");
+
+    let attr_start = find_bytes(xml, &pattern, sst_pos)?;
     if attr_start > sst_end {
         return None;
     }
 
-    let value_start = attr_start + b"uniqueCount=\"".len();
+    let value_start = attr_start + pattern.len();
     let value_end = find_byte(xml, b'"', value_start)?;
 
     // Parse the number

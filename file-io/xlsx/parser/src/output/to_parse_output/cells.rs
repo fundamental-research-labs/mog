@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use domain_types::{CellData, ImportedCellProjectionRole};
+use domain_types::{
+    CellData, FormulaCacheProvenance, FormulaCacheState, FormulaCachedValuePresence,
+    ImportedCellProjectionRole,
+};
 use value_types::{CellError, CellValue};
 
 use crate::output::results::{
@@ -232,6 +235,7 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
         (is_formula || cell.formula.is_some() || cell.cell_formula.is_some())
             && cell.value.as_ref().map_or(false, |v| v.is_empty())
             && cell.cached_value_type == 0;
+    let is_formula_cell = is_formula || cell.formula.is_some() || cell.cell_formula.is_some();
 
     let can_drop_sst_provenance = cell
         .sst_index
@@ -273,6 +277,12 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
             None
         },
         has_empty_cached_value,
+        formula_cache_provenance: formula_cache_provenance(
+            cell,
+            is_formula_cell,
+            has_empty_cached_value,
+            has_effective_formula_result_type,
+        ),
         vm: cell.vm,
         phonetic: cell.phonetic,
         date_lexical_value: cell.date_lexical_value.clone(),
@@ -287,6 +297,44 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
             cell.value.clone()
         },
         projection_role,
+    }
+}
+
+fn formula_cache_provenance(
+    cell: &FullCellData,
+    is_formula_cell: bool,
+    has_empty_cached_value: bool,
+    has_effective_formula_result_type: bool,
+) -> FormulaCacheProvenance {
+    if !is_formula_cell {
+        return FormulaCacheProvenance::default();
+    }
+
+    let cached_value_presence = if has_empty_cached_value {
+        FormulaCachedValuePresence::ExplicitEmpty
+    } else if cell.value.as_ref().is_some_and(|value| !value.is_empty()) {
+        FormulaCachedValuePresence::NonEmpty
+    } else {
+        FormulaCachedValuePresence::Absent
+    };
+    let cached_value_kind = has_effective_formula_result_type.then_some(cell.cached_value_type);
+
+    if !cell.force_recalc
+        && cached_value_kind.is_none()
+        && cached_value_presence.is_absent()
+        && cell.value.is_none()
+    {
+        return FormulaCacheProvenance::default();
+    }
+
+    FormulaCacheProvenance {
+        state: FormulaCacheState::ImportedCurrent,
+        force_recalc: cell.force_recalc,
+        cached_value_kind,
+        cached_value_presence,
+        cached_value_lexeme: cell.value.clone(),
+        formula_identity_fingerprint: cell.formula.clone(),
+        ..Default::default()
     }
 }
 

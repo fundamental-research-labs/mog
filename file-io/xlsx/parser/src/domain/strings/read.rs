@@ -41,6 +41,10 @@ pub struct SharedStrings {
     phonetic_xml: Vec<Option<Vec<u8>>>,
     /// Safe root-level `<extLst>` XML from the shared string table.
     root_ext_lst_xml: Option<Vec<u8>>,
+    /// Imported `<sst count="...">` value, when present.
+    declared_count: Option<u32>,
+    /// Imported `<sst uniqueCount="...">` value, when present.
+    declared_unique_count: Option<u32>,
 }
 
 impl SharedStrings {
@@ -60,12 +64,17 @@ impl SharedStrings {
         context.set_current_part("xl/sharedStrings.xml");
         let (refs, phonetic_xml, root_ext_lst_xml) =
             parse_shared_strings_with_context(&xml, context);
+        let declared_count = scanner::parse_count(&xml).and_then(|value| u32::try_from(value).ok());
+        let declared_unique_count =
+            scanner::parse_unique_count(&xml).and_then(|value| u32::try_from(value).ok());
         Self {
             xml,
             refs,
             decode_buffer: Vec::with_capacity(256),
             phonetic_xml,
             root_ext_lst_xml,
+            declared_count,
+            declared_unique_count,
         }
     }
 
@@ -198,6 +207,16 @@ impl SharedStrings {
     /// Get safe root-level `<extLst>` XML from the shared string table.
     pub fn root_ext_lst_xml(&self) -> Option<Vec<u8>> {
         self.root_ext_lst_xml.clone()
+    }
+
+    /// Imported `<sst count="...">` value, when present.
+    pub fn declared_count(&self) -> Option<u32> {
+        self.declared_count
+    }
+
+    /// Imported `<sst uniqueCount="...">` value, when present.
+    pub fn declared_unique_count(&self) -> Option<u32> {
+        self.declared_unique_count
     }
 }
 

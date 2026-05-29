@@ -5,6 +5,9 @@ use domain_types::PackageFidelityMetadata;
 pub type PackagePartPath = String;
 pub type RelationshipOwnerPath = String;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RegisteredRelationshipKey(pub(super) usize);
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOwner {
     Root,
@@ -30,9 +33,16 @@ pub struct PackagePart {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageRelationshipTarget {
-    InternalPart { path: PackagePartPath },
-    InternalPath { target: String },
-    External { target: String },
+    InternalPart {
+        path: PackagePartPath,
+    },
+    InternalPath {
+        target: String,
+    },
+    External {
+        target: String,
+        target_mode: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +66,7 @@ pub struct PackageRelationship {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedPackageRelationship {
+    pub source_key: RegisteredRelationshipKey,
     pub owner_rels_path: String,
     pub id: String,
     pub relationship_type: String,

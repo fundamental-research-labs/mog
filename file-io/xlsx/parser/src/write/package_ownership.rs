@@ -1,7 +1,12 @@
-//! Round-6 package graph ownership contract.
+//! Package graph ownership contract.
 //!
 //! This matrix is the writer-side authority for deciding whether an OOXML
 //! package cluster is modeled by Mog or can remain an unknown opaque extension.
+
+use domain_types::{
+    XlsxDiagnosticContinuation, XlsxDiagnosticReason, XlsxDiagnosticSeverity, XlsxExportAction,
+    XlsxOwnerPolicyRequiredTest, XlsxPackageOwnerId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PackageFeatureOwner {
@@ -35,6 +40,38 @@ pub struct PackageOwnershipContract {
     pub relationship_id_hints: &'static [&'static str],
     pub dirty_invalidation_triggers: &'static [&'static str],
     pub opaque_policy: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CurrentStateOwnerPolicy {
+    pub owner: PackageFeatureOwner,
+    pub owner_id: XlsxPackageOwnerId,
+    pub package_part_patterns: &'static [&'static str],
+    pub relationship_patterns: &'static [&'static str],
+    pub typed_live_state: &'static str,
+    pub typed_import_fields: &'static [&'static str],
+    pub provenance_only_fields: &'static [&'static str],
+    pub closure_requirements: &'static [&'static str],
+    pub mutation_invalidators: &'static [&'static str],
+    pub currentness_validator: &'static str,
+    pub export_action: XlsxExportAction,
+    pub diagnostic_code: &'static str,
+    pub diagnostic_severity: XlsxDiagnosticSeverity,
+    pub diagnostic_reason: XlsxDiagnosticReason,
+    pub continuation: XlsxDiagnosticContinuation,
+    pub required_tests: &'static [XlsxOwnerPolicyRequiredTest],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FallbackOwnerPolicy {
+    pub owner_id: XlsxPackageOwnerId,
+    pub package_part_patterns: &'static [&'static str],
+    pub export_action: XlsxExportAction,
+    pub diagnostic_code: &'static str,
+    pub diagnostic_severity: XlsxDiagnosticSeverity,
+    pub diagnostic_reason: XlsxDiagnosticReason,
+    pub continuation: XlsxDiagnosticContinuation,
+    pub required_tests: &'static [XlsxOwnerPolicyRequiredTest],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -468,10 +505,13 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
         relationship_id_hints: &["worksheet printer settings r:id"],
         dirty_invalidation_triggers: &[
             "page setup mutation",
+            "page margins mutation",
             "print options mutation",
             "header/footer mutation",
+            "print area or titles mutation",
+            "sheet clone/delete",
         ],
-        opaque_policy: "typed print/page setup is regenerated; printerSettings binaries are inert owner-scoped payloads",
+        opaque_policy: "typed print/page setup is regenerated from live state; imported printerSettings binaries are owner-scoped payloads emitted only when the current page-setup fingerprint still matches the imported attachment, otherwise the relationship and binary must be dropped or diagnosed rather than replayed",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::Hyperlinks,
@@ -496,6 +536,564 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
         relationship_id_hints: &["drawing media r:id"],
         dirty_invalidation_triggers: &["media payload mutation", "owning drawing object mutation"],
         opaque_policy: "media payloads require a typed drawing/chart/comment/control owner",
+    },
+];
+
+const ALL_OWNER_POLICY_TESTS: &[XlsxOwnerPolicyRequiredTest] = &[
+    XlsxOwnerPolicyRequiredTest::ImportedUnchanged,
+    XlsxOwnerPolicyRequiredTest::ImportedEditedStaleProvenance,
+    XlsxOwnerPolicyRequiredTest::FreshGeneratedNoProvenance,
+    XlsxOwnerPolicyRequiredTest::PackageGraphClosure,
+    XlsxOwnerPolicyRequiredTest::Diagnostics,
+];
+
+pub const CURRENT_STATE_OWNER_POLICY_TABLE: &[CurrentStateOwnerPolicy] = &[
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::CoreWorkbook,
+        owner_id: XlsxPackageOwnerId::WorkbookMetadata,
+        package_part_patterns: &[
+            "xl/workbook.xml",
+            "xl/worksheets/sheet*.xml",
+            "xl/styles.xml",
+            "xl/theme/*.xml",
+            "xl/sharedStrings.xml",
+            "xl/metadata.xml",
+            "xl/persons/person.xml",
+        ],
+        relationship_patterns: &[
+            "officeDocument",
+            "worksheet",
+            "styles",
+            "theme",
+            "sharedStrings",
+            "sheetMetadata",
+            "person",
+        ],
+        typed_live_state: "ParseOutput workbook, sheets, styles, theme, calculation, metadata, persons, and current cell text/formula state",
+        typed_import_fields: &[
+            "workbook/sheet/style/theme/calculation/person fields parsed into ParseOutput",
+        ],
+        provenance_only_fields: &[
+            "original relationship ids",
+            "shared string indexes",
+            "part paths",
+            "relationship order",
+            "content type spelling",
+        ],
+        closure_requirements: &[
+            "root officeDocument",
+            "workbook-owned modeled parts",
+            "content type for each emitted part",
+        ],
+        mutation_invalidators: &[
+            "workbook metadata",
+            "sheet list",
+            "cell text",
+            "formula",
+            "style",
+            "theme",
+            "calculation",
+            "person",
+        ],
+        currentness_validator: "modeled core parts are regenerated from live state; provenance can only supply validated graph identity",
+        export_action: XlsxExportAction::TypedRegenerate,
+        diagnostic_code: "xlsx.workbook.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::NonEditableSheets,
+        owner_id: XlsxPackageOwnerId::UnknownInertPackageData,
+        package_part_patterns: &["xl/chartsheets/sheet*.xml", "xl/dialogsheets/sheet*.xml"],
+        relationship_patterns: &[
+            "workbook -> chartsheet",
+            "workbook -> dialogsheet",
+            "owned sheet relationships",
+        ],
+        typed_live_state: "workbook sheet inventory for non-editable sheet entries",
+        typed_import_fields: &[
+            "sheet name",
+            "sheet id",
+            "sheet state",
+            "workbook relationship binding",
+        ],
+        provenance_only_fields: &[
+            "raw sheet cluster bytes",
+            "relationship ids",
+            "target spelling",
+            "content types",
+        ],
+        closure_requirements: &[
+            "entire non-editable sheet relationship closure must be present and inert",
+        ],
+        mutation_invalidators: &[
+            "sheet add/delete/reorder",
+            "sheet name/state/id mutation",
+            "owned closure mismatch",
+        ],
+        currentness_validator: "preserve only unchanged non-editable sheet clusters with closed relationships",
+        export_action: XlsxExportAction::PreserveInertArtifact,
+        diagnostic_code: "xlsx.unknownInert.preserved",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::WorksheetTables,
+        owner_id: XlsxPackageOwnerId::Tables,
+        package_part_patterns: &["xl/tables/table*.xml", "xl/tables/tableSingleCells*.xml"],
+        relationship_patterns: &["worksheet -> table", "worksheet -> tableSingleCells"],
+        typed_live_state: "worksheet table and XML binding state",
+        typed_import_fields: &[
+            "table definitions",
+            "table ranges",
+            "table style references",
+        ],
+        provenance_only_fields: &["table part path", "relationship id", "relationship order"],
+        closure_requirements: &[
+            "worksheet table references and table content types match emitted table parts",
+        ],
+        mutation_invalidators: &[
+            "table create/update/delete",
+            "table range",
+            "sheet structure",
+            "XML binding",
+        ],
+        currentness_validator: "table package identity may be reused only for matching current table owners",
+        export_action: XlsxExportAction::TypedRegenerate,
+        diagnostic_code: "xlsx.worksheet.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::ConnectionsAndQueryTables,
+        owner_id: XlsxPackageOwnerId::ExternalLinks,
+        package_part_patterns: &["xl/connections.xml", "xl/queryTables/queryTable*.xml"],
+        relationship_patterns: &["workbook -> connections", "table -> queryTable"],
+        typed_live_state: "workbook connection and query-table state",
+        typed_import_fields: &["supported connection/query table fields"],
+        provenance_only_fields: &["external target spelling", "relationship id", "part path"],
+        closure_requirements: &[
+            "connection/query-table parts and external-capable relationships are explicitly owned",
+        ],
+        mutation_invalidators: &["connection", "query table", "table connection binding"],
+        currentness_validator: "external-capable behavior must be typed, diagnosed, or dropped",
+        export_action: XlsxExportAction::DiagnosticDrop,
+        diagnostic_code: "xlsx.externalLinks.unsupportedDropped",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::UnsupportedFeature,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::OleObjects,
+        owner_id: XlsxPackageOwnerId::ActiveContent,
+        package_part_patterns: &["xl/embeddings/oleObject*.bin", "xl/embeddings/package*.bin"],
+        relationship_patterns: &["worksheet -> oleObject", "worksheet -> embedded package"],
+        typed_live_state: "worksheet OLE object state and embedded binary data when modeled",
+        typed_import_fields: &["supported OLE object descriptors"],
+        provenance_only_fields: &["binary bytes", "relationship id", "preview relationship"],
+        closure_requirements: &[
+            "OLE object, preview, and binary relationships remain package-closed",
+        ],
+        mutation_invalidators: &["OLE object", "embedded binary", "worksheet object anchor"],
+        currentness_validator: "unsafe or unmodeled OLE behavior is not silently replayed",
+        export_action: XlsxExportAction::DiagnosticDrop,
+        diagnostic_code: "xlsx.activeContent.blocked",
+        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
+        diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
+        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::RichData,
+        owner_id: XlsxPackageOwnerId::DrawingsMediaCharts,
+        package_part_patterns: &["xl/richData/*.xml", "xl/metadata.xml value metadata"],
+        relationship_patterns: &["workbook -> richData", "richData -> richValueRel"],
+        typed_live_state: "WorkbookMetadata and rich data value references",
+        typed_import_fields: &["metadata/richData facts parsed into workbook metadata"],
+        provenance_only_fields: &["richData part paths", "relationship ids", "content types"],
+        closure_requirements: &[
+            "metadata vm references, richData parts, and media relationships are closed",
+        ],
+        mutation_invalidators: &[
+            "rich data value",
+            "metadata valueMetadata",
+            "cell vm metadata",
+        ],
+        currentness_validator: "metadata references must still imply each emitted richData package part",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.drawings.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::PivotTables,
+        owner_id: XlsxPackageOwnerId::Pivots,
+        package_part_patterns: &[
+            "xl/pivotTables/pivotTable*.xml",
+            "xl/pivotCache/pivotCacheDefinition*.xml",
+            "xl/pivotCache/pivotCacheRecords*.xml",
+        ],
+        relationship_patterns: &[
+            "worksheet -> pivotTable",
+            "workbook -> pivotCacheDefinition",
+            "pivotCacheDefinition -> pivotCacheRecords",
+        ],
+        typed_live_state: "parsed pivot tables, pivot caches, and cache source bindings",
+        typed_import_fields: &[
+            "pivot table definitions",
+            "cache definitions",
+            "cache records when persisted",
+        ],
+        provenance_only_fields: &[
+            "pivot package paths",
+            "relationship ids",
+            "relationship XML order",
+        ],
+        closure_requirements: &["pivot table/cache definition/cache records closure"],
+        mutation_invalidators: &[
+            "pivot table",
+            "pivot cache",
+            "cache source range",
+            "source sheet",
+        ],
+        currentness_validator: "cache identity and source binding must match current pivot state",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.pivots.staleProvenance",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::SlicersAndTimelines,
+        owner_id: XlsxPackageOwnerId::Pivots,
+        package_part_patterns: &[
+            "xl/slicers/*.xml",
+            "xl/slicerCaches/*.xml",
+            "xl/timelines/*.xml",
+            "xl/timelineCaches/*.xml",
+        ],
+        relationship_patterns: &[
+            "worksheet -> slicer",
+            "workbook -> slicerCache",
+            "timeline relationships",
+        ],
+        typed_live_state: "slicer/timeline workbook data features",
+        typed_import_fields: &["supported slicer cache and slicer definitions"],
+        provenance_only_fields: &["part paths", "relationship ids", "content types"],
+        closure_requirements: &["slicer/timeline references and cache parts are closed"],
+        mutation_invalidators: &["slicer", "timeline", "pivot cache binding"],
+        currentness_validator: "slicer/timeline package facts must match current data-feature state",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.pivots.staleProvenance",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::ChartAuxiliary,
+        owner_id: XlsxPackageOwnerId::DrawingsMediaCharts,
+        package_part_patterns: &[
+            "xl/charts/style*.xml",
+            "xl/charts/color*.xml",
+            "xl/drawings/userShapeDrawing*.xml",
+        ],
+        relationship_patterns: &[
+            "chart -> style",
+            "chart -> colorStyle",
+            "chart -> userShape",
+        ],
+        typed_live_state: "chart and drawing auxiliary state",
+        typed_import_fields: &["supported chart auxiliary payloads"],
+        provenance_only_fields: &["auxiliary XML bytes", "relationship ids", "part paths"],
+        closure_requirements: &["chart auxiliary relationship closure"],
+        mutation_invalidators: &["chart", "drawing", "chart auxiliary"],
+        currentness_validator: "auxiliary payload can survive only when the owning chart still implies it",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.drawings.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::ExternalLinks,
+        owner_id: XlsxPackageOwnerId::ExternalLinks,
+        package_part_patterns: &[
+            "xl/externalLinks/externalLink*.xml",
+            "external-link sidecars",
+        ],
+        relationship_patterns: &["workbook -> externalLink", "externalLink -> external path"],
+        typed_live_state: "workbook external link definitions",
+        typed_import_fields: &["supported external link definitions"],
+        provenance_only_fields: &["external targets", "relationship ids", "target modes"],
+        closure_requirements: &["external targets are typed or intentionally removed"],
+        mutation_invalidators: &[
+            "external link",
+            "formula external reference",
+            "connection refresh",
+        ],
+        currentness_validator: "external-capable package content must never be stale-replayed",
+        export_action: XlsxExportAction::DiagnosticDrop,
+        diagnostic_code: "xlsx.externalLinks.unsupportedDropped",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::UnsupportedFeature,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::DocumentProperties,
+        owner_id: XlsxPackageOwnerId::WorkbookMetadata,
+        package_part_patterns: &[
+            "docProps/core.xml",
+            "docProps/app.xml",
+            "docProps/custom.xml",
+        ],
+        relationship_patterns: &[
+            "root -> core-properties",
+            "root -> extended-properties",
+            "root -> custom-properties",
+        ],
+        typed_live_state: "document properties and extended properties",
+        typed_import_fields: &["document property values"],
+        provenance_only_fields: &[
+            "raw XML bytes for exact current writer match",
+            "relationship ids",
+            "part paths",
+        ],
+        closure_requirements: &[
+            "root relationship and content type for each emitted property part",
+        ],
+        mutation_invalidators: &["document property", "sheet list for app properties"],
+        currentness_validator: "raw property XML is reusable only when current generated XML matches import-time generated XML",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.workbook.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::DrawingObjects,
+        owner_id: XlsxPackageOwnerId::DrawingsMediaCharts,
+        package_part_patterns: &["xl/drawings/drawing*.xml", "xl/charts/chart*.xml"],
+        relationship_patterns: &[
+            "worksheet -> drawing",
+            "drawing -> chart/image",
+            "chart auxiliary relationships",
+        ],
+        typed_live_state: "worksheet drawings, charts, media references, anchors, and current objects",
+        typed_import_fields: &["supported drawings/charts/media facts"],
+        provenance_only_fields: &[
+            "paths",
+            "rIds",
+            "relationship order",
+            "unsupported raw auxiliary payloads",
+        ],
+        closure_requirements: &[
+            "worksheet drawing, drawing rels, chart/media parts, and content types are closed",
+        ],
+        mutation_invalidators: &["drawing", "chart", "media", "object anchor"],
+        currentness_validator: "drawing package identity is reused only for matching current drawing object graph",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.drawings.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::Comments,
+        owner_id: XlsxPackageOwnerId::CommentsVml,
+        package_part_patterns: &["xl/comments*.xml", "xl/drawings/vmlDrawing*.vml"],
+        relationship_patterns: &[
+            "worksheet -> comments",
+            "worksheet -> vmlDrawing",
+            "vmlDrawing sidecars",
+        ],
+        typed_live_state: "worksheet comments, note anchors, and VML comment package identity",
+        typed_import_fields: &[
+            "comments",
+            "comment authors",
+            "VML note anchors where supported",
+        ],
+        provenance_only_fields: &["comments/VML paths", "relationship ids", "safe extLst XML"],
+        closure_requirements: &[
+            "worksheet comments/VML relationships and sidecar relationships are closed",
+        ],
+        mutation_invalidators: &["comment", "note anchor", "worksheet object"],
+        currentness_validator: "comments and VML are regenerated from current comments; bounded extensions require relationship-free validation",
+        export_action: XlsxExportAction::TypedRegenerate,
+        diagnostic_code: "xlsx.comments.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::ThreadedComments,
+        owner_id: XlsxPackageOwnerId::PersonsThreadedComments,
+        package_part_patterns: &[
+            "xl/threadedComments/threadedComment*.xml",
+            "xl/persons/person.xml",
+        ],
+        relationship_patterns: &["worksheet -> threadedComment", "workbook -> person"],
+        typed_live_state: "persons and threaded comments",
+        typed_import_fields: &["persons", "threaded comments"],
+        provenance_only_fields: &[
+            "part paths",
+            "relationship ids",
+            "empty person part presence",
+        ],
+        closure_requirements: &["person/threaded comment references are closed"],
+        mutation_invalidators: &["person", "threaded comment", "comment/person binding"],
+        currentness_validator: "person and threaded comment package identity must match current modeled state",
+        export_action: XlsxExportAction::TypedRegenerate,
+        diagnostic_code: "xlsx.comments.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::Controls,
+        owner_id: XlsxPackageOwnerId::ActiveContent,
+        package_part_patterns: &["xl/ctrlProps/ctrlProp*.xml", "xl/activeX/*"],
+        relationship_patterns: &[
+            "worksheet -> ctrlProp",
+            "worksheet -> activeX",
+            "activeX binary",
+        ],
+        typed_live_state: "form controls and disabled active-control diagnostics",
+        typed_import_fields: &["supported form control descriptors"],
+        provenance_only_fields: &[
+            "ActiveX bytes",
+            "relationship ids",
+            "control property paths",
+        ],
+        closure_requirements: &[
+            "control properties are closed; executable ActiveX is blocked or removed consistently",
+        ],
+        mutation_invalidators: &["control", "ActiveX payload", "worksheet object anchor"],
+        currentness_validator: "active controls must be disabled, dropped, or blocked by policy",
+        export_action: XlsxExportAction::BlockedExport,
+        diagnostic_code: "xlsx.activeContent.blocked",
+        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
+        diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
+        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::PrintSettings,
+        owner_id: XlsxPackageOwnerId::PrinterSettings,
+        package_part_patterns: &["xl/printerSettings/printerSettings*.bin"],
+        relationship_patterns: &["worksheet -> printerSettings"],
+        typed_live_state: "worksheet page setup and print settings fingerprint",
+        typed_import_fields: &["page setup fields"],
+        provenance_only_fields: &["printer settings binary", "relationship id", "part path"],
+        closure_requirements: &[
+            "worksheet r:id, binary part, and content type are emitted or removed together",
+        ],
+        mutation_invalidators: &[
+            "page setup",
+            "print options",
+            "printer settings relationship",
+        ],
+        currentness_validator: "binary is inert only while page setup fingerprint and relationship closure validate",
+        export_action: XlsxExportAction::PreserveInertArtifact,
+        diagnostic_code: "xlsx.printerSettings.staleProvenance",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::Hyperlinks,
+        owner_id: XlsxPackageOwnerId::Hyperlinks,
+        package_part_patterns: &["worksheet hyperlink XML refs"],
+        relationship_patterns: &["worksheet -> hyperlink"],
+        typed_live_state: "worksheet hyperlink state",
+        typed_import_fields: &["hyperlink targets and display text"],
+        provenance_only_fields: &["relationship id", "target spelling", "target mode"],
+        closure_requirements: &["worksheet XML hyperlink refs match emitted relationships"],
+        mutation_invalidators: &["hyperlink", "cell text when hyperlink-owned"],
+        currentness_validator: "hyperlink rIds are reused only for matching current hyperlink targets",
+        export_action: XlsxExportAction::TypedRegenerate,
+        diagnostic_code: "xlsx.worksheet.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    CurrentStateOwnerPolicy {
+        owner: PackageFeatureOwner::Media,
+        owner_id: XlsxPackageOwnerId::DrawingsMediaCharts,
+        package_part_patterns: &["xl/media/*"],
+        relationship_patterns: &["drawing/chart/VML/richData -> image"],
+        typed_live_state: "media blobs referenced by current drawings, charts, VML, or richData",
+        typed_import_fields: &["supported image blobs and references"],
+        provenance_only_fields: &["media path", "content type", "relationship id"],
+        closure_requirements: &["each media part has a current typed owner relationship"],
+        mutation_invalidators: &["media blob", "drawing", "chart", "VML", "richData"],
+        currentness_validator: "media is emitted only when referenced by current owner state",
+        export_action: XlsxExportAction::TypedWithValidatedProvenance,
+        diagnostic_code: "xlsx.drawings.rewrittenFromLiveState",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
+        diagnostic_reason: XlsxDiagnosticReason::StaleProvenance,
+        continuation: XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+];
+
+pub const FALLBACK_OWNER_POLICY_TABLE: &[FallbackOwnerPolicy] = &[
+    FallbackOwnerPolicy {
+        owner_id: XlsxPackageOwnerId::UnknownInertPackageData,
+        package_part_patterns: &[
+            "customXml/*",
+            "docProps/thumbnail.*",
+            "docMetadata/LabelInfo.xml",
+        ],
+        export_action: XlsxExportAction::PreserveInertArtifact,
+        diagnostic_code: "xlsx.unknownInert.preserved",
+        diagnostic_severity: XlsxDiagnosticSeverity::Info,
+        diagnostic_reason: XlsxDiagnosticReason::CanonicalFreshExportPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    FallbackOwnerPolicy {
+        owner_id: XlsxPackageOwnerId::ActiveContent,
+        package_part_patterns: &[
+            "xl/vbaProject.bin",
+            "xl/activeX/*",
+            "_xmlsignatures/*",
+            "add-in and executable-capable package adjuncts",
+        ],
+        export_action: XlsxExportAction::BlockedExport,
+        diagnostic_code: "xlsx.activeContent.blocked",
+        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
+        diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
+        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        required_tests: ALL_OWNER_POLICY_TESTS,
+    },
+    FallbackOwnerPolicy {
+        owner_id: XlsxPackageOwnerId::UnknownInertPackageData,
+        package_part_patterns: &["unmatched imported package part"],
+        export_action: XlsxExportAction::DiagnosticDrop,
+        diagnostic_code: "xlsx.ownerPolicy.unmatched",
+        diagnostic_severity: XlsxDiagnosticSeverity::Error,
+        diagnostic_reason: XlsxDiagnosticReason::UnmatchedOwnerPolicy,
+        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        required_tests: ALL_OWNER_POLICY_TESTS,
     },
 ];
 
@@ -1092,6 +1690,25 @@ pub fn ownership_contract(owner: PackageFeatureOwner) -> &'static PackageOwnersh
         .iter()
         .find(|contract| contract.owner == owner)
         .expect("package ownership matrix must cover every PackageFeatureOwner")
+}
+
+pub fn current_state_owner_policy(owner: PackageFeatureOwner) -> &'static CurrentStateOwnerPolicy {
+    CURRENT_STATE_OWNER_POLICY_TABLE
+        .iter()
+        .find(|policy| policy.owner == owner)
+        .expect("current-state owner policy table must cover every PackageFeatureOwner")
+}
+
+pub fn current_state_owner_policy_for_part(path: &str) -> Option<&'static CurrentStateOwnerPolicy> {
+    modeled_owner_for_part(path).map(current_state_owner_policy)
+}
+
+pub fn all_current_state_owner_policies() -> &'static [CurrentStateOwnerPolicy] {
+    CURRENT_STATE_OWNER_POLICY_TABLE
+}
+
+pub fn fallback_owner_policies() -> &'static [FallbackOwnerPolicy] {
+    FALLBACK_OWNER_POLICY_TABLE
 }
 
 pub fn modeled_owner_for_part(path: &str) -> Option<PackageFeatureOwner> {

@@ -14,6 +14,7 @@ use super::IdAllocator;
 
 const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
 const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
+const KEY_THREADED_COMMENT_PERSON_ORDER: &str = "threadedCommentPersonOrder";
 
 // ===========================================================================
 // Workbook-level hydration
@@ -413,10 +414,19 @@ pub(super) fn hydrate_workbook_threaded_comment_persons(
 
     let persons_map =
         crate::storage::ensure_workbook_child_map(workbook, txn, KEY_THREADED_COMMENT_PERSONS);
+    let mut person_order = Vec::with_capacity(persons.len());
     for person in persons {
+        person_order.push(person.id.clone());
         if let Ok(json) = serde_json::to_string(person) {
             persons_map.insert(txn, &*person.id, Any::String(Arc::from(json.as_str())));
         }
+    }
+    if let Ok(json) = serde_json::to_string(&person_order) {
+        workbook.insert(
+            txn,
+            KEY_THREADED_COMMENT_PERSON_ORDER,
+            Any::String(Arc::from(json.as_str())),
+        );
     }
 }
 

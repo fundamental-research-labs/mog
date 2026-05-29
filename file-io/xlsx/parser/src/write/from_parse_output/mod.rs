@@ -15,6 +15,7 @@ mod chart_replay;
 mod differential_formats;
 mod doc_props;
 mod export_context;
+mod export_report;
 mod external_links;
 mod form_control_export_plan;
 mod form_controls;
@@ -70,6 +71,10 @@ use assembly::{
     WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
 };
 
+pub use export_report::{
+    ExportDiagnostic, ExportDiagnosticCode, ExportReport, ExportSemanticImpact,
+};
+
 fn worksheet_legacy_vml_path(
     sheet_idx: usize,
     comments: &[WorksheetCommentsGraphEntry],
@@ -92,6 +97,29 @@ fn worksheet_legacy_vml_path(
                 .find(|entry| entry.sheet_idx == sheet_idx)
                 .map(|entry| entry.path.clone())
         })
+}
+
+fn imported_worksheet_hyperlink_relationship_id(
+    output: &ParseOutput,
+    sheet_num: usize,
+    target: &str,
+    target_mode: Option<&str>,
+) -> Option<String> {
+    let owner_path = format!("xl/worksheets/sheet{sheet_num}.xml");
+    output
+        .package_fidelity
+        .as_ref()?
+        .part_relationships
+        .iter()
+        .find(|info| info.owner_path == owner_path)?
+        .relationships
+        .iter()
+        .find(|relationship| {
+            relationship.relationship_type == REL_HYPERLINK
+                && relationship.target == target
+                && relationship.target_mode.as_deref() == target_mode
+        })
+        .map(|relationship| relationship.id.clone())
 }
 
 /// Write an XLSX file from a `ParseOutput`.
@@ -136,7 +164,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry> =
         Vec::new();
     let mut worksheet_table_relationships: Vec<(usize, usize, Option<String>)> = Vec::new();
-    let mut worksheet_pivot_table_relationships: Vec<(usize, usize, String)> = Vec::new();
+    let mut worksheet_pivot_table_relationships: Vec<(usize, String, String)> = Vec::new();
     let mut worksheet_slicer_relationships: Vec<(usize, usize)> = Vec::new();
 
     // Per-sheet drawing XML (the drawingN.xml content).
@@ -286,10 +314,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     hyperlink_idx,
                     target,
                     target_mode,
-                    relationship_id_hint: hyperlink_outputs[hyperlink_idx]
-                        .r_id
-                        .clone()
-                        .unwrap_or_default(),
+                    relationship_id_hint: imported_worksheet_hyperlink_relationship_id(
+                        output,
+                        sheet_num,
+                        hyperlink_outputs[hyperlink_idx]
+                            .target
+                            .as_deref()
+                            .unwrap_or_default(),
+                        hyperlink_outputs[hyperlink_idx].target_mode.as_deref(),
+                    )
+                    .or_else(|| hyperlink_outputs[hyperlink_idx].r_id.clone()),
                 });
             }
             sheet_hyperlink_outputs[sheet_idx] = Some(hyperlink_outputs);
@@ -497,7 +531,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 .filter(|entry| entry.sheet_idx == sheet_idx)
                 .zip(pivot_table_r_ids)
             {
-                worksheet_pivot_table_relationships.push((sheet_idx, entry.global_idx, r_id));
+                worksheet_pivot_table_relationships.push((sheet_idx, entry.path.clone(), r_id));
             }
         }
 
@@ -511,12 +545,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 .clone()
                 .unwrap_or_else(|| format!("xl/drawings/drawing{}.xml", global_drawing_idx));
             let drawing_target = worksheet_relative_target(&drawing_path);
-            let drawing_relationship_id_hint = Some(rels.add(REL_DRAWING, &drawing_target));
             worksheet_drawing_relationships.push(WorksheetDrawingGraphEntry {
                 sheet_idx,
                 path: drawing_path.clone(),
                 target: drawing_target,
-                relationship_id_hint: drawing_relationship_id_hint,
+                relationship_id_hint: sheet_extras[sheet_idx]
+                    .original_drawing_relationship_id
+                    .clone(),
             });
 
             // Build drawing .rels (drawing→chart references, image refs).
@@ -1051,11 +1086,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
         // Printer settings relationship.
         if has_printer_settings {
-            if let Some(entry) = sheet_data
-                .print_settings
-                .as_ref()
-                .and_then(|ps| printer_settings::relationship_for_export(sheet_idx, sheet_num, ps))
-            {
+            if let Some(entry) = sheet_data.print_settings.as_ref().and_then(|ps| {
+                printer_settings::relationship_for_export(
+                    sheet_idx,
+                    sheet_num,
+                    ps,
+                    output.package_fidelity.as_ref(),
+                )
+            }) {
                 worksheet_printer_settings_relationships.push(entry);
             }
         }
@@ -1195,7 +1233,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.sheet_idx,
             &entry.target,
             entry.target_mode.as_deref(),
-            &entry.relationship_id_hint,
+            entry.relationship_id_hint.as_deref(),
         );
     }
     for entry in &worksheet_control_property_relationships {
@@ -1412,21 +1450,22 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     {
         crate::write::package_graph::register_media_part(&mut package_graph_builder, zip_path)?;
     }
-    for entry in &drawing_relationships {
-        if entry.rel_type == REL_CHART {
+    let mut drawing_relationship_keys = Vec::with_capacity(drawing_relationships.len());
+    for (entry_idx, entry) in drawing_relationships.iter().enumerate() {
+        let relationship_key = if entry.rel_type == REL_CHART {
             crate::write::package_graph::register_drawing_chart_relationship(
                 &mut package_graph_builder,
                 &entry.drawing_path,
                 &entry.target_path,
                 &entry.relationship_id_hint,
-            )?;
+            )?
         } else if entry.rel_type == REL_CHART_EX {
             crate::write::package_graph::register_drawing_chart_ex_relationship(
                 &mut package_graph_builder,
                 &entry.drawing_path,
                 &entry.target_path,
                 &entry.relationship_id_hint,
-            )?;
+            )?
         } else if entry.rel_type
             == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
             && !crate::write::package_graph::is_external_target_mode(entry.target_mode.as_deref())
@@ -1436,7 +1475,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 &entry.drawing_path,
                 &entry.target_path,
                 &entry.relationship_id_hint,
-            )?;
+            )?
         } else {
             crate::write::package_graph::register_drawing_relationship_with_target_mode(
                 &mut package_graph_builder,
@@ -1445,20 +1484,21 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 &entry.target_path,
                 entry.target_mode.as_deref(),
                 &entry.relationship_id_hint,
-            )?;
-        }
+            )?
+        };
+        drawing_relationship_keys.push((entry_idx, relationship_key));
+    }
+    for entry in &worksheet_printer_settings_relationships {
+        crate::write::package_graph::register_worksheet_printer_settings_payload(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            entry.bytes.clone(),
+            &entry.content_type,
+            &entry.relationship_id_hint,
+        )?;
     }
     package_graph_builder.register_imported_opaque_parts()?;
-    for entry in &worksheet_printer_settings_relationships {
-        if package_graph_builder.contains_part(&entry.path) {
-            crate::write::package_graph::register_worksheet_printer_settings(
-                &mut package_graph_builder,
-                entry.sheet_idx,
-                &entry.path,
-                &entry.relationship_id_hint,
-            );
-        }
-    }
     for entry in &worksheet_comments_relationships {
         crate::write::package_graph::register_worksheet_comments(
             &mut package_graph_builder,
@@ -1524,11 +1564,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             part,
         )?;
     }
-    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_pivot_table_relationships {
-        crate::write::package_graph::register_generated_worksheet_pivot_table(
+    for (sheet_idx, pivot_table_path, relationship_id_hint) in &worksheet_pivot_table_relationships
+    {
+        crate::write::package_graph::register_worksheet_pivot_table(
             &mut package_graph_builder,
             *sheet_idx,
-            *global_idx,
+            pivot_table_path,
             Some(relationship_id_hint),
         )?;
     }
@@ -1539,9 +1580,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         .collect();
     for entry in &pivot_data.pivot_table_entries {
         if let Some(cache_definition_path) = cache_id_to_definition_path.get(&entry.cache_id) {
-            crate::write::package_graph::register_pivot_table_cache_relationship(
+            crate::write::package_graph::register_pivot_table_cache_relationship_for_path(
                 &mut package_graph_builder,
-                entry.global_idx,
+                &entry.path,
                 cache_definition_path,
                 entry.cache_relationship_id_hint.as_deref(),
             );
@@ -1564,52 +1605,19 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     sheet_idx + 1
                 ))
             })?;
-        let drawing_rels = package_graph.relationship_manager_for_owner(
-            &crate::write::package_graph::PackageOwner::Part {
-                path: drawing_path.to_string(),
-            },
-        );
-        let mut resolved_relationship_ids_by_target: std::collections::HashMap<
-            (String, String, Option<String>),
-            std::collections::VecDeque<String>,
-        > = std::collections::HashMap::new();
-        for rel in drawing_rels.relationships() {
-            let target_path =
-                if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
-                    || (rel.rel_type == REL_HYPERLINK && rel.target.starts_with('#'))
-                {
-                    rel.target.clone()
-                } else {
-                    crate::infra::opc::resolve_relationship_target(Some(drawing_path), &rel.target)
-                        .map_err(|err| {
-                            WriteError::PackageIntegrity(format!(
-                                "invalid resolved drawing relationship target for {}: {} ({:?})",
-                                drawing_path, rel.target, err
-                            ))
-                        })?
-                };
-            resolved_relationship_ids_by_target
-                .entry((rel.rel_type.clone(), target_path, rel.target_mode.clone()))
-                .or_default()
-                .push_back(rel.id.clone());
-        }
-
         let mut resolved_ids = std::collections::HashMap::new();
-        for entry in drawing_relationships
+        for (entry_idx, relationship_key) in drawing_relationship_keys
             .iter()
-            .filter(|entry| entry.drawing_path == drawing_path)
+            .filter(|(entry_idx, _)| drawing_relationships[*entry_idx].drawing_path == drawing_path)
         {
-            let resolved_id = resolved_relationship_ids_by_target
-                .get_mut(&(
-                    entry.rel_type.clone(),
-                    entry.target_path.clone(),
-                    entry.target_mode.clone(),
-                ))
-                .and_then(|ids| ids.pop_front())
+            let entry = &drawing_relationships[*entry_idx];
+            let resolved_id = package_graph
+                .relationship_id_for_key(*relationship_key)
+                .map(ToOwned::to_owned)
                 .ok_or_else(|| {
                     WriteError::PackageIntegrity(format!(
-                        "missing resolved drawing relationship for {} target {}",
-                        drawing_path, entry.target_path
+                        "missing resolved drawing relationship for {} relationship {} target {}",
+                        drawing_path, entry.relationship_id_hint, entry.target_path
                     ))
                 })?;
             resolved_ids.insert(entry.relationship_id_hint.clone(), resolved_id);
@@ -1756,10 +1764,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         };
         let r_id = package_graph
             .relationship_id(&owner, REL_PRINTER_SETTINGS, &entry.target)
-            .map(str::to_string);
-        let Some(r_id) = r_id else {
-            continue;
-        };
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(format!(
+                    "missing worksheet printer-settings relationship for sheet {} target {}",
+                    entry.sheet_idx + 1,
+                    entry.target
+                ))
+            })?
+            .to_string();
         sheet_writers[entry.sheet_idx]
             .ensure_print_writer()
             .set_printer_settings_r_id(Some(r_id));
@@ -1926,7 +1938,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             .iter()
             .filter(|entry| entry.sheet_idx == sheet_idx)
             .map(|entry| {
-                let target = format!("../pivotTables/pivotTable{}.xml", entry.global_idx);
+                let target = pivot_package::worksheet_relative_target(&entry.path);
                 package_graph
                     .relationship_id(&owner, REL_PIVOT_TABLE, &target)
                     .ok_or_else(|| {
@@ -1993,6 +2005,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         &worksheet_drawing_relationships,
         &worksheet_threaded_comments_relationships,
     )
+}
+
+pub fn write_xlsx_from_parse_output_with_report(
+    output: &ParseOutput,
+) -> Result<(Vec<u8>, ExportReport), WriteError> {
+    let report = export_report::build_export_report(output);
+    let bytes = write_xlsx_from_parse_output(output)?;
+    Ok((bytes, report))
 }
 
 fn reject_unsupported_package_profile(output: &ParseOutput) -> Result<(), WriteError> {

@@ -352,34 +352,56 @@ pub fn write_cols(w: &mut XmlWriter, cols: &[ColWidth]) {
     for col in cols {
         w.start_element("col")
             .attr_num("min", col.min)
-            .attr_num("max", col.max)
-            .attr("width", &format_f64(col.width.unwrap_or(0.0)));
+            .attr_num("max", col.max);
+
+        if let Some(width) = col.width {
+            if let Some(width_str) = &col.width_str
+                && width_str.parse::<f64>().ok() == Some(width)
+            {
+                w.attr("width", width_str);
+            } else {
+                w.attr("width", &format_f64(width));
+            }
+        }
 
         // Emit attributes in Excel's canonical order:
         // min, max, width, style, hidden, bestFit, customWidth, phonetic, outlineLevel, collapsed
         if let Some(style) = col.style {
             w.attr_num("style", style);
         }
-        if col.hidden {
-            w.attr("hidden", "1");
-        }
-        if col.best_fit {
-            w.attr("bestFit", "1");
-        }
-        if col.custom_width {
-            w.attr("customWidth", "1");
-        }
-        if col.phonetic {
-            w.attr("phonetic", "1");
-        }
+        match col.hidden_attr {
+            Some(true) => w.attr("hidden", "1"),
+            Some(false) => w.attr("hidden", "0"),
+            None if col.hidden => w.attr("hidden", "1"),
+            None => w,
+        };
+        match col.best_fit_attr {
+            Some(true) => w.attr("bestFit", "1"),
+            Some(false) => w.attr("bestFit", "0"),
+            None if col.best_fit => w.attr("bestFit", "1"),
+            None => w,
+        };
+        match col.custom_width_attr {
+            Some(true) => w.attr("customWidth", "1"),
+            Some(false) => w.attr("customWidth", "0"),
+            None if col.custom_width => w.attr("customWidth", "1"),
+            None => w,
+        };
+        match col.phonetic_attr {
+            Some(true) => w.attr("phonetic", "1"),
+            Some(false) => w.attr("phonetic", "0"),
+            None if col.phonetic => w.attr("phonetic", "1"),
+            None => w,
+        };
         if let Some(lvl) = col.outline_level {
-            if lvl > 0 {
-                w.attr_num("outlineLevel", lvl as u32);
-            }
+            w.attr_num("outlineLevel", lvl as u32);
         }
-        if col.collapsed {
-            w.attr("collapsed", "1");
-        }
+        match col.collapsed_attr {
+            Some(true) => w.attr("collapsed", "1"),
+            Some(false) => w.attr("collapsed", "0"),
+            None if col.collapsed => w.attr("collapsed", "1"),
+            None => w,
+        };
 
         w.self_close();
     }

@@ -101,9 +101,12 @@ pub use crate::domain::validation::write::{
 };
 pub use crate::domain::workbook::write::{
     CalcMode, CalcSettings, DefinedNameDef, SheetDef, SheetState, WorkbookView, WorkbookWriter,
-    calc_settings_from_domain,
+    calc_settings_for_export, calc_settings_from_domain,
 };
-pub use from_parse_output::write_xlsx_from_parse_output;
+pub use from_parse_output::{
+    ExportDiagnostic, ExportDiagnosticCode, ExportReport, ExportSemanticImpact,
+    write_xlsx_from_parse_output, write_xlsx_from_parse_output_with_report,
+};
 pub use relationships::{
     REL_CALC_CHAIN, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES,
     REL_CUSTOM_PROPERTIES, REL_DIAGRAM_COLORS, REL_DIAGRAM_DATA, REL_DIAGRAM_DRAWING,

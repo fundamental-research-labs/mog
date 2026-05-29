@@ -318,11 +318,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
             .unwrap_or_default(),
         query_table: read_string(map, txn, KEY_QUERY_TABLE)
             .and_then(|s| serde_json::from_str(&s).ok()),
-        worksheet_relationship_id_hint: read_string(
-            map,
-            txn,
-            KEY_WORKSHEET_RELATIONSHIP_ID_HINT,
-        ),
+        worksheet_relationship_id_hint: read_string(map, txn, KEY_WORKSHEET_RELATIONSHIP_ID_HINT),
         table_part_path_hint: read_string(map, txn, KEY_TABLE_PART_PATH_HINT),
         worksheet_relationship_target_hint: read_string(
             map,

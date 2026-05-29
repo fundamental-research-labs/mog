@@ -500,6 +500,7 @@ pub(super) fn hydrate_cell_styles(
             && !has_date_lexical_value
             && !has_formula_result_type
             && !has_empty_cached_value
+            && cell.formula_cache_provenance.is_absent_or_unknown()
             && !has_original_sst_index
             && !has_original_value
         {
@@ -553,6 +554,7 @@ pub(super) fn hydrate_cell_styles(
                 date_lexical_value: cell.date_lexical_value.clone(),
                 formula_result_type: cell.formula_result_type,
                 has_empty_cached_value,
+                formula_cache_provenance: cell.formula_cache_provenance.clone(),
                 original_sst_index: cell.original_sst_index,
                 original_value: cell.original_value.clone(),
                 // CSE flags are runtime-derived; never set on the

@@ -3,7 +3,7 @@
 //! Pure data contracts for cell metadata and properties.
 //! `CellFormat` itself lives in `crate::cell_format`.
 
-use crate::CellFormat;
+use crate::{CellFormat, FormulaCacheProvenance};
 use serde::{Deserialize, Serialize};
 
 /// Cell metadata (non-format properties: provenance, validation, etc.)
@@ -56,6 +56,14 @@ pub struct CellMetadata {
         skip_serializing_if = "is_false"
     )]
     pub has_empty_cached_value: bool,
+    /// Formula-cache metadata owner. Missing/empty means absent or unknown
+    /// provenance and must not authorize cache-only OOXML replay.
+    #[serde(
+        rename = "formulaCacheProvenance",
+        default,
+        skip_serializing_if = "FormulaCacheProvenance::is_absent_or_unknown"
+    )]
+    pub formula_cache_provenance: FormulaCacheProvenance,
     /// Original shared-string-table index for imported `t="s"` cells.
     /// Import provenance only; XLSX export derives shared-string indices from
     /// current cell values and must not use this field as SST identity.
@@ -124,6 +132,13 @@ pub struct CellProperties {
         skip_serializing_if = "is_false"
     )]
     pub has_empty_cached_value: bool,
+    /// Formula-cache metadata owner. See [`CellMetadata::formula_cache_provenance`].
+    #[serde(
+        rename = "formulaCacheProvenance",
+        default,
+        skip_serializing_if = "FormulaCacheProvenance::is_absent_or_unknown"
+    )]
+    pub formula_cache_provenance: FormulaCacheProvenance,
     /// Original SST index. See [`CellMetadata::original_sst_index`].
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
@@ -156,6 +171,7 @@ impl CellProperties {
             && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
+            && self.formula_cache_provenance.is_absent_or_unknown()
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -174,6 +190,7 @@ impl CellMetadata {
             && self.vm.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
+            && self.formula_cache_provenance.is_absent_or_unknown()
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula

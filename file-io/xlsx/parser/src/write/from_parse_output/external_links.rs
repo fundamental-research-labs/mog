@@ -1,4 +1,7 @@
-use domain_types::domain::external_link::ExternalLink;
+use domain_types::domain::external_link::{
+    ExternalLink, ExternalLinkRelationship, ExternalLinkRelationshipCurrentness,
+    ExternalLinkRelationshipRole,
+};
 
 pub(super) fn part_name(link: &ExternalLink) -> String {
     link.imported_identity
@@ -48,53 +51,17 @@ pub(super) fn register_owned_relationships(
     part_name: &str,
     link: &ExternalLink,
 ) {
-    let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
-    let primary_rel_type = supported_external_link_relationship_type(
-        link.file_path_rel_type.as_deref(),
-        default_rel_type,
-    );
-    if let Some(target) = &link.file_path {
-        crate::write::package_graph::register_external_link_relationship(
-            graph,
-            part_name,
-            primary_rel_type,
-            target,
-            link.file_path_rid.as_deref().or(Some("rId1")),
-        );
-    }
-    if let Some(target) = &link.alternate_url {
-        crate::write::package_graph::register_external_link_relationship(
-            graph,
-            part_name,
-            default_rel_type,
-            target,
-            link.alternate_url_rid.as_deref().or(Some("rId2")),
-        );
-    }
-    if let Some(target) = &link.relative_url {
-        let default_rid = if link.alternate_url.is_some() {
-            "rId3"
-        } else {
-            "rId2"
-        };
-        crate::write::package_graph::register_external_link_relationship(
-            graph,
-            part_name,
-            default_rel_type,
-            target,
-            link.relative_url_rid.as_deref().or(Some(default_rid)),
-        );
-    }
-    for extra in &link.extra_rels {
-        if !is_supported_external_link_relationship_type(&extra.rel_type) {
+    for relationship in effective_relationships(link) {
+        if !is_supported_external_link_relationship_type(&relationship.relationship_type) {
             continue;
         }
         crate::write::package_graph::register_external_link_relationship(
             graph,
             part_name,
-            &extra.rel_type,
-            &extra.target,
-            Some(&extra.id),
+            &relationship.relationship_type,
+            &relationship.target,
+            relationship.target_mode.as_deref().or(Some("External")),
+            relationship.imported_id_hint.as_deref(),
         );
     }
 }
@@ -105,34 +72,60 @@ pub(super) fn with_resolved_relationship_ids(
     owner: &crate::write::package_graph::PackageOwner,
 ) -> Result<ExternalLink, crate::write::WriteError> {
     let mut link = link.clone();
-    let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
-    let primary_rel_type = supported_external_link_relationship_type(
-        link.file_path_rel_type.as_deref(),
-        default_rel_type,
-    );
-    if let Some(target) = &link.file_path {
-        link.file_path_rid = Some(
-            package_graph
-                .relationship_id(owner, primary_rel_type, target)
-                .map(str::to_string)
-                .ok_or_else(|| missing_relationship_error(owner, primary_rel_type, target))?,
-        );
-    }
-    if let Some(target) = &link.alternate_url {
-        link.alternate_url_rid = Some(
-            package_graph
-                .relationship_id(owner, default_rel_type, target)
-                .map(str::to_string)
-                .ok_or_else(|| missing_relationship_error(owner, default_rel_type, target))?,
-        );
-    }
-    if let Some(target) = &link.relative_url {
-        link.relative_url_rid = Some(
-            package_graph
-                .relationship_id(owner, default_rel_type, target)
-                .map(str::to_string)
-                .ok_or_else(|| missing_relationship_error(owner, default_rel_type, target))?,
-        );
+    link.file_path_rid = None;
+    link.alternate_url_rid = None;
+    link.relative_url_rid = None;
+    let relationships = effective_relationships(&link);
+    let mut resolved_indices = Vec::new();
+    for relationship in &relationships {
+        if !is_supported_external_link_relationship_type(&relationship.relationship_type) {
+            if relationship
+                .roles
+                .iter()
+                .any(|role| !matches!(role, ExternalLinkRelationshipRole::ExtraPath))
+            {
+                return Err(crate::write::WriteError::PackageIntegrity(format!(
+                    "unsupported external link relationship for owner {owner:?} source {} type {} target {}",
+                    relationship.source_key, relationship.relationship_type, relationship.target
+                )));
+            }
+            continue;
+        }
+        let (index, resolved_id) = package_graph
+            .relationship_id_for_nth_match(
+                owner,
+                &relationship.relationship_type,
+                &relationship.target,
+                relationship.target_mode.as_deref().or(Some("External")),
+                &resolved_indices,
+            )
+            .map(|(index, id)| (index, id.to_string()))
+            .ok_or_else(|| {
+                missing_relationship_error(
+                    owner,
+                    &relationship.relationship_type,
+                    &relationship.target,
+                )
+            })?;
+        resolved_indices.push(index);
+        if relationship
+            .roles
+            .contains(&ExternalLinkRelationshipRole::ExternalBook)
+        {
+            link.file_path_rid = Some(resolved_id.clone());
+        }
+        if relationship
+            .roles
+            .contains(&ExternalLinkRelationshipRole::AlternateAbsoluteUrl)
+        {
+            link.alternate_url_rid = Some(resolved_id.clone());
+        }
+        if relationship
+            .roles
+            .contains(&ExternalLinkRelationshipRole::AlternateRelativeUrl)
+        {
+            link.relative_url_rid = Some(resolved_id);
+        }
     }
     Ok(link)
 }
@@ -158,6 +151,146 @@ fn supported_external_link_relationship_type<'a>(
 
 fn is_supported_external_link_relationship_type(rel_type: &str) -> bool {
     crate::infra::opc::is_external_workbook_base_path_relationship_type(rel_type)
+}
+
+fn effective_relationships(link: &ExternalLink) -> Vec<ExternalLinkRelationship> {
+    if !link.relationships.is_empty() {
+        let mut relationships: Vec<_> = link
+            .relationships
+            .iter()
+            .map(|relationship| relationship_current_for_live_fields(link, relationship))
+            .filter(|relationship| {
+                relationship.currentness == ExternalLinkRelationshipCurrentness::Current
+                    || relationship.currentness == ExternalLinkRelationshipCurrentness::Regenerated
+            })
+            .collect();
+        relationships.sort_by_key(|relationship| relationship.order.unwrap_or(u32::MAX));
+        return relationships;
+    }
+
+    synthesized_legacy_relationships(link)
+}
+
+fn relationship_current_for_live_fields(
+    link: &ExternalLink,
+    relationship: &ExternalLinkRelationship,
+) -> ExternalLinkRelationship {
+    let mut relationship = relationship.clone();
+    if relationship
+        .roles
+        .contains(&ExternalLinkRelationshipRole::ExternalBook)
+        && let Some(target) = &link.file_path
+        && relationship.target != *target
+    {
+        relationship.target = target.clone();
+        relationship.imported_id_hint = None;
+        relationship.currentness = ExternalLinkRelationshipCurrentness::Regenerated;
+    }
+    if relationship
+        .roles
+        .contains(&ExternalLinkRelationshipRole::AlternateAbsoluteUrl)
+        && let Some(target) = &link.alternate_url
+        && relationship.target != *target
+    {
+        relationship.target = target.clone();
+        relationship.imported_id_hint = None;
+        relationship.currentness = ExternalLinkRelationshipCurrentness::Regenerated;
+    }
+    if relationship
+        .roles
+        .contains(&ExternalLinkRelationshipRole::AlternateRelativeUrl)
+        && let Some(target) = &link.relative_url
+        && relationship.target != *target
+    {
+        relationship.target = target.clone();
+        relationship.imported_id_hint = None;
+        relationship.currentness = ExternalLinkRelationshipCurrentness::Regenerated;
+    }
+    relationship
+}
+
+fn synthesized_legacy_relationships(link: &ExternalLink) -> Vec<ExternalLinkRelationship> {
+    let default_rel_type = crate::domain::external::write::REL_EXTERNAL_LINK_PATH;
+    let primary_rel_type = supported_external_link_relationship_type(
+        link.file_path_rel_type.as_deref(),
+        default_rel_type,
+    );
+    let mut relationships = Vec::new();
+
+    if let Some(target) = &link.file_path {
+        relationships.push(ExternalLinkRelationship {
+            source_key: "legacy:filePath".to_string(),
+            imported_id_hint: link
+                .file_path_rid
+                .clone()
+                .or_else(|| Some("rId1".to_string())),
+            relationship_type: primary_rel_type.to_string(),
+            target: target.clone(),
+            target_mode: Some("External".to_string()),
+            order: Some(0),
+            roles: vec![ExternalLinkRelationshipRole::ExternalBook],
+            currentness: ExternalLinkRelationshipCurrentness::Regenerated,
+        });
+    }
+    if let Some(target) = &link.alternate_url {
+        relationships.push(ExternalLinkRelationship {
+            source_key: "legacy:alternateUrl".to_string(),
+            imported_id_hint: link
+                .alternate_url_rid
+                .clone()
+                .or_else(|| Some("rId2".to_string())),
+            relationship_type: default_rel_type.to_string(),
+            target: target.clone(),
+            target_mode: Some("External".to_string()),
+            order: Some(1),
+            roles: vec![ExternalLinkRelationshipRole::AlternateAbsoluteUrl],
+            currentness: ExternalLinkRelationshipCurrentness::Regenerated,
+        });
+    }
+    if let Some(target) = &link.relative_url {
+        let default_rid = if link.alternate_url.is_some() {
+            "rId3"
+        } else {
+            "rId2"
+        };
+        relationships.push(ExternalLinkRelationship {
+            source_key: "legacy:relativeUrl".to_string(),
+            imported_id_hint: link
+                .relative_url_rid
+                .clone()
+                .or_else(|| Some(default_rid.to_string())),
+            relationship_type: default_rel_type.to_string(),
+            target: target.clone(),
+            target_mode: Some("External".to_string()),
+            order: Some(2),
+            roles: vec![ExternalLinkRelationshipRole::AlternateRelativeUrl],
+            currentness: ExternalLinkRelationshipCurrentness::Regenerated,
+        });
+    }
+    for (index, extra) in link.extra_rels.iter().enumerate() {
+        relationships.push(ExternalLinkRelationship {
+            source_key: format!("legacy:extra:{index}"),
+            imported_id_hint: Some(extra.id.clone()),
+            relationship_type: extra.rel_type.clone(),
+            target: extra.target.clone(),
+            target_mode: Some("External".to_string()),
+            order: Some(index as u32 + 3),
+            roles: vec![ExternalLinkRelationshipRole::ExtraPath],
+            currentness: ExternalLinkRelationshipCurrentness::Regenerated,
+        });
+    }
+
+    if let Some(order) = &link.rels_id_order {
+        relationships.sort_by_key(|relationship| {
+            relationship
+                .imported_id_hint
+                .as_ref()
+                .and_then(|id| order.iter().position(|ordered| ordered == id))
+                .unwrap_or(usize::MAX)
+        });
+    }
+
+    relationships
 }
 
 pub(super) fn rels_path(zip_path: &str) -> String {
@@ -204,5 +337,54 @@ mod tests {
             .expect_err("stale imported r:id must not be used without graph relationship");
 
         assert!(format!("{err}").contains("missing external link relationship"));
+    }
+
+    #[test]
+    fn duplicate_external_link_relationship_targets_resolve_by_role_order() {
+        let mut graph = PackageGraphBuilder::new();
+        let part_name = "externalLinks/externalLink1.xml";
+        let target = "file:///same.xlsx".to_string();
+        let link = ExternalLink {
+            id: "1".to_string(),
+            file_path: Some(target.clone()),
+            alternate_url: Some(target.clone()),
+            relationships: vec![
+                ExternalLinkRelationship {
+                    source_key: "primary".to_string(),
+                    imported_id_hint: Some("rId1".to_string()),
+                    relationship_type: crate::domain::external::write::REL_EXTERNAL_LINK_PATH
+                        .to_string(),
+                    target: target.clone(),
+                    target_mode: Some("External".to_string()),
+                    order: Some(0),
+                    roles: vec![ExternalLinkRelationshipRole::ExternalBook],
+                    currentness: ExternalLinkRelationshipCurrentness::Current,
+                },
+                ExternalLinkRelationship {
+                    source_key: "absolute".to_string(),
+                    imported_id_hint: Some("rId2".to_string()),
+                    relationship_type: crate::domain::external::write::REL_EXTERNAL_LINK_PATH
+                        .to_string(),
+                    target,
+                    target_mode: Some("External".to_string()),
+                    order: Some(1),
+                    roles: vec![ExternalLinkRelationshipRole::AlternateAbsoluteUrl],
+                    currentness: ExternalLinkRelationshipCurrentness::Current,
+                },
+            ],
+            ..Default::default()
+        };
+
+        register_owned_relationships(&mut graph, part_name, &link);
+        let graph = graph.resolve().unwrap();
+        let owner = PackageOwner::Part {
+            path: "xl/externalLinks/externalLink1.xml".to_string(),
+        };
+        let resolved = with_resolved_relationship_ids(&graph, &link, &owner).unwrap();
+
+        assert_eq!(resolved.file_path_rid.as_deref(), Some("rId1"));
+        assert_eq!(resolved.alternate_url_rid.as_deref(), Some("rId2"));
+        let rels = graph.relationship_manager_for_owner(&owner);
+        assert_eq!(rels.relationships().len(), 2);
     }
 }

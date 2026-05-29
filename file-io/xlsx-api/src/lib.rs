@@ -33,7 +33,7 @@ pub mod mmap;
 pub mod parallel;
 
 pub use error::XlsxApiError;
-pub use export::export_from_parse_output;
+pub use export::{ExportReport, export_from_parse_output, export_from_parse_output_with_report};
 pub use options::{ParseMode, ParseOptions};
 pub use parse::{ParsedWorkbook, parse, parse_max_sheets, parse_with_options};
 pub use types::*;

@@ -66,6 +66,13 @@ pub struct ExternalLink {
     /// Each entry is (rId, Target, Type).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_rels: Vec<ExternalLinkExtraRel>,
+    /// Typed external-link-owned relationships.
+    ///
+    /// These records are live workbook state. Imported relationship IDs and
+    /// order are provenance hints for these records, not a second source of
+    /// truth for export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<ExternalLinkRelationship>,
     /// OOXML package identity captured during import.
     ///
     /// This is the durable mapping from workbook.xml `<externalReference r:id>`
@@ -209,6 +216,57 @@ pub struct ExternalLinkExtraRel {
     pub id: String,
     pub target: String,
     pub rel_type: String,
+}
+
+/// A live relationship owned by an `externalLink*.xml` part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalLinkRelationship {
+    /// Stable local source key used by body role bindings. This is distinct
+    /// from imported or emitted `rId` values.
+    pub source_key: String,
+    /// Imported relationship ID, when the current record was reconstructed
+    /// from an XLSX package relationship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_id_hint: Option<String>,
+    /// OOXML relationship type URI.
+    pub relationship_type: String,
+    /// Relationship target as live state.
+    pub target: String,
+    /// TargetMode from the relationship row. External workbook path
+    /// relationships normally use `External`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
+    /// Imported order within the owning `.rels` file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
+    /// Semantic body roles that refer to this relationship.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<ExternalLinkRelationshipRole>,
+    /// Currentness decision for imported provenance.
+    #[serde(default)]
+    pub currentness: ExternalLinkRelationshipCurrentness,
+}
+
+/// Semantic use of an external-link-owned relationship.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExternalLinkRelationshipRole {
+    ExternalBook,
+    AlternateAbsoluteUrl,
+    AlternateRelativeUrl,
+    ExtraPath,
+}
+
+/// Whether imported provenance is still eligible for reuse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExternalLinkRelationshipCurrentness {
+    #[default]
+    Current,
+    Regenerated,
+    DroppedStale,
+    DroppedUnsupported,
 }
 
 /// Imported OOXML external-link package identity.

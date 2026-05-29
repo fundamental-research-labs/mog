@@ -237,6 +237,7 @@ export interface ExternalLink {
   alternateUrlRid?: string;
   relativeUrlRid?: string;
   extraRels?: ExternalLinkExtraRel[];
+  relationships?: ExternalLinkRelationship[];
   importedIdentity?: ImportedExternalLinkIdentity;
 }
 
@@ -245,6 +246,29 @@ export interface ExternalLinkExtraRel {
   target: string;
   relType: string;
 }
+
+export interface ExternalLinkRelationship {
+  sourceKey: string;
+  importedIdHint?: string;
+  relationshipType: string;
+  target: string;
+  targetMode?: string;
+  order?: number;
+  roles?: ExternalLinkRelationshipRole[];
+  currentness: ExternalLinkRelationshipCurrentness;
+}
+
+export type ExternalLinkRelationshipRole =
+  | "externalBook"
+  | "alternateAbsoluteUrl"
+  | "alternateRelativeUrl"
+  | "extraPath";
+
+export type ExternalLinkRelationshipCurrentness =
+  | "current"
+  | "regenerated"
+  | "droppedStale"
+  | "droppedUnsupported";
 
 export type ExternalLinkType =
   | { type: 'workbook' }

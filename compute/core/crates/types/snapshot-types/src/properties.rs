@@ -3,7 +3,7 @@
 //! `CellFormat` lives in the `domain-types` crate —
 //! import from there directly.
 
-use domain_types::CellFormat;
+use domain_types::{CellFormat, FormulaCacheProvenance};
 use serde::{Deserialize, Serialize};
 
 /// Discriminant for region-membership kinds on the wire surface.
@@ -91,6 +91,12 @@ pub struct CellMetadata {
         skip_serializing_if = "is_false"
     )]
     pub has_empty_cached_value: bool,
+    #[serde(
+        rename = "formulaCacheProvenance",
+        default,
+        skip_serializing_if = "FormulaCacheProvenance::is_absent_or_unknown"
+    )]
+    pub formula_cache_provenance: FormulaCacheProvenance,
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     #[serde(rename = "originalValue", skip_serializing_if = "Option::is_none")]
@@ -141,6 +147,12 @@ pub struct CellProperties {
         skip_serializing_if = "is_false"
     )]
     pub has_empty_cached_value: bool,
+    #[serde(
+        rename = "formulaCacheProvenance",
+        default,
+        skip_serializing_if = "FormulaCacheProvenance::is_absent_or_unknown"
+    )]
+    pub formula_cache_provenance: FormulaCacheProvenance,
     #[serde(rename = "sstIndex", skip_serializing_if = "Option::is_none")]
     pub original_sst_index: Option<u32>,
     #[serde(rename = "originalValue", skip_serializing_if = "Option::is_none")]
@@ -164,6 +176,7 @@ impl CellProperties {
             && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
+            && self.formula_cache_provenance.is_absent_or_unknown()
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -181,6 +194,7 @@ impl CellMetadata {
             && self.vm.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
+            && self.formula_cache_provenance.is_absent_or_unknown()
             && self.original_sst_index.is_none()
             && self.original_value.is_none()
             && !self.is_array_formula
@@ -204,6 +218,7 @@ impl From<domain_types::CellProperties> for CellProperties {
             date_lexical_value: d.date_lexical_value,
             formula_result_type: d.formula_result_type,
             has_empty_cached_value: d.has_empty_cached_value,
+            formula_cache_provenance: d.formula_cache_provenance,
             original_sst_index: d.original_sst_index,
             original_value: d.original_value,
             is_array_formula: d.is_array_formula,
@@ -226,6 +241,7 @@ impl From<CellProperties> for domain_types::CellProperties {
             date_lexical_value: s.date_lexical_value,
             formula_result_type: s.formula_result_type,
             has_empty_cached_value: s.has_empty_cached_value,
+            formula_cache_provenance: s.formula_cache_provenance,
             original_sst_index: s.original_sst_index,
             original_value: s.original_value,
             is_array_formula: s.is_array_formula,

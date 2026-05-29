@@ -18,6 +18,9 @@ mod writer;
 mod tests;
 
 pub use super::types::{CalcMode, CalcSettings, SheetDef, SheetState, WorkbookView};
-pub use calc::calc_settings_from_domain;
+pub use calc::{
+    CalcIdExportDisposition, CalcSettingsExportDecision, calc_settings_for_export,
+    calc_settings_from_domain,
+};
 pub use types::DefinedNameDef;
 pub use writer::WorkbookWriter;

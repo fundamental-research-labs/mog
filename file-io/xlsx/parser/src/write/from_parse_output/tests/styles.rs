@@ -112,6 +112,126 @@ fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
 }
 
 #[test]
+fn imported_workbook_stylesheet_preserves_positional_dxf_registry() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        conditional_formats: vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![CFCellRange::single(0, 0)],
+            range_identities: None,
+            rules: vec![CFRule::CellValue {
+                id: "rule-1".to_string(),
+                operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                value1: serde_json::json!("1"),
+                value2: None,
+                style: CFStyle {
+                    dxf_id: Some(5),
+                    ..Default::default()
+                },
+                priority: 1,
+                stop_if_true: Some(false),
+                text: None,
+            }],
+        }],
+        ..Default::default()
+    }]);
+
+    let imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
+    let mut workbook_stylesheet = WorkbookStylesheet::from_stylesheet(
+        ooxml_types::styles::Stylesheet {
+            fonts: imported_styles.fonts,
+            fills: imported_styles.fills,
+            borders: imported_styles.borders,
+            cell_style_xfs: imported_styles.cell_style_xfs,
+            cell_xfs: imported_styles.cell_xfs,
+            cell_styles: imported_styles.cell_styles,
+            ..Default::default()
+        },
+        Vec::new(),
+        None,
+    );
+    workbook_stylesheet.dxf_registry = vec![
+        domain_types::DxfDef {
+            id: 0,
+            font: Some(ooxml_types::styles::FontDef {
+                italic: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        domain_types::DxfDef {
+            id: 5,
+            font: Some(ooxml_types::styles::FontDef {
+                bold: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    ];
+    output.workbook_stylesheet = Some(workbook_stylesheet);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"<dxfs count="6">"#), "{styles_xml}");
+    assert!(
+        sheet_xml.contains(r#"dxfId="5""#),
+        "imported dxfId must remain in workbook registry space, got: {sheet_xml}"
+    );
+}
+
+#[test]
+fn imported_workbook_stylesheet_exports_even_without_sheet_style_refs() {
+    let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
+    imported_styles
+        .cell_xfs
+        .push(ooxml_types::styles::CellXfDef {
+            num_fmt_id: Some(49),
+            font_id: Some(0),
+            fill_id: Some(0),
+            border_id: Some(0),
+            xf_id: Some(0),
+            apply_number_format: Some(true),
+            ..Default::default()
+        });
+
+    let output = ParseOutput {
+        workbook_stylesheet: Some(WorkbookStylesheet::from_stylesheet(
+            ooxml_types::styles::Stylesheet {
+                fonts: imported_styles.fonts,
+                fills: imported_styles.fills,
+                borders: imported_styles.borders,
+                cell_style_xfs: imported_styles.cell_style_xfs,
+                cell_xfs: imported_styles.cell_xfs,
+                cell_styles: imported_styles.cell_styles,
+                ..Default::default()
+            },
+            Vec::new(),
+            None,
+        )),
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(
+        styles_xml.contains(r#"<cellXfs count="2">"#),
+        "workbook cellXfs remain observable even without sheet refs, got: {styles_xml}"
+    );
+}
+
+#[test]
 fn test_style_mapping_font() {
     let palette = vec![DocumentFormat {
         font: Some(FontFormat {
@@ -318,6 +438,112 @@ fn workbook_stylesheet_style_ids_emit_without_palette_offset() {
 }
 
 #[test]
+fn imported_workbook_stylesheet_style_ids_emit_for_all_sheet_owners() {
+    let mut imported_styles = crate::domain::styles::write::StylesWriter::with_defaults();
+    imported_styles
+        .cell_xfs
+        .resize(956, ooxml_types::styles::CellXfDef::default());
+
+    let output = ParseOutput {
+        workbook_stylesheet: Some(WorkbookStylesheet::from_stylesheet(
+            ooxml_types::styles::Stylesheet {
+                fonts: imported_styles.fonts,
+                fills: imported_styles.fills,
+                borders: imported_styles.borders,
+                cell_style_xfs: imported_styles.cell_style_xfs,
+                cell_xfs: imported_styles.cell_xfs,
+                cell_styles: imported_styles.cell_styles,
+                ..Default::default()
+            },
+            Vec::new(),
+            None,
+        )),
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![
+                DomainCellData {
+                    row: 0,
+                    col: 0,
+                    value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+                    style_id: Some(8),
+                    ..Default::default()
+                },
+                DomainCellData {
+                    row: 0,
+                    col: 1,
+                    value: DomainValue::Number(FiniteF64::new(2.0).unwrap()),
+                    style_id: Some(956),
+                    ..Default::default()
+                },
+            ],
+            authored_style_runs: vec![AuthoredStyleRun {
+                start_row: 0,
+                start_col: 2,
+                end_row: 0,
+                end_col: 2,
+                style_id: 162,
+            }],
+            row_styles: vec![RowStyleEntry {
+                row: 2,
+                style_id: 955,
+            }],
+            col_styles: vec![ColStyleEntry {
+                col: 3,
+                style_id: 162,
+            }],
+            dimensions: SheetDimensions {
+                col_widths: vec![ColDimension {
+                    col: 4,
+                    width: 12.0,
+                    custom_width: true,
+                    hidden: false,
+                    best_fit: false,
+                    collapsed: false,
+                    phonetic: false,
+                    ..Default::default()
+                }],
+                trailing_col_ranges: vec![TrailingColRange {
+                    min: 8,
+                    max: 9,
+                    width: 8.43,
+                    custom_width: false,
+                    hidden: false,
+                    best_fit: false,
+                    collapsed: false,
+                    phonetic: false,
+                    style_id: Some(955),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(
+        sheet_xml.contains(r#"<c r="A1" s="8"><v>1</v></c>"#),
+        "{sheet_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"<c r="B1"><v>2</v></c>"#),
+        "invalid workbook style IDs must not be coerced, got: {sheet_xml}"
+    );
+    assert!(sheet_xml.contains(r#"<c r="C1" s="162"/>"#), "{sheet_xml}");
+    assert!(sheet_xml.contains(r#"<row r="3""#), "{sheet_xml}");
+    assert!(sheet_xml.contains(r#"s="955""#), "{sheet_xml}");
+    assert!(sheet_xml.contains(r#"style="162""#), "{sheet_xml}");
+    assert!(sheet_xml.contains(r#"style="955""#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"s="956""#), "{sheet_xml}");
+    assert!(!sheet_xml.contains(r#"style="956""#), "{sheet_xml}");
+}
+
+#[test]
 fn test_style_mapping_border() {
     let palette = vec![DocumentFormat {
         border: Some(BorderFormat {
@@ -399,6 +625,7 @@ fn test_col_styles_roundtrip() {
                 best_fit: false,
                 collapsed: false,
                 phonetic: false,
+                ..Default::default()
             }],
             ..Default::default()
         },

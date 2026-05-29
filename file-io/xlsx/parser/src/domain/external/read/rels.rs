@@ -1,7 +1,10 @@
 use crate::infra::scanner::find_tag_simd;
 use crate::infra::xml::parse_string_attr_quoted;
 
-use domain_types::domain::external_link::{ExternalLink, ExternalLinkExtraRel};
+use domain_types::domain::external_link::{
+    ExternalLink, ExternalLinkExtraRel, ExternalLinkRelationship,
+    ExternalLinkRelationshipCurrentness, ExternalLinkRelationshipRole,
+};
 
 use super::support::{start_tag_element, start_tag_end_for_attrs};
 
@@ -29,6 +32,7 @@ pub(super) fn resolve_rels(link: &mut ExternalLink, rels_xml: &[u8], book_xml: &
         None
     };
 
+    let mut parsed_rels = Vec::new();
     let mut pos = 0;
     let mut rels_order = Vec::new();
     while pos < rels_xml.len() {
@@ -42,30 +46,49 @@ pub(super) fn resolve_rels(link: &mut ExternalLink, rels_xml: &[u8], book_xml: &
         let id = parse_string_attr_quoted(el, b"Id");
         let target = parse_string_attr_quoted(el, b"Target");
         let rel_type = parse_string_attr_quoted(el, b"Type");
+        let target_mode = parse_string_attr_quoted(el, b"TargetMode");
 
         if let (Some(id), Some(target)) = (id, target) {
             rels_order.push(id.clone());
+            let mut roles = Vec::new();
             if primary_r_id.as_deref() == Some(&id) {
-                link.file_path = Some(target);
+                roles.push(ExternalLinkRelationshipRole::ExternalBook);
+                link.file_path = Some(target.clone());
                 link.file_path_rid = Some(id.clone());
                 if let Some(ref rt) = rel_type {
                     if rt != crate::infra::opc::REL_EXTERNAL_LINK_PATH {
                         link.file_path_rel_type = Some(rt.clone());
                     }
                 }
-            } else if alt_r_id.as_deref() == Some(&id) {
-                link.alternate_url = Some(target);
+            }
+            if alt_r_id.as_deref() == Some(&id) {
+                roles.push(ExternalLinkRelationshipRole::AlternateAbsoluteUrl);
+                link.alternate_url = Some(target.clone());
                 link.alternate_url_rid = Some(id.clone());
-            } else if rel_r_id.as_deref() == Some(&id) {
-                link.relative_url = Some(target);
+            }
+            if rel_r_id.as_deref() == Some(&id) {
+                roles.push(ExternalLinkRelationshipRole::AlternateRelativeUrl);
+                link.relative_url = Some(target.clone());
                 link.relative_url_rid = Some(id.clone());
-            } else {
+            }
+            if roles.is_empty() {
+                roles.push(ExternalLinkRelationshipRole::ExtraPath);
                 link.extra_rels.push(ExternalLinkExtraRel {
                     id: id.clone(),
-                    target,
-                    rel_type: rel_type.unwrap_or_default(),
+                    target: target.clone(),
+                    rel_type: rel_type.clone().unwrap_or_default(),
                 });
             }
+            parsed_rels.push(ExternalLinkRelationship {
+                source_key: format!("rel:{id}"),
+                imported_id_hint: Some(id),
+                relationship_type: rel_type.unwrap_or_default(),
+                target,
+                target_mode,
+                order: Some(parsed_rels.len() as u32),
+                roles,
+                currentness: ExternalLinkRelationshipCurrentness::Current,
+            });
         }
 
         pos = rel_end;
@@ -74,6 +97,7 @@ pub(super) fn resolve_rels(link: &mut ExternalLink, rels_xml: &[u8], book_xml: &
     if rels_order.len() >= 2 && rels_order[0] != "rId1" {
         link.rels_id_order = Some(rels_order);
     }
+    link.relationships = parsed_rels;
 }
 
 /// Return the r:id from `<externalBook>`, if this external link is a workbook link.
@@ -137,6 +161,23 @@ mod tests {
         assert_eq!(link.relative_url_rid.as_deref(), Some("rId4"));
         assert_eq!(link.extra_rels.len(), 1);
         assert_eq!(link.extra_rels[0].id, "rId5");
+        assert_eq!(link.relationships.len(), 4);
+        assert_eq!(
+            link.relationships[0].roles,
+            vec![ExternalLinkRelationshipRole::ExternalBook]
+        );
+        assert_eq!(
+            link.relationships[0].target_mode.as_deref(),
+            Some("External")
+        );
+        assert_eq!(
+            link.relationships[1].roles,
+            vec![ExternalLinkRelationshipRole::AlternateAbsoluteUrl]
+        );
+        assert_eq!(
+            link.relationships[2].roles,
+            vec![ExternalLinkRelationshipRole::AlternateRelativeUrl]
+        );
         assert_eq!(
             link.rels_id_order.as_ref().unwrap(),
             &vec![

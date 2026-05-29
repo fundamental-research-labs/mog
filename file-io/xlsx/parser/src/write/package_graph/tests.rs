@@ -58,7 +58,7 @@ fn imported_root_order_and_ids_are_reused_only_for_matching_current_set() {
 }
 
 #[test]
-fn imported_order_is_ignored_when_current_owner_set_changes() {
+fn imported_order_is_kept_for_surviving_root_relationships() {
     let metadata = PackageFidelityMetadata {
         root_relationships: vec![relationship_hint(
             "rId9",
@@ -77,6 +77,122 @@ fn imported_order_is_ignored_when_current_owner_set_changes() {
 
     assert_eq!(root_rels[0].relationship_type, REL_OFFICE_DOCUMENT);
     assert_eq!(root_rels[1].relationship_type, REL_CORE_PROPERTIES);
+}
+
+#[test]
+fn imported_workbook_relationship_ids_survive_dropped_siblings() {
+    let metadata = PackageFidelityMetadata {
+        workbook_relationships: vec![
+            relationship_hint("rId1", REL_WORKSHEET, "worksheets/sheet2.xml"),
+            relationship_hint("rId2", REL_PERSON, "persons/person.xml"),
+            relationship_hint("rId8", REL_WORKSHEET, "worksheets/sheet1.xml"),
+            relationship_hint("rId9", REL_STYLES, "styles.xml"),
+            relationship_hint("rId10", REL_SHARED_STRINGS, "sharedStrings.xml"),
+            relationship_hint("rId11", REL_THEME, "theme/theme1.xml"),
+        ],
+        ..Default::default()
+    };
+    let mut options = graph_options(Some(metadata));
+    options.sheet_count = 2;
+    options.has_shared_strings = true;
+    options.has_theme = true;
+
+    let graph = build_modeled_workbook_graph(options).unwrap();
+
+    assert_eq!(
+        graph.relationship_id(
+            &PackageOwner::Workbook,
+            REL_WORKSHEET,
+            "worksheets/sheet2.xml"
+        ),
+        Some("rId1")
+    );
+    assert_eq!(
+        graph.relationship_id(
+            &PackageOwner::Workbook,
+            REL_WORKSHEET,
+            "worksheets/sheet1.xml"
+        ),
+        Some("rId8")
+    );
+    assert_eq!(
+        graph.relationship_id(&PackageOwner::Workbook, REL_STYLES, "styles.xml"),
+        Some("rId9")
+    );
+    assert_eq!(
+        graph.relationship_id(
+            &PackageOwner::Workbook,
+            REL_SHARED_STRINGS,
+            "sharedStrings.xml"
+        ),
+        Some("rId10")
+    );
+    assert_eq!(
+        graph.relationship_id(&PackageOwner::Workbook, REL_THEME, "theme/theme1.xml"),
+        Some("rId11")
+    );
+    assert!(
+        !graph
+            .relationships
+            .iter()
+            .any(|rel| { rel.owner_rels_path == "xl/_rels/workbook.xml.rels" && rel.id == "rId2" })
+    );
+}
+
+#[test]
+fn duplicate_imported_relationship_matches_use_occurrence_order() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![
+            relationship_hint("rId8", REL_CORE_PROPERTIES, "docProps/core.xml"),
+            relationship_hint("rId9", REL_CORE_PROPERTIES, "docProps/core.xml"),
+        ],
+        ..Default::default()
+    };
+    let mut builder = PackageGraphBuilder::with_package_fidelity(Some(metadata));
+    builder
+        .register_part(modeled_part("docProps/core.xml", CT_CORE_PROPERTIES))
+        .unwrap();
+    let first = builder.add_relationship(PackageRelationship {
+        owner: PackageOwner::Root,
+        relationship_type: REL_CORE_PROPERTIES.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "docProps/core.xml".to_string(),
+        },
+        identity_hint: None,
+    });
+    let second = builder.add_relationship(PackageRelationship {
+        owner: PackageOwner::Root,
+        relationship_type: REL_CORE_PROPERTIES.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: "docProps/core.xml".to_string(),
+        },
+        identity_hint: None,
+    });
+
+    let graph = builder.resolve().unwrap();
+
+    assert_eq!(graph.relationship_id_for_key(first), Some("rId8"));
+    assert_eq!(graph.relationship_id_for_key(second), Some("rId9"));
+}
+
+#[test]
+fn invalid_imported_relationship_id_is_reallocated() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![relationship_hint(
+            "",
+            REL_CORE_PROPERTIES,
+            "docProps/core.xml",
+        )],
+        ..Default::default()
+    };
+
+    let graph = build_modeled_workbook_graph(graph_options(Some(metadata))).unwrap();
+
+    assert!(graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "_rels/.rels"
+            && rel.relationship_type == REL_CORE_PROPERTIES
+            && rel.id == "rId1"
+    }));
 }
 
 #[test]
@@ -102,6 +218,91 @@ fn imported_default_mime_preference_updates_existing_current_default() {
         .find(|default| default.extension == "jpg")
         .unwrap();
     assert_eq!(jpg.content_type, "image/jpg");
+}
+
+#[test]
+fn imported_default_without_current_part_is_reported_as_unused_drop() {
+    let metadata = PackageFidelityMetadata {
+        content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {
+            extension: "png".to_string(),
+            content_type: CT_PNG.to_string(),
+        }],
+        ..Default::default()
+    };
+    let graph = build_modeled_workbook_graph(graph_options(Some(metadata))).unwrap();
+
+    let dispositions = graph.content_type_manifest_dispositions();
+
+    assert!(dispositions.iter().any(|disposition| {
+        disposition.row_kind == domain_types::PackageContentTypeManifestRowKind::Default
+            && disposition.extension.as_deref() == Some("png")
+            && disposition.disposition
+                == domain_types::PackageContentTypeManifestDispositionKind::UnusedDefaultDropped
+    }));
+}
+
+#[test]
+fn graph_content_types_do_not_seed_unrelated_binary_or_image_defaults() {
+    let graph = build_modeled_workbook_graph(graph_options(None)).unwrap();
+    let mut content_types = ContentTypesManager::with_xlsx_defaults();
+
+    graph.add_content_types_to(&mut content_types);
+
+    for extension in [
+        "bin", "png", "jpg", "jpeg", "gif", "bmp", "svg", "emf", "wmf", "tiff", "vml",
+    ] {
+        assert!(
+            !content_types.has_default(extension),
+            "unexpected default for {extension}"
+        );
+    }
+}
+
+#[test]
+fn imported_binary_default_cannot_retype_current_printer_settings_part() {
+    let metadata = PackageFidelityMetadata {
+        content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {
+            extension: "bin".to_string(),
+            content_type: crate::write::CT_VBA.to_string(),
+        }],
+        ..Default::default()
+    };
+    let mut builder = PackageGraphBuilder::with_package_fidelity(Some(metadata));
+    builder
+        .register_part(PackagePart {
+            path: "xl/printerSettings/printerSettings1.bin".to_string(),
+            content_type: None,
+            default_extension: Some((
+                "bin".to_string(),
+                crate::write::CT_PRINTER_SETTINGS.to_string(),
+            )),
+            kind: PackagePartKind::Modeled,
+            bytes: None,
+        })
+        .unwrap();
+    let graph = builder.resolve().unwrap();
+    let mut content_types = ContentTypesManager::with_xlsx_defaults();
+
+    graph.add_content_types_to(&mut content_types);
+    graph.apply_content_type_preferences_to(&mut content_types);
+
+    let bin = content_types
+        .defaults()
+        .iter()
+        .find(|default| default.extension == "bin")
+        .unwrap();
+    assert_eq!(bin.content_type, crate::write::CT_PRINTER_SETTINGS);
+    assert!(
+        graph
+            .content_type_manifest_dispositions()
+            .iter()
+            .any(|disposition| {
+                disposition.row_kind == domain_types::PackageContentTypeManifestRowKind::Default
+                    && disposition.extension.as_deref() == Some("bin")
+                    && disposition.disposition
+                        == domain_types::PackageContentTypeManifestDispositionKind::Rewritten
+            })
+    );
 }
 
 #[test]
@@ -133,6 +334,45 @@ fn rich_data_parts_can_own_image_relationships() {
             && relationship.relationship_type == REL_IMAGE
             && relationship.target == "../media/image1.png"
     }));
+}
+
+#[test]
+fn duplicate_same_target_relationships_keep_distinct_resolved_keys() {
+    let mut builder = PackageGraphBuilder::new();
+    builder
+        .register_part(modeled_part("xl/drawings/drawing1.xml", CT_DRAWING))
+        .unwrap();
+    register_media_part(&mut builder, "xl/media/image1.png").unwrap();
+
+    let first = register_drawing_image_relationship(
+        &mut builder,
+        "xl/drawings/drawing1.xml",
+        "xl/media/image1.png",
+        "rId1",
+    )
+    .unwrap();
+    let second = register_drawing_image_relationship(
+        &mut builder,
+        "xl/drawings/drawing1.xml",
+        "xl/media/image1.png",
+        "rId2",
+    )
+    .unwrap();
+
+    let graph = builder.resolve().unwrap();
+
+    assert_eq!(graph.relationship_id_for_key(first), Some("rId1"));
+    assert_eq!(graph.relationship_id_for_key(second), Some("rId2"));
+    let drawing_image_relationships = graph
+        .relationships
+        .iter()
+        .filter(|relationship| {
+            relationship.owner_rels_path == "xl/drawings/_rels/drawing1.xml.rels"
+                && relationship.relationship_type == REL_IMAGE
+                && relationship.target == "../media/image1.png"
+        })
+        .count();
+    assert_eq!(drawing_image_relationships, 2);
 }
 
 #[test]
@@ -237,6 +477,78 @@ fn webextension_cluster_is_registered_with_root_and_taskpane_relationships() {
                 == "http://schemas.microsoft.com/office/2011/relationships/webextension"
             && rel.target == "webextension1.xml"
     }));
+}
+
+#[test]
+fn webextension_cluster_is_dropped_without_root_taskpanes_relationship() {
+    let metadata = PackageFidelityMetadata {
+        opaque_parts: vec![
+            domain_types::OpaquePackagePartHint {
+                path: "xl/webextensions/taskpanes.xml".to_string(),
+                bytes: b"<wetp:taskpanes/>".to_vec(),
+                content_type: Some(
+                    "application/vnd.ms-office.webextensiontaskpanes+xml".to_string(),
+                ),
+                relationships: vec![relationship_hint(
+                    "rId1",
+                    "http://schemas.microsoft.com/office/2011/relationships/webextension",
+                    "webextension1.xml",
+                )],
+            },
+            domain_types::OpaquePackagePartHint {
+                path: "xl/webextensions/webextension1.xml".to_string(),
+                bytes: b"<we:webextension/>".to_vec(),
+                content_type: Some("application/vnd.ms-office.webextension+xml".to_string()),
+                relationships: Vec::new(),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    assert!(!graph.contains_part("xl/webextensions/taskpanes.xml"));
+    assert!(!graph.contains_part("xl/webextensions/webextension1.xml"));
+}
+
+#[test]
+fn webextension_cluster_is_dropped_for_unsafe_internal_target() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![relationship_hint(
+            "rId2",
+            "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes",
+            "xl/webextensions/taskpanes.xml",
+        )],
+        opaque_parts: vec![
+            domain_types::OpaquePackagePartHint {
+                path: "xl/webextensions/taskpanes.xml".to_string(),
+                bytes: b"<wetp:taskpanes/>".to_vec(),
+                content_type: Some(
+                    "application/vnd.ms-office.webextensiontaskpanes+xml".to_string(),
+                ),
+                relationships: vec![relationship_hint(
+                    "rId1",
+                    "http://schemas.microsoft.com/office/2011/relationships/webextension",
+                    "../media/image1.png",
+                )],
+            },
+            domain_types::OpaquePackagePartHint {
+                path: "xl/media/image1.png".to_string(),
+                bytes: vec![1, 2, 3],
+                content_type: Some(CT_PNG.to_string()),
+                relationships: Vec::new(),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    assert!(!graph.contains_part("xl/webextensions/taskpanes.xml"));
 }
 
 #[test]

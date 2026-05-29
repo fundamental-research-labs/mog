@@ -3,18 +3,24 @@ use domain_types::ParseOutput;
 use super::differential_formats;
 use super::export_context::WorkbookPreflight;
 use super::sheet_parts;
-use super::style_remap::build_style_export_plan;
+use super::style_remap::{build_style_export_plan, uses_imported_workbook_style_authority};
 use crate::write::pivot_writer;
 
 pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
-    let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
+    let (remapped_output, style_export) = if uses_imported_workbook_style_authority(output) {
+        let style_export = build_style_export_plan(output);
+        (output.clone(), style_export)
+    } else {
+        let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
+        let mut style_export = build_style_export_plan(&remapped_output);
+        style_export.writer.dxfs = registry_dxfs;
+        if style_export.writer.dxfs.is_empty() {
+            style_export.writer.dxfs = differential_formats::collect(&remapped_output);
+        }
+        (remapped_output, style_export)
+    };
 
-    let style_export = build_style_export_plan(&remapped_output);
     let mut styles_writer = style_export.writer;
-    styles_writer.dxfs = registry_dxfs;
-    if styles_writer.dxfs.is_empty() {
-        styles_writer.dxfs = differential_formats::collect(&remapped_output);
-    }
     if styles_writer.table_styles.is_empty() {
         styles_writer.table_styles = remapped_output.custom_table_styles.clone();
     }

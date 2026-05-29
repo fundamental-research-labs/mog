@@ -97,13 +97,6 @@ pub(super) fn write_stylesheet(styles: &StylesWriter) -> Vec<u8> {
         }
     }
 
-    if let Some(ref ext_lst) = styles.ext_lst_raw {
-        let raw = String::from_utf8_lossy(ext_lst);
-        if !crate::infra::xml::raw_xml_contains_relationship_attr(&raw) {
-            w.raw(ext_lst);
-        }
-    }
-
     w.end_element("styleSheet");
 
     w.finish()

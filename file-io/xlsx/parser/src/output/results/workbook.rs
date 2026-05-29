@@ -549,6 +549,12 @@ pub struct FullParseResult {
     /// Index-aligned with `shared_strings`. `None` = no phonetic data.
     #[serde(skip)]
     pub shared_strings_phonetic_xml: Vec<Option<Vec<u8>>>,
+    /// Imported `<sst count="...">` value from `xl/sharedStrings.xml`, when present.
+    #[serde(skip)]
+    pub shared_strings_declared_count: Option<u32>,
+    /// Imported `<sst uniqueCount="...">` value from `xl/sharedStrings.xml`, when present.
+    #[serde(skip)]
+    pub shared_strings_declared_unique_count: Option<u32>,
     /// Safe root-level `<extLst>` XML from `xl/sharedStrings.xml`.
     #[serde(skip)]
     pub shared_strings_ext_lst_xml: Option<Vec<u8>>,
@@ -747,6 +753,9 @@ pub struct FullParseResult {
     /// Raw workbook-level `<customWorkbookViews>` XML.
     #[serde(skip)]
     pub custom_workbook_views_xml: Option<Vec<u8>>,
+    /// Workbook direct-child slot/payload fidelity captured from `xl/workbook.xml`.
+    #[serde(skip)]
+    pub workbook_xml_fidelity: domain_types::WorkbookXmlFidelity,
     /// Parsed workbook properties from `<workbookPr>` for domain output.
     #[serde(skip)]
     pub workbook_properties: Option<domain_types::domain::workbook::WorkbookProperties>,

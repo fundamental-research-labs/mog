@@ -94,6 +94,7 @@ pub(super) fn convert_sheet(
         .map(|rh| RowDimension {
             row: rh.row,
             height: rh.height,
+            height_str: rh.height_str.clone(),
             custom_height: rh.custom_height,
             hidden: rh.hidden.unwrap_or(false),
             explicit_hidden: rh.hidden.is_some(),
@@ -124,6 +125,7 @@ pub(super) fn convert_sheet(
                 row_heights.push(RowDimension {
                     row,
                     height: 0.0,
+                    height_str: None,
                     custom_height: false,
                     hidden: false,
                     explicit_hidden: false,
@@ -149,6 +151,7 @@ pub(super) fn convert_sheet(
                 row_heights.push(RowDimension {
                     row,
                     height: 0.0,
+                    height_str: None,
                     custom_height: false,
                     hidden: false,
                     explicit_hidden: false,
@@ -176,6 +179,7 @@ pub(super) fn convert_sheet(
                 row_heights.push(RowDimension {
                     row,
                     height: 0.0,
+                    height_str: None,
                     custom_height: false,
                     hidden: false,
                     explicit_hidden: false,
@@ -212,11 +216,19 @@ pub(super) fn convert_sheet(
                 col_widths.push(ColDimension {
                     col: one_based.saturating_sub(1),
                     width,
+                    width_str: cw.width_str.clone(),
+                    width_present: Some(cw.width.is_some()),
                     custom_width: cw.custom_width,
+                    custom_width_attr: cw.custom_width_attr,
                     hidden: cw.hidden,
+                    hidden_attr: cw.hidden_attr,
                     best_fit: cw.best_fit,
+                    best_fit_attr: cw.best_fit_attr,
+                    outline_level: cw.outline_level,
                     collapsed: cw.collapsed,
+                    collapsed_attr: cw.collapsed_attr,
                     phonetic: cw.phonetic,
+                    phonetic_attr: cw.phonetic_attr,
                 });
             }
         }
@@ -227,11 +239,19 @@ pub(super) fn convert_sheet(
                 min: trailing_min,
                 max: cw.max,
                 width,
+                width_str: cw.width_str.clone(),
+                width_present: Some(cw.width.is_some()),
                 custom_width: cw.custom_width,
+                custom_width_attr: cw.custom_width_attr,
                 hidden: cw.hidden,
+                hidden_attr: cw.hidden_attr,
                 best_fit: cw.best_fit,
+                best_fit_attr: cw.best_fit_attr,
+                outline_level: cw.outline_level,
                 collapsed: cw.collapsed,
+                collapsed_attr: cw.collapsed_attr,
                 phonetic: cw.phonetic,
+                phonetic_attr: cw.phonetic_attr,
                 style_id: cw.style.filter(|&s| s > 0).map(|s| s as u32),
             });
         }
@@ -443,6 +463,7 @@ pub(super) fn convert_sheet(
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.
     let hf_images = convert_hf_images(sheet);
     let comment_package = build_sheet_comment_package_info(sheet);
+    let drawing_package = build_sheet_drawing_package_info(sheet);
 
     // --- Build SheetData ---
     let mut sheet_properties = sheet.sheet_properties.clone();
@@ -475,6 +496,7 @@ pub(super) fn convert_sheet(
         comments,
         legacy_comment_authors: sheet.comment_authors.clone(),
         comment_package,
+        drawing_package,
         hyperlinks,
         data_validations,
         x14_data_validations,
@@ -505,4 +527,29 @@ pub(super) fn convert_sheet(
         outline_properties: sheet.outline_properties.clone(),
         extra_sheet_views,
     }
+}
+
+fn build_sheet_drawing_package_info(
+    sheet: &FullParsedSheet,
+) -> Option<domain_types::SheetDrawingPackageInfo> {
+    let owner_part = sheet
+        .owner_part_path
+        .clone()
+        .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", sheet.index + 1));
+    let rel = sheet
+        .sheet_opc_rels
+        .iter()
+        .find(|rel| rel.rel_type == crate::infra::opc::REL_DRAWING)?;
+    let drawing_path_hint = crate::infra::opc::resolve_relationship_target(
+        Some(owner_part.as_str()),
+        rel.target.as_str(),
+    )
+    .ok()
+    .map(|path| domain_types::normalize_package_path(&path));
+    Some(domain_types::SheetDrawingPackageInfo {
+        drawing_path_hint,
+        drawing_relationship_id_hint: Some(rel.id.clone()),
+        drawing_relationship_target_hint: Some(rel.target.clone()),
+        worksheet_relationships_file_present: true,
+    })
 }

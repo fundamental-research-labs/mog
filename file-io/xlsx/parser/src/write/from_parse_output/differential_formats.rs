@@ -414,7 +414,9 @@ mod tests {
 
     #[test]
     fn remap_for_export_covers_all_table_and_filter_dxf_consumers() {
-        let reachable_ids = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
+        let reachable_ids = [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150,
+        ];
         let mut output = ParseOutput {
             workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
                 dxf_registry: std::iter::once(999)
@@ -549,10 +551,13 @@ mod tests {
         );
         assert_eq!(
             sheet.auto_filter.as_ref().and_then(|filter| {
-                filter.columns.first().and_then(|column| match &column.filter_type {
-                    Some(domain_types::OoxmlFilterType::Color { dxf_id, .. }) => *dxf_id,
-                    _ => None,
-                })
+                filter
+                    .columns
+                    .first()
+                    .and_then(|column| match &column.filter_type {
+                        Some(domain_types::OoxmlFilterType::Color { dxf_id, .. }) => *dxf_id,
+                        _ => None,
+                    })
             }),
             Some(1)
         );
@@ -567,7 +572,8 @@ mod tests {
             Some(2)
         );
         assert_eq!(
-            sheet.sort_state
+            sheet
+                .sort_state
                 .as_ref()
                 .and_then(|sort| sort.conditions.first())
                 .and_then(|condition| condition.dxf_id),

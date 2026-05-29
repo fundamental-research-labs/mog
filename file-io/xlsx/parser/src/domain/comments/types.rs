@@ -173,6 +173,10 @@ pub struct CommentShape {
     pub note_height: Option<f64>,
     /// Note callout box width in points (from VML style `width:NNpt`)
     pub note_width: Option<f64>,
+    /// Parsed VML height declaration, retained as typed provenance.
+    pub note_height_style: Option<domain_types::VmlStyleDimensionInfo>,
+    /// Parsed VML width declaration, retained as typed provenance.
+    pub note_width_style: Option<domain_types::VmlStyleDimensionInfo>,
 }
 
 #[cfg(test)]

@@ -191,7 +191,8 @@ impl SheetWriter {
         self
     }
 
-    /// Set an authored worksheet dimension ref for passive import/export.
+    /// Set an authored worksheet dimension ref that was already validated by
+    /// the parse-output owner against the live cells this writer will emit.
     pub fn set_dimension_ref(&mut self, dimension_ref: String) -> &mut Self {
         self.dimension_ref = Some(dimension_ref);
         self
@@ -207,13 +208,19 @@ impl SheetWriter {
         if let Some(last) = self.cols.last_mut() {
             if last.max + 1 == col.min
                 && last.width == col.width
+                && last.width_str == col.width_str
                 && last.custom_width == col.custom_width
+                && last.custom_width_attr == col.custom_width_attr
                 && last.hidden == col.hidden
+                && last.hidden_attr == col.hidden_attr
                 && last.best_fit == col.best_fit
+                && last.best_fit_attr == col.best_fit_attr
                 && last.style == col.style
                 && last.outline_level == col.outline_level
                 && last.collapsed == col.collapsed
+                && last.collapsed_attr == col.collapsed_attr
                 && last.phonetic == col.phonetic
+                && last.phonetic_attr == col.phonetic_attr
             {
                 last.max = col.max;
                 return self;
@@ -232,6 +239,7 @@ impl SheetWriter {
         let col_1indexed = col + 1;
         let mut col_width = ColWidth::range(col_1indexed, col_1indexed, width);
         col_width.custom_width = true;
+        col_width.custom_width_attr = Some(true);
         self.cols.push(col_width);
         self
     }
@@ -256,6 +264,7 @@ impl SheetWriter {
             cw.outline_level = Some(level);
             if hidden {
                 cw.hidden = true;
+                cw.hidden_attr = Some(true);
             }
         } else {
             // Create a minimal col entry with no custom width
@@ -263,6 +272,9 @@ impl SheetWriter {
             cw.width = None;
             cw.outline_level = Some(level);
             cw.hidden = hidden;
+            if hidden {
+                cw.hidden_attr = Some(true);
+            }
             self.cols.push(cw);
         }
         self
@@ -284,10 +296,16 @@ impl SheetWriter {
             .find(|c| c.min == col_1indexed && c.max == col_1indexed)
         {
             cw.collapsed = collapsed;
+            if collapsed {
+                cw.collapsed_attr = Some(true);
+            }
         } else {
             let mut cw = ColWidth::range(col_1indexed, col_1indexed, 0.0);
             cw.width = None;
             cw.collapsed = collapsed;
+            if collapsed {
+                cw.collapsed_attr = Some(true);
+            }
             self.cols.push(cw);
         }
         self

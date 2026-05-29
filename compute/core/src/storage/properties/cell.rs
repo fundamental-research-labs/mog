@@ -124,12 +124,16 @@ pub fn clear_formula_cache_metadata(
     let Some(mut props) = get_properties(doc, workbook, sheets, sheet_id, cell_id) else {
         return;
     };
-    if props.formula_result_type.is_none() && !props.has_empty_cached_value {
+    if props.formula_result_type.is_none()
+        && !props.has_empty_cached_value
+        && props.formula_cache_provenance.is_absent_or_unknown()
+    {
         return;
     }
 
     props.formula_result_type = None;
     props.has_empty_cached_value = false;
+    props.formula_cache_provenance = Default::default();
     if props.format.is_none() && props.metadata_is_empty() {
         clear_properties(doc, sheets, sheet_id, cell_id);
     } else {

@@ -124,7 +124,7 @@ fn append_suppressed_auxiliary_diagnostics<'a>(
 ) {
     for path in paths {
         if path.starts_with("xl/webextensions/") {
-            dropped.push("active web extension package parts".to_string());
+            continue;
         } else if path.starts_with("xl/activeX/") {
             dropped.push(format!("ActiveX active content suppressed at {}", path));
         } else if path == "xl/volatileDependencies.xml" {

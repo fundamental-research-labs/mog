@@ -42,7 +42,7 @@ pub(super) struct WorksheetRelationshipPlan {
     pub(super) worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry>,
     pub(super) worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry>,
     pub(super) worksheet_table_relationships: Vec<(usize, usize, Option<String>)>,
-    pub(super) worksheet_pivot_table_relationships: Vec<(usize, usize, String)>,
+    pub(super) worksheet_pivot_table_relationships: Vec<(usize, String, String)>,
     pub(super) worksheet_slicer_relationships: Vec<(usize, usize)>,
     pub(super) drawing_xml_data: Vec<Option<Vec<u8>>>,
     pub(super) drawing_writer_data: Vec<Option<DrawingWriter>>,

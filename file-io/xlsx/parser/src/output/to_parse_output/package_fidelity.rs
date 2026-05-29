@@ -4,17 +4,15 @@ pub(super) fn build_package_fidelity_metadata(
     result: &FullParseResult,
 ) -> Option<domain_types::PackageFidelityMetadata> {
     let mut metadata = domain_types::PackageFidelityMetadata {
+        provenance_version: domain_types::PackageProvenanceVersion::default(),
+        workbook_xml_fidelity: result.workbook_xml_fidelity.clone(),
         package_profile: result.package_inventory.as_ref().map(|inventory| {
             domain_types::PackageProfileHint {
                 profile: inventory.profile.as_str().to_string(),
                 evidence: inventory.profile_evidence.clone(),
             }
         }),
-        shared_string_table: result.shared_strings_ext_lst_xml.as_ref().map(|xml| {
-            domain_types::SharedStringTableFidelity {
-                ext_lst_xml: xml.clone(),
-            }
-        }),
+        shared_string_table: build_shared_string_table_fidelity(result),
         content_type_defaults: result
             .content_type_defaults
             .iter()
@@ -36,6 +34,7 @@ pub(super) fn build_package_fidelity_metadata(
                 },
             )
             .collect(),
+        content_type_manifest_dispositions: Vec::new(),
         root_relationships: result
             .root_relationships
             .iter()
@@ -48,10 +47,12 @@ pub(super) fn build_package_fidelity_metadata(
             .cloned()
             .map(domain_types::PackageRelationshipHint::from)
             .collect(),
+        part_relationships: build_part_relationship_package_infos(result),
         sheet_workbook_r_ids: result.sheet_workbook_r_ids.clone(),
         opaque_parts: Vec::new(),
         raw_doc_props: build_raw_doc_props_hints(result),
         pivot_cache_packages: result.pivot_cache_packages.clone(),
+        relationship_provenance: build_relationship_provenance(result),
         diagnostics: result
             .package_inventory
             .as_ref()
@@ -68,6 +69,7 @@ pub(super) fn build_package_fidelity_metadata(
                     .collect()
             })
             .unwrap_or_default(),
+        package_diagnostics: build_package_diagnostics(result),
     };
 
     let mut raw_parts = Vec::<(String, Vec<u8>)>::new();
@@ -94,8 +96,224 @@ pub(super) fn build_package_fidelity_metadata(
     }
 
     metadata.opaque_parts = build_opaque_package_part_hints(result, raw_parts);
+    append_webextension_cluster_diagnostic(&mut metadata);
 
     (!metadata.is_empty()).then_some(metadata)
+}
+
+fn build_shared_string_table_fidelity(
+    result: &FullParseResult,
+) -> Option<domain_types::SharedStringTableFidelity> {
+    let entries: Vec<domain_types::SharedStringEntryFidelity> = result
+        .shared_strings
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, text)| {
+            let index = u32::try_from(idx).ok()?;
+            let has_rich_text = result
+                .shared_strings_rich_runs
+                .get(idx)
+                .and_then(Option::as_ref)
+                .is_some_and(|runs| !runs.is_empty());
+            let has_phonetic = result
+                .shared_strings_phonetic_xml
+                .get(idx)
+                .and_then(Option::as_ref)
+                .is_some_and(|xml| !xml.is_empty());
+            let kind = if has_rich_text {
+                domain_types::SharedStringEntryKind::RichText
+            } else if text.is_empty() {
+                domain_types::SharedStringEntryKind::Empty
+            } else {
+                domain_types::SharedStringEntryKind::PlainText
+            };
+            Some(domain_types::SharedStringEntryFidelity {
+                index,
+                text: text.clone(),
+                kind,
+                has_phonetic,
+            })
+        })
+        .collect();
+
+    let fidelity = domain_types::SharedStringTableFidelity {
+        declared_count: result.shared_strings_declared_count,
+        declared_unique_count: result.shared_strings_declared_unique_count,
+        entries,
+        ext_lst_xml: result
+            .shared_strings_ext_lst_xml
+            .clone()
+            .unwrap_or_default(),
+    };
+
+    (!fidelity.is_empty()).then_some(fidelity)
+}
+
+fn build_part_relationship_package_infos(
+    result: &FullParseResult,
+) -> Vec<domain_types::PartRelationshipPackageInfo> {
+    let mut infos: Vec<_> = result
+        .package_inventory
+        .as_ref()
+        .map(crate::infra::opc_inventory::relationships_by_owner)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(owner_path, relationships)| {
+            let owner_path = domain_types::normalize_package_path(&owner_path);
+            if owner_path == "xl/workbook.xml" || relationships.is_empty() {
+                return None;
+            }
+            let relationships = relationships
+                .into_iter()
+                .map(|relationship| domain_types::PackageRelationshipHint {
+                    id: relationship.id,
+                    relationship_type: relationship.relationship_type,
+                    target: relationship.target,
+                    target_mode: relationship.target_mode,
+                })
+                .collect();
+            Some(domain_types::PartRelationshipPackageInfo {
+                owner_path,
+                relationships,
+            })
+        })
+        .collect();
+    infos.sort_by(|a, b| a.owner_path.cmp(&b.owner_path));
+    infos
+}
+
+fn build_relationship_provenance(
+    result: &FullParseResult,
+) -> Vec<domain_types::RelationshipProvenance> {
+    let Some(inventory) = result.package_inventory.as_ref() else {
+        return Vec::new();
+    };
+    inventory
+        .relationships
+        .iter()
+        .enumerate()
+        .map(
+            |(imported_order, relationship)| domain_types::RelationshipProvenance {
+                owner_rels_path: relationship
+                    .owner
+                    .as_deref()
+                    .map(owner_rels_path_from_part)
+                    .unwrap_or_else(|| "_rels/.rels".to_string()),
+                imported_relationship_id: relationship.id.clone(),
+                relationship_type: relationship.relationship_type.clone(),
+                original_target: relationship.target.clone(),
+                resolved_target_path: relationship.resolved_target.clone(),
+                target_mode: relationship.target_mode.clone(),
+                imported_order,
+                stable_owner_key: relationship.owner.clone(),
+            },
+        )
+        .collect()
+}
+
+fn build_package_diagnostics(result: &FullParseResult) -> Vec<domain_types::XlsxPackageDiagnostic> {
+    result
+        .package_inventory
+        .as_ref()
+        .map(|inventory| {
+            inventory
+                .diagnostics
+                .iter()
+                .map(|diagnostic| domain_types::XlsxPackageDiagnostic {
+                    code: package_diagnostic_code(diagnostic.code).to_string(),
+                    severity: package_diagnostic_severity(diagnostic.code),
+                    owner_id: package_diagnostic_owner(diagnostic.part.as_deref()),
+                    action: domain_types::XlsxDiagnosticAction::Dropped,
+                    reason: package_diagnostic_reason(diagnostic.code),
+                    continuation: package_diagnostic_continuation(diagnostic.code),
+                    lifecycle: domain_types::XlsxDiagnosticLifecycle::ImportOnlyEvidence,
+                    normalized_part_path: diagnostic
+                        .part
+                        .as_deref()
+                        .map(domain_types::normalize_package_path),
+                    original_part_path: diagnostic.part.clone(),
+                    relationship_owner_path: None,
+                    relationship_id: diagnostic.relationship_id.clone(),
+                    relationship_type: None,
+                    target_mode: None,
+                    content_type: None,
+                    affected_graph: Vec::new(),
+                    semantics_changed: true,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn package_diagnostic_code(code: &str) -> &'static str {
+    match code {
+        "invalid_relationship_owner" => "xlsx.packageGraph.danglingRelationship",
+        "unsupported_needs_model_dropped" => "xlsx.extensions.unsupportedDropped",
+        "active_forbidden_dropped" | "security_disabled_active_content" => {
+            "xlsx.activeContent.blocked"
+        }
+        _ => "xlsx.ownerPolicy.unmatched",
+    }
+}
+
+fn package_diagnostic_severity(code: &str) -> domain_types::XlsxDiagnosticSeverity {
+    match code {
+        "active_forbidden_dropped" | "security_disabled_active_content" => {
+            domain_types::XlsxDiagnosticSeverity::Blocked
+        }
+        "invalid_relationship_owner" => domain_types::XlsxDiagnosticSeverity::Error,
+        _ => domain_types::XlsxDiagnosticSeverity::Warning,
+    }
+}
+
+fn package_diagnostic_reason(code: &str) -> domain_types::XlsxDiagnosticReason {
+    match code {
+        "invalid_relationship_owner" => domain_types::XlsxDiagnosticReason::DanglingRelationship,
+        "active_forbidden_dropped" | "security_disabled_active_content" => {
+            domain_types::XlsxDiagnosticReason::UnsafeActiveContent
+        }
+        "unsupported_needs_model_dropped" => domain_types::XlsxDiagnosticReason::UnsupportedFeature,
+        _ => domain_types::XlsxDiagnosticReason::UnmatchedOwnerPolicy,
+    }
+}
+
+fn package_diagnostic_continuation(code: &str) -> domain_types::XlsxDiagnosticContinuation {
+    match code {
+        "active_forbidden_dropped"
+        | "security_disabled_active_content"
+        | "invalid_relationship_owner" => domain_types::XlsxDiagnosticContinuation::ExportFailed,
+        _ => domain_types::XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
+    }
+}
+
+fn package_diagnostic_owner(part: Option<&str>) -> domain_types::XlsxPackageOwnerId {
+    let Some(part) = part else {
+        return domain_types::XlsxPackageOwnerId::UnknownInertPackageData;
+    };
+    let part = domain_types::normalize_package_path(part);
+    if part == "xl/vbaProject.bin"
+        || part.starts_with("xl/activeX/")
+        || part.starts_with("_xmlsignatures/")
+    {
+        domain_types::XlsxPackageOwnerId::ActiveContent
+    } else if part.starts_with("xl/externalLinks/") || part == "xl/connections.xml" {
+        domain_types::XlsxPackageOwnerId::ExternalLinks
+    } else if part.starts_with("xl/printerSettings/") {
+        domain_types::XlsxPackageOwnerId::PrinterSettings
+    } else if part.starts_with("xl/pivot") {
+        domain_types::XlsxPackageOwnerId::Pivots
+    } else {
+        domain_types::XlsxPackageOwnerId::UnknownInertPackageData
+    }
+}
+
+fn owner_rels_path_from_part(owner_part: &str) -> String {
+    let normalized = domain_types::normalize_package_path(owner_part);
+    if let Some((dir, file)) = normalized.rsplit_once('/') {
+        format!("{dir}/_rels/{file}.rels")
+    } else {
+        format!("_rels/{normalized}.rels")
+    }
 }
 
 fn build_opaque_package_part_hints(
@@ -256,4 +474,135 @@ fn package_content_type_for_path(result: &FullParseResult, path: &str) -> Option
                     .map(|(_, content_type)| content_type.clone())
             })
         })
+}
+
+const REL_WEB_EXTENSION_TASKPANES: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes";
+const REL_WEB_EXTENSION: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/webextension";
+const CT_WEB_EXTENSION_TASKPANES: &str = "application/vnd.ms-office.webextensiontaskpanes+xml";
+const CT_WEB_EXTENSION: &str = "application/vnd.ms-office.webextension+xml";
+
+fn append_webextension_cluster_diagnostic(metadata: &mut domain_types::PackageFidelityMetadata) {
+    if !metadata.opaque_parts.iter().any(|part| {
+        domain_types::normalize_package_path(&part.path).starts_with("xl/webextensions/")
+    }) {
+        return;
+    }
+
+    let (code, message, part) = match webextension_cluster_drop_reason(metadata) {
+        None => (
+            "webextensionClusterPreservedQuarantined",
+            "Preserved Office webextension taskpane package cluster as inert quarantined package data",
+            Some("xl/webextensions/taskpanes.xml".to_string()),
+        ),
+        Some(reason) => reason,
+    };
+
+    metadata
+        .diagnostics
+        .push(domain_types::PackageFidelityDiagnostic {
+            code: code.to_string(),
+            message: message.to_string(),
+            part,
+            relationship_id: None,
+        });
+}
+
+fn webextension_cluster_drop_reason(
+    metadata: &domain_types::PackageFidelityMetadata,
+) -> Option<(&'static str, &'static str, Option<String>)> {
+    let parts: std::collections::HashMap<String, &domain_types::OpaquePackagePartHint> = metadata
+        .opaque_parts
+        .iter()
+        .filter_map(|part| {
+            let path = domain_types::normalize_package_path(&part.path);
+            path.starts_with("xl/webextensions/")
+                .then_some((path, part))
+        })
+        .collect();
+
+    let has_root_relationship = metadata.root_relationships.iter().any(|hint| {
+        hint.relationship_type == REL_WEB_EXTENSION_TASKPANES
+            && hint
+                .target_mode
+                .as_deref()
+                .map(|mode| !mode.eq_ignore_ascii_case("External"))
+                .unwrap_or(true)
+            && crate::infra::opc::resolve_relationship_target(None, &hint.target)
+                .ok()
+                .is_some_and(|target| {
+                    domain_types::normalize_package_path(&target)
+                        == "xl/webextensions/taskpanes.xml"
+                })
+    });
+    if !has_root_relationship {
+        return Some((
+            "webextensionClusterDroppedMissingRootRelationship",
+            "Dropped Office webextension taskpane package cluster because the root taskpanes relationship was missing",
+            None,
+        ));
+    }
+
+    let Some(taskpanes) = parts.get("xl/webextensions/taskpanes.xml") else {
+        return Some((
+            "webextensionClusterDroppedMissingTaskpanesPart",
+            "Dropped Office webextension taskpane package cluster because taskpanes.xml was missing",
+            Some("xl/webextensions/taskpanes.xml".to_string()),
+        ));
+    };
+    if taskpanes.content_type.as_deref() != Some(CT_WEB_EXTENSION_TASKPANES) {
+        return Some((
+            "webextensionClusterDroppedMissingContentType",
+            "Dropped Office webextension taskpane package cluster because taskpanes.xml did not have the required content type",
+            Some("xl/webextensions/taskpanes.xml".to_string()),
+        ));
+    }
+
+    for hint in &taskpanes.relationships {
+        if hint.relationship_type != REL_WEB_EXTENSION {
+            continue;
+        }
+        if hint
+            .target_mode
+            .as_deref()
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
+        {
+            continue;
+        }
+        let Ok(target) = crate::infra::opc::resolve_relationship_target(
+            Some("xl/webextensions/taskpanes.xml"),
+            &hint.target,
+        ) else {
+            return Some((
+                "webextensionClusterDroppedUnsafeInternalTarget",
+                "Dropped Office webextension taskpane package cluster because a taskpane relationship target could not be resolved safely",
+                Some("xl/webextensions/taskpanes.xml".to_string()),
+            ));
+        };
+        let target = domain_types::normalize_package_path(&target);
+        if !target.starts_with("xl/webextensions/") {
+            return Some((
+                "webextensionClusterDroppedUnsafeInternalTarget",
+                "Dropped Office webextension taskpane package cluster because an internal taskpane target escaped xl/webextensions",
+                Some(target),
+            ));
+        }
+        let Some(part) = parts.get(&target) else {
+            return Some((
+                "webextensionClusterDroppedMissingReferencedPart",
+                "Dropped Office webextension taskpane package cluster because a referenced webextension part was missing",
+                Some(target),
+            ));
+        };
+        if part.content_type.as_deref() != Some(CT_WEB_EXTENSION) {
+            return Some((
+                "webextensionClusterDroppedMissingContentType",
+                "Dropped Office webextension taskpane package cluster because a referenced webextension part did not have the required content type",
+                Some(target),
+            ));
+        }
+    }
+
+    None
 }

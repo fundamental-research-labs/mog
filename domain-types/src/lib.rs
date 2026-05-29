@@ -40,6 +40,10 @@ pub use format::*;
 mod parse_output;
 pub use parse_output::*;
 
+// XLSX package ownership, provenance, and export diagnostics contracts.
+mod package_policy;
+pub use package_policy::*;
+
 // Document properties
 mod properties;
 pub use properties::*;

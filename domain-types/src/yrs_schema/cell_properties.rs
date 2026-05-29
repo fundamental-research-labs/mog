@@ -36,6 +36,7 @@ const KEY_PHONETIC: &str = "ph";
 const KEY_DATE_LEXICAL_VALUE: &str = "dlv";
 const KEY_FORMULA_RESULT_TYPE: &str = "frt";
 const KEY_HAS_EMPTY_CACHED_VALUE: &str = "ecv";
+const KEY_FORMULA_CACHE_PROVENANCE: &str = "fcp";
 const KEY_ORIGINAL_SST_INDEX: &str = "sst";
 const KEY_ORIGINAL_VALUE: &str = "ov";
 
@@ -100,6 +101,14 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
     if props.has_empty_cached_value {
         entries.push((KEY_HAS_EMPTY_CACHED_VALUE, Any::Bool(true)));
     }
+    if !props.formula_cache_provenance.is_absent_or_unknown()
+        && let Ok(json) = serde_json::to_string(&props.formula_cache_provenance)
+    {
+        entries.push((
+            KEY_FORMULA_CACHE_PROVENANCE,
+            Any::String(Arc::from(json.as_str())),
+        ));
+    }
     if let Some(sst) = props.original_sst_index {
         entries.push((KEY_ORIGINAL_SST_INDEX, Any::Number(sst as f64)));
     }
@@ -148,6 +157,9 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
     let date_lexical_value = read_string(map, txn, KEY_DATE_LEXICAL_VALUE);
     let formula_result_type = read_u32(map, txn, KEY_FORMULA_RESULT_TYPE).map(|n| n as u8);
     let has_empty_cached_value = read_bool(map, txn, KEY_HAS_EMPTY_CACHED_VALUE).unwrap_or(false);
+    let formula_cache_provenance = read_string(map, txn, KEY_FORMULA_CACHE_PROVENANCE)
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default();
     let original_sst_index = read_u32(map, txn, KEY_ORIGINAL_SST_INDEX);
     let original_value = read_string(map, txn, KEY_ORIGINAL_VALUE);
 
@@ -163,6 +175,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
         date_lexical_value,
         formula_result_type,
         has_empty_cached_value,
+        formula_cache_provenance,
         original_sst_index,
         original_value,
         // CSE flags are runtime-only — derived from the projection

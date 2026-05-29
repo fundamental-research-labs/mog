@@ -199,6 +199,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         date_lexical_value: props.date_lexical_value,
         formula_result_type: props.formula_result_type,
         has_empty_cached_value: props.has_empty_cached_value,
+        formula_cache_provenance: props.formula_cache_provenance,
         original_sst_index: props.original_sst_index,
         original_value: props.original_value,
         is_array_formula: false,

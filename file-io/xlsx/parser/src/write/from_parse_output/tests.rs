@@ -4,11 +4,12 @@ use crate::domain::styles::write::ColorDef;
 use crate::infra::package_integrity::validate_archive_package_integrity;
 use crate::write::REL_PIVOT_TABLE;
 use domain_types::{
-    AnchorPosition, BorderFormat, BorderSide as DomainBorderSide, CFCellRange, CFRule, CFStyle,
-    CellData as DomainCellData, CellValue as DomainValue, ChartSpec, ChartType, ColDimension,
-    ColStyleEntry, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion, DocumentFormat,
-    FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ObjectSize, ParseOutput,
-    RowDimension, SheetData, SheetDimensions, WorkbookStylesheet,
+    AnchorPosition, AuthoredStyleRun, BorderFormat, BorderSide as DomainBorderSide, CFCellRange,
+    CFRule, CFStyle, CellData as DomainCellData, CellValue as DomainValue, ChartSpec, ChartType,
+    ColDimension, ColStyleEntry, ConditionalFormat, DataTableOoxmlFlags, DataTableRegion,
+    DocumentFormat, FillFormat, FontFormat, FrozenPane, MergeRegion, NamedRange, ObjectSize,
+    ParseOutput, RowDimension, RowStyleEntry, SheetData, SheetDimensions, TrailingColRange,
+    WorkbookStylesheet,
 };
 use formula_types::CellRef;
 use std::sync::Arc;
@@ -40,6 +41,16 @@ fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     }
 }
 
+fn sheet_xml_from_output(output: &ParseOutput) -> String {
+    let bytes = write_xlsx_from_parse_output(output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap()
+}
+
+fn dimension_count(sheet_xml: &str) -> usize {
+    sheet_xml.matches("<dimension ").count()
+}
+
 fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32) -> DomainCellData {
     DomainCellData {
         row,
@@ -49,6 +60,100 @@ fn make_text_cell_with_original_sst(row: u32, col: u32, value: &str, index: u32)
         original_value: Some(index.to_string()),
         ..Default::default()
     }
+}
+
+#[test]
+fn matching_authored_worksheet_dimension_is_preserved_once() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        worksheet_dimension_ref: Some("$A$1:$C$2".to_string()),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+        )],
+        authored_style_runs: vec![AuthoredStyleRun {
+            start_row: 1,
+            start_col: 2,
+            end_row: 1,
+            end_col: 2,
+            style_id: 0,
+        }],
+        ..Default::default()
+    }]);
+
+    let sheet_xml = sheet_xml_from_output(&output);
+
+    assert_eq!(dimension_count(&sheet_xml), 1);
+    assert!(sheet_xml.contains(r#"<dimension ref="$A$1:$C$2"/>"#));
+    assert!(sheet_xml.find("<dimension ").unwrap() < sheet_xml.find("<sheetViews").unwrap());
+}
+
+#[test]
+fn stale_or_malformed_authored_worksheet_dimension_is_recomputed() {
+    let stale = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        worksheet_dimension_ref: Some("A1".to_string()),
+        cells: vec![make_cell(
+            2,
+            3,
+            DomainValue::Number(FiniteF64::new(2.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let stale_xml = sheet_xml_from_output(&stale);
+    assert_eq!(dimension_count(&stale_xml), 1);
+    assert!(stale_xml.contains(r#"<dimension ref="D3"/>"#));
+
+    let malformed = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        worksheet_dimension_ref: Some("A1,C3".to_string()),
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(3.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    let malformed_xml = sheet_xml_from_output(&malformed);
+    assert_eq!(dimension_count(&malformed_xml), 1);
+    assert!(malformed_xml.contains(r#"<dimension ref="A1"/>"#));
+}
+
+#[test]
+fn generated_and_style_only_dimensions_come_from_emitted_cells() {
+    let generated = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(1.0).unwrap())),
+            make_cell(4, 3, DomainValue::Number(FiniteF64::new(4.0).unwrap())),
+        ],
+        ..Default::default()
+    }]);
+    let generated_xml = sheet_xml_from_output(&generated);
+    assert!(generated_xml.contains(r#"<dimension ref="B2:D5"/>"#));
+
+    let style_only = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        authored_style_runs: vec![AuthoredStyleRun {
+            start_row: 2,
+            start_col: 4,
+            end_row: 3,
+            end_col: 5,
+            style_id: 0,
+        }],
+        ..Default::default()
+    }]);
+    let style_only_xml = sheet_xml_from_output(&style_only);
+    assert!(style_only_xml.contains(r#"<dimension ref="E3:F4"/>"#));
+    assert!(style_only_xml.contains(r#"<c r="E3" s="0"/>"#));
+
+    let empty = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    let empty_xml = sheet_xml_from_output(&empty);
+    assert!(empty_xml.contains(r#"<dimension ref="A1"/>"#));
 }
 
 #[test]
@@ -102,6 +207,75 @@ fn empty_persons_part_is_emitted_from_typed_presence_state() {
 
     assert!(persons_xml.contains("<personList"));
     assert!(!persons_xml.contains("<person "));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn webextension_cluster_round_trips_through_production_zip_writer() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            ..Default::default()
+        }],
+        package_fidelity: Some(domain_types::PackageFidelityMetadata {
+            root_relationships: vec![domain_types::PackageRelationshipHint {
+                id: "rIdWebExt".to_string(),
+                relationship_type:
+                    "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes"
+                        .to_string(),
+                target: "xl/webextensions/taskpanes.xml".to_string(),
+                target_mode: None,
+            }],
+            opaque_parts: vec![
+                domain_types::OpaquePackagePartHint {
+                    path: "xl/webextensions/taskpanes.xml".to_string(),
+                    bytes: b"<wetp:taskpanes/>".to_vec(),
+                    content_type: Some(
+                        "application/vnd.ms-office.webextensiontaskpanes+xml".to_string(),
+                    ),
+                    relationships: vec![domain_types::PackageRelationshipHint {
+                        id: "rId1".to_string(),
+                        relationship_type:
+                            "http://schemas.microsoft.com/office/2011/relationships/webextension"
+                                .to_string(),
+                        target: "webextension1.xml".to_string(),
+                        target_mode: None,
+                    }],
+                },
+                domain_types::OpaquePackagePartHint {
+                    path: "xl/webextensions/webextension1.xml".to_string(),
+                    bytes: b"<we:webextension/>".to_vec(),
+                    content_type: Some("application/vnd.ms-office.webextension+xml".to_string()),
+                    relationships: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+
+    assert!(archive.read_file("xl/webextensions/taskpanes.xml").is_ok());
+    assert!(
+        archive
+            .read_file("xl/webextensions/webextension1.xml")
+            .is_ok()
+    );
+    let root_rels = String::from_utf8(archive.read_file("_rels/.rels").unwrap()).unwrap();
+    let taskpane_rels = String::from_utf8(
+        archive
+            .read_file("xl/webextensions/_rels/taskpanes.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    assert!(root_rels.contains("webextensiontaskpanes"));
+    assert!(taskpane_rels.contains("webextension1.xml"));
+    assert!(content_types.contains("/xl/webextensions/taskpanes.xml"));
+    assert!(content_types.contains("/xl/webextensions/webextension1.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

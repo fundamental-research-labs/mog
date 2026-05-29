@@ -15,11 +15,17 @@ pub(super) fn add_sheet_relationships(
         if entry.sheet_idx != sheet_idx {
             continue;
         }
-        let target = format!("../pivotTables/pivotTable{}.xml", entry.global_idx);
+        let target = worksheet_relative_target(&entry.path);
         let r_id = rels
             .find_by_target(&target)
             .unwrap_or_else(|| rels.add(REL_PIVOT_TABLE, &target));
         r_ids.push(r_id);
     }
     r_ids
+}
+
+pub(super) fn worksheet_relative_target(path: &str) -> String {
+    path.strip_prefix("xl/")
+        .map(|path| format!("../{path}"))
+        .unwrap_or_else(|| path.to_string())
 }

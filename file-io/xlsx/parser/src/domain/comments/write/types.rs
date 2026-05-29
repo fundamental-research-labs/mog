@@ -232,6 +232,14 @@ pub struct CommentShape {
     pub note_height: Option<f64>,
     /// Note callout box width in points (from domain Comment.note_width)
     pub note_width: Option<f64>,
+    /// Imported VML height declaration, reused only when it matches current
+    /// typed geometry for this note owner.
+    pub note_height_style: Option<domain_types::VmlStyleDimensionInfo>,
+    /// Imported VML width declaration, reused only when it matches current
+    /// typed geometry for this note owner.
+    pub note_width_style: Option<domain_types::VmlStyleDimensionInfo>,
+    /// Whether this shape has imported owner-scoped VML provenance.
+    pub has_vml_note_provenance: bool,
 }
 
 impl Default for CommentShape {
@@ -249,6 +257,9 @@ impl Default for CommentShape {
             visible: false,
             note_height: None,
             note_width: None,
+            note_height_style: None,
+            note_width_style: None,
+            has_vml_note_provenance: false,
         }
     }
 }
@@ -270,6 +281,9 @@ impl CommentShape {
             visible: false,
             note_height: None,
             note_width: None,
+            note_height_style: None,
+            note_width_style: None,
+            has_vml_note_provenance: false,
         }
     }
 }

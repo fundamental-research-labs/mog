@@ -44,31 +44,43 @@ fn parse_cols(xml: &[u8]) -> Vec<ColWidth> {
 fn parse_col_element(col_elem: &[u8]) -> ColWidth {
     let min = attr_parse::<u32>(col_elem, b"min=\"").unwrap_or(1);
     let max = attr_parse::<u32>(col_elem, b"max=\"").unwrap_or(min);
-    let width = attr_parse::<f64>(col_elem, b"width=\"").unwrap_or(8.43);
+    let width_str = attr_str(col_elem, b"width=\"");
+    let width = width_str.as_deref().and_then(|raw| raw.parse::<f64>().ok());
     let style = attr_parse::<u32>(col_elem, b"style=\"");
-    let hidden = attr_bool(col_elem, b"hidden=\"").unwrap_or(false);
-    let custom_width = attr_bool(col_elem, b"customWidth=\"").unwrap_or(false);
-    let best_fit = attr_bool(col_elem, b"bestFit=\"").unwrap_or(false);
+    let hidden = attr_bool(col_elem, b"hidden=\"");
+    let custom_width = attr_bool(col_elem, b"customWidth=\"");
+    let best_fit = attr_bool(col_elem, b"bestFit=\"");
     let outline_level = attr_parse::<u8>(col_elem, b"outlineLevel=\"");
-    let collapsed = attr_bool(col_elem, b"collapsed=\"").unwrap_or(false);
-    let phonetic = attr_bool(col_elem, b"phonetic=\"").unwrap_or(false);
+    let collapsed = attr_bool(col_elem, b"collapsed=\"");
+    let phonetic = attr_bool(col_elem, b"phonetic=\"");
 
-    let mut cw = ColWidth::range(min, max, width);
+    let mut cw = ColWidth::range(min, max, width.unwrap_or(0.0));
+    cw.width = width;
+    cw.width_str = width_str;
     if let Some(s) = style {
         cw = cw.with_style(s);
     }
-    if hidden {
-        cw = cw.with_hidden(true);
+    if let Some(value) = hidden {
+        cw.hidden = value;
+        cw.hidden_attr = Some(value);
     }
-    if custom_width {
-        cw.custom_width = true;
+    if let Some(value) = custom_width {
+        cw.custom_width = value;
+        cw.custom_width_attr = Some(value);
     }
-    if best_fit {
-        cw.best_fit = true;
+    if let Some(value) = best_fit {
+        cw.best_fit = value;
+        cw.best_fit_attr = Some(value);
     }
     cw.outline_level = outline_level;
-    cw.collapsed = collapsed;
-    cw.phonetic = phonetic;
+    if let Some(value) = collapsed {
+        cw.collapsed = value;
+        cw.collapsed_attr = Some(value);
+    }
+    if let Some(value) = phonetic {
+        cw.phonetic = value;
+        cw.phonetic_attr = Some(value);
+    }
     cw
 }
 

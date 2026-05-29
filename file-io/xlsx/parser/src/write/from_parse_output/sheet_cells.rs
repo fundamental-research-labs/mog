@@ -9,7 +9,7 @@ use value_types::CellError;
 use super::super::SharedStringsWriter;
 use super::sheet_formulas::{
     current_formula_metadata, data_table_formula_text, data_table_master_formula_map,
-    is_data_table_body_formula,
+    is_data_table_body_formula, shared_formula_export_plan,
 };
 use super::style_remap::StyleExportRemapper;
 use crate::write::sheet::{CellData, CellValue, SheetWriter};
@@ -24,6 +24,8 @@ pub(super) fn apply_cells(
     style_remapper: &StyleExportRemapper,
 ) {
     let data_table_master_formulas = data_table_master_formula_map(data_table_regions);
+    let shared_formula_plan = shared_formula_export_plan(&sheet_data.cells);
+    let _shared_formula_diagnostics = &shared_formula_plan.diagnostics;
     let authored_style_at = |row: u32, col: u32| -> Option<u32> {
         sheet_data
             .authored_style_runs
@@ -66,7 +68,10 @@ pub(super) fn apply_cells(
             if canonical.style_id.is_none() {
                 canonical.style_id = authored_style_at(canonical.row, canonical.col);
             }
-            canonical.cell_formula = current_formula_metadata(&canonical).cloned();
+            canonical.cell_formula = shared_formula_plan
+                .metadata_for(canonical.row, canonical.col)
+                .cloned()
+                .or_else(|| current_formula_metadata(&canonical).cloned());
             if let Some(cell_formula) = data_table_master_formulas.get(&key) {
                 canonical.cell_formula = Some(cell_formula.clone());
                 if canonical.formula.is_none() {
@@ -180,7 +185,7 @@ fn convert_cell_with_metadata_refs(
         } else {
             authored_numeric_value
         },
-        force_recalc: false,
+        force_recalc: current_force_recalc(cell),
         cell_metadata_index: emit_cell_metadata_refs
             .then_some(cell.cell_metadata_index)
             .flatten(),
@@ -192,6 +197,10 @@ fn convert_cell_with_metadata_refs(
         phonetic: cell.phonetic,
         date_lexical_value: compatible_date_lexical_value(cell),
     }
+}
+
+fn current_force_recalc(cell: &DomainCellData) -> bool {
+    cell.formula_cache_provenance.state.is_current() && cell.formula_cache_provenance.force_recalc
 }
 
 fn compatible_date_lexical_value(cell: &DomainCellData) -> Option<String> {

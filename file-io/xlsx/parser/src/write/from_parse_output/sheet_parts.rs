@@ -289,12 +289,13 @@ pub(super) fn build_sheet_parts(
                 .as_ref()
                 .and_then(|package| package.comments_ext_lst_xml.as_deref());
             let (comments_xml, generated_vml_xml) =
-                crate::domain::comments::write::comments_from_domain(
+                crate::domain::comments::write::comments_from_domain_with_package(
                     sheet_num,
                     &sheet_data.comments,
                     original_authors,
                     root_ns_attrs,
                     root_ext_lst_xml,
+                    sheet_data.comment_package.as_ref(),
                 );
             Some((comments_xml, generated_vml_xml))
         } else {
@@ -434,7 +435,13 @@ pub(super) fn build_sheet_parts(
         // Check for floating objects (images, shapes, etc.)
         let has_floating_objects = !sheet_data.floating_objects.is_empty();
 
-        let (original_comment_path, original_vml_path, hf_vml, original_drawing_path) = (
+        let (
+            original_comment_path,
+            original_vml_path,
+            hf_vml,
+            original_drawing_path,
+            original_drawing_relationship_id,
+        ) = (
             sheet_data
                 .comment_package
                 .as_ref()
@@ -444,7 +451,14 @@ pub(super) fn build_sheet_parts(
                 .as_ref()
                 .and_then(|package| package.vml_path_hint.clone()),
             None,
-            None,
+            sheet_data
+                .drawing_package
+                .as_ref()
+                .and_then(|package| package.drawing_path_hint.clone()),
+            sheet_data
+                .drawing_package
+                .as_ref()
+                .and_then(|package| package.drawing_relationship_id_hint.clone()),
         );
 
         let has_printer_settings = sheet_data
@@ -502,6 +516,7 @@ pub(super) fn build_sheet_parts(
                 .and_then(|package| package.threaded_comments_relationship_id_hint.clone()),
             hf_vml,
             original_drawing_path,
+            original_drawing_relationship_id,
             has_printer_settings,
             form_controls: form_control_plan.controls,
             form_control_diagnostics: form_control_plan.diagnostics,

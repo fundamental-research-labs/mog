@@ -28,11 +28,7 @@ pub(crate) fn set_tab_color(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, colo
     }
 }
 
-fn update_modeled_tab_color(
-    txn: &mut yrs::TransactionMut,
-    meta: &MapRef,
-    color: Option<&str>,
-) {
+fn update_modeled_tab_color(txn: &mut yrs::TransactionMut, meta: &MapRef, color: Option<&str>) {
     let existing = meta
         .get(txn, yrs_schema::sheet_properties::PROPERTY_KEY)
         .and_then(|v| match v {

@@ -26,6 +26,14 @@ pub(super) fn build_workbook_xml(
     if !output.workbook_root_namespaces.is_empty() {
         workbook_writer.set_root_namespaces(NamespaceMap::from(&output.workbook_root_namespaces));
     }
+    if let Some(fidelity) = output
+        .package_fidelity
+        .as_ref()
+        .map(|package| package.workbook_xml_fidelity.clone())
+        .filter(|fidelity| !fidelity.is_empty())
+    {
+        workbook_writer.set_workbook_xml_fidelity(fidelity);
+    }
     if output.workbook_sheet_inventory.is_empty() {
         add_generated_sheet_defs(output, package_graph, &mut workbook_writer)?;
     } else {
@@ -87,8 +95,12 @@ pub(super) fn build_workbook_xml(
 
     // ── Iterative Calc Settings ──────────────────────────────────────
     {
-        let calc = crate::domain::workbook::write::calc_settings_from_domain(&output.calculation);
-        workbook_writer.set_calc_settings(calc);
+        let calc = crate::domain::workbook::write::calc_settings_for_export(
+            &output.calculation,
+            Some(&output.calc_id_provenance),
+            super::export_report::requires_consumer_recalc(output),
+        );
+        workbook_writer.set_calc_settings(calc.settings);
     }
 
     let workbook_rels = package_graph.relationship_manager_for_owner(&PackageOwner::Workbook);

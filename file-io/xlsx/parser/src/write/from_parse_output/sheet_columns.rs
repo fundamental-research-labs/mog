@@ -49,14 +49,20 @@ pub(super) fn apply_columns(
     struct ColEntry {
         col_0: u32,
         width: f64,
+        width_str: Option<String>,
         custom_width: bool,
+        custom_width_attr: Option<bool>,
         hidden: bool,
+        hidden_attr: Option<bool>,
         best_fit: bool,
+        best_fit_attr: Option<bool>,
         style: Option<u32>,
         has_width: bool,
         outline_level: Option<u8>,
         collapsed: bool,
+        collapsed_attr: Option<bool>,
         phonetic: bool,
+        phonetic_attr: Option<bool>,
     }
 
     let mut col_entries: Vec<ColEntry> = Vec::new();
@@ -75,14 +81,28 @@ pub(super) fn apply_columns(
         col_entries.push(ColEntry {
             col_0: col_dim.col,
             width: col_dim.width,
+            width_str: col_dim.width_str.clone(),
             custom_width: col_dim.custom_width,
+            custom_width_attr: col_dim.custom_width_attr,
             hidden,
+            hidden_attr: if hidden {
+                Some(true)
+            } else {
+                col_dim.hidden_attr
+            },
             best_fit: col_dim.best_fit,
+            best_fit_attr: col_dim.best_fit_attr,
             style,
-            has_width: true,
-            outline_level,
+            has_width: col_dim.width_present.unwrap_or(true),
+            outline_level: col_dim.outline_level.or(outline_level),
             collapsed: is_collapsed,
+            collapsed_attr: if is_collapsed {
+                Some(true)
+            } else {
+                col_dim.collapsed_attr
+            },
             phonetic: col_dim.phonetic,
+            phonetic_attr: col_dim.phonetic_attr,
         });
         emitted_cols.insert(col_dim.col);
     }
@@ -96,14 +116,20 @@ pub(super) fn apply_columns(
             col_entries.push(ColEntry {
                 col_0: cs.col,
                 width: default_cw,
+                width_str: None,
                 custom_width: false,
+                custom_width_attr: None,
                 hidden,
+                hidden_attr: hidden.then_some(true),
                 best_fit: false,
+                best_fit_attr: None,
                 style: style_remapper.emitted_cell_xf_id(cs.style_id),
                 has_width: true,
                 outline_level,
                 collapsed: is_collapsed,
+                collapsed_attr: is_collapsed.then_some(true),
                 phonetic: false,
+                phonetic_attr: None,
             });
             emitted_cols.insert(cs.col);
         }
@@ -116,14 +142,20 @@ pub(super) fn apply_columns(
             col_entries.push(ColEntry {
                 col_0: col,
                 width: default_cw,
+                width_str: None,
                 custom_width: false,
+                custom_width_attr: None,
                 hidden,
+                hidden_attr: hidden.then_some(true),
                 best_fit: false,
+                best_fit_attr: None,
                 style: None,
                 has_width: true,
                 outline_level: Some(level),
                 collapsed: is_collapsed,
+                collapsed_attr: is_collapsed.then_some(true),
                 phonetic: false,
+                phonetic_attr: None,
             });
             emitted_cols.insert(col);
         }
@@ -134,14 +166,20 @@ pub(super) fn apply_columns(
             col_entries.push(ColEntry {
                 col_0: col,
                 width: default_cw,
+                width_str: None,
                 custom_width: false,
+                custom_width_attr: None,
                 hidden: false,
+                hidden_attr: None,
                 best_fit: false,
+                best_fit_attr: None,
                 style: None,
                 has_width: true,
                 outline_level: None,
                 collapsed: true,
+                collapsed_attr: Some(true),
                 phonetic: false,
+                phonetic_attr: None,
             });
         }
     }
@@ -158,14 +196,20 @@ pub(super) fn apply_columns(
             let next = &col_entries[i + 1];
             if next.col_0 == max_col_0 + 1
                 && next.width == start.width
+                && next.width_str == start.width_str
                 && next.custom_width == start.custom_width
+                && next.custom_width_attr == start.custom_width_attr
                 && next.hidden == start.hidden
+                && next.hidden_attr == start.hidden_attr
                 && next.best_fit == start.best_fit
+                && next.best_fit_attr == start.best_fit_attr
                 && next.style == start.style
                 && next.has_width == start.has_width
                 && next.outline_level == start.outline_level
                 && next.collapsed == start.collapsed
+                && next.collapsed_attr == start.collapsed_attr
                 && next.phonetic == start.phonetic
+                && next.phonetic_attr == start.phonetic_attr
             {
                 max_col_0 = next.col_0;
                 i += 1;
@@ -177,15 +221,22 @@ pub(super) fn apply_columns(
         let min_1 = start.col_0 + 1;
         let max_1 = max_col_0 + 1;
         let mut cw = ColWidth::range(min_1, max_1, start.width);
+        cw.width_str = start.width_str.clone();
         cw.custom_width = start.custom_width;
+        cw.custom_width_attr = start.custom_width_attr;
         cw.hidden = start.hidden;
+        cw.hidden_attr = start.hidden_attr;
         cw.best_fit = start.best_fit;
+        cw.best_fit_attr = start.best_fit_attr;
         cw.style = start.style;
         cw.outline_level = start.outline_level;
         cw.collapsed = start.collapsed;
+        cw.collapsed_attr = start.collapsed_attr;
         cw.phonetic = start.phonetic;
+        cw.phonetic_attr = start.phonetic_attr;
         if !start.has_width {
             cw.width = None;
+            cw.width_str = None;
         }
         writer.add_col(cw);
 
@@ -194,13 +245,24 @@ pub(super) fn apply_columns(
 
     for tcr in &sheet_data.dimensions.trailing_col_ranges {
         let mut cw = ColWidth::range(tcr.min, tcr.max, tcr.width);
+        cw.width_str = tcr.width_str.clone();
         cw.custom_width = tcr.custom_width;
+        cw.custom_width_attr = tcr.custom_width_attr;
         cw.hidden = tcr.hidden;
+        cw.hidden_attr = tcr.hidden_attr;
         cw.best_fit = tcr.best_fit;
+        cw.best_fit_attr = tcr.best_fit_attr;
+        cw.outline_level = tcr.outline_level;
         cw.collapsed = tcr.collapsed;
+        cw.collapsed_attr = tcr.collapsed_attr;
         cw.phonetic = tcr.phonetic;
+        cw.phonetic_attr = tcr.phonetic_attr;
         if let Some(sid) = tcr.style_id {
             cw.style = style_remapper.emitted_cell_xf_id(sid);
+        }
+        if !tcr.width_present.unwrap_or(true) {
+            cw.width = None;
+            cw.width_str = None;
         }
         writer.add_col(cw);
     }

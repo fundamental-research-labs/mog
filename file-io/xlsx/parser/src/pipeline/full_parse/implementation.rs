@@ -390,6 +390,8 @@ pub(super) fn parse_xlsx_full_native_impl(
         shared_strings_rich_runs.push(shared_strings_parser.get_rich_text_runs(i));
         shared_strings_phonetic_xml.push(shared_strings_parser.get_phonetic_xml(i));
     }
+    let shared_strings_declared_count = shared_strings_parser.declared_count();
+    let shared_strings_declared_unique_count = shared_strings_parser.declared_unique_count();
     let shared_strings_ext_lst_xml = shared_strings_parser.root_ext_lst_xml();
     let t2 = tick(&timings);
 
@@ -562,6 +564,8 @@ pub(super) fn parse_xlsx_full_native_impl(
     let calc_settings = parse_calc_settings(&workbook_xml);
     let workbook_views = crate::domain::workbook::read::parse_workbook_views(&workbook_xml);
     let custom_workbook_views_xml = raw_workbook_custom_views_xml(&workbook_xml);
+    let workbook_xml_fidelity =
+        super::workbook_xml_fidelity::capture_workbook_xml_fidelity(&workbook_xml);
     let workbook_properties =
         crate::domain::workbook::read::parse_workbook_properties(&workbook_xml);
     let file_version = crate::domain::workbook::read::parse_file_version(&workbook_xml);
@@ -956,6 +960,8 @@ pub(super) fn parse_xlsx_full_native_impl(
         shared_strings,
         shared_strings_rich_runs,
         shared_strings_phonetic_xml,
+        shared_strings_declared_count,
+        shared_strings_declared_unique_count,
         shared_strings_ext_lst_xml,
         styles: styles_output,
         theme: None,
@@ -1023,6 +1029,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         raw_threaded_comments,
         workbook_views,
         custom_workbook_views_xml,
+        workbook_xml_fidelity,
         workbook_properties,
         file_version,
         file_sharing,

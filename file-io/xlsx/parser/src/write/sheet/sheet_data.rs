@@ -27,6 +27,15 @@ pub(super) fn calculate_dimension(sheet: &SheetWriter) -> Option<(u32, u32, u32,
         }
     }
 
+    for run in &sheet.authored_style_runs {
+        if run.start_row <= run.end_row && run.start_col <= run.end_col {
+            min_row = min_row.min(run.start_row);
+            max_row = max_row.max(run.end_row);
+            min_col = min_col.min(run.start_col);
+            max_col = max_col.max(run.end_col);
+        }
+    }
+
     if min_row <= max_row && min_col <= max_col {
         Some((min_row, min_col, max_row, max_col))
     } else {

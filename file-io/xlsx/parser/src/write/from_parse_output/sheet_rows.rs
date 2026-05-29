@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use domain_types::SheetData;
 
 use super::style_remap::StyleExportRemapper;
@@ -17,6 +15,11 @@ pub(super) fn apply_rows(
                 writer.set_row_height(row_dim.row, row_dim.height);
             } else {
                 writer.set_row_height_no_custom(row_dim.row, row_dim.height);
+            }
+            if let Some(height_str) = &row_dim.height_str
+                && height_str.parse::<f64>().ok() == Some(row_dim.height)
+            {
+                writer.set_row_height_str(row_dim.row, height_str.clone());
             }
         }
         if row_dim.hidden || row_dim.explicit_hidden {
@@ -55,22 +58,6 @@ pub(super) fn apply_rows(
     for rs in &sheet_data.row_styles {
         if let Some(style_id) = style_remapper.emitted_cell_xf_id(rs.style_id) {
             writer.set_row_style(rs.row, style_id);
-        }
-    }
-
-    if let Some(default_descent) = sheet_data.dimensions.default_row_descent {
-        let rows_with_descent: HashSet<u32> = sheet_data
-            .dimensions
-            .row_heights
-            .iter()
-            .filter(|rd| rd.descent.is_some())
-            .map(|rd| rd.row)
-            .collect();
-        let data_rows: HashSet<u32> = sheet_data.cells.iter().map(|c| c.row).collect();
-        for row in data_rows {
-            if !rows_with_descent.contains(&row) {
-                writer.set_row_descent(row, default_descent);
-            }
         }
     }
 }

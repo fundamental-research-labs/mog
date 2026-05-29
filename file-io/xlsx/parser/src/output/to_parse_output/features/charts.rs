@@ -70,7 +70,10 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 standard_chart_relationship_closure_current(&spec.chart_relationships);
             spec.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
                 original_path: chart.original_path.clone(),
-                rels_path: chart.chart_rels_bytes.as_ref().map(|(path, _)| path.clone()),
+                rels_path: chart
+                    .chart_rels_bytes
+                    .as_ref()
+                    .map(|(path, _)| path.clone()),
                 projection_schema_version: STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
                 projection_fingerprint: Some(projection_fingerprint.clone()),
                 relationships: spec.chart_relationships.clone(),
@@ -105,11 +108,9 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
 fn standard_chart_relationship_closure_current(
     relationships: &[domain_types::chart::ChartRelationshipData],
 ) -> bool {
-    relationships
-        .iter()
-        .all(|rel| {
-            !crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
-        })
+    relationships.iter().all(|rel| {
+        !crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+    })
 }
 
 const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;

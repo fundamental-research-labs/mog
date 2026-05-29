@@ -1,4 +1,5 @@
 use crate::write::xml_writer::XmlWriter;
+use domain_types::{VmlStyleDimensionInfo, VmlStyleDimensionStatus};
 
 use super::helpers::parse_cell_ref;
 use super::namespaces::{EXCEL_NS, OFFICE_NS, VML_NS};
@@ -57,17 +58,32 @@ fn write_vml_shape(w: &mut XmlWriter, shape: &CommentShape, index: usize) {
 
     // Calculate style
     let visibility = if shape.visible { "visible" } else { "hidden" };
-    let width_pt = shape.note_width.unwrap_or(96.0);
-    let height_pt = shape.note_height.unwrap_or(55.5);
-    let style = format!(
-        "position:absolute;margin-left:{}pt;margin-top:{}pt;width:{}pt;height:{}pt;z-index:{};visibility:{}",
+    let mut style = format!(
+        "position:absolute;margin-left:{}pt;margin-top:{}pt;",
         shape.left_offset + (shape.left_col as f64 * 64.0),
-        shape.top_offset + (shape.top_row as f64 * 15.0),
-        width_pt,
-        height_pt,
-        index + 1,
-        visibility
+        shape.top_offset + (shape.top_row as f64 * 15.0)
     );
+    if let Some(width) = dimension_style_value(
+        shape.note_width,
+        shape.note_width_style.as_ref(),
+        shape.has_vml_note_provenance,
+        96.0,
+    ) {
+        style.push_str("width:");
+        style.push_str(&width);
+        style.push(';');
+    }
+    if let Some(height) = dimension_style_value(
+        shape.note_height,
+        shape.note_height_style.as_ref(),
+        shape.has_vml_note_provenance,
+        55.5,
+    ) {
+        style.push_str("height:");
+        style.push_str(&height);
+        style.push(';');
+    }
+    style.push_str(&format!("z-index:{};visibility:{}", index + 1, visibility));
 
     w.start_element_ns("v", "shape")
         .attr("id", &shape_id)
@@ -128,4 +144,43 @@ fn write_vml_shape(w: &mut XmlWriter, shape: &CommentShape, index: usize) {
 
     w.end_element_ns("x", "ClientData");
     w.end_element_ns("v", "shape");
+}
+
+fn dimension_style_value(
+    current_pt: Option<f64>,
+    imported: Option<&VmlStyleDimensionInfo>,
+    has_vml_note_provenance: bool,
+    default_pt: f64,
+) -> Option<String> {
+    if let Some(current_pt) = current_pt {
+        if let Some(imported) = imported {
+            match imported.status {
+                VmlStyleDimensionStatus::Supported | VmlStyleDimensionStatus::UnitlessZero
+                    if imported
+                        .normalized_pt
+                        .map(|normalized| points_match(normalized, current_pt))
+                        .unwrap_or(false) =>
+                {
+                    return Some(imported.raw.clone());
+                }
+                _ => {}
+            }
+        }
+        return Some(format!("{}pt", current_pt));
+    }
+
+    if let Some(imported) = imported {
+        if matches!(
+            imported.status,
+            VmlStyleDimensionStatus::UnsupportedUnit | VmlStyleDimensionStatus::Malformed
+        ) {
+            return Some(imported.raw.clone());
+        }
+    }
+
+    (!has_vml_note_provenance).then(|| format!("{}pt", default_pt))
+}
+
+fn points_match(left: f64, right: f64) -> bool {
+    (left - right).abs() < 0.000_001
 }

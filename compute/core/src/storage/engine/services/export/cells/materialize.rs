@@ -56,6 +56,9 @@ pub(super) fn build_cell_data_for_cell_id(
     let has_empty_cached_value = cell_props
         .map(|props| props.has_empty_cached_value)
         .unwrap_or(false);
+    let formula_cache_provenance = cell_props
+        .map(|props| props.formula_cache_provenance.clone())
+        .unwrap_or_default();
     let original_sst_index = cell_props.and_then(|props| props.original_sst_index);
     let original_value = cell_props
         .and_then(|props| props.original_value.as_ref())
@@ -73,6 +76,7 @@ pub(super) fn build_cell_data_for_cell_id(
         && vm.is_none()
         && formula_result_type.is_none()
         && !has_empty_cached_value
+        && formula_cache_provenance.is_absent_or_unknown()
         && original_sst_index.is_none()
         && original_value.is_none()
         && !phonetic
@@ -89,6 +93,7 @@ pub(super) fn build_cell_data_for_cell_id(
             vm,
             formula_result_type,
             has_empty_cached_value,
+            &formula_cache_provenance,
             original_sst_index,
             original_value.as_ref(),
             phonetic,
@@ -112,6 +117,7 @@ pub(super) fn build_cell_data_for_cell_id(
         cell_metadata_index,
         formula_result_type,
         has_empty_cached_value,
+        formula_cache_provenance,
         vm,
         phonetic,
         date_lexical_value,
@@ -128,6 +134,7 @@ fn is_imported_style_only_blank(
     vm: Option<u32>,
     formula_result_type: Option<u8>,
     has_empty_cached_value: bool,
+    formula_cache_provenance: &domain_types::FormulaCacheProvenance,
     original_sst_index: Option<u32>,
     original_value: Option<&String>,
     phonetic: bool,
@@ -139,6 +146,7 @@ fn is_imported_style_only_blank(
         && vm.is_none()
         && formula_result_type.is_none()
         && !has_empty_cached_value
+        && formula_cache_provenance.is_absent_or_unknown()
         && original_sst_index.is_none()
         && original_value.is_none_or(|value| value.is_empty())
         && !phonetic
@@ -169,6 +177,7 @@ pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellDa
         cell_metadata_index: None,
         formula_result_type: None,
         has_empty_cached_value: false,
+        formula_cache_provenance: Default::default(),
         vm: None,
         phonetic: false,
         date_lexical_value: None,
@@ -187,6 +196,7 @@ pub(super) fn is_plain_blank_cell(cell: &CellData) -> bool {
         && cell.cell_metadata_index.is_none()
         && cell.formula_result_type.is_none()
         && !cell.has_empty_cached_value
+        && cell.formula_cache_provenance.is_absent_or_unknown()
         && cell.vm.is_none()
         && !cell.phonetic
         && cell.date_lexical_value.is_none()

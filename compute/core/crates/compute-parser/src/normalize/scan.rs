@@ -13,16 +13,7 @@ fn follows_empty_string_boundary(bytes: &[u8], pos: usize) -> bool {
     pos >= bytes.len()
         || matches!(
             bytes[pos],
-            b')' | b',' | b';'
-                | b'&'
-                | b'+'
-                | b'-'
-                | b'*'
-                | b'/'
-                | b'^'
-                | b'='
-                | b'<'
-                | b'>'
+            b')' | b',' | b';' | b'&' | b'+' | b'-' | b'*' | b'/' | b'^' | b'=' | b'<' | b'>'
         )
 }
 

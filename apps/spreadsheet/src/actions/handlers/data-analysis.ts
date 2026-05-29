@@ -7,6 +7,7 @@
 
 import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import type { CellValue, CellValuePrimitive } from '@mog-sdk/contracts/core';
+import { sheetId } from '@mog-sdk/contracts/core';
 import { parseA1, toA1 } from '@mog/spreadsheet-utils/a1';
 // Unified API: setCellValue replaced with ws.setCell in APPLY_GOAL_SEEK_RESULT
 import type { SpellingError } from '../../ui-store/slices/dialogs/spelling-dialog';
@@ -311,12 +312,13 @@ export const SPELL_CHECK_CHANGE: AsyncActionHandler = async (
   const replacement = payload?.replacement ?? state.spellingDialog.customReplacement;
   if (!error || !replacement.trim()) return { handled: true };
 
-  const ws = deps.workbook.getSheetById(error.sheetId);
+  const targetSheetId = sheetId(error.sheetId);
+  const ws = deps.workbook.getSheetById(targetSheetId);
   const cell = await ws.getCell(error.row, error.col);
   const value = typeof cell?.value === 'string' ? cell.value : '';
   await ws.setCell(error.row, error.col, replaceSpan(value, error, replacement));
   requestFormulaBarRefresh({
-    sheetIds: [error.sheetId],
+    sheetIds: [targetSheetId],
     ranges: [
       {
         startRow: error.row,
@@ -355,7 +357,8 @@ export const SPELL_CHECK_CHANGE_ALL: AsyncActionHandler = async (
 
   for (const cellErrors of errorsByCell.values()) {
     const first = cellErrors[0];
-    const ws = deps.workbook.getSheetById(first.sheetId);
+    const targetSheetId = sheetId(first.sheetId);
+    const ws = deps.workbook.getSheetById(targetSheetId);
     const cell = await ws.getCell(first.row, first.col);
     let value = typeof cell?.value === 'string' ? cell.value : '';
     for (const error of [...cellErrors].sort((a, b) => b.startIndex - a.startIndex)) {
@@ -363,7 +366,7 @@ export const SPELL_CHECK_CHANGE_ALL: AsyncActionHandler = async (
     }
     await ws.setCell(first.row, first.col, value);
     requestFormulaBarRefresh({
-      sheetIds: [first.sheetId],
+      sheetIds: [targetSheetId],
       ranges: [
         {
           startRow: first.row,

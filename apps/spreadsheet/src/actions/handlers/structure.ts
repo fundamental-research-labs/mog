@@ -81,9 +81,9 @@ function getRangesOrActiveCell(
   return ranges.length > 0 ? ranges : [activeCellRange(activeCell)];
 }
 
-async function withProtectionFeedback(
+async function withProtectionFeedback<T>(
   deps: ActionDependencies,
-  operation: () => Promise<void>,
+  operation: () => Promise<T>,
 ): Promise<ActionResult> {
   try {
     await operation();

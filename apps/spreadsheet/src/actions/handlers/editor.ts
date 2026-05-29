@@ -30,7 +30,7 @@ import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 import type { Direction } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
-import type { Worksheet } from '@mog-sdk/contracts/api';
+import type { Worksheet, WorksheetWithInternals } from '@mog-sdk/contracts/api';
 // Fill operations - use executeFillViaWorksheet for proper formula adjustment
 import type { FillDirection } from '../../domain/fill/types';
 import { executeFillViaWorksheet } from './fill/types';
@@ -473,15 +473,15 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
   return handled();
 };
 
-async function clearRangeMetadata(ws: Worksheet, range: CellRange): Promise<void> {
+async function clearRangeMetadata(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
   await Promise.all([
     clearCommentsInRange(ws, range),
-    ws.validations.clear(range),
+    ws.validations.clearInRange(range),
     ws.conditionalFormats.clearInRanges([range]),
   ]);
 }
 
-async function clearCommentsInRange(ws: Worksheet, range: CellRange): Promise<void> {
+async function clearCommentsInRange(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
   const comments = await ws.comments.list();
   if (comments.length === 0) return;
 

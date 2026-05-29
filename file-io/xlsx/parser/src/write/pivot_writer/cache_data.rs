@@ -16,7 +16,7 @@ pub(super) fn build_cache(
     snapshot_records: Option<&[Vec<CellValue>]>,
     records_relationship_id: Option<&str>,
     external_source_relationship_id: Option<&str>,
-) -> (Vec<u8>, Vec<u8>) {
+) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
     if let Some(records_relationship_id) = records_relationship_id {
         cache_writer.records_relationship_id = records_relationship_id.to_string();
@@ -42,7 +42,7 @@ pub(super) fn build_cache(
         cache_writer.set_record_count(records.len() as u32);
         let definition_xml = cache_writer.to_definition_xml();
         let records_xml = cache_writer.to_records_xml(&records);
-        return (definition_xml, records_xml);
+        return Some((definition_xml, records_xml));
     }
 
     if let Some(source_name) = &cache_src.source_name {
@@ -58,7 +58,9 @@ pub(super) fn build_cache(
 
         if let Some((sheet_idx, range_ref)) = resolve_named_source(sheets, source_name) {
             let sheet = &sheets[sheet_idx];
-            if let Some((start_row, start_col, end_row, mut end_col)) = parse_range(range_ref) {
+            if let Some((start_row, start_col, end_row, mut end_col)) =
+                resolve_extraction_range(sheet, range_ref)
+            {
                 if !cache_src.field_names.is_empty() {
                     let schema_end_col = start_col
                         .saturating_add(cache_src.field_names.len() as u32)
@@ -84,7 +86,7 @@ pub(super) fn build_cache(
                 cache_writer.set_record_count(records.len() as u32);
                 let definition_xml = cache_writer.to_definition_xml();
                 let records_xml = cache_writer.to_records_xml(&records);
-                return (definition_xml, records_xml);
+                return Some((definition_xml, records_xml));
             }
         }
     } else if let (Some(sheet_name), Some(range_ref)) =
@@ -102,7 +104,9 @@ pub(super) fn build_cache(
 
         if let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name.as_str()) {
             let sheet = &sheets[sheet_idx];
-            if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
+            if let Some((start_row, start_col, end_row, end_col)) =
+                resolve_extraction_range(sheet, range_ref)
+            {
                 let (fields, records) = extract_cache_data(
                     sheet,
                     CacheExtractionRange {
@@ -121,18 +125,58 @@ pub(super) fn build_cache(
                 cache_writer.set_record_count(records.len() as u32);
                 let definition_xml = cache_writer.to_definition_xml();
                 let records_xml = cache_writer.to_records_xml(&records);
-                return (definition_xml, records_xml);
+                return Some((definition_xml, records_xml));
             }
         }
     }
 
-    for field_name in &cache_src.field_names {
-        cache_writer.add_field(CacheFieldDef::new(field_name));
+    let snapshot_records = snapshot_records?;
+    let (fields, records) = cache_from_snapshot(cache_src, snapshot_records);
+    for field in fields {
+        cache_writer.add_field(field);
     }
-    cache_writer.set_record_count(0);
+    cache_writer.set_record_count(records.len() as u32);
     let definition_xml = cache_writer.to_definition_xml();
-    let records_xml = cache_writer.to_records_xml(&[]);
-    (definition_xml, records_xml)
+    let records_xml = cache_writer.to_records_xml(&records);
+    Some((definition_xml, records_xml))
+}
+
+fn resolve_extraction_range(sheet: &SheetData, range_ref: &str) -> Option<(u32, u32, u32, u32)> {
+    parse_range(range_ref).or_else(|| {
+        let (start_col, end_col) = parse_whole_column_range(range_ref)?;
+        Some((0, start_col, sheet_data_last_row(sheet), end_col))
+    })
+}
+
+fn sheet_data_last_row(sheet: &SheetData) -> u32 {
+    sheet
+        .cells
+        .iter()
+        .map(|cell| cell.row)
+        .max()
+        .or_else(|| (sheet.rows > 0).then_some(sheet.rows - 1))
+        .unwrap_or(0)
+}
+
+fn parse_whole_column_range(range_ref: &str) -> Option<(u32, u32)> {
+    let range = range_ref.replace('$', "");
+    let (start, end) = range.split_once(':')?;
+    let start_col = parse_col_ref(start)?;
+    let end_col = parse_col_ref(end)?;
+    (start_col <= end_col).then_some((start_col, end_col))
+}
+
+fn parse_col_ref(col_ref: &str) -> Option<u32> {
+    if col_ref.is_empty() || !col_ref.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut col: u32 = 0;
+    for byte in col_ref.bytes() {
+        col = col
+            .saturating_mul(26)
+            .saturating_add((byte.to_ascii_uppercase() - b'A') as u32 + 1);
+    }
+    (col > 0).then_some(col - 1)
 }
 
 fn fields_from_source(
@@ -361,4 +405,115 @@ fn extract_cache_data(
         .collect();
 
     (fields, records)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use value_types::FiniteF64;
+
+    fn text_cell(row: u32, col: u32, value: &str) -> domain_types::CellData {
+        domain_types::CellData {
+            row,
+            col,
+            value: CellValue::Text(Arc::from(value)),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn whole_column_source_uses_live_sheet_extent_not_dimension_extent() {
+        let sheet = SheetData {
+            name: "Data".to_string(),
+            rows: 10_000,
+            cols: 2,
+            cells: vec![
+                text_cell(0, 0, "Region"),
+                text_cell(0, 1, "Amount"),
+                text_cell(1, 0, "West"),
+                domain_types::CellData {
+                    row: 1,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::new(42.0).unwrap()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A:B".to_string()),
+            field_names: vec!["Region".to_string(), "Amount".to_string()],
+            ..Default::default()
+        };
+        let sheet_name_to_idx = HashMap::from([("Data", 0usize)]);
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[sheet],
+            &sheet_name_to_idx,
+            None,
+            Some("rId1"),
+            None,
+        )
+        .expect("whole-column cache should resolve from live sheet state");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains("recordCount=\"1\""));
+        assert!(definition.contains("<s v=\"West\"/>"));
+        assert_eq!(records.matches("<r>").count(), 1);
+    }
+
+    #[test]
+    fn unresolved_local_source_does_not_emit_fake_empty_cache() {
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Missing".to_string()),
+            source_range: Some("not-a-range".to_string()),
+            field_names: vec!["Region".to_string()],
+            shared_items: vec![vec![CellValue::Text(Arc::from("West"))]],
+            ..Default::default()
+        };
+
+        assert!(build_cache(&cache_src, &[], &HashMap::new(), None, Some("rId1"), None).is_none());
+    }
+
+    #[test]
+    fn unresolved_local_source_uses_imported_typed_cache_records() {
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Missing".to_string()),
+            source_range: Some("A:B".to_string()),
+            field_names: vec!["Region".to_string(), "Amount".to_string()],
+            shared_items: vec![vec![CellValue::Text(Arc::from("West"))], vec![]],
+            ..Default::default()
+        };
+        let snapshot_records = vec![vec![
+            CellValue::Text(Arc::from("West")),
+            CellValue::Number(FiniteF64::new(42.0).unwrap()),
+        ]];
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[],
+            &HashMap::new(),
+            Some(&snapshot_records),
+            Some("rId1"),
+            None,
+        )
+        .expect("imported typed cache records should be exported when source is absent");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains("recordCount=\"1\""));
+        assert!(definition.contains(r#"<worksheetSource ref="A:B" sheet="Missing"/>"#));
+        assert!(records.contains(r#"<x v="0"/>"#));
+        assert!(records.contains(r#"<n v="42"/>"#));
+    }
 }

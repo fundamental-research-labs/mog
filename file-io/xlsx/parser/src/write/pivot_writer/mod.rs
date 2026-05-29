@@ -24,9 +24,9 @@ use crate::write::pivot_writer::part_paths::{
     pivot_cache_definition_path, pivot_cache_records_path, pivot_table_path,
 };
 use crate::write::pivot_writer::source_fields::derive_missing_fields;
+use domain_types::ParseOutput;
 use domain_types::domain::pivot::ParsedPivotTable;
 use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
-use domain_types::ParseOutput;
 use std::collections::{HashMap, HashSet};
 
 /// All generated pivot data ready for ZIP assembly.
@@ -109,9 +109,25 @@ pub fn build_pivot_data(output: &ParseOutput) -> PivotWriteData {
         &cache_sources,
         &mut generated_part_paths,
     );
+    let emitted_cache_ids: HashSet<u32> = pivot_cache_entries
+        .iter()
+        .map(|entry| entry.cache_id)
+        .collect();
+    let mut resolved_pivots_with_emitted_caches = Vec::new();
+    let mut emitted_pivot_cache_ids = Vec::new();
+    for ((sheet_idx, pivot), cache_id) in resolved_pivots
+        .iter()
+        .copied()
+        .zip(assigned_caches.pivot_cache_ids.iter().copied())
+    {
+        if emitted_cache_ids.contains(&cache_id) {
+            resolved_pivots_with_emitted_caches.push((sheet_idx, pivot));
+            emitted_pivot_cache_ids.push(cache_id);
+        }
+    }
     let pivot_table_entries = build_pivot_table_entries(
-        &resolved_pivots,
-        &assigned_caches.pivot_cache_ids,
+        &resolved_pivots_with_emitted_caches,
+        &emitted_pivot_cache_ids,
         &mut generated_part_paths,
     );
 
@@ -174,7 +190,7 @@ fn build_pivot_cache_entries(
     cache_sources
         .iter()
         .enumerate()
-        .map(|(idx, cache_src)| {
+        .filter_map(|(idx, cache_src)| {
             let global_idx = idx + 1;
             let fidelity = output
                 .package_fidelity
@@ -208,7 +224,7 @@ fn build_pivot_cache_entries(
                     .map(Vec::as_slice),
                 Some(records_relationship_id_for_xml.as_str()),
                 external_relationship_id_for_xml.as_deref(),
-            );
+            )?;
             let definition_path = fidelity
                 .and_then(|package| {
                     select_imported_path(&package.definition_path, &mut selected_paths)
@@ -245,7 +261,7 @@ fn build_pivot_cache_entries(
             generated_part_paths.insert(records_path.clone());
             generated_part_paths.insert(rels_path);
 
-            PivotCacheEntry {
+            Some(PivotCacheEntry {
                 global_idx,
                 cache_id: cache_src.cache_id,
                 workbook_ref_scope: cache_src.workbook_ref_scope,
@@ -283,7 +299,7 @@ fn build_pivot_cache_entries(
                     .and_then(|source| source.target_mode.clone()),
                 definition_xml,
                 records_xml: Some(records_xml),
-            }
+            })
         })
         .collect()
 }

@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { createTestPlatformIdentity } from '@mog/platform/identity';
+import { PlatformIdentityProvider } from '../../../context/platform-identity-context';
 import { FileExplorer } from '../FileExplorer';
 import type { FileExplorerProps } from '../types';
+
+const platformIdentity = createTestPlatformIdentity();
 
 function renderFileExplorer(props: Partial<FileExplorerProps> = {}) {
   const defaultProps: FileExplorerProps = {
@@ -13,7 +17,11 @@ function renderFileExplorer(props: Partial<FileExplorerProps> = {}) {
     onRefresh: jest.fn(),
   };
 
-  return render(<FileExplorer {...defaultProps} {...props} />);
+  return render(
+    <PlatformIdentityProvider value={platformIdentity}>
+      <FileExplorer {...defaultProps} {...props} />
+    </PlatformIdentityProvider>,
+  );
 }
 
 describe('FileExplorer', () => {

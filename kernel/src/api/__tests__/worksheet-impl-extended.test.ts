@@ -98,6 +98,7 @@ jest.unstable_mockModule('../worksheet/operations/dependency-operations', () => 
 }));
 jest.unstable_mockModule('../worksheet/operations/validation-operations', () => ({
   getDropdownItems: jest.fn(),
+  resolveDropdownItems: jest.fn(),
 }));
 jest.unstable_mockModule('../worksheet/operations/filter-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/shape-operations', () => ({}));

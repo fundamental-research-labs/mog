@@ -12,6 +12,7 @@
 
 import { jest } from '@jest/globals';
 import { spawn, ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { attachWsSidecar, ComputeBridgeLike, fetchRoomSnapshot, WsSidecar } from '../ws-sidecar';
@@ -43,8 +44,6 @@ try {
   // Skip tests if addon not available (no Rust build)
 }
 
-const describeWithAddon = addon ? describe : describe.skip;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -61,6 +60,9 @@ const SERVER_ENTRY = join(
   'src',
   'index.ts',
 );
+const hasCollabServer = existsSync(SERVER_ENTRY);
+
+const describeWithAddon = addon && hasCollabServer ? describe : describe.skip;
 
 /** Find a free port by binding to 0 then releasing. */
 async function getFreePort(): Promise<number> {

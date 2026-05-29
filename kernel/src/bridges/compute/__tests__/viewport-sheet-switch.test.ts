@@ -509,7 +509,7 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     );
     const pivotAccessor = core.getViewportBuffer('main:sheet-1')?.createAccessor();
     expect(pivotAccessor?.moveTo(0, 0)).toBe(true);
-    expect(pivotAccessor?.displayText).toBe('');
+    expect(pivotAccessor?.displayText).toBeNull();
     expect(ctx.eventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'pivot:deleted',

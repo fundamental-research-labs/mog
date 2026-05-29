@@ -19,6 +19,7 @@ module.exports = {
       },
     ],
   },
+  setupFiles: ['<rootDir>/jest.setup.cjs'],
   setupFilesAfterEnv: ['@testing-library/jest-dom'],
   moduleNameMapper: {
     ...preset.moduleNameMapper,

@@ -4,9 +4,30 @@
  */
 
 import { jest } from '@jest/globals';
+import { createRequire } from 'node:module';
 
 import * as browserCodec from '../wire-codec';
-import * as serverCodec from '@mog/collaboration-server/wire-format';
+
+type ServerCodec = typeof browserCodec;
+
+const require = createRequire(import.meta.url);
+let serverCodec: ServerCodec | null = null;
+try {
+  const serverCodecPath = require.resolve('@mog/collaboration-server/wire-format');
+  serverCodec = (await import(serverCodecPath)) as ServerCodec;
+} catch {
+  // The collaboration server package is private/internal and is not present in
+  // the public repository checkout.
+}
+
+const describeWithServerCodec = serverCodec ? describe : describe.skip;
+
+function getServerCodec(): ServerCodec {
+  if (!serverCodec) {
+    throw new Error('collaboration server codec is not available in this checkout');
+  }
+  return serverCodec;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -21,9 +42,10 @@ function toArray(buf: Buffer | Uint8Array): number[] {
 // 1. Byte-identical encoding
 // ---------------------------------------------------------------------------
 
-describe('byte-identical encoding across codecs', () => {
+describeWithServerCodec('byte-identical encoding across codecs', () => {
   test('JOIN_REQUEST (pure JSON)', () => {
     const payload = { participantId: 'user-1' };
+    const serverCodec = getServerCodec();
     const browserBytes = browserCodec.encodeJson(browserCodec.MSG.JOIN_REQUEST, payload);
     const serverBytes = serverCodec.encodeJson(serverCodec.MSG.JOIN_REQUEST, payload);
 
@@ -33,6 +55,7 @@ describe('byte-identical encoding across codecs', () => {
   test('PUSH (binary+meta)', () => {
     const meta = { touchedSheets: ['sheet1'], sv: [1, 2, 3] };
     const binary = new Uint8Array([10, 20, 30, 40]);
+    const serverCodec = getServerCodec();
 
     const browserBytes = browserCodec.encodeBinary(browserCodec.MSG.PUSH, meta, binary);
     const serverBytes = serverCodec.encodeBinary(serverCodec.MSG.PUSH, meta, Buffer.from(binary));
@@ -43,6 +66,7 @@ describe('byte-identical encoding across codecs', () => {
   test('BROADCAST_NUDGE (binary+meta)', () => {
     const meta = { broadcast: true };
     const binary = new Uint8Array([5, 6, 7]);
+    const serverCodec = getServerCodec();
 
     const browserBytes = browserCodec.encodeBinary(browserCodec.MSG.BROADCAST_NUDGE, meta, binary);
     const serverBytes = serverCodec.encodeBinary(
@@ -56,6 +80,7 @@ describe('byte-identical encoding across codecs', () => {
 
   test('LOCK_LIST_REQ (type byte only)', () => {
     const raw = new Uint8Array([0x0a]);
+    const serverCodec = getServerCodec();
     // Both codecs should decode a bare type byte as LOCK_LIST_REQ
     expect(raw[0]).toBe(browserCodec.MSG.LOCK_LIST_REQ);
     expect(raw[0]).toBe(serverCodec.MSG.LOCK_LIST_REQ);
@@ -66,9 +91,10 @@ describe('byte-identical encoding across codecs', () => {
 // 2. Cross-codec decode compatibility
 // ---------------------------------------------------------------------------
 
-describe('cross-codec decode compatibility', () => {
+describeWithServerCodec('cross-codec decode compatibility', () => {
   test('server-encoded JOIN_REQUEST decoded by browser', () => {
     const payload = { participantId: 'user-1' };
+    const serverCodec = getServerCodec();
     const encoded = serverCodec.encodeJson(serverCodec.MSG.JOIN_REQUEST, payload);
     const decoded = browserCodec.decode(encoded);
 
@@ -79,6 +105,7 @@ describe('cross-codec decode compatibility', () => {
 
   test('browser-encoded JOIN_REQUEST decoded by server', () => {
     const payload = { participantId: 'user-1' };
+    const serverCodec = getServerCodec();
     const encoded = browserCodec.encodeJson(browserCodec.MSG.JOIN_REQUEST, payload);
     const decoded = serverCodec.decode(Buffer.from(encoded));
 
@@ -90,6 +117,7 @@ describe('cross-codec decode compatibility', () => {
   test('server-encoded PUSH decoded by browser', () => {
     const meta = { touchedSheets: ['sheet1'], sv: [1, 2, 3] };
     const binary = Buffer.from([10, 20, 30, 40]);
+    const serverCodec = getServerCodec();
     const encoded = serverCodec.encodeBinary(serverCodec.MSG.PUSH, meta, binary);
     const decoded = browserCodec.decode(encoded);
 
@@ -101,6 +129,7 @@ describe('cross-codec decode compatibility', () => {
   test('browser-encoded PUSH decoded by server', () => {
     const meta = { touchedSheets: ['sheet1'], sv: [1, 2, 3] };
     const binary = new Uint8Array([10, 20, 30, 40]);
+    const serverCodec = getServerCodec();
     const encoded = browserCodec.encodeBinary(browserCodec.MSG.PUSH, meta, binary);
     const decoded = serverCodec.decode(Buffer.from(encoded));
 
@@ -112,6 +141,7 @@ describe('cross-codec decode compatibility', () => {
   test('server-encoded BROADCAST_NUDGE decoded by browser', () => {
     const meta = { broadcast: true };
     const binary = Buffer.from([5, 6, 7]);
+    const serverCodec = getServerCodec();
     const encoded = serverCodec.encodeBinary(serverCodec.MSG.BROADCAST_NUDGE, meta, binary);
     const decoded = browserCodec.decode(encoded);
 
@@ -123,6 +153,7 @@ describe('cross-codec decode compatibility', () => {
   test('browser-encoded BROADCAST_NUDGE decoded by server', () => {
     const meta = { broadcast: true };
     const binary = new Uint8Array([5, 6, 7]);
+    const serverCodec = getServerCodec();
     const encoded = browserCodec.encodeBinary(browserCodec.MSG.BROADCAST_NUDGE, meta, binary);
     const decoded = serverCodec.decode(Buffer.from(encoded));
 
@@ -133,6 +164,7 @@ describe('cross-codec decode compatibility', () => {
 
   test('LOCK_LIST_REQ (type-only) decoded by both codecs', () => {
     const raw = new Uint8Array([0x0a]);
+    const serverCodec = getServerCodec();
 
     const browserDecoded = browserCodec.decode(raw);
     expect(browserDecoded.type).toBe(browserCodec.MSG.LOCK_LIST_REQ);
@@ -150,10 +182,11 @@ describe('cross-codec decode compatibility', () => {
 // 3. Edge cases
 // ---------------------------------------------------------------------------
 
-describe('edge cases', () => {
+describeWithServerCodec('edge cases', () => {
   test('empty binary payload in encodeBinary', () => {
     const meta = { empty: true };
     const emptyBinary = new Uint8Array(0);
+    const serverCodec = getServerCodec();
 
     const browserBytes = browserCodec.encodeBinary(browserCodec.MSG.PUSH, meta, emptyBinary);
     const serverBytes = serverCodec.encodeBinary(serverCodec.MSG.PUSH, meta, Buffer.alloc(0));
@@ -179,6 +212,7 @@ describe('edge cases', () => {
       nested: { a: 'y'.repeat(200), b: Array.from({ length: 50 }, (_, i) => i) },
     };
     const binary = new Uint8Array([0xff, 0x00, 0x42]);
+    const serverCodec = getServerCodec();
 
     const browserBytes = browserCodec.encodeBinary(browserCodec.MSG.PUSH, largeMeta, binary);
     const serverBytes = serverCodec.encodeBinary(
@@ -198,6 +232,7 @@ describe('edge cases', () => {
 
   test('empty message throws in both codecs', () => {
     const empty = new Uint8Array(0);
+    const serverCodec = getServerCodec();
 
     expect(() => browserCodec.decode(empty)).toThrow('Empty message');
     expect(() => serverCodec.decode(Buffer.alloc(0))).toThrow('Empty message');

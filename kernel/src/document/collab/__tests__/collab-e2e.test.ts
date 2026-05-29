@@ -25,6 +25,7 @@
  */
 
 import { spawn, ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { attachWsSidecar, fetchRoomSnapshot, type WsSidecar } from '../ws-sidecar';
@@ -105,6 +106,10 @@ const SERVER_ENTRY = join(
   'src',
   'index.ts',
 );
+const hasCollabServer = existsSync(SERVER_ENTRY);
+
+const describeWithCollabStack =
+  hasEngineSupport && hasCollabServer ? describe : describe.skip;
 
 async function getFreePort(): Promise<number> {
   const { createServer } = await import('node:net');
@@ -348,7 +353,7 @@ async function waitForCell(
 // Tests
 // ---------------------------------------------------------------------------
 
-describeWithEngine('Collab E2E — real engines + WS sidecar', () => {
+describeWithCollabStack('Collab E2E — real engines + WS sidecar', () => {
   let serverProc: ChildProcess | null = null;
   let wsPort: number;
   let healthPort: number;

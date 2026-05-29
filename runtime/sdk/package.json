@@ -83,12 +83,14 @@
     "@mog-sdk/win32-x64-msvc": "workspace:*"
   },
   "devDependencies": {
-    "@mog-sdk/types-host": "workspace:*",
     "@microsoft/api-extractor": "^7.58.7",
-    "@mog/kernel-host-internal": "workspace:*",
     "@mog-sdk/kernel": "workspace:*",
+    "@mog-sdk/types-host": "workspace:*",
+    "@mog/kernel-host-internal": "workspace:*",
     "@types/jest": "^30.0.0",
     "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0",
+    "ts-jest": "^29.4.11",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"
   }

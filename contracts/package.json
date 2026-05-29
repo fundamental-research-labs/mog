@@ -686,6 +686,10 @@
     "test": "jest"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
+    "@mog-sdk/types-document": "workspace:*",
+    "@mog/diagram-engine": "workspace:*",
+    "@mog/math-engine": "workspace:*",
     "@mog/types-api": "workspace:*",
     "@mog/types-bridges": "workspace:*",
     "@mog/types-commands": "workspace:*",
@@ -693,7 +697,6 @@
     "@mog/types-core": "workspace:*",
     "@mog/types-culture": "workspace:*",
     "@mog/types-data": "workspace:*",
-    "@mog-sdk/types-document": "workspace:*",
     "@mog/types-editor": "workspace:*",
     "@mog/types-events": "workspace:*",
     "@mog/types-formatting": "workspace:*",
@@ -701,13 +704,11 @@
     "@mog/types-objects": "workspace:*",
     "@mog/types-rendering": "workspace:*",
     "@mog/types-viewport": "workspace:*",
-    "@mog/math-engine": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.7",
-    "@types/jest": "^29.5.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.0",
-    "typescript": "^5.0.0",
-    "@mog/diagram-engine": "workspace:*"
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0",
+    "ts-jest": "^29.4.11",
+    "typescript": "^5.0.0"
   },
   "publishConfig": {
     "access": "public",

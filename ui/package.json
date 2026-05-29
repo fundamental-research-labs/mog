@@ -103,7 +103,8 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "jest": "^30.3.0"
+    "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

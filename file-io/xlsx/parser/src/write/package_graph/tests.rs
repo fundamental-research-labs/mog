@@ -150,6 +150,63 @@ fn inert_custom_xml_cluster_is_registered_with_graph_generated_sidecar() {
 }
 
 #[test]
+fn webextension_cluster_is_registered_with_root_and_taskpane_relationships() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![
+            relationship_hint("rId3", REL_CORE_PROPERTIES, "docProps/core.xml"),
+            relationship_hint(
+                "rId2",
+                "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes",
+                "xl/webextensions/taskpanes.xml",
+            ),
+            relationship_hint("rId1", REL_OFFICE_DOCUMENT, "xl/workbook.xml"),
+        ],
+        opaque_parts: vec![
+            domain_types::OpaquePackagePartHint {
+                path: "xl/webextensions/taskpanes.xml".to_string(),
+                bytes: b"<wetp:taskpanes/>".to_vec(),
+                content_type: Some(
+                    "application/vnd.ms-office.webextensiontaskpanes+xml".to_string(),
+                ),
+                relationships: vec![relationship_hint(
+                    "rId1",
+                    "http://schemas.microsoft.com/office/2011/relationships/webextension",
+                    "webextension1.xml",
+                )],
+            },
+            domain_types::OpaquePackagePartHint {
+                path: "xl/webextensions/webextension1.xml".to_string(),
+                bytes: b"<we:webextension/>".to_vec(),
+                content_type: Some("application/vnd.ms-office.webextension+xml".to_string()),
+                relationships: Vec::new(),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    assert!(graph.contains_part("xl/webextensions/taskpanes.xml"));
+    assert!(graph.contains_part("xl/webextensions/webextension1.xml"));
+    assert!(graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "_rels/.rels"
+            && rel.id == "rId2"
+            && rel.relationship_type
+                == "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes"
+            && rel.target == "/xl/webextensions/taskpanes.xml"
+    }));
+    assert!(graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "xl/webextensions/_rels/taskpanes.xml.rels"
+            && rel.id == "rId1"
+            && rel.relationship_type
+                == "http://schemas.microsoft.com/office/2011/relationships/webextension"
+            && rel.target == "webextension1.xml"
+    }));
+}
+
+#[test]
 fn modeled_paths_are_not_replayed_as_opaque_parts() {
     let metadata = PackageFidelityMetadata {
         opaque_parts: vec![domain_types::OpaquePackagePartHint {

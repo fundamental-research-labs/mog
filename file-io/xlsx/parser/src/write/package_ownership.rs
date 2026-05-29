@@ -983,10 +983,9 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plans 01/05",
     },
     OoxmlOwnershipRow {
-        surface: "external links, web publishing/extensions, VBA/macros, revisions, feature property bags, smart tags",
+        surface: "external links, web publishing, VBA/macros, revisions, feature property bags, smart tags",
         package_part_patterns: &[
             "xl/externalLinks/externalLink*.xml",
-            "xl/webextensions/*",
             "xl/vbaProject.bin",
             "xl/revisions/*",
             "xl/featurePropertyBag/*",
@@ -1024,6 +1023,31 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         user_visible_behavior: "external workbook bindings, revision history, executable or refresh-capable content",
         fixture_coverage: "round-9 matrix contract only; feature gates owned by plan 05/security slices",
+    },
+    OoxmlOwnershipRow {
+        surface: "Office web extension taskpane package cluster",
+        package_part_patterns: &["xl/webextensions/*"],
+        ooxml_modules: &[],
+        canonical_type_status: CanonicalTypeStatus::InventoryOnly,
+        classification: OoxmlOwnershipClassification::SafeInert,
+        production_reader: "domain::web_extensions and package inventory",
+        private_parser_adapter: "web extension scanner",
+        full_parse_result_field: "web_extensions imported extension parts",
+        parse_output_domain_owner: "package fidelity opaque parts",
+        yrs_app_persistence_owner: "package fidelity metadata",
+        api_exposure: ApiExposureLevel::DiagnosticOnly,
+        production_writer: "package graph opaque replay for the closed webextensions cluster",
+        package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary),
+        opaque_fallback_policy: OpaqueFallbackPolicy::OwnerScopedInert,
+        unsupported_diagnostic_policy: "web extension taskpane cluster is preserved opaquely; semantic editing requires a future typed model",
+        dirty_invalidation_triggers: &["web extension package mutation"],
+        semantic_references: &[
+            "root taskpanes relationship",
+            "taskpane webextension relationship",
+        ],
+        user_visible_behavior: "Office add-in taskpane package payload and activation metadata",
+        fixture_coverage: "xlsx roundtrip package graph regression",
     },
     OoxmlOwnershipRow {
         surface: "unsupported functional package adjuncts awaiting typed round-9 models; volatile dependencies are workbook-owned calculation sidecars",
@@ -1164,6 +1188,7 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || (path.starts_with("xl/printerSettings/") && path.ends_with(".bin"))
         || path.starts_with("docProps/thumbnail.")
         || path == "docMetadata/LabelInfo.xml"
+        || path.starts_with("xl/webextensions/")
         || (path.starts_with("xl/customProperty")
             && path.ends_with(".bin")
             && !path.starts_with("xl/customProperty/"))
@@ -1183,8 +1208,6 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || path.starts_with("_xmlsignatures/sig")
     {
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden)
-    } else if path.starts_with("xl/webextensions/") {
-        Some(AuxiliaryPackagePartPolicy::ExternalCapable)
     } else if path.starts_with("xl/revisions/")
         || path.starts_with("xl/timelineCaches/")
         || path.starts_with("xl/timelines/")

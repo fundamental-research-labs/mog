@@ -44,6 +44,8 @@ pub(super) fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
         target_path.starts_with("xl/revisions/")
     } else if owner_path.starts_with("xl/printerSettings/") {
         target_path.starts_with("xl/printerSettings/")
+    } else if owner_path.starts_with("xl/webextensions/") {
+        target_path.starts_with("xl/webextensions/")
     } else if owner_path.starts_with("docProps/thumbnail.") {
         target_path.starts_with("docProps/thumbnail.")
     } else if owner_path == "docMetadata/LabelInfo.xml" {

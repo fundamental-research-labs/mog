@@ -49,7 +49,7 @@ impl DrawingWriter {
         }
         w.end_element("xdr:nvGraphicFramePr");
 
-        // Transform (zeroed — position comes from the anchor)
+        // Transform
         w.start_element("xdr:xfrm").end_attrs();
         {
             w.start_element("a:off")
@@ -191,20 +191,29 @@ impl DrawingWriter {
             } else {
                 w.self_close();
             }
-            w.start_element("xdr:cNvGraphicFramePr").self_close();
+            Self::write_cnv_graphic_frame_pr(
+                w,
+                &cx_ref.graphic_frame_locks,
+                cx_ref.has_graphic_frame_locks,
+                cx_ref.no_change_aspect_explicit,
+                cx_ref.no_drilldown,
+                &cx_ref.c_nv_graphic_frame_pr_ext_lst,
+                self.suppress_unregistered_relationships,
+            );
         }
         w.end_element("xdr:nvGraphicFramePr");
 
-        // Transform (zeroed — position comes from the anchor)
+        // Transform — preserve the typed graphic frame transform. For two-cell
+        // anchors Excel also stores the position on the anchor itself.
         w.start_element("xdr:xfrm").end_attrs();
         {
             w.start_element("a:off")
-                .attr_num("x", 0)
-                .attr_num("y", 0)
+                .attr_num("x", cx_ref.xfrm_off_x)
+                .attr_num("y", cx_ref.xfrm_off_y)
                 .self_close();
             w.start_element("a:ext")
-                .attr_num("cx", 0)
-                .attr_num("cy", 0)
+                .attr_num("cx", cx_ref.xfrm_ext_cx)
+                .attr_num("cy", cx_ref.xfrm_ext_cy)
                 .self_close();
         }
         w.end_element("xdr:xfrm");

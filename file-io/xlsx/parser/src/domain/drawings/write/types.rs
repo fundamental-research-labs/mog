@@ -262,20 +262,30 @@ pub struct ChartExRef {
     pub name: String,
     /// Unique ID for the cNvPr
     pub id: u32,
-    /// xfrm offset x (for the mc:Fallback shape)
-    pub fallback_off_x: i64,
+    /// Graphic frame transform offset x.
+    pub xfrm_off_x: i64,
     /// xfrm offset y
-    pub fallback_off_y: i64,
-    /// xfrm extent cx (for the mc:Fallback shape)
-    pub fallback_ext_cx: i64,
+    pub xfrm_off_y: i64,
+    /// xfrm extent cx
+    pub xfrm_ext_cx: i64,
     /// xfrm extent cy
-    pub fallback_ext_cy: i64,
+    pub xfrm_ext_cy: i64,
     /// Macro name (@macro attribute on graphicFrame).
     /// `Some("")` preserves `macro=""` for round-trip fidelity.
     /// `None` means the attribute was absent and should not be emitted.
     pub macro_name: Option<String>,
     /// Extension list on cNvPr — opaque XML passthrough (CT_NonVisualDrawingProps extLst).
     pub nv_ext_lst: Option<String>,
+    /// Graphic frame locking properties (CT_GraphicalObjectFrameLocking).
+    pub graphic_frame_locks: DrawingLocking,
+    /// Whether `<a:graphicFrameLocks>` was present in the original XML.
+    pub has_graphic_frame_locks: bool,
+    /// Explicit `noChangeAspect` from original XML. `Some(false)` preserves `noChangeAspect="0"`.
+    pub no_change_aspect_explicit: Option<bool>,
+    /// Disallow drilldown — unique to CT_GraphicalObjectFrameLocking.
+    pub no_drilldown: bool,
+    /// Extension list from cNvGraphicFramePr.
+    pub c_nv_graphic_frame_pr_ext_lst: Option<String>,
 }
 
 /// Chart reference in drawing

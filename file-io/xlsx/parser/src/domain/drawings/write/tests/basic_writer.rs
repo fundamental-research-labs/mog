@@ -396,15 +396,20 @@ fn chart_ex_preserves_cnvpr_ext_lst() {
             r_id: "rId1".to_string(),
             name: "Waterfall".to_string(),
             id: 4,
-            fallback_off_x: 0,
-            fallback_off_y: 0,
-            fallback_ext_cx: 0,
-            fallback_ext_cy: 0,
+            xfrm_off_x: 4413250,
+            xfrm_off_y: 1724025,
+            xfrm_ext_cx: 4307417,
+            xfrm_ext_cy: 2905125,
             macro_name: Some(String::new()),
             nv_ext_lst: Some(
                 r#"<a:extLst><a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}"><a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{747C816B-D48A-63FE-35C7-CC1AE1ADA584}"/></a:ext></a:extLst>"#
                     .to_string(),
             ),
+            graphic_frame_locks: Default::default(),
+            has_graphic_frame_locks: true,
+            no_change_aspect_explicit: Some(false),
+            no_drilldown: false,
+            c_nv_graphic_frame_pr_ext_lst: None,
         }),
     ));
 
@@ -417,6 +422,9 @@ fn chart_ex_preserves_cnvpr_ext_lst() {
     assert!(xml_str.contains("<a16:creationId"));
     assert!(xml_str.contains("id=\"{747C816B-D48A-63FE-35C7-CC1AE1ADA584}\""));
     assert!(xml_str.contains("</xdr:cNvPr>"));
+    assert!(xml_str.contains("<a:graphicFrameLocks noChangeAspect=\"0\"/>"));
+    assert!(xml_str.contains("<a:off x=\"4413250\" y=\"1724025\"/>"));
+    assert!(xml_str.contains("<a:ext cx=\"4307417\" cy=\"2905125\"/>"));
 }
 
 #[test]

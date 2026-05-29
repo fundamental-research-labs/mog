@@ -810,6 +810,22 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     };
                     let frame_cnv =
                         chart_frame.map(|frame| &frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr);
+                    let frame_nv =
+                        chart_frame.map(|frame| &frame.graphic_frame.nv_graphic_frame_pr);
+                    let frame_locks = frame_nv
+                        .map(|nv| nv.c_nv_graphic_frame_pr.clone())
+                        .unwrap_or_default();
+                    let has_gf_locks = frame_nv
+                        .map(|nv| {
+                            nv.has_graphic_frame_locks || nv.no_change_aspect_explicit.is_some()
+                        })
+                        .unwrap_or_else(|| {
+                            chart_spec.has_graphic_frame_locks
+                                || chart_spec.no_change_aspect.is_some()
+                        });
+                    let no_change_aspect_explicit = frame_nv
+                        .and_then(|nv| nv.no_change_aspect_explicit)
+                        .or(chart_spec.no_change_aspect);
                     let cx_ref = ChartExRef {
                         r_id: cx_r_id,
                         name: frame_cnv
@@ -821,16 +837,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .and_then(|cnv| (cnv.id.value() != 0).then_some(cnv.id.value()))
                             .or(chart_spec.cnv_pr_id)
                             .unwrap_or((cx_local_idx + 100) as u32),
-                        fallback_off_x: chart_frame
+                        xfrm_off_x: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.off_x())
                             .unwrap_or(chart_spec.position.anchor_col_offset),
-                        fallback_off_y: chart_frame
+                        xfrm_off_y: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.off_y())
                             .unwrap_or(chart_spec.position.anchor_row_offset),
-                        fallback_ext_cx: chart_frame
+                        xfrm_ext_cx: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
                             .unwrap_or((chart_spec.size.width as i64) * 9525),
-                        fallback_ext_cy: chart_frame
+                        xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or((chart_spec.size.height as i64) * 9525),
                         macro_name: chart_frame
@@ -839,6 +855,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         nv_ext_lst: frame_cnv
                             .and_then(|cnv| cnv.ext_lst.clone())
                             .or_else(|| chart_spec.cnv_pr_ext_lst.clone()),
+                        graphic_frame_locks: frame_locks,
+                        has_graphic_frame_locks: has_gf_locks,
+                        no_change_aspect_explicit,
+                        no_drilldown: frame_nv.map(|nv| nv.no_drilldown).unwrap_or(false),
+                        c_nv_graphic_frame_pr_ext_lst: frame_nv
+                            .and_then(|nv| nv.c_nv_graphic_frame_pr_ext_lst.clone()),
                     };
                     let edit_as = chart_frame
                         .and_then(|frame| frame.edit_as.as_deref())

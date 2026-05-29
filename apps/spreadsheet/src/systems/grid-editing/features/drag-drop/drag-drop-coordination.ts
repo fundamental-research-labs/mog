@@ -47,7 +47,7 @@ import type { GridEditingUIStore } from '../../types';
  */
 interface MoveResult {
   success: boolean;
-  movedCellIds: import('@mog-sdk/contracts/cell-identity').CellId[];
+  movedCount: number;
   error?: string;
 }
 
@@ -79,12 +79,20 @@ export interface DragDropCoordinatorDependencies {
    * Execute a MOVE operation using relocateCells (preserves CellIds).
    * Injected from coordinator layer.
    */
-  executeMove: (sheetId: SheetId, sourceRange: CellRange, targetCell: CellCoord) => MoveResult;
+  executeMove: (
+    sheetId: SheetId,
+    sourceRange: CellRange,
+    targetCell: CellCoord,
+  ) => MoveResult | Promise<MoveResult>;
   /**
    * Execute a COPY operation by creating new cells.
    * Injected from coordinator layer.
    */
-  executeCopy: (sheetId: SheetId, sourceRange: CellRange, targetCell: CellCoord) => CopyResult;
+  executeCopy: (
+    sheetId: SheetId,
+    sourceRange: CellRange,
+    targetCell: CellCoord,
+  ) => CopyResult | Promise<CopyResult>;
 }
 
 /**
@@ -409,19 +417,19 @@ export class DragDropCoordinator {
       console.warn(
         '[DragDropCoordinator] Target has data but no action deps - proceeding with overwrite',
       );
-      this.executeDropConfirmed();
+      await this.executeDropConfirmed();
       return;
     }
 
     // No conflicts - execute drop directly
-    this.executeDropConfirmed();
+    await this.executeDropConfirmed();
   }
 
   /**
    * Execute the confirmed drop operation.
    * Called either directly (no conflicts) or after user confirmation (data overwrite).
    */
-  private executeDropConfirmed(): void {
+  private async executeDropConfirmed(): Promise<void> {
     if (!this.deps) return;
 
     const dropInfo = this.pendingDrop;
@@ -429,12 +437,15 @@ export class DragDropCoordinator {
 
     const { sourceRange, targetCell, mode, sheetId } = dropInfo;
 
-    if (mode === 'move') {
-      // MOVE: Use relocateCells to preserve CellIds (formulas follow)
-      this.executeMove(sheetId, sourceRange, targetCell);
-    } else {
-      // COPY: Create new cells at target (new CellIds)
-      this.executeCopy(sheetId, sourceRange, targetCell);
+    const success =
+      mode === 'move'
+        ? await this.executeMove(sheetId, sourceRange, targetCell)
+        : await this.executeCopy(sheetId, sourceRange, targetCell);
+
+    if (!success) {
+      this.pendingDrop = null;
+      this.clearDragContext();
+      return;
     }
 
     // Update selection to new location
@@ -478,12 +489,16 @@ export class DragDropCoordinator {
    * Execute a MOVE operation using relocateCells.
    * Preserves CellIds so formulas automatically follow.
    */
-  private executeMove(sheetId: SheetId, sourceRange: CellRange, targetCell: CellCoord): void {
-    const result = this.deps!.executeMove(sheetId, sourceRange, targetCell);
+  private async executeMove(
+    sheetId: SheetId,
+    sourceRange: CellRange,
+    targetCell: CellCoord,
+  ): Promise<boolean> {
+    const result = await this.deps!.executeMove(sheetId, sourceRange, targetCell);
 
     this.lastResult = {
       success: result.success,
-      movedCount: result.movedCellIds.length,
+      movedCount: result.movedCount,
       copiedCount: 0,
       mode: 'move',
       error: result.error,
@@ -492,6 +507,7 @@ export class DragDropCoordinator {
     if (!result.success) {
       console.warn('[DragDropCoordinator] Move failed:', result.error);
     }
+    return result.success;
   }
 
   /**
@@ -501,8 +517,12 @@ export class DragDropCoordinator {
    * Also copies validation rules from source cells to target cells.
    * Since drag-copy creates new CellIds, we must explicitly copy validation schemas.
    */
-  private executeCopy(sheetId: SheetId, sourceRange: CellRange, targetCell: CellCoord): void {
-    const result = this.deps!.executeCopy(sheetId, sourceRange, targetCell);
+  private async executeCopy(
+    sheetId: SheetId,
+    sourceRange: CellRange,
+    targetCell: CellCoord,
+  ): Promise<boolean> {
+    const result = await this.deps!.executeCopy(sheetId, sourceRange, targetCell);
 
     this.lastResult = {
       success: result.success,
@@ -511,6 +531,10 @@ export class DragDropCoordinator {
       mode: 'copy',
       error: result.error,
     };
+    if (!result.success) {
+      console.warn('[DragDropCoordinator] Copy failed:', result.error);
+    }
+    return result.success;
   }
 
   /**

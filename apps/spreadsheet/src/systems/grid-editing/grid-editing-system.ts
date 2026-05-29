@@ -91,6 +91,10 @@ import type { DragTerminator } from '../shared/drag-terminator';
 import { buildCheckboxCoordination } from './features/checkbox/checkbox-coordination';
 import { createFillCoordinator, type FillCoordinator } from './features/fill/fill-coordination';
 import { createResizeCoordinator, type ResizeCoordinator } from './features/resize';
+import {
+  createDragDropCoordinator,
+  type DragDropCoordinator,
+} from './features/drag-drop/drag-drop-coordination';
 import type {
   CommentHoverCoordinator,
   DrawBorderCoordinator,
@@ -584,6 +588,7 @@ export class GridEditingSystem implements IGridEditingSystem {
 
   private resizeCoordinator: ResizeCoordinator | null = null;
   private fillCoordinator: FillCoordinator | null = null;
+  private dragDropCoordinator: DragDropCoordinator | null = null;
   private commentHoverCoordination: CommentHoverCoordinationResult | null = null;
 
   private checkboxCoordination:
@@ -741,6 +746,68 @@ export class GridEditingSystem implements IGridEditingSystem {
       this.cleanupFns.push(() => {
         this.fillCoordinator?.dispose();
         this.fillCoordinator = null;
+      });
+    }
+
+    // 7b. Wire cell drag-drop coordinator (executes move/copy after range-edge drag release)
+    if (this.config.workbook && !this.config.readOnly) {
+      const workbook = this.config.workbook;
+      this.dragDropCoordinator = createDragDropCoordinator();
+      this.dragDropCoordinator.setDependencies({
+        selectionActor: this.selectionActor,
+        workbook,
+        getActiveSheetId: () =>
+          toSheetId((this.config.getActiveSheetId ?? (() => this.config.initialSheetId))()),
+        onCellsChanged: (sheetId) => {
+          // Mutations update viewport state through the workbook bridge; this
+          // callback gives renderer hosts a synchronous invalidation hook when
+          // one is available.
+          this.config.onDimensionsChanged?.(sheetId);
+        },
+        executeMove: async (sheetId, sourceRange, targetCell) => {
+          const success = await guardBridgeMutation(async () => {
+            await workbook
+              .getSheetById(sheetId)
+              ._internal.relocateCells(sourceRange, targetCell.row, targetCell.col);
+          });
+          const movedCount = success
+            ? (sourceRange.endRow - sourceRange.startRow + 1) *
+              (sourceRange.endCol - sourceRange.startCol + 1)
+            : 0;
+          return {
+            success,
+            movedCount,
+            error: success ? undefined : 'relocateCells failed',
+          };
+        },
+        executeCopy: async (sheetId, sourceRange, targetCell) => {
+          const success = await guardBridgeMutation(async () => {
+            await workbook
+              .getSheetById(sheetId)
+              ._internal.copyRangeToSheet(
+                sourceRange,
+                sheetId,
+                targetCell.row,
+                targetCell.col,
+                'all',
+                false,
+                false,
+              );
+          });
+          const copiedCount = success
+            ? (sourceRange.endRow - sourceRange.startRow + 1) *
+              (sourceRange.endCol - sourceRange.startCol + 1)
+            : 0;
+          return {
+            success,
+            copiedCount,
+            error: success ? undefined : 'copyRangeToSheet failed',
+          };
+        },
+      });
+      this.cleanupFns.push(() => {
+        this.dragDropCoordinator?.dispose();
+        this.dragDropCoordinator = null;
       });
     }
 

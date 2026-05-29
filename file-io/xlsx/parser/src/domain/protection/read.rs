@@ -87,7 +87,25 @@ impl SheetProtectionParse for SheetProtection {
 
         let element = &xml[tag_start..=tag_end];
 
-        let mut protection = SheetProtection::default();
+        let mut protection = SheetProtection {
+            sheet: false,
+            objects: false,
+            scenarios: false,
+            format_cells: false,
+            format_columns: false,
+            format_rows: false,
+            insert_columns: false,
+            insert_rows: false,
+            insert_hyperlinks: false,
+            delete_columns: false,
+            delete_rows: false,
+            sort: false,
+            auto_filter: false,
+            pivot_tables: false,
+            select_locked_cells: false,
+            select_unlocked_cells: false,
+            ..SheetProtection::default()
+        };
 
         // Parse password protection attributes
         protection.password = parse_string_attr(element, b"password=\"");

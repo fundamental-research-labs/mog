@@ -626,7 +626,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
             let mut spec = ChartSpec {
                 chart_type: domain_types::ChartType::from_str(&chart_type),
                 title,
-                position,
+                position: position.clone(),
                 size: ObjectSize {
                     width: 400.0,
                     height: 300.0,

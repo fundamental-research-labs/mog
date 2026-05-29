@@ -89,7 +89,7 @@ fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
 
 fn is_opc_relationships_ns(ns: &ResolveResult<'_>) -> bool {
     match ns {
-        ResolveResult::Bound(Namespace(uri)) => uri == RELATIONSHIPS_NS.as_bytes(),
+        ResolveResult::Bound(Namespace(uri)) => *uri == RELATIONSHIPS_NS.as_bytes(),
         ResolveResult::Unbound => true,
         ResolveResult::Unknown(_) => false,
     }

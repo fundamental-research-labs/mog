@@ -12,7 +12,7 @@ use ooxml_types::drawings::{
 };
 use ooxml_types::themes::EffectStyleItem;
 
-use crate::infra::scanner::{find_closing_tag, find_tag_simd};
+use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 
 use super::formats::{get_attr, get_attr_i32, get_attr_u32, parse_drawing_color};
 
@@ -47,6 +47,7 @@ pub fn parse_effect_style_list_canonical(xml: &[u8]) -> Vec<EffectStyleItem> {
 
         if item.effect_properties.is_none()
             && let Some(dag_start) = find_tag_simd(eff_xml, b"effectDag", 0)
+            && !is_self_closing_start_tag(eff_xml, dag_start)
         {
             let dag_end =
                 find_closing_tag(eff_xml, b"effectDag", dag_start).unwrap_or(eff_xml.len());
@@ -75,6 +76,11 @@ pub fn parse_effect_style_list_canonical(xml: &[u8]) -> Vec<EffectStyleItem> {
     }
 
     styles
+}
+
+fn is_self_closing_start_tag(xml: &[u8], start: usize) -> bool {
+    find_gt_simd(xml, start)
+        .is_some_and(|gt| gt > start && xml[..gt].iter().rev().find(|&&b| !b" \t\r\n".contains(&b)) == Some(&b'/'))
 }
 
 fn parse_effect_container(xml: &[u8]) -> EffectContainer {

@@ -198,5 +198,9 @@ fn dxf_gradient_fill_is_written_as_gradient_fill() {
 
     let xml = xml_string(&writer);
     assert_contains_all(&xml, &["<gradientFill", "degree=\"45\""]);
-    assert!(!xml.contains("<patternFill patternType=\"none\"/>"));
+    let dxf_xml = xml
+        .split_once("<dxfs count=\"1\">")
+        .and_then(|(_, rest)| rest.split_once("</dxfs>").map(|(body, _)| body))
+        .expect("dxfs xml");
+    assert!(!dxf_xml.contains("<patternFill patternType=\"none\"/>"));
 }

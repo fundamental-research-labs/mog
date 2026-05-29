@@ -163,7 +163,7 @@ pub fn parse_shared_strings_with_context(
                 ErrorCode::MalformedXml,
                 "Missing <sst> element in sharedStrings.xml",
             );
-            return (strings, phonetic_xml);
+            return (strings, phonetic_xml, root_ext_lst_xml);
         }
     };
 

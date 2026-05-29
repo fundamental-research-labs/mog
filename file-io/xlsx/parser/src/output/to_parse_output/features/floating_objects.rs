@@ -624,7 +624,7 @@ pub(crate) fn convert_floating_objects(
                 let relationship_ids = gf
                     .graphic_xml
                     .as_deref()
-                    .map(crate::domain::drawings::reader::raw::relationship_ids_in_raw)
+                    .map(crate::domain::drawings::relationship_ids_in_raw)
                     .unwrap_or_default();
                 let relationships = drawing
                     .opc_rels

@@ -229,6 +229,8 @@ fn roundtrip_named_ranges() {
             help: Some("sheet-local help".to_string()),
             status_bar: Some("sheet-local status".to_string()),
             xlm: true,
+            function_group_id: None,
+            shortcut_key: None,
             function: true,
             vb_procedure: true,
             publish_to_server: true,
@@ -458,6 +460,7 @@ fn roundtrip_comprehensive() {
                     hidden: false,
                     best_fit: false,
                     collapsed: false,
+                phonetic: false,
                 }],
                 ..Default::default()
             },

@@ -77,6 +77,7 @@ fn test_drawing_data_serde_round_trip() {
         },
         recognitions,
         background_color: Some("#eee".to_string()),
+        ooxml: None,
     };
 
     let json = serde_json::to_string_pretty(&data).unwrap();

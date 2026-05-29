@@ -6,7 +6,7 @@ use crate::infra::scanner::{
 };
 use crate::infra::xml::decode_xml_entities_string;
 use domain_types::domain::pivot::{
-    PivotFieldOoxmlPreservation, PivotPreservedXmlBlock, PivotRawXmlAttribute,
+    PivotFieldOoxmlPreservation, PivotRawXmlBlock, PivotRawXmlAttribute,
     PivotTableOoxmlPreservation,
 };
 
@@ -142,7 +142,7 @@ fn collect_direct_children(
     xml: &[u8],
     parent: ElementSpan,
     typed_children: &[&str],
-) -> Vec<PivotPreservedXmlBlock> {
+) -> Vec<PivotRawXmlBlock> {
     let mut blocks = Vec::new();
     let mut pos = parent.tag_end;
     while let Some(lt) = find_lt_simd(xml, pos) {
@@ -161,7 +161,7 @@ fn collect_direct_children(
             break;
         };
         if !typed_children.contains(&local.as_str()) {
-            blocks.push(PivotPreservedXmlBlock {
+            blocks.push(PivotRawXmlBlock {
                 local_name: local,
                 xml: String::from_utf8_lossy(&xml[span.start..span.end]).to_string(),
             });
@@ -245,11 +245,8 @@ fn find_child_span(xml: &[u8], parent: ElementSpan, name: &[u8]) -> Option<Eleme
 }
 
 fn find_child_start(xml: &[u8], parent: ElementSpan, name: &[u8], pos: usize) -> Option<usize> {
-    while let Some(start) = crate::infra::scanner::find_tag_simd(xml, name, pos) {
-        if start >= parent.end {
-            return None;
-        }
-        return Some(start);
+    if let Some(start) = crate::infra::scanner::find_tag_simd(xml, name, pos) {
+        return (start < parent.end).then_some(start);
     }
     None
 }

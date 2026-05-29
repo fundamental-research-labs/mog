@@ -1,4 +1,5 @@
 use super::*;
+use domain_types::PackageFidelityMetadata;
 
 fn graph_options(package_fidelity: Option<PackageFidelityMetadata>) -> ModeledWorkbookGraphOptions {
     ModeledWorkbookGraphOptions {

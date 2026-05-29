@@ -82,13 +82,17 @@ fn write_border_side(w: &mut XmlWriter, element_name: &str, side: &Option<Border
             if *style != BorderStyle::None {
                 w.attr("style", style.to_ooxml());
             }
-            w.end_attrs();
 
             if let Some(c) = color {
+                w.end_attrs();
                 write_color(w, "color", c);
+                w.end_element(element_name);
+            } else if *style == BorderStyle::Thin {
+                w.self_close();
+            } else {
+                w.end_attrs();
+                w.end_element(element_name);
             }
-
-            w.end_element(element_name);
         }
         _ => {
             w.start_element(element_name).self_close();

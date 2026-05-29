@@ -177,7 +177,7 @@ pub struct PivotRawXmlAttribute {
 /// Raw XML child block captured under a pivot-owned element.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PivotPreservedXmlBlock {
+pub struct PivotRawXmlBlock {
     pub local_name: String,
     pub xml: String,
 }
@@ -189,7 +189,7 @@ pub struct PivotFieldOoxmlPreservation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<PivotRawXmlAttribute>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<PivotPreservedXmlBlock>,
+    pub children: Vec<PivotRawXmlBlock>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
 }
@@ -229,7 +229,7 @@ pub struct PivotTableOoxmlPreservation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_attributes: Vec<PivotRawXmlAttribute>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<PivotPreservedXmlBlock>,
+    pub children: Vec<PivotRawXmlBlock>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<PivotFieldOoxmlPreservation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

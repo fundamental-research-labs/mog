@@ -82,6 +82,7 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
         &[],
         &std::collections::HashMap::new(),
         &std::collections::HashMap::<String, Vec<u8>>::new(),
+        None,
     );
 
     assert_eq!(sheet_data.cells.len(), 1);

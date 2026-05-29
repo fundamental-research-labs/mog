@@ -38,6 +38,7 @@ fn color_scale_roundtrip() {
         priority: 3,
         stop_if_true: None,
         color_scale: CFColorScale {
+            points: vec![],
             min_point: CFColorPoint {
                 value: CFValueRef::Min,
                 color: "#FF0000".into(),
@@ -80,6 +81,7 @@ fn data_bar_roundtrip() {
             positive_color: "#638EC6".into(),
             negative_color: Some("#FF0000".into()),
             border_color: None,
+            negative_border_color: None,
             show_border: None,
             gradient: Some(true),
             direction: None,
@@ -104,16 +106,19 @@ fn icon_set_roundtrip() {
             icon_set_name: IconSetType::ThreeArrows,
             reverse_order: Some(false),
             show_icon_only: None,
+            percent: None,
             thresholds: vec![
                 CFIconThreshold {
                     value_type: CfvoType::Percent,
                     value: Some("33".into()),
                     gte: true,
+                    ext_lst_xml: None,
                 },
                 CFIconThreshold {
                     value_type: CfvoType::Percent,
                     value: Some("67".into()),
                     gte: true,
+                    ext_lst_xml: None,
                 },
             ],
             custom_icons: vec![],

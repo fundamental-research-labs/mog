@@ -361,7 +361,7 @@ fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
 
 fn is_opc_content_types_ns(ns: &ResolveResult<'_>) -> bool {
     match ns {
-        ResolveResult::Bound(Namespace(uri)) => uri == CONTENT_TYPES_NS.as_bytes(),
+        ResolveResult::Bound(Namespace(uri)) => *uri == CONTENT_TYPES_NS.as_bytes(),
         ResolveResult::Unbound => true,
         ResolveResult::Unknown(_) => false,
     }
@@ -700,9 +700,15 @@ mod tests {
     #[test]
     fn test_matches_tag_at() {
         let xml = b"<Default Extension=\"xml\"/>";
-        assert!(matches_tag_at(xml, 0, b"Default"));
-        assert!(!matches_tag_at(xml, 0, b"Override"));
-        assert!(!matches_tag_at(xml, 1, b"Default"));
+        let mut reader = NsReader::from_reader(xml.as_slice());
+        let mut buf = Vec::new();
+        match reader.read_event_into(&mut buf).expect("event") {
+            Event::Empty(start) => {
+                assert_eq!(start.local_name().as_ref(), b"Default");
+                assert_ne!(start.local_name().as_ref(), b"Override");
+            }
+            event => panic!("expected empty element, got {event:?}"),
+        }
     }
 
     #[test]

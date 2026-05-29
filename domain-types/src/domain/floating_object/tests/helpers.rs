@@ -339,6 +339,7 @@ pub(super) fn drawing_data_full() -> DrawingData {
         tool_state: InkToolState::default(),
         recognitions,
         background_color: Some("#ffffff".to_string()),
+        ooxml: None,
     }
 }
 

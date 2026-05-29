@@ -31,11 +31,13 @@ fn basic_ooxml_data_bar() -> DataBar {
                 cfvo_type: CfvoType::Min,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
             Cfvo {
                 cfvo_type: CfvoType::Max,
                 val: None,
                 gte: true,
+                ext_lst_xml: None,
             },
         ],
         color: CfColor {

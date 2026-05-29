@@ -64,9 +64,11 @@ fn values_with_calendar_type_and_date_group_items_round_trip() {
             }),
             hidden_button: false,
             show_button: true,
+        ext_lst_raw: None,
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -88,6 +90,7 @@ fn top10_preserves_filter_val() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -110,6 +113,7 @@ fn color_filter_preserves_dxf_id() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -131,6 +135,7 @@ fn icon_filter_round_trips() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -153,6 +158,7 @@ fn dynamic_filter_preserves_val_and_iso() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -172,9 +178,11 @@ fn filter_column_hidden_and_show_button_round_trip() {
             }),
             hidden_button: true,
             show_button: false,
+        ext_lst_raw: None,
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt, original);
@@ -190,6 +198,7 @@ fn childless_and_explicit_empty_values_filters_round_trip_distinctly() {
                 hidden_button: true,
                 show_button: false,
                 filter_type: None,
+                ext_lst_raw: None,
             },
             FilterColumn {
                 col_index: 1,
@@ -204,6 +213,7 @@ fn childless_and_explicit_empty_values_filters_round_trip_distinctly() {
         ],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
 
     let rt = round_trip(original.clone());
@@ -245,6 +255,7 @@ fn custom_filter_round_trips_with_two_conditions() {
         }],
         sort: None,
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     // Note: in this path, `CellValue::Text("10")` survives as `Text("10")`
@@ -299,6 +310,7 @@ fn autofilter_with_nested_sort_state_round_trips() {
             ..Default::default()
         }),
         xr_uid: None,
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt.sort, original.sort);
@@ -314,6 +326,7 @@ fn xr_uid_round_trips() {
         columns: Vec::new(),
         sort: None,
         xr_uid: Some("{00000000-0001-0000-0000-000000000000}".to_string()),
+        ext_lst_raw: None,
     };
     let rt = round_trip(original.clone());
     assert_eq!(rt.xr_uid, original.xr_uid);

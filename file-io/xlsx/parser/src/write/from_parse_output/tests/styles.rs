@@ -398,6 +398,7 @@ fn test_col_styles_roundtrip() {
                 hidden: false,
                 best_fit: false,
                 collapsed: false,
+                phonetic: false,
             }],
             ..Default::default()
         },

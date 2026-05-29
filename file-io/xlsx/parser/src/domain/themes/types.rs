@@ -365,9 +365,7 @@ impl Theme {
                         is_self_closing = true;
                     }
                 }
-                if is_self_closing {
-                    theme.object_defaults_xml = Some(Vec::new());
-                } else {
+                if !is_self_closing {
                     // Find the end of the opening tag '>'
                     if let Some(gt_offset) = xml[od_start..].iter().position(|&b| b == b'>') {
                         let inner_start = od_start + gt_offset + 1;
@@ -391,9 +389,7 @@ impl Theme {
                         is_self_closing = true;
                     }
                 }
-                if is_self_closing {
-                    theme.extra_clr_scheme_lst_xml = Some(Vec::new());
-                } else {
+                if !is_self_closing {
                     if let Some(gt_offset) = xml[ecsl_start..].iter().position(|&b| b == b'>') {
                         let inner_start = ecsl_start + gt_offset + 1;
                         if let Some(close_pos) =

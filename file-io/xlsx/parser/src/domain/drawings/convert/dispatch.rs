@@ -9,6 +9,7 @@ use super::outcome::{
 use super::pictures::picture_to_image_props;
 use super::shapes::shape_to_text_box;
 use super::smartart::smartart_to_write_data;
+use super::write::OpaqueDrawingObject;
 use super::{read, write};
 
 /// Convert a read-side `DrawingContent` to a write-side `DrawingObject`.
@@ -68,7 +69,7 @@ pub fn convert_drawing_content_with_outcome(
                 DrawingConversionOutcome::unsupported("unknown drawing content without raw XML")
             } else {
                 DrawingConversionOutcome::opaque(
-                    write::DrawingObject::OpaqueRaw(write::OpaqueDrawingObject {
+                    write::DrawingObject::OpaqueRaw(OpaqueDrawingObject {
                         raw_xml: opaque.raw_xml.clone(),
                     }),
                     relationship_ids_for_opaque_unknown(opaque),

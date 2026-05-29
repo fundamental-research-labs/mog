@@ -320,7 +320,7 @@ pub struct PivotFieldDef {
     /// Unmodeled pivotField attributes preserved from imported OOXML.
     pub preserved_attributes: Vec<PivotRawXmlAttribute>,
     /// Unmodeled pivotField child XML preserved from imported OOXML.
-    pub preserved_children: Vec<domain_types::domain::pivot::PivotPreservedXmlBlock>,
+    pub preserved_children: Vec<domain_types::domain::pivot::PivotRawXmlBlock>,
 }
 
 impl PivotFieldDef {

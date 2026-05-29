@@ -4,27 +4,24 @@
 //! relationship IDs. Existing ZIP assembly can consume the resolved graph while
 //! feature writers migrate off ad-hoc relationship/content-type construction.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-
-use domain_types::PackageFidelityMetadata;
+use std::collections::{HashMap, HashSet};
 
 use super::relationships::{Relationship, RelationshipManager};
 use super::write_error::{PackageIntegrityIssue, WriteError};
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
-    CT_PIVOT_TABLE, CT_PNG, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME,
-    CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, REL_CHART,
+    CT_PIVOT_TABLE, CT_PNG, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS,
+    CT_THEME, CT_VOLATILE_DEPENDENCIES, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, REL_CHART,
     REL_CHART_EX, REL_COMMENTS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
     REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_HYPERLINK,
     REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
-    REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE, REL_THEME,
-    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
+    REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
+    REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
 };
 use crate::domain::content_types::write::{
     CT_CHART_COLOR_STYLE, CT_CHART_STYLE, ContentTypesManager,
 };
-use crate::infra::opc::OoxmlRelationshipType;
 use crate::write::package_ownership::AuxiliaryPackagePartPolicy;
 
 mod builder;
@@ -57,7 +54,7 @@ pub(super) use hints::*;
 pub(super) use opaque::*;
 pub(super) use paths::{
     normalize_external_link_part_path, normalize_part_path, owner_part_path_from_rels_path,
-    owner_rels_path, relationship_target_part_path, relative_path, relative_target,
+    owner_rels_path, relationship_target_part_path, relative_target,
 };
 pub(super) use resolution::*;
 pub(super) use validation::*;

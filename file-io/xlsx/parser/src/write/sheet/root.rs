@@ -32,12 +32,14 @@ pub(super) fn write_worksheet_start(w: &mut XmlWriter, sheet: &SheetWriter) {
         }
     }
     if let Some(ref ns) = sheet.root_namespaces {
-        mc_builder.add_from_namespace_map(ns);
-        if has_descent {
-            mc_builder.add("x14ac");
-        }
-        if has_uid {
-            mc_builder.add("xr");
+        if ns.has_prefix("mc") {
+            mc_builder.add_from_namespace_map(ns);
+            if has_descent {
+                mc_builder.add("x14ac");
+            }
+            if has_uid {
+                mc_builder.add("xr");
+            }
         }
     }
 

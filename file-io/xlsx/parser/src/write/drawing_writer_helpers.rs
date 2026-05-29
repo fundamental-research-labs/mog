@@ -80,8 +80,12 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                         domain_types::domain::floating_object::DrawingObjectOoxml::GraphicFrame {
                             graphic_frame,
                         } => crate::domain::drawings::write::DrawingObject::GraphicFrame(
-                            crate::domain::drawings::write::OpaqueGraphicFrame {
-                                raw_xml: graphic_frame.graphic_xml.clone().unwrap_or_default(),
+                            {
+                                let raw_xml = graphic_frame.graphic_xml.clone().unwrap_or_default();
+                                if is_chart_graphic_frame_xml(&raw_xml) {
+                                    continue;
+                                }
+                                crate::domain::drawings::write::OpaqueGraphicFrame { raw_xml }
                             },
                         ),
                         domain_types::domain::floating_object::DrawingObjectOoxml::Unknown => {
@@ -135,4 +139,11 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
         image_rels,
         drawing_rels,
     }
+}
+
+fn is_chart_graphic_frame_xml(xml: &str) -> bool {
+    xml.contains("schemas.openxmlformats.org/drawingml/2006/chart")
+        || xml.contains("schemas.microsoft.com/office/drawing/2014/chartex")
+        || xml.contains("<c:chart")
+        || xml.contains("<cx:chart")
 }

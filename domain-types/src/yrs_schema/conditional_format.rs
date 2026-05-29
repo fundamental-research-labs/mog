@@ -736,6 +736,7 @@ mod tests {
                 axis_position: Some(DataBarAxisPosition::Middle),
                 negative_color: None,
                 border_color: None,
+                negative_border_color: None,
                 show_border: None,
                 gradient: Some(true),
                 axis_color: None,
@@ -757,16 +758,19 @@ mod tests {
                 icon_set_name: IconSetType::ThreeArrows,
                 reverse_order: Some(false),
                 show_icon_only: None,
+                percent: None,
                 thresholds: vec![
                     CFIconThreshold {
                         value_type: CfvoType::Percent,
                         value: Some("33".into()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     CFIconThreshold {
                         value_type: CfvoType::Percent,
                         value: Some("67".into()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                 ],
                 custom_icons: vec![],

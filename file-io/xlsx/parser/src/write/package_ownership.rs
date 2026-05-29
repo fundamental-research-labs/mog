@@ -241,7 +241,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "metadata valueMetadata mutation",
             "cell vm metadata mutation",
         ],
-        opaque_policy: "richData clusters require WorkbookMetadata/WorkbookRichData ownership and current metadata/vm reference validation before imported package parts are emitted",
+        opaque_policy: "richData clusters require typed WorkbookMetadata/WorkbookRichData ownership and current metadata/vm reference validation before imported package parts are emitted",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::PivotTables,
@@ -331,7 +331,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "external link add/update/delete",
             "defined name/formula external reference mutation",
         ],
-        opaque_policy: "external link package parts require typed ExternalLink state",
+        opaque_policy: "external link package parts require typed external link state",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::DocumentProperties,
@@ -524,7 +524,7 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         api_exposure: ApiExposureLevel::Editable,
         production_writer: "write::from_parse_output workbook/sheet writers",
         package_feature_owner: Some(PackageFeatureOwner::CoreWorkbook),
-        auxiliary_policy: None,
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::UnsupportedNeedsModel),
         opaque_fallback_policy: OpaqueFallbackPolicy::None,
         unsupported_diagnostic_policy: "unsupported MustUnderstand/AlternateContent branches are diagnosed at the MCE resolver; chartsheets/dialogsheets and calcChain gaps use unsupported-needs-model or intentional-recalculation-drop diagnostics",
         dirty_invalidation_triggers: &[

@@ -331,6 +331,7 @@ fn test_col_widths_and_row_heights() {
                 hidden: false,
                 best_fit: false,
                 collapsed: false,
+                phonetic: false,
             }],
             row_heights: vec![RowDimension {
                 row: 0,

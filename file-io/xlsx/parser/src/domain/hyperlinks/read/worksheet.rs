@@ -21,14 +21,14 @@ impl Hyperlink {
             return None;
         }
 
-        hyperlink.r_id =
-            parse_string_attr(tag, b"r:id=\"").or_else(|| parse_string_attr(tag, b":id=\""));
+        hyperlink.r_id = parse_string_attr(tag, b"r:id=\"")
+            .or_else(|| parse_prefixed_local_attr(tag, b"id"));
         hyperlink.location = parse_string_attr(tag, b"location=\"");
         hyperlink.display = parse_string_attr(tag, b"display=\"");
         hyperlink.tooltip = parse_string_attr(tag, b"tooltip=\"");
         hyperlink.id = parse_string_attr(tag, b"id=\"");
-        hyperlink.uid =
-            parse_string_attr(tag, b"xr:uid=\"").or_else(|| parse_string_attr(tag, b":uid=\""));
+        hyperlink.uid = parse_string_attr(tag, b"xr:uid=\"")
+            .or_else(|| parse_prefixed_local_attr(tag, b"uid"));
 
         if let Some(ref loc) = hyperlink.location {
             hyperlink.target = Some(loc.clone());
@@ -38,6 +38,30 @@ impl Hyperlink {
 
         Some(hyperlink)
     }
+}
+
+fn parse_prefixed_local_attr(xml: &[u8], local_name: &[u8]) -> Option<String> {
+    let mut pos = 0;
+    while pos < xml.len() {
+        let colon = memchr::memchr(b':', &xml[pos..]).map(|offset| pos + offset)?;
+        let name_start = xml[..colon]
+            .iter()
+            .rposition(|b| matches!(*b, b' ' | b'\t' | b'\n' | b'\r' | b'<'))
+            .map_or(0, |idx| idx + 1);
+        if name_start < colon
+            && xml.get(colon + 1..colon + 1 + local_name.len()) == Some(local_name)
+        {
+            let name_end = colon + 1 + local_name.len();
+            if matches!(xml.get(name_end), Some(b'=') | Some(b' ' | b'\t' | b'\n' | b'\r')) {
+                let attr_name = &xml[name_start..name_end];
+                if let Some(value) = parse_string_attr(xml, attr_name) {
+                    return Some(value);
+                }
+            }
+        }
+        pos = colon + 1;
+    }
+    None
 }
 
 impl Hyperlinks {

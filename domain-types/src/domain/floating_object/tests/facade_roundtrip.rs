@@ -414,6 +414,7 @@ fn test_drawing_round_trip() {
             tool_state: InkToolState::default(),
             recognitions,
             background_color: Some("#ffffff".to_string()),
+            ooxml: None,
         }),
     };
     let json = serde_json::to_string(&obj).unwrap();

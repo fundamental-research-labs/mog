@@ -120,6 +120,7 @@ fn cf_color_scale_rule_round_trips_with_typed_value_refs() {
             priority: 1,
             stop_if_true: None,
             color_scale: CFColorScale {
+                points: Vec::new(),
                 min_point: CFColorPoint {
                     value: CFValueRef::Min,
                     color: "#FF0000".to_string(),
@@ -183,16 +184,19 @@ fn cf_icon_set_rule_round_trips() {
                 icon_set_name: IconSetType::ThreeArrows,
                 reverse_order: Some(true),
                 show_icon_only: None,
+                percent: None,
                 thresholds: vec![
                     CFIconThreshold {
                         value_type: ooxml_types::cond_format::CfvoType::Percent,
                         value: Some("33".into()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                     CFIconThreshold {
                         value_type: ooxml_types::cond_format::CfvoType::Percent,
                         value: Some("67".into()),
                         gte: true,
+                        ext_lst_xml: None,
                     },
                 ],
                 custom_icons: Vec::new(),
@@ -243,6 +247,7 @@ fn cf_data_bar_rule_round_trips_with_typed_value_refs() {
                 positive_color: "#638EC6".to_string(),
                 negative_color: None,
                 border_color: None,
+                negative_border_color: None,
                 show_border: None,
                 gradient: None,
                 direction: None,

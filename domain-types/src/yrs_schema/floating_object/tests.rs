@@ -764,6 +764,7 @@ fn test_drawing_roundtrip() {
             tool_state: InkToolState::default(),
             recognitions: BTreeMap::new(),
             background_color: Some("#ffffff".to_string()),
+            ooxml: None,
         }),
     };
 

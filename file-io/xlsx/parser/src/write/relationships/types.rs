@@ -42,18 +42,6 @@ impl Relationship {
 
     /// Check if this is an external relationship
     pub fn is_external(&self) -> bool {
-        self.target_mode
-            .as_deref()
-            .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
-    }
-}
-
-pub(super) fn canonical_target_mode(mode: &str) -> Option<&'static str> {
-    if mode.eq_ignore_ascii_case("External") {
-        Some("External")
-    } else if mode.eq_ignore_ascii_case("Internal") {
-        Some("Internal")
-    } else {
-        None
+        self.target_mode.as_deref() == Some("External")
     }
 }

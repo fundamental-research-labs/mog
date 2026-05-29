@@ -41,8 +41,15 @@ pub fn recover_cell_reference(raw: &str) -> (u32, u32) {
     let col = col_num.saturating_sub(1);
 
     let row = if col_end < raw.len() {
-        raw[col_end..].parse::<u32>().unwrap_or(1).saturating_sub(1)
+        let row_str = &raw[col_end..];
+        if row_str.is_empty() || !row_str.bytes().all(|b| b.is_ascii_digit()) {
+            return (0, 0);
+        }
+        row_str.parse::<u32>().unwrap_or(1).saturating_sub(1)
     } else {
+        if col_end > 3 {
+            return (0, 0);
+        }
         0
     };
 
@@ -68,35 +75,32 @@ pub fn recover_number(raw: &str) -> f64 {
         return n;
     }
 
-    let cleaned: String = raw
-        .chars()
-        .filter(|c| {
-            c.is_ascii_digit() || *c == '.' || *c == '-' || *c == '+' || *c == 'e' || *c == 'E'
-        })
-        .collect();
-
-    if let Ok(n) = cleaned.parse::<f64>() {
-        return n;
-    }
-
     let mut num_str = String::new();
     let mut has_decimal = false;
+    let mut has_exponent = false;
+    let mut expect_exponent_sign = false;
     let mut started = false;
 
     for c in raw.chars() {
         if c == '-' || c == '+' {
-            if started {
+            if started && !expect_exponent_sign {
                 break;
             }
             num_str.push(c);
             started = true;
+            expect_exponent_sign = false;
         } else if c.is_ascii_digit() {
             num_str.push(c);
             started = true;
+            expect_exponent_sign = false;
         } else if c == '.' && !has_decimal {
             num_str.push(c);
             has_decimal = true;
             started = true;
+        } else if matches!(c, 'e' | 'E') && started && !has_exponent {
+            num_str.push(c);
+            has_exponent = true;
+            expect_exponent_sign = true;
         } else if started {
             break;
         }

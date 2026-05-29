@@ -65,6 +65,7 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
     for child in direct_child_elements(element) {
         let child_xml = child.full_slice(element);
         match child.local_name {
+            b"nvGrpSpPr" | b"grpSpPr" => {}
             b"pic" => {
                 if let Some(pic) = parse_picture(child_xml, 0) {
                     group.children.push(DrawingContent::Picture(pic));

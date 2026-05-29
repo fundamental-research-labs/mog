@@ -60,6 +60,7 @@ fn sort_state_typed_field_round_trips_losslessly() {
                 icon_id: None,
             },
         ],
+        ext_lst_raw: None,
     };
 
     let po = make_sheet_with_sort_state(original.clone());

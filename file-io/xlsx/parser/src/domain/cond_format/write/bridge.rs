@@ -641,6 +641,7 @@ mod tests {
             color_tint: None,
             color_indexed: None,
             color_auto: None,
+            ext_lst_xml: None,
         }
     }
 
@@ -663,6 +664,7 @@ mod tests {
                     max_length: None,
                     positive_color: "#4472C4".to_string(),
                     negative_color: Some("#FF0000".to_string()),
+                    negative_border_color: None,
                     border_color: Some("#222222".to_string()),
                     show_border: Some(true),
                     gradient: Some(false),
@@ -715,6 +717,7 @@ mod tests {
                     max_length: None,
                     positive_color: "#4472C4".to_string(),
                     negative_color: None,
+                    negative_border_color: None,
                     border_color: None,
                     show_border: None,
                     gradient: None,
@@ -766,6 +769,7 @@ mod tests {
                     max_length: None,
                     positive_color: "#4472C4".to_string(),
                     negative_color: None,
+                    negative_border_color: None,
                     border_color: None,
                     show_border: None,
                     gradient: None,
@@ -805,6 +809,7 @@ mod tests {
                     max_length: Some(90),
                     positive_color: "#4472C4".to_string(),
                     negative_color: None,
+                    negative_border_color: None,
                     border_color: None,
                     show_border: Some(false),
                     gradient: Some(true),

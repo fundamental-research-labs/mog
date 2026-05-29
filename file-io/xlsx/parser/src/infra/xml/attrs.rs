@@ -204,7 +204,7 @@ fn find_attr_name(xml: &[u8], attr_name: &[u8]) -> Option<usize> {
         if b == first
             && end <= xml.len()
             && &xml[pos..end] == attr_name
-            && (pos == 0 || matches!(xml[pos - 1], b' ' | b'\t' | b'\n' | b'\r' | b'<'))
+            && (pos == 0 || matches!(xml[pos - 1], b' ' | b'\t' | b'\n' | b'\r'))
             && (end >= xml.len() || matches!(xml[end], b'=' | b' ' | b'\t' | b'\n' | b'\r'))
         {
             return Some(pos);

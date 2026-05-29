@@ -46,4 +46,5 @@ pub use parse::styling::{
     parse_color, parse_dash_style, parse_effect_list, parse_fill, parse_outline,
     parse_shape_properties, parse_shape_style, parse_transform_2d, scheme_name_to_index,
 };
+pub(crate) use reader::raw::relationship_ids_in_raw;
 pub use text::parse_text_body;

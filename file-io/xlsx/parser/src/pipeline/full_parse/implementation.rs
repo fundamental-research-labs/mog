@@ -947,7 +947,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         root_relationships,
         workbook_relationships,
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),
-        workbook_sheet_inventory,
+        workbook_sheet_inventory: workbook_sheet_inventory.clone(),
         imported_media_parts,
         imported_ole_parts,
         raw_metadata_xml,

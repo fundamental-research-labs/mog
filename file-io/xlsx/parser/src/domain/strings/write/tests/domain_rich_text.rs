@@ -22,6 +22,7 @@ fn domain_rich_text_preserves_color_and_font_fields() {
             bold: true,
             italic: true,
             underline: true,
+            underline_style: None,
             strikethrough: true,
             font_size: Some(13.5),
             color: Some("FF00AA".to_string()),
@@ -34,6 +35,10 @@ fn domain_rich_text_preserves_color_and_font_fields() {
             scheme: Some("minor".to_string()),
             vert_align: Some("superscript".to_string()),
             preserve_space: true,
+            outline: None,
+            shadow: None,
+            condense: None,
+            extend: None,
         }],
         ..Default::default()
     });

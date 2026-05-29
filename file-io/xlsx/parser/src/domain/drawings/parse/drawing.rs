@@ -73,7 +73,7 @@ fn parse_wrapped_anchor(mc_xml: &[u8], containing_xml: Option<&[u8]>) -> Option<
     )?;
     let branch_xml = &mc_xml[branch.start..branch.end];
 
-    for child in direct_child_elements(branch_xml) {
+    if let Some(child) = document_element(branch_xml) {
         let anchor_xml = child.full_slice(branch_xml);
         match child.local_name {
             b"twoCellAnchor" => {

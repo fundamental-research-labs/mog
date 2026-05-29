@@ -163,6 +163,7 @@ fn test_comments_writer_to_xml_rich_text() {
         visible: false,
         shape_id: None,
         xr_uid: None,
+        comment_pr: None,
     };
     writer.add_comment(comment);
 
@@ -501,6 +502,7 @@ fn test_comment_with_preserve_space_roundtrip() {
         visible: false,
         shape_id: None,
         xr_uid: None,
+        comment_pr: None,
     };
     let shape = CommentShape::for_cell("A1");
     writer.add_with_shape(comment, shape);

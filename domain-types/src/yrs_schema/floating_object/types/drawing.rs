@@ -73,6 +73,7 @@ pub(super) fn read_drawing_or_legacy<R: ReadTxn>(
                 tool_state: old_tool_state,
                 recognitions: old_recognitions,
                 background_color: old_bg,
+                ooxml: None,
             }),
         });
     }
@@ -82,5 +83,6 @@ pub(super) fn read_drawing_or_legacy<R: ReadTxn>(
         tool_state,
         recognitions,
         background_color,
+        ooxml: None,
     })
 }

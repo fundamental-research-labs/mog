@@ -1,4 +1,5 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml_namespaces::{NS_X14, NS_X15, NamespaceMap};
 
 use super::attrs::parse_string_attr;
@@ -86,8 +87,11 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
                 })
             {
                 let content_start = choice_elem_end;
-                let content_end =
-                    find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(xml.len());
+                let choice_end = extract_element_bounds(xml, choice_start)
+                    .map(|(_, end)| end)
+                    .unwrap_or(xml.len());
+                let content_end = closing_start_before(xml, content_start, choice_end)
+                    .unwrap_or(choice_end);
 
                 return McAlternateContentOutcome::ChoiceSelected(McBranch {
                     start: content_start,
@@ -104,11 +108,9 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
             diagnostics.push("mc:Choice missing Requires".to_string());
         }
 
-        let choice_close =
-            find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(choice_elem_end);
-        pos = find_gt_simd(xml, choice_close)
-            .map(|p| p + 1)
-            .unwrap_or(choice_close + 1);
+        pos = extract_element_bounds(xml, choice_start)
+            .map(|(_, end)| end)
+            .unwrap_or(choice_elem_end);
     }
 
     if let Some(fb_start) = find_tag_simd(xml, b"mc:Fallback", 0) {
@@ -121,7 +123,11 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
         }
 
         let content_start = fb_elem_end;
-        let content_end = find_closing_tag(xml, b"mc:Fallback", fb_start).unwrap_or(xml.len());
+        let fallback_end = extract_element_bounds(xml, fb_start)
+            .map(|(_, end)| end)
+            .unwrap_or(xml.len());
+        let content_end = closing_start_before(xml, content_start, fallback_end)
+            .unwrap_or(fallback_end);
 
         return McAlternateContentOutcome::FallbackSelected(McBranch {
             start: content_start,
@@ -143,6 +149,11 @@ pub fn resolve_mc_alternate_content_with_supported_namespaces(
     } else {
         McAlternateContentOutcome::Invalid { diagnostics }
     }
+}
+
+fn closing_start_before(xml: &[u8], content_start: usize, element_end: usize) -> Option<usize> {
+    memchr::memrchr(b'<', xml.get(content_start..element_end)?)
+        .map(|offset| content_start + offset)
 }
 
 pub fn resolve_mc_alternate_content(
@@ -269,8 +280,11 @@ pub fn resolve_mc_alternate_content_v2(
 
             if supported {
                 let content_start = choice_elem_end;
-                let content_end =
-                    find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(xml.len());
+                let choice_end = extract_element_bounds(xml, choice_start)
+                    .map(|(_, end)| end)
+                    .unwrap_or(xml.len());
+                let content_end = closing_start_before(xml, content_start, choice_end)
+                    .unwrap_or(choice_end);
 
                 return McResolution::Resolved(McBranch {
                     start: content_start,
@@ -282,11 +296,9 @@ pub fn resolve_mc_alternate_content_v2(
             }
         }
 
-        let choice_close =
-            find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(choice_elem_end);
-        pos = find_gt_simd(xml, choice_close)
-            .map(|p| p + 1)
-            .unwrap_or(choice_close + 1);
+        pos = extract_element_bounds(xml, choice_start)
+            .map(|(_, end)| end)
+            .unwrap_or(choice_elem_end);
     }
 
     if has_unsupported_choice {
@@ -303,7 +315,11 @@ pub fn resolve_mc_alternate_content_v2(
         }
 
         let content_start = fb_elem_end;
-        let content_end = find_closing_tag(xml, b"mc:Fallback", fb_start).unwrap_or(xml.len());
+        let fallback_end = extract_element_bounds(xml, fb_start)
+            .map(|(_, end)| end)
+            .unwrap_or(xml.len());
+        let content_end = closing_start_before(xml, content_start, fallback_end)
+            .unwrap_or(fallback_end);
 
         return McResolution::Resolved(McBranch {
             start: content_start,
@@ -394,8 +410,11 @@ fn resolve_mc_alternate_content_with_policy(
 
             if supported {
                 let content_start = choice_elem_end;
-                let content_end =
-                    find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(xml.len());
+                let choice_end = extract_element_bounds(xml, choice_start)
+                    .map(|(_, end)| end)
+                    .unwrap_or(xml.len());
+                let content_end = closing_start_before(xml, content_start, choice_end)
+                    .unwrap_or(choice_end);
 
                 return McResolution::Resolved(McBranch {
                     start: content_start,
@@ -406,11 +425,9 @@ fn resolve_mc_alternate_content_with_policy(
             has_unsupported_choice = true;
         }
 
-        let choice_close =
-            find_closing_tag(xml, b"mc:Choice", choice_start).unwrap_or(choice_elem_end);
-        pos = find_gt_simd(xml, choice_close)
-            .map(|p| p + 1)
-            .unwrap_or(choice_close + 1);
+        pos = extract_element_bounds(xml, choice_start)
+            .map(|(_, end)| end)
+            .unwrap_or(choice_elem_end);
     }
 
     if preserve_unsupported && has_unsupported_choice {
@@ -434,7 +451,11 @@ fn resolve_mc_alternate_content_with_policy(
         }
 
         let content_start = fb_elem_end;
-        let content_end = find_closing_tag(xml, b"mc:Fallback", fb_start).unwrap_or(xml.len());
+        let fallback_end = extract_element_bounds(xml, fb_start)
+            .map(|(_, end)| end)
+            .unwrap_or(xml.len());
+        let content_end = closing_start_before(xml, content_start, fallback_end)
+            .unwrap_or(fallback_end);
 
         return McResolution::Resolved(McBranch {
             start: content_start,
@@ -454,6 +475,11 @@ fn resolve_namespace_prefix(
     namespace_decl_in_start_tag(xml, prefix)
         .or_else(|| containing_xml.and_then(|ctx| namespace_decl_in_start_tag(ctx, prefix)))
         .or_else(|| namespace_decl_anywhere(xml, prefix))
+        .or_else(|| match prefix {
+            "x14" => Some(NS_X14.to_string()),
+            "x15" => Some(NS_X15.to_string()),
+            _ => None,
+        })
 }
 
 fn namespace_decl_in_start_tag(xml: &[u8], prefix: &str) -> Option<String> {

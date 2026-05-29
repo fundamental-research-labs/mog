@@ -8,6 +8,9 @@ use crate::output::results::{
     CELL_TYPE_VAL_STRING as CELL_TYPE_STRING,
 };
 use crate::output::results::{FullCellData, FullParsedSheet};
+use crate::output::results::{
+    CellMetadataBlock, CellMetadataRecord, MetadataOutput, MetadataTypeOutput,
+};
 use domain_types::ImportedCellProjectionRole;
 use value_types::{CellError, CellValue};
 
@@ -36,7 +39,7 @@ fn test_resolve_cell_value_number() {
         formula: None,
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         vm: None,
         phonetic: false,
         date_lexical_value: None,
@@ -64,7 +67,17 @@ fn projection_roles_preserve_authored_cm_cells_and_classify_only_proven_spills()
         ],
         ..FullParsedSheet::default()
     };
-    let result = threading_result(sheet, None, Vec::new());
+    let mut result = threading_result(sheet, None, Vec::new());
+    result.metadata = Some(MetadataOutput {
+        metadata_types: vec![MetadataTypeOutput {
+            name: "XLDAPR".to_string(),
+            ..Default::default()
+        }],
+        cell_metadata: vec![CellMetadataBlock {
+            records: vec![CellMetadataRecord { t: 1, v: 0 }],
+        }],
+        ..Default::default()
+    });
 
     let (output, _diagnostics) = full_parse_result_to_parse_output(&result);
     let cells = &output.sheets[0].cells;
@@ -96,7 +109,7 @@ fn projection_roles_preserve_authored_cm_cells_and_classify_only_proven_spills()
         .iter()
         .find(|cell| cell.row == 5 && cell.col == 30)
         .expect("authored cm cell is preserved");
-    assert!(authored_cm.cm);
+    assert_eq!(authored_cm.cell_metadata_index, Some(1));
     assert!(authored_cm.formula.is_none());
     assert_eq!(
         authored_cm.original_value.as_deref(),
@@ -115,7 +128,7 @@ fn test_resolve_cell_value_string() {
         formula: None,
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         vm: None,
         phonetic: false,
         date_lexical_value: None,
@@ -143,7 +156,7 @@ fn test_resolve_cell_value_bool() {
         formula: None,
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         vm: None,
         phonetic: false,
         date_lexical_value: None,
@@ -171,7 +184,7 @@ fn test_resolve_cell_value_empty() {
         formula: None,
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         vm: None,
         phonetic: false,
         date_lexical_value: None,
@@ -196,7 +209,7 @@ fn test_convert_cell_with_formula() {
         formula: Some("=A1+B1".to_string()),
         force_recalc: false,
         array_ref: None,
-        cm: false,
+        cell_metadata_index: None,
         vm: None,
         phonetic: false,
         date_lexical_value: None,

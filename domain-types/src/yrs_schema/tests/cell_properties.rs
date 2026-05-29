@@ -22,7 +22,7 @@ fn cell_properties_hydrates_format_and_metadata_from_one_flat_map() {
         validation: Some("validation-1".to_string()),
         connection_id: Some("connection-1".to_string()),
         style_id: Some(5),
-        cm: true,
+        cell_metadata_index: Some(1),
         vm: Some(7),
         formula_result_type: Some(2),
         has_empty_cached_value: true,

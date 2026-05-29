@@ -13,6 +13,7 @@ use super::relationships;
 use super::types::{ControlAnchor, FormControl, ModernAnchorResult, WorksheetControlRef};
 use super::vml;
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml::{
     MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, parse_string_attr, parse_u32_attr,
     resolve_mc_alternate_content_with_namespace_context,
@@ -60,10 +61,8 @@ pub fn parse_worksheet_controls(xml: &[u8]) -> Vec<WorksheetControlRef> {
 #[allow(clippy::string_slice)]
 pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetControlRef> {
     if let Some(ac_start) = find_tag_simd(worksheet_xml, b"mc:AlternateContent", 0) {
-        let ac_end = find_closing_tag(worksheet_xml, b"mc:AlternateContent", ac_start)
-            .unwrap_or(worksheet_xml.len());
-        let ac_close_tag_end = find_gt_simd(worksheet_xml, ac_end)
-            .map(|p| p + 1)
+        let ac_close_tag_end = extract_element_bounds(worksheet_xml, ac_start)
+            .map(|(_, end)| end)
             .unwrap_or(worksheet_xml.len());
         let ac_block = &worksheet_xml[ac_start..ac_close_tag_end];
 

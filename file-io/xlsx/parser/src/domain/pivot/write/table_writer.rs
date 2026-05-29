@@ -366,7 +366,7 @@ impl PivotTableWriter {
 
 fn write_preserved_children(
     w: &mut XmlWriter,
-    children: &[domain_types::domain::pivot::PivotPreservedXmlBlock],
+    children: &[domain_types::domain::pivot::PivotRawXmlBlock],
     local_names: &[&str],
 ) {
     for child in children {

@@ -59,15 +59,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install WASM build prerequisites
+      - name: Install WASM publish toolchain
         run: |
           rustup target add wasm32-unknown-unknown
-          cargo install wasm-pack
+          cargo install wasm-pack --version 0.14.0 --locked
           sudo apt-get update
           sudo apt-get install -y binaryen brotli
-
-      - name: Build declaration prerequisites
-        run: pnpm typecheck || true
 
       - run: pnpm build:public-artifacts
 

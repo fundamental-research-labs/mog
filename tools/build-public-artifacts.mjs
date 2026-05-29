@@ -278,6 +278,128 @@ function orderedGeneratedAssetPrerequisites(inventory, workspacePackages, rootNa
   return orderWorkspacePackageSet(names, workspacePackages);
 }
 
+function workspacePackageDir(pkg) {
+  return pkg.dir.replace(ROOT + '/', '');
+}
+
+function buildTypeShardDeclarations(workspacePackages, errors) {
+  const typeShardNames = [...workspacePackages.keys()].filter(
+    (name) => name.startsWith('@mog/types-') || name.startsWith('@mog-sdk/types-'),
+  );
+  const orderedTypeShardNames = orderWorkspacePackageSet(typeShardNames, workspacePackages);
+
+  console.log('\n=== Declaration prerequisites ===');
+
+  for (const name of orderedTypeShardNames) {
+    const pkg = workspacePackages.get(name);
+    if (!pkg) {
+      errors.push(`${name}: type shard is not a workspace package`);
+      continue;
+    }
+
+    if (skipTsBuild) {
+      console.log(`  SKIP tsc -b ${name} (${checkOnly ? 'check-only' : 'skip-ts-build'})`);
+      continue;
+    }
+
+    try {
+      run('pnpm', [
+        '-C',
+        workspacePackageDir(pkg),
+        'exec',
+        'tsc',
+        '-b',
+        '.',
+        '--force',
+        '--pretty',
+        'false',
+      ]);
+    } catch (error) {
+      errors.push(`${name}: declaration prerequisite build failed: ${error.message}`);
+    }
+  }
+}
+
+function buildProjectReferenceDeclarations(project, errors) {
+  if (skipTsBuild) {
+    console.log(`  SKIP tsc -b ${project} (${checkOnly ? 'check-only' : 'skip-ts-build'})`);
+    return;
+  }
+
+  try {
+    run('pnpm', ['-C', project, 'exec', 'tsc', '-b', '.', '--force', '--pretty', 'false']);
+  } catch (error) {
+    errors.push(`${project}: declaration prerequisite build failed: ${error.message}`);
+  }
+}
+
+function buildDeclarationPrerequisites(workspacePackages, errors) {
+  buildTypeShardDeclarations(workspacePackages, errors);
+  buildProjectReferenceDeclarations('views/sheet-view', errors);
+}
+
+function buildKernelArtifact(errors) {
+  console.log('\n=== Kernel artifact prerequisite ===');
+
+  if (!skipTsBuild) {
+    try {
+      run('pnpm', ['--filter', '@mog-sdk/kernel', 'build']);
+    } catch (error) {
+      errors.push(`@mog-sdk/kernel: ${error.message}`);
+    }
+  } else {
+    console.log(`  SKIP build @mog-sdk/kernel (${checkOnly ? 'check-only' : 'skip-ts-build'})`);
+  }
+
+  if (!skipTsBuild) {
+    try {
+      run('pnpm', [
+        '-C',
+        'kernel/host-internal',
+        'exec',
+        'tsc',
+        '-b',
+        '.',
+        '--force',
+        '--pretty',
+        'false',
+      ]);
+    } catch (error) {
+      errors.push(`@mog/kernel-host-internal: ${error.message}`);
+    }
+  } else {
+    console.log(
+      `  SKIP tsc -b @mog/kernel-host-internal (${checkOnly ? 'check-only' : 'skip-ts-build'})`,
+    );
+  }
+}
+
+function buildWasmArtifact(workspacePackages, errors) {
+  console.log('\n=== WASM asset artifact ===');
+  const wasmPkg = workspacePackages.get('@mog-sdk/wasm');
+  if (!wasmPkg) {
+    errors.push('@mog-sdk/wasm: binary-wrapper package missing from workspace');
+    return null;
+  }
+
+  if (!skipWasmBuild) {
+    try {
+      run('bash', ['compute/wasm/build.sh', '--profile', 'release']);
+    } catch (error) {
+      errors.push(`@mog-sdk/wasm: ${error.message}`);
+    }
+  } else {
+    console.log(`  SKIP WASM build (${checkOnly ? 'check-only' : 'skip-wasm-build'})`);
+  }
+
+  const missing = verifyPackageFiles(wasmPkg.manifest, wasmPkg.dir);
+  if (missing.length > 0) {
+    errors.push(`@mog-sdk/wasm: missing packaged WASM file(s): ${missing.join(', ')}`);
+  }
+
+  return wasmPkg;
+}
+
 const inventory = loadJsonc(join(ROOT, 'tools/package-inventory.jsonc'));
 const workspacePackages = discoverWorkspacePackages();
 const errors = [];
@@ -329,6 +451,11 @@ for (const name of generatedAssetPrerequisites) {
   }
 }
 
+buildDeclarationPrerequisites(workspacePackages, errors);
+
+const wasmPkg = buildWasmArtifact(workspacePackages, errors);
+let kernelArtifactBuilt = false;
+
 for (const name of shipPublicNames) {
   const pkg = workspacePackages.get(name);
   if (!pkg) {
@@ -339,6 +466,11 @@ for (const name of shipPublicNames) {
   if (!pkg.manifest.scripts?.build) {
     errors.push(`${name}: ship-public package has no build script`);
     continue;
+  }
+
+  if (name === '@mog-sdk/node' && !kernelArtifactBuilt) {
+    buildKernelArtifact(errors);
+    kernelArtifactBuilt = true;
   }
 
   if (!skipTsBuild) {
@@ -387,27 +519,6 @@ if (!hostNative) {
     if (missing.length > 0) {
       errors.push(`${hostNative}: missing packaged native file(s): ${missing.join(', ')}`);
     }
-  }
-}
-
-console.log('\n=== WASM asset artifact ===');
-const wasmPkg = workspacePackages.get('@mog-sdk/wasm');
-if (!wasmPkg) {
-  errors.push('@mog-sdk/wasm: binary-wrapper package missing from workspace');
-} else {
-  if (!skipWasmBuild) {
-    try {
-      run('bash', ['compute/wasm/build.sh', '--profile', 'release']);
-    } catch (error) {
-      errors.push(`@mog-sdk/wasm: ${error.message}`);
-    }
-  } else {
-    console.log(`  SKIP WASM build (${checkOnly ? 'check-only' : 'skip-wasm-build'})`);
-  }
-
-  const missing = verifyPackageFiles(wasmPkg.manifest, wasmPkg.dir);
-  if (missing.length > 0) {
-    errors.push(`@mog-sdk/wasm: missing packaged WASM file(s): ${missing.join(', ')}`);
   }
 }
 

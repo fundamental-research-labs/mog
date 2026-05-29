@@ -22,7 +22,8 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/react": "^19.0.0",
-    "@svgr/cli": "^8.0.0"
+    "@svgr/cli": "^8.0.0",
+    "typescript": "^5.0.0"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

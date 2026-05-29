@@ -897,6 +897,9 @@ importers:
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.15
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
 
   infra/platform:
     dependencies:

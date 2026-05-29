@@ -1,5 +1,6 @@
 use super::common::*;
 use super::*;
+use value_types::FiniteF64;
 
 // ---- PivotTableConfig helper methods ----
 
@@ -149,7 +150,7 @@ fn pivot_table_config_serde_roundtrip() {
         layout: None,
         style: None,
         data_options: None,
-        created_at: Some(1234567890.0),
+        created_at: Some(FiniteF64::must(1234567890.0)),
         updated_at: None,
         calculated_fields: None,
         allow_multiple_filters_per_field: None,

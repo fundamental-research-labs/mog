@@ -855,6 +855,22 @@ export class ComputeCore {
       );
     }
 
+    // Pivot deletion clears the materialized output cells in Rust, but that
+    // clear is not represented as binary mutation patches. Re-read affected
+    // sheet buffers before pivot:deleted subscribers repaint from stale cells.
+    if (result.pivotChanges?.some((change) => change.kind === 'Removed') && this.fetchManager) {
+      const sheetIds = new Set(
+        result.pivotChanges
+          .filter((change) => change.kind === 'Removed')
+          .map((change) => change.sheetId),
+      );
+      await Promise.all(
+        Array.from(sheetIds).map((sheetId) =>
+          this.fetchManager!.forceRefreshSheetViewports(sheetId),
+        ),
+      );
+    }
+
     // Delegate state updates + event emission to handler
     this.mutationHandler?.applyAndNotify(result, 'user', directEdits);
 

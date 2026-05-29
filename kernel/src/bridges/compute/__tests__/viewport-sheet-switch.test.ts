@@ -456,6 +456,75 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     expect(refreshOrder).toBeLessThan(emitOrder);
   });
 
+  it('pivot deletion refreshes affected sheet viewports before pivot events', async () => {
+    const initialBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: 'Region' }],
+    });
+    const refreshedBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: '' }],
+    });
+    let viewportFetchCount = 0;
+    const transport = {
+      call: jest.fn(async (command: string): Promise<any> => {
+        if (command === 'compute_get_viewport_binary') {
+          viewportFetchCount += 1;
+          return viewportFetchCount === 1 ? initialBuffer : refreshedBuffer;
+        }
+        return undefined;
+      }) as any,
+    } as BridgeTransport & { call: jest.Mock };
+    const ctx = makeMockContext();
+    const core = new ComputeCore(ctx, 'test-doc', transport);
+    (core as any)._phase = 'STARTED';
+    core.initMutationHandler();
+
+    await core.refreshViewportForRegion('main:sheet-1', sheetId('sheet-1'), bounds);
+    transport.call.mockClear();
+
+    await core.mutateCore(
+      Promise.resolve([
+        new Uint8Array(),
+        {
+          pivotChanges: [{ sheetId: 'sheet-1', pivotId: 'PivotTable1', kind: 'Removed' }],
+        } as unknown as MutationResult,
+      ]),
+    );
+
+    expect(transport.call).toHaveBeenCalledWith(
+      'compute_get_viewport_binary',
+      expect.objectContaining({
+        docId: 'test-doc',
+        sheetId: 'sheet-1',
+        startRow: 0,
+        startCol: 0,
+      }),
+    );
+    const pivotAccessor = core.getViewportBuffer('main:sheet-1')?.createAccessor();
+    expect(pivotAccessor?.moveTo(0, 0)).toBe(true);
+    expect(pivotAccessor?.displayText).toBe('');
+    expect(ctx.eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'pivot:deleted',
+        sheetId: 'sheet-1',
+        pivotId: 'PivotTable1',
+      }),
+    );
+    const refreshOrder = transport.call.mock.invocationCallOrder.find((_, index) => {
+      const [command] = transport.call.mock.calls[index] ?? [];
+      return command === 'compute_get_viewport_binary';
+    });
+    const emitOrder = (ctx.eventBus.emit as jest.Mock).mock.invocationCallOrder[0];
+    expect(refreshOrder).toBeLessThan(emitOrder);
+  });
+
   it('undo refreshes registered viewports after history replay', async () => {
     const initialBuffer = buildTestViewportBuffer({
       rows: 100,

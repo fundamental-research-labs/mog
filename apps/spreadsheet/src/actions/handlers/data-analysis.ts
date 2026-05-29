@@ -157,7 +157,7 @@ export const CANCEL_GOAL_SEEK: ActionHandler = (deps): ActionResult => {
   return { handled: true };
 };
 
-export const OPEN_FORECAST_SHEET_DIALOG: ActionHandler = (deps): ActionResult => {
+export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
   const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
   const rangeLabel =
@@ -167,11 +167,10 @@ export const OPEN_FORECAST_SHEET_DIALOG: ActionHandler = (deps): ActionResult =>
         ? toA1(activeCell.row, activeCell.col)
         : 'the selected range';
 
-  if (typeof window !== 'undefined') {
-    window.alert(
-      `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${rangeLabel}.`,
-    );
-  }
+  await deps.platform.dialogs.alert(
+    `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${rangeLabel}.`,
+    { type: 'info' },
+  );
   return { handled: true };
 };
 

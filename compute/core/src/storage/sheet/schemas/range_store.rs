@@ -45,7 +45,7 @@ pub(super) fn create_validation_ranges(
     let binding_bytes = binding.to_bytes();
 
     for _range_str in &spec.ranges {
-        let range_id = cell_types::RangeId::from_raw(uuid::Uuid::new_v4().as_u128());
+        let range_id = crate::storage::STORAGE_ID_ALLOC.next_range_id();
         let metadata = compute_document::range::RangeMetadata {
             range_id,
             kind: cell_types::RangeKind::Validation,

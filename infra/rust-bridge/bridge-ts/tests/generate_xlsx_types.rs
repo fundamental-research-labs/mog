@@ -56,6 +56,32 @@ fn read_domain_source(path_from_domain: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e))
 }
 
+fn read_xlsx_sources(paths_from_parser: &[&str]) -> String {
+    paths_from_parser
+        .iter()
+        .map(|path| read_xlsx_source(path))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn xlsx_result_source_files() -> &'static [&'static str] {
+    &[
+        "output/results/cells.rs",
+        "output/results/comments.rs",
+        "output/results/controls.rs",
+        "output/results/errors.rs",
+        "output/results/metadata.rs",
+        "output/results/ole.rs",
+        "output/results/print.rs",
+        "output/results/status.rs",
+        "output/results/styles.rs",
+        "output/results/tables.rs",
+        "output/results/timings.rs",
+        "output/results/views.rs",
+        "output/results/workbook.rs",
+    ]
+}
+
 fn extract_external_types(ts: &str) -> BTreeSet<String> {
     ts.lines()
         .find_map(|line| line.strip_prefix("// External types:"))
@@ -104,7 +130,7 @@ fn extract_declared_external_types(dts: &str) -> BTreeSet<String> {
 
 #[test]
 fn xlsx_results_generate() {
-    let source = read_xlsx_source("output/results.rs");
+    let source = read_xlsx_sources(xlsx_result_source_files());
     let ts = generate_types_from_source(&source, &xlsx_config()).unwrap();
 
     // Should have many interfaces (all the output structs)
@@ -144,7 +170,7 @@ fn xlsx_worksheet_col_width_generated() {
 #[test]
 fn xlsx_files_parse_without_error() {
     let config = xlsx_config();
-    for path in &["output/results.rs"] {
+    for path in xlsx_result_source_files() {
         let source = read_xlsx_source(path);
         let result = generate_types_from_source(&source, &config);
         assert!(
@@ -226,8 +252,20 @@ fn generate_combined() {
     let config = xlsx_config();
 
     let source_files = [
-        // xlsx parser types
-        format!("{}/output/results.rs", xlsx_base),
+        // xlsx parser result types
+        format!("{}/output/results/cells.rs", xlsx_base),
+        format!("{}/output/results/comments.rs", xlsx_base),
+        format!("{}/output/results/controls.rs", xlsx_base),
+        format!("{}/output/results/errors.rs", xlsx_base),
+        format!("{}/output/results/metadata.rs", xlsx_base),
+        format!("{}/output/results/ole.rs", xlsx_base),
+        format!("{}/output/results/print.rs", xlsx_base),
+        format!("{}/output/results/status.rs", xlsx_base),
+        format!("{}/output/results/styles.rs", xlsx_base),
+        format!("{}/output/results/tables.rs", xlsx_base),
+        format!("{}/output/results/timings.rs", xlsx_base),
+        format!("{}/output/results/views.rs", xlsx_base),
+        format!("{}/output/results/workbook.rs", xlsx_base),
         // Worksheet & slicer types from ooxml-types
         format!("{}/worksheet/column.rs", ooxml_base),
         format!("{}/worksheet/row.rs", ooxml_base),

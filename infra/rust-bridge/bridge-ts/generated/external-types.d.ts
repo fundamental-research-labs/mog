@@ -14,15 +14,29 @@ declare global {
   type DocPropsApp = unknown;
   type DocPropsCore = unknown;
   type DocPropsCustom = unknown;
+  type DrawingAnchorMetadata = unknown;
+  type Extent = unknown;
   type FilterColumnSpec = unknown;
   type FontScheme = unknown;
+  type FormControlWorksheetControlPr = unknown;
   type FormatScheme = unknown;
   type HorizontalAlign = unknown;
+  type HyperlinkTargetKind = unknown;
+  type IconSetType = unknown;
   type OleObjectPropertiesOutput = unknown;
+  type PivotSelection = unknown;
+  type QueryTable = unknown;
   type Selection = unknown;
+  type SortConditionBy = unknown;
+  type SortMethod = unknown;
+  type TimelineAnchor = unknown;
+  type TimelineCacheDef = unknown;
+  type TimelineDef = unknown;
   type VerticalAlign = unknown;
   type VmlShapeProps = unknown;
   type WorkbookProtection = unknown;
+  type WorkbookRichData = unknown;
+  type XmlColumnPr = unknown;
 }
 
 export {};

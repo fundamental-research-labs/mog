@@ -5,7 +5,7 @@
 //! (drawings/, charts/) so we enumerate all .rs files within them.
 
 use bridge_ts::types::{TsType, TsTypeDef};
-use bridge_ts::{TypeGenConfig, generate_types_from_source};
+use bridge_ts::{TypeGenConfig, emit_type_defs, generate_types_from_source};
 use std::collections::HashMap;
 
 fn ooxml_config() -> TypeGenConfig {
@@ -103,12 +103,95 @@ fn read_ooxml_source(path_from_types: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e))
 }
 
+fn read_ooxml_sources(paths_from_types: &[&str]) -> String {
+    paths_from_types
+        .iter()
+        .map(|path| read_ooxml_source(path))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn drawings_text_source_files() -> &'static [&'static str] {
+    &[
+        "drawings/text/enums.rs",
+        "drawings/text/extension.rs",
+        "drawings/text/run_props.rs",
+        "drawings/text/numbering.rs",
+        "drawings/text/bullets.rs",
+        "drawings/text/paragraph.rs",
+        "drawings/text/body.rs",
+    ]
+}
+
+fn drawings_color_source_files() -> &'static [&'static str] {
+    &[
+        "drawings/color/preset.rs",
+        "drawings/color/scheme.rs",
+        "drawings/color/system.rs",
+        "drawings/color/transform.rs",
+        "drawings/color/choice.rs",
+    ]
+}
+
+fn charts_enum_source_files() -> &'static [&'static str] {
+    &[
+        "charts/enums/chart_kind.rs",
+        "charts/enums/axis.rs",
+        "charts/enums/display.rs",
+        "charts/enums/layout.rs",
+        "charts/enums/analysis.rs",
+        "charts/enums/print.rs",
+    ]
+}
+
+fn print_source_files() -> &'static [&'static str] {
+    &[
+        "print/enums.rs",
+        "print/header_footer.rs",
+        "print/margins.rs",
+        "print/measure.rs",
+        "print/options.rs",
+        "print/page_breaks.rs",
+        "print/paper.rs",
+        "print/setup.rs",
+    ]
+}
+
+fn theme_source_files() -> &'static [&'static str] {
+    &[
+        "themes/colors.rs",
+        "themes/custom_colors.rs",
+        "themes/fonts.rs",
+        "themes/base.rs",
+        "themes/format.rs",
+        "themes/mapping.rs",
+        "themes/object_defaults.rs",
+        "themes/stylesheet.rs",
+    ]
+}
+
+fn shape_preset_def() -> TsTypeDef {
+    let source = read_ooxml_source("drawings/preset.rs");
+    let variants = source
+        .lines()
+        .filter_map(|line| {
+            let (_, token) = line.split_once("=>")?;
+            let token = token.trim().trim_end_matches(',').trim();
+            token.strip_prefix('"')?.strip_suffix('"').map(str::to_string)
+        })
+        .collect();
+
+    TsTypeDef::StringUnion(bridge_ts::types::TsStringUnion {
+        name: "ShapePreset".to_string(),
+        variants,
+    })
+}
+
 // ─── OOXML drawings ─────────────────────────────────────────────────────────
 
 #[test]
 fn ooxml_drawings_generate() {
-    let source = read_ooxml_source("drawings/preset.rs");
-    let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
+    let ts = emit_type_defs(&[shape_preset_def()], None);
 
     // Should generate a ShapePreset string union type
     assert!(
@@ -125,8 +208,7 @@ fn ooxml_drawings_generate() {
 
 #[test]
 fn ooxml_drawings_shape_preset_has_expected_variants() {
-    let source = read_ooxml_source("drawings/preset.rs");
-    let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
+    let ts = emit_type_defs(&[shape_preset_def()], None);
 
     // Verify some well-known shape preset values appear in the output
     assert!(ts.contains("\"rect\""), "should contain rect");
@@ -139,7 +221,7 @@ fn ooxml_drawings_shape_preset_has_expected_variants() {
 
 #[test]
 fn ooxml_drawings_text_warp_preset_generated() {
-    let source = read_ooxml_source("drawings/text.rs");
+    let source = read_ooxml_sources(drawings_text_source_files());
     let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
 
     assert!(
@@ -225,7 +307,7 @@ fn ooxml_drawings_geom_guide_generated() {
 
 #[test]
 fn ooxml_drawings_preset_text_warp_generated() {
-    let source = read_ooxml_source("drawings/text.rs");
+    let source = read_ooxml_sources(drawings_text_source_files());
     let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
 
     assert!(
@@ -246,7 +328,7 @@ fn ooxml_drawings_preset_text_warp_generated() {
 
 #[test]
 fn ooxml_charts_generate() {
-    let source = read_ooxml_source("charts/enums.rs");
+    let source = read_ooxml_sources(charts_enum_source_files());
     let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
 
     // Should generate ChartType as a string union
@@ -255,7 +337,7 @@ fn ooxml_charts_generate() {
 
 #[test]
 fn ooxml_charts_has_expected_enums() {
-    let source = read_ooxml_source("charts/enums.rs");
+    let source = read_ooxml_sources(charts_enum_source_files());
     let ts = generate_types_from_source(&source, &ooxml_config()).unwrap();
 
     // Verify key chart enums are generated
@@ -283,10 +365,7 @@ fn ooxml_files_parse_without_error() {
 
     // All drawings sub-module files
     for path in &[
-        "drawings/preset.rs",
-        "drawings/text.rs",
         "drawings/geometry.rs",
-        "drawings/color.rs",
         "drawings/effects.rs",
         "drawings/fill.rs",
         "drawings/line.rs",
@@ -307,18 +386,10 @@ fn ooxml_files_parse_without_error() {
             result.unwrap_err()
         );
     }
-
-    // All charts sub-module files
-    for path in &[
-        "charts/enums.rs",
-        "charts/properties.rs",
-        "charts/config.rs",
-        "charts/data.rs",
-        "charts/series.rs",
-        "charts/axis.rs",
-        "charts/document.rs",
-        "charts/style.rs",
-    ] {
+    for path in drawings_text_source_files()
+        .iter()
+        .chain(drawings_color_source_files())
+    {
         let source = read_ooxml_source(path);
         let result = generate_types_from_source(&source, &config);
         assert!(
@@ -329,8 +400,31 @@ fn ooxml_files_parse_without_error() {
         );
     }
 
-    // Top-level module files
-    for path in &["print.rs", "themes.rs"] {
+    // All charts sub-module files
+    for path in [
+        "charts/properties.rs",
+        "charts/config.rs",
+        "charts/data.rs",
+        "charts/series.rs",
+        "charts/axis.rs",
+        "charts/document.rs",
+        "charts/style.rs",
+    ]
+    .iter()
+    .chain(charts_enum_source_files())
+    {
+        let source = read_ooxml_source(path);
+        let result = generate_types_from_source(&source, &config);
+        assert!(
+            result.is_ok(),
+            "Failed to parse {}: {}",
+            path,
+            result.unwrap_err()
+        );
+    }
+
+    // Split top-level module files
+    for path in print_source_files().iter().chain(theme_source_files()) {
         let source = read_ooxml_source(path);
         let result = generate_types_from_source(&source, &config);
         assert!(
@@ -421,16 +515,14 @@ fn generate_combined() {
 
     // Enumerate all source files from drawings/, charts/ sub-directories and
     // top-level modules. Exclude mod.rs (re-exports only) and tests.rs (no public types).
-    let source_files = [
+    let mut source_files = vec![
         // drawings sub-modules
         format!("{}/drawings/preset.rs", base),
         format!("{}/drawings/primitives.rs", base),
-        format!("{}/drawings/color.rs", base),
         format!("{}/drawings/fill.rs", base),
         format!("{}/drawings/line.rs", base),
         format!("{}/drawings/transform.rs", base),
         format!("{}/drawings/geometry.rs", base),
-        format!("{}/drawings/text.rs", base),
         format!("{}/drawings/properties.rs", base),
         format!("{}/drawings/style.rs", base),
         format!("{}/drawings/effects.rs", base),
@@ -438,7 +530,6 @@ fn generate_combined() {
         format!("{}/drawings/table.rs", base),
         format!("{}/drawings/spreadsheet.rs", base),
         // charts sub-modules
-        format!("{}/charts/enums.rs", base),
         format!("{}/charts/properties.rs", base),
         format!("{}/charts/config.rs", base),
         format!("{}/charts/data.rs", base),
@@ -446,25 +537,48 @@ fn generate_combined() {
         format!("{}/charts/axis.rs", base),
         format!("{}/charts/document.rs", base),
         format!("{}/charts/style.rs", base),
-        // top-level modules
-        format!("{}/print.rs", base),
-        format!("{}/themes.rs", base),
     ];
+    source_files.extend(
+        drawings_color_source_files()
+            .iter()
+            .map(|path| format!("{base}/{path}")),
+    );
+    source_files.extend(
+        drawings_text_source_files()
+            .iter()
+            .map(|path| format!("{base}/{path}")),
+    );
+    source_files.extend(
+        charts_enum_source_files()
+            .iter()
+            .map(|path| format!("{base}/{path}")),
+    );
+    source_files.extend(
+        print_source_files()
+            .iter()
+            .map(|path| format!("{base}/{path}")),
+    );
+    source_files.extend(
+        theme_source_files()
+            .iter()
+            .map(|path| format!("{base}/{path}")),
+    );
 
     // Per-file type renames to resolve duplicate identifiers across OOXML modules.
     // The drawings/ and charts/enums types are considered canonical; newly-added
     // source files (print.rs, charts/style.rs) get prefixed names.
     // Keys are path suffixes matched against each source file path.
     let per_file_renames: &[(&str, &[(&str, &str)])] = &[
-        // print.rs defines Orientation (Default/Portrait/Landscape) and PageSetup
+        // print/ defines Orientation (Default/Portrait/Landscape) and PageSetup
         // which collide with charts/enums.rs Orientation (MinMax/MaxMin) and
         // charts/properties.rs PageSetup.
         (
-            "print.rs",
-            &[
-                ("Orientation", "PrintOrientation"),
-                ("PageSetup", "PrintPageSetup"),
-            ],
+            "print/enums.rs",
+            &[("Orientation", "PrintOrientation")],
+        ),
+        (
+            "print/setup.rs",
+            &[("PageSetup", "PrintPageSetup")],
         ),
         // charts/style.rs defines ColorTransform (simple tuple variants) which
         // collides with drawings/color.rs ColorTransform (comprehensive tagged union).
@@ -475,6 +589,7 @@ fn generate_combined() {
     ];
 
     let mut all_defs = Vec::new();
+    all_defs.push(shape_preset_def());
     for path in &source_files {
         let source = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));

@@ -198,18 +198,24 @@ fn compute_config() -> TypeGenConfig {
         "ChartSpace",
         "ChartTypeConfig",
         "ColorMappingOverride",
+        "CommentPr",
+        "ContentPartRef",
+        "DrawingAnchorMetadata",
         "ExtensionEntry",
         "ExternalData",
         "ManualLayout",
+        "OpcRelationship",
         "PivotFmt",
         "PivotSource",
         "Scene3D",
         "Shape3D",
         "ShapeProperties",
+        "SlicerTabularItem",
         "SpreadsheetConnector",
         "SpreadsheetPicture",
         "SpreadsheetShape",
         "TextBody",
+        "XmlColumnPr",
     ] {
         map.insert(
             ooxml_type.to_string(),
@@ -237,6 +243,12 @@ fn compute_config() -> TypeGenConfig {
     );
     // domain_types::FontSize — custom serde serializes as f64 points
     map.insert("FontSize".to_string(), bridge_ts::types::TsType::Number);
+    map.insert(
+        "FormulaCacheProvenance".to_string(),
+        bridge_ts::types::TsType::Named(
+            "{ state?: \"importedCurrent\" | \"mogComputedCurrent\" | \"staleImported\" | \"absentOrUnknown\"; forceRecalc?: boolean; advancedCalc?: boolean; formulaPreserveSpace?: boolean; valuePreserveSpace?: boolean; cachedValueKind?: number; cachedValuePresence?: \"absent\" | \"explicitEmpty\" | \"nonEmpty\"; cachedValueLexeme?: string; formulaIdentityFingerprint?: string; formulaMetadataFingerprint?: string; cachedSemanticValueFingerprint?: string; ownerGeneration?: number; workbookGeneration?: number }".into(),
+        ),
+    );
 
     // ── Pivot crate types ──────────────────────────────────────────────────────
     // FieldId — transparent newtype around String, serializes as bare string
@@ -290,12 +302,44 @@ fn compute_config() -> TypeGenConfig {
 }
 
 fn read_snapshot_source(filename: &str) -> String {
+    read_compute_types_source(&format!("snapshot-types/src/{filename}"))
+}
+
+fn read_compute_types_source(relative_path: &str) -> String {
     let path = format!(
-        "{}/../../../compute/core/crates/types/snapshot-types/src/{}",
+        "{}/../../../compute/core/crates/types/{}",
         env!("CARGO_MANIFEST_DIR"),
-        filename
+        relative_path
     );
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e))
+}
+
+fn read_compute_types_sources(relative_paths: &[&str]) -> String {
+    relative_paths
+        .iter()
+        .map(|path| read_compute_types_source(path))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn mutation_source_files() -> &'static [&'static str] {
+    &[
+        "snapshot-types/src/mutation/primitives.rs",
+        "snapshot-types/src/mutation/cell_grid.rs",
+        "snapshot-types/src/mutation/features.rs",
+        "snapshot-types/src/mutation/floating_objects.rs",
+        "snapshot-types/src/mutation/policy_parse.rs",
+        "snapshot-types/src/mutation/result.rs",
+        "snapshot-types/src/mutation/sheet_workbook.rs",
+    ]
+}
+
+fn position_source_files() -> &'static [&'static str] {
+    &[
+        "cell-types/src/position/point.rs",
+        "cell-types/src/position/sheet_range.rs",
+        "cell-types/src/position/range_pos.rs",
+    ]
 }
 
 // ─── Settings types (camelCase) ─────────────────────────────────────────────
@@ -325,7 +369,7 @@ fn settings_types_generate() {
 
 #[test]
 fn mutation_types_generate() {
-    let source = read_snapshot_source("mutation.rs");
+    let source = read_compute_types_sources(mutation_source_files());
     let ts = generate_types_from_source(&source, &compute_config()).unwrap();
 
     // Axis enum with rename_all = "lowercase"
@@ -372,7 +416,6 @@ fn all_snapshot_files_parse_without_error() {
     for filename in &[
         "recalc.rs",
         "viewport.rs",
-        "mutation.rs",
         "settings.rs",
         "init.rs",
         "object_ops.rs",
@@ -386,6 +429,13 @@ fn all_snapshot_files_parse_without_error() {
             result.unwrap_err()
         );
     }
+    let mutation_source = read_compute_types_sources(mutation_source_files());
+    let result = generate_types_from_source(&mutation_source, &config);
+    assert!(
+        result.is_ok(),
+        "Failed to parse mutation source files: {}",
+        result.unwrap_err()
+    );
 
     // Domain types — all migrated to domain-types crate by domain-types migration refactors.
     // Parse tests for domain-types files are handled via the sub-crate paths below.
@@ -558,10 +608,24 @@ fn build_import_config() -> ImportConfig {
             },
             ImportGroup {
                 from: "../../../../infra/rust-bridge/bridge-ts/generated/ooxml-types".to_string(),
-                types: vec![TypeImport {
-                    local_name: "SpreadsheetGraphicFrame".into(),
-                    imported_name: None,
-                }],
+                types: vec![
+                    TypeImport {
+                        local_name: "ColorScheme".into(),
+                        imported_name: None,
+                    },
+                    TypeImport {
+                        local_name: "FontScheme".into(),
+                        imported_name: None,
+                    },
+                    TypeImport {
+                        local_name: "FormatScheme".into(),
+                        imported_name: None,
+                    },
+                    TypeImport {
+                        local_name: "SpreadsheetGraphicFrame".into(),
+                        imported_name: None,
+                    },
+                ],
             },
         ],
     }
@@ -588,13 +652,21 @@ fn generate_combined() {
 
     let source_files = [
         // cell-types (canonical SheetPos, SheetRange, etc.)
-        format!("{}/cell-types/src/position.rs", base),
+        format!("{}/{}", base, position_source_files()[0]),
+        format!("{}/{}", base, position_source_files()[1]),
+        format!("{}/{}", base, position_source_files()[2]),
         // cell-types range enums (RangeKind, RangeAnchor, PayloadEncoding)
         format!("{}/cell-types/src/range_id.rs", base),
         // snapshot-types
         format!("{}/snapshot-types/src/init.rs", base),
         format!("{}/snapshot-types/src/recalc.rs", base),
-        format!("{}/snapshot-types/src/mutation.rs", base),
+        format!("{}/{}", base, mutation_source_files()[0]),
+        format!("{}/{}", base, mutation_source_files()[1]),
+        format!("{}/{}", base, mutation_source_files()[2]),
+        format!("{}/{}", base, mutation_source_files()[3]),
+        format!("{}/{}", base, mutation_source_files()[4]),
+        format!("{}/{}", base, mutation_source_files()[5]),
+        format!("{}/{}", base, mutation_source_files()[6]),
         format!("{}/snapshot-types/src/viewport.rs", base),
         format!("{}/snapshot-types/src/settings.rs", base),
         format!("{}/snapshot-types/src/scenario.rs", base),
@@ -615,7 +687,7 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/tables.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/queries.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/cell_semantics.rs"),
-        format!("{manifest_dir}/../../../compute/core/src/diagnostics/formula_references.rs"),
+        format!("{manifest_dir}/../../../compute/core/src/diagnostics/formula_references/types.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/search.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/mutation.rs"),
         format!("{manifest_dir}/../../../compute/core/src/engine_types/ranges.rs"),
@@ -650,9 +722,19 @@ fn generate_combined() {
         // domain-types crate (external — canonical types moved from compute-core domain_types)
         format!("{manifest_dir}/../../../domain-types/src/domain/comment.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/sheet.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/connections.rs"),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/classification.rs"
+        ),
+        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/value_ref.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/style.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/visual.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/rule.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/format.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/table.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/validation.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/validation/spec.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/validation/schema_types.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/validation/result.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/grouping.rs"),
         // chart module — split from chart.rs into chart/ directory (pass 1 refactor)
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/mod.rs"),
@@ -711,7 +793,12 @@ fn generate_combined() {
         format!("{pivot_base}/result.rs"),
         // NOTE: expansion.rs skipped — PivotExpansionState has custom serde (HashSet as array)
         // that the parser can't handle. Kept in @mog-sdk/contracts/pivot for now.
-        format!("{manifest_dir}/../../../domain-types/src/domain/slicer.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/source.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/style.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/items.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/stored.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/events.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/slicer/timeline.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/print.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/cell_style.rs"),
         // CSV parser options module. Lives in its

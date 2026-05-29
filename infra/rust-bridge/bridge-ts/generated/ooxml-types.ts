@@ -8,8 +8,8 @@ export interface AbsoluteAnchor {
 }
 
 export type AdjustHandle =
-  | ({ type: 'Xy' } & AdjustHandle_Xy)
-  | ({ type: 'Polar' } & AdjustHandle_Polar);
+  | { type: "Xy" } & AdjustHandle_Xy
+  | { type: "Polar" } & AdjustHandle_Polar;
 
 export interface AdjustHandle_Polar {
   gd_ref_r?: string;
@@ -37,9 +37,11 @@ export interface AlphaBiLevelEffect {
   thresh: number;
 }
 
-export interface AlphaCeilingEffect {}
+export interface AlphaCeilingEffect {
+}
 
-export interface AlphaFloorEffect {}
+export interface AlphaFloorEffect {
+}
 
 export interface AlphaInverseEffect {
   color: DrawingColor | null;
@@ -61,7 +63,7 @@ export interface AlphaReplaceEffect {
   a: number;
 }
 
-export type AnchorType = 'TwoCell' | 'OneCell' | 'Absolute';
+export type AnchorType = "TwoCell" | "OneCell" | "Absolute";
 
 export interface Area3DChartConfig {
   grouping: Grouping | null;
@@ -82,9 +84,9 @@ export interface AreaChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type AxisCrosses = 'AutoZero' | 'Min' | 'Max';
+export type AxisCrosses = "AutoZero" | "Min" | "Max";
 
-export type AxisType = 'Category' | 'Value' | 'Date' | 'Series';
+export type AxisType = "Category" | "Value" | "Date" | "Series";
 
 export interface Backdrop {
   anchor: Point3D;
@@ -122,9 +124,9 @@ export interface BarChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type BarDirection = 'Bar' | 'Column';
+export type BarDirection = "Bar" | "Column";
 
-export type BarShape = 'Box' | 'Cone' | 'ConeToMax' | 'Cylinder' | 'Pyramid' | 'PyramidToMax';
+export type BarShape = "Box" | "Cone" | "ConeToMax" | "Cylinder" | "Pyramid" | "PyramidToMax";
 
 export interface BaseStyles {
   clr_scheme: ColorScheme;
@@ -145,43 +147,20 @@ export interface Bevel {
   prst: BevelPresetType | null;
 }
 
-export type BevelPresetType =
-  | 'RelaxedInset'
-  | 'Circle'
-  | 'Slope'
-  | 'Cross'
-  | 'Angle'
-  | 'SoftRound'
-  | 'Convex'
-  | 'CoolSlant'
-  | 'Divot'
-  | 'Riblet'
-  | 'HardEdge'
-  | 'ArtDeco';
+export type BevelPresetType = "RelaxedInset" | "Circle" | "Slope" | "Cross" | "Angle" | "SoftRound" | "Convex" | "CoolSlant" | "Divot" | "Riblet" | "HardEdge" | "ArtDeco";
 
 export interface BiLevelEffect {
   thresh: number;
 }
 
-export type BlackWhiteMode =
-  | 'Clr'
-  | 'Auto'
-  | 'Gray'
-  | 'LtGray'
-  | 'InvGray'
-  | 'GrayWhite'
-  | 'BlackGray'
-  | 'BlackWhite'
-  | 'Black'
-  | 'White'
-  | 'Hidden';
+export type BlackWhiteMode = "Clr" | "Auto" | "Gray" | "LtGray" | "InvGray" | "GrayWhite" | "BlackGray" | "BlackWhite" | "Black" | "White" | "Hidden";
 
 export interface BlendEffect {
   blend: BlendMode;
   cont: EffectContainer;
 }
 
-export type BlendMode = 'Over' | 'Mult' | 'Screen' | 'Darken' | 'Lighten';
+export type BlendMode = "Over" | "Mult" | "Screen" | "Darken" | "Lighten";
 
 export type BlipEffect =
   | { AlphaModFix: BlipEffect_AlphaModFix }
@@ -281,18 +260,11 @@ export interface BubbleChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type BuiltInUnit =
-  | 'Hundreds'
-  | 'Thousands'
-  | 'TenThousands'
-  | 'HundredThousands'
-  | 'Millions'
-  | 'TenMillions'
-  | 'HundredMillions'
-  | 'Billions'
-  | 'Trillions';
+export type BuiltInUnit = "Hundreds" | "Thousands" | "TenThousands" | "HundredThousands" | "Millions" | "TenMillions" | "HundredMillions" | "Billions" | "Trillions";
 
-export type BulletColor = { FollowText: null } | { Custom: DrawingColor };
+export type BulletColor =
+  | { FollowText: null }
+  | { Custom: DrawingColor };
 
 export interface BulletProperties {
   color: BulletColor | null;
@@ -302,7 +274,10 @@ export interface BulletProperties {
   bullet_type: BulletType | null;
 }
 
-export type BulletSize = { FollowText: null } | { Percent: number } | { Points: number };
+export type BulletSize =
+  | { FollowText: null }
+  | { Percent: number }
+  | { Points: number };
 
 export type BulletType =
   | { None: null }
@@ -342,7 +317,7 @@ export interface CellAnchor {
   row_off: number;
 }
 
-export type CellComments = 'None' | 'AtEnd' | 'AsDisplayed';
+export type CellComments = "None" | "AtEnd" | "AsDisplayed";
 
 export interface Chart {
   title: Title | null;
@@ -396,7 +371,7 @@ export interface ChartAxis {
   raw_axis_type_attr?: string;
 }
 
-export type ChartAxisPosition = 'Bottom' | 'Top' | 'Left' | 'Right';
+export type ChartAxisPosition = "Bottom" | "Top" | "Left" | "Right";
 
 export interface ChartColorStyle {
   meth: string;
@@ -502,27 +477,11 @@ export interface ChartSurface {
   extensions: ExtensionEntry[];
 }
 
-export type ChartText = { Rich: TextBody } | { StrRef: StrRef };
+export type ChartText =
+  | { Rich: TextBody }
+  | { StrRef: StrRef };
 
-export type ChartType =
-  | 'Unknown'
-  | 'Bar'
-  | 'Bar3D'
-  | 'Line'
-  | 'Line3D'
-  | 'Pie'
-  | 'Pie3D'
-  | 'Doughnut'
-  | 'Area'
-  | 'Area3D'
-  | 'Scatter'
-  | 'Bubble'
-  | 'Radar'
-  | 'Surface'
-  | 'Surface3D'
-  | 'Stock'
-  | 'OfPie'
-  | 'Combo';
+export type ChartType = "Unknown" | "Bar" | "Bar3D" | "Line" | "Line3D" | "Pie" | "Pie3D" | "Doughnut" | "Area" | "Area3D" | "Scatter" | "Bubble" | "Radar" | "Surface" | "Surface3D" | "Stock" | "OfPie" | "Combo";
 
 export type ChartTypeConfig =
   | { Bar: BarChartConfig }
@@ -605,53 +564,41 @@ export interface ColorSchemeAndMapping {
   clr_map: ColorMapping | null;
 }
 
-export type ColorSchemeIndex =
-  | 'Dk1'
-  | 'Lt1'
-  | 'Dk2'
-  | 'Lt2'
-  | 'Accent1'
-  | 'Accent2'
-  | 'Accent3'
-  | 'Accent4'
-  | 'Accent5'
-  | 'Accent6'
-  | 'Hlink'
-  | 'FolHlink';
+export type ColorSchemeIndex = "Dk1" | "Lt1" | "Dk2" | "Lt2" | "Accent1" | "Accent2" | "Accent3" | "Accent4" | "Accent5" | "Accent6" | "Hlink" | "FolHlink";
 
 export interface ColorSchemeList {
   extra_clr_scheme: ColorSchemeAndMapping[];
 }
 
 export type ColorTransform =
-  | ({ type: 'Alpha' } & ColorTransform_Alpha)
-  | ({ type: 'AlphaOff' } & ColorTransform_AlphaOff)
-  | ({ type: 'AlphaMod' } & ColorTransform_AlphaMod)
-  | ({ type: 'Hue' } & ColorTransform_Hue)
-  | ({ type: 'HueOff' } & ColorTransform_HueOff)
-  | ({ type: 'HueMod' } & ColorTransform_HueMod)
-  | ({ type: 'Sat' } & ColorTransform_Sat)
-  | ({ type: 'SatOff' } & ColorTransform_SatOff)
-  | ({ type: 'SatMod' } & ColorTransform_SatMod)
-  | ({ type: 'Lum' } & ColorTransform_Lum)
-  | ({ type: 'LumOff' } & ColorTransform_LumOff)
-  | ({ type: 'LumMod' } & ColorTransform_LumMod)
-  | ({ type: 'Red' } & ColorTransform_Red)
-  | ({ type: 'RedOff' } & ColorTransform_RedOff)
-  | ({ type: 'RedMod' } & ColorTransform_RedMod)
-  | ({ type: 'Green' } & ColorTransform_Green)
-  | ({ type: 'GreenOff' } & ColorTransform_GreenOff)
-  | ({ type: 'GreenMod' } & ColorTransform_GreenMod)
-  | ({ type: 'Blue' } & ColorTransform_Blue)
-  | ({ type: 'BlueOff' } & ColorTransform_BlueOff)
-  | ({ type: 'BlueMod' } & ColorTransform_BlueMod)
-  | ({ type: 'Tint' } & ColorTransform_Tint)
-  | ({ type: 'Shade' } & ColorTransform_Shade)
-  | { type: 'Comp' }
-  | { type: 'Inv' }
-  | { type: 'Gray' }
-  | { type: 'Gamma' }
-  | { type: 'InvGamma' };
+  | { type: "Alpha" } & ColorTransform_Alpha
+  | { type: "AlphaOff" } & ColorTransform_AlphaOff
+  | { type: "AlphaMod" } & ColorTransform_AlphaMod
+  | { type: "Hue" } & ColorTransform_Hue
+  | { type: "HueOff" } & ColorTransform_HueOff
+  | { type: "HueMod" } & ColorTransform_HueMod
+  | { type: "Sat" } & ColorTransform_Sat
+  | { type: "SatOff" } & ColorTransform_SatOff
+  | { type: "SatMod" } & ColorTransform_SatMod
+  | { type: "Lum" } & ColorTransform_Lum
+  | { type: "LumOff" } & ColorTransform_LumOff
+  | { type: "LumMod" } & ColorTransform_LumMod
+  | { type: "Red" } & ColorTransform_Red
+  | { type: "RedOff" } & ColorTransform_RedOff
+  | { type: "RedMod" } & ColorTransform_RedMod
+  | { type: "Green" } & ColorTransform_Green
+  | { type: "GreenOff" } & ColorTransform_GreenOff
+  | { type: "GreenMod" } & ColorTransform_GreenMod
+  | { type: "Blue" } & ColorTransform_Blue
+  | { type: "BlueOff" } & ColorTransform_BlueOff
+  | { type: "BlueMod" } & ColorTransform_BlueMod
+  | { type: "Tint" } & ColorTransform_Tint
+  | { type: "Shade" } & ColorTransform_Shade
+  | { type: "Comp" }
+  | { type: "Inv" }
+  | { type: "Gray" }
+  | { type: "Gamma" }
+  | { type: "InvGamma" };
 
 export interface ColorTransform_Alpha {
   val: number;
@@ -750,9 +697,9 @@ export interface ColorVariation {
   transforms: ChartColorTransform[];
 }
 
-export type CompoundLine = 'Single' | 'Double' | 'ThickThin' | 'ThinThick' | 'Triple';
+export type CompoundLine = "Single" | "Double" | "ThickThin" | "ThinThick" | "Triple";
 
-export type CompressionState = 'None' | 'Print' | 'Screen' | 'Email' | 'HqPrint';
+export type CompressionState = "None" | "Print" | "Screen" | "Email" | "HqPrint";
 
 export interface Connection {
   shape_id: number;
@@ -777,7 +724,7 @@ export interface ContentPartRef {
   r_id: string;
 }
 
-export type CrossBetween = 'Between' | 'MidCat';
+export type CrossBetween = "Between" | "MidCat";
 
 export interface CustomColor {
   name: string | null;
@@ -834,18 +781,7 @@ export interface DashStop {
   sp: number;
 }
 
-export type DashStyle =
-  | 'Solid'
-  | 'Dot'
-  | 'Dash'
-  | 'DashDot'
-  | 'LongDash'
-  | 'LongDashDot'
-  | 'LongDashDotDot'
-  | 'SystemDash'
-  | 'SystemDot'
-  | 'SystemDashDot'
-  | 'SystemDashDotDot';
+export type DashStyle = "Solid" | "Dot" | "Dash" | "DashDot" | "LongDash" | "LongDashDot" | "LongDashDotDot" | "SystemDash" | "SystemDot" | "SystemDashDot" | "SystemDashDotDot";
 
 export interface DataLabel {
   idx: number;
@@ -886,16 +822,7 @@ export interface DataLabelOptions {
   extensions: ExtensionEntry[];
 }
 
-export type DataLabelPosition =
-  | 'BestFit'
-  | 'Bottom'
-  | 'Center'
-  | 'InsideBase'
-  | 'InsideEnd'
-  | 'Left'
-  | 'OutsideEnd'
-  | 'Right'
-  | 'Top';
+export type DataLabelPosition = "BestFit" | "Bottom" | "Center" | "InsideBase" | "InsideEnd" | "Left" | "OutsideEnd" | "Right" | "Top";
 
 export interface DataPointOverride {
   idx: number;
@@ -922,9 +849,11 @@ export interface DefaultShapeDefinition {
   raw_xml: string | null;
 }
 
-export type DisplayBlanksAs = 'Gap' | 'Span' | 'Zero';
+export type DisplayBlanksAs = "Gap" | "Span" | "Zero";
 
-export type DisplayUnitKind = { BuiltIn: BuiltInUnit } | { Custom: number };
+export type DisplayUnitKind =
+  | { BuiltIn: BuiltInUnit }
+  | { Custom: number };
 
 export interface DisplayUnits {
   kind: DisplayUnitKind | null;
@@ -953,13 +882,17 @@ export type DrawingAnchor =
   | { OneCell: OneCellAnchor }
   | { Absolute: AbsoluteAnchor };
 
+export interface DrawingAnchorMetadata {
+  anchorIndex?: number;
+}
+
 export type DrawingColor =
-  | ({ type: 'SrgbClr' } & DrawingColor_SrgbClr)
-  | ({ type: 'SchemeClr' } & DrawingColor_SchemeClr)
-  | ({ type: 'HslClr' } & DrawingColor_HslClr)
-  | ({ type: 'SysClr' } & DrawingColor_SysClr)
-  | ({ type: 'PrstClr' } & DrawingColor_PrstClr)
-  | ({ type: 'ScrgbClr' } & DrawingColor_ScrgbClr);
+  | { type: "SrgbClr" } & DrawingColor_SrgbClr
+  | { type: "SchemeClr" } & DrawingColor_SchemeClr
+  | { type: "HslClr" } & DrawingColor_HslClr
+  | { type: "SysClr" } & DrawingColor_SysClr
+  | { type: "PrstClr" } & DrawingColor_PrstClr
+  | { type: "ScrgbClr" } & DrawingColor_ScrgbClr;
 
 export interface DrawingColor_HslClr {
   hue: number;
@@ -1024,7 +957,7 @@ export interface DuotoneEffect {
   colors: DrawingColor[];
 }
 
-export type EditAs = 'TwoCell' | 'OneCell' | 'Absolute';
+export type EditAs = "TwoCell" | "OneCell" | "Absolute";
 
 export interface EffectContainer {
   container_type: EffectContainerType | null;
@@ -1032,7 +965,7 @@ export interface EffectContainer {
   effects: DagEffect[];
 }
 
-export type EffectContainerType = 'Sib' | 'Tree';
+export type EffectContainerType = "Sib" | "Tree";
 
 export interface EffectList {
   blur: BlurEffect | null;
@@ -1045,7 +978,9 @@ export interface EffectList {
   soft_edge: SoftEdge | null;
 }
 
-export type EffectProperties = { EffectList: EffectList } | { EffectDag: EffectContainer };
+export type EffectProperties =
+  | { EffectList: EffectList }
+  | { EffectDag: EffectContainer };
 
 export interface EffectReference {
   ref: string;
@@ -1057,9 +992,9 @@ export interface EffectStyleItem {
   sp_3d: Shape3D | null;
 }
 
-export type ErrorBarDirection = 'X' | 'Y';
+export type ErrorBarDirection = "X" | "Y";
 
-export type ErrorBarType = 'Both' | 'Plus' | 'Minus';
+export type ErrorBarType = "Both" | "Plus" | "Minus";
 
 export interface ErrorBars {
   err_dir: ErrorBarDirection | null;
@@ -1073,7 +1008,7 @@ export interface ErrorBars {
   extensions: ExtensionEntry[];
 }
 
-export type ErrorValueType = 'Custom' | 'FixedVal' | 'Percentage' | 'StdDev' | 'StdErr';
+export type ErrorValueType = "Custom" | "FixedVal" | "Percentage" | "StdDev" | "StdErr";
 
 export interface ExtensionEntry {
   uri: string;
@@ -1098,7 +1033,9 @@ export interface FillEffect {
   fill: DrawingFill | null;
 }
 
-export type FillMode = { Stretch: FillMode_Stretch } | { Tile: TileFill };
+export type FillMode =
+  | { Stretch: FillMode_Stretch }
+  | { Tile: TileFill };
 
 export interface FillMode_Stretch {
   fill_rect?: SourceRect;
@@ -1121,7 +1058,7 @@ export interface FontCollection {
   ext_lst: ExtensionList | null;
 }
 
-export type FontCollectionIndex = 'Major' | 'Minor' | 'None';
+export type FontCollectionIndex = "Major" | "Minor" | "None";
 
 export interface FontReference {
   idx: FontCollectionIndex;
@@ -1176,7 +1113,7 @@ export interface GradientFill {
   rotate_with_shape: boolean | null;
 }
 
-export type GradientPathType = 'Circle' | 'Rect' | 'Shape';
+export type GradientPathType = "Circle" | "Rect" | "Shape";
 
 export interface GradientStop {
   position: number;
@@ -1192,7 +1129,8 @@ export interface GraphicFrameNonVisual {
   c_nv_graphic_frame_pr_ext_lst: string | null;
 }
 
-export interface GrayscaleEffect {}
+export interface GrayscaleEffect {
+}
 
 export interface GroupLocking {
   no_grp: boolean;
@@ -1230,7 +1168,7 @@ export interface GroupTransform2D {
   flip_v: boolean | null;
 }
 
-export type Grouping = 'Standard' | 'Clustered' | 'Stacked' | 'PercentStacked';
+export type Grouping = "Standard" | "Clustered" | "Stacked" | "PercentStacked";
 
 export interface HeaderFooter {
   odd_header: string | null;
@@ -1277,11 +1215,11 @@ export interface InnerShadow {
   color: DrawingColor | null;
 }
 
-export type LabelAlignment = 'Center' | 'Left' | 'Right';
+export type LabelAlignment = "Center" | "Left" | "Right";
 
-export type LayoutMode = 'Edge' | 'Factor';
+export type LayoutMode = "Edge" | "Factor";
 
-export type LayoutTarget = 'Inner' | 'Outer';
+export type LayoutTarget = "Inner" | "Outer";
 
 export interface Legend {
   legend_pos: LegendPosition | null;
@@ -1300,7 +1238,7 @@ export interface LegendEntry {
   extensions: ExtensionEntry[];
 }
 
-export type LegendPosition = 'Bottom' | 'Top' | 'Left' | 'Right' | 'TopRight';
+export type LegendPosition = "Bottom" | "Top" | "Left" | "Right" | "TopRight";
 
 export interface LightRig {
   rig: LightRigType;
@@ -1308,44 +1246,9 @@ export interface LightRig {
   rot: Rotation3D | null;
 }
 
-export type LightRigDirection =
-  | 'Top'
-  | 'TopLeft'
-  | 'TopRight'
-  | 'Left'
-  | 'Right'
-  | 'Bottom'
-  | 'BottomLeft'
-  | 'BottomRight';
+export type LightRigDirection = "Top" | "TopLeft" | "TopRight" | "Left" | "Right" | "Bottom" | "BottomLeft" | "BottomRight";
 
-export type LightRigType =
-  | 'Balanced'
-  | 'BrightRoom'
-  | 'Chilly'
-  | 'Contrasting'
-  | 'Flat'
-  | 'Flood'
-  | 'Freezing'
-  | 'Glow'
-  | 'Harsh'
-  | 'LegacyFlat1'
-  | 'LegacyFlat2'
-  | 'LegacyFlat3'
-  | 'LegacyFlat4'
-  | 'LegacyHarsh1'
-  | 'LegacyHarsh2'
-  | 'LegacyHarsh3'
-  | 'LegacyHarsh4'
-  | 'LegacyNormal1'
-  | 'LegacyNormal2'
-  | 'LegacyNormal3'
-  | 'LegacyNormal4'
-  | 'Morning'
-  | 'Soft'
-  | 'Sunrise'
-  | 'Sunset'
-  | 'ThreePt'
-  | 'TwoPt';
+export type LightRigType = "Balanced" | "BrightRoom" | "Chilly" | "Contrasting" | "Flat" | "Flood" | "Freezing" | "Glow" | "Harsh" | "LegacyFlat1" | "LegacyFlat2" | "LegacyFlat3" | "LegacyFlat4" | "LegacyHarsh1" | "LegacyHarsh2" | "LegacyHarsh3" | "LegacyHarsh4" | "LegacyNormal1" | "LegacyNormal2" | "LegacyNormal3" | "LegacyNormal4" | "Morning" | "Soft" | "Sunrise" | "Sunset" | "ThreePt" | "TwoPt";
 
 export interface Line3DChartConfig {
   grouping: Grouping;
@@ -1357,7 +1260,7 @@ export interface Line3DChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type LineCap = 'Flat' | 'Square' | 'Round';
+export type LineCap = "Flat" | "Square" | "Round";
 
 export interface LineChartConfig {
   grouping: Grouping;
@@ -1372,7 +1275,9 @@ export interface LineChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type LineDash = { Preset: DashStyle } | { Custom: DashStop[] };
+export type LineDash =
+  | { Preset: DashStyle }
+  | { Custom: DashStop[] };
 
 export interface LineEndProperties {
   end_type: LineEndType | null;
@@ -1380,9 +1285,9 @@ export interface LineEndProperties {
   length: LineEndSize | null;
 }
 
-export type LineEndSize = 'Small' | 'Medium' | 'Large';
+export type LineEndSize = "Small" | "Medium" | "Large";
 
-export type LineEndType = 'None' | 'Triangle' | 'Stealth' | 'Diamond' | 'Oval' | 'Arrow';
+export type LineEndType = "None" | "Triangle" | "Stealth" | "Diamond" | "Oval" | "Arrow";
 
 export type LineFill =
   | { NoFill: null }
@@ -1390,7 +1295,10 @@ export type LineFill =
   | { Gradient: GradientFill }
   | { Pattern: PatternFill };
 
-export type LineJoin = { Round: null } | { Bevel: null } | { Miter: LineJoin_Miter };
+export type LineJoin =
+  | { Round: null }
+  | { Bevel: null }
+  | { Miter: LineJoin_Miter };
 
 export interface LineJoin_Miter {
   limit?: number;
@@ -1421,19 +1329,7 @@ export interface Marker {
   extensions: ExtensionEntry[];
 }
 
-export type MarkerStyle =
-  | 'None'
-  | 'Auto'
-  | 'Circle'
-  | 'Dash'
-  | 'Diamond'
-  | 'Dot'
-  | 'Picture'
-  | 'Plus'
-  | 'Square'
-  | 'Star'
-  | 'Triangle'
-  | 'X';
+export type MarkerStyle = "None" | "Auto" | "Circle" | "Dash" | "Diamond" | "Dot" | "Picture" | "Plus" | "Square" | "Star" | "Triangle" | "X";
 
 export interface MultiLvlStrData {
   pt_count: number | null;
@@ -1465,7 +1361,9 @@ export interface NumData {
   extensions: ExtensionEntry[];
 }
 
-export type NumDataSource = { Ref: NumRef } | { Lit: NumData };
+export type NumDataSource =
+  | { Ref: NumRef }
+  | { Lit: NumData };
 
 export interface NumFmt {
   format_code: string;
@@ -1513,7 +1411,7 @@ export interface OfPieChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type OfPieType = 'Pie' | 'Bar';
+export type OfPieType = "Pie" | "Bar";
 
 export interface OfficeStyleSheet {
   name: string;
@@ -1524,7 +1422,7 @@ export interface OfficeStyleSheet {
   ext_lst: ExtensionList | null;
 }
 
-export type OnOffStyleType = 'Def' | 'On' | 'Off';
+export type OnOffStyleType = "Def" | "On" | "Off";
 
 export interface OneCellAnchor {
   from: CellAnchor;
@@ -1533,7 +1431,7 @@ export interface OneCellAnchor {
   client_data: ClientData;
 }
 
-export type Orientation = 'MinMax' | 'MaxMin';
+export type Orientation = "MinMax" | "MaxMin";
 
 export interface OuterShadow {
   blur_rad: number;
@@ -1592,9 +1490,9 @@ export interface PageMargins {
   footer: number;
 }
 
-export type PageOrder = 'DownThenOver' | 'OverThenDown';
+export type PageOrder = "DownThenOver" | "OverThenDown";
 
-export type PageOrientation = 'Default' | 'Portrait' | 'Landscape';
+export type PageOrientation = "Default" | "Portrait" | "Landscape";
 
 export interface PageSetup {
   paper_size: number | null;
@@ -1691,12 +1589,12 @@ export interface Path2D {
 }
 
 export type PathCommand =
-  | ({ type: 'MoveTo' } & PathCommand_MoveTo)
-  | ({ type: 'LineTo' } & PathCommand_LineTo)
-  | ({ type: 'ArcTo' } & PathCommand_ArcTo)
-  | ({ type: 'QuadBezTo' } & PathCommand_QuadBezTo)
-  | ({ type: 'CubicBezTo' } & PathCommand_CubicBezTo)
-  | { type: 'Close' };
+  | { type: "MoveTo" } & PathCommand_MoveTo
+  | { type: "LineTo" } & PathCommand_LineTo
+  | { type: "ArcTo" } & PathCommand_ArcTo
+  | { type: "QuadBezTo" } & PathCommand_QuadBezTo
+  | { type: "CubicBezTo" } & PathCommand_CubicBezTo
+  | { type: "Close" };
 
 export interface PathCommand_ArcTo {
   w_r: string;
@@ -1731,7 +1629,7 @@ export interface PathCommand_QuadBezTo {
   y: string;
 }
 
-export type PathFillMode = 'None' | 'Norm' | 'Lighten' | 'LightenLess' | 'Darken' | 'DarkenLess';
+export type PathFillMode = "None" | "Norm" | "Lighten" | "LightenLess" | "Darken" | "DarkenLess";
 
 export interface PatternFill {
   preset: PresetPatternVal | null;
@@ -1739,9 +1637,9 @@ export interface PatternFill {
   bg_color: DrawingColor | null;
 }
 
-export type PenAlignment = 'Center' | 'Inset';
+export type PenAlignment = "Center" | "Inset";
 
-export type PictureFormat = 'Stretch' | 'Stack' | 'StackScale';
+export type PictureFormat = "Stretch" | "Stack" | "StackScale";
 
 export interface PictureNonVisual {
   c_nv_pr: NonVisualProps;
@@ -1810,289 +1708,18 @@ export interface Position {
   y: number;
 }
 
-export type PresetCameraType =
-  | 'LegacyObliqueTopLeft'
-  | 'LegacyObliqueTop'
-  | 'LegacyObliqueTopRight'
-  | 'LegacyObliqueFront'
-  | 'LegacyObliqueLeft'
-  | 'LegacyObliqueRight'
-  | 'LegacyObliqueBottomLeft'
-  | 'LegacyObliqueBottom'
-  | 'LegacyObliqueBottomRight'
-  | 'LegacyPerspectiveTopLeft'
-  | 'LegacyPerspectiveTop'
-  | 'LegacyPerspectiveTopRight'
-  | 'LegacyPerspectiveFront'
-  | 'LegacyPerspectiveLeft'
-  | 'LegacyPerspectiveRight'
-  | 'LegacyPerspectiveBottomLeft'
-  | 'LegacyPerspectiveBottom'
-  | 'LegacyPerspectiveBottomRight'
-  | 'OrthographicFront'
-  | 'IsometricTopUp'
-  | 'IsometricTopDown'
-  | 'IsometricBottomUp'
-  | 'IsometricBottomDown'
-  | 'IsometricLeftUp'
-  | 'IsometricLeftDown'
-  | 'IsometricRightUp'
-  | 'IsometricRightDown'
-  | 'IsometricOffAxis1Left'
-  | 'IsometricOffAxis1Right'
-  | 'IsometricOffAxis1Top'
-  | 'IsometricOffAxis2Left'
-  | 'IsometricOffAxis2Right'
-  | 'IsometricOffAxis2Top'
-  | 'IsometricOffAxis3Left'
-  | 'IsometricOffAxis3Right'
-  | 'IsometricOffAxis3Bottom'
-  | 'IsometricOffAxis4Left'
-  | 'IsometricOffAxis4Right'
-  | 'IsometricOffAxis4Bottom'
-  | 'ObliqueTopLeft'
-  | 'ObliqueTop'
-  | 'ObliqueTopRight'
-  | 'ObliqueLeft'
-  | 'ObliqueRight'
-  | 'ObliqueBottomLeft'
-  | 'ObliqueBottom'
-  | 'ObliqueBottomRight'
-  | 'PerspectiveFront'
-  | 'PerspectiveLeft'
-  | 'PerspectiveRight'
-  | 'PerspectiveAbove'
-  | 'PerspectiveAboveLeftFacing'
-  | 'PerspectiveAboveRightFacing'
-  | 'PerspectiveContrastingLeftFacing'
-  | 'PerspectiveContrastingRightFacing'
-  | 'PerspectiveHeroicLeftFacing'
-  | 'PerspectiveHeroicRightFacing'
-  | 'PerspectiveHeroicExtremeLeftFacing'
-  | 'PerspectiveHeroicExtremeRightFacing'
-  | 'PerspectiveBelow'
-  | 'PerspectiveRelaxed'
-  | 'PerspectiveRelaxedModerately';
+export type PresetCameraType = "LegacyObliqueTopLeft" | "LegacyObliqueTop" | "LegacyObliqueTopRight" | "LegacyObliqueFront" | "LegacyObliqueLeft" | "LegacyObliqueRight" | "LegacyObliqueBottomLeft" | "LegacyObliqueBottom" | "LegacyObliqueBottomRight" | "LegacyPerspectiveTopLeft" | "LegacyPerspectiveTop" | "LegacyPerspectiveTopRight" | "LegacyPerspectiveFront" | "LegacyPerspectiveLeft" | "LegacyPerspectiveRight" | "LegacyPerspectiveBottomLeft" | "LegacyPerspectiveBottom" | "LegacyPerspectiveBottomRight" | "OrthographicFront" | "IsometricTopUp" | "IsometricTopDown" | "IsometricBottomUp" | "IsometricBottomDown" | "IsometricLeftUp" | "IsometricLeftDown" | "IsometricRightUp" | "IsometricRightDown" | "IsometricOffAxis1Left" | "IsometricOffAxis1Right" | "IsometricOffAxis1Top" | "IsometricOffAxis2Left" | "IsometricOffAxis2Right" | "IsometricOffAxis2Top" | "IsometricOffAxis3Left" | "IsometricOffAxis3Right" | "IsometricOffAxis3Bottom" | "IsometricOffAxis4Left" | "IsometricOffAxis4Right" | "IsometricOffAxis4Bottom" | "ObliqueTopLeft" | "ObliqueTop" | "ObliqueTopRight" | "ObliqueLeft" | "ObliqueRight" | "ObliqueBottomLeft" | "ObliqueBottom" | "ObliqueBottomRight" | "PerspectiveFront" | "PerspectiveLeft" | "PerspectiveRight" | "PerspectiveAbove" | "PerspectiveAboveLeftFacing" | "PerspectiveAboveRightFacing" | "PerspectiveContrastingLeftFacing" | "PerspectiveContrastingRightFacing" | "PerspectiveHeroicLeftFacing" | "PerspectiveHeroicRightFacing" | "PerspectiveHeroicExtremeLeftFacing" | "PerspectiveHeroicExtremeRightFacing" | "PerspectiveBelow" | "PerspectiveRelaxed" | "PerspectiveRelaxedModerately";
 
-export type PresetColorVal =
-  | 'AliceBlue'
-  | 'AntiqueWhite'
-  | 'Aqua'
-  | 'Aquamarine'
-  | 'Azure'
-  | 'Beige'
-  | 'Bisque'
-  | 'Black'
-  | 'BlanchedAlmond'
-  | 'Blue'
-  | 'BlueViolet'
-  | 'Brown'
-  | 'BurlyWood'
-  | 'CadetBlue'
-  | 'Chartreuse'
-  | 'Chocolate'
-  | 'Coral'
-  | 'CornflowerBlue'
-  | 'Cornsilk'
-  | 'Crimson'
-  | 'Cyan'
-  | 'DkBlue'
-  | 'DkCyan'
-  | 'DkGoldenrod'
-  | 'DkGray'
-  | 'DkGreen'
-  | 'DkKhaki'
-  | 'DkMagenta'
-  | 'DkOliveGreen'
-  | 'DkOrange'
-  | 'DkOrchid'
-  | 'DkRed'
-  | 'DkSalmon'
-  | 'DkSeaGreen'
-  | 'DkSlateBlue'
-  | 'DkSlateGray'
-  | 'DkTurquoise'
-  | 'DkViolet'
-  | 'DeepPink'
-  | 'DeepSkyBlue'
-  | 'DimGray'
-  | 'DodgerBlue'
-  | 'Firebrick'
-  | 'FloralWhite'
-  | 'ForestGreen'
-  | 'Fuchsia'
-  | 'Gainsboro'
-  | 'GhostWhite'
-  | 'Gold'
-  | 'Goldenrod'
-  | 'Gray'
-  | 'Green'
-  | 'GreenYellow'
-  | 'Honeydew'
-  | 'HotPink'
-  | 'IndianRed'
-  | 'Indigo'
-  | 'Ivory'
-  | 'Khaki'
-  | 'Lavender'
-  | 'LavenderBlush'
-  | 'LawnGreen'
-  | 'LemonChiffon'
-  | 'LtBlue'
-  | 'LtCoral'
-  | 'LtCyan'
-  | 'LtGoldenrodYellow'
-  | 'LtGray'
-  | 'LtGreen'
-  | 'LtPink'
-  | 'LtSalmon'
-  | 'LtSeaGreen'
-  | 'LtSkyBlue'
-  | 'LtSlateGray'
-  | 'LtSteelBlue'
-  | 'LtYellow'
-  | 'Lime'
-  | 'LimeGreen'
-  | 'Linen'
-  | 'Magenta'
-  | 'Maroon'
-  | 'MedAquamarine'
-  | 'MedBlue'
-  | 'MedOrchid'
-  | 'MedPurple'
-  | 'MedSeaGreen'
-  | 'MedSlateBlue'
-  | 'MedSpringGreen'
-  | 'MedTurquoise'
-  | 'MedVioletRed'
-  | 'MidnightBlue'
-  | 'MintCream'
-  | 'MistyRose'
-  | 'Moccasin'
-  | 'NavajoWhite'
-  | 'Navy'
-  | 'OldLace'
-  | 'Olive'
-  | 'OliveDrab'
-  | 'Orange'
-  | 'OrangeRed'
-  | 'Orchid'
-  | 'PaleGoldenrod'
-  | 'PaleGreen'
-  | 'PaleTurquoise'
-  | 'PaleVioletRed'
-  | 'PapayaWhip'
-  | 'PeachPuff'
-  | 'Peru'
-  | 'Pink'
-  | 'Plum'
-  | 'PowderBlue'
-  | 'Purple'
-  | 'Red'
-  | 'RosyBrown'
-  | 'RoyalBlue'
-  | 'SaddleBrown'
-  | 'Salmon'
-  | 'SandyBrown'
-  | 'SeaGreen'
-  | 'SeaShell'
-  | 'Sienna'
-  | 'Silver'
-  | 'SkyBlue'
-  | 'SlateBlue'
-  | 'SlateGray'
-  | 'Snow'
-  | 'SpringGreen'
-  | 'SteelBlue'
-  | 'Tan'
-  | 'Teal'
-  | 'Thistle'
-  | 'Tomato'
-  | 'Turquoise'
-  | 'Violet'
-  | 'Wheat'
-  | 'White'
-  | 'WhiteSmoke'
-  | 'Yellow'
-  | 'YellowGreen';
+export type PresetColorVal = "AliceBlue" | "AntiqueWhite" | "Aqua" | "Aquamarine" | "Azure" | "Beige" | "Bisque" | "Black" | "BlanchedAlmond" | "Blue" | "BlueViolet" | "Brown" | "BurlyWood" | "CadetBlue" | "Chartreuse" | "Chocolate" | "Coral" | "CornflowerBlue" | "Cornsilk" | "Crimson" | "Cyan" | "DkBlue" | "DkCyan" | "DkGoldenrod" | "DkGray" | "DkGreen" | "DkKhaki" | "DkMagenta" | "DkOliveGreen" | "DkOrange" | "DkOrchid" | "DkRed" | "DkSalmon" | "DkSeaGreen" | "DkSlateBlue" | "DkSlateGray" | "DkTurquoise" | "DkViolet" | "DeepPink" | "DeepSkyBlue" | "DimGray" | "DodgerBlue" | "Firebrick" | "FloralWhite" | "ForestGreen" | "Fuchsia" | "Gainsboro" | "GhostWhite" | "Gold" | "Goldenrod" | "Gray" | "Green" | "GreenYellow" | "Honeydew" | "HotPink" | "IndianRed" | "Indigo" | "Ivory" | "Khaki" | "Lavender" | "LavenderBlush" | "LawnGreen" | "LemonChiffon" | "LtBlue" | "LtCoral" | "LtCyan" | "LtGoldenrodYellow" | "LtGray" | "LtGreen" | "LtPink" | "LtSalmon" | "LtSeaGreen" | "LtSkyBlue" | "LtSlateGray" | "LtSteelBlue" | "LtYellow" | "Lime" | "LimeGreen" | "Linen" | "Magenta" | "Maroon" | "MedAquamarine" | "MedBlue" | "MedOrchid" | "MedPurple" | "MedSeaGreen" | "MedSlateBlue" | "MedSpringGreen" | "MedTurquoise" | "MedVioletRed" | "MidnightBlue" | "MintCream" | "MistyRose" | "Moccasin" | "NavajoWhite" | "Navy" | "OldLace" | "Olive" | "OliveDrab" | "Orange" | "OrangeRed" | "Orchid" | "PaleGoldenrod" | "PaleGreen" | "PaleTurquoise" | "PaleVioletRed" | "PapayaWhip" | "PeachPuff" | "Peru" | "Pink" | "Plum" | "PowderBlue" | "Purple" | "Red" | "RosyBrown" | "RoyalBlue" | "SaddleBrown" | "Salmon" | "SandyBrown" | "SeaGreen" | "SeaShell" | "Sienna" | "Silver" | "SkyBlue" | "SlateBlue" | "SlateGray" | "Snow" | "SpringGreen" | "SteelBlue" | "Tan" | "Teal" | "Thistle" | "Tomato" | "Turquoise" | "Violet" | "Wheat" | "White" | "WhiteSmoke" | "Yellow" | "YellowGreen";
 
 export interface PresetGeometry {
   prst: ShapePreset;
   av_list: GeomGuide[];
 }
 
-export type PresetMaterialType =
-  | 'Clear'
-  | 'DkEdge'
-  | 'Flat'
-  | 'LegacyMatte'
-  | 'LegacyMetal'
-  | 'LegacyPlastic'
-  | 'LegacyWireframe'
-  | 'Matte'
-  | 'Metal'
-  | 'Plastic'
-  | 'Powder'
-  | 'SoftEdge'
-  | 'SoftMetal'
-  | 'TranslucentPowder'
-  | 'WarmMatte';
+export type PresetMaterialType = "Clear" | "DkEdge" | "Flat" | "LegacyMatte" | "LegacyMetal" | "LegacyPlastic" | "LegacyWireframe" | "Matte" | "Metal" | "Plastic" | "Powder" | "SoftEdge" | "SoftMetal" | "TranslucentPowder" | "WarmMatte";
 
-export type PresetPatternVal =
-  | 'Pct5'
-  | 'Pct10'
-  | 'Pct20'
-  | 'Pct25'
-  | 'Pct30'
-  | 'Pct40'
-  | 'Pct50'
-  | 'Pct60'
-  | 'Pct70'
-  | 'Pct75'
-  | 'Pct80'
-  | 'Pct90'
-  | 'Horz'
-  | 'Vert'
-  | 'LtHorz'
-  | 'LtVert'
-  | 'DkHorz'
-  | 'DkVert'
-  | 'NarHorz'
-  | 'NarVert'
-  | 'DashHorz'
-  | 'DashVert'
-  | 'Cross'
-  | 'DnDiag'
-  | 'UpDiag'
-  | 'LtDnDiag'
-  | 'LtUpDiag'
-  | 'DkDnDiag'
-  | 'DkUpDiag'
-  | 'WdDnDiag'
-  | 'WdUpDiag'
-  | 'DashDnDiag'
-  | 'DashUpDiag'
-  | 'DiagCross'
-  | 'SmCheck'
-  | 'LgCheck'
-  | 'SmGrid'
-  | 'LgGrid'
-  | 'DotGrid'
-  | 'SmConfetti'
-  | 'LgConfetti'
-  | 'HorzBrick'
-  | 'DiagBrick'
-  | 'SolidDmnd'
-  | 'OpenDmnd'
-  | 'DotDmnd'
-  | 'Plaid'
-  | 'Sphere'
-  | 'Weave'
-  | 'Divot'
-  | 'Shingle'
-  | 'Wave'
-  | 'Trellis'
-  | 'ZigZag';
+export type PresetPatternVal = "Pct5" | "Pct10" | "Pct20" | "Pct25" | "Pct30" | "Pct40" | "Pct50" | "Pct60" | "Pct70" | "Pct75" | "Pct80" | "Pct90" | "Horz" | "Vert" | "LtHorz" | "LtVert" | "DkHorz" | "DkVert" | "NarHorz" | "NarVert" | "DashHorz" | "DashVert" | "Cross" | "DnDiag" | "UpDiag" | "LtDnDiag" | "LtUpDiag" | "DkDnDiag" | "DkUpDiag" | "WdDnDiag" | "WdUpDiag" | "DashDnDiag" | "DashUpDiag" | "DiagCross" | "SmCheck" | "LgCheck" | "SmGrid" | "LgGrid" | "DotGrid" | "SmConfetti" | "LgConfetti" | "HorzBrick" | "DiagBrick" | "SolidDmnd" | "OpenDmnd" | "DotDmnd" | "Plaid" | "Sphere" | "Weave" | "Divot" | "Shingle" | "Wave" | "Trellis" | "ZigZag";
 
 export interface PresetShadow {
   prst: PresetShadowVal;
@@ -2101,34 +1728,14 @@ export interface PresetShadow {
   color: DrawingColor | null;
 }
 
-export type PresetShadowVal =
-  | 'Shdw1'
-  | 'Shdw2'
-  | 'Shdw3'
-  | 'Shdw4'
-  | 'Shdw5'
-  | 'Shdw6'
-  | 'Shdw7'
-  | 'Shdw8'
-  | 'Shdw9'
-  | 'Shdw10'
-  | 'Shdw11'
-  | 'Shdw12'
-  | 'Shdw13'
-  | 'Shdw14'
-  | 'Shdw15'
-  | 'Shdw16'
-  | 'Shdw17'
-  | 'Shdw18'
-  | 'Shdw19'
-  | 'Shdw20';
+export type PresetShadowVal = "Shdw1" | "Shdw2" | "Shdw3" | "Shdw4" | "Shdw5" | "Shdw6" | "Shdw7" | "Shdw8" | "Shdw9" | "Shdw10" | "Shdw11" | "Shdw12" | "Shdw13" | "Shdw14" | "Shdw15" | "Shdw16" | "Shdw17" | "Shdw18" | "Shdw19" | "Shdw20";
 
 export interface PresetTextWarp {
   preset: TextWarpPreset;
   adjust_values: GeomGuide[];
 }
 
-export type PrintErrors = 'Displayed' | 'Blank' | 'Dash' | 'NA';
+export type PrintErrors = "Displayed" | "Blank" | "Dash" | "NA";
 
 export interface PrintOptions {
   grid_lines: boolean;
@@ -2138,13 +1745,13 @@ export interface PrintOptions {
   grid_lines_set: boolean;
 }
 
-export type PrintOrientation = 'Default' | 'Portrait' | 'Landscape';
+export type PrintOrientation = "Default" | "Portrait" | "Landscape";
 
 export interface PrintPageSetup {
   paper_size: PaperSize;
   paper_width: UniversalMeasure | null;
   paper_height: UniversalMeasure | null;
-  orientation: PrintOrientation;
+  orientation: Orientation;
   scale: number | null;
   fit_to_width: number | null;
   fit_to_height: number | null;
@@ -2177,18 +1784,9 @@ export interface RadarChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type RadarStyle = 'Standard' | 'Marker' | 'Filled';
+export type RadarStyle = "Standard" | "Marker" | "Filled";
 
-export type RectAlignment =
-  | 'TopLeft'
-  | 'Top'
-  | 'TopRight'
-  | 'Left'
-  | 'Center'
-  | 'Right'
-  | 'BottomLeft'
-  | 'Bottom'
-  | 'BottomRight';
+export type RectAlignment = "TopLeft" | "Top" | "TopRight" | "Left" | "Center" | "Right" | "BottomLeft" | "Bottom" | "BottomRight";
 
 export interface Reflection {
   blur_rad: number;
@@ -2288,7 +1886,7 @@ export interface ScatterChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type ScatterStyle = 'None' | 'Line' | 'LineMarker' | 'Marker' | 'Smooth' | 'SmoothMarker';
+export type ScatterStyle = "None" | "Line" | "LineMarker" | "Marker" | "Smooth" | "SmoothMarker";
 
 export interface Scene3D {
   camera: Camera;
@@ -2297,31 +1895,16 @@ export interface Scene3D {
   ext_lst: string | null;
 }
 
-export type SchemeColor =
-  | 'Dk1'
-  | 'Lt1'
-  | 'Dk2'
-  | 'Lt2'
-  | 'Accent1'
-  | 'Accent2'
-  | 'Accent3'
-  | 'Accent4'
-  | 'Accent5'
-  | 'Accent6'
-  | 'Hlink'
-  | 'FolHlink'
-  | 'Bg1'
-  | 'Bg2'
-  | 'Tx1'
-  | 'Tx2'
-  | 'PhClr';
+export type SchemeColor = "Dk1" | "Lt1" | "Dk2" | "Lt2" | "Accent1" | "Accent2" | "Accent3" | "Accent4" | "Accent5" | "Accent6" | "Hlink" | "FolHlink" | "Bg1" | "Bg2" | "Tx1" | "Tx2" | "PhClr";
 
 export interface ScriptFont {
   script: string;
   typeface: string;
 }
 
-export type SeriesTextSource = { StrRef: StrRef } | { Value: string };
+export type SeriesTextSource =
+  | { StrRef: StrRef }
+  | { Value: string };
 
 export interface Shape3D {
   bevel_t: Bevel | null;
@@ -2335,7 +1918,9 @@ export interface Shape3D {
   ext_lst: string | null;
 }
 
-export type ShapeGeometry = { Preset: PresetGeometry } | { Custom: CustomGeometry };
+export type ShapeGeometry =
+  | { Preset: PresetGeometry }
+  | { Custom: CustomGeometry };
 
 export interface ShapeNonVisual {
   c_nv_pr: NonVisualProps;
@@ -2346,195 +1931,7 @@ export interface ShapeNonVisual {
   c_nv_sp_pr_ext_lst: string | null;
 }
 
-export type ShapePreset =
-  | 'rect'
-  | 'roundRect'
-  | 'ellipse'
-  | 'triangle'
-  | 'rtTriangle'
-  | 'diamond'
-  | 'parallelogram'
-  | 'trapezoid'
-  | 'nonIsoscelesTrapezoid'
-  | 'pentagon'
-  | 'hexagon'
-  | 'heptagon'
-  | 'octagon'
-  | 'decagon'
-  | 'dodecagon'
-  | 'pie'
-  | 'chord'
-  | 'teardrop'
-  | 'plaque'
-  | 'homePlate'
-  | 'chevron'
-  | 'diagStripe'
-  | 'corner'
-  | 'plus'
-  | 'round1Rect'
-  | 'round2DiagRect'
-  | 'round2SameRect'
-  | 'snip1Rect'
-  | 'snip2DiagRect'
-  | 'snip2SameRect'
-  | 'snipRoundRect'
-  | 'line'
-  | 'lineInv'
-  | 'straightConnector1'
-  | 'bentConnector2'
-  | 'bentConnector3'
-  | 'bentConnector4'
-  | 'bentConnector5'
-  | 'curvedConnector2'
-  | 'curvedConnector3'
-  | 'curvedConnector4'
-  | 'curvedConnector5'
-  | 'rightArrow'
-  | 'leftArrow'
-  | 'upArrow'
-  | 'downArrow'
-  | 'leftRightArrow'
-  | 'upDownArrow'
-  | 'bentArrow'
-  | 'bentUpArrow'
-  | 'uturnArrow'
-  | 'quadArrow'
-  | 'leftRightUpArrow'
-  | 'leftUpArrow'
-  | 'circularArrow'
-  | 'leftCircularArrow'
-  | 'leftRightCircularArrow'
-  | 'curvedRightArrow'
-  | 'curvedLeftArrow'
-  | 'curvedUpArrow'
-  | 'curvedDownArrow'
-  | 'stripedRightArrow'
-  | 'notchedRightArrow'
-  | 'swooshArrow'
-  | 'rightArrowCallout'
-  | 'leftArrowCallout'
-  | 'upArrowCallout'
-  | 'downArrowCallout'
-  | 'leftRightArrowCallout'
-  | 'upDownArrowCallout'
-  | 'quadArrowCallout'
-  | 'flowChartProcess'
-  | 'flowChartAlternateProcess'
-  | 'flowChartDecision'
-  | 'flowChartInputOutput'
-  | 'flowChartPredefinedProcess'
-  | 'flowChartInternalStorage'
-  | 'flowChartDocument'
-  | 'flowChartMultidocument'
-  | 'flowChartTerminator'
-  | 'flowChartPreparation'
-  | 'flowChartManualInput'
-  | 'flowChartManualOperation'
-  | 'flowChartConnector'
-  | 'flowChartOffpageConnector'
-  | 'flowChartPunchedCard'
-  | 'flowChartPunchedTape'
-  | 'flowChartSummingJunction'
-  | 'flowChartOr'
-  | 'flowChartCollate'
-  | 'flowChartSort'
-  | 'flowChartExtract'
-  | 'flowChartMerge'
-  | 'flowChartOnlineStorage'
-  | 'flowChartOfflineStorage'
-  | 'flowChartMagneticTape'
-  | 'flowChartMagneticDisk'
-  | 'flowChartMagneticDrum'
-  | 'flowChartDisplay'
-  | 'flowChartDelay'
-  | 'callout1'
-  | 'callout2'
-  | 'callout3'
-  | 'accentCallout1'
-  | 'accentCallout2'
-  | 'accentCallout3'
-  | 'borderCallout1'
-  | 'borderCallout2'
-  | 'borderCallout3'
-  | 'accentBorderCallout1'
-  | 'accentBorderCallout2'
-  | 'accentBorderCallout3'
-  | 'wedgeRectCallout'
-  | 'wedgeRoundRectCallout'
-  | 'wedgeEllipseCallout'
-  | 'cloudCallout'
-  | 'star4'
-  | 'star5'
-  | 'star6'
-  | 'star7'
-  | 'star8'
-  | 'star10'
-  | 'star12'
-  | 'star16'
-  | 'star24'
-  | 'star32'
-  | 'ribbon'
-  | 'ribbon2'
-  | 'ellipseRibbon'
-  | 'ellipseRibbon2'
-  | 'leftRightRibbon'
-  | 'verticalScroll'
-  | 'horizontalScroll'
-  | 'wave'
-  | 'doubleWave'
-  | 'irregularSeal1'
-  | 'irregularSeal2'
-  | 'mathPlus'
-  | 'mathDivide'
-  | 'mathEqual'
-  | 'mathNotEqual'
-  | 'mathMinus'
-  | 'mathMultiply'
-  | 'actionButtonBackPrevious'
-  | 'actionButtonForwardNext'
-  | 'actionButtonBeginning'
-  | 'actionButtonEnd'
-  | 'actionButtonHome'
-  | 'actionButtonInformation'
-  | 'actionButtonReturn'
-  | 'actionButtonDocument'
-  | 'actionButtonSound'
-  | 'actionButtonMovie'
-  | 'actionButtonHelp'
-  | 'actionButtonBlank'
-  | 'bracePair'
-  | 'bracketPair'
-  | 'leftBrace'
-  | 'rightBrace'
-  | 'leftBracket'
-  | 'rightBracket'
-  | 'cornerTabs'
-  | 'squareTabs'
-  | 'plaqueTabs'
-  | 'heart'
-  | 'lightningBolt'
-  | 'sun'
-  | 'moon'
-  | 'cloud'
-  | 'arc'
-  | 'blockArc'
-  | 'foldedCorner'
-  | 'smileyFace'
-  | 'donut'
-  | 'noSmoking'
-  | 'can'
-  | 'cube'
-  | 'bevel'
-  | 'frame'
-  | 'halfFrame'
-  | 'funnel'
-  | 'gear6'
-  | 'gear9'
-  | 'pieWedge'
-  | 'chartPlus'
-  | 'chartStar'
-  | 'chartX'
-  | 'textBox';
+export type ShapePreset = "rect" | "roundRect" | "ellipse" | "triangle" | "rtTriangle" | "diamond" | "parallelogram" | "trapezoid" | "nonIsoscelesTrapezoid" | "pentagon" | "hexagon" | "heptagon" | "octagon" | "decagon" | "dodecagon" | "pie" | "chord" | "teardrop" | "plaque" | "homePlate" | "chevron" | "diagStripe" | "corner" | "plus" | "round1Rect" | "round2DiagRect" | "round2SameRect" | "snip1Rect" | "snip2DiagRect" | "snip2SameRect" | "snipRoundRect" | "line" | "lineInv" | "straightConnector1" | "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" | "curvedConnector2" | "curvedConnector3" | "curvedConnector4" | "curvedConnector5" | "rightArrow" | "leftArrow" | "upArrow" | "downArrow" | "leftRightArrow" | "upDownArrow" | "bentArrow" | "bentUpArrow" | "uturnArrow" | "quadArrow" | "leftRightUpArrow" | "leftUpArrow" | "circularArrow" | "leftCircularArrow" | "leftRightCircularArrow" | "curvedRightArrow" | "curvedLeftArrow" | "curvedUpArrow" | "curvedDownArrow" | "stripedRightArrow" | "notchedRightArrow" | "swooshArrow" | "rightArrowCallout" | "leftArrowCallout" | "upArrowCallout" | "downArrowCallout" | "leftRightArrowCallout" | "upDownArrowCallout" | "quadArrowCallout" | "flowChartProcess" | "flowChartAlternateProcess" | "flowChartDecision" | "flowChartInputOutput" | "flowChartPredefinedProcess" | "flowChartInternalStorage" | "flowChartDocument" | "flowChartMultidocument" | "flowChartTerminator" | "flowChartPreparation" | "flowChartManualInput" | "flowChartManualOperation" | "flowChartConnector" | "flowChartOffpageConnector" | "flowChartPunchedCard" | "flowChartPunchedTape" | "flowChartSummingJunction" | "flowChartOr" | "flowChartCollate" | "flowChartSort" | "flowChartExtract" | "flowChartMerge" | "flowChartOnlineStorage" | "flowChartOfflineStorage" | "flowChartMagneticTape" | "flowChartMagneticDisk" | "flowChartMagneticDrum" | "flowChartDisplay" | "flowChartDelay" | "callout1" | "callout2" | "callout3" | "accentCallout1" | "accentCallout2" | "accentCallout3" | "borderCallout1" | "borderCallout2" | "borderCallout3" | "accentBorderCallout1" | "accentBorderCallout2" | "accentBorderCallout3" | "wedgeRectCallout" | "wedgeRoundRectCallout" | "wedgeEllipseCallout" | "cloudCallout" | "star4" | "star5" | "star6" | "star7" | "star8" | "star10" | "star12" | "star16" | "star24" | "star32" | "ribbon" | "ribbon2" | "ellipseRibbon" | "ellipseRibbon2" | "leftRightRibbon" | "verticalScroll" | "horizontalScroll" | "wave" | "doubleWave" | "irregularSeal1" | "irregularSeal2" | "mathPlus" | "mathDivide" | "mathEqual" | "mathNotEqual" | "mathMinus" | "mathMultiply" | "actionButtonBackPrevious" | "actionButtonForwardNext" | "actionButtonBeginning" | "actionButtonEnd" | "actionButtonHome" | "actionButtonInformation" | "actionButtonReturn" | "actionButtonDocument" | "actionButtonSound" | "actionButtonMovie" | "actionButtonHelp" | "actionButtonBlank" | "bracePair" | "bracketPair" | "leftBrace" | "rightBrace" | "leftBracket" | "rightBracket" | "cornerTabs" | "squareTabs" | "plaqueTabs" | "heart" | "lightningBolt" | "sun" | "moon" | "cloud" | "arc" | "blockArc" | "foldedCorner" | "smileyFace" | "donut" | "noSmoking" | "can" | "cube" | "bevel" | "frame" | "halfFrame" | "funnel" | "gear6" | "gear9" | "pieWedge" | "chartPlus" | "chartStar" | "chartX" | "textBox";
 
 export interface ShapeProperties {
   xfrm: Transform2D | null;
@@ -2555,7 +1952,7 @@ export interface ShapeStyle {
   font_ref: FontReference;
 }
 
-export type SizeRepresents = 'Area' | 'Width';
+export type SizeRepresents = "Area" | "Width";
 
 export interface SoftEdge {
   rad: number;
@@ -2572,7 +1969,7 @@ export interface SourceRect {
   right: number;
 }
 
-export type SplitType = 'Auto' | 'Custom' | 'Percent' | 'Position' | 'Value';
+export type SplitType = "Auto" | "Custom" | "Percent" | "Position" | "Value";
 
 export interface SpreadsheetConnector {
   nv_cxn_sp_pr: ConnectorNonVisual;
@@ -2628,7 +2025,7 @@ export interface StockChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type StockType = 'HLC' | 'OHLC' | 'VolumeHLC' | 'VolumeOHLC';
+export type StockType = "HLC" | "OHLC" | "VolumeHLC" | "VolumeOHLC";
 
 export interface StrData {
   pt_count: number | null;
@@ -2636,7 +2033,9 @@ export interface StrData {
   extensions: ExtensionEntry[];
 }
 
-export type StrDataSource = { Ref: StrRef } | { Lit: StrData };
+export type StrDataSource =
+  | { Ref: StrRef }
+  | { Lit: StrData };
 
 export interface StrPoint {
   idx: number;
@@ -2665,37 +2064,7 @@ export interface SurfaceChartConfig {
   extensions: ExtensionEntry[];
 }
 
-export type SystemColorVal =
-  | 'ScrollBar'
-  | 'Background'
-  | 'ActiveCaption'
-  | 'InactiveCaption'
-  | 'Menu'
-  | 'Window'
-  | 'WindowFrame'
-  | 'MenuText'
-  | 'WindowText'
-  | 'CaptionText'
-  | 'ActiveBorder'
-  | 'InactiveBorder'
-  | 'AppWorkspace'
-  | 'Highlight'
-  | 'HighlightText'
-  | 'BtnFace'
-  | 'BtnShadow'
-  | 'GrayText'
-  | 'BtnText'
-  | 'InactiveCaptionText'
-  | 'BtnHighlight'
-  | 'ThreeDDkShadow'
-  | 'ThreeDLight'
-  | 'InfoText'
-  | 'InfoBk'
-  | 'HotLight'
-  | 'GradientActiveCaption'
-  | 'GradientInactiveCaption'
-  | 'MenuHighlight'
-  | 'MenuBar';
+export type SystemColorVal = "ScrollBar" | "Background" | "ActiveCaption" | "InactiveCaption" | "Menu" | "Window" | "WindowFrame" | "MenuText" | "WindowText" | "CaptionText" | "ActiveBorder" | "InactiveBorder" | "AppWorkspace" | "Highlight" | "HighlightText" | "BtnFace" | "BtnShadow" | "GrayText" | "BtnText" | "InactiveCaptionText" | "BtnHighlight" | "ThreeDDkShadow" | "ThreeDLight" | "InfoText" | "InfoBk" | "HotLight" | "GradientActiveCaption" | "GradientInactiveCaption" | "MenuHighlight" | "MenuBar";
 
 export interface Table {
   tbl_pr: TableProperties | null;
@@ -2820,16 +2189,9 @@ export interface TableStyleTextStyle {
   italic: OnOffStyleType;
 }
 
-export type TextAlign =
-  | 'Left'
-  | 'Center'
-  | 'Right'
-  | 'Justify'
-  | 'JustifyLow'
-  | 'Distributed'
-  | 'ThaiDistributed';
+export type TextAlign = "Left" | "Center" | "Right" | "Justify" | "JustifyLow" | "Distributed" | "ThaiDistributed";
 
-export type TextAnchor = 'Top' | 'Center' | 'Bottom' | 'Justified' | 'Distributed';
+export type TextAnchor = "Top" | "Center" | "Bottom" | "Justified" | "Distributed";
 
 export type TextAutofit =
   | { NoAutofit: null }
@@ -2841,48 +2203,7 @@ export interface TextAutofit_NormalAutofit {
   line_space_reduction?: number;
 }
 
-export type TextAutonumberType =
-  | 'AlphaLcParenBoth'
-  | 'AlphaUcParenBoth'
-  | 'AlphaLcParenR'
-  | 'AlphaUcParenR'
-  | 'AlphaLcPeriod'
-  | 'AlphaUcPeriod'
-  | 'ArabicParenBoth'
-  | 'ArabicParenR'
-  | 'ArabicPeriod'
-  | 'ArabicPlain'
-  | 'RomanLcParenBoth'
-  | 'RomanUcParenBoth'
-  | 'RomanLcParenR'
-  | 'RomanUcParenR'
-  | 'RomanLcPeriod'
-  | 'RomanUcPeriod'
-  | 'CircleNumDbPlain'
-  | 'CircleNumWdBlackPlain'
-  | 'CircleNumWdWhitePlain'
-  | 'ArabicDbPeriod'
-  | 'ArabicDbPlain'
-  | 'Ea1ChsPeriod'
-  | 'Ea1ChsPlain'
-  | 'Ea1ChtPeriod'
-  | 'Ea1ChtPlain'
-  | 'Ea1JpnChsDbPeriod'
-  | 'Ea1JpnKorPlain'
-  | 'Ea1JpnKorPeriod'
-  | 'Arabic1Minus'
-  | 'Arabic2Minus'
-  | 'Hebrew2Minus'
-  | 'ThaiAlphaPeriod'
-  | 'ThaiAlphaParenR'
-  | 'ThaiAlphaParenBoth'
-  | 'ThaiNumPeriod'
-  | 'ThaiNumParenR'
-  | 'ThaiNumParenBoth'
-  | 'HindiAlphaPeriod'
-  | 'HindiNumPeriod'
-  | 'HindiNumParenR'
-  | 'HindiAlpha1Period';
+export type TextAutonumberType = "AlphaLcParenBoth" | "AlphaUcParenBoth" | "AlphaLcParenR" | "AlphaUcParenR" | "AlphaLcPeriod" | "AlphaUcPeriod" | "ArabicParenBoth" | "ArabicParenR" | "ArabicPeriod" | "ArabicPlain" | "RomanLcParenBoth" | "RomanUcParenBoth" | "RomanLcParenR" | "RomanUcParenR" | "RomanLcPeriod" | "RomanUcPeriod" | "CircleNumDbPlain" | "CircleNumWdBlackPlain" | "CircleNumWdWhitePlain" | "ArabicDbPeriod" | "ArabicDbPlain" | "Ea1ChsPeriod" | "Ea1ChsPlain" | "Ea1ChtPeriod" | "Ea1ChtPlain" | "Ea1JpnChsDbPeriod" | "Ea1JpnKorPlain" | "Ea1JpnKorPeriod" | "Arabic1Minus" | "Arabic2Minus" | "Hebrew2Minus" | "ThaiAlphaPeriod" | "ThaiAlphaParenR" | "ThaiAlphaParenBoth" | "ThaiNumPeriod" | "ThaiNumParenR" | "ThaiNumParenBoth" | "HindiAlphaPeriod" | "HindiNumPeriod" | "HindiNumParenR" | "HindiAlpha1Period";
 
 export interface TextBody {
   body_props: TextBodyProperties;
@@ -2918,7 +2239,7 @@ export interface TextBodyProperties {
   flatTx: FlatText | null;
 }
 
-export type TextCapsType = 'None' | 'Small' | 'All';
+export type TextCapsType = "None" | "Small" | "All";
 
 export interface TextFont {
   typeface: string;
@@ -2927,9 +2248,9 @@ export interface TextFont {
   charset: number | null;
 }
 
-export type TextFontAlignType = 'Auto' | 'Top' | 'Center' | 'Baseline' | 'Bottom';
+export type TextFontAlignType = "Auto" | "Top" | "Center" | "Baseline" | "Bottom";
 
-export type TextHorzOverflow = 'Overflow' | 'Clip';
+export type TextHorzOverflow = "Overflow" | "Clip";
 
 export interface TextListStyle {
   def_ppr: ParagraphProperties | null;
@@ -2958,106 +2279,30 @@ export interface TextRunContent_LineBreak {
   props?: RunProperties;
 }
 
-export type TextSpacing = { Percent: number } | { Points: number };
+export type TextSpacing =
+  | { Percent: number }
+  | { Points: number };
 
-export type TextStrikeType = 'NoStrike' | 'SingleStrike' | 'DoubleStrike';
+export type TextStrikeType = "NoStrike" | "SingleStrike" | "DoubleStrike";
 
-export type TextTabAlignType = 'Left' | 'Center' | 'Right' | 'Decimal';
+export type TextTabAlignType = "Left" | "Center" | "Right" | "Decimal";
 
 export interface TextTabStop {
   position: number | null;
   align: TextTabAlignType | null;
 }
 
-export type TextUnderlineType =
-  | 'None'
-  | 'Words'
-  | 'Single'
-  | 'Double'
-  | 'Heavy'
-  | 'Dotted'
-  | 'DottedHeavy'
-  | 'Dash'
-  | 'DashHeavy'
-  | 'DashLong'
-  | 'DashLongHeavy'
-  | 'DotDash'
-  | 'DotDashHeavy'
-  | 'DotDotDash'
-  | 'DotDotDashHeavy'
-  | 'Wavy'
-  | 'WavyHeavy'
-  | 'WavyDouble';
+export type TextUnderlineType = "None" | "Words" | "Single" | "Double" | "Heavy" | "Dotted" | "DottedHeavy" | "Dash" | "DashHeavy" | "DashLong" | "DashLongHeavy" | "DotDash" | "DotDashHeavy" | "DotDotDash" | "DotDotDashHeavy" | "Wavy" | "WavyHeavy" | "WavyDouble";
 
-export type TextVertOverflow = 'Overflow' | 'Ellipsis' | 'Clip';
+export type TextVertOverflow = "Overflow" | "Ellipsis" | "Clip";
 
-export type TextVerticalType =
-  | 'Horizontal'
-  | 'Vertical'
-  | 'Vertical270'
-  | 'WordArtVert'
-  | 'EastAsianVert'
-  | 'MongolianVert'
-  | 'WordArtVertRtl';
+export type TextVerticalType = "Horizontal" | "Vertical" | "Vertical270" | "WordArtVert" | "EastAsianVert" | "MongolianVert" | "WordArtVertRtl";
 
-export type TextWarpPreset =
-  | 'textNoShape'
-  | 'textPlain'
-  | 'textStop'
-  | 'textTriangle'
-  | 'textTriangleInverted'
-  | 'textChevron'
-  | 'textChevronInverted'
-  | 'textRingInside'
-  | 'textRingOutside'
-  | 'textArchUp'
-  | 'textArchDown'
-  | 'textCircle'
-  | 'textButton'
-  | 'textArchUpPour'
-  | 'textArchDownPour'
-  | 'textCirclePour'
-  | 'textButtonPour'
-  | 'textCurveUp'
-  | 'textCurveDown'
-  | 'textCanUp'
-  | 'textCanDown'
-  | 'textWave1'
-  | 'textWave2'
-  | 'textDoubleWave1'
-  | 'textWave4'
-  | 'textInflate'
-  | 'textDeflate'
-  | 'textInflateBottom'
-  | 'textDeflateBottom'
-  | 'textInflateTop'
-  | 'textDeflateTop'
-  | 'textDeflateInflate'
-  | 'textDeflateInflateDeflate'
-  | 'textFadeRight'
-  | 'textFadeLeft'
-  | 'textFadeUp'
-  | 'textFadeDown'
-  | 'textSlantUp'
-  | 'textSlantDown'
-  | 'textCascadeUp'
-  | 'textCascadeDown';
+export type TextWarpPreset = "textNoShape" | "textPlain" | "textStop" | "textTriangle" | "textTriangleInverted" | "textChevron" | "textChevronInverted" | "textRingInside" | "textRingOutside" | "textArchUp" | "textArchDown" | "textCircle" | "textButton" | "textArchUpPour" | "textArchDownPour" | "textCirclePour" | "textButtonPour" | "textCurveUp" | "textCurveDown" | "textCanUp" | "textCanDown" | "textWave1" | "textWave2" | "textDoubleWave1" | "textWave4" | "textInflate" | "textDeflate" | "textInflateBottom" | "textDeflateBottom" | "textInflateTop" | "textDeflateTop" | "textDeflateInflate" | "textDeflateInflateDeflate" | "textFadeRight" | "textFadeLeft" | "textFadeUp" | "textFadeDown" | "textSlantUp" | "textSlantDown" | "textCascadeUp" | "textCascadeDown";
 
-export type TextWrap = 'None' | 'Square';
+export type TextWrap = "None" | "Square";
 
-export type ThemeColorIndex =
-  | 'Dark1'
-  | 'Light1'
-  | 'Dark2'
-  | 'Light2'
-  | 'Accent1'
-  | 'Accent2'
-  | 'Accent3'
-  | 'Accent4'
-  | 'Accent5'
-  | 'Accent6'
-  | 'Hyperlink'
-  | 'FollowedHyperlink';
+export type ThemeColorIndex = "Dark1" | "Light1" | "Dark2" | "Light2" | "Accent1" | "Accent2" | "Accent3" | "Accent4" | "Accent5" | "Accent6" | "Hyperlink" | "FollowedHyperlink";
 
 export interface ThemeFontDef {
   typeface: string;
@@ -3066,17 +2311,25 @@ export interface ThemeFontDef {
   charset: number | null;
 }
 
-export type ThemeableEffectStyle = { Effect: EffectProperties } | { EffectRef: StyleRef };
+export type ThemeableEffectStyle =
+  | { Effect: EffectProperties }
+  | { EffectRef: StyleRef };
 
-export type ThemeableFillStyle = { Fill: DrawingFill } | { FillRef: StyleRef };
+export type ThemeableFillStyle =
+  | { Fill: DrawingFill }
+  | { FillRef: StyleRef };
 
-export type ThemeableFontStyle = { Font: TextFont } | { FontRef: FontReference };
+export type ThemeableFontStyle =
+  | { Font: TextFont }
+  | { FontRef: FontReference };
 
-export type ThemeableLineStyle = { Ln: Outline } | { LnRef: StyleRef };
+export type ThemeableLineStyle =
+  | { Ln: Outline }
+  | { LnRef: StyleRef };
 
-export type TickLabelPosition = 'High' | 'Low' | 'NextTo' | 'None';
+export type TickLabelPosition = "High" | "Low" | "NextTo" | "None";
 
-export type TickMark = 'Cross' | 'In' | 'None' | 'Out';
+export type TickMark = "Cross" | "In" | "None" | "Out";
 
 export interface TileFill {
   tx: number | null;
@@ -3087,9 +2340,9 @@ export interface TileFill {
   align: RectAlignment | null;
 }
 
-export type TileFlipMode = 'None' | 'X' | 'Y' | 'XY';
+export type TileFlipMode = "None" | "X" | "Y" | "XY";
 
-export type TimeUnit = 'Days' | 'Months' | 'Years';
+export type TimeUnit = "Days" | "Months" | "Years";
 
 export interface TintEffect {
   hue: number;
@@ -3146,13 +2399,7 @@ export interface TrendlineLabel {
   extensions: ExtensionEntry[];
 }
 
-export type TrendlineType =
-  | 'Exponential'
-  | 'Linear'
-  | 'Logarithmic'
-  | 'MovingAverage'
-  | 'Polynomial'
-  | 'Power';
+export type TrendlineType = "Exponential" | "Linear" | "Logarithmic" | "MovingAverage" | "Polynomial" | "Power";
 
 export interface TwoCellAnchor {
   from: CellAnchor;
@@ -3162,9 +2409,13 @@ export interface TwoCellAnchor {
   client_data: ClientData;
 }
 
-export type UnderlineFill = { FollowText: null } | { Custom: DrawingFill };
+export type UnderlineFill =
+  | { FollowText: null }
+  | { Custom: DrawingFill };
 
-export type UnderlineLine = { FollowText: null } | { Custom: Outline };
+export type UnderlineLine =
+  | { FollowText: null }
+  | { Custom: Outline };
 
 export interface UniversalMeasure {
   raw: string;

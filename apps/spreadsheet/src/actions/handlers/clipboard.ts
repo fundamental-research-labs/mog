@@ -462,6 +462,36 @@ function boundClipboardCaptureRange(
 const MAX_CLIPBOARD_CELLS = 100_000;
 let clipboardSettlementSequence = 0;
 
+interface PendingInternalClipboardWrite {
+  sequence: number;
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+let pendingInternalClipboardWrite: PendingInternalClipboardWrite | null = null;
+
+function beginInternalClipboardWrite(sequence: number): void {
+  pendingInternalClipboardWrite?.resolve();
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  pendingInternalClipboardWrite = { sequence, promise, resolve };
+}
+
+function finishInternalClipboardWrite(sequence: number): void {
+  const pending = pendingInternalClipboardWrite;
+  if (!pending || pending.sequence !== sequence) return;
+  pending.resolve();
+  pendingInternalClipboardWrite = null;
+}
+
+async function waitForInternalClipboardWrite(): Promise<void> {
+  const pending = pendingInternalClipboardWrite;
+  if (!pending) return;
+  await pending.promise;
+}
+
 function totalCells(ranges: CellRange[]): number {
   let total = 0;
   for (const r of ranges) {
@@ -529,6 +559,7 @@ export const COPY: ActionHandler = (deps) => {
     rejectData = rej;
   });
   const settlementId = ++clipboardSettlementSequence;
+  beginInternalClipboardWrite(settlementId);
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
@@ -551,6 +582,7 @@ export const COPY: ActionHandler = (deps) => {
       // system clipboard write. The internal state must be set even if the
       // system clipboard write fails (e.g., headless browsers, Playwright).
       copyCutDeps.commands.copy(mutableRanges, data);
+      finishInternalClipboardWrite(settlementId);
 
       // Await the clipboard write — best-effort, failure is non-fatal.
       void clipboardWritePromise
@@ -568,6 +600,7 @@ export const COPY: ActionHandler = (deps) => {
     .catch((err) => {
       // Reject the data promise so ClipboardItem doesn't hang forever.
       rejectData(err);
+      finishInternalClipboardWrite(settlementId);
       console.error('Copy failed:', err);
     });
 
@@ -620,6 +653,7 @@ export const CUT: ActionHandler = (deps) => {
     rejectData = rej;
   });
   const settlementId = ++clipboardSettlementSequence;
+  beginInternalClipboardWrite(settlementId);
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
@@ -642,6 +676,7 @@ export const CUT: ActionHandler = (deps) => {
       // system clipboard write. The internal state must be set even if the
       // system clipboard write fails (e.g., headless browsers, Playwright).
       copyCutDeps.commands.cut(mutableRanges, data);
+      finishInternalClipboardWrite(settlementId);
 
       // Await the clipboard write — best-effort, failure is non-fatal.
       void clipboardWritePromise
@@ -658,6 +693,7 @@ export const CUT: ActionHandler = (deps) => {
     })
     .catch((err) => {
       rejectData(err);
+      finishInternalClipboardWrite(settlementId);
       console.error('Cut failed:', err);
     });
 
@@ -711,6 +747,8 @@ const runPaste: AsyncActionHandler = async (deps) => {
   if (isEditing(deps)) {
     return deferred();
   }
+
+  await waitForInternalClipboardWrite();
 
   // If a chart was previously copied/cut, delegate to chart paste instead of
   // cell paste. The chart clipboard is stored in UIStore independently of the

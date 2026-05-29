@@ -1051,11 +1051,13 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Store text signature for external clipboard detection
         data.textSignature = tsv;
 
-        // Write to system clipboard via modern async API
-        await writeToSystemClipboard({ tsv, html });
-
-        // Update XState clipboard machine using commands
+        // Update internal rich clipboard state before awaiting the system
+        // clipboard write so immediate paste can use formulas, formats,
+        // comments, validation, and cut metadata even in headless browsers.
         commands.copy(mutableRanges, data);
+
+        // Write to system clipboard via modern async API for cross-app paste.
+        await writeToSystemClipboard({ tsv, html });
         onCopy?.();
       } catch (err) {
         // Push to devtools error buffer first so failure records have
@@ -1124,11 +1126,13 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Store text signature for external clipboard detection
         data.textSignature = tsv;
 
-        // Write to system clipboard via modern async API
-        await writeToSystemClipboard({ tsv, html });
-
-        // Update XState clipboard machine using commands
+        // Update internal rich clipboard state before awaiting the system
+        // clipboard write so immediate paste can use cut metadata even when
+        // the browser clipboard write is slow or unavailable.
         commands.cut(mutableRanges, data);
+
+        // Write to system clipboard via modern async API for cross-app paste.
+        await writeToSystemClipboard({ tsv, html });
         onCut?.();
       } catch (err) {
         (

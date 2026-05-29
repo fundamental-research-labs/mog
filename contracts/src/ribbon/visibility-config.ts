@@ -577,6 +577,17 @@ export type RibbonVisibilityProfileName = 'public' | 'app-eval' | 'all';
 export type RibbonVisibilityPath = readonly [RibbonVisibilityRootKey, string?, string?];
 
 export const PUBLIC_RIBBON_VISIBILITY_CONFIG = {
+  insert: {
+    tables: {
+      pivotTable: false,
+      checkBox: false,
+      comboBox: false,
+    },
+    illustrations: false,
+    sparklines: false,
+    filters: false,
+    text: false,
+  },
   pageLayout: false,
 } satisfies RibbonVisibilityConfig;
 

@@ -56,7 +56,30 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(merged, ['pageLayout', 'themes'])).toBe(true);
   });
 
-  it('hides only page layout in the public profile', () => {
+  it('hides staged public chrome and tabs in the public profile', () => {
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'pivotTable']),
+    ).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'checkBox']),
+    ).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'comboBox']),
+    ).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'table']),
+    ).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'illustrations'])).toBe(
+      false,
+    );
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'sparklines'])).toBe(
+      false,
+    );
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(false);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'text'])).toBe(false);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'charts'])).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'links'])).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'comments'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['pageLayout'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['review'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['view'])).toBe(true);

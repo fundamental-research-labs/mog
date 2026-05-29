@@ -8,12 +8,10 @@ const mockSetCells = jest.fn();
 const mockGetSheetById = jest.fn(() => ({ setCells: mockSetCells }));
 const mockWorkbook = { getSheetById: mockGetSheetById };
 const mockDispatch = jest.fn();
-let mockHostCommands:
-  | {
-      getOwner: jest.Mock;
-      request: jest.Mock;
-    }
-  | null = null;
+let mockHostCommands: {
+  getOwner: jest.Mock;
+  request: jest.Mock;
+} | null = null;
 
 const uiState = {
   validationCirclesVisible: false,
@@ -85,13 +83,7 @@ jest.unstable_mockModule('../../primitives/RibbonButton', () => ({
 
 jest.unstable_mockModule('../../primitives/RibbonDropdown', () => ({
   RibbonDropdownPanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  RibbonDropdownItem: ({
-    children,
-    onClick,
-  }: {
-    children: ReactNode;
-    onClick?: () => void;
-  }) => (
+  RibbonDropdownItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
     <button type="button" role="menuitem" onClick={onClick}>
       {children}
     </button>
@@ -138,7 +130,10 @@ function installInputSpy() {
   const originalCreateElement = document.createElement.bind(document);
   const inputs: HTMLInputElement[] = [];
 
-  jest.spyOn(document, 'createElement').mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+  jest.spyOn(document, 'createElement').mockImplementation(((
+    tagName: string,
+    options?: ElementCreationOptions,
+  ) => {
     const element = originalCreateElement(tagName, options);
     if (tagName.toLowerCase() === 'input') {
       inputs.push(element as HTMLInputElement);

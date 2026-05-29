@@ -382,10 +382,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
               setActiveSheetId(targetSheet.id);
             }
           }
-          selectionCommands.setSelection(
-            [rangeFromParsedCellRange(parsedRange)],
-            { row: parsedRange.startRow, col: parsedRange.startCol },
-          );
+          selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
+            row: parsedRange.startRow,
+            col: parsedRange.startCol,
+          });
           return;
         }
       }
@@ -411,10 +411,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             setActiveSheetId(targetSheet.id);
           }
         }
-        selectionCommands.setSelection(
-          [rangeFromParsedCellRange(parsedRange)],
-          { row: parsedRange.startRow, col: parsedRange.startCol },
-        );
+        selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
+          row: parsedRange.startRow,
+          col: parsedRange.startCol,
+        });
         return true;
       };
 
@@ -490,10 +490,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         // Set selection to the range (or single cell when start === end);
         // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
-        selectionCommands.setSelection(
-          [rangeFromParsedCellRange(parsed)],
-          { row: parsed.startRow, col: parsed.startCol },
-        );
+        selectionCommands.setSelection([rangeFromParsedCellRange(parsed)], {
+          row: parsed.startRow,
+          col: parsed.startCol,
+        });
         return;
       }
 

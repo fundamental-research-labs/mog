@@ -66,11 +66,11 @@ export async function resolveInitialActiveSheetId({
 export function persistActiveSheetId(workbook: WorkbookInternal, activeSheetId: SheetId): void {
   if (!isVisibleSheet(workbook, activeSheetId)) return;
 
-  void workbook.setCustomSetting(ACTIVE_SHEET_CUSTOM_SETTING_KEY, String(activeSheetId)).catch(
-    (error) => {
+  void workbook
+    .setCustomSetting(ACTIVE_SHEET_CUSTOM_SETTING_KEY, String(activeSheetId))
+    .catch((error) => {
       console.warn('[SpreadsheetApp] Failed to persist active sheet:', error);
-    },
-  );
+    });
 }
 
 export function subscribeActiveSheetPersistence<TState extends ActiveSheetStoreState>({

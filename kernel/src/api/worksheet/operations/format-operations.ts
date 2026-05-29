@@ -22,10 +22,7 @@ import {
 } from './shared';
 
 import { normalizeRange } from '../../internal/utils';
-import {
-  assertFormatOperationsAllowed,
-  assertFormatRangesAllowed,
-} from '../protection-guards';
+import { assertFormatOperationsAllowed, assertFormatRangesAllowed } from '../protection-guards';
 
 /**
  * Threshold for enumerating individual cells in affectedCells.

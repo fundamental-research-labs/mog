@@ -656,10 +656,7 @@ export function SpreadsheetCoordinatorProvider({
           return syntaxResult;
         }
 
-        const qualifiedFormula = qualifyImplicitRowStructuredReferences(
-          formula,
-          context.tableName,
-        );
+        const qualifiedFormula = qualifyImplicitRowStructuredReferences(formula, context.tableName);
         const qualifiedSyntaxResult = await ws.validateFormulaSyntax(qualifiedFormula);
         return qualifiedSyntaxResult ? syntaxResult : null;
       },

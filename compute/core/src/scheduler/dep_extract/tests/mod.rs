@@ -363,7 +363,10 @@ fn test_intersection_with_no_overlap_extracts_no_value_deps() {
 
     let deps = deps_from_ast(&ast, &sheet);
 
-    assert!(deps.is_empty(), "no-overlap intersection got deps: {deps:?}");
+    assert!(
+        deps.is_empty(),
+        "no-overlap intersection got deps: {deps:?}"
+    );
 }
 
 #[test]

@@ -181,12 +181,7 @@ const READ_ONLY_ALLOWED_IDS = new Set([
   'showFormulas',
 ]);
 
-export function CellContextMenu({
-  target,
-  targetRow,
-  targetCol,
-  onClose,
-}: CellContextMenuProps) {
+export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellContextMenuProps) {
   const contextMenuCell = useMemo(
     () =>
       (target === 'cell' || target === 'selection') &&

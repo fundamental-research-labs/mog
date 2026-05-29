@@ -291,10 +291,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
   // ---------------------------------------------------------------------------
   // SPLIT VIEW EVENTS
   // ---------------------------------------------------------------------------
-  const applySplitConfig = (
-    sheetId: string,
-    viewportConfig: PersistedViewportConfig,
-  ): void => {
+  const applySplitConfig = (sheetId: string, viewportConfig: PersistedViewportConfig): void => {
     const currentSheetId = getCurrentSheetId();
     if (currentSheetId && sheetId === currentSheetId) {
       setViewportConfig(viewportConfig);

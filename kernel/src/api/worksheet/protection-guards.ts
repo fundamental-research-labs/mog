@@ -77,10 +77,8 @@ function rangeFormatOperation(range: CellRange): ProtectionOperation {
   const normalized = normalizeRange(range);
   const spansAllRows = normalized.startRow === 0 && normalized.endRow === MAX_ROWS - 1;
   const spansAllColumns = normalized.startCol === 0 && normalized.endCol === MAX_COLS - 1;
-  const isFullRow =
-    range.isFullRow === true || (spansAllColumns && !spansAllRows);
-  const isFullColumn =
-    range.isFullColumn === true || (spansAllRows && !spansAllColumns);
+  const isFullRow = range.isFullRow === true || (spansAllColumns && !spansAllRows);
+  const isFullColumn = range.isFullColumn === true || (spansAllRows && !spansAllColumns);
 
   if (isFullRow) return 'formatRows';
   if (isFullColumn) return 'formatColumns';

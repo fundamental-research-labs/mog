@@ -382,14 +382,20 @@ impl ComputeCore {
             cell: cell_id,
             new_precedents: extracted.value_deps,
         };
-        let positions = compute_graph::positions::WithOverrides::new(mirror)
-            .with_override(cell_id, compute_graph::positions::CellPosition {
+        let positions = compute_graph::positions::WithOverrides::new(mirror).with_override(
+            cell_id,
+            compute_graph::positions::CellPosition {
                 sheet: *sheet_id,
                 row,
                 col,
-            });
+            },
+        );
 
-        if self.graph.would_create_cycle(&edit, &positions).into_value() {
+        if self
+            .graph
+            .would_create_cycle(&edit, &positions)
+            .into_value()
+        {
             Some(crate::engine_types::FormulaCircularReferenceValidation {
                 cell_address: crate::range_manager::pos_to_a1(row, col),
                 formula,

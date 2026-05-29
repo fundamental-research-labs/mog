@@ -53,10 +53,7 @@ function isClipboardPastePending(state: ClipboardState): boolean {
   return clipboardSelectors.isPastePreview(state) || clipboardSelectors.isPasting(state);
 }
 
-function waitForClipboardPasteIdle(
-  actor: ClipboardActorLike,
-  signal?: AbortSignal,
-): Promise<void> {
+function waitForClipboardPasteIdle(actor: ClipboardActorLike, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
     return Promise.resolve();
   }

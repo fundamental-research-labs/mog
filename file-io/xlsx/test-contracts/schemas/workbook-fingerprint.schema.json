@@ -13,7 +13,14 @@
     "summary": { "type": "string" },
     "proof": {
       "type": "object",
-      "required": ["version", "algorithm", "digest", "canonicalization", "covered_fields", "issued_by"]
+      "required": [
+        "version",
+        "algorithm",
+        "digest",
+        "canonicalization",
+        "covered_fields",
+        "issued_by"
+      ]
     },
     "evidence": { "type": "array" }
   },

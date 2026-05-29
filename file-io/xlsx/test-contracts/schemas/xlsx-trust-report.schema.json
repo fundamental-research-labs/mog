@@ -3,7 +3,17 @@
   "$id": "mog.xlsx.file_io.report.v1",
   "title": "GateReport",
   "type": "object",
-  "required": ["$schema", "eval", "gate", "tier", "run_id", "timestamp", "totals", "duration_ms", "scenarios"],
+  "required": [
+    "$schema",
+    "eval",
+    "gate",
+    "tier",
+    "run_id",
+    "timestamp",
+    "totals",
+    "duration_ms",
+    "scenarios"
+  ],
   "properties": {
     "$schema": { "const": "mog.xlsx.file_io.report.v1" },
     "eval": { "const": "xlsx-file-io" },

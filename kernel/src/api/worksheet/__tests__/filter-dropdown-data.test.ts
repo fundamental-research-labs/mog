@@ -196,11 +196,7 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
     await filters.getFilterDropdownData(0, 'filter-1');
 
     expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
-    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(
-      ['A', 'B'],
-      null,
-      null,
-    );
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(['A', 'B'], null, null);
   });
 
   it('returns empty dropdown data for missing filters and out-of-range columns', async () => {

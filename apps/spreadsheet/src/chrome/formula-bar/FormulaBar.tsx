@@ -430,9 +430,7 @@ export function FormulaBar({
           onClick={onToggleExpand}
           className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
           title={
-            isExpanded
-              ? 'Collapse Formula Bar (Ctrl+Shift+U)'
-              : 'Expand Formula Bar (Ctrl+Shift+U)'
+            isExpanded ? 'Collapse Formula Bar (Ctrl+Shift+U)' : 'Expand Formula Bar (Ctrl+Shift+U)'
           }
         >
           {/* Chevron icon: up when expanded, down when collapsed */}
@@ -442,12 +440,7 @@ export function FormulaBar({
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 15l7-7 7 7"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
       </RibbonVisibilityPathItem>

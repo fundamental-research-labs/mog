@@ -325,7 +325,10 @@ export function usePdfExport(
   const [state, setState] = useState<PdfExportState>(initialState);
 
   const exportPdf = useCallback(
-    async (filename = options.defaultFileName ?? 'workbook.pdf', sheetIds?: string[]): Promise<boolean> => {
+    async (
+      filename = options.defaultFileName ?? 'workbook.pdf',
+      sheetIds?: string[],
+    ): Promise<boolean> => {
       setState({ ...initialState, isExporting: true });
       onExportStart?.();
 

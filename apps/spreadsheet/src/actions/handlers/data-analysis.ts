@@ -39,7 +39,9 @@ export const OPEN_GOAL_SEEK_DIALOG: AsyncActionHandler = async (deps): Promise<A
     }
   }
 
-  getUIStore(deps).getState().openGoalSeekDialog(setCell ? { setCell } : undefined);
+  getUIStore(deps)
+    .getState()
+    .openGoalSeekDialog(setCell ? { setCell } : undefined);
   return { handled: true };
 };
 
@@ -245,9 +247,7 @@ function scanTextForSpellingErrors(
 
 function replaceSpan(value: string, error: SpellingError, replacement: string): string {
   return (
-    value.slice(0, error.startIndex) +
-    replacement +
-    value.slice(error.startIndex + error.length)
+    value.slice(0, error.startIndex) + replacement + value.slice(error.startIndex + error.length)
   );
 }
 

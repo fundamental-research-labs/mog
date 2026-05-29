@@ -4,16 +4,14 @@ import { normalizeRange } from './clipboard-utils';
 export function isFullColumnRange(range: CellRange): boolean {
   const normalized = normalizeRange(range);
   return (
-    range.isFullColumn === true ||
-    (normalized.startRow === 0 && normalized.endRow === MAX_ROWS - 1)
+    range.isFullColumn === true || (normalized.startRow === 0 && normalized.endRow === MAX_ROWS - 1)
   );
 }
 
 export function isFullRowRange(range: CellRange): boolean {
   const normalized = normalizeRange(range);
   return (
-    range.isFullRow === true ||
-    (normalized.startCol === 0 && normalized.endCol === MAX_COLS - 1)
+    range.isFullRow === true || (normalized.startCol === 0 && normalized.endCol === MAX_COLS - 1)
   );
 }
 

@@ -296,10 +296,10 @@ export const NAVIGATE_TO_REFERENCE: AsyncActionHandler = async (deps): Promise<A
     // Navigate to range
     // MIGRATION: Uses deps.commands.selection instead of direct actor.send()
     if (deps.commands?.selection) {
-      deps.commands.selection.setSelection(
-        [rangeFromParsedCellRange(rangeParsed)],
-        { row: rangeParsed.startRow, col: rangeParsed.startCol },
-      );
+      deps.commands.selection.setSelection([rangeFromParsedCellRange(rangeParsed)], {
+        row: rangeParsed.startRow,
+        col: rangeParsed.startCol,
+      });
     }
 
     // Add to recent locations

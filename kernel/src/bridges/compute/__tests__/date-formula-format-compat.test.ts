@@ -41,7 +41,12 @@ function createStartedBridge(transport: BridgeTransport & { call: jest.Mock }): 
 describe('ComputeBridge DATE formula format compatibility', () => {
   it('applies M/d/yyyy only when stale WASM leaves a numeric DATE formula General', async () => {
     const primary = mutationResult();
-    const formatChange = { sheetId: 'sheet-1', row: 0, col: 0, format: { numberFormat: 'M/d/yyyy' } };
+    const formatChange = {
+      sheetId: 'sheet-1',
+      row: 0,
+      col: 0,
+      format: { numberFormat: 'M/d/yyyy' },
+    };
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async (command: string) => {
         if (command === 'compute_batch_set_cells_by_position') {
@@ -78,7 +83,12 @@ describe('ComputeBridge DATE formula format compatibility', () => {
 
   it.each([
     ['non-DATE formula', { kind: 'parse', text: '=SUM(1,2)' }, {}, 3],
-    ['already formatted DATE formula', { kind: 'parse', text: '=DATE(2026,1,2)' }, { numberFormat: '0.00' }, 46024],
+    [
+      'already formatted DATE formula',
+      { kind: 'parse', text: '=DATE(2026,1,2)' },
+      { numberFormat: '0.00' },
+      46024,
+    ],
     ['literal date string', { kind: 'parse', text: '1/2/2026' }, {}, 46024],
     ['apostrophe-prefixed text', { kind: 'parse', text: "'=DATE(2026,1,2)" }, {}, 46024],
     ['non-numeric DATE result', { kind: 'parse', text: '=DATE("bad",1,2)' }, {}, '#VALUE!'],

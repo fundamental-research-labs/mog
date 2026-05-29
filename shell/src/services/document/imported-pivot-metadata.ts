@@ -65,11 +65,12 @@ function u16(data: Uint8Array, offset: number): number {
 
 function u32(data: Uint8Array, offset: number): number {
   return (
-    data[offset] |
-    (data[offset + 1] << 8) |
-    (data[offset + 2] << 16) |
-    (data[offset + 3] << 24)
-  ) >>> 0;
+    (data[offset] |
+      (data[offset + 1] << 8) |
+      (data[offset + 2] << 16) |
+      (data[offset + 3] << 24)) >>>
+    0
+  );
 }
 
 function findEndOfCentralDirectory(data: Uint8Array): number {
@@ -309,7 +310,8 @@ export async function extractImportedPivotMetadata(
   const diagnostics: string[] = [];
   const entries = new Map(readZipEntries(bytes).map((entry) => [entry.name, entry]));
   const workbookPath = entries.has('xl/workbook.xml') ? 'xl/workbook.xml' : null;
-  if (!workbookPath) return { pivots: [], diagnostics: ['Workbook part xl/workbook.xml not found'] };
+  if (!workbookPath)
+    return { pivots: [], diagnostics: ['Workbook part xl/workbook.xml not found'] };
 
   const workbookXml = await readZipText(bytes, entries, workbookPath);
   const workbookRels = parseRelationships(

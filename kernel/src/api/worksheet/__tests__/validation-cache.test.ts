@@ -285,16 +285,18 @@ describe('WorksheetValidationImpl list validation', () => {
     );
     const rejectBlankCtx = createRangeListCtx();
 
-    await expect(new WorksheetValidationImpl(allowBlankCtx, SHEET_ID).validate(4, 4, '')).resolves
-      .toMatchObject({
-        valid: true,
-        errorStyle: 'stop',
-      });
-    await expect(new WorksheetValidationImpl(rejectBlankCtx, SHEET_ID).validate(4, 4, '')).resolves
-      .toMatchObject({
-        valid: false,
-        errorStyle: 'stop',
-      });
+    await expect(
+      new WorksheetValidationImpl(allowBlankCtx, SHEET_ID).validate(4, 4, ''),
+    ).resolves.toMatchObject({
+      valid: true,
+      errorStyle: 'stop',
+    });
+    await expect(
+      new WorksheetValidationImpl(rejectBlankCtx, SHEET_ID).validate(4, 4, ''),
+    ).resolves.toMatchObject({
+      valid: false,
+      errorStyle: 'stop',
+    });
   });
 
   it('falls back to document validation when no rule covers the cell', async () => {

@@ -49,7 +49,9 @@ function parseA1Range(ref: string): Bounds | null {
 }
 
 function contains(bounds: Bounds, row: number, col: number): boolean {
-  return row >= bounds.startRow && row <= bounds.endRow && col >= bounds.startCol && col <= bounds.endCol;
+  return (
+    row >= bounds.startRow && row <= bounds.endRow && col >= bounds.startCol && col <= bounds.endCol
+  );
 }
 
 async function findEditablePivotAtActiveCell(

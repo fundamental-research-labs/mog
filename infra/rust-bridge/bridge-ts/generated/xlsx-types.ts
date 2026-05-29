@@ -259,16 +259,16 @@ export interface ExternalLinkRelationship {
 }
 
 export type ExternalLinkRelationshipRole =
-  | "externalBook"
-  | "alternateAbsoluteUrl"
-  | "alternateRelativeUrl"
-  | "extraPath";
+  | 'externalBook'
+  | 'alternateAbsoluteUrl'
+  | 'alternateRelativeUrl'
+  | 'extraPath';
 
 export type ExternalLinkRelationshipCurrentness =
-  | "current"
-  | "regenerated"
-  | "droppedStale"
-  | "droppedUnsupported";
+  | 'current'
+  | 'regenerated'
+  | 'droppedStale'
+  | 'droppedUnsupported';
 
 export type ExternalLinkType =
   | { type: 'workbook' }
@@ -652,7 +652,7 @@ export interface ParsedTableColumn {
 export interface ParsedTableSortCondition {
   refRange: string;
   descending?: boolean;
-  sortBy?: "value" | "cellColor" | "fontColor" | "icon";
+  sortBy?: 'value' | 'cellColor' | 'fontColor' | 'icon';
   customList?: string;
   dxfId?: number;
   iconSet?: string;
@@ -663,7 +663,7 @@ export interface ParsedTableSortState {
   refRange: string;
   columnSort?: boolean;
   caseSensitive?: boolean;
-  sortMethod?: "none" | "stroke" | "pinYin";
+  sortMethod?: 'none' | 'stroke' | 'pinYin';
   conditions: ParsedTableSortCondition[];
 }
 

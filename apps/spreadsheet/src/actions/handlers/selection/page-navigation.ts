@@ -54,10 +54,7 @@ function getRenderer(coordinator: unknown): Record<string, unknown> | null {
 }
 
 function hasViewport(renderer: Record<string, unknown>): renderer is RendererWithViewport {
-  return (
-    'getViewport' in renderer &&
-    typeof renderer.getViewport === 'function'
-  );
+  return 'getViewport' in renderer && typeof renderer.getViewport === 'function';
 }
 
 function hasGeometry(renderer: Record<string, unknown>): renderer is RendererWithGeometry {

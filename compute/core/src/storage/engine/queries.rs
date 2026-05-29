@@ -13,9 +13,10 @@ use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
 use crate::engine_types::{
-    CellPosition, CellPositionResult, ColumnEdge, DataBounds, DefaultFont, ProjectionData,
-    FormulaCircularReferenceValidation, RectBounds, RegexSearchOptions, RegexSearchResult,
-    RowEdge, SheetProtectionConfig, SignCheckOptions, SignCheckResult, WorkbookSearchResult,
+    CellPosition, CellPositionResult, ColumnEdge, DataBounds, DefaultFont,
+    FormulaCircularReferenceValidation, ProjectionData, RectBounds, RegexSearchOptions,
+    RegexSearchResult, RowEdge, SheetProtectionConfig, SignCheckOptions, SignCheckResult,
+    WorkbookSearchResult,
 };
 use crate::range_manager::{A1CellRef, A1RangeRef};
 use crate::snapshot::{

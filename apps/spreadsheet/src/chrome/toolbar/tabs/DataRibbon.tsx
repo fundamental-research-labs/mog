@@ -687,10 +687,10 @@ export function DataRibbon({
                 icon={<SettingsIcon />}
                 label={PRODUCT_VOCABULARY.scenarios.label}
                 hasDropdown
-            title="Scenario tools (Alt+A, W)"
-            aria-label={PRODUCT_VOCABULARY.scenarios.label}
-            visibilityKey="whatIfAnalysis"
-          />
+                title="Scenario tools (Alt+A, W)"
+                aria-label={PRODUCT_VOCABULARY.scenarios.label}
+                visibilityKey="whatIfAnalysis"
+              />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem

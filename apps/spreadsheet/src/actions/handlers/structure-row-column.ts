@@ -8,7 +8,12 @@
 import type { ActionDependencies, ActionResult } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
-import { handled, isProtectionRejection, notHandled, showProtectionFeedback } from './handler-utils';
+import {
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 
 function getTargetSheetIds(deps: ActionDependencies): SheetId[] {
   return [deps.getActiveSheetId()];

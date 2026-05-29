@@ -159,11 +159,7 @@ function createCellAccessor(
 ): CellDataAccessor {
   return {
     getValue(row: number, col: number, sheetRef?: string) {
-      const sourceWs = sheetRef
-        ? sheetRef === _sheetId
-          ? ws
-          : sourceSheets?.get(sheetRef)
-        : ws;
+      const sourceWs = sheetRef ? (sheetRef === _sheetId ? ws : sourceSheets?.get(sheetRef)) : ws;
       if (!sourceWs) {
         return '';
       }

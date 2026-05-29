@@ -451,10 +451,13 @@ pub(in crate::storage::engine) fn validate_formula_circular_reference(
     col: u32,
     formula: &str,
 ) -> Option<crate::engine_types::FormulaCircularReferenceValidation> {
-    engine
-        .stores
-        .compute
-        .validate_formula_circular_reference(&engine.mirror, sheet_id, row, col, formula)
+    engine.stores.compute.validate_formula_circular_reference(
+        &engine.mirror,
+        sheet_id,
+        row,
+        col,
+        formula,
+    )
 }
 
 pub(in crate::storage::engine) fn evaluate_expression(

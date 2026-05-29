@@ -100,9 +100,13 @@ jest.unstable_mockModule('@mog/shell', () => ({
       ))}
     </div>
   ),
-  SectionLabel: ({ children }: { children: React.ReactNode; size?: string; className?: string }) => (
-    <div>{children}</div>
-  ),
+  SectionLabel: ({
+    children,
+  }: {
+    children: React.ReactNode;
+    size?: string;
+    className?: string;
+  }) => <div>{children}</div>,
   Select: ({
     value,
     onChange,

@@ -183,8 +183,7 @@ impl CellMirror {
                 // full ancestor chain, but `first_data_col` is the number of
                 // visible row-header columns. Write the deepest visible headers
                 // so child labels do not get overwritten by data values.
-                let visible_header_count =
-                    (first_data_col as usize).min(pivot_row.headers.len());
+                let visible_header_count = (first_data_col as usize).min(pivot_row.headers.len());
                 let hidden_prefix = pivot_row.headers.len().saturating_sub(visible_header_count);
                 for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
                     let row = anchor_row + first_data_row + row_idx;

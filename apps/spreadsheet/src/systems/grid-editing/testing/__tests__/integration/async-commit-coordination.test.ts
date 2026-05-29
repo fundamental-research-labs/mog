@@ -344,16 +344,11 @@ describe('commitCellValue invoke awaits bridge call', () => {
       },
     );
 
-    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
-      setCellValue,
-      {
-        validateFormulaSyntax: jest.fn().mockResolvedValue(null),
-        validateCircularReference: jest
-          .fn()
-          .mockResolvedValue({ cellAddress: 'A1', formula: '=A1' }),
-        onCircularReferenceWarning,
-      },
-    );
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(setCellValue, {
+      validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+      validateCircularReference: jest.fn().mockResolvedValue({ cellAddress: 'A1', formula: '=A1' }),
+      onCircularReferenceWarning,
+    });
 
     const cell = system.access.accessors.selection.getActiveCell();
     system.startEditing(cell, sheetId, '=A1');
@@ -378,14 +373,11 @@ describe('commitCellValue invoke awaits bridge call', () => {
     const onCircularReferenceWarning = jest.fn();
     const validateCircularReference = jest.fn().mockResolvedValue(null);
 
-    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
-      setCellValue,
-      {
-        validateFormulaSyntax: jest.fn().mockResolvedValue(null),
-        validateCircularReference,
-        onCircularReferenceWarning,
-      },
-    );
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(setCellValue, {
+      validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+      validateCircularReference,
+      onCircularReferenceWarning,
+    });
 
     const cell = system.access.accessors.selection.getActiveCell();
     system.startEditing(cell, sheetId, '=A1');

@@ -81,8 +81,9 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   const { selectedChartId, deleteSelectedChart } = useChartUI();
   const { charts, updateChart } = useCharts({ sheetId: activeSheetId });
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
-  const [optimisticTitleToggle, setOptimisticTitleToggle] =
-    useState<OptimisticTitleToggle | null>(null);
+  const [optimisticTitleToggle, setOptimisticTitleToggle] = useState<OptimisticTitleToggle | null>(
+    null,
+  );
 
   // Get the selected chart
   const selectedChart = charts.find((c) => c.id === selectedChartId);
@@ -126,21 +127,24 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
     [selectedChartId, deps],
   );
 
-  const handleToggleTitle = useCallback((checked: boolean) => {
-    if (selectedChartId && selectedChart) {
-      setOptimisticTitleToggle({ chartId: selectedChartId, checked });
+  const handleToggleTitle = useCallback(
+    (checked: boolean) => {
+      if (selectedChartId && selectedChart) {
+        setOptimisticTitleToggle({ chartId: selectedChartId, checked });
 
-      if (checked) {
-        updateChart(selectedChartId, {
-          title: selectedChart.config.title || DEFAULT_CHART_TITLE,
-          autoTitleDeleted: false,
-        });
-      } else {
-        // `null` explicitly clears title; `undefined` means no title update.
-        updateChart(selectedChartId, { title: null, autoTitleDeleted: true });
+        if (checked) {
+          updateChart(selectedChartId, {
+            title: selectedChart.config.title || DEFAULT_CHART_TITLE,
+            autoTitleDeleted: false,
+          });
+        } else {
+          // `null` explicitly clears title; `undefined` means no title update.
+          updateChart(selectedChartId, { title: null, autoTitleDeleted: true });
+        }
       }
-    }
-  }, [selectedChartId, selectedChart, updateChart]);
+    },
+    [selectedChartId, selectedChart, updateChart],
+  );
 
   const handleToggleLegend = useCallback(() => {
     if (selectedChartId && selectedChart) {

@@ -3,7 +3,15 @@
   "$id": "mog.xlsx.workbook_facts.v1",
   "title": "WorkbookFacts",
   "type": "object",
-  "required": ["schema_version", "workbook", "sheets", "styles", "shared_strings", "formulas", "package"],
+  "required": [
+    "schema_version",
+    "workbook",
+    "sheets",
+    "styles",
+    "shared_strings",
+    "formulas",
+    "package"
+  ],
   "properties": {
     "schema_version": { "const": 1 },
     "workbook": { "type": "object" },

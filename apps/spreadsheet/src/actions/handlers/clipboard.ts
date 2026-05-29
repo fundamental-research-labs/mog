@@ -262,10 +262,8 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
 
   // Create store reader for buildClipboardData using pre-fetched data
   const storeReader: ClipboardStoreReader = {
-    getCellData: (_sid, row, col) =>
-      cellDataLookup.get(`${row},${col}`) ?? undefined,
-    getCellFormat: (_sid, row, col) =>
-      formatLookup.get(`${row},${col}`) ?? undefined,
+    getCellData: (_sid, row, col) => cellDataLookup.get(`${row},${col}`) ?? undefined,
+    getCellFormat: (_sid, row, col) => formatLookup.get(`${row},${col}`) ?? undefined,
     getMergedRegions: (_sid) =>
       allMerges.map((m) => ({
         startRow: m.startRow,
@@ -279,8 +277,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     isColHidden: (_sid, col) => hiddenColsMap.get(col) ?? false,
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
-    getCellIdAt: (_sid, row, col) =>
-      cellIdByPosition.get(`${row},${col}`) ?? null,
+    getCellIdAt: (_sid, row, col) => cellIdByPosition.get(`${row},${col}`) ?? null,
     getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
   };
 
@@ -415,8 +412,7 @@ async function createSparseFullShapeCopyCutDeps(
   ]);
 
   const storeReader: ClipboardStoreReader = {
-    getCellData: (_sid, row, col) =>
-      entriesByPosition.get(`${row},${col}`)?.cellData ?? undefined,
+    getCellData: (_sid, row, col) => entriesByPosition.get(`${row},${col}`)?.cellData ?? undefined,
     getCellFormat: (_sid, row, col) =>
       (formatLookup.get(`${row},${col}`) as SparseClipboardCellEntry['format']) ?? undefined,
     getMergedRegions: (_sid) =>
@@ -430,8 +426,7 @@ async function createSparseFullShapeCopyCutDeps(
       })),
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
-    getCellIdAt: (_sid, row, col) =>
-      cellIdByPosition.get(`${row},${col}`) ?? null,
+    getCellIdAt: (_sid, row, col) => cellIdByPosition.get(`${row},${col}`) ?? null,
     getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
   };
 

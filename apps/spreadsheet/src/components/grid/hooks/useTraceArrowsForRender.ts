@@ -108,9 +108,12 @@ export function useTraceArrowsForRender(
    * Resolve CellId to current position.
    * Used by TraceArrowsLayer to render arrows at correct cell locations.
    */
-  const getCellPosition = useCallback((cellId: string): TraceCellPosition | null => {
-    return positionCacheRef.current.get(cellId) ?? null;
-  }, [positionVersion]);
+  const getCellPosition = useCallback(
+    (cellId: string): TraceCellPosition | null => {
+      return positionCacheRef.current.get(cellId) ?? null;
+    },
+    [positionVersion],
+  );
 
   return {
     getTraceArrows,

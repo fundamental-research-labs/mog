@@ -198,9 +198,7 @@ export class ViewportFetchManager {
    * Force refreshes bypass refresh(), so mirror the committed coordinator
    * buffer back into the per-viewport cache that render/devtools consumers read.
    */
-  private markForceRefreshedViewportFresh(
-    coordinator: ViewportCoordinator,
-  ): void {
+  private markForceRefreshedViewportFresh(coordinator: ViewportCoordinator): void {
     const vpState = this.perViewportState.get(coordinator.viewportId);
     if (!vpState) return;
 

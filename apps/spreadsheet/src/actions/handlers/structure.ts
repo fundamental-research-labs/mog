@@ -24,12 +24,21 @@
  *
  */
 
-import type { ActionDependencies, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type {
+  ActionDependencies,
+  ActionResult,
+  AsyncActionHandler,
+} from '@mog-sdk/contracts/actions';
 
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
-import { handled, isProtectionRejection, notHandled, showProtectionFeedback } from './handler-utils';
+import {
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 import {
   deleteSelectedColumns,
   deleteSelectedRows,

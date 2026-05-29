@@ -38,9 +38,9 @@ export interface SparklineSelectionCoordinationConfig {
   actors: {
     selection: {
       getSnapshot: () => SparklineSelectionSnapshot;
-      subscribe: (
-        listener: (state: SparklineSelectionSnapshot) => void,
-      ) => { unsubscribe: () => void };
+      subscribe: (listener: (state: SparklineSelectionSnapshot) => void) => {
+        unsubscribe: () => void;
+      };
     };
   };
   /** Sparkline manager for checking sparklines at cells */

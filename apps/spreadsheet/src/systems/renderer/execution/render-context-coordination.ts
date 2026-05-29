@@ -333,9 +333,7 @@ export interface RenderContextCoordinationConfig {
    * Resolve CellId to position for rendering trace arrows.
    * Used by TraceArrowsLayer to convert CellId-based arrow endpoints to row/col.
    */
-  getCellPositionForTrace?: (
-    cellId: string,
-  ) => { row: number; col: number; sheet: string } | null;
+  getCellPositionForTrace?: (cellId: string) => { row: number; col: number; sheet: string } | null;
 
   // ===========================================================================
   // Paste Preview

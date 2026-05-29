@@ -342,11 +342,7 @@ export function Dialog({
   );
 
   return (
-    <RadixDialog.Root
-      open={open}
-      onOpenChange={handleOpenChange}
-      modal={!allowPointerEventsBehind}
-    >
+    <RadixDialog.Root open={open} onOpenChange={handleOpenChange} modal={!allowPointerEventsBehind}>
       <RadixDialog.Portal container={portalContainer}>
         <RadixDialog.Overlay
           className={`${overlayClasses} ${overlayPointerEventsClass}`}

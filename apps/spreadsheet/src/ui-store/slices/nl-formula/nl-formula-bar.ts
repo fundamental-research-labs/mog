@@ -137,7 +137,12 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlDismiss: () => {
-    set({ ...INITIAL_NL_STATE, nlLastRequest: null, ...INITIAL_EXPLAIN_STATE, nlBarVisible: false });
+    set({
+      ...INITIAL_NL_STATE,
+      nlLastRequest: null,
+      ...INITIAL_EXPLAIN_STATE,
+      nlBarVisible: false,
+    });
   },
 
   // Explain feature

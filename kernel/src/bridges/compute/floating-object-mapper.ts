@@ -136,7 +136,9 @@ function alphaTransparency(transforms: unknown): number | undefined {
     }
   }
 
-  return touched ? Math.max(0, Math.min(1, 1 - Math.max(0, Math.min(100000, alpha)) / 100000)) : undefined;
+  return touched
+    ? Math.max(0, Math.min(1, 1 - Math.max(0, Math.min(100000, alpha)) / 100000))
+    : undefined;
 }
 
 function presetColorHex(value: unknown): string | undefined {
@@ -264,8 +266,7 @@ function resolveDrawingColor(color: unknown): { color: string; transparency?: nu
   }
 
   const sys =
-    enumPayload(color, 'SysClr', 'sysClr', 'sys_clr') ??
-    readRecord(color, 'sysClr', 'sys_clr');
+    enumPayload(color, 'SysClr', 'sysClr', 'sys_clr') ?? readRecord(color, 'sysClr', 'sys_clr');
   if (sys) {
     const resolved = normalizeHexColor(readAny(sys, 'lastClr', 'last_clr'));
     return resolved

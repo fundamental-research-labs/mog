@@ -47,7 +47,9 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
   const pictureSize = useMemo(() => getPictureSize(selectedPicture), [selectedPicture]);
 
   const updatePicture = useCallback(
-    (updates: Partial<Pick<PictureObject, 'adjustments'>> & { width?: number; height?: number }) => {
+    (
+      updates: Partial<Pick<PictureObject, 'adjustments'>> & { width?: number; height?: number },
+    ) => {
       if (!selectedPictureId) return;
       dispatch('UPDATE_PICTURE', { objectId: selectedPictureId, updates });
     },
@@ -120,7 +122,9 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
       }
 
       const ratio =
-        pictureSize.width > 0 && pictureSize.height > 0 ? pictureSize.height / pictureSize.width : 1;
+        pictureSize.width > 0 && pictureSize.height > 0
+          ? pictureSize.height / pictureSize.width
+          : 1;
       updatePicture(
         field === 'width'
           ? { width: nextValue, height: Math.max(1, Math.round(nextValue * ratio)) }
@@ -276,7 +280,9 @@ export function PictureToolsRibbon(_props: ContextualTabProps) {
   );
 }
 
-function getPictureSize(picture: PictureObject | undefined): { width: number; height: number } | null {
+function getPictureSize(
+  picture: PictureObject | undefined,
+): { width: number; height: number } | null {
   if (!picture) return null;
   const width = picture.position.width ?? picture.originalWidth;
   const height = picture.position.height ?? picture.originalHeight;

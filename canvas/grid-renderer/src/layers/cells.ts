@@ -948,7 +948,8 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     ctx.fillRect(x, y, width, height);
     ctx.strokeStyle = '#cbd5e1';
     ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-    const label = cached === 'error' ? fallbackText || imageData.altText || '' : imageData.altText || '';
+    const label =
+      cached === 'error' ? fallbackText || imageData.altText || '' : imageData.altText || '';
     if (label) {
       ctx.fillStyle = '#64748b';
       ctx.font = '11px system-ui, sans-serif';

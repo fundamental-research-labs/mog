@@ -59,7 +59,10 @@ function themeDefinitionToWire(theme: ThemeDefinition): ThemeData {
   };
 }
 
-function mergeThemeDefinitionIntoWire(theme: ThemeDefinition, current: ThemeData | null): ThemeData {
+function mergeThemeDefinitionIntoWire(
+  theme: ThemeDefinition,
+  current: ThemeData | null,
+): ThemeData {
   return {
     ...(current ?? {}),
     ...themeDefinitionToWire(theme),

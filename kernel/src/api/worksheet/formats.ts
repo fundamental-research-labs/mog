@@ -39,10 +39,7 @@ import {
   setColumnProperties as setColumnPropertiesOp,
   setRowProperties as setRowPropertiesOp,
 } from './operations/format-operations';
-import {
-  assertFormatOperationsAllowed,
-  assertFormatRangesAllowed,
-} from './protection-guards';
+import { assertFormatOperationsAllowed, assertFormatRangesAllowed } from './protection-guards';
 
 export class WorksheetFormatsImpl implements WorksheetFormats {
   constructor(

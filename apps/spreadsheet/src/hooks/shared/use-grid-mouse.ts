@@ -145,7 +145,9 @@ function isObjectDragOperationLive(coordinator: UseGridMouseOptions['coordinator
   return operationType === 'drag' || operationType === 'resize' || operationType === 'rotate';
 }
 
-function isObjectInteractionOwningPointer(coordinator: UseGridMouseOptions['coordinator']): boolean {
+function isObjectInteractionOwningPointer(
+  coordinator: UseGridMouseOptions['coordinator'],
+): boolean {
   const objectAccess = coordinator.objects.access.accessors.object;
   return objectAccess.isInserting() || isObjectDragOperationLive(coordinator);
 }
@@ -565,9 +567,10 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       cell: { row: number; col: number },
       point: { x: number; y: number },
       geometry: {
-        getCellRect(
-          cell: { row: number; col: number },
-        ): { x: number; y: number; width: number; height: number } | null;
+        getCellRect(cell: {
+          row: number;
+          col: number;
+        }): { x: number; y: number; width: number; height: number } | null;
       },
     ): boolean => {
       const dblCellRect = geometry.getCellRect(cell);
@@ -761,8 +764,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         if (rangeSelectionMode.active) {
           if (hit.type === 'cell') {
             const cell = { row: hit.row, col: hit.col };
-            const anchor =
-              e.shiftKey ? getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell : cell;
+            const anchor = e.shiftKey
+              ? (getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell)
+              : cell;
 
             applyRangePickerSelection(uiStoreApi, selection, 'cell', anchor, cell);
             rangeSelectionDragRef.current = {

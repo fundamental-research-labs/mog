@@ -35,14 +35,7 @@ jest.unstable_mockModule('@mog/shell', () => ({
     checked: boolean;
     onChange: () => void;
     label?: string;
-  }) => (
-    <input
-      aria-label={label}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-    />
-  ),
+  }) => <input aria-label={label} type="checkbox" checked={checked} onChange={onChange} />,
   Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 

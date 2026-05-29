@@ -32,10 +32,7 @@ function isTextRunArray(value: unknown): value is Array<{ text: string }> {
     Array.isArray(value) &&
     value.every(
       (run) =>
-        typeof run === 'object' &&
-        run !== null &&
-        'text' in run &&
-        typeof run.text === 'string',
+        typeof run === 'object' && run !== null && 'text' in run && typeof run.text === 'string',
     )
   );
 }

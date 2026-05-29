@@ -134,9 +134,7 @@ describe('Pivot Selection Coordination', () => {
     const workbook = createMockWorkbook({
       editableThrows: true,
       importedHit: (row, col) =>
-        row === 1 && col === 1
-          ? { id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml' }
-          : null,
+        row === 1 && col === 1 ? { id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml' } : null,
     });
 
     setupPivotSelectionCoordination(

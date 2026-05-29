@@ -328,10 +328,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
       for (const config of configs) {
         if (config.id.startsWith('imported:')) {
-          const imported = await (wb as WorkbookWithImportedPivots).importedPivots?.getRenderedImportedPivotWithResult(
-            sheetId,
-            config.id,
-          );
+          const imported = await (
+            wb as WorkbookWithImportedPivots
+          ).importedPivots?.getRenderedImportedPivotWithResult(sheetId, config.id);
           if (cancelled) return;
           newResults.set(config.id, { result: imported?.result ?? null });
           continue;

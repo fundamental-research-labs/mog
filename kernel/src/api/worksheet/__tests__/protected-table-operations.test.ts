@@ -90,6 +90,7 @@ function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}
     queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
     createTableLifecycle: jest.fn().mockResolvedValue(undefined),
     deleteTable: jest.fn().mockResolvedValue(undefined),
+    convertTableToRange: jest.fn().mockResolvedValue({ data: 0 }),
     renameTable: jest.fn().mockResolvedValue(undefined),
     tableValidateTableName: jest.fn().mockResolvedValue({ valid: true }),
     setTableStyle: jest.fn().mockResolvedValue(undefined),
@@ -159,11 +160,13 @@ describe('protected sheet table operation policy', () => {
 
     await expect(tables.rename('Sales', 'NewSales')).rejects.toThrow(KernelError);
     expect(ctx.computeBridge.renameTable).not.toHaveBeenCalled();
+    await expect(tables.convertToRange('Sales')).rejects.toThrow(KernelError);
+    expect(ctx.computeBridge.convertTableToRange).not.toHaveBeenCalled();
 
     try {
-      await tables.rename('Sales', 'NewSales');
+      await tables.convertToRange('Sales');
     } catch (error) {
-      expectProtected(error, 'tables.rename');
+      expectProtected(error, 'tables.convertToRange');
     }
   });
 

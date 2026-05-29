@@ -9,6 +9,7 @@ import { bridgeTableToTableInfo } from './operations/table-operations';
 export type ProtectedTableOperation =
   | 'tables.add'
   | 'tables.remove'
+  | 'tables.convertToRange'
   | 'tables.clear'
   | 'tables.rename'
   | 'tables.update.definition'
@@ -691,6 +692,7 @@ function columnRangeToA1(table: TableInfo, columnIndex: number): string {
 function operationLabel(operation: ProtectedTableOperation): string {
   if (operation.includes('sort')) return 'sort';
   if (operation.includes('filter') || operation.startsWith('filters.')) return 'filter';
+  if (operation === 'tables.convertToRange') return 'convert to range';
   if (operation.includes('addRow')) return 'add a row to';
   if (operation.includes('deleteRow')) return 'delete rows from';
   if (operation.includes('resize')) return 'resize';

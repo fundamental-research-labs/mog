@@ -440,6 +440,49 @@ fn with_chart_auxiliary(mut chart: ChartSpec, chart_num: usize) -> ChartSpec {
     chart
 }
 
+fn imported_picture_with_media(
+    id: &str,
+    image_path: &str,
+) -> domain_types::domain::floating_object::FloatingObject {
+    use domain_types::domain::floating_object::{
+        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
+        PictureData, PictureOoxmlProps,
+    };
+
+    let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
+    picture.blip_fill.embed_id = Some("rIdImported".to_string());
+
+    FloatingObject {
+        common: FloatingObjectCommon {
+            id: id.to_string(),
+            name: id.to_string(),
+            width: 100.0,
+            height: 100.0,
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(4),
+                end_col: Some(4),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        data: FloatingObjectData::Picture(PictureData {
+            src: "data:image/png;base64,AQIDBA==".to_string(),
+            original_width: None,
+            original_height: None,
+            crop: None,
+            adjustments: None,
+            border: None,
+            color_type: None,
+            ooxml: Some(PictureOoxmlProps {
+                picture,
+                image_path: Some(image_path.to_string()),
+                ..Default::default()
+            }),
+        }),
+    }
+}
+
 fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
     ChartSpec {
         chart_type,

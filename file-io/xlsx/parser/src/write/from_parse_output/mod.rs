@@ -23,6 +23,7 @@ mod ole_objects;
 mod pivot_package;
 mod preflight_phase;
 mod printer_settings;
+mod relationship_ids;
 mod rich_data;
 mod sheet_builder;
 mod sheet_cells;
@@ -671,10 +672,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         && let Some(rid) =
                             chart_frame.and_then(|frame| frame.relationship_id.clone())
                     {
-                        if drawing_rels.get_by_id(&rid).is_none() {
-                            drawing_rels.add_with_id(&rid, REL_CHART_EX, &cx_target);
-                        }
-                        rid
+                        relationship_ids::reserve_preferred_or_allocate(
+                            &mut drawing_rels,
+                            &rid,
+                            REL_CHART_EX,
+                            &cx_target,
+                        )
                     } else {
                         drawing_rels
                             .find_by_target(&cx_target)
@@ -789,10 +792,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         && let Some(rid) =
                             chart_frame.and_then(|frame| frame.relationship_id.clone())
                     {
-                        if drawing_rels.get_by_id(&rid).is_none() {
-                            drawing_rels.add_with_id(&rid, REL_CHART, &chart_target);
-                        }
-                        rid
+                        relationship_ids::reserve_preferred_or_allocate(
+                            &mut drawing_rels,
+                            &rid,
+                            REL_CHART,
+                            &chart_target,
+                        )
                     } else {
                         drawing_rels
                             .find_by_target(&chart_target)

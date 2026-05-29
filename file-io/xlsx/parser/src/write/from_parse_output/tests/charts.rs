@@ -328,6 +328,55 @@ fn modeled_chart_ignores_stale_chart_frame_relationship_target() {
 }
 
 #[test]
+fn imported_chart_allocates_new_relationship_id_when_preferred_id_is_taken() {
+    let mut imported_chart = with_chart_auxiliary(make_chart(ChartType::Column, "Data!A1:B2"), 2);
+    imported_chart.chart_frame = Some(
+        domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps {
+            relationship_id: Some("rId2".to_string()),
+            relationship_target: Some("../charts/chart2.xml".to_string()),
+            ..Default::default()
+        },
+    );
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        floating_objects: vec![
+            imported_picture_with_media("p1", "../media/image1.png"),
+            imported_picture_with_media("p2", "../media/image2.png"),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_rels_bytes = archive
+        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+        .unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_bytes);
+    let chart_rel = drawing_rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_CHART && rel.target == "../charts/chart2.xml")
+        .expect("chart2 should have a chart relationship");
+
+    assert_ne!(chart_rel.id, "rId2");
+    assert_eq!(
+        drawing_rels
+            .iter()
+            .find(|rel| rel.id == "rId2")
+            .map(|rel| rel.rel_type.as_str()),
+        Some(crate::infra::opc::REL_IMAGE)
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_with_modeled_chart_property_does_not_replay_stale_raw_chart_xml() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;

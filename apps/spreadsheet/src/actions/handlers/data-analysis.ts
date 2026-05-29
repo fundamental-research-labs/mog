@@ -157,7 +157,9 @@ export const CANCEL_GOAL_SEEK: ActionHandler = (deps): ActionResult => {
   return { handled: true };
 };
 
-export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (
+  deps,
+): Promise<ActionResult> => {
   const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
   const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
   const rangeLabel =

@@ -1298,9 +1298,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         hasInternalRichData: true,
       });
       if (resolved.appliesDefault) {
-        await sendClipboardPasteCommand(() =>
-          commands.pasteSpecial(activeCell, resolved.options),
-        );
+        await sendClipboardPasteCommand(() => commands.pasteSpecial(activeCell, resolved.options));
       } else {
         await sendClipboardPasteCommand(() => commands.paste(activeCell));
       }

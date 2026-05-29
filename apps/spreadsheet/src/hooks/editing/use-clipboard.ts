@@ -59,6 +59,7 @@ import { blobToDataUrl } from '../../utils/blob-to-data-url';
 import { withHandlerErrors } from '../../devtools/handler-error-boundary';
 import { useActiveSheetId, useReadOnly, useWorkbook } from '../../infra/context';
 import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
+import { waitForPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
 import { useCoordinator } from '../shared/use-coordinator';
 
 // =============================================================================
@@ -108,34 +109,9 @@ function isOurClipboardData(
   );
 }
 
-type ClipboardActorLike = {
-  getSnapshot: () => ClipboardState;
-};
-
-async function waitForClipboardPasteActor(actor: ClipboardActorLike): Promise<void> {
-  const deadline = Date.now() + 2000;
-  const idleDeadline = Date.now() + 500;
-  let sawPasteActivity = false;
-
-  while (Date.now() < deadline) {
-    const snapshot = actor.getSnapshot();
-    const matches = snapshot.matches?.bind(snapshot);
-    const isPasting = matches?.('pasting') === true;
-    const isPreviewing =
-      matches?.('pastePreview') === true || Boolean(snapshot.context.pastePreviewTarget);
-    const isComplete = matches?.('empty') === true || matches?.('pasteError') === true;
-
-    sawPasteActivity ||= isPasting || isPreviewing;
-
-    if (isComplete || (sawPasteActivity && !isPasting && !isPreviewing)) return;
-    if (!sawPasteActivity && Date.now() >= idleDeadline) return;
-
-    await new Promise((resolve) => setTimeout(resolve, 16));
-  }
-}
-
-function trackClipboardPaste(actor: ClipboardActorLike): void {
-  void trackClipboardPastePromise(waitForClipboardPasteActor(actor));
+async function sendClipboardPasteCommand(command: () => void): Promise<void> {
+  command();
+  await waitForPendingClipboardPaste();
 }
 
 // =============================================================================
@@ -832,6 +808,7 @@ export function useClipboard(): UseClipboardReturn {
       await unifiedPaste(activeCell, {
         getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
         commands,
+        waitForPasteCommit: waitForPendingClipboardPaste,
         pasteImage: async (blob, anchorCell) => {
           const ws = wb.getSheetById(activeSheetId);
           const dataUrl = await blobToDataUrl(blob);
@@ -853,6 +830,7 @@ export function useClipboard(): UseClipboardReturn {
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { values: true },
       );
@@ -868,6 +846,7 @@ export function useClipboard(): UseClipboardReturn {
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { formulas: true },
       );
@@ -883,6 +862,7 @@ export function useClipboard(): UseClipboardReturn {
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { formats: true },
       );
@@ -954,22 +934,6 @@ export function useClipboard(): UseClipboardReturn {
 // =============================================================================
 // CLIPBOARD EVENTS HOOK - Browser Event Handling
 // =============================================================================
-
-type PendingClipboardPasteGlobal = typeof globalThis & {
-  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
-};
-
-function trackClipboardPastePromise<T>(promise: Promise<T>): Promise<T> {
-  const global = globalThis as PendingClipboardPasteGlobal;
-  const tracked = promise.catch(() => undefined);
-  global.__MOG_PENDING_CLIPBOARD_PASTE__ = tracked;
-  void tracked.finally(() => {
-    if (global.__MOG_PENDING_CLIPBOARD_PASTE__ === tracked) {
-      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    }
-  });
-  return promise;
-}
 
 /**
  * Options for useClipboardEvents hook.
@@ -1222,11 +1186,11 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
             hasInternalRichData: true,
           });
           if (resolved.appliesDefault) {
-            trackClipboardPaste(actor);
-            commands.pasteSpecial(activeCell, resolved.options);
+            await sendClipboardPasteCommand(() =>
+              commands.pasteSpecial(activeCell, resolved.options),
+            );
           } else {
-            trackClipboardPaste(actor);
-            commands.paste(activeCell);
+            await sendClipboardPasteCommand(() => commands.paste(activeCell));
           }
           // Count cells from internal clipboard
           if (clipboardData.sourceRanges && clipboardData.sourceRanges.length > 0) {
@@ -1261,13 +1225,14 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
           });
           const resolvedOptions = resolved.appliesDefault ? resolved.options : undefined;
           if (shouldNoopExternalFormatsPaste(resolvedOptions, html || undefined)) return;
-          trackClipboardPaste(actor);
-          commands.externalPaste({
-            text,
-            targetCell: activeCell,
-            html: html || undefined,
-            options: resolvedOptions,
-          });
+          await sendClipboardPasteCommand(() =>
+            commands.externalPaste({
+              text,
+              targetCell: activeCell,
+              html: html || undefined,
+              options: resolvedOptions,
+            }),
+          );
           onPaste?.(1);
           return;
         }
@@ -1333,11 +1298,11 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         hasInternalRichData: true,
       });
       if (resolved.appliesDefault) {
-        trackClipboardPaste(actor);
-        commands.pasteSpecial(activeCell, resolved.options);
+        await sendClipboardPasteCommand(() =>
+          commands.pasteSpecial(activeCell, resolved.options),
+        );
       } else {
-        trackClipboardPaste(actor);
-        commands.paste(activeCell);
+        await sendClipboardPasteCommand(() => commands.paste(activeCell));
       }
       if (clipboardData.sourceRanges && clipboardData.sourceRanges.length > 0) {
         const range = clipboardData.sourceRanges[0];
@@ -1356,8 +1321,9 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       });
       const resolvedOptions = resolved.appliesDefault ? resolved.options : undefined;
       if (shouldNoopExternalFormatsPaste(resolvedOptions)) return 0;
-      trackClipboardPaste(actor);
-      commands.externalPaste({ text, targetCell: activeCell, options: resolvedOptions });
+      await sendClipboardPasteCommand(() =>
+        commands.externalPaste({ text, targetCell: activeCell, options: resolvedOptions }),
+      );
       return 1;
     }
 
@@ -1380,7 +1346,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       void handleCut(e as ClipboardEvent);
     };
     const pasteHandler = (e: Event) => {
-      void trackClipboardPastePromise(handlePaste(e as ClipboardEvent));
+      void handlePaste(e as ClipboardEvent);
     };
 
     // Add clipboard event listeners

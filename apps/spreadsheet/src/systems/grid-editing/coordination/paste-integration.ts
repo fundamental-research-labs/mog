@@ -22,6 +22,7 @@ import {
   type PasteStoreOperations,
 } from '../../../domain/clipboard';
 import type { clipboardMachine } from '../machines/clipboard-machine';
+import { trackPendingClipboardPaste } from './pending-clipboard-paste';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -30,20 +31,6 @@ import type { clipboardMachine } from '../machines/clipboard-machine';
 export type ClipboardActor = ActorRefFrom<typeof clipboardMachine>;
 export type ClipboardState = SnapshotFrom<typeof clipboardMachine>;
 type MaybePromise<T> = T | Promise<T>;
-type PendingClipboardPasteGlobal = typeof globalThis & {
-  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
-};
-
-function trackPendingClipboardPaste(promise: Promise<void>): void {
-  const global = globalThis as PendingClipboardPasteGlobal;
-  const tracked = promise.catch(() => undefined);
-  global.__MOG_PENDING_CLIPBOARD_PASTE__ = tracked;
-  void tracked.finally(() => {
-    if (global.__MOG_PENDING_CLIPBOARD_PASTE__ === tracked) {
-      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    }
-  });
-}
 
 function hasAnyCellFormat(data: NonNullable<ClipboardState['context']['data']>): boolean {
   return Object.values(data.cells).some(

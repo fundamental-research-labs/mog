@@ -95,6 +95,7 @@ pub fn remove_format_range(
     // Remove from mirror
     mirror.format_ranges.retain(|r| r.id != range_id);
     mirror.range_format_cache.remove(&range_id);
+    mirror.range_xlsx_style_id_cache.remove(&range_id);
 }
 
 /// Hydrate Format Ranges from the `rangeFormats` Yrs sub-map into a SheetMirror.
@@ -105,6 +106,10 @@ pub fn remove_format_range(
 /// - Bounds metadata: `_sr` (start_row), `_sc` (start_col), `_er` (end_row), `_ec` (end_col)
 pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &mut SheetMirror) {
     use compute_document::schema::KEY_RANGE_FORMATS;
+
+    mirror.format_ranges.clear();
+    mirror.range_format_cache.clear();
+    mirror.range_xlsx_style_id_cache.clear();
 
     let sheets = storage.sheets_ref();
     let txn = storage.doc().transact();
@@ -153,6 +158,11 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
             let has_imported_style_id = nested
                 .get(&txn, yrs_schema::cell_format::KEY_XLSX_STYLE_ID)
                 .is_some();
+            let imported_style_id =
+                match nested.get(&txn, yrs_schema::cell_format::KEY_XLSX_STYLE_ID) {
+                    Some(Out::Any(Any::Number(n))) if n >= 0.0 => Some(n as u32),
+                    _ => None,
+                };
             if let Some(fmt) = yrs_schema::cell_format::from_yrs_map(&nested, &txn)
                 .or_else(|| has_imported_style_id.then(CellFormat::default))
             {
@@ -164,6 +174,9 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
                     end_col,
                 });
                 mirror.range_format_cache.insert(range_id, fmt);
+                if let Some(style_id) = imported_style_id {
+                    mirror.range_xlsx_style_id_cache.insert(range_id, style_id);
+                }
             }
         }
     }

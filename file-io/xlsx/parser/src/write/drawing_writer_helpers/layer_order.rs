@@ -98,10 +98,8 @@ pub fn build_feature_drawing_anchors(
 /// Indexed anchors use their imported/domain drawing ordinal. Unindexed anchors
 /// fill the remaining free slots in their caller-provided order, matching the
 /// existing chart/floating-object behavior.
-pub fn add_ordered_anchors<I>(
-    writer: &mut DrawingWriter,
-    anchor_groups: I,
-) where
+pub fn add_ordered_anchors<I>(writer: &mut DrawingWriter, anchor_groups: I)
+where
     I: IntoIterator<Item = Vec<(Option<usize>, DrawingAnchor)>>,
 {
     let groups: Vec<Vec<(Option<usize>, DrawingAnchor)>> = anchor_groups.into_iter().collect();

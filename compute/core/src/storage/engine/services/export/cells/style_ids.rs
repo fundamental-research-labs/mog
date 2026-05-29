@@ -29,9 +29,12 @@ pub(super) fn format_range_style_id_at(
         return None;
     }
 
-    matching
-        .last()
-        .and_then(|(_, format)| style_id_for_cell_format(format, palette))
+    let (range_id, format) = matching.last()?;
+    sheet
+        .range_xlsx_style_id_cache()
+        .get(range_id)
+        .copied()
+        .or_else(|| style_id_for_cell_format(format, palette))
 }
 pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     _stores: &EngineStores,
@@ -46,9 +49,15 @@ pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     let mut runs = Vec::new();
     for range in sheet.format_ranges() {
         let style_id = sheet
-            .range_format_cache()
+            .range_xlsx_style_id_cache()
             .get(&range.id)
-            .and_then(|format| style_id_for_cell_format(format, palette));
+            .copied()
+            .or_else(|| {
+                sheet
+                    .range_format_cache()
+                    .get(&range.id)
+                    .and_then(|format| style_id_for_cell_format(format, palette))
+            });
         let Some(style_id) = style_id else {
             continue;
         };

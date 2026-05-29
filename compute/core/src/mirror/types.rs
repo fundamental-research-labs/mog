@@ -163,6 +163,8 @@ pub struct SheetMirror {
     pub(crate) format_ranges: Vec<FormatRange>,
     /// Cached CellFormat per RangeId, populated during hydration from the `rangeFormats` Yrs sub-map.
     pub(crate) range_format_cache: FxHashMap<RangeId, CellFormat>,
+    /// Original XLSX cellXfs style id per imported format RangeId.
+    pub(crate) range_xlsx_style_id_cache: FxHashMap<RangeId, u32>,
 }
 
 impl SheetMirror {
@@ -198,6 +200,7 @@ impl SheetMirror {
             enable_calculation: true,
             format_ranges: Vec::new(),
             range_format_cache: FxHashMap::default(),
+            range_xlsx_style_id_cache: FxHashMap::default(),
         }
     }
 
@@ -243,6 +246,7 @@ impl SheetMirror {
             enable_calculation: true,
             format_ranges: Vec::new(),
             range_format_cache: FxHashMap::default(),
+            range_xlsx_style_id_cache: FxHashMap::default(),
         }
     }
 
@@ -629,5 +633,10 @@ impl SheetMirror {
     /// Get the format cache.
     pub(crate) fn range_format_cache(&self) -> &FxHashMap<RangeId, CellFormat> {
         &self.range_format_cache
+    }
+
+    /// Get the imported XLSX style id cache for format ranges.
+    pub(crate) fn range_xlsx_style_id_cache(&self) -> &FxHashMap<RangeId, u32> {
+        &self.range_xlsx_style_id_cache
     }
 }

@@ -184,4 +184,95 @@ mod tests {
             .collect();
         assert_eq!(rects, vec![(0, 3, 1, 3, 18), (3, 3, 3, 3, 18)]);
     }
+
+    #[test]
+    fn imported_range_style_plan_splits_mixed_range_styles() {
+        let sheet = SheetData {
+            name: "Sheet1".to_string(),
+            rows: 3,
+            cols: 3,
+            cells: vec![
+                CellData {
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Number(FiniteF64::must(1.0)),
+                    style_id: Some(9),
+                    ..Default::default()
+                },
+                CellData {
+                    row: 1,
+                    col: 0,
+                    value: CellValue::Number(FiniteF64::must(2.0)),
+                    style_id: Some(9),
+                    ..Default::default()
+                },
+                CellData {
+                    row: 2,
+                    col: 0,
+                    value: CellValue::Number(FiniteF64::must(3.0)),
+                    style_id: Some(9),
+                    ..Default::default()
+                },
+                CellData {
+                    row: 0,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::must(4.0)),
+                    style_id: Some(10),
+                    ..Default::default()
+                },
+                CellData {
+                    row: 1,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::must(5.0)),
+                    style_id: Some(10),
+                    ..Default::default()
+                },
+                CellData {
+                    row: 2,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::must(6.0)),
+                    style_id: Some(10),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let mut allocator = DefaultIdAllocator::new();
+        let alloc = allocate_sheet_ids(&sheet, &mut allocator);
+        let range = RangeData {
+            range_id: RangeId::from_raw(456),
+            kind: RangeKind::Data,
+            anchor: RangeAnchor::Elastic {
+                start_row: alloc.row_ids[0],
+                end_row: alloc.row_ids[2],
+                start_col: alloc.col_ids[0],
+                end_col: alloc.col_ids[1],
+            },
+            encoding: PayloadEncoding::MixedCbor,
+            payload: Vec::new(),
+            row_axis: None,
+            col_axis: None,
+            row_ids: vec![alloc.row_ids[0], alloc.row_ids[1], alloc.row_ids[2]],
+            col_ids: vec![alloc.col_ids[0], alloc.col_ids[1]],
+        };
+
+        let (positions, styles) =
+            build_imported_range_style_plan(&sheet, &alloc, &[range], &mut allocator);
+
+        assert_eq!(positions.len(), 6);
+        let rects: Vec<_> = styles
+            .iter()
+            .map(|style| {
+                (
+                    style.start_row,
+                    style.start_col,
+                    style.end_row,
+                    style.end_col,
+                    style.style_id,
+                )
+            })
+            .collect();
+        assert_eq!(rects, vec![(0, 0, 2, 0, 9), (0, 1, 2, 1, 10)]);
+        assert_eq!(styles[0].range_id, RangeId::from_raw(456));
+    }
 }

@@ -155,12 +155,13 @@ fn is_imported_style_only_blank(
 
 fn cell_style_id(cell_props: Option<&CellProperties>, palette: &impl PaletteOps) -> Option<u32> {
     cell_props.and_then(|props| {
-        let cell_fmt = props.format.as_ref()?;
-        let doc_fmt = cell_format_to_document_format(cell_fmt);
-        if doc_fmt == DocumentFormat::default() {
-            return None;
+        if let Some(cell_fmt) = props.format.as_ref() {
+            let doc_fmt = cell_format_to_document_format(cell_fmt);
+            if doc_fmt != DocumentFormat::default() {
+                return Some(palette.get_or_insert(doc_fmt));
+            }
         }
-        Some(palette.get_or_insert(doc_fmt))
+        props.style_id
     })
 }
 

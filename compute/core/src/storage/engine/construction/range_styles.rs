@@ -43,66 +43,51 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
     let mut styles = Vec::new();
 
     for range in ranges {
-        let mut range_positions = Vec::with_capacity(range.row_ids.len() * range.col_ids.len());
-        let mut style_id: Option<u32> = None;
-        let mut eligible = true;
+        let mut positions_by_style: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
 
         for row_id in &range.row_ids {
             let Some(&row) = row_index_by_id.get(row_id) else {
-                eligible = false;
-                break;
+                continue;
             };
             for col_id in &range.col_ids {
                 let Some(&col) = col_index_by_id.get(col_id) else {
-                    eligible = false;
-                    break;
+                    continue;
                 };
                 let Some(cell_style) = style_by_pos.get(&(row, col)).copied().flatten() else {
-                    eligible = false;
-                    break;
+                    continue;
                 };
-                match style_id {
-                    Some(existing) if existing != cell_style => {
-                        eligible = false;
-                        break;
-                    }
-                    Some(_) => {}
-                    None => style_id = Some(cell_style),
-                }
-                range_positions.push((row, col));
-            }
-            if !eligible {
-                break;
+                positions_by_style
+                    .entry(cell_style)
+                    .or_default()
+                    .push((row, col));
             }
         }
 
-        let Some(style_id) = style_id else {
-            continue;
-        };
-        if !eligible {
-            continue;
-        }
+        let mut style_groups: Vec<_> = positions_by_style.into_iter().collect();
+        style_groups.sort_by_key(|(style_id, _)| *style_id);
 
-        let range_position_set: std::collections::HashSet<(u32, u32)> =
-            range_positions.iter().copied().collect();
-        positions.extend(range_positions);
-        for (idx, (start_row, start_col, end_row, end_col)) in
-            coalesce_imported_style_positions(&range_position_set)
-                .into_iter()
-                .enumerate()
-        {
-            styles.push(crate::storage::infra::hydration::ImportedRangeStyle {
-                range_id: if idx == 0 {
-                    range.range_id
-                } else {
-                    allocator.alloc_range_id()
-                },
-                start_row,
-                start_col,
-                end_row,
-                end_col,
-                style_id,
-            });
+        let mut first_rect_for_range = true;
+        for (style_id, range_positions) in style_groups {
+            let range_position_set: std::collections::HashSet<(u32, u32)> =
+                range_positions.iter().copied().collect();
+            positions.extend(range_positions);
+            for (start_row, start_col, end_row, end_col) in
+                coalesce_imported_style_positions(&range_position_set)
+            {
+                styles.push(crate::storage::infra::hydration::ImportedRangeStyle {
+                    range_id: if first_rect_for_range {
+                        first_rect_for_range = false;
+                        range.range_id
+                    } else {
+                        allocator.alloc_range_id()
+                    },
+                    start_row,
+                    start_col,
+                    end_row,
+                    end_col,
+                    style_id,
+                });
+            }
         }
     }
 

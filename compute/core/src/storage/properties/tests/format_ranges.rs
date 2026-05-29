@@ -445,4 +445,8 @@ fn test_format_range_cold_load_hydrates_imported_style_only_range() {
         fresh_mirror.range_format_cache().get(&range_id),
         Some(&CellFormat::default())
     );
+    assert_eq!(
+        fresh_mirror.range_xlsx_style_id_cache().get(&range_id),
+        Some(&44)
+    );
 }

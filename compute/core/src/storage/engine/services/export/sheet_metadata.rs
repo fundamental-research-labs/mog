@@ -597,11 +597,7 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
                     stored_slicers.push(stored);
                 }
             }
-            stored_slicers.sort_by(|a, b| {
-                a.z_index
-                    .cmp(&b.z_index)
-                    .then_with(|| a.id.cmp(&b.id))
-            });
+            stored_slicers.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
             for stored in stored_slicers {
                 slicers.push(domain_types::domain::slicer::stored_slicer_to_slicer_def(
                     &stored,
@@ -625,15 +621,9 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
                 stored_timelines.push(stored);
             }
         }
-        stored_timelines.sort_by(|a, b| {
-            a.z_index
-                .cmp(&b.z_index)
-                .then_with(|| a.id.cmp(&b.id))
-        });
+        stored_timelines.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
         for stored in stored_timelines {
-            timelines.push(domain_types::domain::slicer::stored_timeline_to_timeline_def(
-                &stored,
-            ));
+            timelines.push(domain_types::domain::slicer::stored_timeline_to_timeline_def(&stored));
             if let Some(anchor) = domain_types::domain::slicer::stored_timeline_to_anchor(&stored) {
                 timeline_anchors.push(anchor);
             }

@@ -1,7 +1,7 @@
+use domain_types::PivotCacheSourceDef;
 use domain_types::domain::pivot::{
     PivotCacheSourceKind, PivotCacheWorkbookRefScope, PivotExternalWorksheetSourceDef,
 };
-use domain_types::PivotCacheSourceDef;
 use value_types::{CellValue, FiniteF64};
 
 use crate::domain::pivot::types::ParsedPivotCache;

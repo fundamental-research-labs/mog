@@ -123,11 +123,43 @@ fn overlay_x14_rule(rule: &mut CfRule, x14_rule: &CfRuleX14) {
     if x14_rule.color_scale.is_some() {
         rule.color_scale = x14_rule.color_scale.clone();
     }
-    if x14_rule.data_bar.is_some() {
-        rule.data_bar = x14_rule.data_bar.clone();
+    if let Some(x14_data_bar) = &x14_rule.data_bar {
+        if let Some(base_data_bar) = &mut rule.data_bar {
+            overlay_x14_data_bar(base_data_bar, x14_data_bar);
+        } else {
+            rule.data_bar = Some(x14_data_bar.clone());
+        }
     }
     if x14_rule.icon_set.is_some() {
         rule.icon_set = x14_rule.icon_set.clone();
+    }
+}
+
+fn overlay_x14_data_bar(
+    base: &mut ooxml_types::cond_format::DataBar,
+    x14: &ooxml_types::cond_format::DataBar,
+) {
+    base.gradient = x14.gradient;
+    base.gradient_attr_present = x14.gradient_attr_present;
+    base.border = x14.border;
+    base.border_attr_present = x14.border_attr_present;
+    base.direction = x14.direction;
+    base.direction_attr_present = x14.direction_attr_present;
+    base.negative_bar_color_same_as_positive = x14.negative_bar_color_same_as_positive;
+    base.negative_bar_color_same_as_positive_attr_present =
+        x14.negative_bar_color_same_as_positive_attr_present;
+    base.negative_bar_border_color_same_as_positive = x14.negative_bar_border_color_same_as_positive;
+    base.negative_bar_border_color_same_as_positive_attr_present =
+        x14.negative_bar_border_color_same_as_positive_attr_present;
+    base.axis_position = x14.axis_position;
+    base.axis_position_attr_present = x14.axis_position_attr_present;
+    base.axis_color = x14.axis_color.clone();
+    base.border_color = x14.border_color.clone();
+    base.negative_fill_color = x14.negative_fill_color.clone();
+    base.negative_border_color = x14.negative_border_color.clone();
+
+    if !x14.cfvo.is_empty() {
+        base.cfvo = x14.cfvo.clone();
     }
 }
 

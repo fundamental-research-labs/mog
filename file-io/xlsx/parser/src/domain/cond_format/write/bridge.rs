@@ -30,14 +30,6 @@ pub(super) fn write_cf_color_point_color(w: &mut XmlWriter, pt: &CFColorPoint) {
     w.self_close();
 }
 
-/// Write an extension color element for data bars, using the public CF color
-/// string shape accepted by `hex_to_argb`.
-fn write_data_bar_color_element(w: &mut XmlWriter, element: &str, color: &str) {
-    w.start_element(element)
-        .attr("rgb", &hex_to_argb(color))
-        .self_close();
-}
-
 pub(super) fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
     point
         .value
@@ -51,13 +43,22 @@ fn write_cfvo_from_color_point(w: &mut XmlWriter, point: &CFColorPoint) {
     if let Some(val) = cfvo_ooxml_value(point) {
         w.attr("val", &val);
     }
-    if let Some(ext_lst_xml) = &point.ext_lst_xml {
-        w.end_attrs();
-        w.raw_str(ext_lst_xml);
-        w.end_element("cfvo");
-    } else {
-        w.self_close();
-    }
+    w.self_close();
+}
+
+fn data_bar_has_x14_payload(data_bar: &domain_types::CFDataBar) -> bool {
+    data_bar.gradient.is_some()
+        || data_bar.show_border.is_some()
+        || data_bar.direction.is_some()
+        || data_bar.match_positive_fill_color.is_some()
+        || data_bar.match_positive_border_color.is_some()
+        || data_bar.axis_position.is_some()
+        || data_bar.negative_border_color.is_some()
+        || data_bar.negative_color.is_some()
+        || data_bar.border_color.is_some()
+        || data_bar.axis_color.is_some()
+        || data_bar.min_point.ext_lst_xml.is_some()
+        || data_bar.max_point.ext_lst_xml.is_some()
 }
 
 /// Build `<conditionalFormatting>` XML string from domain `ConditionalFormat` list.
@@ -310,30 +311,6 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             if let Some(show_value) = data_bar.show_value {
                 w.attr("showValue", if show_value { "1" } else { "0" });
             }
-            if let Some(gradient) = data_bar.gradient {
-                w.attr("gradient", if gradient { "1" } else { "0" });
-            }
-            if let Some(show_border) = data_bar.show_border {
-                w.attr("border", if show_border { "1" } else { "0" });
-            }
-            if let Some(direction) = data_bar.direction {
-                w.attr("direction", direction.to_ooxml());
-            }
-            if let Some(match_positive) = data_bar.match_positive_fill_color {
-                w.attr(
-                    "negativeBarColorSameAsPositive",
-                    if match_positive { "1" } else { "0" },
-                );
-            }
-            if let Some(match_positive) = data_bar.match_positive_border_color {
-                w.attr(
-                    "negativeBarBorderColorSameAsPositive",
-                    if match_positive { "1" } else { "0" },
-                );
-            }
-            if let Some(axis_position) = data_bar.axis_position {
-                w.attr("axisPosition", axis_position.to_ooxml());
-            }
             w.end_attrs();
             write_cfvo_from_color_point(w, &data_bar.min_point);
             write_cfvo_from_color_point(w, &data_bar.max_point);
@@ -341,21 +318,11 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.start_element("color")
                 .attr("rgb", &hex_to_argb(&data_bar.positive_color))
                 .self_close();
-            if let Some(ref color) = data_bar.border_color {
-                write_data_bar_color_element(w, "borderColor", color);
-            }
-            if let Some(ref color) = data_bar.negative_color {
-                write_data_bar_color_element(w, "negativeFillColor", color);
-            }
-            if let Some(ref color) = data_bar.negative_border_color {
-                write_data_bar_color_element(w, "negativeBorderColor", color);
-            }
-            if let Some(ref color) = data_bar.axis_color {
-                write_data_bar_color_element(w, "axisColor", color);
-            }
             w.end_element("dataBar");
             // Write x14:id extension linking to extended databar properties
-            if let Some(ref ext_id) = data_bar.ext_id {
+            if let Some(ref ext_id) = data_bar.ext_id
+                && data_bar_has_x14_payload(data_bar)
+            {
                 w.start_element("extLst").end_attrs();
                 w.start_element("ext")
                     .attr(
@@ -406,13 +373,7 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
                 if !threshold.gte {
                     w.attr("gte", "0");
                 }
-                if let Some(ext_lst_xml) = &threshold.ext_lst_xml {
-                    w.end_attrs();
-                    w.raw_str(ext_lst_xml);
-                    w.end_element("cfvo");
-                } else {
-                    w.self_close();
-                }
+                w.self_close();
             }
             w.end_element("iconSet");
         }

@@ -60,7 +60,12 @@ pub fn x14_conditional_formatting_ext_xml_from_domain(cfs: &[ConditionalFormat])
 fn rule_needs_x14(rule: &CFRule) -> bool {
     match rule {
         CFRule::DataBar { data_bar, .. } => {
-            data_bar.ext_id.is_some()
+            data_bar.gradient.is_some()
+                || data_bar.show_border.is_some()
+                || data_bar.direction.is_some()
+                || data_bar.match_positive_fill_color.is_some()
+                || data_bar.match_positive_border_color.is_some()
+                || data_bar.axis_position.is_some()
                 || data_bar.negative_border_color.is_some()
                 || data_bar.negative_color.is_some()
                 || data_bar.border_color.is_some()

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use compute_document::undo::ORIGIN_USER_EDIT;
+use compute_document::undo::ORIGIN_UI_STATE;
 use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 
 use super::map::{
@@ -21,7 +21,7 @@ pub fn get_custom_setting(doc: &Doc, workbook: &MapRef, key: &str) -> Option<Str
 
 /// Set a custom setting value. Pass `None` to delete the key.
 pub fn set_custom_setting(doc: &Doc, workbook: &MapRef, key: &str, value: Option<&str>) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_UI_STATE));
     let settings_map = ensure_settings_map(workbook, &mut txn);
 
     let custom_map = ensure_optional_string_sub_map(&settings_map, &mut txn, "customSettings");

@@ -60,7 +60,7 @@ fn diff_top_level_keys(pre: &serde_json::Value, post: &serde_json::Value) -> Vec
 fn workbook_settings_origin_for_change(changed_keys: &[String]) -> &'static [u8] {
     if changed_keys
         .iter()
-        .all(|key| key.as_str() == "selectedSheetIds")
+        .all(|key| matches!(key.as_str(), "selectedSheetIds" | "customSettings"))
     {
         ORIGIN_UI_STATE
     } else {

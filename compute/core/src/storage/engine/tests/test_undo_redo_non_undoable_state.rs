@@ -93,3 +93,32 @@ fn scroll_position_does_not_clear_redo_stack() {
     engine.redo().unwrap();
     assert_eq!(cell_value_at(&engine, &sheet_id(), 0, 0), num(42.0));
 }
+
+#[test]
+fn custom_settings_do_not_clear_redo_stack() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    engine
+        .set_cell(
+            &sheet_id(),
+            cell_id_a1(),
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "42".into() },
+        )
+        .unwrap();
+    engine.undo().unwrap();
+    assert!(engine.can_redo(), "cell edit should be redoable after undo");
+
+    engine
+        .set_custom_setting("mog.activeSheetId", Some(sheet_id().to_uuid_string()))
+        .expect("custom setting state write should succeed");
+
+    assert!(
+        engine.can_redo(),
+        "custom metadata state must not clear the redo stack"
+    );
+    engine.redo().unwrap();
+    assert_eq!(cell_value_at(&engine, &sheet_id(), 0, 0), num(42.0));
+}

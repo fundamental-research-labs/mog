@@ -29,17 +29,21 @@ pub struct ThemeData {
     /// background fill styles such as gradient theme backgrounds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_scheme: Option<ooxml_types::themes::FormatScheme>,
-    /// Raw XML content inside `<a:objectDefaults>...</a:objectDefaults>`.
+    /// Current theme-owned inner XML for `<a:objectDefaults>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub object_defaults_xml: Option<Vec<u8>>,
-    /// Raw XML content inside `<a:extraClrSchemeLst>...</a:extraClrSchemeLst>`.
+    /// Current theme-owned inner XML for `<a:extraClrSchemeLst>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_clr_scheme_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of `<a:extLst>...</a:extLst>`, including the root element.
+    /// Current theme-owned raw XML of `<a:extLst>`, including the root element.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<Vec<u8>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cust_clr_lst_xml: Option<Vec<u8>>,
+    /// Current order of modeled root siblings after `themeElements`.
+    /// `None` uses generated-theme defaults; `Some(vec![])` means no siblings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_sibling_order: Option<Vec<String>>,
 }

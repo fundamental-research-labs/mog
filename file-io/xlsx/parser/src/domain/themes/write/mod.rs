@@ -142,15 +142,18 @@ pub struct ThemeWriter {
     font_scheme: FontScheme,
     /// Format scheme (fill, line, effect, and background fill styles)
     format_scheme: FormatScheme,
-    /// Raw XML content inside <a:objectDefaults>...</a:objectDefaults>
+    /// Current theme-owned inner XML for `<a:objectDefaults>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     object_defaults_xml: Option<Vec<u8>>,
-    /// Raw XML content inside <a:extraClrSchemeLst>...</a:extraClrSchemeLst>
+    /// Current theme-owned inner XML for `<a:extraClrSchemeLst>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     extra_clr_scheme_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of <a:extLst>...</a:extLst> (full element including tags)
+    /// Current theme-owned raw XML of `<a:extLst>`, including the root element.
     ext_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of <a:custClrLst>...</a:custClrLst> (full element including tags)
+    /// Current theme-owned raw XML of `<a:custClrLst>`, including the root element.
     cust_clr_lst_xml: Option<Vec<u8>>,
-    /// Root sibling order after themeElements. `Some(vec![])` preserves absence.
+    /// Current order of modeled root siblings after `themeElements`.
+    /// `None` uses generated-theme defaults; `Some(vec![])` means no siblings.
     root_sibling_order: Option<Vec<String>>,
 }
 
@@ -233,13 +236,15 @@ impl ThemeWriter {
         self
     }
 
-    /// Set raw XML content for <a:objectDefaults> (inner content only).
+    /// Set current inner XML for `<a:objectDefaults>`.
+    /// Pass an empty vector to emit a present empty/self-closing element.
     pub fn set_object_defaults_xml(&mut self, xml: Vec<u8>) -> &mut Self {
         self.object_defaults_xml = Some(xml);
         self
     }
 
-    /// Set raw XML content for <a:extraClrSchemeLst> (inner content only).
+    /// Set current inner XML for `<a:extraClrSchemeLst>`.
+    /// Pass an empty vector to emit a present empty/self-closing element.
     pub fn set_extra_clr_scheme_lst_xml(&mut self, xml: Vec<u8>) -> &mut Self {
         self.extra_clr_scheme_lst_xml = Some(xml);
         self

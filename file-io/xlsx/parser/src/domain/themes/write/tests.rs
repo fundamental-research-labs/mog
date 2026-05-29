@@ -388,6 +388,101 @@ fn test_to_xml_contains_object_defaults() {
 }
 
 #[test]
+fn test_domain_bridge_preserves_empty_root_sibling_presence() {
+    let parsed = crate::domain::themes::Theme::parse(
+        br#"<a:theme name="Bridge">
+            <a:themeElements></a:themeElements>
+            <a:objectDefaults/>
+            <a:extraClrSchemeLst/>
+            <a:extLst/>
+        </a:theme>"#,
+    );
+    let theme = domain_types::ThemeData {
+        name: Some(parsed.name),
+        color_scheme: Some(parsed.color_scheme),
+        font_scheme: Some(parsed.font_scheme),
+        format_scheme: Some(parsed.format_scheme),
+        object_defaults_xml: parsed.object_defaults_xml,
+        extra_clr_scheme_lst_xml: parsed.extra_clr_scheme_lst_xml,
+        ext_lst_xml: parsed.ext_lst_xml,
+        root_sibling_order: parsed.root_sibling_order,
+        ..Default::default()
+    };
+
+    let xml = theme_writer_from_domain(&theme);
+    let xml_str = String::from_utf8_lossy(&xml);
+
+    assert!(xml_str.contains("<a:objectDefaults/>"));
+    assert!(xml_str.contains("<a:extraClrSchemeLst/>"));
+    assert!(xml_str.contains("<a:extLst/>"));
+}
+
+#[test]
+fn test_domain_bridge_preserves_non_empty_object_defaults_and_empty_extra_colors() {
+    let parsed = crate::domain::themes::Theme::parse(
+        br#"<a:theme name="Bridge">
+            <a:themeElements></a:themeElements>
+            <a:extraClrSchemeLst/>
+            <a:objectDefaults><a:spDef><a:spPr/></a:spDef></a:objectDefaults>
+        </a:theme>"#,
+    );
+    let theme = domain_types::ThemeData {
+        name: Some(parsed.name),
+        color_scheme: Some(parsed.color_scheme),
+        font_scheme: Some(parsed.font_scheme),
+        format_scheme: Some(parsed.format_scheme),
+        object_defaults_xml: parsed.object_defaults_xml,
+        extra_clr_scheme_lst_xml: parsed.extra_clr_scheme_lst_xml,
+        root_sibling_order: parsed.root_sibling_order,
+        ..Default::default()
+    };
+
+    let xml = theme_writer_from_domain(&theme);
+    let xml_str = String::from_utf8_lossy(&xml);
+    let extra_pos = xml_str
+        .find("<a:extraClrSchemeLst/>")
+        .expect("extraClrSchemeLst not emitted");
+    let object_pos = xml_str
+        .find("<a:objectDefaults><a:spDef><a:spPr/></a:spDef></a:objectDefaults>")
+        .expect("objectDefaults content not emitted");
+
+    assert!(extra_pos < object_pos);
+}
+
+#[test]
+fn test_theme_data_serde_preserves_empty_root_sibling_presence() {
+    let theme = domain_types::ThemeData {
+        object_defaults_xml: Some(Vec::new()),
+        extra_clr_scheme_lst_xml: Some(Vec::new()),
+        root_sibling_order: Some(vec![
+            "objectDefaults".to_string(),
+            "extraClrSchemeLst".to_string(),
+        ]),
+        ..Default::default()
+    };
+
+    let json = serde_json::to_string(&theme).expect("serialize ThemeData");
+    let hydrated: domain_types::ThemeData =
+        serde_json::from_str(&json).expect("deserialize ThemeData");
+
+    assert_eq!(hydrated.object_defaults_xml, Some(Vec::new()));
+    assert_eq!(hydrated.extra_clr_scheme_lst_xml, Some(Vec::new()));
+    assert_eq!(hydrated.root_sibling_order, theme.root_sibling_order);
+}
+
+#[test]
+fn test_root_sibling_ordered_absent_fields_are_not_defaulted_to_empty() {
+    let mut theme = ThemeWriter::default_office_theme();
+    theme.set_root_sibling_order(vec!["objectDefaults".to_string()]);
+
+    let xml = theme.to_xml();
+    let xml_str = String::from_utf8_lossy(&xml);
+
+    assert!(!xml_str.contains("<a:objectDefaults/>"));
+    assert!(!xml_str.contains("<a:extraClrSchemeLst/>"));
+}
+
+#[test]
 fn test_to_xml_custom_colors() {
     let mut theme = ThemeWriter::new();
     theme

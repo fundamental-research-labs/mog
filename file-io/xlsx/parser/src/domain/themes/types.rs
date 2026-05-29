@@ -292,15 +292,18 @@ pub struct Theme {
     /// Runtime color scheme preserving full ThemeColor variants for resolution
     pub(crate) runtime_colors: RuntimeColorScheme,
 
-    /// Raw XML content inside <a:objectDefaults>...</a:objectDefaults> (inner content only, no wrapper tags)
+    /// Current theme-owned inner XML for `<a:objectDefaults>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     pub object_defaults_xml: Option<Vec<u8>>,
-    /// Raw XML content inside <a:extraClrSchemeLst>...</a:extraClrSchemeLst>
+    /// Current theme-owned inner XML for `<a:extraClrSchemeLst>`.
+    /// `None` means absent; `Some(vec![])` means present empty/self-closing.
     pub extra_clr_scheme_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of <a:extLst>...</a:extLst> (full element including tags)
+    /// Current theme-owned raw XML of `<a:extLst>`, including the root element.
     pub ext_lst_xml: Option<Vec<u8>>,
-    /// Raw XML of <a:custClrLst>...</a:custClrLst> (full element including tags)
+    /// Current theme-owned raw XML of `<a:custClrLst>`, including the root element.
     pub cust_clr_lst_xml: Option<Vec<u8>>,
-    /// Root sibling order after themeElements. `Some(vec![])` means preserve absence.
+    /// Current order of modeled root siblings after `themeElements`.
+    /// `None` uses generated-theme defaults; `Some(vec![])` means no siblings.
     pub root_sibling_order: Option<Vec<String>>,
 }
 
@@ -353,90 +356,36 @@ impl Theme {
                     xml.len()
                 };
 
-            let mut root_sibling_positions: Vec<(usize, String)> = Vec::new();
-
-            // Extract objectDefaults (inner content only)
-            if let Some(od_start) = find_tag_simd(xml, b"objectDefaults", after_elements) {
-                root_sibling_positions.push((od_start, "objectDefaults".to_string()));
-                // Check if it's a self-closing tag
-                let mut is_self_closing = false;
-                if let Some(gt_pos) = xml[od_start..].iter().position(|&b| b == b'>') {
-                    if gt_pos > 0 && xml[od_start + gt_pos - 1] == b'/' {
-                        is_self_closing = true;
+            let root_siblings = collect_theme_root_siblings(xml, after_elements);
+            for sibling in &root_siblings {
+                match sibling.name.as_str() {
+                    "objectDefaults" => {
+                        theme.object_defaults_xml = Some(
+                            sibling
+                                .inner_range()
+                                .map_or_else(Vec::new, |range| xml[range].to_vec()),
+                        );
                     }
-                }
-                if !is_self_closing {
-                    // Find the end of the opening tag '>'
-                    if let Some(gt_offset) = xml[od_start..].iter().position(|&b| b == b'>') {
-                        let inner_start = od_start + gt_offset + 1;
-                        if let Some(close_pos) = find_closing_tag(xml, b"objectDefaults", od_start)
-                        {
-                            if close_pos > inner_start {
-                                theme.object_defaults_xml =
-                                    Some(xml[inner_start..close_pos].to_vec());
-                            }
-                        }
+                    "extraClrSchemeLst" => {
+                        theme.extra_clr_scheme_lst_xml = Some(
+                            sibling
+                                .inner_range()
+                                .map_or_else(Vec::new, |range| xml[range].to_vec()),
+                        );
                     }
-                }
-            }
-
-            // Extract extraClrSchemeLst (inner content only)
-            if let Some(ecsl_start) = find_tag_simd(xml, b"extraClrSchemeLst", after_elements) {
-                root_sibling_positions.push((ecsl_start, "extraClrSchemeLst".to_string()));
-                let mut is_self_closing = false;
-                if let Some(gt_pos) = xml[ecsl_start..].iter().position(|&b| b == b'>') {
-                    if gt_pos > 0 && xml[ecsl_start + gt_pos - 1] == b'/' {
-                        is_self_closing = true;
+                    "custClrLst" => {
+                        theme.cust_clr_lst_xml = Some(xml[sibling.full_range()].to_vec());
                     }
-                }
-                if !is_self_closing {
-                    if let Some(gt_offset) = xml[ecsl_start..].iter().position(|&b| b == b'>') {
-                        let inner_start = ecsl_start + gt_offset + 1;
-                        if let Some(close_pos) =
-                            find_closing_tag(xml, b"extraClrSchemeLst", ecsl_start)
-                        {
-                            if close_pos > inner_start {
-                                theme.extra_clr_scheme_lst_xml =
-                                    Some(xml[inner_start..close_pos].to_vec());
-                            }
-                        }
+                    "extLst" => {
+                        theme.ext_lst_xml = Some(xml[sibling.full_range()].to_vec());
                     }
+                    _ => {}
                 }
             }
-
-            // Extract custClrLst (full element including tags)
-            if let Some(cust_start) = find_tag_simd(xml, b"custClrLst", after_elements) {
-                root_sibling_positions.push((cust_start, "custClrLst".to_string()));
-                theme.cust_clr_lst_xml = extract_full_element(xml, b"custClrLst", cust_start);
-            }
-
-            // Extract extLst (full element including tags)
-            if let Some(ext_start) = find_tag_simd(xml, b"extLst", after_elements) {
-                root_sibling_positions.push((ext_start, "extLst".to_string()));
-                // Check if it's a self-closing tag
-                let mut is_self_closing = false;
-                if let Some(gt_pos) = xml[ext_start..].iter().position(|&b| b == b'>') {
-                    if gt_pos > 0 && xml[ext_start + gt_pos - 1] == b'/' {
-                        is_self_closing = true;
-                    }
-                }
-                if is_self_closing {
-                    // Include the full self-closing tag
-                    if let Some(gt_pos) = xml[ext_start..].iter().position(|&b| b == b'>') {
-                        theme.ext_lst_xml = Some(xml[ext_start..ext_start + gt_pos + 1].to_vec());
-                    }
-                } else if let Some(close_pos) = find_closing_tag(xml, b"extLst", ext_start) {
-                    // Include from '<a:extLst' through '</a:extLst>'
-                    if let Some(gt_pos) = xml[close_pos..].iter().position(|&b| b == b'>') {
-                        theme.ext_lst_xml = Some(xml[ext_start..close_pos + gt_pos + 1].to_vec());
-                    }
-                }
-            }
-            root_sibling_positions.sort_by_key(|(pos, _)| *pos);
             theme.root_sibling_order = Some(
-                root_sibling_positions
+                root_siblings
                     .into_iter()
-                    .map(|(_, name)| name)
+                    .map(|sibling| sibling.name)
                     .collect(),
             );
         }
@@ -528,14 +477,181 @@ impl Theme {
     }
 }
 
-fn extract_full_element(xml: &[u8], tag: &[u8], start: usize) -> Option<Vec<u8>> {
-    let gt_pos = xml[start..].iter().position(|&b| b == b'>')?;
-    if gt_pos > 0 && xml[start + gt_pos - 1] == b'/' {
-        return Some(xml[start..start + gt_pos + 1].to_vec());
+#[derive(Debug)]
+struct ThemeRootSibling {
+    name: String,
+    start: usize,
+    open_end: usize,
+    close_start: Option<usize>,
+    end: usize,
+}
+
+impl ThemeRootSibling {
+    fn full_range(&self) -> std::ops::Range<usize> {
+        self.start..self.end
     }
-    let close_pos = find_closing_tag(xml, tag, start)?;
-    let close_gt = xml[close_pos..].iter().position(|&b| b == b'>')?;
-    Some(xml[start..close_pos + close_gt + 1].to_vec())
+
+    fn inner_range(&self) -> Option<std::ops::Range<usize>> {
+        self.close_start.map(|close_start| self.open_end..close_start)
+    }
+}
+
+#[derive(Debug)]
+struct ElementStart<'a> {
+    gt_pos: usize,
+    local_name: &'a [u8],
+    is_closing: bool,
+    is_special: bool,
+    is_self_closing: bool,
+}
+
+fn collect_theme_root_siblings(xml: &[u8], after_elements: usize) -> Vec<ThemeRootSibling> {
+    let mut siblings = Vec::new();
+    let mut pos = after_elements;
+
+    while let Some(rel_lt) = xml[pos..].iter().position(|&b| b == b'<') {
+        let start = pos + rel_lt;
+        let Some(element) = parse_element_start(xml, start) else {
+            break;
+        };
+
+        if element.is_special {
+            pos = element.gt_pos + 1;
+            continue;
+        }
+
+        if element.is_closing {
+            break;
+        }
+
+        let Some(name) = theme_root_sibling_name(element.local_name) else {
+            pos = element_end(
+                xml,
+                element.local_name,
+                start,
+                element.gt_pos,
+                element.is_self_closing,
+            )
+            .unwrap_or(element.gt_pos + 1);
+            continue;
+        };
+
+        let open_end = element.gt_pos + 1;
+        if element.is_self_closing {
+            siblings.push(ThemeRootSibling {
+                name: name.to_string(),
+                start,
+                open_end,
+                close_start: None,
+                end: open_end,
+            });
+            pos = open_end;
+        } else if let Some(close_start) = find_closing_tag(xml, element.local_name, start) {
+            if let Some(close_gt_rel) = xml[close_start..].iter().position(|&b| b == b'>') {
+                let end = close_start + close_gt_rel + 1;
+                siblings.push(ThemeRootSibling {
+                    name: name.to_string(),
+                    start,
+                    open_end,
+                    close_start: Some(close_start),
+                    end,
+                });
+                pos = end;
+            } else {
+                break;
+            }
+        } else {
+            pos = open_end;
+        }
+    }
+
+    siblings
+}
+
+fn element_end(
+    xml: &[u8],
+    local_name: &[u8],
+    start: usize,
+    gt_pos: usize,
+    is_self_closing: bool,
+) -> Option<usize> {
+    if is_self_closing {
+        return Some(gt_pos + 1);
+    }
+    let close_start = find_closing_tag(xml, local_name, start)?;
+    let close_gt = xml[close_start..].iter().position(|&b| b == b'>')?;
+    Some(close_start + close_gt + 1)
+}
+
+fn parse_element_start(xml: &[u8], start: usize) -> Option<ElementStart<'_>> {
+    if xml.get(start) != Some(&b'<') {
+        return None;
+    }
+
+    let gt_pos = start + xml[start..].iter().position(|&b| b == b'>')?;
+    let mut name_start = start + 1;
+    let first = *xml.get(name_start)?;
+    let is_closing = first == b'/';
+    let is_special = first == b'!' || first == b'?';
+    if is_closing {
+        name_start += 1;
+    }
+    if is_special {
+        return Some(ElementStart {
+            gt_pos,
+            local_name: &[],
+            is_closing,
+            is_special,
+            is_self_closing: false,
+        });
+    }
+
+    while name_start < gt_pos && is_xml_space(xml[name_start]) {
+        name_start += 1;
+    }
+    let mut name_end = name_start;
+    while name_end < gt_pos
+        && !is_xml_space(xml[name_end])
+        && xml[name_end] != b'/'
+        && xml[name_end] != b'>'
+    {
+        name_end += 1;
+    }
+
+    let local_name = local_name(&xml[name_start..name_end]);
+    let is_self_closing = xml[start..gt_pos]
+        .iter()
+        .rev()
+        .find(|&&b| !is_xml_space(b))
+        .is_some_and(|&b| b == b'/');
+
+    Some(ElementStart {
+        gt_pos,
+        local_name,
+        is_closing,
+        is_special,
+        is_self_closing,
+    })
+}
+
+fn local_name(name: &[u8]) -> &[u8] {
+    name.iter()
+        .rposition(|&b| b == b':')
+        .map_or(name, |colon| &name[colon + 1..])
+}
+
+fn theme_root_sibling_name(local_name: &[u8]) -> Option<&'static str> {
+    match local_name {
+        b"objectDefaults" => Some("objectDefaults"),
+        b"extraClrSchemeLst" => Some("extraClrSchemeLst"),
+        b"custClrLst" => Some("custClrLst"),
+        b"extLst" => Some("extLst"),
+        _ => None,
+    }
+}
+
+fn is_xml_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\n' | b'\r' | b'\t')
 }
 
 #[cfg(test)]
@@ -1067,25 +1183,106 @@ mod tests {
                     .as_slice()
             )
         );
+        assert_eq!(
+            theme.root_sibling_order.as_deref(),
+            Some(
+                [
+                    "objectDefaults".to_string(),
+                    "extraClrSchemeLst".to_string(),
+                    "extLst".to_string()
+                ]
+                .as_slice()
+            )
+        );
     }
 
     #[test]
-    fn test_parse_ignores_self_closing_root_siblings() {
+    fn test_parse_preserves_self_closing_root_siblings_as_empty_present() {
         let xml = br#"
         <a:theme name="Test">
             <a:themeElements></a:themeElements>
             <a:objectDefaults/>
             <a:extraClrSchemeLst/>
+            <a:custClrLst/>
             <a:extLst/>
+        </a:theme>
+        "#;
+
+        let theme = Theme::parse(xml);
+        assert_eq!(theme.object_defaults_xml.as_deref(), Some(b"".as_slice()));
+        assert_eq!(
+            theme.extra_clr_scheme_lst_xml.as_deref(),
+            Some(b"".as_slice())
+        );
+        assert_eq!(
+            theme.cust_clr_lst_xml.as_deref(),
+            Some(br#"<a:custClrLst/>"#.as_slice())
+        );
+        assert_eq!(
+            theme.ext_lst_xml.as_deref(),
+            Some(br#"<a:extLst/>"#.as_slice())
+        );
+        assert_eq!(
+            theme.root_sibling_order.as_deref(),
+            Some(
+                [
+                    "objectDefaults".to_string(),
+                    "extraClrSchemeLst".to_string(),
+                    "custClrLst".to_string(),
+                    "extLst".to_string()
+                ]
+                .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_preserves_explicit_empty_root_siblings_as_empty_present() {
+        let xml = br#"
+        <a:theme name="Test">
+            <a:themeElements></a:themeElements>
+            <a:objectDefaults></a:objectDefaults>
+            <a:extraClrSchemeLst></a:extraClrSchemeLst>
+        </a:theme>
+        "#;
+
+        let theme = Theme::parse(xml);
+        assert_eq!(theme.object_defaults_xml.as_deref(), Some(b"".as_slice()));
+        assert_eq!(
+            theme.extra_clr_scheme_lst_xml.as_deref(),
+            Some(b"".as_slice())
+        );
+        assert_eq!(
+            theme.root_sibling_order.as_deref(),
+            Some(
+                ["objectDefaults".to_string(), "extraClrSchemeLst".to_string()].as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_root_siblings_ignores_nested_matches_after_theme_elements() {
+        let xml = br#"
+        <a:theme name="Test">
+            <a:themeElements></a:themeElements>
+            <a:extLst>
+                <a:ext uri="{test}">
+                    <a:objectDefaults/>
+                    <a:extraClrSchemeLst/>
+                    <a:custClrLst/>
+                </a:ext>
+            </a:extLst>
         </a:theme>
         "#;
 
         let theme = Theme::parse(xml);
         assert!(theme.object_defaults_xml.is_none());
         assert!(theme.extra_clr_scheme_lst_xml.is_none());
+        assert!(theme.cust_clr_lst_xml.is_none());
+        assert!(theme.ext_lst_xml.is_some());
         assert_eq!(
-            theme.ext_lst_xml.as_deref(),
-            Some(br#"<a:extLst/>"#.as_slice())
+            theme.root_sibling_order.as_deref(),
+            Some(["extLst".to_string()].as_slice())
         );
     }
 

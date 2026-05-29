@@ -1,21 +1,21 @@
 use std::collections::BTreeMap;
 
 use super::{
-    is_external_target_mode, owner_part_path_from_rels_path, relationship_target_part_path,
-    PackageIntegrityIssue, PackagePart, PackagePartKind, ResolvedPackageRelationship,
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
     CT_COMMENTS, CT_CONNECTIONS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DOC_METADATA_LABEL_INFO, CT_DRAWING, CT_EXTENDED_PROPERTIES, CT_METADATA, CT_OLE_OBJECT,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_QUERY_TABLE, CT_SHARED_STRINGS,
     CT_SLICER, CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME,
     CT_THREADED_COMMENTS, CT_VOLATILE_DEPENDENCIES, CT_WORKBOOK, CT_WORKSHEET,
-    CT_WORKSHEET_CUSTOM_PROPERTY, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS,
-    REL_CORE_PROPERTIES, REL_CTRL_PROP, REL_CUSTOM_PROPERTIES, REL_DRAWING,
-    REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_IMAGE, REL_METADATA, REL_OFFICE_DOCUMENT,
-    REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE, REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE,
-    REL_PRINTER_SETTINGS, REL_QUERY_TABLE, REL_SHARED_STRINGS, REL_SLICER, REL_SLICER_CACHE,
-    REL_STYLES, REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT,
-    REL_VML_DRAWING, REL_WORKSHEET, REL_WORKSHEET_CUSTOM_PROPERTY,
+    CT_WORKSHEET_CUSTOM_PROPERTY, PackageIntegrityIssue, PackagePart, PackagePartKind, REL_CHART,
+    REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
+    REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_IMAGE,
+    REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
+    REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE,
+    REL_SHARED_STRINGS, REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE,
+    REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
+    REL_WORKSHEET_CUSTOM_PROPERTY, ResolvedPackageRelationship, is_external_target_mode,
+    owner_part_path_from_rels_path, relationship_target_part_path,
 };
 use crate::infra::opc::OoxmlRelationshipType;
 
@@ -412,8 +412,7 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
     if path.starts_with("xl/charts/color") && path.ends_with(".xml") {
         return Some(RequiredRelationship {
             rels_path: None,
-            relationship_type:
-                "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle",
+            relationship_type: "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle",
         });
     }
     if path.starts_with("xl/media/") {

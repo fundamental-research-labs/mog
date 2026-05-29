@@ -32,6 +32,19 @@ fn relationship_hint(
     }
 }
 
+fn external_relationship_hint(
+    id: &str,
+    relationship_type: &str,
+    target: &str,
+) -> domain_types::PackageRelationshipHint {
+    domain_types::PackageRelationshipHint {
+        id: id.to_string(),
+        relationship_type: relationship_type.to_string(),
+        target: target.to_string(),
+        target_mode: Some("External".to_string()),
+    }
+}
+
 #[test]
 fn imported_root_order_and_ids_are_reused_only_for_matching_current_set() {
     let metadata = PackageFidelityMetadata {
@@ -656,6 +669,39 @@ fn opaque_xml_relationship_references_must_have_registered_owner_relationships()
             .to_string()
             .contains("opaque part customXml/item1.xml references relationship rIdMissing")
     );
+}
+
+#[test]
+fn opaque_sidecar_external_relationships_are_not_replayed() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![relationship_hint(
+            "rId7",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+            "customXml/item1.xml",
+        )],
+        opaque_parts: vec![domain_types::OpaquePackagePartHint {
+            path: "customXml/item1.xml".to_string(),
+            bytes: b"<root/>".to_vec(),
+            content_type: Some("application/xml".to_string()),
+            relationships: vec![external_relationship_hint(
+                "rId1",
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+                "https://example.invalid/",
+            )],
+        }],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    assert!(graph.contains_part("customXml/item1.xml"));
+    assert!(!graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "customXml/_rels/item1.xml.rels"
+            && rel.id == "rId1"
+            && rel.target == "https://example.invalid/"
+    }));
 }
 
 #[test]

@@ -224,15 +224,6 @@ impl PackageGraphBuilder {
             };
             for hint in opaque_part_relationship_hints(metadata, part) {
                 if is_external_target_mode(hint.target_mode.as_deref()) {
-                    self.add_relationship(PackageRelationship {
-                        owner: owner.clone(),
-                        relationship_type: hint.relationship_type.clone(),
-                        target: PackageRelationshipTarget::External {
-                            target: hint.target.clone(),
-                            target_mode: hint.target_mode.clone(),
-                        },
-                        identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
-                    });
                     continue;
                 }
 

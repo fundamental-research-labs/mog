@@ -1,7 +1,8 @@
 use ooxml_types::drawings::CellAnchor;
 use ooxml_types::slicers::{
-    SlicerAnchor as OoxmlSlicerAnchor, SlicerCacheDef as OoxmlSlicerCacheDef,
-    SlicerDef as OoxmlSlicerDef, SlicerTabularItem, TableSlicerCache,
+    SlicerAnchor as OoxmlSlicerAnchor, SlicerAnchorMode as OoxmlSlicerAnchorMode,
+    SlicerCacheDef as OoxmlSlicerCacheDef, SlicerDef as OoxmlSlicerDef, SlicerTabularItem,
+    TableSlicerCache,
 };
 use value_types::CellValue;
 
@@ -168,21 +169,26 @@ pub fn xlsx_import_to_stored_slicer(
         }
     });
 
-    // Build two-cell anchor position from SlicerAnchor
+    // Build anchor position from SlicerAnchor.
     let position = anchor.map(|a| FloatingObjectAnchor {
         anchor_row: a.from.row,
         anchor_col: a.from.col,
         anchor_row_offset: a.from.row_off,
         anchor_col_offset: a.from.col_off,
-        anchor_mode: AnchorMode::TwoCell,
+        anchor_mode: match a.anchor_mode.unwrap_or(OoxmlSlicerAnchorMode::TwoCell) {
+            OoxmlSlicerAnchorMode::TwoCell => AnchorMode::TwoCell,
+            OoxmlSlicerAnchorMode::OneCell => AnchorMode::OneCell,
+        },
         absolute_x: None,
         absolute_y: None,
-        end_row: Some(a.to.row),
-        end_col: Some(a.to.col),
-        end_row_offset: Some(a.to.row_off),
-        end_col_offset: Some(a.to.col_off),
-        extent_cx: None,
-        extent_cy: None,
+        end_row: Some(a.to.row).filter(|_| a.anchor_mode != Some(OoxmlSlicerAnchorMode::OneCell)),
+        end_col: Some(a.to.col).filter(|_| a.anchor_mode != Some(OoxmlSlicerAnchorMode::OneCell)),
+        end_row_offset: Some(a.to.row_off)
+            .filter(|_| a.anchor_mode != Some(OoxmlSlicerAnchorMode::OneCell)),
+        end_col_offset: Some(a.to.col_off)
+            .filter(|_| a.anchor_mode != Some(OoxmlSlicerAnchorMode::OneCell)),
+        extent_cx: a.extent.as_ref().map(|ext| ext.cx),
+        extent_cy: a.extent.as_ref().map(|ext| ext.cy),
     });
 
     StoredSlicer {
@@ -358,10 +364,17 @@ pub fn stored_slicer_to_slicer_def(stored: &StoredSlicer) -> OoxmlSlicerDef {
 /// Returns `None` if the stored slicer has no position data.
 pub fn stored_slicer_to_anchor(stored: &StoredSlicer) -> Option<OoxmlSlicerAnchor> {
     let pos = stored.position.as_ref()?;
-    // OOXML slicer anchors require a two-cell rectangle (`from`/`to`).
-    // Skip export when the stored anchor lacks end coordinates.
-    let end_row = pos.end_row?;
-    let end_col = pos.end_col?;
+    let is_one_cell = pos.anchor_mode == AnchorMode::OneCell;
+    let end_row = if is_one_cell {
+        pos.anchor_row
+    } else {
+        pos.end_row?
+    };
+    let end_col = if is_one_cell {
+        pos.anchor_col
+    } else {
+        pos.end_col?
+    };
     let end_row_offset = pos.end_row_offset.unwrap_or(0);
     let end_col_offset = pos.end_col_offset.unwrap_or(0);
     Some(OoxmlSlicerAnchor {
@@ -384,6 +397,19 @@ pub fn stored_slicer_to_anchor(stored: &StoredSlicer) -> Option<OoxmlSlicerAncho
             col_off: end_col_offset,
             row: end_row,
             row_off: end_row_offset,
+        },
+        anchor_mode: Some(if is_one_cell {
+            OoxmlSlicerAnchorMode::OneCell
+        } else {
+            OoxmlSlicerAnchorMode::TwoCell
+        }),
+        extent: if is_one_cell {
+            Some(ooxml_types::drawings::Extent {
+                cx: pos.extent_cx.unwrap_or(0),
+                cy: pos.extent_cy.unwrap_or(0),
+            })
+        } else {
+            None
         },
     })
 }

@@ -517,30 +517,48 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             let mut drawing_writer = DrawingWriter::new();
             drawing_writer.set_suppress_unregistered_relationships(true);
             for anchor in &sheet_data.slicer_anchors {
-                drawing_writer.add_anchor(DrawingAnchor::TwoCell(
-                    TwoCellAnchor {
-                        from: CellAnchor {
-                            col: anchor.from.col,
-                            col_off: anchor.from.col_off,
-                            row: anchor.from.row,
-                            row_off: anchor.from.row_off,
+                let object = DrawingObject::Slicer {
+                    original_id: anchor.object_id,
+                    name: anchor.slicer_name.clone(),
+                    r_id: String::new(),
+                };
+                if anchor.anchor_mode == Some(ooxml_types::slicers::SlicerAnchorMode::OneCell) {
+                    drawing_writer.add_anchor(DrawingAnchor::OneCell(
+                        OneCellAnchor {
+                            from: CellAnchor {
+                                col: anchor.from.col,
+                                col_off: anchor.from.col_off,
+                                row: anchor.from.row,
+                                row_off: anchor.from.row_off,
+                            },
+                            extent: anchor.extent.clone().unwrap_or_default(),
+                            client_data: ClientData::default(),
+                            mc_alternate_content: None,
                         },
-                        to: CellAnchor {
-                            col: anchor.to.col,
-                            col_off: anchor.to.col_off,
-                            row: anchor.to.row,
-                            row_off: anchor.to.row_off,
+                        object,
+                    ));
+                } else {
+                    drawing_writer.add_anchor(DrawingAnchor::TwoCell(
+                        TwoCellAnchor {
+                            from: CellAnchor {
+                                col: anchor.from.col,
+                                col_off: anchor.from.col_off,
+                                row: anchor.from.row,
+                                row_off: anchor.from.row_off,
+                            },
+                            to: CellAnchor {
+                                col: anchor.to.col,
+                                col_off: anchor.to.col_off,
+                                row: anchor.to.row,
+                                row_off: anchor.to.row_off,
+                            },
+                            edit_as: None,
+                            client_data: ClientData::default(),
+                            mc_alternate_content: None,
                         },
-                        edit_as: None,
-                        client_data: ClientData::default(),
-                        mc_alternate_content: None,
-                    },
-                    DrawingObject::Slicer {
-                        original_id: anchor.object_id,
-                        name: anchor.slicer_name.clone(),
-                        r_id: String::new(),
-                    },
-                ));
+                        object,
+                    ));
+                }
             }
             // ── Floating objects (images, shapes, text boxes, groups, connectors, SmartArt) ──
             // IMPORTANT: Image rels must be registered BEFORE chart rels so that

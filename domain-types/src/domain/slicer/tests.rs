@@ -397,6 +397,8 @@ fn xlsx_import_table_slicer_conversion() {
             row: 10,
             row_off: 0,
         },
+        anchor_mode: None,
+        extent: None,
     };
 
     let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), Some(&anchor), "sheet-hex-1");

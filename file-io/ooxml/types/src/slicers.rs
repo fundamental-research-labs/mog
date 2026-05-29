@@ -13,7 +13,7 @@
 //! writer modules own relationship closure, dirty invalidation, and any opaque
 //! extension payload replay.
 
-use crate::drawings::CellAnchor;
+use crate::drawings::{CellAnchor, Extent};
 
 // ============================================================================
 // Content Type & Relationship Constants
@@ -297,4 +297,25 @@ pub struct SlicerAnchor {
     pub from: CellAnchor,
     /// Bottom-right anchor position.
     pub to: CellAnchor,
+    /// Imported drawing anchor mode.
+    ///
+    /// Older callers only modeled two-cell slicer geometry.  This typed field
+    /// lets the file-IO owner preserve one-cell slicer controls without raw
+    /// drawing replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_mode: Option<SlicerAnchorMode>,
+    /// Object extent for one-cell anchors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extent: Option<Extent>,
+}
+
+/// Drawing anchor mode for a slicer control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SlicerAnchorMode {
+    /// `xdr:twoCellAnchor`.
+    #[default]
+    TwoCell,
+    /// `xdr:oneCellAnchor`.
+    OneCell,
 }

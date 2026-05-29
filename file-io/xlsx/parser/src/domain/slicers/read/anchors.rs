@@ -4,7 +4,8 @@ use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find
 use crate::infra::xml::{parse_string_attr, parse_u32_attr};
 
 use super::super::types::SlicerAnchor;
-use ooxml_types::drawings::CellAnchor;
+use ooxml_types::drawings::{CellAnchor, Extent};
+use ooxml_types::slicers::SlicerAnchorMode;
 
 /// Parse slicer anchors from drawing XML.
 pub fn parse_slicer_anchors_from_drawing(drawing_xml: &[u8]) -> Vec<SlicerAnchor> {
@@ -31,7 +32,7 @@ pub fn parse_slicer_anchors_from_drawing(drawing_xml: &[u8]) -> Vec<SlicerAnchor
                     if let Some(slicer_name) = extract_slicer_name_from_block(ac_block) {
                         let object_id = extract_slicer_object_id_from_block(ac_block);
                         if let Some(mut anchor) =
-                            extract_two_cell_anchor_for_slicer(drawing_xml, ac_start, &slicer_name)
+                            extract_anchor_for_slicer(drawing_xml, ac_start, &slicer_name)
                         {
                             anchor.object_id = object_id;
                             anchors.push(anchor);
@@ -80,6 +81,15 @@ fn extract_slicer_object_id_from_block(block: &[u8]) -> Option<u32> {
     parse_u32_attr(&block[c_nv_pr..elem_end], b"id=\"")
 }
 
+fn extract_anchor_for_slicer(
+    drawing_xml: &[u8],
+    ac_start: usize,
+    slicer_name: &str,
+) -> Option<SlicerAnchor> {
+    extract_two_cell_anchor_for_slicer(drawing_xml, ac_start, slicer_name)
+        .or_else(|| extract_one_cell_anchor_for_slicer(drawing_xml, ac_start, slicer_name))
+}
+
 fn extract_two_cell_anchor_for_slicer(
     drawing_xml: &[u8],
     ac_start: usize,
@@ -98,15 +108,49 @@ fn extract_two_cell_anchor_for_slicer(
         object_id: None,
         from: parse_cell_anchor_element(two_cell_block, b"from")?,
         to: parse_cell_anchor_element(two_cell_block, b"to")?,
+        anchor_mode: Some(SlicerAnchorMode::TwoCell),
+        extent: None,
+    })
+}
+
+fn extract_one_cell_anchor_for_slicer(
+    drawing_xml: &[u8],
+    ac_start: usize,
+    slicer_name: &str,
+) -> Option<SlicerAnchor> {
+    let one_cell_start = find_enclosing_one_cell_anchor(drawing_xml, ac_start)?;
+    let one_cell_close = find_closing_tag(drawing_xml, b"oneCellAnchor", one_cell_start)
+        .unwrap_or(drawing_xml.len());
+    let one_cell_end = find_gt_simd(drawing_xml, one_cell_close)
+        .map(|p| p + 1)
+        .unwrap_or(one_cell_close);
+    let one_cell_block = &drawing_xml[one_cell_start..one_cell_end];
+    let from = parse_cell_anchor_element(one_cell_block, b"from")?;
+
+    Some(SlicerAnchor {
+        slicer_name: slicer_name.to_string(),
+        object_id: None,
+        from: from.clone(),
+        to: from,
+        anchor_mode: Some(SlicerAnchorMode::OneCell),
+        extent: parse_extent_element(one_cell_block),
     })
 }
 
 fn find_enclosing_two_cell_anchor(xml: &[u8], before_pos: usize) -> Option<usize> {
+    find_enclosing_anchor(xml, b"twoCellAnchor", before_pos)
+}
+
+fn find_enclosing_one_cell_anchor(xml: &[u8], before_pos: usize) -> Option<usize> {
+    find_enclosing_anchor(xml, b"oneCellAnchor", before_pos)
+}
+
+fn find_enclosing_anchor(xml: &[u8], tag_name: &[u8], before_pos: usize) -> Option<usize> {
     let mut last_found = None;
     let mut pos = 0;
 
     while pos < before_pos {
-        if let Some(found) = find_tag_simd(xml, b"twoCellAnchor", pos) {
+        if let Some(found) = find_tag_simd(xml, tag_name, pos) {
             if found < before_pos {
                 last_found = Some(found);
                 let end = find_gt_simd(xml, found).map(|p| p + 1).unwrap_or(found + 1);
@@ -137,6 +181,32 @@ fn parse_cell_anchor_element(block: &[u8], tag_name: &[u8]) -> Option<CellAnchor
         row: parse_element_text_u32(inner, b"row")?,
         row_off: parse_element_text_i64(inner, b"rowOff").unwrap_or(0),
     })
+}
+
+fn parse_extent_element(block: &[u8]) -> Option<Extent> {
+    let tag_start =
+        find_tag_simd(block, b"xdr:ext", 0).or_else(|| find_tag_simd(block, b"ext", 0))?;
+    let tag_end = find_gt_simd(block, tag_start)
+        .map(|p| p + 1)
+        .unwrap_or(block.len());
+    let elem = &block[tag_start..tag_end];
+
+    Some(Extent {
+        cx: parse_i64_attr(elem, b"cx=\"")?,
+        cy: parse_i64_attr(elem, b"cy=\"")?,
+    })
+}
+
+fn parse_i64_attr(elem: &[u8], attr: &[u8]) -> Option<i64> {
+    let start = find_attr_simd(elem, attr, 0)? + attr.len();
+    let mut end = start;
+    while end < elem.len() && elem[end] != b'"' {
+        end += 1;
+    }
+    std::str::from_utf8(&elem[start..end])
+        .ok()?
+        .parse::<i64>()
+        .ok()
 }
 
 fn find_from_to_tag(block: &[u8], tag_name: &[u8]) -> Option<usize> {
@@ -254,6 +324,8 @@ mod tests {
         assert_eq!(a.to.col_off, 304800);
         assert_eq!(a.to.row, 15);
         assert_eq!(a.to.row_off, 0);
+        assert_eq!(a.anchor_mode, Some(SlicerAnchorMode::TwoCell));
+        assert_eq!(a.extent, None);
     }
 
     #[test]
@@ -275,5 +347,50 @@ mod tests {
         let anchors = parse_slicer_anchors_from_drawing(&drawing_xml);
         assert_eq!(anchors.len(), 1);
         assert_eq!(anchors[0].object_id, None);
+    }
+
+    #[test]
+    fn parses_one_cell_slicer_anchor_from_drawing() {
+        let drawing_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+          xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"
+          xmlns:sle="http://schemas.microsoft.com/office/drawing/2010/slicer">
+  <xdr:oneCellAnchor>
+    <xdr:from>
+      <xdr:col>2</xdr:col>
+      <xdr:colOff>38100</xdr:colOff>
+      <xdr:row>4</xdr:row>
+      <xdr:rowOff>76200</xdr:rowOff>
+    </xdr:from>
+    <xdr:ext cx="1234567" cy="7654321"/>
+    <mc:AlternateContent>
+      <mc:Choice Requires="a14">
+        <xdr:graphicFrame>
+          <xdr:nvGraphicFramePr><xdr:cNvPr id="9" name="Region 1"/></xdr:nvGraphicFramePr>
+          <a:graphic>
+            <a:graphicData uri="http://schemas.microsoft.com/office/drawing/2010/slicer">
+              <sle:slicer name="Region 1"/>
+            </a:graphicData>
+          </a:graphic>
+        </xdr:graphicFrame>
+      </mc:Choice>
+    </mc:AlternateContent>
+  </xdr:oneCellAnchor>
+</xdr:wsDr>"#;
+
+        let anchors = parse_slicer_anchors_from_drawing(drawing_xml);
+        assert_eq!(anchors.len(), 1);
+
+        let a = &anchors[0];
+        assert_eq!(a.slicer_name, "Region 1");
+        assert_eq!(a.object_id, Some(9));
+        assert_eq!(a.anchor_mode, Some(SlicerAnchorMode::OneCell));
+        assert_eq!(a.from.col, 2);
+        assert_eq!(a.from.row, 4);
+        assert_eq!(
+            a.extent.as_ref().map(|ext| (ext.cx, ext.cy)),
+            Some((1234567, 7654321))
+        );
     }
 }

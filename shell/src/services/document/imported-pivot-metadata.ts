@@ -189,6 +189,7 @@ function normalizeZipPath(path: string): string {
 
 function resolveTarget(ownerPartPath: string, target: string): string {
   if (/^[a-z]+:/i.test(target)) return target;
+  if (target.startsWith('/')) return normalizeZipPath(target);
   return normalizeZipPath(`${dirname(ownerPartPath)}/${target}`);
 }
 

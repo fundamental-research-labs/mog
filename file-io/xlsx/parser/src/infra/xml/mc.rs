@@ -10,6 +10,13 @@ pub const MC_SUPPORTED_NAMESPACES: &[&str] = &[
     "http://schemas.microsoft.com/office/spreadsheetml/2010/11/main",
 ];
 
+/// Namespaces supported while parsing DrawingML `mc:AlternateContent`.
+pub const MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES: &[&str] = &[
+    "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main",
+    "http://schemas.microsoft.com/office/spreadsheetml/2010/11/main",
+    "http://schemas.microsoft.com/office/drawing/2010/main",
+];
+
 pub const MC_RELATIONSHIPS_NAMESPACE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 

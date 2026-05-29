@@ -19,9 +19,10 @@ pub use attrs::{
 pub use decode::{decode_xml_entities, decode_xml_entities_string};
 pub use direct_child::extract_direct_child_element_xml;
 pub use mc::{
-    MC_RELATIONSHIPS_NAMESPACE, MC_SUPPORTED_NAMESPACES, MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES,
-    McAlternateContentOutcome, McBranch, McResolution, resolve_mc_alternate_content,
-    resolve_mc_alternate_content_v2, resolve_mc_alternate_content_v2_with_namespace_context,
+    MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES, MC_RELATIONSHIPS_NAMESPACE, MC_SUPPORTED_NAMESPACES,
+    MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, McAlternateContentOutcome, McBranch, McResolution,
+    resolve_mc_alternate_content, resolve_mc_alternate_content_v2,
+    resolve_mc_alternate_content_v2_with_namespace_context,
     resolve_mc_alternate_content_with_namespace_context,
     resolve_mc_alternate_content_with_namespaces,
     resolve_mc_alternate_content_with_supported_namespaces,

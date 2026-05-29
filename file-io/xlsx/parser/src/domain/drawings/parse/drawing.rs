@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use super::anchors::{parse_absolute_anchor, parse_one_cell_anchor, parse_two_cell_anchor};
 use crate::infra::xml::{
-    MC_SUPPORTED_NAMESPACES, resolve_mc_alternate_content_with_namespace_context,
+    MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES, resolve_mc_alternate_content_with_namespace_context,
 };
 
 /// Parse a drawing XML file.
@@ -69,7 +69,7 @@ fn parse_wrapped_anchor(mc_xml: &[u8], containing_xml: Option<&[u8]>) -> Option<
     let branch = resolve_mc_alternate_content_with_namespace_context(
         mc_xml,
         containing_xml,
-        MC_SUPPORTED_NAMESPACES,
+        MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES,
     )?;
     let branch_xml = &mc_xml[branch.start..branch.end];
 
@@ -146,6 +146,21 @@ mod tests {
             panic!("expected one cell anchor");
         };
         assert_eq!(anchor.from.col, 1);
+        assert!(anchor.mc_alternate_content.is_some());
+    }
+
+    #[test]
+    fn parses_a14_alternate_content_shape_anchor() {
+        let xml = br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14"><xdr:twoCellAnchor><xdr:from><xdr:col>5</xdr:col><xdr:row>4</xdr:row></xdr:from><xdr:to><xdr:col>7</xdr:col><xdr:row>6</xdr:row></xdr:to><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="7169" name="Button 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:sp><xdr:clientData fPrintsWithSheet="0"/></xdr:twoCellAnchor></mc:Choice><mc:Fallback/></mc:AlternateContent></xdr:wsDr>"#;
+        let drawing = parse_drawing(xml);
+
+        assert_eq!(drawing.anchors.len(), 1);
+        let Anchor::TwoCell(anchor) = &drawing.anchors[0] else {
+            panic!("expected two cell anchor");
+        };
+        assert_eq!(anchor.from.col, 5);
+        assert_eq!(anchor.to.col, 7);
+        assert!(matches!(anchor.content, DrawingContent::Shape(_)));
         assert!(anchor.mc_alternate_content.is_some());
     }
 }

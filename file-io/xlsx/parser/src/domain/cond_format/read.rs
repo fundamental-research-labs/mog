@@ -6,7 +6,7 @@ use crate::domain::cond_format::{
 use crate::infra::scanner::{self, find_gt_simd, find_tag_simd};
 use crate::output::results::CfSummary;
 use ooxml_types::cond_format::{
-    CfRule, CfRuleX14, ConditionalFormatting, ConditionalFormattingX14,
+    CfRule, CfRuleX14, CfRuleType, ConditionalFormatting, ConditionalFormattingX14,
 };
 
 /// Parse conditional formats from worksheet XML.
@@ -73,7 +73,9 @@ fn merge_x14_conditional_formatting(
         let mut standalone_rules = Vec::new();
         for x14_rule in x14_block.rules {
             if !apply_x14_rule_to_base(base, &x14_rule) {
-                standalone_rules.push(cf_rule_from_x14(x14_rule));
+                if standalone_x14_rule_has_classic_model(&x14_rule) {
+                    standalone_rules.push(cf_rule_from_x14(x14_rule));
+                }
             }
         }
         if !standalone_rules.is_empty() {
@@ -99,6 +101,15 @@ fn apply_x14_rule_to_base(base: &mut [ConditionalFormatting], x14_rule: &CfRuleX
         }
     }
     false
+}
+
+fn standalone_x14_rule_has_classic_model(x14_rule: &CfRuleX14) -> bool {
+    match x14_rule.rule_type {
+        CfRuleType::ColorScale => x14_rule.color_scale.is_some(),
+        CfRuleType::DataBar => x14_rule.data_bar.is_some(),
+        CfRuleType::IconSet => x14_rule.icon_set.is_some(),
+        _ => false,
+    }
 }
 
 fn overlay_x14_rule(rule: &mut CfRule, x14_rule: &CfRuleX14) {
@@ -147,5 +158,37 @@ mod tests {
         assert_eq!(full.len(), 1);
         assert_eq!(full[0].sqref, "A1:B2");
         assert_eq!(full[0].rules.len(), 1);
+    }
+
+    #[test]
+    fn standalone_x14_expression_is_not_promoted_to_blank_classic_cf() {
+        let xml = br#"
+        <worksheet xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"
+                   xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+          <extLst>
+            <ext uri="{CCE6A557-97BC-4B89-ADB6-D9C93CAAB3DF}">
+              <x14:conditionalFormattings>
+                <x14:conditionalFormatting>
+                  <x14:cfRule type="expression" priority="91" id="{rule-1}">
+                    <x14:dxf><fill><patternFill patternType="solid"/></fill></x14:dxf>
+                    <xm:f>V2=Time_Capture!#REF!</xm:f>
+                  </x14:cfRule>
+                  <xm:sqref>V2 AF2</xm:sqref>
+                </x14:conditionalFormatting>
+              </x14:conditionalFormattings>
+            </ext>
+          </extLst>
+        </worksheet>"#;
+
+        let (summaries, full) = parse_conditional_formats(xml);
+
+        assert!(
+            summaries.is_empty(),
+            "unsupported standalone x14 expression rules must remain extension-owned"
+        );
+        assert!(
+            full.is_empty(),
+            "parser must not synthesize a classic CF rule with blank formula/style"
+        );
     }
 }

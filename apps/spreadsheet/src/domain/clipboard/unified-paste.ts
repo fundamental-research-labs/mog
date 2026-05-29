@@ -80,6 +80,10 @@ const IMAGE_MIME_TYPES = [
   'image/bmp',
 ] as const;
 
+function normalizeClipboardSignature(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
+}
+
 function resolveNormalPasteOptions(
   deps: UnifiedPasteDeps,
   context: PasteDefaultContext,
@@ -220,7 +224,16 @@ export async function unifiedPaste(
 
   // If system clipboard matches our text signature, use rich internal data (preserves formulas, formats)
   // Empty string check prevents matching when both are empty
-  const isOurClipboard = clipboardData?.textSignature === systemText && systemText !== '';
+  const internalSignature = clipboardData?.textSignature
+    ? normalizeClipboardSignature(clipboardData.textSignature)
+    : '';
+  const systemSignature = normalizeClipboardSignature(systemText);
+  const hasFreshInternalClipboard =
+    Boolean(clipboardData?.textSignature) &&
+    clipboardData?.sourceSheetId !== EXTERNAL_SOURCE_SHEET_ID &&
+    clipboardState.context.isStale !== true;
+  const isOurClipboard =
+    (internalSignature === systemSignature && systemSignature !== '') || hasFreshInternalClipboard;
 
   // 3. Route to appropriate paste method
   if (clipboardData && isOurClipboard) {

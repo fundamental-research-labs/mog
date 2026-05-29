@@ -177,7 +177,7 @@ mod tests {
         set_people_data(&mut engine, sid);
         let before_depth = engine.get_undo_state().undo_depth;
 
-        engine
+        let (_patches, result) = engine
             .create_table_lifecycle(
                 &sid,
                 Some("StyledPeople".into()),
@@ -192,6 +192,14 @@ mod tests {
             .expect("create lifecycle");
 
         assert_eq!(engine.get_undo_state().undo_depth, before_depth + 1);
+        assert!(
+            result.table_changes.iter().any(|change| {
+                change.name == "StyledPeople"
+                    && change.sheet_id == sid.to_uuid_string()
+                    && change.kind == ChangeKind::Set
+            }),
+            "table creation must report a table change so viewport formatting refreshes before repaint"
+        );
         let table = engine
             .get_table_by_name("StyledPeople")
             .expect("styled table");

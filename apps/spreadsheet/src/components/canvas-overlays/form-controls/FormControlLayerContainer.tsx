@@ -57,14 +57,14 @@ export function FormControlLayerContainer() {
     }
 
     let cancelled = false;
-    void resolveControlPositions(controls, geometry, ws).then((positions) => {
+    void resolveControlPositions(controls, geometry, viewport, ws).then((positions) => {
       if (!cancelled) setResolvedControls(positions);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [geometry, isReady, refreshVersion, sheetId, ws]);
+  }, [geometry, isReady, refreshVersion, sheetId, viewport, ws]);
 
   // Form controls are managed below the React state tree. Subscribe to the
   // manager events so creates/updates immediately re-resolve DOM overlays.
@@ -161,10 +161,11 @@ export function FormControlLayerContainer() {
 // =============================================================================
 
 interface GeometryLike {
-  getCellPageRect: (cell: {
-    row: number;
-    col: number;
-  }) => { x: number; y: number; width: number; height: number } | null;
+  toViewportPoint: (cell: { row: number; col: number }) => { x: number; y: number } | null;
+}
+
+interface ViewportLike {
+  getScrollPosition: () => { x: number; y: number };
 }
 
 interface WorksheetLike {
@@ -186,22 +187,24 @@ function toWritableCellValue(value: unknown): WritableCellValue {
 async function resolveControlPositions(
   controls: FormControl[],
   geometry: GeometryLike,
+  viewport: ViewportLike | null,
   ws: WorksheetLike,
 ): Promise<ResolvedFormControl[]> {
   const resolved: ResolvedFormControl[] = [];
+  const scrollPosition = viewport?.getScrollPosition() ?? { x: 0, y: 0 };
 
   for (const control of controls) {
     const anchorPosition = await ws._internal.getCellPosition(control.anchor.cellId);
     if (!anchorPosition) continue;
 
-    const docRect = geometry.getCellPageRect({
+    const viewportPoint = geometry.toViewportPoint({
       row: anchorPosition.row,
       col: anchorPosition.col,
     });
-    if (!docRect) continue;
+    if (!viewportPoint) continue;
 
-    const x = docRect.x + (control.anchor.xOffset ?? 0);
-    const y = docRect.y + (control.anchor.yOffset ?? 0);
+    const x = viewportPoint.x + scrollPosition.x + (control.anchor.xOffset ?? 0);
+    const y = viewportPoint.y + scrollPosition.y + (control.anchor.yOffset ?? 0);
 
     let cellValue: unknown;
     let resolvedItems: string[] | undefined;

@@ -4,6 +4,7 @@ use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
+use crate::snapshot::{ChangeKind, TableChange};
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::metadata_shift;
 use crate::storage::engine::stores::EngineStores;
@@ -28,7 +29,14 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     target_sheet_id: &SheetId,
     target_row: u32,
     target_col: u32,
-) -> Result<(RecalcResult, crate::engine_types::RelocateResult), ComputeError> {
+) -> Result<
+    (
+        RecalcResult,
+        crate::engine_types::RelocateResult,
+        Vec<TableChange>,
+    ),
+    ComputeError,
+> {
     use crate::engine_types::RelocateResult;
     use crate::storage::infra::cell_iter;
 
@@ -116,6 +124,18 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
 
     metadata_shift::relocate_validation_ranges(
         stores,
+        source_sheet_id,
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+        target_sheet_id,
+        target_row,
+        target_col,
+    );
+    let table_changes = relocate_whole_tables(
+        stores,
+        mirror,
         source_sheet_id,
         src_start_row,
         src_start_col,
@@ -270,5 +290,57 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         error: result.error,
     };
 
-    Ok((recalc, relocate_result))
+    Ok((recalc, relocate_result, table_changes))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn relocate_whole_tables(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    source_sheet_id: &SheetId,
+    src_start_row: u32,
+    src_start_col: u32,
+    src_end_row: u32,
+    src_end_col: u32,
+    target_sheet_id: &SheetId,
+    target_row: u32,
+    target_col: u32,
+) -> Vec<TableChange> {
+    let source_sheet_hex = source_sheet_id.to_uuid_string();
+    let target_sheet_hex = target_sheet_id.to_uuid_string();
+    let row_span = src_end_row.saturating_sub(src_start_row);
+    let col_span = src_end_col.saturating_sub(src_start_col);
+
+    let tables_to_move: Vec<_> = mirror
+        .all_tables()
+        .iter()
+        .filter(|table| {
+            table.sheet_id == source_sheet_hex
+                && table.range.start_row() == src_start_row
+                && table.range.start_col() == src_start_col
+                && table.range.end_row() == src_end_row
+                && table.range.end_col() == src_end_col
+        })
+        .cloned()
+        .collect();
+
+    let mut changes = Vec::with_capacity(tables_to_move.len());
+    for mut table in tables_to_move {
+        table.sheet_id = target_sheet_hex.clone();
+        table.range = cell_types::SheetRange::new(
+            target_row,
+            target_col,
+            target_row + row_span,
+            target_col + col_span,
+        );
+        stores.compute.set_table(mirror, table.clone());
+        super::super::super::tables::persist_table_to_yrs(stores, &table);
+        changes.push(TableChange {
+            name: table.name,
+            sheet_id: target_sheet_hex.clone(),
+            kind: ChangeKind::Set,
+        });
+    }
+
+    changes
 }

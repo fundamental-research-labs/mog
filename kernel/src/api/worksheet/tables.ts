@@ -70,6 +70,24 @@ import {
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
 
+type PendingClipboardPasteGlobal = typeof globalThis & {
+  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+};
+
+async function waitForPendingClipboardPaste(): Promise<void> {
+  const deadline = Date.now() + 2000;
+
+  while (Date.now() < deadline) {
+    const pending = (globalThis as PendingClipboardPasteGlobal).__MOG_PENDING_CLIPBOARD_PASTE__;
+    if (!pending || typeof pending.then !== 'function') return;
+
+    await Promise.race([
+      pending.catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 16)),
+    ]);
+  }
+}
+
 // FIX-001-tables-hotcheck-v1
 export class WorksheetTablesImpl implements WorksheetTables {
   // TODO(4.8): Persist sort specs to document model via bridge (OOXML
@@ -347,6 +365,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async list(): Promise<TableInfo[]> {
+    await waitForPendingClipboardPaste();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => bridgeTableToTableInfo(t));
   }

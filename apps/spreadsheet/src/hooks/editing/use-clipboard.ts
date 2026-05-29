@@ -41,10 +41,11 @@ import {
 } from '../../domain/clipboard/paste-defaults';
 import { readPasteDefaultsPreference } from '../../infra/state/paste-defaults-store';
 
-import type {
-  ClipboardData,
-  ExternalPastePayload,
-  PasteSpecialOptions,
+import {
+  EXTERNAL_SOURCE_SHEET_ID,
+  type ClipboardData,
+  type ExternalPastePayload,
+  type PasteSpecialOptions,
 } from '@mog-sdk/contracts/actors';
 import type { Comment } from '@mog-sdk/contracts/api';
 import { clipboardSelectors } from '../../selectors';
@@ -82,6 +83,59 @@ interface ClipboardStateSlice {
   marchingAntsPhase: number;
   errorMessage: string | null;
   pastePreviewTarget: CellCoord | null;
+}
+
+function normalizeClipboardSignature(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
+}
+
+function isOurClipboardData(
+  clipboardState: ClipboardState,
+  clipboardData: ClipboardData | null,
+  systemText: string,
+): boolean {
+  const internalSignature = clipboardData?.textSignature
+    ? normalizeClipboardSignature(clipboardData.textSignature)
+    : '';
+  const systemSignature = normalizeClipboardSignature(systemText);
+  const hasFreshInternalClipboard =
+    Boolean(clipboardData?.textSignature) &&
+    clipboardData?.sourceSheetId !== EXTERNAL_SOURCE_SHEET_ID &&
+    clipboardState.context.isStale !== true;
+
+  return (
+    (internalSignature === systemSignature && systemSignature !== '') || hasFreshInternalClipboard
+  );
+}
+
+type ClipboardActorLike = {
+  getSnapshot: () => ClipboardState;
+};
+
+async function waitForClipboardPasteActor(actor: ClipboardActorLike): Promise<void> {
+  const deadline = Date.now() + 2000;
+  const idleDeadline = Date.now() + 500;
+  let sawPasteActivity = false;
+
+  while (Date.now() < deadline) {
+    const snapshot = actor.getSnapshot();
+    const matches = snapshot.matches?.bind(snapshot);
+    const isPasting = matches?.('pasting') === true;
+    const isPreviewing =
+      matches?.('pastePreview') === true || Boolean(snapshot.context.pastePreviewTarget);
+    const isComplete = matches?.('empty') === true || matches?.('pasteError') === true;
+
+    sawPasteActivity ||= isPasting || isPreviewing;
+
+    if (isComplete || (sawPasteActivity && !isPasting && !isPreviewing)) return;
+    if (!sawPasteActivity && Date.now() >= idleDeadline) return;
+
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+}
+
+function trackClipboardPaste(actor: ClipboardActorLike): void {
+  void trackClipboardPastePromise(waitForClipboardPasteActor(actor));
 }
 
 // =============================================================================
@@ -891,6 +945,22 @@ export function useClipboard(): UseClipboardReturn {
 // CLIPBOARD EVENTS HOOK - Browser Event Handling
 // =============================================================================
 
+type PendingClipboardPasteGlobal = typeof globalThis & {
+  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+};
+
+function trackClipboardPastePromise<T>(promise: Promise<T>): Promise<T> {
+  const global = globalThis as PendingClipboardPasteGlobal;
+  const tracked = promise.catch(() => undefined);
+  global.__MOG_PENDING_CLIPBOARD_PASTE__ = tracked;
+  void tracked.finally(() => {
+    if (global.__MOG_PENDING_CLIPBOARD_PASTE__ === tracked) {
+      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
+    }
+  });
+  return promise;
+}
+
 /**
  * Options for useClipboardEvents hook.
  */
@@ -1133,7 +1203,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Compare system clipboard with our text signature to detect external copies
         // - If they match: user is pasting our copy → use rich internal data (formulas, formats)
         // - If they differ: user copied from another app → parse external clipboard
-        const isOurClipboard = clipboardData?.textSignature === systemText && systemText !== '';
+        const isOurClipboard = isOurClipboardData(clipboardState, clipboardData, systemText);
 
         if (clipboardData && isOurClipboard) {
           // System clipboard matches what we wrote - use rich internal data
@@ -1142,8 +1212,10 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
             hasInternalRichData: true,
           });
           if (resolved.appliesDefault) {
+            trackClipboardPaste(actor);
             commands.pasteSpecial(activeCell, resolved.options);
           } else {
+            trackClipboardPaste(actor);
             commands.paste(activeCell);
           }
           // Count cells from internal clipboard
@@ -1179,6 +1251,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
           });
           const resolvedOptions = resolved.appliesDefault ? resolved.options : undefined;
           if (shouldNoopExternalFormatsPaste(resolvedOptions, html || undefined)) return;
+          trackClipboardPaste(actor);
           commands.externalPaste({
             text,
             targetCell: activeCell,
@@ -1241,7 +1314,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
     const clipboardData = clipboardSelectors.data(clipboardState);
 
     // Compare system clipboard with our text signature to detect external copies
-    const isOurClipboard = clipboardData?.textSignature === systemText && systemText !== '';
+    const isOurClipboard = isOurClipboardData(clipboardState, clipboardData, systemText);
 
     if (clipboardData && isOurClipboard) {
       // System clipboard matches what we wrote - use rich internal data
@@ -1250,8 +1323,10 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         hasInternalRichData: true,
       });
       if (resolved.appliesDefault) {
+        trackClipboardPaste(actor);
         commands.pasteSpecial(activeCell, resolved.options);
       } else {
+        trackClipboardPaste(actor);
         commands.paste(activeCell);
       }
       if (clipboardData.sourceRanges && clipboardData.sourceRanges.length > 0) {
@@ -1271,6 +1346,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       });
       const resolvedOptions = resolved.appliesDefault ? resolved.options : undefined;
       if (shouldNoopExternalFormatsPaste(resolvedOptions)) return 0;
+      trackClipboardPaste(actor);
       commands.externalPaste({ text, targetCell: activeCell, options: resolvedOptions });
       return 1;
     }
@@ -1294,7 +1370,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       void handleCut(e as ClipboardEvent);
     };
     const pasteHandler = (e: Event) => {
-      void handlePaste(e as ClipboardEvent);
+      void trackClipboardPastePromise(handlePaste(e as ClipboardEvent));
     };
 
     // Add clipboard event listeners

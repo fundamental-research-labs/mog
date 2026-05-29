@@ -78,6 +78,29 @@ interface NativeHandledCellDoubleClick {
   time: number;
 }
 
+type PendingTableClickSelection =
+  | {
+      kind: 'column';
+      sheetId: string;
+      row: number;
+      col: number;
+      tableId: string;
+    }
+  | {
+      kind: 'table-data-or-full';
+      sheetId: string;
+      row: number;
+      col: number;
+      tableId: string;
+    }
+  | {
+      kind: 'row';
+      sheetId: string;
+      row: number;
+      col: number;
+      tableId: string;
+    };
+
 /**
  * Get mouse position relative to container.
  */
@@ -143,6 +166,7 @@ function makeRangeSelectionRange(
       endRow,
       startCol: 0,
       endCol: MAX_COLS - 1,
+      isFullRow: true,
     };
   }
 
@@ -152,6 +176,7 @@ function makeRangeSelectionRange(
       endRow: MAX_ROWS - 1,
       startCol,
       endCol,
+      isFullColumn: true,
     };
   }
 
@@ -169,6 +194,18 @@ function updateRangeSelectionFromDrag(
     .updateRangeSelection(
       formatRangeSelectionRange(makeRangeSelectionRange(mode, startCell, currentCell)),
     );
+}
+
+function applyRangePickerSelection(
+  uiStoreApi: ReturnType<typeof useUIStoreApi>,
+  selection: Pick<ReturnType<typeof useSelection>, 'setSelection'>,
+  mode: RangeSelectionDragMode,
+  startCell: { row: number; col: number },
+  currentCell: { row: number; col: number },
+): void {
+  const range = makeRangeSelectionRange(mode, startCell, currentCell);
+  updateRangeSelectionFromDrag(uiStoreApi, mode, startCell, currentCell);
+  selection.setSelection([range], { row: startCell.row, col: startCell.col });
 }
 
 function isMatchingNativeCellDoubleClick(
@@ -410,6 +447,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   } | null>(null);
   const nativeHandledCellDoubleClickRef = useRef<NativeHandledCellDoubleClick | null>(null);
   const pendingFormatPainterTargetRef = useRef(false);
+  const pendingTableClickSelectionRef = useRef<PendingTableClickSelection | null>(null);
+  const pendingTableClickStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingTableClickMovedRef = useRef(false);
 
   // Page break dragging state
   const isPageBreakDraggingRef = useRef(false);
@@ -724,7 +764,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const anchor =
               e.shiftKey ? getRangeSelectionAnchor(rangeSelectionMode.currentRange) ?? cell : cell;
 
-            updateRangeSelectionFromDrag(uiStoreApi, 'cell', anchor, cell);
+            applyRangePickerSelection(uiStoreApi, selection, 'cell', anchor, cell);
             rangeSelectionDragRef.current = {
               isDragging: true,
               mode: 'cell',
@@ -735,7 +775,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
           if (hit.type === 'row-header') {
             const cell = { row: hit.row, col: 0 };
-            updateRangeSelectionFromDrag(uiStoreApi, 'row', cell, cell);
+            applyRangePickerSelection(uiStoreApi, selection, 'row', cell, cell);
             rangeSelectionDragRef.current = {
               isDragging: true,
               mode: 'row',
@@ -746,7 +786,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
           if (hit.type === 'column-header') {
             const cell = { row: 0, col: hit.col };
-            updateRangeSelectionFromDrag(uiStoreApi, 'column', cell, cell);
+            applyRangePickerSelection(uiStoreApi, selection, 'column', cell, cell);
             rangeSelectionDragRef.current = {
               isDragging: true,
               mode: 'column',
@@ -981,33 +1021,28 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
                 switch (tableHit.region) {
                   case 'header': {
-                    const uiState = uiStoreApi.getState();
-                    const stage = uiState.handleHeaderClick(table.id, cell.col);
-                    dispatch('SELECT_TABLE_COLUMN', {
+                    pendingTableClickSelectionRef.current = {
+                      kind: 'column',
                       sheetId: activeSheetId,
                       row: cell.row,
                       col: cell.col,
-                      stage,
-                    });
-                    return;
+                      tableId: table.id,
+                    };
+                    pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
+                    pendingTableClickMovedRef.current = false;
+                    break;
                   }
                   case 'corner': {
-                    const uiState = uiStoreApi.getState();
-                    const stage = uiState.handleCornerClick(table.id);
-                    if (stage === 0) {
-                      dispatch('SELECT_TABLE_DATA', {
-                        sheetId: activeSheetId,
-                        row: cell.row,
-                        col: cell.col,
-                      });
-                    } else {
-                      dispatch('SELECT_FULL_TABLE', {
-                        sheetId: activeSheetId,
-                        row: cell.row,
-                        col: cell.col,
-                      });
-                    }
-                    return;
+                    pendingTableClickSelectionRef.current = {
+                      kind: 'table-data-or-full',
+                      sheetId: activeSheetId,
+                      row: cell.row,
+                      col: cell.col,
+                      tableId: table.id,
+                    };
+                    pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
+                    pendingTableClickMovedRef.current = false;
+                    break;
                   }
                   case 'total': {
                     const cellRect = geometry.getCellRect(cell);
@@ -1039,12 +1074,16 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                     return;
                   }
                   case 'data-left-edge': {
-                    dispatch('SELECT_TABLE_ROW', {
+                    pendingTableClickSelectionRef.current = {
+                      kind: 'row',
                       sheetId: activeSheetId,
                       row: cell.row,
                       col: cell.col,
-                    });
-                    return;
+                      tableId: table.id,
+                    };
+                    pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
+                    pendingTableClickMovedRef.current = false;
+                    break;
                   }
                 }
               }
@@ -1243,6 +1282,15 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
   const handleMouseMove = useCallback(
     (e: GridMouseEvent) => {
+      const pendingTableClickStart = pendingTableClickStartRef.current;
+      if (pendingTableClickStart) {
+        const dx = e.clientX - pendingTableClickStart.x;
+        const dy = e.clientY - pendingTableClickStart.y;
+        if (dx * dx + dy * dy > 9) {
+          pendingTableClickMovedRef.current = true;
+        }
+      }
+
       const container = containerRef.current;
       if (!container) return;
 
@@ -1291,7 +1339,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           }
 
           if (currentCell) {
-            updateRangeSelectionFromDrag(uiStoreApi, mode, startCell, currentCell);
+            applyRangePickerSelection(uiStoreApi, selection, mode, startCell, currentCell);
           }
 
           return; // Consume the event
@@ -1963,6 +2011,37 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       coordinator.handlePointerUp();
       applyPendingFormatPainterTarget();
 
+      const pendingTableClick = pendingTableClickSelectionRef.current;
+      if (pendingTableClick && !pendingTableClickMovedRef.current) {
+        if (pendingTableClick.kind === 'column') {
+          const stage = uiStoreApi
+            .getState()
+            .handleHeaderClick(pendingTableClick.tableId, pendingTableClick.col);
+          dispatch('SELECT_TABLE_COLUMN', {
+            sheetId: pendingTableClick.sheetId,
+            row: pendingTableClick.row,
+            col: pendingTableClick.col,
+            stage,
+          });
+        } else if (pendingTableClick.kind === 'table-data-or-full') {
+          const stage = uiStoreApi.getState().handleCornerClick(pendingTableClick.tableId);
+          dispatch(stage === 0 ? 'SELECT_TABLE_DATA' : 'SELECT_FULL_TABLE', {
+            sheetId: pendingTableClick.sheetId,
+            row: pendingTableClick.row,
+            col: pendingTableClick.col,
+          });
+        } else {
+          dispatch('SELECT_TABLE_ROW', {
+            sheetId: pendingTableClick.sheetId,
+            row: pendingTableClick.row,
+            col: pendingTableClick.col,
+          });
+        }
+      }
+      pendingTableClickSelectionRef.current = null;
+      pendingTableClickStartRef.current = null;
+      pendingTableClickMovedRef.current = false;
+
       // Handle formula range box drag completion (non-selection operation)
       if (formulaRangeDrag.isFormulaRangeDragging()) {
         formulaRangeDrag.endFormulaRangeDrag();
@@ -1976,6 +2055,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       // Reset range selection drag state
       rangeSelectionDragRef.current = { isDragging: false, mode: 'cell', startCell: null };
       pendingFormatPainterTargetRef.current = false;
+      pendingTableClickSelectionRef.current = null;
+      pendingTableClickStartRef.current = null;
+      pendingTableClickMovedRef.current = false;
 
       // Use cancel handler to safely reset any drag state
       coordinator.handlePointerCancel();
@@ -2004,6 +2086,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     getHitTest,
     activeSheetId,
     handleCellDoubleClickAtViewportPoint,
+    dispatch,
+    uiStoreApi,
   ]);
 
   // ==========================================================================

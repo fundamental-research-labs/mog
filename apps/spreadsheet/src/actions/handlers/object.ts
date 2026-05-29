@@ -150,6 +150,25 @@ function getSmartObjectPosition(
   });
 }
 
+/**
+ * Form controls inserted from the ribbon are cell controls, not free-floating
+ * shapes. Excel anchors them to the selected/active cell and links their value
+ * to that same cell.
+ */
+function getSelectedCellPosition(deps: ActionDependencies): { row: number; col: number } {
+  const activeCell = deps.accessors.selection.getActiveCell?.();
+  if (activeCell) {
+    return { row: activeCell.row, col: activeCell.col };
+  }
+
+  const range = deps.accessors.selection.getRanges?.()[0];
+  if (range) {
+    return { row: range.startRow, col: range.startCol };
+  }
+
+  return { row: 0, col: 0 };
+}
+
 // =============================================================================
 // Object Deletion/Selection Actions
 // These actions route to chart actor when a chart is selected.
@@ -814,7 +833,7 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
 ): Promise<ActionResult> => {
   const sheetId = deps.getActiveSheetId();
   const ws = deps.workbook.getSheetById(sheetId);
-  const { anchorRow, anchorCol } = getSmartObjectPosition(deps, sheetId, SHAPE_POSITION_PRESET);
+  const position = getSelectedCellPosition(deps);
 
   try {
     if (!(await ws.protection.canDoStructureOp('editObject'))) {
@@ -823,12 +842,13 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
     }
     deps.workbook.setPendingUndoDescription('Insert checkbox');
     await ws.formControls.addCheckbox({
-      anchor: { row: anchorRow, col: anchorCol },
-      linkedCell: { row: anchorRow, col: anchorCol },
+      anchor: position,
+      linkedCell: position,
       label: 'Check Box',
       width: DEFAULT_CHECKBOX_WIDTH,
       height: DEFAULT_CHECKBOX_HEIGHT,
     });
+    await ws.setCell(position.row, position.col, false);
     return handled();
   } catch (err) {
     if (isProtectionRejection(err)) {
@@ -848,7 +868,7 @@ export const INSERT_FORM_CONTROL_COMBOBOX: AsyncActionHandler = async (
 ): Promise<ActionResult> => {
   const sheetId = deps.getActiveSheetId();
   const ws = deps.workbook.getSheetById(sheetId);
-  const { anchorRow, anchorCol } = getSmartObjectPosition(deps, sheetId, SHAPE_POSITION_PRESET);
+  const position = getSelectedCellPosition(deps);
 
   try {
     if (!(await ws.protection.canDoStructureOp('editObject'))) {
@@ -857,8 +877,8 @@ export const INSERT_FORM_CONTROL_COMBOBOX: AsyncActionHandler = async (
     }
     deps.workbook.setPendingUndoDescription('Insert combo box');
     await ws.formControls.addComboBox({
-      anchor: { row: anchorRow, col: anchorCol },
-      linkedCell: { row: anchorRow, col: anchorCol },
+      anchor: position,
+      linkedCell: position,
       items: ['Option 1', 'Option 2', 'Option 3'],
       placeholder: 'Select',
       width: DEFAULT_COMBOBOX_WIDTH,

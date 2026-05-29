@@ -76,7 +76,8 @@ pub(super) fn canonicalize_formula_for_ooxml(formula: &str) -> Cow<'_, str> {
                     && !has_excel_storage_prefix(name)
                     && let Some(prefix) = storage_prefix_for_function(name)
                 {
-                    let output = out.get_or_insert_with(|| String::with_capacity(formula.len() + 16));
+                    let output =
+                        out.get_or_insert_with(|| String::with_capacity(formula.len() + 16));
                     // `last` and `start` are ASCII token boundaries from this scanner.
                     #[allow(clippy::string_slice)]
                     output.push_str(&formula[last..start]);
@@ -113,9 +114,7 @@ fn storage_prefix_for_function(name: &str) -> Option<&'static str> {
     let upper = name.to_ascii_uppercase();
     if XLWS_FUTURE_FUNCTIONS.contains(&upper.as_str()) {
         Some(XLWS_PREFIX)
-    } else if XLFN_FUTURE_FUNCTIONS.contains(&upper.as_str())
-        || XLFN_COMPATIBILITY_FUNCTIONS.contains(&upper.as_str())
-    {
+    } else if XLFN_FUTURE_FUNCTIONS.contains(&upper.as_str()) {
         Some(XLFN_PREFIX)
     } else {
         None
@@ -134,16 +133,6 @@ fn is_formula_identifier_continue(b: u8) -> bool {
 // Names listed without `_xlfn.` in that spec are worksheet-only grammar names and
 // intentionally remain unprefixed here.
 const XLWS_FUTURE_FUNCTIONS: &[&str] = &["FILTER", "PY", "SORT"];
-
-// Excel also writes `_xlfn.` for some functions that are now predefined in
-// current ISO/MS-XLSX grammars when saving compatibility-version workbooks.
-const XLFN_COMPATIBILITY_FUNCTIONS: &[&str] = &[
-    "AVERAGEIF",
-    "AVERAGEIFS",
-    "COUNTIFS",
-    "IFERROR",
-    "SUMIFS",
-];
 
 const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "ACOT",
@@ -173,9 +162,9 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "CHOOSECOLS",
     "CHOOSEROWS",
     "COMBINA",
-    "CONCAT",
     "CONFIDENCE.NORM",
     "CONFIDENCE.T",
+    "COPILOT",
     "COT",
     "COTH",
     "COVARIANCE.P",
@@ -198,11 +187,6 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "FILTERXML",
     "FLOOR.MATH",
     "FLOOR.PRECISE",
-    "FORECAST.ETS",
-    "FORECAST.ETS.CONFINT",
-    "FORECAST.ETS.SEASONALITY",
-    "FORECAST.ETS.STAT",
-    "FORECAST.LINEAR",
     "FORMULATEXT",
     "GAMMA",
     "GAMMA.DIST",
@@ -212,7 +196,6 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "HSTACK",
     "HYPGEOM.DIST",
     "IFNA",
-    "IFS",
     "IMCOSH",
     "IMCOT",
     "IMCSC",
@@ -228,10 +211,9 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "LET",
     "LOGNORM.DIST",
     "LOGNORM.INV",
+    "LONGTEXT",
     "MAKEARRAY",
     "MAP",
-    "MAXIFS",
-    "MINIFS",
     "MODE.MULT",
     "MODE.SNGL",
     "MUNIT",
@@ -271,7 +253,6 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "SORTBY",
     "STDEV.P",
     "STDEV.S",
-    "SWITCH",
     "T.DIST",
     "T.DIST.2T",
     "T.DIST.RT",
@@ -281,7 +262,6 @@ const XLFN_FUTURE_FUNCTIONS: &[&str] = &[
     "TAKE",
     "TEXTAFTER",
     "TEXTBEFORE",
-    "TEXTJOIN",
     "TEXTSPLIT",
     "TOCOL",
     "TOROW",
@@ -308,9 +288,9 @@ mod tests {
     fn prefixes_future_functions_outside_strings() {
         assert_eq!(
             canonicalize_formula_for_ooxml(
-                r#"IF(A1="_xlfn.MINIFS(A:A,B:B,1)",MINIFS(A:A,B:B,1),FILTER(A:A,B:B=1))"#
+                r#"IF(A1="_xlfn.XLOOKUP(A1,A:A,B:B)",XLOOKUP(A1,A:A,B:B),FILTER(A:A,B:B=1))"#
             ),
-            r#"IF(A1="_xlfn.MINIFS(A:A,B:B,1)",_xlfn.MINIFS(A:A,B:B,1),_xlfn._xlws.FILTER(A:A,B:B=1))"#
+            r#"IF(A1="_xlfn.XLOOKUP(A1,A:A,B:B)",_xlfn.XLOOKUP(A1,A:A,B:B),_xlfn._xlws.FILTER(A:A,B:B=1))"#
         );
     }
 
@@ -318,17 +298,19 @@ mod tests {
     fn does_not_double_prefix_existing_storage_names() {
         assert_eq!(
             canonicalize_formula_for_ooxml(
-                "_xlfn.MINIFS(A:A,B:B,1)+_xlfn._xlws.FILTER(A:A,B:B=1)"
+                "_xlfn.XLOOKUP(A1,A:A,B:B)+_xlfn._xlws.FILTER(A:A,B:B=1)"
             ),
-            "_xlfn.MINIFS(A:A,B:B,1)+_xlfn._xlws.FILTER(A:A,B:B=1)"
+            "_xlfn.XLOOKUP(A1,A:A,B:B)+_xlfn._xlws.FILTER(A:A,B:B=1)"
         );
     }
 
     #[test]
-    fn leaves_worksheet_only_and_legacy_functions_unprefixed() {
+    fn leaves_standard_and_unprefixed_future_grammar_functions_unprefixed() {
         assert_eq!(
-            canonicalize_formula_for_ooxml("SUM(A1:A5)+WORKDAY.INTL(A1,1)+NETWORKDAYS.INTL(A1,A2)"),
-            "SUM(A1:A5)+WORKDAY.INTL(A1,1)+NETWORKDAYS.INTL(A1,A2)"
+            canonicalize_formula_for_ooxml(
+                "SUM(A1:A5)+SUMIFS(A:A,B:B,1)+IFERROR(A1,0)+AVERAGEIFS(A:A,B:B,1)+COUNTIFS(A:A,1)+MINIFS(A:A,B:B,1)+MAXIFS(A:A,B:B,1)+IFS(A1>0,1)+SWITCH(A1,1,2)+CONCAT(A1,B1)+TEXTJOIN(\",\",TRUE,A:A)+FORECAST.ETS(A1,B:B,C:C)+WORKDAY.INTL(A1,1)+NETWORKDAYS.INTL(A1,A2)"
+            ),
+            "SUM(A1:A5)+SUMIFS(A:A,B:B,1)+IFERROR(A1,0)+AVERAGEIFS(A:A,B:B,1)+COUNTIFS(A:A,1)+MINIFS(A:A,B:B,1)+MAXIFS(A:A,B:B,1)+IFS(A1>0,1)+SWITCH(A1,1,2)+CONCAT(A1,B1)+TEXTJOIN(\",\",TRUE,A:A)+FORECAST.ETS(A1,B:B,C:C)+WORKDAY.INTL(A1,1)+NETWORKDAYS.INTL(A1,A2)"
         );
     }
 
@@ -342,10 +324,10 @@ mod tests {
     }
 
     #[test]
-    fn prefixes_compatibility_xlfn_functions() {
+    fn prefixes_newly_listed_xlfn_functions() {
         assert_eq!(
-            canonicalize_formula_for_ooxml("AVERAGEIFS(A:A,B:B,1)+COUNTIFS(A:A,1)+IFERROR(A1,0)"),
-            "_xlfn.AVERAGEIFS(A:A,B:B,1)+_xlfn.COUNTIFS(A:A,1)+_xlfn.IFERROR(A1,0)"
+            canonicalize_formula_for_ooxml("COPILOT(A1)+LONGTEXT(A1)"),
+            "_xlfn.COPILOT(A1)+_xlfn.LONGTEXT(A1)"
         );
     }
 

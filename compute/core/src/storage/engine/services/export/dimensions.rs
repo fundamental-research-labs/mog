@@ -209,6 +209,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     row_heights.push(RowDimension {
                         row,
                         height: emit_height,
+                        height_str: None,
                         custom_height: is_custom_height,
                         hidden: is_hidden,
                         explicit_hidden: explicit_hidden_rows.contains(&row),
@@ -254,6 +255,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     row_heights.push(RowDimension {
                         row,
                         height,
+                        height_str: None,
                         custom_height: is_custom_height,
                         hidden: is_hidden,
                         explicit_hidden: explicit_hidden_rows.contains(&row),
@@ -299,6 +301,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                 row_heights.push(RowDimension {
                     row,
                     height: 0.0,
+                    height_str: None,
                     custom_height: false,
                     hidden: false,
                     explicit_hidden: explicit_hidden_rows.contains(&row),
@@ -397,11 +400,19 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     col_widths.push(ColDimension {
                         col,
                         width: width.0,
+                        width_str: None,
+                        width_present: Some(true),
                         custom_width: custom,
+                        custom_width_attr: custom.then_some(true),
                         hidden: is_hidden,
+                        hidden_attr: is_hidden.then_some(true),
                         best_fit: is_best_fit,
+                        best_fit_attr: is_best_fit.then_some(true),
+                        outline_level: None,
                         collapsed: is_collapsed,
+                        collapsed_attr: is_collapsed.then_some(true),
                         phonetic: is_phonetic,
+                        phonetic_attr: is_phonetic.then_some(true),
                     });
                 }
             }
@@ -412,11 +423,19 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
                     col_widths.push(ColDimension {
                         col,
                         width: default_col_width.0,
+                        width_str: None,
+                        width_present: Some(true),
                         custom_width: false,
+                        custom_width_attr: None,
                         hidden: is_hidden,
+                        hidden_attr: is_hidden.then_some(true),
                         best_fit: is_best_fit,
+                        best_fit_attr: is_best_fit.then_some(true),
+                        outline_level: None,
                         collapsed: is_collapsed,
+                        collapsed_attr: is_collapsed.then_some(true),
                         phonetic: is_phonetic,
+                        phonetic_attr: is_phonetic.then_some(true),
                     });
                 }
             }

@@ -567,16 +567,10 @@ fn named_table_pivot_cache_source_does_not_guess_ambiguous_live_table_prefix() {
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();
-    let records_xml = String::from_utf8(
-        archive
-            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
-            .unwrap(),
-    )
-    .unwrap();
 
-    assert!(records_xml.contains("count=\"0\""));
-    assert!(!records_xml.contains("<n v=\"10\"/>"));
-    assert!(!records_xml.contains("<n v=\"20\"/>"));
+    assert!(!archive.contains("xl/pivotTables/pivotTable1.xml"));
+    assert!(!archive.contains("xl/pivotCache/pivotCacheDefinition1.xml"));
+    assert!(!archive.contains("xl/pivotCache/pivotCacheRecords1.xml"));
 }
 
 #[test]

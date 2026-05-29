@@ -735,6 +735,8 @@ impl CacheFieldDef {
 pub struct WorksheetSource {
     /// Sheet name
     pub sheet_name: Option<String>,
+    /// Named range/table source
+    pub source_name: Option<String>,
     /// Range reference (e.g., "A1:D100" or "Sheet1!$A$1:$D$100")
     pub range_ref: String,
     /// Relationship ID for external sources
@@ -757,6 +759,7 @@ impl CacheSource {
             source_type: CacheSourceType::Worksheet,
             worksheet_source: Some(WorksheetSource {
                 sheet_name: Some(sheet.to_string()),
+                source_name: None,
                 range_ref: range.to_string(),
                 r_id: None,
             }),
@@ -770,8 +773,15 @@ impl CacheSource {
             .end_attrs();
 
         if let Some(ref ws) = self.worksheet_source {
-            w.start_element("worksheetSource")
-                .attr("ref", &ws.range_ref);
+            w.start_element("worksheetSource");
+
+            if !ws.range_ref.is_empty() {
+                w.attr("ref", &ws.range_ref);
+            }
+
+            if let Some(ref name) = ws.source_name {
+                w.attr("name", name);
+            }
 
             if let Some(ref sheet) = ws.sheet_name {
                 w.attr("sheet", sheet);

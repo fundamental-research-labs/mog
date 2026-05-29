@@ -7,6 +7,7 @@ use std::collections::HashMap;
 enum CacheIdentity {
     Explicit(u32),
     Source {
+        source_name: Option<String>,
         source_sheet_name: String,
         source_range: String,
         field_names: Vec<String>,
@@ -44,6 +45,7 @@ pub(super) fn assign_cache_sources(
         let identity = match config.cache_id {
             Some(cache_id) => CacheIdentity::Explicit(cache_id),
             None => CacheIdentity::Source {
+                source_name: pt.ooxml_preservation.cache_source_name.clone(),
                 source_sheet_name: config.source_sheet_name.clone(),
                 source_range: source_range.clone(),
                 field_names: field_names.clone(),
@@ -64,10 +66,11 @@ pub(super) fn assign_cache_sources(
             seen_cache_identities.insert(identity, cache_id);
             sources.push(PivotCacheSourceDef {
                 cache_id,
+                source_name: pt.ooxml_preservation.cache_source_name.clone(),
                 source_sheet: Some(config.source_sheet_name.clone()),
                 source_range: Some(source_range),
                 field_names,
-                shared_items: Vec::new(),
+                shared_items: pt.ooxml_preservation.cache_shared_items.clone(),
             });
             cache_id
         };

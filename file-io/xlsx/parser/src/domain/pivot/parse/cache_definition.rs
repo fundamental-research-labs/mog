@@ -39,6 +39,7 @@ pub fn parse_pivot_cache_definition(xml: &[u8]) -> PivotCache {
                 let ws_element = &xml[ws_start..ws_end + 1];
                 cache.source_ref = parse_string_attr(ws_element, b"ref=\"");
                 cache.source_sheet = parse_string_attr(ws_element, b"sheet=\"");
+                cache.source_name = parse_string_attr(ws_element, b"name=\"");
             }
         }
     }
@@ -159,6 +160,21 @@ mod tests {
             parse_pivot_cache_definition(br#"<pivotCacheDefinition/>"#).source_type,
             CacheSourceType::Worksheet
         );
+    }
+
+    #[test]
+    fn parses_named_worksheet_source() {
+        let xml = br#"<pivotCacheDefinition recordCount="2">
+            <cacheSource type="worksheet">
+                <worksheetSource name="tbl_units"/>
+            </cacheSource>
+        </pivotCacheDefinition>"#;
+
+        let cache = parse_pivot_cache_definition(xml);
+
+        assert_eq!(cache.source_name.as_deref(), Some("tbl_units"));
+        assert_eq!(cache.source_ref, None);
+        assert_eq!(cache.source_sheet, None);
     }
 
     #[test]

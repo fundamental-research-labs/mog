@@ -232,6 +232,58 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
 }
 
 #[test]
+fn named_table_pivot_cache_source_regenerates_from_live_table_and_keeps_shared_item_order() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "xlsx-source-sheet",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.sheets[0].tables.push(domain_types::TableSpec {
+        name: "tbl_units".to_string(),
+        display_name: "tbl_units".to_string(),
+        range_ref: "A1:B3".to_string(),
+        ..Default::default()
+    });
+    output.pivot_tables[0].ooxml_preservation.cache_source_name = Some("tbl_units".to_string());
+    output.pivot_tables[0].ooxml_preservation.cache_shared_items = vec![
+        vec![
+            DomainValue::Text(Arc::from("B")),
+            DomainValue::Text(Arc::from("A")),
+        ],
+        vec![
+            DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+            DomainValue::Number(FiniteF64::new(20.0).unwrap()),
+        ],
+    ];
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let definition_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheDefinition1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(definition_xml.contains("<worksheetSource name=\"tbl_units\"/>"));
+    assert!(
+        definition_xml.contains("<sharedItems count=\"2\"><s v=\"B\"/><s v=\"A\"/></sharedItems>")
+    );
+    assert!(records_xml.contains("count=\"2\""));
+    assert!(records_xml.contains("<x v=\"1\"/><n v=\"10\"/>"));
+    assert!(records_xml.contains("<x v=\"0\"/><n v=\"20\"/>"));
+}
+
+#[test]
 fn pivot_table_xml_uses_modeled_layout_style_location_and_items() {
     let mut config = make_pivot_config(
         "pivot-1",

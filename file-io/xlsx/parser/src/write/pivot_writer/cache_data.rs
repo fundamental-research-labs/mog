@@ -16,12 +16,62 @@ pub(super) fn build_cache(
 ) -> (Vec<u8>, Vec<u8>) {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
 
-    if let (Some(sheet_name), Some(range_ref)) = (&cache_src.source_sheet, &cache_src.source_range)
+    if let Some(source_name) = &cache_src.source_name {
+        cache_writer.source = CacheSource {
+            source_type: CacheSourceType::Worksheet,
+            worksheet_source: Some(WorksheetSource {
+                sheet_name: None,
+                source_name: Some(source_name.clone()),
+                range_ref: String::new(),
+                r_id: None,
+            }),
+        };
+
+        if let Some((sheet_idx, range_ref)) = resolve_named_source(sheets, source_name) {
+            if let Some(records) = imported_records
+                && source_records_match_by_index(sheets, sheet_idx, range_ref, records)
+            {
+                let (fields, write_records) = imported_cache_records_to_write_data(
+                    &cache_src.field_names,
+                    records,
+                    &cache_src.shared_items,
+                );
+                for field in fields {
+                    cache_writer.add_field(field);
+                }
+                cache_writer.set_record_count(write_records.len() as u32);
+                let definition_xml = cache_writer.to_definition_xml();
+                let records_xml = cache_writer.to_records_xml(&write_records);
+                return (definition_xml, records_xml);
+            }
+
+            let sheet = &sheets[sheet_idx];
+            if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
+                let (fields, records) = extract_cache_data(
+                    sheet,
+                    start_row,
+                    start_col,
+                    end_row,
+                    end_col,
+                    &cache_src.shared_items,
+                );
+                for field in fields {
+                    cache_writer.add_field(field);
+                }
+                cache_writer.set_record_count(records.len() as u32);
+                let definition_xml = cache_writer.to_definition_xml();
+                let records_xml = cache_writer.to_records_xml(&records);
+                return (definition_xml, records_xml);
+            }
+        }
+    } else if let (Some(sheet_name), Some(range_ref)) =
+        (&cache_src.source_sheet, &cache_src.source_range)
     {
         cache_writer.source = CacheSource {
             source_type: CacheSourceType::Worksheet,
             worksheet_source: Some(WorksheetSource {
                 sheet_name: Some(sheet_name.clone()),
+                source_name: None,
                 range_ref: range_ref.clone(),
                 r_id: None,
             }),
@@ -30,8 +80,11 @@ pub(super) fn build_cache(
         if let Some(records) = imported_records
             && source_records_match(sheets, sheet_name_to_idx, sheet_name, range_ref, records)
         {
-            let (fields, write_records) =
-                imported_cache_records_to_write_data(&cache_src.field_names, records);
+            let (fields, write_records) = imported_cache_records_to_write_data(
+                &cache_src.field_names,
+                records,
+                &cache_src.shared_items,
+            );
             for field in fields {
                 cache_writer.add_field(field);
             }
@@ -44,8 +97,14 @@ pub(super) fn build_cache(
         if let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name.as_str()) {
             let sheet = &sheets[sheet_idx];
             if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
-                let (fields, records) =
-                    extract_cache_data(sheet, start_row, start_col, end_row, end_col);
+                let (fields, records) = extract_cache_data(
+                    sheet,
+                    start_row,
+                    start_col,
+                    end_row,
+                    end_col,
+                    &cache_src.shared_items,
+                );
                 for field in fields {
                     cache_writer.add_field(field);
                 }
@@ -66,6 +125,18 @@ pub(super) fn build_cache(
     (definition_xml, records_xml)
 }
 
+fn resolve_named_source<'a>(
+    sheets: &'a [SheetData],
+    source_name: &str,
+) -> Option<(usize, &'a str)> {
+    sheets.iter().enumerate().find_map(|(sheet_idx, sheet)| {
+        sheet.tables.iter().find_map(|table| {
+            (table.name == source_name || table.display_name == source_name)
+                .then_some((sheet_idx, table.range_ref.as_str()))
+        })
+    })
+}
+
 fn source_records_match(
     sheets: &[SheetData],
     sheet_name_to_idx: &HashMap<&str, usize>,
@@ -76,6 +147,15 @@ fn source_records_match(
     let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name) else {
         return false;
     };
+    source_records_match_by_index(sheets, sheet_idx, range_ref, imported_records)
+}
+
+fn source_records_match_by_index(
+    sheets: &[SheetData],
+    sheet_idx: usize,
+    range_ref: &str,
+    imported_records: &[Vec<CellValue>],
+) -> bool {
     let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) else {
         return false;
     };
@@ -88,12 +168,13 @@ fn source_records_match(
 fn imported_cache_records_to_write_data(
     field_names: &[String],
     records: &[Vec<CellValue>],
+    seed_shared_items: &[Vec<CellValue>],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
     let num_cols = field_names
         .len()
         .max(records.iter().map(Vec::len).max().unwrap_or(0));
-    let mut field_shared_items: Vec<Vec<SharedItem>> = vec![Vec::new(); num_cols];
-    let mut field_value_indices: Vec<HashMap<String, u32>> = vec![HashMap::new(); num_cols];
+    let (mut field_shared_items, mut field_value_indices) =
+        seeded_shared_items(num_cols, seed_shared_items);
     let mut write_records = Vec::with_capacity(records.len());
 
     for row in records {
@@ -146,6 +227,40 @@ fn cell_value_to_cache_record_item(
     }
 }
 
+fn seeded_shared_items(
+    num_cols: usize,
+    seed_shared_items: &[Vec<CellValue>],
+) -> (Vec<Vec<SharedItem>>, Vec<HashMap<String, u32>>) {
+    let mut field_shared_items: Vec<Vec<SharedItem>> = vec![Vec::new(); num_cols];
+    let mut field_value_indices: Vec<HashMap<String, u32>> = vec![HashMap::new(); num_cols];
+
+    for col_idx in 0..num_cols {
+        if let Some(seeds) = seed_shared_items.get(col_idx) {
+            for value in seeds {
+                let shared_item = cell_value_to_shared_item(value);
+                if let SharedItem::String(s) = &shared_item {
+                    field_value_indices[col_idx]
+                        .entry(s.clone())
+                        .or_insert(field_shared_items[col_idx].len() as u32);
+                }
+                field_shared_items[col_idx].push(shared_item);
+            }
+        }
+    }
+
+    (field_shared_items, field_value_indices)
+}
+
+fn cell_value_to_shared_item(value: &CellValue) -> SharedItem {
+    match value {
+        CellValue::Text(s) => SharedItem::String(s.to_string()),
+        CellValue::Number(n) => SharedItem::Number(n.get()),
+        CellValue::Boolean(b) => SharedItem::Boolean(*b),
+        CellValue::Error(err, _) => SharedItem::Error(err.as_str().to_string()),
+        _ => SharedItem::Missing,
+    }
+}
+
 /// Extract cache field definitions and record rows from sheet cell data.
 fn extract_cache_data(
     sheet: &SheetData,
@@ -153,6 +268,7 @@ fn extract_cache_data(
     start_col: u32,
     end_row: u32,
     end_col: u32,
+    seed_shared_items: &[Vec<CellValue>],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
     let num_cols = (end_col - start_col + 1) as usize;
 
@@ -183,32 +299,19 @@ fn extract_cache_data(
 
     let data_start = header_row + 1;
     let data_end = end_row;
-    let mut field_shared_items: Vec<Vec<SharedItem>> = vec![Vec::new(); num_cols];
-    let mut field_value_indices: Vec<HashMap<String, u32>> = vec![HashMap::new(); num_cols];
+    let (mut field_shared_items, mut field_value_indices) =
+        seeded_shared_items(num_cols, seed_shared_items);
     let mut records: Vec<Vec<SharedItem>> = Vec::new();
 
     for row in data_start..=data_end {
         let mut record = Vec::with_capacity(num_cols);
         for (col_offset, col) in (start_col..=end_col).enumerate() {
             let value = cell_map.get(&(row, col)).copied();
-            let item = match value {
-                Some(CellValue::Text(s)) => {
-                    let key = s.to_string();
-                    let idx = if let Some(&existing) = field_value_indices[col_offset].get(&key) {
-                        existing
-                    } else {
-                        let idx = field_shared_items[col_offset].len() as u32;
-                        field_shared_items[col_offset].push(SharedItem::String(key.clone()));
-                        field_value_indices[col_offset].insert(key, idx);
-                        idx
-                    };
-                    SharedItem::Index(idx)
-                }
-                Some(CellValue::Number(n)) => SharedItem::Number(n.get()),
-                Some(CellValue::Boolean(b)) => SharedItem::Boolean(*b),
-                Some(CellValue::Error(..)) => SharedItem::Error("#VALUE!".to_string()),
-                _ => SharedItem::Missing,
-            };
+            let item = cell_value_to_cache_record_item(
+                value.unwrap_or(&CellValue::Null),
+                &mut field_shared_items[col_offset],
+                &mut field_value_indices[col_offset],
+            );
             record.push(item);
         }
         records.push(record);

@@ -15,11 +15,14 @@ pub(crate) fn pivot_cache_to_ooxml(xml: &[u8]) -> ooxml_types::pivot::PivotCache
             CacheSourceType::Consolidation => ooxml_types::pivot::PivotSourceType::Consolidation,
             CacheSourceType::Scenario => ooxml_types::pivot::PivotSourceType::Scenario,
         },
-        worksheet_source: if parsed.source_ref.is_some() || parsed.source_sheet.is_some() {
+        worksheet_source: if parsed.source_ref.is_some()
+            || parsed.source_sheet.is_some()
+            || parsed.source_name.is_some()
+        {
             Some(ooxml_types::pivot::WorksheetSource {
                 r#ref: parsed.source_ref,
                 sheet: parsed.source_sheet,
-                name: None,
+                name: parsed.source_name,
                 r_id: None,
             })
         } else {

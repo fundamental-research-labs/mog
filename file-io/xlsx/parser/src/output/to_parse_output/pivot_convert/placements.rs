@@ -38,7 +38,7 @@ pub(super) fn build_placements(
                     field_id: field.id.clone(),
                     placement_id: parsed_pivot_placement_id(&pivot.name, "row", pos, &field.id),
                     position: pos,
-                    display_name: pf.and_then(|fd| fd.name.clone()),
+                    display_name: pf.and_then(|fd| display_name_override(fd, field)),
                 },
                 sort_order: effective_sort_order,
                 custom_sort_list,
@@ -71,7 +71,7 @@ pub(super) fn build_placements(
                     field_id: field.id.clone(),
                     placement_id: parsed_pivot_placement_id(&pivot.name, "column", pos, &field.id),
                     position: pos,
-                    display_name: pf.and_then(|fd| fd.name.clone()),
+                    display_name: pf.and_then(|fd| display_name_override(fd, field)),
                 },
                 sort_order: effective_sort_order,
                 custom_sort_list,
@@ -113,13 +113,23 @@ pub(super) fn build_placements(
                     field_id: field.id.clone(),
                     placement_id: parsed_pivot_placement_id(&pivot.name, "filter", pos, &field.id),
                     position: pos,
-                    display_name: page_field.name.clone(),
+                    display_name: page_field.name.clone().filter(|name| name != &field.name),
                 },
             }));
         }
     }
 
     placements
+}
+
+fn display_name_override(
+    field_def: &crate::domain::pivot::read::PivotField,
+    field: &PivotField,
+) -> Option<String> {
+    field_def
+        .name
+        .clone()
+        .filter(|display_name| display_name != &field.name)
 }
 
 fn parsed_pivot_placement_id(

@@ -84,7 +84,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                             .map(|index| index as u32)
                     }),
                 subtotal_top: field.subtotal_top.unwrap_or(true),
-                default_subtotal: field.default_subtotal.unwrap_or(axis.is_some()),
+                default_subtotal: field.default_subtotal.unwrap_or(true),
                 subtotals: field.subtotals.clone(),
                 items: field.items.clone(),
             }

@@ -30,7 +30,7 @@ use filters::build_filters;
 use layout::build_layout;
 use placements::build_placements;
 use source::{parse_output_anchor, parse_source_range};
-use value_map::convert_row_col_item;
+use value_map::{convert_row_col_item, shared_item_to_cell_value};
 
 /// Convert parser-internal pivot types directly to the compute-ready
 /// `ParsedPivotTable`, bypassing `PivotSpec`. OOXML attributes live on
@@ -170,9 +170,23 @@ pub(crate) fn parsed_pivot_to_config(
     // Items with show_details=true are expanded; items with show_details=false are collapsed.
     let initial_expansion_state = build_expansion_state_from_ooxml(pivot, cache);
 
+    let mut ooxml_preservation = pivot.ooxml_preservation.clone();
+    ooxml_preservation.cache_source_name = cache.source_name.clone();
+    ooxml_preservation.cache_shared_items = cache
+        .fields
+        .iter()
+        .map(|field| {
+            field
+                .shared_items
+                .iter()
+                .map(shared_item_to_cell_value)
+                .collect()
+        })
+        .collect();
+
     Some(ParsedPivotTable {
         config,
         initial_expansion_state,
-        ooxml_preservation: pivot.ooxml_preservation.clone(),
+        ooxml_preservation,
     })
 }

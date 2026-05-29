@@ -26,6 +26,7 @@ pub(crate) fn build_full_pivot_cache_for_converter(
         id: cache_id,
         source_ref: ws_src.and_then(|s| s.r#ref.clone()),
         source_sheet: ws_src.and_then(|s| s.sheet.clone()),
+        source_name: ws_src.and_then(|s| s.name.clone()),
         fields: pc
             .definition
             .cache_fields

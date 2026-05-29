@@ -232,7 +232,7 @@ pub struct FilterColumnSpec {
     pub col_id: u32,
     #[serde(default)]
     pub hidden_button: bool,
-    #[serde(default, skip_serializing_if = "is_true_default")]
+    #[serde(default = "default_true", skip_serializing_if = "is_true_default")]
     pub show_button: bool,
     pub filter: FilterSpec,
     /// Raw direct-child `<extLst>` owned by this filterColumn.
@@ -803,4 +803,25 @@ pub(crate) fn col_index_to_letter(col: u32) -> String {
         n /= 26;
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filter_column_show_button_defaults_to_true_when_omitted() {
+        let spec: FilterColumnSpec = serde_json::from_value(serde_json::json!({
+            "colId": 0,
+            "filter": {
+                "values": {
+                    "blank": false,
+                    "values": ["A"]
+                }
+            }
+        }))
+        .unwrap();
+
+        assert!(spec.show_button);
+    }
 }

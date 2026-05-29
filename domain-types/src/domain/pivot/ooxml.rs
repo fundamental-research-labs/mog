@@ -238,6 +238,16 @@ pub struct PivotTableOoxmlPreservation {
     pub col_item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship: Option<PivotTableRelationshipPreservation>,
+    /// Named range/table source from pivot cache `<worksheetSource name="...">`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_source_name: Option<String>,
+    /// Per-cache-field shared items from the imported cache definition.
+    ///
+    /// These are typed pivot semantics: pivot items and manual/custom ordering
+    /// refer to shared item indexes, so export must keep the current shared item
+    /// universe when regenerating cache definitions from live rows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cache_shared_items: Vec<Vec<value_types::CellValue>>,
 }
 
 impl PivotTableOoxmlPreservation {
@@ -252,6 +262,8 @@ impl PivotTableOoxmlPreservation {
             && self.row_item_attributes.iter().all(Vec::is_empty)
             && self.col_item_attributes.iter().all(Vec::is_empty)
             && self.relationship.is_none()
+            && self.cache_source_name.is_none()
+            && self.cache_shared_items.is_empty()
     }
 }
 
@@ -278,6 +290,9 @@ pub struct PivotStyleDef {
 #[serde(rename_all = "camelCase")]
 pub struct PivotCacheSourceDef {
     pub cache_id: u32,
+    /// Named range/table source from pivot cache `<worksheetSource name="...">`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_sheet: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

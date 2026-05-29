@@ -440,6 +440,12 @@ pub fn sumifs_lookup(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    fn cache_test_guard() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
 
     fn num(n: f64) -> CellValue {
         CellValue::number(n)
@@ -588,6 +594,7 @@ mod tests {
 
     #[test]
     fn test_thread_local_cache_lookup() {
+        let _guard = cache_test_guard();
         clear();
         reset_diagnostics();
         let crit = vec![text("a"), text("b"), text("a")];
@@ -617,6 +624,7 @@ mod tests {
 
     #[test]
     fn test_clear_invalidates_cache() {
+        let _guard = cache_test_guard();
         clear();
         let crit = vec![text("a"), text("a")];
         let sums = vec![num(10.0), num(20.0)];
@@ -645,6 +653,7 @@ mod tests {
 
     #[test]
     fn test_same_epoch_warm_extract_seed_hits() {
+        let _guard = cache_test_guard();
         clear();
         reset_diagnostics();
         let crit = vec![text("a"), text("b"), text("a")];
@@ -681,6 +690,7 @@ mod tests {
 
     #[test]
     fn test_different_ranges_same_length_do_not_alias() {
+        let _guard = cache_test_guard();
         clear();
         let crit_a = vec![text("x"), text("x")];
         let sums_a = vec![num(1.0), num(2.0)];
@@ -713,6 +723,7 @@ mod tests {
 
     #[test]
     fn test_same_pointer_epoch_different_build_row_count_does_not_alias() {
+        let _guard = cache_test_guard();
         clear();
         let crit = vec![text("a"), text("a"), text("a")];
         let sums = vec![num(10.0), num(20.0), num(30.0)];
@@ -743,6 +754,7 @@ mod tests {
 
     #[test]
     fn test_same_sheet_col_different_row_window_does_not_alias() {
+        let _guard = cache_test_guard();
         clear();
         let crit = [text("a"), text("b"), text("a")];
         let sums = [num(10.0), num(20.0), num(30.0)];
@@ -777,6 +789,7 @@ mod tests {
 
     #[test]
     fn test_empty_or_clipped_slices_do_not_collide_across_identity() {
+        let _guard = cache_test_guard();
         clear();
         let empty_criteria: Vec<CellValue> = Vec::new();
         let sums_a = vec![num(1.0), num(2.0)];
@@ -798,6 +811,7 @@ mod tests {
 
     #[test]
     fn test_same_pointer_length_different_epoch_misses_stale_entry() {
+        let _guard = cache_test_guard();
         clear();
         reset_diagnostics();
         let crit = vec![text("a"), text("a")];

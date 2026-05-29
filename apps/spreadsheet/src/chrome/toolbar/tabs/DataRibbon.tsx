@@ -14,7 +14,7 @@
  * Uses RibbonButton for consistent button styling (single source of truth).
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useActiveCell, useUIStore } from '../../../internal-api';
 import { parseCSV } from '../../../domain/clipboard/clipboard-parser';
 import {
@@ -227,7 +227,8 @@ export function DataRibbon({
   onImportJson,
   onImportFromWeb,
 }: DataRibbonProps) {
-  const { canGroup, canUngroup, canShowDetail, canHideDetail } = useGroupingActions();
+  const { groupRows, groupColumns, canGroup, canUngroup, canShowDetail, canHideDetail } =
+    useGroupingActions();
   const { canClearFilters, canReapplyFilters } = useFilterActions();
 
   // Get dispatch for action handling
@@ -351,6 +352,24 @@ export function DataRibbon({
       onImportFromWeb();
     }
   }, [hostCommands, onImportFromWeb, setIsGetDataDropdownOpen]);
+
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
+  const handleGroupClick = useCallback(() => {
+    if (!canGroup) return;
+    setIsGroupDropdownOpen((open) => !open);
+  }, [canGroup]);
+  const handleGroupRows = useCallback(() => {
+    setIsGroupDropdownOpen(false);
+    groupRows();
+  }, [groupRows]);
+  const handleGroupColumns = useCallback(() => {
+    setIsGroupDropdownOpen(false);
+    groupColumns();
+  }, [groupColumns]);
+
+  useEffect(() => {
+    if (!canGroup) setIsGroupDropdownOpen(false);
+  }, [canGroup]);
 
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
@@ -724,18 +743,44 @@ export function DataRibbon({
         dropdownIcon={<GroupIcon />}
       >
         <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">
-          <RibbonButton
-            id="data-group"
-            layout="vertical"
-            height="full"
-            width="narrow"
-            icon={<GroupIcon />}
-            label="Group"
-            onClick={() => dispatch('GROUP')}
-            disabled={!canGroup}
-            title="Group selected rows (Alt+Shift+Right)"
-            aria-label="Group"
-          />
+          <div className="relative inline-flex">
+            <RibbonButton
+              id="data-group"
+              layout="vertical"
+              height="full"
+              width="narrow"
+              icon={<GroupIcon />}
+              label="Group"
+              onClick={handleGroupClick}
+              disabled={!canGroup}
+              isOpen={isGroupDropdownOpen}
+              title="Group selected rows or columns"
+              aria-label="Group"
+              aria-expanded={isGroupDropdownOpen}
+              aria-haspopup="menu"
+            />
+            <RibbonDropdownPanel
+              open={isGroupDropdownOpen}
+              onClose={() => setIsGroupDropdownOpen(false)}
+            >
+              <div
+                className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[120px] py-1"
+                role="menu"
+                aria-label="Group rows or columns"
+              >
+                <RibbonDropdownItem dataValue="rows" icon={<GroupIcon />} onClick={handleGroupRows}>
+                  Rows
+                </RibbonDropdownItem>
+                <RibbonDropdownItem
+                  dataValue="columns"
+                  icon={<GroupIcon />}
+                  onClick={handleGroupColumns}
+                >
+                  Columns
+                </RibbonDropdownItem>
+              </div>
+            </RibbonDropdownPanel>
+          </div>
           <RibbonButton
             id="data-ungroup"
             layout="vertical"

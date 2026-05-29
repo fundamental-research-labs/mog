@@ -146,11 +146,13 @@ async function scanInvalidCellsOnActiveSheet(
 }
 
 /**
- * Populate the validation-circle set for the active sheet and flip the
- * visibility flag on. Safe to call when circles are already visible — it
- * re-scans and replaces the set for the active sheet (other sheets untouched).
+ * Populate the validation-circle set for the active sheet. Safe to call when
+ * circles are already visible — it re-scans and replaces the set for the
+ * active sheet (other sheets untouched). If no invalid cells are found, keep
+ * circles hidden and announce the empty result instead of switching the ribbon
+ * into "Clear Circles" with nothing drawn.
  */
-async function turnCirclesOn(deps: ActionDependencies): Promise<void> {
+async function turnCirclesOn(deps: ActionDependencies): Promise<number> {
   const activeSheetId = deps.getActiveSheetId();
   const invalidCells = await scanInvalidCellsOnActiveSheet(deps);
 
@@ -162,8 +164,12 @@ async function turnCirclesOn(deps: ActionDependencies): Promise<void> {
   state.clearValidationCirclesForSheet(activeSheetId);
   if (invalidCells.length > 0) {
     state.addValidationCircles(activeSheetId, invalidCells);
+    state.showValidationCircles();
+  } else {
+    state.hideValidationCircles();
+    state.announce('No invalid data found', 'polite');
   }
-  state.showValidationCircles();
+  return invalidCells.length;
 }
 
 /**

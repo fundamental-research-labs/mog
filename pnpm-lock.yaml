@@ -754,8 +754,6 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
-  file-io/xlsx/corpus-eval: {}
-
   file-io/xlsx/parser: {}
 
   file-io/xlsx/tooling:

@@ -181,10 +181,10 @@ impl GateName {
                 "pnpm --filter @mog/xlsx-parser-wasm run gate:corpus-anti-cheat"
             }
             GateName::CorpusGolden => "pnpm --filter @mog/xlsx-parser-wasm run gate:corpus-golden",
-            GateName::PerfSmoke => "pnpm --filter @mog/xlsx-corpus-eval run perf-smoke",
-            GateName::PerfGolden => "pnpm --filter @mog/xlsx-corpus-eval run perf-golden",
+            GateName::PerfSmoke => "pnpm --filter @mog/xlsx-parser-wasm run gate:perf-smoke",
+            GateName::PerfGolden => "pnpm --filter @mog/xlsx-parser-wasm run gate:perf-golden",
             GateName::CorpusFull => "pnpm --filter @mog/xlsx-parser-wasm run gate:corpus-full",
-            GateName::PerfFull => "pnpm --filter @mog/xlsx-corpus-eval run perf-full",
+            GateName::PerfFull => "pnpm --filter @mog/xlsx-parser-wasm run gate:perf-full",
         }
     }
 

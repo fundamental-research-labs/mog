@@ -6,7 +6,7 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 
 - Shared Rust contracts: `file-io/xlsx/test-contracts`
 - Public synthetic/generated fixtures: `file-io/xlsx/parser/test-corpus` or lane-owned public fixture folders under `file-io/xlsx`
-- Public smoke/golden budget files for generated fixtures: lane-owned folders under `file-io/xlsx`
+- Public smoke/golden budget files for generated fixtures: `file-io/xlsx/parser/testing/budgets`
 - Public gate adapters and parser/archive validation: `file-io/xlsx/parser/src/testing`
 - Stable gate command surface: `cargo run -p xlsx-parser --bin xlsx-gate --features cli -- <gate>`
 

@@ -222,6 +222,15 @@ fn needs_quoting_rules() {
     assert!(needs_quoting("D&A"));
     assert!(needs_quoting("Sheet's"));
     assert!(needs_quoting("Café"));
+    assert!(needs_quoting("A1"));
+    assert!(needs_quoting("XFD1048576"));
+    assert!(needs_quoting("RC"));
+    assert!(needs_quoting("R1C1"));
+    assert!(needs_quoting("R"));
+    assert!(needs_quoting("C"));
+    assert!(!needs_quoting("XFE1"));
+    assert!(!needs_quoting("A1048577"));
+    assert!(!needs_quoting("R0C1"));
     assert!(!needs_quoting("Sheet1"));
     assert!(!needs_quoting("_Sheet"));
 }

@@ -186,6 +186,13 @@ fn test_strip_keeps_required() {
 }
 
 #[test]
+fn test_strip_keeps_reference_like_sheet_names() {
+    assert_eq!(strip_unnecessary_sheet_quotes("='RC'!S7"), "='RC'!S7");
+    assert_eq!(strip_unnecessary_sheet_quotes("='A1'!B2"), "='A1'!B2");
+    assert_eq!(strip_unnecessary_sheet_quotes("='R1C1'!A1"), "='R1C1'!A1");
+}
+
+#[test]
 fn test_strip_mixed() {
     assert_eq!(
         strip_unnecessary_sheet_quotes("='Sheet1'!A1+'D&A'!B1"),

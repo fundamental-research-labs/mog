@@ -700,6 +700,8 @@ mod api_contract {
     #[test]
     fn needs_quoting_special_chars() {
         assert!(needs_quoting("D&A Build"));
+        assert!(needs_quoting("RC"));
+        assert!(needs_quoting("A1"));
         assert!(!needs_quoting("Sheet1"));
     }
 

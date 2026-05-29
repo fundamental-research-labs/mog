@@ -333,6 +333,26 @@ mod tests {
     }
 
     #[test]
+    fn cross_sheet_reference_like_sheet_name_is_quoted() {
+        let s1 = sheet(1);
+        let s2 = sheet(2);
+        let mut lookup = MockLookup::new(s1);
+        lookup.cell_positions.insert(cell(91), (s2, 6, 18));
+        lookup.sheet_names.insert(s2, "RC".to_string());
+
+        let formula = make_formula(
+            "{0}",
+            vec![IdentityFormulaRef::Cell(IdentityCellRef {
+                id: cell(91),
+                row_absolute: false,
+                col_absolute: false,
+            })],
+        );
+
+        assert_eq!(to_a1_string(&formula, &lookup), "='RC'!S7");
+    }
+
+    #[test]
     fn deleted_cell_ref() {
         let s1 = sheet(1);
         let lookup = MockLookup::new(s1);

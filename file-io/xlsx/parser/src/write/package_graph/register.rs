@@ -462,6 +462,62 @@ pub fn register_media_part(graph: &mut PackageGraphBuilder, path: &str) -> Resul
     })
 }
 
+pub fn register_media_part_with_bytes(
+    graph: &mut PackageGraphBuilder,
+    path: &str,
+    bytes: &[u8],
+) -> Result<(), WriteError> {
+    if let Some(content_type) = image_content_type_from_bytes(bytes) {
+        register_media_part_with_content_type(graph, path, content_type)
+    } else {
+        register_media_part(graph, path)
+    }
+}
+
+pub fn register_media_part_with_content_type(
+    graph: &mut PackageGraphBuilder,
+    path: &str,
+    content_type: &str,
+) -> Result<(), WriteError> {
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_else(|| "bin".to_string());
+    graph.register_part(PackagePart {
+        path: normalize_part_path(path),
+        content_type: None,
+        default_extension: Some((extension, content_type.to_string())),
+        kind: PackagePartKind::Modeled,
+        semantic_kind: Some(domain_types::XlsxPackagePartKind::Media),
+        bytes: None,
+    })
+}
+
+fn image_content_type_from_bytes(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(CT_PNG)
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        Some(CT_JPEG)
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some(CT_GIF)
+    } else if bytes.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        Some("image/tiff")
+    } else if bytes
+        .iter()
+        .take(256)
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .copied()
+        .collect::<Vec<_>>()
+        .starts_with(b"<svg")
+    {
+        Some("image/svg+xml")
+    } else {
+        None
+    }
+}
+
 pub fn register_ole_embedding_part(
     graph: &mut PackageGraphBuilder,
     path: &str,

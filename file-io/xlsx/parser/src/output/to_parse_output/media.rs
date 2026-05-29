@@ -10,7 +10,8 @@ pub(super) fn build_media_data_url_map(result: &FullParseResult) -> HashMap<Stri
             .content_type
             .as_deref()
             .filter(|content_type| content_type.starts_with("image/"))
-            .unwrap_or_else(|| image_mime_type_for_path(&normalized));
+            .or_else(|| image_mime_type_for_bytes(&part.bytes))
+            .unwrap_or("application/octet-stream");
         let encoded = base64::engine::general_purpose::STANDARD.encode(&part.bytes);
         let data_url = format!("data:{mime};base64,{encoded}");
 
@@ -38,23 +39,28 @@ pub(super) fn build_binary_part_map(result: &FullParseResult) -> HashMap<String,
     parts
 }
 
-fn image_mime_type_for_path(path: &str) -> &'static str {
-    match path
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "bmp" => "image/bmp",
-        "webp" => "image/webp",
-        "tif" | "tiff" => "image/tiff",
-        "svg" | "svgz" => "image/svg+xml",
-        "emf" => "image/x-emf",
-        "wmf" => "image/x-wmf",
-        _ => "application/octet-stream",
+fn image_mime_type_for_bytes(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        Some("image/tiff")
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_mime_type_for_bytes_recognizes_jpeg_jfif_payload() {
+        assert_eq!(image_mime_type_for_bytes(b"\xff\xd8\xff\xe0"), Some("image/jpeg"));
     }
 }

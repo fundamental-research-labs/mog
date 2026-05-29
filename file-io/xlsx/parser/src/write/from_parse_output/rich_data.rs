@@ -87,7 +87,17 @@ pub(super) fn register_parts(
     }
     for part in related_parts {
         if part.path.starts_with("xl/media/") {
-            crate::write::package_graph::register_media_part(graph, &part.path)?;
+            if let Some(content_type) = part.content_type.as_deref() {
+                crate::write::package_graph::register_media_part_with_content_type(
+                    graph,
+                    &part.path,
+                    content_type,
+                )?;
+            } else {
+                crate::write::package_graph::register_media_part_with_bytes(
+                    graph, &part.path, &part.data,
+                )?;
+            }
         } else {
             graph.register_part(crate::write::package_graph::modeled_part(
                 &part.path,

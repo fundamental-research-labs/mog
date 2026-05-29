@@ -100,6 +100,7 @@ fn mime_to_extension(mime: &str) -> &'static str {
     match mime {
         "image/png" => "png",
         "image/jpeg" | "image/jpg" => "jpeg",
+        "image/jfif" => "jfif",
         "image/gif" => "gif",
         "image/bmp" => "bmp",
         "image/tiff" => "tiff",
@@ -108,6 +109,19 @@ fn mime_to_extension(mime: &str) -> &'static str {
         "image/emf" | "image/x-emf" => "emf",
         "image/wmf" | "image/x-wmf" => "wmf",
         _ => "png",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_data_url_preserves_jfif_extension() {
+        let (extension, bytes) = parse_data_url("data:image/jfif;base64,AQID").unwrap();
+
+        assert_eq!(extension, "jfif");
+        assert_eq!(bytes, vec![1, 2, 3]);
     }
 }
 

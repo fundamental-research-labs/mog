@@ -221,6 +221,24 @@ fn imported_default_mime_preference_updates_existing_current_default() {
 }
 
 #[test]
+fn media_jfif_part_registers_content_type_from_current_bytes() {
+    let mut builder = PackageGraphBuilder::new();
+    register_media_part_with_bytes(&mut builder, "xl/media/image2.jfif", b"\xff\xd8\xff\xe0")
+        .unwrap();
+    let graph = builder.resolve().unwrap();
+
+    let mut content_types = ContentTypesManager::new();
+    graph.add_content_types_to(&mut content_types);
+
+    let jfif = content_types
+        .defaults()
+        .iter()
+        .find(|default| default.extension == "jfif")
+        .expect("current JFIF media parts must emit a content type default");
+    assert_eq!(jfif.content_type, CT_JPEG);
+}
+
+#[test]
 fn imported_default_without_current_part_is_reported_as_unused_drop() {
     let metadata = PackageFidelityMetadata {
         content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {

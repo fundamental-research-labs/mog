@@ -20,6 +20,7 @@ mod external_links;
 mod form_control_export_plan;
 mod form_controls;
 mod hyperlink_targets;
+mod media;
 mod metadata;
 mod ole_objects;
 mod pivot_package;
@@ -1566,13 +1567,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             &entry.relationship_id_hint,
         );
     }
-    for zip_path in all_image_blobs
-        .iter()
-        .map(|(zip_path, _)| zip_path.as_str())
-        .collect::<std::collections::BTreeSet<_>>()
-    {
-        crate::write::package_graph::register_media_part(&mut package_graph_builder, zip_path)?;
-    }
+    media::register_image_blob_parts(&mut package_graph_builder, &all_image_blobs)?;
     let mut drawing_relationship_keys = Vec::with_capacity(drawing_relationships.len());
     for (entry_idx, entry) in drawing_relationships.iter().enumerate() {
         let relationship_key = if entry.rel_type == REL_CHART {

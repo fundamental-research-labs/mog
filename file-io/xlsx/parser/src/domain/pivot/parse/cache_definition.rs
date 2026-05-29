@@ -40,6 +40,7 @@ pub fn parse_pivot_cache_definition(xml: &[u8]) -> PivotCache {
                 cache.source_ref = parse_string_attr(ws_element, b"ref=\"");
                 cache.source_sheet = parse_string_attr(ws_element, b"sheet=\"");
                 cache.source_name = parse_string_attr(ws_element, b"name=\"");
+                cache.source_r_id = parse_string_attr(ws_element, b"r:id=\"");
             }
         }
     }
@@ -128,6 +129,7 @@ mod tests {
         assert_eq!(cache.source_type, CacheSourceType::Worksheet);
         assert_eq!(cache.source_ref, Some("A1:D100".to_string()));
         assert_eq!(cache.source_sheet, Some("Data".to_string()));
+        assert_eq!(cache.source_r_id, None);
         assert_eq!(cache.fields.len(), 1);
         assert_eq!(cache.fields[0].name, "Category");
         assert_eq!(
@@ -175,6 +177,21 @@ mod tests {
         assert_eq!(cache.source_name.as_deref(), Some("tbl_units"));
         assert_eq!(cache.source_ref, None);
         assert_eq!(cache.source_sheet, None);
+    }
+
+    #[test]
+    fn parses_external_worksheet_source_relationship_id() {
+        let xml = br#"<pivotCacheDefinition recordCount="2">
+            <cacheSource type="worksheet">
+                <worksheetSource ref="A1:B3" sheet="External Sheet" r:id="rIdExternalSource"/>
+            </cacheSource>
+        </pivotCacheDefinition>"#;
+
+        let cache = parse_pivot_cache_definition(xml);
+
+        assert_eq!(cache.source_sheet.as_deref(), Some("External Sheet"));
+        assert_eq!(cache.source_ref.as_deref(), Some("A1:B3"));
+        assert_eq!(cache.source_r_id.as_deref(), Some("rIdExternalSource"));
     }
 
     #[test]

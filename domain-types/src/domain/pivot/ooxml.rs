@@ -296,6 +296,10 @@ pub struct PivotCacheSourceDef {
         skip_serializing_if = "PivotCacheWorkbookRefScope::is_default"
     )]
     pub workbook_ref_scope: PivotCacheWorkbookRefScope,
+    /// Typed source kind. A missing local sheet is not a source kind; imported
+    /// external worksheet sources must stay external through export.
+    #[serde(default, skip_serializing_if = "PivotCacheSourceKind::is_default")]
+    pub source_kind: PivotCacheSourceKind,
     /// Named range/table source from pivot cache `<worksheetSource name="...">`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_name: Option<String>,
@@ -303,6 +307,9 @@ pub struct PivotCacheSourceDef {
     pub source_sheet: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_range: Option<String>,
+    /// External worksheet relationship owned by the pivot cache definition part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_worksheet: Option<PivotExternalWorksheetSourceDef>,
     /// Field (column) names from the cache definition header row.
     /// These are source metadata, not derived data.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -311,6 +318,40 @@ pub struct PivotCacheSourceDef {
     /// Used to resolve PivotFieldItem.value indices to actual CellValues for filtering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_items: Vec<Vec<value_types::CellValue>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PivotCacheSourceKind {
+    #[default]
+    LocalWorksheet,
+    LocalTableOrName,
+    ExternalWorksheet,
+    WorkbookConnection,
+    Consolidation,
+    Scenario,
+    UnknownImported,
+}
+
+impl PivotCacheSourceKind {
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::LocalWorksheet)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotExternalWorksheetSourceDef {
+    /// Imported `worksheetSource@r:id`; an allocation hint, not authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_id_hint: Option<String>,
+    /// Relationship type URI, usually `externalLinkPath`.
+    pub relationship_type: String,
+    /// External workbook/path target as current typed source state.
+    pub target: String,
+    /// Relationship TargetMode. External worksheet sources normally use External.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

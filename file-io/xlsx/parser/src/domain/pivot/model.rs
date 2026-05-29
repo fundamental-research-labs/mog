@@ -316,6 +316,8 @@ pub struct PivotCache {
     pub source_sheet: Option<String>,
     /// Named range/table source
     pub source_name: Option<String>,
+    /// Relationship ID for external worksheet sources.
+    pub source_r_id: Option<String>,
     /// Field definitions in the cache
     pub fields: Vec<CacheField>,
     /// Cached records

@@ -5,9 +5,10 @@ use crate::domain::pivot::convert::{
 };
 use crate::domain::pivot::parse::parse_pivot_table;
 use crate::domain::pivot::spec::{pivot_cache_records_to_ooxml, pivot_cache_to_ooxml};
+use crate::domain::workbook::read::parse_all_rels;
 use crate::infra::opc::{
-    OoxmlRelationshipType, PackageOwner, WorkbookRelationships, WorksheetRelationships,
-    parse_owned_relationships,
+    parse_owned_relationships, OoxmlRelationshipType, PackageOwner, WorkbookRelationships,
+    WorksheetRelationships,
 };
 use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
 use domain_types::domain::pivot::PivotTableRelationshipPreservation;
@@ -129,6 +130,8 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
             .rels_path
             .as_deref()
             .and_then(|path| archive.read_file(path).ok());
+        let external_source_relationship =
+            external_worksheet_source_relationship(definition_rels_xml.as_deref(), &definition);
 
         let mut cache_records = ooxml_types::pivot::PivotCacheRecords::default();
         let mut raw_records_xml = None;
@@ -182,6 +185,18 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
                     .worksheet_source
                     .as_ref()
                     .and_then(|source| source.r#ref.clone()),
+                external_source_relationship_id: external_source_relationship
+                    .as_ref()
+                    .map(|rel| rel.id.clone()),
+                external_source_relationship_type: external_source_relationship
+                    .as_ref()
+                    .map(|rel| rel.rel_type.clone()),
+                external_source_relationship_target: external_source_relationship
+                    .as_ref()
+                    .map(|rel| rel.target.clone()),
+                external_source_relationship_target_mode: external_source_relationship
+                    .as_ref()
+                    .and_then(|rel| rel.target_mode.clone()),
             });
         discovery
             .packages
@@ -189,6 +204,20 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
     }
 
     discovery
+}
+
+fn external_worksheet_source_relationship(
+    definition_rels_xml: Option<&[u8]>,
+    definition: &ooxml_types::pivot::PivotCacheDefinition,
+) -> Option<ooxml_types::shared::OpcRelationship> {
+    let r_id = definition
+        .cache_source
+        .worksheet_source
+        .as_ref()
+        .and_then(|source| source.r_id.as_deref())?;
+    parse_all_rels(definition_rels_xml?)
+        .into_iter()
+        .find(|rel| rel.id == r_id)
 }
 
 fn workbook_pivot_cache_definition_path(raw_target: &str, resolved_path: &str) -> String {

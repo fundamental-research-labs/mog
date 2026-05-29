@@ -3,6 +3,7 @@ use crate::domain::pivot::write::types::{
     CacheFieldDef, CacheSource, CacheSourceType, SharedItem, WorksheetSource,
 };
 use crate::write::pivot_writer::a1::parse_range;
+use domain_types::domain::pivot::PivotCacheSourceKind;
 use domain_types::{PivotCacheSourceDef, SheetData};
 use std::collections::HashMap;
 use value_types::CellValue;
@@ -12,11 +13,36 @@ pub(super) fn build_cache(
     cache_src: &PivotCacheSourceDef,
     sheets: &[SheetData],
     sheet_name_to_idx: &HashMap<&str, usize>,
+    snapshot_records: Option<&[Vec<CellValue>]>,
     records_relationship_id: Option<&str>,
+    external_source_relationship_id: Option<&str>,
 ) -> (Vec<u8>, Vec<u8>) {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
     if let Some(records_relationship_id) = records_relationship_id {
         cache_writer.records_relationship_id = records_relationship_id.to_string();
+    }
+
+    if cache_src.source_kind == PivotCacheSourceKind::ExternalWorksheet {
+        cache_writer.source = CacheSource {
+            source_type: CacheSourceType::Worksheet,
+            worksheet_source: Some(WorksheetSource {
+                sheet_name: cache_src.source_sheet.clone(),
+                source_name: cache_src.source_name.clone(),
+                range_ref: cache_src.source_range.clone().unwrap_or_default(),
+                r_id: external_source_relationship_id.map(ToOwned::to_owned),
+            }),
+        };
+
+        let (fields, records) = snapshot_records
+            .map(|rows| cache_from_snapshot(cache_src, rows))
+            .unwrap_or_else(|| (fields_from_source(cache_src, None), Vec::new()));
+        for field in fields {
+            cache_writer.add_field(field);
+        }
+        cache_writer.set_record_count(records.len() as u32);
+        let definition_xml = cache_writer.to_definition_xml();
+        let records_xml = cache_writer.to_records_xml(&records);
+        return (definition_xml, records_xml);
     }
 
     if let Some(source_name) = &cache_src.source_name {
@@ -107,6 +133,76 @@ pub(super) fn build_cache(
     let definition_xml = cache_writer.to_definition_xml();
     let records_xml = cache_writer.to_records_xml(&[]);
     (definition_xml, records_xml)
+}
+
+fn fields_from_source(
+    cache_src: &PivotCacheSourceDef,
+    snapshot_width: Option<usize>,
+) -> Vec<CacheFieldDef> {
+    let num_cols = cache_src
+        .field_names
+        .len()
+        .max(cache_src.shared_items.len())
+        .max(snapshot_width.unwrap_or_default());
+    let (mut field_shared_items, _) = seeded_shared_items(num_cols, &cache_src.shared_items);
+    (0..num_cols)
+        .map(|i| CacheFieldDef {
+            name: cache_src
+                .field_names
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| format!("Column{}", i + 1)),
+            shared_items: std::mem::take(&mut field_shared_items[i]),
+            number_format: None,
+            num_fmt_id: None,
+            sql_type: None,
+            caption: None,
+        })
+        .collect()
+}
+
+fn cache_from_snapshot(
+    cache_src: &PivotCacheSourceDef,
+    rows: &[Vec<CellValue>],
+) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
+    let num_cols = rows
+        .iter()
+        .map(Vec::len)
+        .max()
+        .unwrap_or_default()
+        .max(cache_src.field_names.len())
+        .max(cache_src.shared_items.len());
+    let (mut field_shared_items, mut field_value_indices) =
+        seeded_shared_items(num_cols, &cache_src.shared_items);
+    let records = rows
+        .iter()
+        .map(|row| {
+            (0..num_cols)
+                .map(|col_idx| {
+                    cell_value_to_cache_record_item(
+                        row.get(col_idx).unwrap_or(&CellValue::Null),
+                        &mut field_shared_items[col_idx],
+                        &mut field_value_indices[col_idx],
+                    )
+                })
+                .collect()
+        })
+        .collect();
+    let fields = (0..num_cols)
+        .map(|i| CacheFieldDef {
+            name: cache_src
+                .field_names
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| format!("Column{}", i + 1)),
+            shared_items: std::mem::take(&mut field_shared_items[i]),
+            number_format: None,
+            num_fmt_id: None,
+            sql_type: None,
+            caption: None,
+        })
+        .collect();
+    (fields, records)
 }
 
 fn resolve_named_source<'a>(

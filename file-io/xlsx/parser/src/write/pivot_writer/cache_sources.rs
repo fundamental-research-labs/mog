@@ -1,6 +1,6 @@
 use crate::write::pivot_writer::a1::col_to_letters;
-use domain_types::PivotCacheSourceDef;
 use domain_types::domain::pivot::ParsedPivotTable;
+use domain_types::PivotCacheSourceDef;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -76,9 +76,15 @@ pub(super) fn assign_cache_sources(
                     .unwrap_or(PivotCacheSourceDef {
                         cache_id,
                         workbook_ref_scope: Default::default(),
+                        source_kind: if pt.ooxml_preservation.cache_source_name.is_some() {
+                            domain_types::domain::pivot::PivotCacheSourceKind::LocalTableOrName
+                        } else {
+                            domain_types::domain::pivot::PivotCacheSourceKind::LocalWorksheet
+                        },
                         source_name: pt.ooxml_preservation.cache_source_name.clone(),
                         source_sheet: Some(config.source_sheet_name.clone()),
                         source_range: Some(source_range),
+                        external_worksheet: None,
                         field_names,
                         shared_items: pt.ooxml_preservation.cache_shared_items.clone(),
                     }),

@@ -128,6 +128,36 @@ fn pivot_cache_records_ignores_malformed_entries() {
 }
 
 #[test]
+fn pivot_cache_sources_round_trip_external_worksheet_binding() {
+    let original = vec![crate::PivotCacheSourceDef {
+        cache_id: 7,
+        workbook_ref_scope: Default::default(),
+        source_kind: crate::domain::pivot::PivotCacheSourceKind::ExternalWorksheet,
+        source_name: None,
+        source_sheet: Some("External Data".to_string()),
+        source_range: Some("A1:B3".to_string()),
+        external_worksheet: Some(crate::domain::pivot::PivotExternalWorksheetSourceDef {
+            relationship_id_hint: Some("rIdExternalSource".to_string()),
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath"
+                    .to_string(),
+            target: "file:///tmp/source.xlsx".to_string(),
+            target_mode: Some("External".to_string()),
+        }),
+        field_names: vec!["Category".to_string(), "Amount".to_string()],
+        shared_items: Vec::new(),
+    }];
+
+    assert_eq!(
+        original,
+        roundtrip_string_map_value(
+            pivot_cache_records::sources_to_yrs_prelim(&original),
+            |map, txn| { pivot_cache_records::sources_from_yrs_map(map, txn) },
+        )
+    );
+}
+
+#[test]
 fn slicer_round_trips_table_binding_style_position_and_selection() {
     let original = StoredSlicer {
         id: "slicer-1".to_string(),

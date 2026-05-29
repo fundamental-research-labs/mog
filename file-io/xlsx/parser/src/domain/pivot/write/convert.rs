@@ -224,12 +224,13 @@ pub fn pivot_cache_to_writer(cache: &read::PivotCache) -> PivotCacheWriter {
         worksheet_source: if cache.source_ref.is_some()
             || cache.source_sheet.is_some()
             || cache.source_name.is_some()
+            || cache.source_r_id.is_some()
         {
             Some(WorksheetSource {
                 sheet_name: cache.source_sheet.clone(),
                 source_name: cache.source_name.clone(),
                 range_ref: cache.source_ref.clone().unwrap_or_default(),
-                r_id: None,
+                r_id: cache.source_r_id.clone(),
             })
         } else {
             None

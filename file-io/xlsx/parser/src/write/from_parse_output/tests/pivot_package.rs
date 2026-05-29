@@ -105,6 +105,89 @@ fn pivot_cache_definition_r_id_matches_generated_records_relationship() {
 }
 
 #[test]
+fn external_worksheet_pivot_cache_exports_snapshot_and_relationship() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "MissingLocalSource",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.pivot_cache_sources.clear();
+    output
+        .pivot_cache_sources
+        .push(domain_types::PivotCacheSourceDef {
+            cache_id: 11,
+            workbook_ref_scope: Default::default(),
+            source_kind: domain_types::domain::pivot::PivotCacheSourceKind::ExternalWorksheet,
+            source_name: None,
+            source_sheet: Some("External Data".to_string()),
+            source_range: Some("A1:B3".to_string()),
+            external_worksheet: Some(
+                domain_types::domain::pivot::PivotExternalWorksheetSourceDef {
+                    relationship_id_hint: Some("rIdExternalSource".to_string()),
+                    relationship_type: crate::infra::opc::REL_EXTERNAL_LINK_PATH.to_string(),
+                    target: "file:///tmp/source.xlsx".to_string(),
+                    target_mode: Some("External".to_string()),
+                },
+            ),
+            field_names: vec!["Category".to_string(), "Amount".to_string()],
+            shared_items: vec![
+                vec![
+                    DomainValue::Text(Arc::from("B")),
+                    DomainValue::Text(Arc::from("A")),
+                ],
+                vec![],
+            ],
+        });
+    output.pivot_cache_records.insert(
+        11,
+        vec![
+            vec![
+                DomainValue::Text(Arc::from("A")),
+                DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+            ],
+            vec![
+                DomainValue::Text(Arc::from("B")),
+                DomainValue::Number(FiniteF64::new(20.0).unwrap()),
+            ],
+        ],
+    );
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let definition_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheDefinition1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let definition_rels = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(definition_xml
+        .contains(r#"worksheetSource ref="A1:B3" sheet="External Data" r:id="rIdExternalSource""#));
+    assert!(definition_xml.contains(r#"<s v="B"/><s v="A"/>"#));
+    assert!(records_xml.contains(r#"<x v="1"/>"#));
+    assert!(records_xml.contains(r#"<n v="10"/>"#));
+    assert!(definition_rels.contains(r#"Id="rIdExternalSource""#));
+    assert!(definition_rels.contains(r#"Target="file:///tmp/source.xlsx""#));
+    assert!(definition_rels.contains(r#"TargetMode="External""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn skipped_generated_pivot_does_not_emit_stale_pivot_package_metadata() {
     let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",
@@ -300,9 +383,11 @@ fn live_pivot_cache_source_schema_is_not_truncated_to_source_range_width() {
         .push(domain_types::PivotCacheSourceDef {
             cache_id: 11,
             workbook_ref_scope: Default::default(),
+            source_kind: domain_types::domain::pivot::PivotCacheSourceKind::LocalWorksheet,
             source_name: None,
             source_sheet: Some("Data".to_string()),
             source_range: Some("A1:B3".to_string()),
+            external_worksheet: None,
             field_names: vec![
                 "Category".to_string(),
                 "Amount".to_string(),
@@ -407,16 +492,17 @@ fn named_table_pivot_cache_source_resolves_unique_live_table_prefix() {
         range_ref: "A1:C3".to_string(),
         ..Default::default()
     });
-    output.pivot_tables[0].ooxml_preservation.cache_source_name =
-        Some("Table7142128".to_string());
+    output.pivot_tables[0].ooxml_preservation.cache_source_name = Some("Table7142128".to_string());
     output
         .pivot_cache_sources
         .push(domain_types::PivotCacheSourceDef {
             cache_id: 11,
             workbook_ref_scope: Default::default(),
+            source_kind: domain_types::domain::pivot::PivotCacheSourceKind::LocalTableOrName,
             source_name: Some("Table7142128".to_string()),
             source_sheet: None,
             source_range: None,
+            external_worksheet: None,
             field_names: vec!["Category".to_string(), "Amount".to_string()],
             shared_items: vec![
                 vec![
@@ -477,8 +563,7 @@ fn named_table_pivot_cache_source_does_not_guess_ambiguous_live_table_prefix() {
         range_ref: "A5:B7".to_string(),
         ..Default::default()
     });
-    output.pivot_tables[0].ooxml_preservation.cache_source_name =
-        Some("Table7142128".to_string());
+    output.pivot_tables[0].ooxml_preservation.cache_source_name = Some("Table7142128".to_string());
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();

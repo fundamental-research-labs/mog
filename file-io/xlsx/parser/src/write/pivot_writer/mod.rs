@@ -24,9 +24,9 @@ use crate::write::pivot_writer::part_paths::{
     pivot_cache_definition_path, pivot_cache_records_path, pivot_table_path,
 };
 use crate::write::pivot_writer::source_fields::derive_missing_fields;
-use domain_types::ParseOutput;
 use domain_types::domain::pivot::ParsedPivotTable;
 use domain_types::domain::pivot::PivotCacheWorkbookRefScope;
+use domain_types::ParseOutput;
 use std::collections::{HashMap, HashSet};
 
 /// All generated pivot data ready for ZIP assembly.
@@ -60,6 +60,10 @@ pub struct PivotCacheEntry {
     pub workbook_relationship_type: String,
     pub records_relationship_id_hint: Option<String>,
     pub records_relationship_type: Option<String>,
+    pub external_source_relationship_id_hint: Option<String>,
+    pub external_source_relationship_type: Option<String>,
+    pub external_source_relationship_target: Option<String>,
+    pub external_source_relationship_target_mode: Option<String>,
     pub definition_xml: Vec<u8>,
     pub records_xml: Option<Vec<u8>>,
 }
@@ -180,11 +184,30 @@ fn build_pivot_cache_entries(
                 .find(|package| package_matches_cache_source(package, cache_src));
             let records_relationship_id_hint = fidelity
                 .and_then(|package| package.records_relationship_id.clone());
+            let external_relationship_id_for_xml = cache_src
+                .external_worksheet
+                .as_ref()
+                .map(|source| {
+                    source
+                        .relationship_id_hint
+                        .clone()
+                        .unwrap_or_else(|| "rId1".to_string())
+                });
+            let records_relationship_id_for_xml =
+                pivot_records_relationship_id_for_xml(
+                    records_relationship_id_hint.as_deref(),
+                    external_relationship_id_for_xml.as_deref(),
+                );
             let (definition_xml, records_xml) = build_cache(
                 cache_src,
                 &output.sheets,
                 sheet_name_to_idx,
-                records_relationship_id_hint.as_deref(),
+                output
+                    .pivot_cache_records
+                    .get(&cache_src.cache_id)
+                    .map(Vec::as_slice),
+                Some(records_relationship_id_for_xml.as_str()),
+                external_relationship_id_for_xml.as_deref(),
             );
             let definition_path = fidelity
                 .and_then(|package| {
@@ -236,7 +259,7 @@ fn build_pivot_cache_entries(
                         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
                             .to_string()
                     }),
-                records_relationship_id_hint,
+                records_relationship_id_hint: Some(records_relationship_id_for_xml),
                 records_relationship_type: fidelity
                     .and_then(|package| package.records_relationship_type.clone())
                     .or_else(|| {
@@ -245,11 +268,38 @@ fn build_pivot_cache_entries(
                                 .to_string(),
                         )
                     }),
+                external_source_relationship_id_hint: external_relationship_id_for_xml,
+                external_source_relationship_type: cache_src
+                    .external_worksheet
+                    .as_ref()
+                    .map(|source| source.relationship_type.clone()),
+                external_source_relationship_target: cache_src
+                    .external_worksheet
+                    .as_ref()
+                    .map(|source| source.target.clone()),
+                external_source_relationship_target_mode: cache_src
+                    .external_worksheet
+                    .as_ref()
+                    .and_then(|source| source.target_mode.clone()),
                 definition_xml,
                 records_xml: Some(records_xml),
             }
         })
         .collect()
+}
+
+fn pivot_records_relationship_id_for_xml(
+    records_relationship_id_hint: Option<&str>,
+    external_relationship_id_hint: Option<&str>,
+) -> String {
+    if let Some(records_relationship_id_hint) = records_relationship_id_hint {
+        return records_relationship_id_hint.to_string();
+    }
+    if external_relationship_id_hint == Some("rId1") {
+        "rId2".to_string()
+    } else {
+        "rId1".to_string()
+    }
 }
 
 fn build_pivot_table_entries(
@@ -322,6 +372,11 @@ fn package_matches_cache_source(
     package.cache_id == cache_src.cache_id
         && package.source_sheet.as_ref() == cache_src.source_sheet.as_ref()
         && package.source_range.as_ref() == cache_src.source_range.as_ref()
+        && package.external_source_relationship_target.as_ref()
+            == cache_src
+                .external_worksheet
+                .as_ref()
+                .map(|source| &source.target)
 }
 
 fn reserved_pivot_cache_paths(output: &ParseOutput) -> HashSet<String> {

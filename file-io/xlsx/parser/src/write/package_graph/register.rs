@@ -1,18 +1,18 @@
 use super::{
+    is_external_target_mode, modeled_part, normalize_external_link_part_path, normalize_part_path,
+    PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind, PackageRelationship,
+    PackageRelationshipTarget, RegisteredRelationshipKey, RelationshipIdentityHint,
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
     CT_COMMENTS, CT_CONNECTIONS, CT_DRAWING, CT_EMF, CT_FEATURE_PROPERTY_BAG, CT_GIF, CT_JPEG,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS,
     CT_QUERY_TABLE, CT_SLICER, CT_SLICER_CACHE, CT_TABLE, CT_TABLE_SINGLE_CELLS,
     CT_THREADED_COMMENTS, CT_TIMELINE, CT_TIMELINE_CACHE, CT_VML_DRAWING, CT_VOLATILE_DEPENDENCIES,
-    CT_WMF, CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner, PackagePart,
-    PackagePartKind, PackageRelationship, PackageRelationshipTarget, REL_CHART, REL_CHART_EX,
-    REL_COMMENTS, REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK,
-    REL_FEATURE_PROPERTY_BAG, REL_HYPERLINK, REL_IMAGE, REL_PIVOT_CACHE,
-    REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS,
-    REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE, REL_TABLE, REL_TABLE_SINGLE_CELLS,
-    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_VOLATILE_DEPENDENCIES,
-    REL_WORKSHEET_CUSTOM_PROPERTY, RegisteredRelationshipKey, RelationshipIdentityHint,
-    is_external_target_mode, modeled_part, normalize_external_link_part_path, normalize_part_path,
+    CT_WMF, CT_WORKSHEET_CUSTOM_PROPERTY, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS,
+    REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK, REL_FEATURE_PROPERTY_BAG, REL_HYPERLINK,
+    REL_IMAGE, REL_PIVOT_CACHE, REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS,
+    REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE,
+    REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_VOLATILE_DEPENDENCIES, REL_WORKSHEET_CUSTOM_PROPERTY,
 };
 use crate::write::write_error::WriteError;
 
@@ -99,6 +99,10 @@ pub fn register_generated_pivot_cache(
         None,
         Some(REL_PIVOT_CACHE_RECORDS),
         None,
+        None,
+        None,
+        None,
+        None,
     )
 }
 
@@ -110,6 +114,10 @@ pub fn register_pivot_cache(
     workbook_relationship_id_hint: Option<&str>,
     records_relationship_type: Option<&str>,
     records_relationship_id_hint: Option<&str>,
+    external_source_relationship_type: Option<&str>,
+    external_source_relationship_target: Option<&str>,
+    external_source_relationship_target_mode: Option<&str>,
+    external_source_relationship_id_hint: Option<&str>,
 ) -> Result<(), WriteError> {
     graph.register_part(modeled_part(definition_path, CT_PIVOT_CACHE))?;
     if let Some(records_path) = records_path {
@@ -135,6 +143,22 @@ pub fn register_pivot_cache(
                 path: records_path.to_string(),
             },
             identity_hint: records_relationship_id_hint.map(RelationshipIdentityHint::new),
+        });
+    }
+    if let (Some(relationship_type), Some(target)) = (
+        external_source_relationship_type,
+        external_source_relationship_target,
+    ) {
+        graph.add_relationship(PackageRelationship {
+            owner: PackageOwner::Part {
+                path: definition_path.to_string(),
+            },
+            relationship_type: relationship_type.to_string(),
+            target: PackageRelationshipTarget::External {
+                target: target.to_string(),
+                target_mode: external_source_relationship_target_mode.map(ToOwned::to_owned),
+            },
+            identity_hint: external_source_relationship_id_hint.map(RelationshipIdentityHint::new),
         });
     }
     Ok(())

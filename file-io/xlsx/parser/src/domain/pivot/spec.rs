@@ -18,12 +18,13 @@ pub(crate) fn pivot_cache_to_ooxml(xml: &[u8]) -> ooxml_types::pivot::PivotCache
         worksheet_source: if parsed.source_ref.is_some()
             || parsed.source_sheet.is_some()
             || parsed.source_name.is_some()
+            || parsed.source_r_id.is_some()
         {
             Some(ooxml_types::pivot::WorksheetSource {
                 r#ref: parsed.source_ref,
                 sheet: parsed.source_sheet,
                 name: parsed.source_name,
-                r_id: None,
+                r_id: parsed.source_r_id,
             })
         } else {
             None

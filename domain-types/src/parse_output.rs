@@ -209,10 +209,11 @@ pub struct ParseOutput {
     /// be rederived from live source rows without changing the cache schema.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pivot_cache_sources: Vec<PivotCacheSourceDef>,
-    /// Pivot cache record data for eval-only use (cache_id → rows of cell values).
-    /// Not consumed by the snapshot/hydration path. Populated from the OOXML
-    /// pivot cache records so formula-eval can feed compute-pivot with the same
-    /// source data Excel used to produce the cached pivot output.
+    /// Pivot cache record data (cache_id → rows of cell values).
+    ///
+    /// For local worksheet/table sources, export may regenerate records from
+    /// current Mog cells. For external worksheet sources, these rows are the
+    /// typed snapshot Mog owns when the external source is not refreshable.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub pivot_cache_records: std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
     pub data_table_regions: Vec<DataTableRegion>,
@@ -711,6 +712,14 @@ pub struct PivotCachePackageFidelity {
     pub source_sheet: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_range: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_source_relationship_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_source_relationship_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_source_relationship_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_source_relationship_target_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

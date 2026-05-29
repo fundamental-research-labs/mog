@@ -436,9 +436,11 @@ fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
         .push(domain_types::PivotCacheSourceDef {
             cache_id: 7,
             workbook_ref_scope: Default::default(),
+            source_kind: domain_types::domain::pivot::PivotCacheSourceKind::LocalWorksheet,
             source_name: None,
             source_sheet: Some("Data".to_string()),
             source_range: Some("A1:B3".to_string()),
+            external_worksheet: None,
             field_names: vec!["Category".to_string(), "Amount".to_string()],
             shared_items: vec![
                 vec![CellValue::Text(Arc::from("A"))],

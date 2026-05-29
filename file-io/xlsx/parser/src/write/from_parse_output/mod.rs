@@ -1344,6 +1344,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.workbook_relationship_id_hint.as_deref(),
             entry.records_relationship_type.as_deref(),
             entry.records_relationship_id_hint.as_deref(),
+            entry.external_source_relationship_type.as_deref(),
+            entry.external_source_relationship_target.as_deref(),
+            entry.external_source_relationship_target_mode.as_deref(),
+            entry.external_source_relationship_id_hint.as_deref(),
         )?;
     }
     rich_data::register_parts(

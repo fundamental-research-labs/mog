@@ -394,8 +394,19 @@ pub(super) fn hydrate_workbook_web_publishing(
 pub(super) fn hydrate_workbook_threaded_comment_persons(
     workbook: &MapRef,
     persons: &[domain_types::domain::comment::PersonInfo],
+    has_persons_part: bool,
     txn: &mut yrs::TransactionMut,
 ) {
+    if !has_persons_part && persons.is_empty() {
+        return;
+    }
+
+    workbook.insert(
+        txn,
+        KEY_THREADED_COMMENT_PERSONS_PART_PRESENT,
+        Any::Bool(true),
+    );
+
     if persons.is_empty() {
         return;
     }

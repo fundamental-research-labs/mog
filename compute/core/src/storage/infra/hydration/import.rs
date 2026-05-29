@@ -229,7 +229,12 @@ impl YrsStorage {
             &mut txn,
         );
         hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
-        hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
+        hydrate_workbook_threaded_comment_persons(
+            &self.workbook,
+            &output.persons,
+            output.has_persons_part,
+            &mut txn,
+        );
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
         hydrate_volatile_dependency_part(
@@ -445,7 +450,12 @@ impl YrsStorage {
             &mut txn,
         );
         hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
-        hydrate_workbook_threaded_comment_persons(&self.workbook, &output.persons, &mut txn);
+        hydrate_workbook_threaded_comment_persons(
+            &self.workbook,
+            &output.persons,
+            output.has_persons_part,
+            &mut txn,
+        );
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
         hydrate_volatile_dependency_part(

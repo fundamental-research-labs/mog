@@ -303,6 +303,7 @@ pub fn full_parse_result_to_parse_output(
         external_links: result.external_links.clone(),
         connections: result.connections.clone(),
         persons,
+        has_persons_part: result.raw_persons_xml.is_some(),
         volatile_dependency_part: result.volatile_dependency_part.clone(),
     };
     let _data_features = parse_output.workbook_data_features();

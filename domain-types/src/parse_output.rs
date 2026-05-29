@@ -101,6 +101,13 @@ pub struct ParseOutput {
     /// Referenced by `Comment.person_id` across all sheets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub persons: Vec<PersonInfo>,
+    /// Whether the workbook owns an `xl/persons/person.xml` part.
+    ///
+    /// This is intentionally separate from `persons`: an empty `<personList/>`
+    /// is still authored workbook state and must keep its package part,
+    /// workbook relationship, and content type on export.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub has_persons_part: bool,
     /// Workbook-owned volatile dependency sidecar from `xl/volatileDependencies.xml`.
     ///
     /// This is calculation/external-data import fidelity, not an editable
@@ -108,6 +115,10 @@ pub struct ParseOutput {
     /// and workbook calculation/external-data owners are unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub volatile_dependency_part: Option<VolatileDependencyPackagePart>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

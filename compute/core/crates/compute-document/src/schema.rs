@@ -116,6 +116,7 @@ pub const KEY_FILE_VERSION: &str = "fileVersion";
 pub const KEY_FILE_SHARING: &str = "fileSharing";
 pub const KEY_WEB_PUBLISHING: &str = "webPublishing";
 pub const KEY_THREADED_COMMENT_PERSONS: &str = "threadedCommentPersons";
+pub const KEY_THREADED_COMMENT_PERSONS_PART_PRESENT: &str = "threadedCommentPersonsPartPresent";
 
 /// Meta map keys
 pub const KEY_NAME: &str = "name";

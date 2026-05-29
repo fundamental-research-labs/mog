@@ -1097,7 +1097,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let metadata_xml = metadata::metadata_xml_for_export(output);
     let rich_data_parts = rich_data::parts_for_export(output);
     let rich_data_related_parts = rich_data::related_parts_for_export(output);
-    let persons_xml: Option<Vec<u8>> = if !output.persons.is_empty() {
+    let persons_xml: Option<Vec<u8>> = if output.has_persons_part || !output.persons.is_empty() {
         Some(crate::domain::comments::write::persons_xml_from_domain(
             &output.persons,
         ))

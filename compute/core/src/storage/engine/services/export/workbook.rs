@@ -749,6 +749,19 @@ pub(in crate::storage::engine) fn export_workbook_threaded_comment_persons(
     persons
 }
 
+pub(in crate::storage::engine) fn export_workbook_threaded_comment_persons_part_present(
+    stores: &EngineStores,
+) -> bool {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    matches!(
+        workbook.get(&txn, KEY_THREADED_COMMENT_PERSONS_PART_PRESENT),
+        Some(Out::Any(Any::Bool(true)))
+    )
+}
+
 /// Export file version from the workbook-level `fileVersion` Y.Map.
 pub(super) fn export_file_version(
     stores: &EngineStores,

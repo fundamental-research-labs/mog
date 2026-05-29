@@ -929,6 +929,10 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
 
+    let persons = export_workbook_threaded_comment_persons(stores);
+    let has_persons_part = !persons.is_empty()
+        || workbook::export_workbook_threaded_comment_persons_part_present(stores);
+
     let output = ParseOutput {
         sheets: output_sheets,
         workbook_sheet_inventory: Vec::new(),
@@ -960,7 +964,8 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         web_publishing: workbook::export_workbook_web_publishing(stores),
         external_links: export_external_links(stores),
         connections,
-        persons: export_workbook_threaded_comment_persons(stores),
+        persons,
+        has_persons_part,
         volatile_dependency_part: workbook::export_volatile_dependency_part(stores),
     };
     let _data_features = output.workbook_data_features();

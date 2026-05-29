@@ -85,6 +85,27 @@ fn shared_string_rich_text_hint_does_not_seed_export_identity() {
 }
 
 #[test]
+fn empty_persons_part_is_emitted_from_typed_presence_state() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            ..Default::default()
+        }],
+        has_persons_part: true,
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let persons_xml =
+        String::from_utf8(archive.read_file("xl/persons/person.xml").unwrap()).unwrap();
+
+    assert!(persons_xml.contains("<personList"));
+    assert!(!persons_xml.contains("<person "));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn sheet_protection_modern_hash_fields_are_written_from_parse_output() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

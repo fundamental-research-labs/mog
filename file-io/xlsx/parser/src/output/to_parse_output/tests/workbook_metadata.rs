@@ -3,6 +3,58 @@ use super::helpers::threading_result;
 use crate::output::results::FullParsedSheet;
 
 #[test]
+fn vba_project_active_content_is_quarantined_in_package_fidelity() {
+    let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
+    result
+        .content_type_defaults
+        .push(("bin".to_string(), crate::write::CT_VBA.to_string()));
+    result.content_type_overrides.push((
+        "/xl/vbaProject.bin".to_string(),
+        crate::write::CT_VBA.to_string(),
+    ));
+    result
+        .workbook_relationships
+        .push(ooxml_types::shared::OpcRelationship {
+            id: "rIdMacro".to_string(),
+            rel_type: crate::infra::opc::REL_VBA_PROJECT.to_string(),
+            target: "vbaProject.bin".to_string(),
+            target_mode: None,
+        });
+
+    let mut extensions = crate::pipeline::import_extensions::ImportExtensionParts::new();
+    extensions
+        .imported_parts
+        .record("xl/vbaProject.bin".to_string(), vec![0xD0, 0xCF, 0x11, 0xE0]);
+    result.extensions = Some(extensions);
+
+    let (output, diagnostics) = full_parse_result_to_parse_output(&result);
+
+    let package_fidelity = output.package_fidelity.unwrap_or_default();
+    assert_eq!(package_fidelity.opaque_parts.len(), 1);
+    assert_eq!(package_fidelity.opaque_parts[0].path, "xl/vbaProject.bin");
+    assert_eq!(
+        package_fidelity.opaque_parts[0].bytes,
+        vec![0xD0, 0xCF, 0x11, 0xE0]
+    );
+    assert!(package_fidelity.workbook_relationships.iter().any(|hint| {
+        hint.id == "rIdMacro"
+            && hint.relationship_type == crate::infra::opc::REL_VBA_PROJECT
+            && hint.target == "vbaProject.bin"
+    }));
+
+    let messages: Vec<_> = diagnostics
+        .errors
+        .iter()
+        .map(|error| error.message.as_str())
+        .collect();
+    assert!(
+        messages.iter().any(|message| message
+            .contains("Preserved XLSX active content without interpretation or execution")),
+        "expected VBA quarantine diagnostic, got {messages:?}"
+    );
+}
+
+#[test]
 fn typed_custom_doc_props_populate_parse_output() {
     let mut result = threading_result(FullParsedSheet::default(), None, Vec::new());
     result.doc_props_custom = Some(vec![

@@ -240,6 +240,69 @@ fn webextension_cluster_is_registered_with_root_and_taskpane_relationships() {
 }
 
 #[test]
+fn vba_project_is_registered_as_quarantined_workbook_opaque_part() {
+    let metadata = PackageFidelityMetadata {
+        content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {
+            extension: "bin".to_string(),
+            content_type: crate::write::CT_VBA.to_string(),
+        }],
+        workbook_relationships: vec![relationship_hint(
+            "rIdMacro",
+            crate::infra::opc::REL_VBA_PROJECT,
+            "vbaProject.bin",
+        )],
+        opaque_parts: vec![domain_types::OpaquePackagePartHint {
+            path: "xl/vbaProject.bin".to_string(),
+            bytes: vec![0xD0, 0xCF, 0x11, 0xE0],
+            content_type: Some(crate::write::CT_VBA.to_string()),
+            relationships: Vec::new(),
+        }],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    assert!(graph.contains_part("xl/vbaProject.bin"));
+    assert!(graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "xl/_rels/workbook.xml.rels"
+            && rel.id == "rIdMacro"
+            && rel.relationship_type == crate::infra::opc::REL_VBA_PROJECT
+            && rel.target == "vbaProject.bin"
+    }));
+}
+
+#[test]
+fn imported_vba_bin_default_does_not_retype_unrelated_bin_parts() {
+    let metadata = PackageFidelityMetadata {
+        content_type_defaults: vec![domain_types::PackageContentTypeDefaultHint {
+            extension: "bin".to_string(),
+            content_type: crate::write::CT_VBA.to_string(),
+        }],
+        ..Default::default()
+    };
+    let builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    let graph = builder.resolve().unwrap();
+    let mut content_types = ContentTypesManager::new();
+    content_types.add_default(
+        "bin",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings",
+    );
+    graph.apply_content_type_preferences_to(&mut content_types);
+
+    let bin = content_types
+        .defaults()
+        .iter()
+        .find(|default| default.extension == "bin")
+        .unwrap();
+    assert_eq!(
+        bin.content_type,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"
+    );
+}
+
+#[test]
 fn modeled_paths_are_not_replayed_as_opaque_parts() {
     let metadata = PackageFidelityMetadata {
         opaque_parts: vec![domain_types::OpaquePackagePartHint {

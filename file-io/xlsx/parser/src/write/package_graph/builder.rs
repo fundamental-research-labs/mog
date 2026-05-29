@@ -86,10 +86,17 @@ impl PackageGraphBuilder {
             let is_inert_auxiliary =
                 crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
                     == Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary);
-            if !is_inert_auxiliary && !is_non_editable_sheet_cluster {
+            let is_quarantined_active =
+                crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
+                    == Some(AuxiliaryPackagePartPolicy::ActiveQuarantined);
+            if !is_inert_auxiliary && !is_non_editable_sheet_cluster && !is_quarantined_active {
+                continue;
+            }
+            if is_quarantined_active && normalize_part_path(&part.path) != "xl/vbaProject.bin" {
                 continue;
             }
             if !is_non_editable_sheet_cluster
+                && !is_quarantined_active
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
                     &part.path,
                 )
@@ -165,6 +172,7 @@ impl PackageGraphBuilder {
                 };
                 if self.is_opaque_part(&target_path)
                     && (same_inert_cluster(&part.path, &target_path)
+                        || same_quarantined_active_cluster(&part.path, &target_path)
                         || same_non_editable_sheet_cluster(
                             &part.path,
                             &target_path,
@@ -330,4 +338,9 @@ fn same_non_editable_sheet_cluster(
 ) -> bool {
     cluster.contains(&normalize_part_path(owner_path))
         && cluster.contains(&normalize_part_path(target_path))
+}
+
+fn same_quarantined_active_cluster(owner_path: &str, target_path: &str) -> bool {
+    normalize_part_path(owner_path) == "xl/vbaProject.bin"
+        && normalize_part_path(target_path) == "xl/vbaProject.bin"
 }

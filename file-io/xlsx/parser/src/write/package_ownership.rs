@@ -41,6 +41,7 @@ pub struct PackageOwnershipContract {
 pub enum AuxiliaryPackagePartPolicy {
     InertOpaqueAuxiliary,
     TypedOwned,
+    ActiveQuarantined,
     ActiveForbidden,
     ExternalCapable,
     UnsupportedNeedsModel,
@@ -1005,11 +1006,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         parse_output_domain_owner: "diagnostics and external reference metadata where modeled",
         yrs_app_persistence_owner: "diagnostic-only unless a future plan adds typed state",
         api_exposure: ApiExposureLevel::DiagnosticOnly,
-        production_writer: "diagnostic/drop; external links only when typed owner is available",
+        production_writer: "VBA project quarantine-preserve; external links only when typed owner is available; unsupported active adjuncts diagnostic/drop",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
-        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ExternalCapable),
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveQuarantined),
         opaque_fallback_policy: OpaqueFallbackPolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy: "unsupported-active-dropped or unsupported-external-capable-dropped; shared-workbook revisions are diagnostics-only unless a typed revision model owns invalidation",
+        unsupported_diagnostic_policy: "VBA is preserved as quarantined active content with package closure and no interpretation/execution; other unsupported active or external-capable adjuncts are diagnosed/dropped; shared-workbook revisions are diagnostics-only unless a typed revision model owns invalidation",
         dirty_invalidation_triggers: &[
             "external reference mutation",
             "macro/security content detected",
@@ -1198,8 +1199,9 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || (path.starts_with("xl/tables/tableSingleCells") && path.ends_with(".xml"))
     {
         Some(AuxiliaryPackagePartPolicy::TypedOwned)
-    } else if path == "xl/vbaProject.bin"
-        || path.starts_with("xl/activeX/")
+    } else if path == "xl/vbaProject.bin" {
+        Some(AuxiliaryPackagePartPolicy::ActiveQuarantined)
+    } else if path.starts_with("xl/activeX/")
         || path == "_xmlsignatures/origin.sigs"
         || path.starts_with("_xmlsignatures/sig")
     {

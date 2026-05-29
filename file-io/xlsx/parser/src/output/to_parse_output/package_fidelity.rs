@@ -138,6 +138,8 @@ fn build_opaque_package_part_hints(
                         .collect(),
                 );
             }
+        } else if package_part_is_forbidden_active_content(&normalized) {
+            continue;
         } else {
             part_bytes.push((normalized, bytes));
         }
@@ -156,6 +158,13 @@ fn build_opaque_package_part_hints(
             }
         })
         .collect()
+}
+
+fn package_part_is_forbidden_active_content(path: &str) -> bool {
+    matches!(
+        crate::write::package_ownership::auxiliary_package_part_policy(path),
+        Some(crate::write::package_ownership::AuxiliaryPackagePartPolicy::ActiveForbidden)
+    )
 }
 
 fn build_raw_doc_props_hints(result: &FullParseResult) -> Vec<domain_types::RawDocPropsHint> {

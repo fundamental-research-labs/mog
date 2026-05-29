@@ -149,7 +149,7 @@ impl ResolvedPackageGraph {
         for hint in &metadata.content_type_defaults {
             let extension = hint.extension.to_ascii_lowercase();
             if emitted_default_extensions.contains(&extension)
-                || matches!(extension.as_str(), "rels" | "xml" | "bin")
+                || matches!(extension.as_str(), "rels" | "xml")
             {
                 content_types
                     .prefer_existing_default_content_type(&hint.extension, &hint.content_type);

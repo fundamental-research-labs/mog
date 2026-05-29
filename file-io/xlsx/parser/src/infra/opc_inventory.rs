@@ -136,6 +136,16 @@ fn collect_disposition_diagnostic(inventory: &mut OpcPackageInventory, path: &st
                 relationship_id: None,
             });
         }
+        Some(AuxiliaryPackagePartPolicy::ActiveQuarantined) => {
+            inventory.diagnostics.push(OpcInventoryDiagnostic {
+                code: "active_content_quarantined",
+                message: format!(
+                    "active package content is preserved without interpretation or execution: {path}"
+                ),
+                part: Some(path.to_string()),
+                relationship_id: None,
+            });
+        }
         Some(AuxiliaryPackagePartPolicy::UnsupportedNeedsModel) => {
             inventory.diagnostics.push(OpcInventoryDiagnostic {
                 code: "unsupported_needs_model_dropped",

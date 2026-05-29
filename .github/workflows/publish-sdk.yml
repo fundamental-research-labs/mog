@@ -61,11 +61,20 @@ jobs:
 
       - run: pnpm build:public-artifacts
 
-      - name: Guard production publishes to main
-        if: ${{ inputs.dry_run == 'false' && github.ref != 'refs/heads/main' }}
+      - name: Guard production publishes to release branch
+        if: ${{ inputs.dry_run == 'false' }}
+        working-directory: ${{ matrix.package_dir }}
         run: |
-          echo "Production publishes must be dispatched from main; got ${GITHUB_REF}."
-          exit 1
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            echo "Production publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            exit 1
+          fi
+          RELEASE_VERSION="${BASH_REMATCH[1]}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "${{ matrix.package_dir }} version ${PACKAGE_VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+            exit 1
+          fi
 
       - name: Publish package
         working-directory: ${{ matrix.package_dir }}

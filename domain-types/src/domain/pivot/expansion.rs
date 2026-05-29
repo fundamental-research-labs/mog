@@ -3,7 +3,7 @@
 //! Consolidated from `pivot-types/src/expansion.rs`.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use value_types::CellValue;
 
 use super::placement::PlacementId;
@@ -63,8 +63,8 @@ impl Serialize for PivotExpansionState {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("PivotExpansionState", 4)?;
-        state.serialize_field("expandedRows", &self.expanded_rows)?;
-        state.serialize_field("expandedColumns", &self.expanded_columns)?;
+        state.serialize_field("expandedRows", &sorted_set(&self.expanded_rows))?;
+        state.serialize_field("expandedColumns", &sorted_set(&self.expanded_columns))?;
         if !self.expanded_row_keys.is_empty() {
             state.serialize_field("expandedRowKeys", &self.expanded_row_keys)?;
         }
@@ -73,6 +73,10 @@ impl Serialize for PivotExpansionState {
         }
         state.end()
     }
+}
+
+fn sorted_set(set: &HashSet<String>) -> BTreeSet<&str> {
+    set.iter().map(String::as_str).collect()
 }
 
 // Custom Deserialize: accept both HashSet (array) and HashMap<String, bool> (legacy)
@@ -150,5 +154,22 @@ mod tests {
             state.expanded_row_keys[0].placement_id.as_str(),
             "row-region"
         );
+    }
+
+    #[test]
+    fn expansion_state_serializes_legacy_sets_in_stable_order() {
+        let mut state = PivotExpansionState::default();
+        state.expanded_rows.insert("1\x01T:vendor".to_string());
+        state.expanded_rows.insert("0\x01T:addback".to_string());
+        state.expanded_columns.insert("2025".to_string());
+        state.expanded_columns.insert("2024".to_string());
+
+        let json = serde_json::to_value(&state).expect("expansion state json");
+
+        assert_eq!(
+            json["expandedRows"],
+            serde_json::json!(["0\u{1}T:addback", "1\u{1}T:vendor"])
+        );
+        assert_eq!(json["expandedColumns"], serde_json::json!(["2024", "2025"]));
     }
 }

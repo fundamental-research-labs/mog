@@ -352,6 +352,7 @@ fn compute_with_show_values_as_invalid_config_returns_error() {
         allow_multiple_filters_per_field: None,
         auto_format: None,
         preserve_formatting: None,
+        data_on_rows: None,
         cache_id: None,
         ref_range: None,
         first_data_row: None,

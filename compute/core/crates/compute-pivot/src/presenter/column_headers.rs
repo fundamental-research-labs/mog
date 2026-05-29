@@ -4,7 +4,7 @@ use compute_relational::AggregatedNode;
 use value_types::CellValue;
 
 use crate::engine::VALUES_FIELD_KEY;
-use crate::resolved::{ResolvedAxisPlacement, ResolvedValuePlacement};
+use crate::resolved::{ResolvedAxisPlacement, ResolvedCalculatedField, ResolvedValuePlacement};
 use crate::types::{FieldId, PivotColumnHeader, PivotHeader};
 
 use super::visibility::{
@@ -16,38 +16,20 @@ pub(super) fn build_column_headers(
     column_tree: &[AggregatedNode],
     column_placements: &[ResolvedAxisPlacement],
     value_placements: &[ResolvedValuePlacement],
+    calculated_fields: &[ResolvedCalculatedField],
     expanded_set: Option<&HashSet<String>>,
 ) -> Vec<PivotColumnHeader> {
     let mut headers: Vec<PivotColumnHeader> = Vec::new();
+    let value_headers = measure_headers(value_placements, calculated_fields);
+    let measure_count = value_headers.len();
 
     if column_placements.is_empty() {
-        if !value_placements.is_empty() {
+        if !value_headers.is_empty() {
             headers.push(PivotColumnHeader {
                 field_id: FieldId::from(VALUES_FIELD_KEY),
-                headers: value_placements
-                    .iter()
-                    .map(|vp| {
-                        let display = vp.display_name().unwrap_or("");
-                        let value_str = if display.is_empty() {
-                            let agg = format!("{:?}", vp.aggregate_function()).to_lowercase();
-                            format!("{} of {}", agg, vp.field_id())
-                        } else {
-                            display.to_string()
-                        };
-                        PivotHeader {
-                            key: format!("value_{}", vp.field_id()),
-                            value: CellValue::Text(value_str.into()),
-                            field_id: vp.field_id().clone(),
-                            depth: 0,
-                            span: 1,
-                            is_expandable: false,
-                            is_expanded: true,
-                            is_subtotal: false,
-                            is_grand_total: false,
-                            parent_key: None,
-                            child_keys: None,
-                        }
-                    })
+                headers: value_headers
+                    .into_iter()
+                    .map(|header| header.into_pivot_header(0, None))
                     .collect(),
             });
         }
@@ -65,7 +47,7 @@ pub(super) fn build_column_headers(
                 } else {
                     1
                 };
-                let span = leaf_count * value_placements.len().max(1);
+                let span = leaf_count * measure_count.max(1);
 
                 let value = if node.value == CellValue::Null {
                     CellValue::Text("(blank)".into())
@@ -94,31 +76,15 @@ pub(super) fn build_column_headers(
         });
     }
 
-    if value_placements.len() > 1 {
+    if measure_count > 1 {
         let leaves = get_visible_leaves(column_tree, expanded_set);
         let mut value_headers: Vec<PivotHeader> = Vec::new();
 
         for leaf in &leaves {
-            for vp in value_placements {
-                let display = vp.display_name().unwrap_or("");
-                let value_str = if display.is_empty() {
-                    format!("{:?}", vp.aggregate_function()).to_lowercase()
-                } else {
-                    display.to_string()
-                };
-                value_headers.push(PivotHeader {
-                    key: format!("{}\x00value_{}", leaf.key, vp.field_id()),
-                    value: CellValue::Text(value_str.into()),
-                    field_id: vp.field_id().clone(),
-                    depth: column_placements.len(),
-                    span: 1,
-                    is_expandable: false,
-                    is_expanded: true,
-                    is_subtotal: false,
-                    is_grand_total: false,
-                    parent_key: Some(leaf.key.clone()),
-                    child_keys: None,
-                });
+            for header in measure_headers(value_placements, calculated_fields) {
+                value_headers.push(
+                    header.into_pivot_header(column_placements.len(), Some(leaf.key.clone())),
+                );
             }
         }
 
@@ -128,6 +94,60 @@ pub(super) fn build_column_headers(
         });
     }
 
+    headers
+}
+
+struct MeasureHeader {
+    key: String,
+    value: String,
+    field_id: FieldId,
+}
+
+impl MeasureHeader {
+    fn into_pivot_header(self, depth: usize, parent_key: Option<String>) -> PivotHeader {
+        PivotHeader {
+            key: match &parent_key {
+                Some(parent) => format!("{parent}\x00{}", self.key),
+                None => self.key,
+            },
+            value: CellValue::Text(self.value.into()),
+            field_id: self.field_id,
+            depth,
+            span: 1,
+            is_expandable: false,
+            is_expanded: true,
+            is_subtotal: false,
+            is_grand_total: false,
+            parent_key,
+            child_keys: None,
+        }
+    }
+}
+
+fn measure_headers(
+    value_placements: &[ResolvedValuePlacement],
+    calculated_fields: &[ResolvedCalculatedField],
+) -> Vec<MeasureHeader> {
+    let mut headers = Vec::with_capacity(value_placements.len() + calculated_fields.len());
+    headers.extend(value_placements.iter().map(|vp| {
+        let display = vp.display_name().unwrap_or("");
+        let value = if display.is_empty() {
+            let agg = format!("{:?}", vp.aggregate_function()).to_lowercase();
+            format!("{} of {}", agg, vp.field_id())
+        } else {
+            display.to_string()
+        };
+        MeasureHeader {
+            key: format!("value_{}", vp.field_id()),
+            value,
+            field_id: vp.field_id().clone(),
+        }
+    }));
+    headers.extend(calculated_fields.iter().map(|cf| MeasureHeader {
+        key: format!("value_{}", cf.field_id()),
+        value: cf.name().to_string(),
+        field_id: cf.field_id().clone(),
+    }));
     headers
 }
 
@@ -167,8 +187,13 @@ mod tests {
 
     #[test]
     fn blank_column_group_values_render_as_blank_text() {
-        let headers =
-            build_column_headers(&[node(CellValue::Null)], &[axis_placement()], &[], None);
+        let headers = build_column_headers(
+            &[node(CellValue::Null)],
+            &[axis_placement()],
+            &[],
+            &[],
+            None,
+        );
 
         assert_eq!(
             headers[0].headers[0].value,
@@ -188,12 +213,50 @@ mod tests {
             show_values_as: None,
         }];
 
-        let headers = build_column_headers(&[], &[], &values, None);
+        let headers = build_column_headers(&[], &[], &values, &[], None);
 
         assert_eq!(headers[0].headers[0].key, "value_sales");
         assert_eq!(
             headers[0].headers[0].value,
             CellValue::Text("sum of sales".into())
+        );
+    }
+
+    #[test]
+    fn calculated_fields_extend_value_header_width() {
+        let values = [
+            ResolvedValuePlacement {
+                field_id: FieldId::from("revenue"),
+                column_index: 1,
+                position: 0,
+                display_name: Some("Revenue".to_string()),
+                aggregate_function: AggregateFunction::Sum,
+                number_format: None,
+                show_values_as: None,
+            },
+            ResolvedValuePlacement {
+                field_id: FieldId::from("cost"),
+                column_index: 2,
+                position: 1,
+                display_name: Some("Cost".to_string()),
+                aggregate_function: AggregateFunction::Sum,
+                number_format: None,
+                show_values_as: None,
+            },
+        ];
+        let calculated = [ResolvedCalculatedField {
+            field_id: FieldId::from("profit"),
+            name: "Profit".to_string(),
+            formula: "Revenue - Cost".to_string(),
+            parsed_expr: crate::calc_field::parse_calc_field("Revenue - Cost").unwrap(),
+        }];
+
+        let headers = build_column_headers(&[], &[], &values, &calculated, None);
+
+        assert_eq!(headers[0].headers.len(), 3);
+        assert_eq!(
+            headers[0].headers[2].value,
+            CellValue::Text("Profit".into())
         );
     }
 }

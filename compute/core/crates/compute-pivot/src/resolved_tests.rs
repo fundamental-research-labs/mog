@@ -122,6 +122,7 @@ fn make_basic_config() -> PivotTableConfig {
         allow_multiple_filters_per_field: None,
         auto_format: None,
         preserve_formatting: None,
+        data_on_rows: None,
         cache_id: None,
         ref_range: None,
         first_data_row: None,

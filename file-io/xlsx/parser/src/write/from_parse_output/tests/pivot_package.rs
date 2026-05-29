@@ -392,6 +392,109 @@ fn named_table_pivot_cache_source_regenerates_from_live_table_and_keeps_shared_i
 }
 
 #[test]
+fn named_table_pivot_cache_source_resolves_unique_live_table_prefix() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "xlsx-source-sheet",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.sheets[0].tables.push(domain_types::TableSpec {
+        name: "Table714212835453111929384756311412233173177".to_string(),
+        display_name: "Table714212835453111929384756311412233173177".to_string(),
+        range_ref: "A1:C3".to_string(),
+        ..Default::default()
+    });
+    output.pivot_tables[0].ooxml_preservation.cache_source_name =
+        Some("Table7142128".to_string());
+    output
+        .pivot_cache_sources
+        .push(domain_types::PivotCacheSourceDef {
+            cache_id: 11,
+            workbook_ref_scope: Default::default(),
+            source_name: Some("Table7142128".to_string()),
+            source_sheet: None,
+            source_range: None,
+            field_names: vec!["Category".to_string(), "Amount".to_string()],
+            shared_items: vec![
+                vec![
+                    DomainValue::Text(Arc::from("B")),
+                    DomainValue::Text(Arc::from("A")),
+                ],
+                vec![
+                    DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+                    DomainValue::Number(FiniteF64::new(20.0).unwrap()),
+                ],
+            ],
+        });
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let definition_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheDefinition1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(definition_xml.contains("<worksheetSource name=\"Table7142128\"/>"));
+    assert!(definition_xml.contains("<cacheFields count=\"2\">"));
+    assert!(
+        definition_xml.contains("<sharedItems count=\"2\"><s v=\"B\"/><s v=\"A\"/></sharedItems>")
+    );
+    assert!(records_xml.contains("count=\"2\""));
+    assert!(records_xml.contains("<x v=\"1\"/><n v=\"10\"/>"));
+    assert!(records_xml.contains("<x v=\"0\"/><n v=\"20\"/>"));
+}
+
+#[test]
+fn named_table_pivot_cache_source_does_not_guess_ambiguous_live_table_prefix() {
+    let mut output = pivot_package_output(vec![make_pivot_config(
+        "pivot-1",
+        "PivotTable1",
+        "xlsx-source-sheet",
+        cell_types::SheetRange::new(0, 0, 2, 1),
+        "Pivot",
+        Some(11),
+    )]);
+    output.sheets[0].tables.push(domain_types::TableSpec {
+        name: "Table7142128Alpha".to_string(),
+        display_name: "Table7142128Alpha".to_string(),
+        range_ref: "A1:B3".to_string(),
+        ..Default::default()
+    });
+    output.sheets[0].tables.push(domain_types::TableSpec {
+        name: "Table7142128Beta".to_string(),
+        display_name: "Table7142128Beta".to_string(),
+        range_ref: "A5:B7".to_string(),
+        ..Default::default()
+    });
+    output.pivot_tables[0].ooxml_preservation.cache_source_name =
+        Some("Table7142128".to_string());
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let records_xml = String::from_utf8(
+        archive
+            .read_file("xl/pivotCache/pivotCacheRecords1.xml")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(records_xml.contains("count=\"0\""));
+    assert!(!records_xml.contains("<n v=\"10\"/>"));
+    assert!(!records_xml.contains("<n v=\"20\"/>"));
+}
+
+#[test]
 fn pivot_table_xml_uses_modeled_layout_style_location_and_items() {
     let mut config = make_pivot_config(
         "pivot-1",

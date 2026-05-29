@@ -32,13 +32,23 @@ pub(super) fn build_cache(
 
         if let Some((sheet_idx, range_ref)) = resolve_named_source(sheets, source_name) {
             let sheet = &sheets[sheet_idx];
-            if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
+            if let Some((start_row, start_col, end_row, mut end_col)) = parse_range(range_ref) {
+                if !cache_src.field_names.is_empty() {
+                    let schema_end_col = start_col
+                        .saturating_add(cache_src.field_names.len() as u32)
+                        .saturating_sub(1);
+                    end_col = end_col.min(schema_end_col);
+                }
                 let (fields, records) = extract_cache_data(
                     sheet,
-                    start_row,
-                    start_col,
-                    end_row,
-                    end_col,
+                    CacheExtractionRange {
+                        start_row,
+                        start_col,
+                        end_row,
+                        end_col,
+                        schema_num_cols: (!cache_src.field_names.is_empty())
+                            .then_some(cache_src.field_names.len()),
+                    },
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
@@ -69,10 +79,13 @@ pub(super) fn build_cache(
             if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
                 let (fields, records) = extract_cache_data(
                     sheet,
-                    start_row,
-                    start_col,
-                    end_row,
-                    end_col,
+                    CacheExtractionRange {
+                        start_row,
+                        start_col,
+                        end_row,
+                        end_col,
+                        schema_num_cols: None,
+                    },
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
@@ -100,12 +113,24 @@ fn resolve_named_source<'a>(
     sheets: &'a [SheetData],
     source_name: &str,
 ) -> Option<(usize, &'a str)> {
-    sheets.iter().enumerate().find_map(|(sheet_idx, sheet)| {
+    let exact = sheets.iter().enumerate().find_map(|(sheet_idx, sheet)| {
         sheet.tables.iter().find_map(|table| {
             (table.name == source_name || table.display_name == source_name)
                 .then_some((sheet_idx, table.range_ref.as_str()))
         })
-    })
+    });
+    if exact.is_some() {
+        return exact;
+    }
+
+    let mut prefix_matches = sheets.iter().enumerate().flat_map(|(sheet_idx, sheet)| {
+        sheet.tables.iter().filter_map(move |table| {
+            (table.name.starts_with(source_name) || table.display_name.starts_with(source_name))
+                .then_some((sheet_idx, table.range_ref.as_str()))
+        })
+    });
+    let first = prefix_matches.next()?;
+    prefix_matches.next().is_none().then_some(first)
 }
 
 fn cell_value_to_cache_record_item(
@@ -168,33 +193,41 @@ fn cell_value_to_shared_item(value: &CellValue) -> SharedItem {
 }
 
 /// Extract cache field definitions and record rows from sheet cell data.
-fn extract_cache_data(
-    sheet: &SheetData,
+#[derive(Clone, Copy)]
+struct CacheExtractionRange {
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
+    schema_num_cols: Option<usize>,
+}
+
+fn extract_cache_data(
+    sheet: &SheetData,
+    range: CacheExtractionRange,
     cache_field_names: &[String],
     seed_shared_items: &[Vec<CellValue>],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
-    let source_num_cols = (end_col - start_col + 1) as usize;
-    let num_cols = source_num_cols
-        .max(cache_field_names.len())
-        .max(seed_shared_items.len());
+    let source_num_cols = (range.end_col - range.start_col + 1) as usize;
+    let num_cols = range.schema_num_cols.unwrap_or_else(|| {
+        source_num_cols
+            .max(cache_field_names.len())
+            .max(seed_shared_items.len())
+    });
 
     let mut cell_map: HashMap<(u32, u32), &CellValue> = HashMap::new();
     for cell in &sheet.cells {
-        if cell.row >= start_row
-            && cell.row <= end_row
-            && cell.col >= start_col
-            && cell.col <= end_col
+        if cell.row >= range.start_row
+            && cell.row <= range.end_row
+            && cell.col >= range.start_col
+            && cell.col <= range.end_col
         {
             cell_map.insert((cell.row, cell.col), &cell.value);
         }
     }
 
-    let data_start = start_row + 1;
-    let data_end = end_row;
+    let data_start = range.start_row + 1;
+    let data_end = range.end_row;
     let (mut field_shared_items, mut field_value_indices) =
         seeded_shared_items(num_cols, seed_shared_items);
     let mut records: Vec<Vec<SharedItem>> = Vec::new();
@@ -202,7 +235,7 @@ fn extract_cache_data(
     for row in data_start..=data_end {
         let mut record = Vec::with_capacity(num_cols);
         for col_offset in 0..num_cols {
-            let col = start_col + col_offset as u32;
+            let col = range.start_col + col_offset as u32;
             let value = (col_offset < source_num_cols)
                 .then(|| cell_map.get(&(row, col)).copied())
                 .flatten();

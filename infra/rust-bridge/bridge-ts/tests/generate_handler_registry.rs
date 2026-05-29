@@ -131,7 +131,7 @@ fn bridge_source_files() -> Vec<String> {
         format!("{}/compute/core/src/storage/engine/delegations.rs", base),
         format!("{}/compute/core/src/storage/engine/viewport/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/queries.rs", base),
-        format!("{}/compute/core/src/storage/engine/structural.rs", base),
+        format!("{}/compute/core/src/storage/engine/structural/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/formatting/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
         format!("{}/compute/core/src/storage/engine/features/mod.rs", base),

@@ -31,7 +31,6 @@
     "bench": "cargo bench",
     "gate:ooxml-contract": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- ooxml-contract",
     "gate:package-graph": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- package-graph",
-    "gate:l2-contract": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- l2-contract",
     "gate:corpus-smoke": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- corpus-smoke",
     "gate:corpus-anti-cheat": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- corpus-anti-cheat",
     "gate:corpus-golden": "cd ../../.. && cargo run -p xlsx-parser --bin xlsx-gate --features cli -- corpus-golden",

@@ -20,7 +20,6 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 
 - `ooxml-contract`
 - `package-graph`
-- `l2-contract`
 - `corpus-smoke`
 - `corpus-anti-cheat`
 - `corpus-golden`
@@ -29,8 +28,8 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 - `corpus-full`
 - `perf-full`
 
-Phase 0 implements the `package-graph` archive adapter and publishes explicit
-`not implemented` stubs for the lane-owned gates.
+Phase 0 implements the `package-graph` archive adapter and performance gates,
+and publishes explicit `not implemented` stubs for corpus-owned gates.
 
 ## Lane E Rollout Surface
 

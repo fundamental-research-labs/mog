@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 pub enum GateName {
     OoxmlContract,
     PackageGraph,
-    L2Contract,
     CorpusSmoke,
     CorpusAntiCheat,
     CorpusGolden,
@@ -21,7 +20,6 @@ impl GateName {
     pub const ALL: &'static [GateName] = &[
         GateName::OoxmlContract,
         GateName::PackageGraph,
-        GateName::L2Contract,
         GateName::CorpusSmoke,
         GateName::CorpusAntiCheat,
         GateName::CorpusGolden,
@@ -35,7 +33,6 @@ impl GateName {
         match self {
             GateName::OoxmlContract => "ooxml-contract",
             GateName::PackageGraph => "package-graph",
-            GateName::L2Contract => "l2-contract",
             GateName::CorpusSmoke => "corpus-smoke",
             GateName::CorpusAntiCheat => "corpus-anti-cheat",
             GateName::CorpusGolden => "corpus-golden",
@@ -50,7 +47,6 @@ impl GateName {
         match self {
             GateName::OoxmlContract
             | GateName::PackageGraph
-            | GateName::L2Contract
             | GateName::CorpusSmoke
             | GateName::PerfSmoke => GateTier::Smoke,
             GateName::CorpusAntiCheat | GateName::CorpusGolden | GateName::PerfGolden => {
@@ -68,7 +64,6 @@ impl std::str::FromStr for GateName {
         match value {
             "ooxml-contract" => Ok(GateName::OoxmlContract),
             "package-graph" => Ok(GateName::PackageGraph),
-            "l2-contract" => Ok(GateName::L2Contract),
             "corpus-smoke" => Ok(GateName::CorpusSmoke),
             "corpus-anti-cheat" => Ok(GateName::CorpusAntiCheat),
             "corpus-golden" => Ok(GateName::CorpusGolden),
@@ -158,7 +153,6 @@ impl GateName {
         match self {
             GateName::PackageGraph => GateProducer::LaneAOpcOwnership,
             GateName::OoxmlContract => GateProducer::LaneBContractMatrix,
-            GateName::L2Contract => GateProducer::LaneBContractMatrix,
             GateName::CorpusSmoke | GateName::CorpusAntiCheat | GateName::CorpusGolden => {
                 GateProducer::LaneCCorpusAntiCheat
             }
@@ -175,7 +169,6 @@ impl GateName {
             GateName::PackageGraph => {
                 "cargo run -p xlsx-parser --bin xlsx-gate --features cli -- package-graph <input.xlsx>"
             }
-            GateName::L2Contract => "cargo test -p compute-core xlsx_contract",
             GateName::CorpusSmoke => "pnpm --filter @mog/xlsx-parser-wasm run gate:corpus-smoke",
             GateName::CorpusAntiCheat => {
                 "pnpm --filter @mog/xlsx-parser-wasm run gate:corpus-anti-cheat"
@@ -196,7 +189,7 @@ impl GateName {
             | GateName::CorpusGolden
             | GateName::CorpusFull => vec!["corpus_root_or_manifest".to_string()],
             GateName::PerfSmoke | GateName::PerfGolden | GateName::PerfFull => Vec::new(),
-            GateName::OoxmlContract | GateName::L2Contract => Vec::new(),
+            GateName::OoxmlContract => Vec::new(),
         }
     }
 
@@ -204,7 +197,6 @@ impl GateName {
         match self {
             GateName::OoxmlContract => "generated OOXML contract fixtures",
             GateName::PackageGraph => "OPC relationship and content type integrity",
-            GateName::L2Contract => "production import, storage, and export persistence",
             GateName::CorpusSmoke => "quick real-file correctness",
             GateName::CorpusAntiCheat => "mutation and context replay rejection",
             GateName::CorpusGolden => "curated real-file correctness budgets",
@@ -331,17 +323,10 @@ impl std::str::FromStr for GateSuiteName {
 
 pub fn gate_suite_contract(suite: GateSuiteName) -> GateSuiteContract {
     let gates = match suite {
-        GateSuiteName::LocalSmoke => vec![
-            GateName::OoxmlContract,
-            GateName::PackageGraph,
-            GateName::L2Contract,
-            GateName::CorpusSmoke,
-            GateName::PerfSmoke,
-        ],
+        GateSuiteName::LocalSmoke => vec![GateName::OoxmlContract, GateName::PerfSmoke],
         GateSuiteName::CiGolden => vec![
             GateName::OoxmlContract,
             GateName::PackageGraph,
-            GateName::L2Contract,
             GateName::CorpusSmoke,
             GateName::CorpusAntiCheat,
             GateName::CorpusGolden,

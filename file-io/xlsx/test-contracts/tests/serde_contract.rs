@@ -217,15 +217,10 @@ fn rollout_suites_publish_local_ci_and_autonomous_gate_sets() {
 }
 
 #[test]
-fn rollout_readiness_blocks_unimplemented_and_unapproved_heavy_gates() {
+fn rollout_readiness_accepts_local_smoke_and_blocks_unapproved_heavy_gates() {
     let smoke = gate_suite_readiness(GateSuiteName::LocalSmoke, false);
-    assert!(!smoke.runnable);
-    assert!(
-        smoke
-            .blockers
-            .iter()
-            .any(|blocker| blocker.code == "gate-not-implemented")
-    );
+    assert!(smoke.runnable);
+    assert!(smoke.blockers.is_empty());
 
     let full_without_heavy = gate_suite_readiness(GateSuiteName::AutonomousFull, false);
     assert!(

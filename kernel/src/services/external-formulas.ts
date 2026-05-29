@@ -38,6 +38,35 @@ export function trackExternalFormulaWrite(
   }
 }
 
+export async function prepareExternalFormulaWrite(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: unknown,
+): Promise<unknown> {
+  trackExternalFormulaWrite(ctx, sheetId, row, col, value);
+  if (
+    typeof value !== 'string' ||
+    !value.startsWith('=') ||
+    parseExternalRefs(value).length === 0
+  ) {
+    return value;
+  }
+  return materializeFormula(ctx, value);
+}
+
+export function maskExternalFormulaRefsForValidation(formula: string): string {
+  const refs = parseExternalRefs(formula);
+  if (refs.length === 0) return formula;
+
+  let out = formula;
+  for (const ref of refs.sort((a, b) => b.start - a.start)) {
+    out = `${out.slice(0, ref.start)}0${out.slice(ref.end)}`;
+  }
+  return out;
+}
+
 export async function materializeExternalFormulas(ctx: DocumentContext): Promise<number> {
   const formulas = formulasByContext.get(ctx);
   if (!formulas || formulas.size === 0) return 0;

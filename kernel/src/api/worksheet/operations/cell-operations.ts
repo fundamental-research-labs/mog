@@ -36,7 +36,7 @@ import { isValidAddress } from '../../internal/utils';
 import { invalidateWorksheetValidationCache } from '../validation-cache';
 import { calendarPartsInTz } from './calendar-tz';
 import { type CellInput, toCellInput } from './cell-input';
-import { trackExternalFormulaWrite } from '../../../services/external-formulas';
+import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 
 // =============================================================================
 // Cell Read Operations
@@ -289,12 +289,12 @@ export async function setCell(
     throw KernelError.from(null, 'COMPUTE_ERROR', `Invalid cell address: row=${row}, col=${col}`);
   }
 
-  // Convert value to a typed CellInput for Rust — no in-band sentinels.
-  const input = toCellInput(value);
-
   // Tell the change accumulator which cells are being directly written
   ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits([{ sheetId, row, col }]);
-  trackExternalFormulaWrite(ctx, sheetId, row, col, value);
+  const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+
+  // Convert value to a typed CellInput for Rust — no in-band sentinels.
+  const input = toCellInput(preparedValue as CellValuePrimitive);
   // Single-element batch — Rust handles CellId resolution, recalc, AND
   // locale-aware date format inference (e.g. "3/15/2024" → number value +
   // M/d/yyyy format applied atomically inside the mutation pipeline).
@@ -456,13 +456,15 @@ export async function setCells(
     if (value instanceof Date) {
       // Last-write-wins across both paths: a later date overwrites an earlier
       // string write at the same coord (and vice versa).
+      await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
       deduped.delete(key);
       dateWrites.set(key, { row, col, date: value });
       continue;
     }
 
     // Normalise value the same way setCell does.
-    const input = toCellInput(value);
+    const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+    const input = toCellInput(preparedValue as CellValuePrimitive);
 
     // Last-write-wins: later entries overwrite earlier ones for the same position
     dateWrites.delete(key);

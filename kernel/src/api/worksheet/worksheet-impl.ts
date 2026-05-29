@@ -73,6 +73,7 @@ import type {
   SpreadsheetEvent,
 } from '@mog-sdk/contracts/events';
 import type { AutoFillMode, AutoFillResult, FillSeriesOptions } from '@mog-sdk/contracts/fill';
+import { maskExternalFormulaRefsForValidation } from '../../services/external-formulas';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 import { KernelError, toMogSdkError } from '../../errors';
@@ -1302,7 +1303,11 @@ export class WorksheetImpl implements Worksheet {
   }
 
   async validateFormulaSyntax(formula: string): Promise<FormulaSyntaxValidationError | null> {
-    const result = await this.ctx.computeBridge.validateFormulaSyntax(this.sheetId, formula);
+    const validationFormula = maskExternalFormulaRefsForValidation(formula);
+    const result = await this.ctx.computeBridge.validateFormulaSyntax(
+      this.sheetId,
+      validationFormula,
+    );
     if (!result) return null;
     const [errorMessage, errorPosition] = result;
     return {
@@ -1316,7 +1321,12 @@ export class WorksheetImpl implements Worksheet {
     row: number,
     col: number,
   ): Promise<FormulaCircularReferenceValidation | null> {
-    return this.ctx.computeBridge.validateFormulaCircularReference(this.sheetId, row, col, formula);
+    return this.ctx.computeBridge.validateFormulaCircularReference(
+      this.sheetId,
+      row,
+      col,
+      maskExternalFormulaRefsForValidation(formula),
+    );
   }
 
   // ===========================================================================

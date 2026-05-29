@@ -15,6 +15,7 @@ import { KernelError } from '../../../errors';
 import { normalizeRange } from '../../internal/utils';
 
 import { normalizeCellValue } from '../../internal/value-conversions';
+import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
@@ -207,10 +208,11 @@ export async function setRange(
       const row = startRow + r;
       const col = startCol + c;
       const value = values[r][c];
+      const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
       // Route every SDK value through the shared helper so the
       // Literal/Parse/Clear distinction is preserved structurally — no
       // in-band \x00 sentinels.
-      edits.push({ row, col, input: toCellInput(value) });
+      edits.push({ row, col, input: toCellInput(preparedValue as CellValuePrimitive) });
     }
   }
 

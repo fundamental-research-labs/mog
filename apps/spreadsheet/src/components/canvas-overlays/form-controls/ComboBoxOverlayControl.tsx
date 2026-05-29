@@ -26,6 +26,10 @@ export interface ComboBoxOverlayControlProps {
   control: ComboBoxControl;
   /** Current value from the linked cell */
   cellValue: unknown;
+  /** Rendered width after resolving the anchor cell's current geometry */
+  width: number;
+  /** Rendered height after resolving the anchor cell's current geometry */
+  height: number;
   /** Resolved items (from static items or dynamic range) */
   resolvedItems: string[];
   /** Callback to write a value to the linked cell */
@@ -45,6 +49,8 @@ export interface ComboBoxOverlayControlProps {
 export const ComboBoxOverlayControl = memo(function ComboBoxOverlayControl({
   control,
   cellValue,
+  width,
+  height,
   resolvedItems,
   onCellValueChange,
 }: ComboBoxOverlayControlProps) {
@@ -79,8 +85,8 @@ export const ComboBoxOverlayControl = memo(function ComboBoxOverlayControl({
     <div
       style={{
         position: 'relative',
-        width: control.width,
-        height: control.height,
+        width,
+        height,
         pointerEvents: 'auto',
       }}
       data-testid={`form-control-combobox-${control.id}`}

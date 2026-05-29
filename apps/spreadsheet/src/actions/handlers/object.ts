@@ -54,10 +54,6 @@ const DEFAULT_PICTURE_WIDTH = 200;
 const DEFAULT_PICTURE_HEIGHT = 150;
 const DEFAULT_TEXTBOX_WIDTH = 150;
 const DEFAULT_TEXTBOX_HEIGHT = 75;
-const DEFAULT_CHECKBOX_WIDTH = 96;
-const DEFAULT_CHECKBOX_HEIGHT = 20;
-const DEFAULT_COMBOBOX_WIDTH = 140;
-const DEFAULT_COMBOBOX_HEIGHT = 28;
 
 // =============================================================================
 // Type Helpers
@@ -844,11 +840,7 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
     await ws.formControls.addCheckbox({
       anchor: position,
       linkedCell: position,
-      label: 'Check Box',
-      width: DEFAULT_CHECKBOX_WIDTH,
-      height: DEFAULT_CHECKBOX_HEIGHT,
     });
-    await ws.setCell(position.row, position.col, false);
     return handled();
   } catch (err) {
     if (isProtectionRejection(err)) {
@@ -881,8 +873,6 @@ export const INSERT_FORM_CONTROL_COMBOBOX: AsyncActionHandler = async (
       linkedCell: position,
       items: ['Option 1', 'Option 2', 'Option 3'],
       placeholder: 'Select',
-      width: DEFAULT_COMBOBOX_WIDTH,
-      height: DEFAULT_COMBOBOX_HEIGHT,
     });
     return handled();
   } catch (err) {

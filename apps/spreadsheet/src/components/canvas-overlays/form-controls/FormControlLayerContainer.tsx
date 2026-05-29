@@ -75,6 +75,8 @@ export function FormControlLayerContainer() {
       ws.on('formControl:updated', bump),
       ws.on('formControl:deleted', bump),
       ws.on('cellChanged', bump),
+      ws.on('row:height-changed', bump),
+      ws.on('column:width-changed', bump),
     ];
 
     return () => {
@@ -162,6 +164,10 @@ export function FormControlLayerContainer() {
 
 interface GeometryLike {
   toViewportPoint: (cell: { row: number; col: number }) => { x: number; y: number } | null;
+  getCellRect?: (cell: {
+    row: number;
+    col: number;
+  }) => { x: number; y: number; width: number; height: number } | null;
 }
 
 interface ViewportLike {
@@ -202,9 +208,15 @@ async function resolveControlPositions(
       col: anchorPosition.col,
     });
     if (!viewportPoint) continue;
+    const anchorRect = geometry.getCellRect?.({
+      row: anchorPosition.row,
+      col: anchorPosition.col,
+    });
 
     const x = viewportPoint.x + scrollPosition.x + (control.anchor.xOffset ?? 0);
     const y = viewportPoint.y + scrollPosition.y + (control.anchor.yOffset ?? 0);
+    const width = anchorRect?.width ?? control.width;
+    const height = anchorRect?.height ?? control.height;
 
     let cellValue: unknown;
     let resolvedItems: string[] | undefined;
@@ -227,7 +239,7 @@ async function resolveControlPositions(
       }
     }
 
-    resolved.push({ control, x, y, cellValue, resolvedItems });
+    resolved.push({ control, x, y, width, height, cellValue, resolvedItems });
   }
 
   return resolved;

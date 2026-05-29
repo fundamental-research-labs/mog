@@ -229,11 +229,8 @@ describe('object picture handlers', () => {
       expect(checkboxAdd).toHaveBeenCalledWith({
         anchor: { row: 0, col: 0 },
         linkedCell: { row: 0, col: 0 },
-        label: 'Check Box',
-        width: 96,
-        height: 20,
       });
-      expect(setCell).toHaveBeenCalledWith(0, 0, false);
+      expect(setCell).not.toHaveBeenCalled();
       expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
     });
 
@@ -249,8 +246,6 @@ describe('object picture handlers', () => {
         linkedCell: { row: 0, col: 0 },
         items: ['Option 1', 'Option 2', 'Option 3'],
         placeholder: 'Select',
-        width: 140,
-        height: 28,
       });
       expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
     });

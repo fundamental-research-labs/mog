@@ -41,6 +41,10 @@ export interface ResolvedFormControl {
   y: number;
   /** Current value from the linked cell */
   cellValue: unknown;
+  /** Rendered width after resolving the anchor cell's current geometry */
+  width: number;
+  /** Rendered height after resolving the anchor cell's current geometry */
+  height: number;
   /** Resolved items for comboBox controls (from static or dynamic source) */
   resolvedItems?: string[];
 }
@@ -67,7 +71,7 @@ interface ControlRendererProps {
  */
 const ControlRenderer = memo(
   function ControlRenderer({ resolved, onCellValueChange }: ControlRendererProps) {
-    const { control, x, y, cellValue, resolvedItems } = resolved;
+    const { control, x, y, cellValue, width, height, resolvedItems } = resolved;
 
     let content: React.ReactNode;
 
@@ -77,6 +81,8 @@ const ControlRenderer = memo(
           <CheckboxOverlayControl
             control={control}
             cellValue={cellValue}
+            width={width}
+            height={height}
             onCellValueChange={onCellValueChange}
           />
         );
@@ -97,6 +103,8 @@ const ControlRenderer = memo(
           <ComboBoxOverlayControl
             control={control}
             cellValue={cellValue}
+            width={width}
+            height={height}
             resolvedItems={resolvedItems ?? control.items ?? []}
             onCellValueChange={onCellValueChange}
           />
@@ -135,6 +143,8 @@ const ControlRenderer = memo(
       prev.resolved.control === next.resolved.control &&
       prev.resolved.x === next.resolved.x &&
       prev.resolved.y === next.resolved.y &&
+      prev.resolved.width === next.resolved.width &&
+      prev.resolved.height === next.resolved.height &&
       prev.resolved.cellValue === next.resolved.cellValue &&
       prev.resolved.resolvedItems === next.resolved.resolvedItems
     );

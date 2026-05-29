@@ -25,6 +25,10 @@ export interface CheckboxOverlayControlProps {
   control: CheckboxControl;
   /** Current value from the linked cell */
   cellValue: unknown;
+  /** Rendered width after resolving the anchor cell's current geometry */
+  width: number;
+  /** Rendered height after resolving the anchor cell's current geometry */
+  height: number;
   /** Callback to write a value to the linked cell */
   onCellValueChange: (controlId: string, value: unknown) => void;
 }
@@ -58,6 +62,8 @@ function isChecked(value: unknown): boolean {
 export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
   control,
   cellValue,
+  width,
+  height,
   onCellValueChange,
 }: CheckboxOverlayControlProps) {
   const checked = isChecked(cellValue);
@@ -81,9 +87,11 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
     <div
       className="flex items-center gap-1"
       style={{
-        width: control.width,
-        height: control.height,
+        width,
+        height,
         pointerEvents: 'auto',
+        justifyContent: control.label ? 'flex-start' : 'center',
+        overflow: 'hidden',
       }}
       data-testid={`form-control-checkbox-${control.id}`}
     >
@@ -110,7 +118,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
           className="text-xs select-none truncate"
           style={{
             color: control.enabled ? '#333' : '#999',
-            lineHeight: `${control.height}px`,
+            lineHeight: `${height}px`,
           }}
         >
           {control.label}

@@ -429,10 +429,12 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
           outputSheetName: sheetName,
           outputLocation: { row: 0, col: 0 },
         });
+        const outputSheetId = toSheetId(result.sheetId);
+        await wb.getSheetById(outputSheetId).pivots.refresh(result.config.name);
 
         return {
           config: result.config,
-          outputSheetId: toSheetId(result.sheetId),
+          outputSheetId,
         };
       } else {
         // =====================================================================
@@ -457,6 +459,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
           outputSheetName: targetSheetName,
           outputLocation: targetCell,
         });
+        await targetWs.pivots.refresh(config.name);
 
         return {
           config,

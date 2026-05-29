@@ -92,8 +92,7 @@ import { ToastRenderer } from '../notifications';
 import { CanvasInteractiveOverlay, OutlineToggleOverlay } from '../canvas-overlays';
 import { ViewportTableDataProvider } from './providers/ViewportTableDataProvider';
 // Extracted editor components
-import { CellContextMenu } from '../context-menu/CellContextMenu';
-import { ObjectContextMenu } from '../context-menu/ObjectContextMenu';
+import { GridContextMenuContent } from '../context-menu/GridContextMenuContent';
 import { ContextMenu, ContextMenuTrigger } from '@mog/shell/components/ui';
 import { AUTO_SCROLL_CURSOR } from '../../infra/styles/cursors';
 import { DatePickerOverlay } from './editors/DatePickerOverlay';
@@ -280,9 +279,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Context menu state — openContextMenu stores hit-test target info,
   // Radix ContextMenu owns open/close state and positioning.
   const openContextMenu = useUIStore((s) => s.openContextMenu);
-  const contextMenuState = useUIStore((s) => s.contextMenu);
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
-  const objectContextMenuIsOpen = useUIStore((s) => s.objectContextMenu.isOpen);
   const closeObjectContextMenu = useUIStore((s) => s.closeObjectContextMenu);
 
   // Get workbook settings for scrollbar visibility (Issue 7: View Options)
@@ -1057,19 +1054,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
         </div>
       </ContextMenuTrigger>
 
-      {/* Context Menu Content — Radix ContextMenu positions from native right-click event.
- Conditionally renders CellContextMenu or ObjectContextMenu based on hit-test.
- Target info is stored in UIStore by the onContextMenu handler before Radix opens. */}
-      {objectContextMenuIsOpen ? (
-        <ObjectContextMenu />
-      ) : contextMenuState.isOpen ? (
-        <CellContextMenu
-          target={contextMenuState.target}
-          targetRow={contextMenuState.targetRow}
-          targetCol={contextMenuState.targetCol}
-          onClose={closeContextMenu}
-        />
-      ) : null}
+      <GridContextMenuContent />
     </ContextMenu>
   );
 });

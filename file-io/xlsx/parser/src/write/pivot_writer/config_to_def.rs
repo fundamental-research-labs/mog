@@ -58,7 +58,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 .unwrap_or((true, true));
 
             PivotFieldDef {
-                name: Some(field.name.clone()),
+                name: Some(pivot_field_ooxml_name(field.name.as_str(), axis_placement)),
                 axis,
                 data_field: is_data_field,
                 compact,
@@ -266,6 +266,15 @@ fn sort_type_for_axis_placement(
     )
 }
 
+fn pivot_field_ooxml_name(
+    field_name: &str,
+    axis_placement: Option<&pivot_types::PivotFieldPlacementFlat>,
+) -> String {
+    axis_placement
+        .and_then(|placement| placement.display_name.clone())
+        .unwrap_or_else(|| field_name.to_string())
+}
+
 fn map_agg_function(
     agg: pivot_types::AggregateFunction,
 ) -> domain_types::domain::pivot::PivotFieldFunction {
@@ -380,6 +389,31 @@ mod tests {
         assert_eq!(
             sort_type_for_axis_placement(&placement),
             Some("ascending".to_string())
+        );
+    }
+
+    #[test]
+    fn axis_placement_display_name_becomes_pivot_field_name() {
+        let mut placement = axis_placement();
+        placement.display_name = Some("PLC".to_string());
+
+        assert_eq!(
+            pivot_field_ooxml_name("Category", Some(&placement)),
+            "PLC".to_string()
+        );
+    }
+
+    #[test]
+    fn pivot_field_name_falls_back_to_source_field_name_without_display_override() {
+        let placement = axis_placement();
+
+        assert_eq!(
+            pivot_field_ooxml_name("Category", Some(&placement)),
+            "Category".to_string()
+        );
+        assert_eq!(
+            pivot_field_ooxml_name("Category", None),
+            "Category".to_string()
         );
     }
 }

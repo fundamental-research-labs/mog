@@ -317,6 +317,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   regexSearchAllSheets: 'read',
   signCheck: 'read',
   validateFormulaSyntax: 'read',
+  validateFormulaCircularReference: 'read',
   evaluateExpression: 'read',
   relocateCells: 'write',
   insertCellsWithShift: 'write',

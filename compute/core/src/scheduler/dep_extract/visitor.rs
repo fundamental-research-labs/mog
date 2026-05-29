@@ -5,7 +5,7 @@ use crate::graph::RANGE_EXPANSION_THRESHOLD;
 use crate::mirror::CellMirror;
 use cell_types::SheetId;
 use compute_functions::helpers::VOLATILE_FUNCTIONS;
-use compute_parser::{ASTNode, AstVisitor, CellRefNode, RangeRef};
+use compute_parser::{ASTNode, AstVisitor, BinOp, CellRefNode, RangeRef};
 use formula_types::CellRef;
 
 use super::formula_text::{FormulaTextCollectOutcome, FormulaTextDepCollector};
@@ -90,6 +90,119 @@ impl<'a> DepExtractor<'a> {
         push_cell_ref_dep_targets(&effective, self.mirror, registry, None, &mut self.deps);
     }
 
+    fn push_range_dep(
+        &mut self,
+        sheet: SheetId,
+        min_row: u32,
+        min_col: u32,
+        max_row: u32,
+        max_col: u32,
+        access: RangeAccess,
+    ) {
+        let row_count = (max_row - min_row + 1) as u64;
+        let col_count = (max_col - min_col + 1) as u64;
+        let cell_count = row_count * col_count;
+
+        self.deps.push(DepTarget::Range(
+            RangePos::new(sheet, min_row, min_col, max_row, max_col),
+            access,
+        ));
+
+        if cell_count < RANGE_EXPANSION_THRESHOLD && access == RangeAccess::Aggregate {
+            for row in min_row..=max_row {
+                for col in min_col..=max_col {
+                    if let Some(cell_id) =
+                        self.mirror.resolve_cell_id(&sheet, SheetPos::new(row, col))
+                    {
+                        self.deps.push(DepTarget::Cell(cell_id));
+                    } else if let Some((source, _, _)) =
+                        self.mirror.projection_registry.resolve(&sheet, row, col)
+                    {
+                        self.deps.push(DepTarget::Cell(source));
+                    }
+                }
+            }
+        }
+    }
+
+    fn node_static_area_in_sheet(
+        &self,
+        node: &ASTNode,
+        sheet_ctx: SheetId,
+    ) -> Option<(SheetId, u32, u32, u32, u32)> {
+        match node {
+            ASTNode::CellReference(CellRefNode { reference, .. }) => {
+                let (sheet, row, col) = cell_ref_to_position(reference, &sheet_ctx, self.mirror)?;
+                Some((sheet, row, col, row, col))
+            }
+            ASTNode::Range(RangeRef { start, end, .. }) => {
+                let (s_sheet, s_row, s_col) = cell_ref_to_position(start, &sheet_ctx, self.mirror)?;
+                let (_, e_row, e_col) = cell_ref_to_position(end, &sheet_ctx, self.mirror)?;
+                Some((
+                    s_sheet,
+                    s_row.min(e_row),
+                    s_col.min(e_col),
+                    s_row.max(e_row),
+                    s_col.max(e_col),
+                ))
+            }
+            ASTNode::SheetRef { sheet, inner } => self.node_static_area_in_sheet(inner, *sheet),
+            ASTNode::UnresolvedSheetRef { sheet_name, inner } => {
+                let sheet = self.mirror.sheet_by_name(sheet_name)?;
+                self.node_static_area_in_sheet(inner, sheet)
+            }
+            ASTNode::Paren(inner) => self.node_static_area_in_sheet(inner, sheet_ctx),
+            ASTNode::BinaryOp {
+                op: BinOp::Intersect,
+                left,
+                right,
+            } => {
+                let left = self.node_static_area_in_sheet(left, sheet_ctx)?;
+                let right = self.node_static_area_in_sheet(right, sheet_ctx)?;
+                Self::intersect_static_areas(left, right)
+            }
+            ASTNode::RangeOp { start, end } => {
+                let (start_sheet, start_row, start_col, _, _) =
+                    self.node_static_area_in_sheet(start, sheet_ctx)?;
+                let (end_sheet, _, _, end_row, end_col) =
+                    self.node_static_area_in_sheet(end, sheet_ctx)?;
+                if start_sheet != end_sheet {
+                    return None;
+                }
+                Some((
+                    start_sheet,
+                    start_row.min(end_row),
+                    start_col.min(end_col),
+                    start_row.max(end_row),
+                    start_col.max(end_col),
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    fn node_static_area(&self, node: &ASTNode) -> Option<(SheetId, u32, u32, u32, u32)> {
+        self.node_static_area_in_sheet(node, self.sheet_ctx)
+    }
+
+    fn intersect_static_areas(
+        left: (SheetId, u32, u32, u32, u32),
+        right: (SheetId, u32, u32, u32, u32),
+    ) -> Option<(SheetId, u32, u32, u32, u32)> {
+        let (left_sheet, left_start_row, left_start_col, left_end_row, left_end_col) = left;
+        let (right_sheet, right_start_row, right_start_col, right_end_row, right_end_col) = right;
+        if left_sheet != right_sheet {
+            return None;
+        }
+
+        let start_row = left_start_row.max(right_start_row);
+        let start_col = left_start_col.max(right_start_col);
+        let end_row = left_end_row.min(right_end_row);
+        let end_col = left_end_col.min(right_end_col);
+        (start_row <= end_row && start_col <= end_col)
+            .then_some((left_sheet, start_row, start_col, end_row, end_col))
+    }
+
     fn collect_formulatext_dep(&mut self, node: &ASTNode) {
         let mut collector = FormulaTextDepCollector {
             sheet_ctx: &mut self.sheet_ctx,
@@ -118,46 +231,13 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                 let min_col = s_col.min(e_col);
                 let max_col = s_col.max(e_col);
 
-                let row_count = (max_row - min_row + 1) as u64;
-                let col_count = (max_col - min_col + 1) as u64;
-                let cell_count = row_count * col_count;
-
-                // Always register the range dep for projection stabilization.
                 let access = self.current_range_access();
-                self.deps.push(DepTarget::Range(
-                    RangePos::new(s_sheet, min_row, min_col, max_row, max_col),
-                    access,
-                ));
+                self.push_range_dep(s_sheet, min_row, min_col, max_row, max_col, access);
 
-                if cell_count < RANGE_EXPANSION_THRESHOLD && access == RangeAccess::Aggregate {
-                    // Small Aggregate range: expand to individual cell deps for
-                    // fine-grained topological ordering.
-                    //
-                    // Selective ranges are NOT expanded — individual Cell deps
-                    // would create false direct dependencies (including self-refs)
-                    // that bypass the Selective back-edge filtering in
-                    // `analysis.rs::is_selective_back_edge`. The Range dep
-                    // (tagged Selective) is sufficient: `subset_levels` and
-                    // `build_barrier_graph` use range-based ordering with
-                    // back-edge exclusion for correct evaluation order.
-                    for row in min_row..=max_row {
-                        for col in min_col..=max_col {
-                            if let Some(cell_id) = self
-                                .mirror
-                                .resolve_cell_id(&s_sheet, SheetPos::new(row, col))
-                            {
-                                self.deps.push(DepTarget::Cell(cell_id));
-                            } else if let Some((source, _, _)) =
-                                self.mirror.projection_registry.resolve(&s_sheet, row, col)
-                            {
-                                // Phantom cell (e.g., spill target from TRANSPOSE).
-                                // Add a dep on the projection source so the spill
-                                // materializes before this formula evaluates.
-                                self.deps.push(DepTarget::Cell(source));
-                            }
-                        }
-                    }
-                } else if access == RangeAccess::Aggregate {
+                if (max_row - min_row + 1) as u64 * (max_col - min_col + 1) as u64
+                    >= RANGE_EXPANSION_THRESHOLD
+                    && access == RangeAccess::Aggregate
+                {
                     // Large Aggregate range: add corner cell deps for basic ordering.
                     self.push_cell_ref_dep(&r.start);
                     self.push_cell_ref_dep(&r.end);
@@ -167,6 +247,35 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                 // Can't determine positions — add individual ref deps only
                 self.push_cell_ref_dep(&r.start);
                 self.push_cell_ref_dep(&r.end);
+            }
+        }
+    }
+
+    fn visit_binary_op(&mut self, op: BinOp, left: &ASTNode, right: &ASTNode) {
+        if op != BinOp::Intersect {
+            self.visit(left);
+            self.visit(right);
+            return;
+        }
+
+        match (self.node_static_area(left), self.node_static_area(right)) {
+            (Some(left_area), Some(right_area)) => {
+                if let Some((sheet, min_row, min_col, max_row, max_col)) =
+                    Self::intersect_static_areas(left_area, right_area)
+                {
+                    self.push_range_dep(
+                        sheet,
+                        min_row,
+                        min_col,
+                        max_row,
+                        max_col,
+                        self.current_range_access(),
+                    );
+                }
+            }
+            _ => {
+                self.visit(left);
+                self.visit(right);
             }
         }
     }

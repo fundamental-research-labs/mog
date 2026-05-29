@@ -21,7 +21,6 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'r
 import type { ActionType } from '@mog-sdk/contracts/actions';
 import { objectSelectors } from '../selectors';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
-import { toA1 } from '@mog/spreadsheet-utils/a1';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
@@ -48,7 +47,6 @@ import {
   useWorkbook,
 } from '../infra/context';
 import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordination';
-import { hasDirectSelfReference } from '../systems/grid-editing/coordination/direct-self-reference';
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
 import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
@@ -636,15 +634,7 @@ export function SpreadsheetCoordinatorProvider({
           return null;
         }
 
-        const sheet = workbook.getSheetById(sheetId);
-        if (!hasDirectSelfReference({ formula, row, col, sheetName: sheet.name })) {
-          return null;
-        }
-
-        return {
-          cellAddress: toA1(row, col),
-          formula,
-        };
+        return workbook.getSheetById(sheetId).validateFormulaCircularReference(formula, row, col);
       },
       // Validate authored formula text against the Rust parser before the
       // commit reaches the mutation path. The mutation path intentionally still

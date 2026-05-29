@@ -5,6 +5,14 @@ pub use snapshot_types::queries::*;
 use formula_types::IdentityFormula;
 use serde::{Deserialize, Serialize};
 
+/// Result returned by pre-commit circular-reference validation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaCircularReferenceValidation {
+    pub cell_address: String,
+    pub formula: String,
+}
+
 /// Wire type for returning defined names through the bridge.
 ///
 /// Unlike `domain_types::DefinedName` which stores `refers_to` as a plain

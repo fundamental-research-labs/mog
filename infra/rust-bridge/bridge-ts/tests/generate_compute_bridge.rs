@@ -386,6 +386,7 @@ fn build_import_config() -> ImportConfig {
                     ti("FormatEntry"),
                     ti("DateValueResult"),
                     ti("ParsedDateInput"),
+                    ti("FormulaCircularReferenceValidation"),
                     ti("Locale"),
                     // CF bridge stubs
                     ti("CFRuleWire"),

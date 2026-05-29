@@ -385,6 +385,10 @@ export interface ParsedDateInput {
   serial: number;
   suggested_format: string;
 }
+export interface FormulaCircularReferenceValidation {
+  cellAddress: string;
+  formula: string;
+}
 /** Date component ordering for locale-aware formatting. */
 export type DateOrder = 'MDY' | 'DMY' | 'YMD';
 

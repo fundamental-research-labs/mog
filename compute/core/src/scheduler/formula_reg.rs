@@ -349,6 +349,56 @@ impl ComputeCore {
     // Internal: formula parsing and dependency registration
     // -----------------------------------------------------------------------
 
+    pub fn validate_formula_circular_reference(
+        &self,
+        mirror: &CellMirror,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+        formula: &str,
+    ) -> Option<crate::engine_types::FormulaCircularReferenceValidation> {
+        let formula = {
+            let sheet_names: Vec<&str> = mirror
+                .sheet_ids()
+                .filter_map(|id| mirror.get_sheet(id).map(|s| s.name.as_str()))
+                .collect();
+            compute_parser::normalize_formula_input(formula, &sheet_names)
+        };
+
+        let resolver = CoreResolver {
+            mirror,
+            current_sheet: *sheet_id,
+        };
+        let ast = parse_formula(&formula, Some(&resolver)).ok()?.into_inner();
+
+        let target_pos = SheetPos::new(row, col);
+        let cell_id = mirror
+            .resolve_cell_id(sheet_id, target_pos)
+            .unwrap_or_else(|| CellId::from_raw(u128::MAX));
+
+        let extracted =
+            extract_deps_and_volatility(&ast, sheet_id, mirror, self.ordered_sheets(), Some(row));
+        let edit = compute_graph::HypotheticalDependencyEdit {
+            cell: cell_id,
+            new_precedents: extracted.value_deps,
+        };
+        let positions = compute_graph::positions::WithOverrides::new(mirror)
+            .with_override(cell_id, compute_graph::positions::CellPosition {
+                sheet: *sheet_id,
+                row,
+                col,
+            });
+
+        if self.graph.would_create_cycle(&edit, &positions).into_value() {
+            Some(crate::engine_types::FormulaCircularReferenceValidation {
+                cell_address: crate::range_manager::pos_to_a1(row, col),
+                formula,
+            })
+        } else {
+            None
+        }
+    }
+
     /// Parse a formula, extract dependencies, and register them in the graph.
     ///
     /// Also generates an [`IdentityFormula`] and stores it in the cell's

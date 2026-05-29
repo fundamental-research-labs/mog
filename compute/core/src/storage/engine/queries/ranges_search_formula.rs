@@ -444,6 +444,19 @@ pub(in crate::storage::engine) fn validate_formula_syntax(
         .map(|err| (err.message(), u32::try_from(err.position()).ok()))
 }
 
+pub(in crate::storage::engine) fn validate_formula_circular_reference(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    formula: &str,
+) -> Option<crate::engine_types::FormulaCircularReferenceValidation> {
+    engine
+        .stores
+        .compute
+        .validate_formula_circular_reference(&engine.mirror, sheet_id, row, col, formula)
+}
+
 pub(in crate::storage::engine) fn evaluate_expression(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,

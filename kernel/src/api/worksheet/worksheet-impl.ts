@@ -31,6 +31,7 @@ import type {
   ClearResult,
   EventHandler,
   FormatEntry,
+  FormulaCircularReferenceValidation,
   FormulaSyntaxValidationError,
   IdentifiedCellData,
   NumberFormatCategory,
@@ -1308,6 +1309,14 @@ export class WorksheetImpl implements Worksheet {
       errorMessage,
       ...(errorPosition == null ? {} : { errorPosition }),
     };
+  }
+
+  async validateFormulaCircularReference(
+    formula: string,
+    row: number,
+    col: number,
+  ): Promise<FormulaCircularReferenceValidation | null> {
+    return this.ctx.computeBridge.validateFormulaCircularReference(this.sheetId, row, col, formula);
   }
 
   // ===========================================================================

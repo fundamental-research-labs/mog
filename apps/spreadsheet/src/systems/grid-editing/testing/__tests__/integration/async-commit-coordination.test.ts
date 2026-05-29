@@ -20,7 +20,6 @@ import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
 import { GridEditingSystem } from '../../../grid-editing-system';
 import type { EditorDependencies } from '../../../types';
-import { hasDirectSelfReference } from '../../../coordination/direct-self-reference';
 import { createEditableTestWorkbook } from '../../mock-workbook';
 
 // =============================================================================
@@ -292,9 +291,7 @@ describe('commitCellValue invoke awaits bridge call', () => {
       );
       const validateCircularReference = jest.fn(
         async (_sheetId: string, row: number, col: number, formula: string) =>
-          hasDirectSelfReference({ formula, row, col, sheetName: 'Sheet1' })
-            ? { cellAddress: 'A1', formula }
-            : null,
+          row === 0 && col === 0 ? { cellAddress: 'A1', formula } : null,
       );
 
       const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(
@@ -454,21 +451,4 @@ describe('commitCellValue invoke awaits bridge call', () => {
 
     system.dispose();
   });
-});
-
-describe('hasDirectSelfReference', () => {
-  it.each(['=B1', '=Sheet2!A1', "='Other Sheet'!A1", '="A1"', '=Table1[A1]'])(
-    'does not flag non-direct or non-same-sheet reference %s',
-    (formula) => {
-      expect(hasDirectSelfReference({ formula, row: 0, col: 0, sheetName: 'Sheet1' })).toBe(false);
-    },
-  );
-
-  it.each(['=A1', '=$A$1', '=SUM(A1)', '=A1:B2', '=Sheet1!A1', "='Sheet 1'!A1"])(
-    'flags same-sheet direct reference %s',
-    (formula) => {
-      const sheetName = formula.includes('Sheet 1') ? 'Sheet 1' : 'Sheet1';
-      expect(hasDirectSelfReference({ formula, row: 0, col: 0, sheetName })).toBe(true);
-    },
-  );
 });

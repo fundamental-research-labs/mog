@@ -14,8 +14,8 @@ use crate::diagnostics::formula_references::{
 };
 use crate::engine_types::{
     CellPosition, CellPositionResult, ColumnEdge, DataBounds, DefaultFont, ProjectionData,
-    RectBounds, RegexSearchOptions, RegexSearchResult, RowEdge, SheetProtectionConfig,
-    SignCheckOptions, SignCheckResult, WorkbookSearchResult,
+    FormulaCircularReferenceValidation, RectBounds, RegexSearchOptions, RegexSearchResult,
+    RowEdge, SheetProtectionConfig, SignCheckOptions, SignCheckResult, WorkbookSearchResult,
 };
 use crate::range_manager::{A1CellRef, A1RangeRef};
 use crate::snapshot::{
@@ -948,6 +948,19 @@ impl YrsComputeEngine {
         formula: &str,
     ) -> Option<(String, Option<u32>)> {
         ranges_search_formula::validate_formula_syntax(self, _sheet_id, formula)
+    }
+
+    #[bridge::read(scope = "sheet")]
+    pub fn validate_formula_circular_reference(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+        formula: &str,
+    ) -> Option<FormulaCircularReferenceValidation> {
+        ranges_search_formula::validate_formula_circular_reference(
+            self, sheet_id, row, col, formula,
+        )
     }
 
     #[bridge::read(scope = "sheet")]

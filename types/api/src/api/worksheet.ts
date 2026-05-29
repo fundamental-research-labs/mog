@@ -197,6 +197,14 @@ export interface FormulaSyntaxValidationError {
 }
 
 /**
+ * Result returned when formula circular-reference validation rejects an input.
+ */
+export interface FormulaCircularReferenceValidation {
+  cellAddress: string;
+  formula: string;
+}
+
+/**
  * Kernel-owned read model for the source text used when entering edit mode on
  * the active cell.
  */
@@ -486,6 +494,16 @@ export interface Worksheet {
    * not normalize or auto-correct incomplete input before parsing.
    */
   validateFormulaSyntax(formula: string): Promise<FormulaSyntaxValidationError | null>;
+
+  /**
+   * Validate whether entering a formula at row/col would create a circular
+   * reference. Returns `null` when the formula is allowed.
+   */
+  validateFormulaCircularReference(
+    formula: string,
+    row: number,
+    col: number,
+  ): Promise<FormulaCircularReferenceValidation | null>;
 
   /** Get the formula of a cell by A1 address (null if not a formula cell). */
   getFormula(address: string): Promise<string | null>;

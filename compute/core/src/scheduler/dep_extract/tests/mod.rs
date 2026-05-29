@@ -325,6 +325,48 @@ fn test_columns_range_no_dep() {
 }
 
 #[test]
+fn test_intersection_extracts_only_overlapping_area() {
+    let sheet = make_sheet_id(1);
+    let ast = ASTNode::Function {
+        name: "SUM".into(),
+        args: vec![ASTNode::BinaryOp {
+            op: compute_parser::BinOp::Intersect,
+            left: Box::new(range_ref_node(sheet, 0, 0, 1, 1)),
+            right: Box::new(range_ref_node(sheet, 0, 1, 2, 2)),
+        }],
+    };
+
+    let deps = deps_from_ast(&ast, &sheet);
+
+    assert!(deps.contains(&DepTarget::Range(
+        RangePos::new(sheet, 0, 1, 1, 1),
+        RangeAccess::Aggregate
+    )));
+    assert!(!deps.contains(&DepTarget::Range(
+        RangePos::new(sheet, 0, 0, 1, 1),
+        RangeAccess::Aggregate
+    )));
+    assert!(!deps.contains(&DepTarget::Range(
+        RangePos::new(sheet, 0, 1, 2, 2),
+        RangeAccess::Aggregate
+    )));
+}
+
+#[test]
+fn test_intersection_with_no_overlap_extracts_no_value_deps() {
+    let sheet = make_sheet_id(1);
+    let ast = ASTNode::BinaryOp {
+        op: compute_parser::BinOp::Intersect,
+        left: Box::new(range_ref_node(sheet, 0, 0, 1, 0)),
+        right: Box::new(range_ref_node(sheet, 0, 2, 1, 2)),
+    };
+
+    let deps = deps_from_ast(&ast, &sheet);
+
+    assert!(deps.is_empty(), "no-overlap intersection got deps: {deps:?}");
+}
+
+#[test]
 fn test_column_cross_sheet_ref_no_dep() {
     // =COLUMN(Sheet2!$A$1) — SheetRef wrapping a CellReference is static
     let sheet1 = make_sheet_id(1);

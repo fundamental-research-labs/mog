@@ -87,6 +87,21 @@ fn test_write_formula_cell() {
 }
 
 #[test]
+fn test_write_formula_canonicalizes_ooxml_future_function_prefixes() {
+    let mut writer = SheetWriter::new();
+    writer.set_formula(
+        0,
+        0,
+        r#"AVERAGEIFS(A:A,B:B,1)/STDEV.S(FILTER(A:A,B:B=1))"#,
+    );
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains(
+        r#"<f>_xlfn.AVERAGEIFS(A:A,B:B,1)/_xlfn.STDEV.S(_xlfn._xlws.FILTER(A:A,B:B=1))</f>"#
+    ));
+}
+
+#[test]
 fn test_write_formula_with_cached_value() {
     let mut writer = SheetWriter::new();
     writer.set_formula_with_value(0, 0, "A1*2", CellValue::Number(84.0));

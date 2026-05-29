@@ -1,3 +1,4 @@
+use super::formula_storage::canonicalize_formula_for_ooxml;
 use super::{CellData, CellValue, to_a1};
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::worksheet::CellFormulaType;
@@ -187,7 +188,8 @@ fn write_formula(
                     b.attr("xml:space", "preserve");
                 }
                 b.end_attrs();
-                w.text(&cf.text);
+                let formula_text = canonicalize_formula_for_ooxml(&cf.text);
+                w.text(&formula_text);
                 w.end_element("f");
             } else if ca {
                 w.empty_element(
@@ -214,7 +216,8 @@ fn write_formula(
                     b.attr("xml:space", "preserve");
                 }
                 b.end_attrs();
-                w.text(&cf.text);
+                let formula_text = canonicalize_formula_for_ooxml(&cf.text);
+                w.text(&formula_text);
                 w.end_element("f");
             } else {
                 let b = w.start_element("f");
@@ -225,7 +228,8 @@ fn write_formula(
                     b.attr("xml:space", "preserve");
                 }
                 b.end_attrs();
-                w.text(formula);
+                let formula_text = canonicalize_formula_for_ooxml(formula);
+                w.text(&formula_text);
                 w.end_element("f");
             }
         }
@@ -273,10 +277,12 @@ fn write_formula(
                     b.attr("xml:space", "preserve");
                 }
                 b.end_attrs();
-                w.text(formula);
+                let formula_text = canonicalize_formula_for_ooxml(formula);
+                w.text(&formula_text);
                 w.end_element("f");
             } else {
-                w.element_with_text("f", formula);
+                let formula_text = canonicalize_formula_for_ooxml(formula);
+                w.element_with_text("f", &formula_text);
             }
         }
     }

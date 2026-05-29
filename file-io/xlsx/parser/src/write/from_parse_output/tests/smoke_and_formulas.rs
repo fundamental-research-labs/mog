@@ -209,6 +209,39 @@ fn modeled_array_formula_range_is_preserved_when_current_array_ref_matches() {
 }
 
 #[test]
+fn imported_xlfn_array_formula_metadata_matches_normalized_current_formula() {
+    let mut formula_cell = make_formula_cell(
+        0,
+        0,
+        "STDEV.S(FILTER(A2:A10,B2:B10=1))",
+        DomainValue::Number(FiniteF64::new(100.0).unwrap()),
+    );
+    formula_cell.array_ref = Some("A1:A2".to_string());
+    formula_cell.cell_formula = Some(ooxml_types::worksheet::CellFormula {
+        t: ooxml_types::worksheet::CellFormulaType::Array,
+        r#ref: Some("A1:A2".to_string()),
+        text: "_xlfn.STDEV.S(_xlfn._xlws.FILTER(A2:A10,B2:B10=1))".to_string(),
+        aca: true,
+        ..Default::default()
+    });
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![formula_cell],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(sheet_xml.contains(
+        r#"<f ref="A1:A2" t="array" aca="1">_xlfn.STDEV.S(_xlfn._xlws.FILTER(A2:A10,B2:B10=1))</f>"#
+    ));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn default_roundtrip_context_does_not_decorate_formula_cell() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -141,8 +141,11 @@ fn formulas_match(current: &str, imported: &str) -> bool {
     formula_identity_text(current) == formula_identity_text(imported)
 }
 
-fn formula_identity_text(formula: &str) -> &str {
-    formula.strip_prefix('=').unwrap_or(formula)
+fn formula_identity_text(formula: &str) -> String {
+    compute_parser::normalize_xlsx_formula(formula)
+        .strip_prefix('=')
+        .unwrap_or_else(|| formula.strip_prefix('=').unwrap_or(formula))
+        .to_string()
 }
 
 fn single_cell_ref_matches(ref_text: &str, row: u32, col: u32) -> bool {

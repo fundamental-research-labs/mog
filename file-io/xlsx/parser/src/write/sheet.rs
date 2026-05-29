@@ -35,6 +35,7 @@ use std::collections::BTreeMap;
 mod body;
 mod cell;
 mod data;
+mod formula_storage;
 mod hyperlinks;
 mod raw_sections;
 mod relationships;

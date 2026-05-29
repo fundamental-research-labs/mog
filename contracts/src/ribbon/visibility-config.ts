@@ -578,14 +578,6 @@ export type RibbonVisibilityPath = readonly [RibbonVisibilityRootKey, string?, s
 
 export const PUBLIC_RIBBON_VISIBILITY_CONFIG = {
   pageLayout: false,
-  review: false,
-  view: false,
-  formulaBar: {
-    controls: {
-      toggleAiFormulaBar: false,
-    },
-  },
-  collaboration: false,
 } satisfies RibbonVisibilityConfig;
 
 export const APP_EVAL_RIBBON_VISIBILITY_CONFIG = {

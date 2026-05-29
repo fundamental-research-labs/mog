@@ -56,18 +56,18 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(merged, ['pageLayout', 'themes'])).toBe(true);
   });
 
-  it('hides staged public chrome and tabs in the public profile', () => {
+  it('hides only page layout in the public profile', () => {
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['pageLayout'])).toBe(false);
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['review'])).toBe(false);
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['view'])).toBe(false);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['review'])).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['view'])).toBe(true);
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, [
         'formulaBar',
         'controls',
         'toggleAiFormulaBar',
       ]),
-    ).toBe(false);
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(false);
+    ).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['home'])).toBe(true);
   });
 

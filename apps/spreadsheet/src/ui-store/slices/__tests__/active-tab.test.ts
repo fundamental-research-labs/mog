@@ -183,8 +183,8 @@ describe('ActiveRibbonTabSlice', () => {
       expect(visible).toContain('formulas');
       expect(visible).toContain('data');
       expect(visible).not.toContain('page');
-      expect(visible).not.toContain('review');
-      expect(visible).not.toContain('view');
+      expect(visible).toContain('review');
+      expect(visible).toContain('view');
     });
 
     it('accepts pageLayout as a legacy gate alias for the Page Layout tab', () => {

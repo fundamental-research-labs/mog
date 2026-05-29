@@ -12,6 +12,7 @@ import { SCALE_TO_FIT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { useActiveSheetId, useDispatch, usePrintSettings } from '../../../internal-api';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { ScaleHeightIcon, ScaleIcon, ScaleWidthIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Component
@@ -77,82 +78,88 @@ export function ScaleToFitGroup() {
     >
       <div className="flex items-center gap-2 px-2 py-1">
         {/* Width dropdown */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1">
-            <ScaleWidthIcon />
-            <span className="text-ribbon text-ss-text-tertiary">Width:</span>
-          </div>
-          <select
-            value={scaleWidth}
-            onChange={(e) => handleFitWidthChange(e.target.value)}
-            className={`
+        <RibbonVisibilityItem item="width">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              <ScaleWidthIcon />
+              <span className="text-ribbon text-ss-text-tertiary">Width:</span>
+            </div>
+            <select
+              value={scaleWidth}
+              onChange={(e) => handleFitWidthChange(e.target.value)}
+              className={`
  h-6 px-1 rounded border border-ss-border
  bg-ss-surface text-ribbon text-ss-text-secondary
  outline-none w-[70px]
  cursor-pointer
  `}
-            title="Scale Width"
-            aria-label="Scale Width"
-          >
-            <option value="auto">Automatic</option>
-            <option value="1">1 page</option>
-            <option value="2">2 pages</option>
-            <option value="3">3 pages</option>
-            <option value="4">4 pages</option>
-          </select>
-        </div>
+              title="Scale Width"
+              aria-label="Scale Width"
+            >
+              <option value="auto">Automatic</option>
+              <option value="1">1 page</option>
+              <option value="2">2 pages</option>
+              <option value="3">3 pages</option>
+              <option value="4">4 pages</option>
+            </select>
+          </div>
+        </RibbonVisibilityItem>
 
         {/* Height dropdown */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1">
-            <ScaleHeightIcon />
-            <span className="text-ribbon text-ss-text-tertiary">Height:</span>
-          </div>
-          <select
-            value={scaleHeight}
-            onChange={(e) => handleFitHeightChange(e.target.value)}
-            className={`
+        <RibbonVisibilityItem item="height">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              <ScaleHeightIcon />
+              <span className="text-ribbon text-ss-text-tertiary">Height:</span>
+            </div>
+            <select
+              value={scaleHeight}
+              onChange={(e) => handleFitHeightChange(e.target.value)}
+              className={`
  h-6 px-1 rounded border border-ss-border
  bg-ss-surface text-ribbon text-ss-text-secondary
  outline-none w-[70px]
  cursor-pointer
  `}
-            title="Scale Height"
-            aria-label="Scale Height"
-          >
-            <option value="auto">Automatic</option>
-            <option value="1">1 page</option>
-            <option value="2">2 pages</option>
-            <option value="3">3 pages</option>
-            <option value="4">4 pages</option>
-          </select>
-        </div>
+              title="Scale Height"
+              aria-label="Scale Height"
+            >
+              <option value="auto">Automatic</option>
+              <option value="1">1 page</option>
+              <option value="2">2 pages</option>
+              <option value="3">3 pages</option>
+              <option value="4">4 pages</option>
+            </select>
+          </div>
+        </RibbonVisibilityItem>
 
         {/* Scale percentage */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1">
-            <ScaleIcon />
-            <span className="text-ribbon text-ss-text-tertiary">Scale:</span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <input
-              type="number"
-              min={10}
-              max={400}
-              value={scalePercent}
-              onChange={(e) => handleScaleChange(e.target.value)}
-              className={`
+        <RibbonVisibilityItem item="scale">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              <ScaleIcon />
+              <span className="text-ribbon text-ss-text-tertiary">Scale:</span>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <input
+                type="number"
+                min={10}
+                max={400}
+                value={scalePercent}
+                onChange={(e) => handleScaleChange(e.target.value)}
+                className={`
  h-6 px-1 rounded border border-ss-border
  bg-ss-surface text-ribbon text-ss-text-secondary text-center
  outline-none w-[50px]
  cursor-text
  `}
-              title="Scale Percentage"
-              aria-label="Scale Percentage"
-            />
-            <span className="text-ribbon text-ss-text-tertiary">%</span>
+                title="Scale Percentage"
+                aria-label="Scale Percentage"
+              />
+              <span className="text-ribbon text-ss-text-tertiary">%</span>
+            </div>
           </div>
-        </div>
+        </RibbonVisibilityItem>
       </div>
     </ToolbarGroup>
   );

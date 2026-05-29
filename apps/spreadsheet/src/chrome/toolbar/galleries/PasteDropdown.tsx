@@ -219,6 +219,7 @@ export const PasteDropdown = React.memo(function PasteDropdown({
       isOpen={isOpen}
       title="Paste (Ctrl+V)"
       aria-label="Paste"
+      visibilityKey="paste"
       onMainClick={handleMainPaste}
       onDropdownClick={handleDropdownClick}
       mainTestId="toolbar-paste-button"

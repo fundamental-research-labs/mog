@@ -47,6 +47,7 @@ import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { ConditionalFormatIcon, DropdownArrowIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Icons
@@ -302,61 +303,63 @@ export const StylesGroup = React.memo(function StylesGroup() {
         </div>
 
         {/* Quick-Pick Style Chips + Cell Styles Dropdown */}
-        <div className="relative inline-flex flex-col items-start h-[var(--ribbon-content-height)] justify-between py-1">
-          {/* 2x2 Grid of style preview chips */}
-          <div className="flex flex-wrap content-start gap-0.5 w-[92px]">
-            {QUICK_PICK_STYLES.map((style) => (
-              <StylePreviewChip
-                key={style.name}
-                styleId={style.id}
-                name={style.name}
-                bgColor={style.bgColor}
-                textColor={style.textColor}
-                borderColor={style.borderColor}
-                onClick={() => handleQuickStyleClick(style.id)}
-              />
-            ))}
-          </div>
+        <RibbonVisibilityItem item="cellStyles">
+          <div className="relative inline-flex flex-col items-start h-[var(--ribbon-content-height)] justify-between py-1">
+            {/* 2x2 Grid of style preview chips */}
+            <div className="flex flex-wrap content-start gap-0.5 w-[92px]">
+              {QUICK_PICK_STYLES.map((style) => (
+                <StylePreviewChip
+                  key={style.name}
+                  styleId={style.id}
+                  name={style.name}
+                  bgColor={style.bgColor}
+                  textColor={style.textColor}
+                  borderColor={style.borderColor}
+                  onClick={() => handleQuickStyleClick(style.id)}
+                />
+              ))}
+            </div>
 
-          {/* Cell Styles dropdown button */}
-          <Tooltip title="Cell Styles" description="Apply predefined cell styles">
-            <button
-              type="button"
-              data-testid="ribbon-dropdown-cell-styles"
-              onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
-              className="
+            {/* Cell Styles dropdown button */}
+            <Tooltip title="Cell Styles" description="Apply predefined cell styles">
+              <button
+                type="button"
+                data-testid="ribbon-dropdown-cell-styles"
+                onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
+                className="
  flex items-center gap-0.5 px-1 py-0.5
  text-ribbon text-ss-text-secondary
  rounded cursor-pointer
  hover:bg-ss-surface-hover
  transition-all duration-ss-fast
  "
-              aria-label="Cell Styles"
-              aria-expanded={styleGalleryOpen}
-              aria-haspopup="menu"
-            >
-              <span>Cell Styles</span>
-              <DropdownArrowIcon className={styleGalleryOpen ? 'rotate-180' : ''} />
-            </button>
-          </Tooltip>
+                aria-label="Cell Styles"
+                aria-expanded={styleGalleryOpen}
+                aria-haspopup="menu"
+              >
+                <span>Cell Styles</span>
+                <DropdownArrowIcon className={styleGalleryOpen ? 'rotate-180' : ''} />
+              </button>
+            </Tooltip>
 
-          {/* Cell Styles Gallery Dropdown */}
-          <RibbonDropdownPanel
-            open={styleGalleryOpen}
-            onClose={() => setStyleGalleryOpen(false)}
-            position="bottom-right"
-          >
-            <div data-testid="ribbon-dropdown-menu-cell-styles">
-              <StyleGallery
-                onSelectStyle={(styleId) => {
-                  applyStyle(styleId);
-                  setStyleGalleryOpen(false);
-                }}
-                onClose={() => setStyleGalleryOpen(false)}
-              />
-            </div>
-          </RibbonDropdownPanel>
-        </div>
+            {/* Cell Styles Gallery Dropdown */}
+            <RibbonDropdownPanel
+              open={styleGalleryOpen}
+              onClose={() => setStyleGalleryOpen(false)}
+              position="bottom-right"
+            >
+              <div data-testid="ribbon-dropdown-menu-cell-styles">
+                <StyleGallery
+                  onSelectStyle={(styleId) => {
+                    applyStyle(styleId);
+                    setStyleGalleryOpen(false);
+                  }}
+                  onClose={() => setStyleGalleryOpen(false)}
+                />
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+        </RibbonVisibilityItem>
       </div>
     </ToolbarGroup>
   );

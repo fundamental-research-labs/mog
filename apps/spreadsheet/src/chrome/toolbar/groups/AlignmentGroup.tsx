@@ -53,6 +53,7 @@ import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { SplitButton } from '../primitives/SplitButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import { useRibbonVisibilityPathVisible } from '../visibility/RibbonVisibilityContext';
 import {
   AlignBottomIcon,
   AlignCenterIcon,
@@ -261,6 +262,37 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   // Render
   // ===========================================================================
 
+  const showAlignLeft = useRibbonVisibilityPathVisible(['home', 'alignment', 'alignLeft']);
+  const showAlignCenter = useRibbonVisibilityPathVisible(['home', 'alignment', 'center']);
+  const showAlignRight = useRibbonVisibilityPathVisible(['home', 'alignment', 'alignRight']);
+
+  const horizontalAlignmentOptions = [
+    {
+      value: 'left',
+      id: 'align-left',
+      ariaLabel: 'Align left',
+      tooltip: 'Align Left',
+      label: <AlignLeftIcon />,
+      visible: showAlignLeft,
+    },
+    {
+      value: 'center',
+      id: 'align-center',
+      ariaLabel: 'Align center',
+      tooltip: 'Align Center',
+      label: <AlignCenterIcon />,
+      visible: showAlignCenter,
+    },
+    {
+      value: 'right',
+      id: 'align-right',
+      ariaLabel: 'Align right',
+      tooltip: 'Align Right',
+      label: <AlignRightIcon />,
+      visible: showAlignRight,
+    },
+  ].filter((option) => option.visible);
+
   if (!isEnabled) return null;
 
   return (
@@ -286,29 +318,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             value={rawHAlign}
             onChange={(v) => dispatch('SET_HORIZONTAL_ALIGN', { align: v as HorizontalAlign })}
             disabled={!canFormatCells}
-            options={[
-              {
-                value: 'left',
-                id: 'align-left',
-                ariaLabel: 'Align left',
-                tooltip: 'Align Left',
-                label: <AlignLeftIcon />,
-              },
-              {
-                value: 'center',
-                id: 'align-center',
-                ariaLabel: 'Align center',
-                tooltip: 'Align Center',
-                label: <AlignCenterIcon />,
-              },
-              {
-                value: 'right',
-                id: 'align-right',
-                ariaLabel: 'Align right',
-                tooltip: 'Align Right',
-                label: <AlignRightIcon />,
-              },
-            ]}
+            options={horizontalAlignmentOptions}
           />
 
           <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
@@ -377,6 +387,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                 variant="small"
                 isOpen={isMerged || mergeDropdownOpen}
                 disabled={!canFormatCells || (!canMerge && !canUnmerge)}
+                visibilityKey="mergeCenter"
                 aria-label="Merge & Center"
                 onMainClick={() => {
                   if (isMerged || canUnmerge) {

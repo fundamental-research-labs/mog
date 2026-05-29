@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
+import { RibbonVisibilityPathItem } from '../toolbar/visibility/RibbonVisibilityContext';
 
 interface NLFormulaBarProps {
   prompt: string;
@@ -129,19 +130,23 @@ function NLFormulaBarImpl({
         ) : explainError ? (
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-ss-error text-xs flex-1 min-w-0 truncate">{explainError}</span>
-            <button
-              onClick={onExplain}
-              className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
-              data-testid="nl-explain-retry"
-            >
-              Retry
-            </button>
-            <button
-              onClick={onExplainDismiss}
-              className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
-            >
-              Dismiss
-            </button>
+            <RibbonVisibilityPathItem path={['nlFormulaBar', 'explain', 'retry']}>
+              <button
+                onClick={onExplain}
+                className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
+                data-testid="nl-explain-retry"
+              >
+                Retry
+              </button>
+            </RibbonVisibilityPathItem>
+            <RibbonVisibilityPathItem path={['nlFormulaBar', 'explain', 'dismiss']}>
+              <button
+                onClick={onExplainDismiss}
+                className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
+              >
+                Dismiss
+              </button>
+            </RibbonVisibilityPathItem>
           </div>
         ) : explainResult != null ? (
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -151,13 +156,15 @@ function NLFormulaBarImpl({
             >
               {explainResult}
             </span>
-            <button
-              onClick={onExplainDismiss}
-              className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
-              data-testid="nl-explain-dismiss"
-            >
-              Dismiss
-            </button>
+            <RibbonVisibilityPathItem path={['nlFormulaBar', 'explain', 'dismiss']}>
+              <button
+                onClick={onExplainDismiss}
+                className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
+                data-testid="nl-explain-dismiss"
+              >
+                Dismiss
+              </button>
+            </RibbonVisibilityPathItem>
           </div>
         ) : null
       ) : /* Generate mode states */
@@ -203,41 +210,49 @@ function NLFormulaBarImpl({
  `}</style>
             </div>
           )}
-          <button
-            type="submit"
-            disabled={loading || !prompt.trim()}
-            className="shrink-0 px-3 py-0.5 rounded text-xs font-medium bg-ss-primary text-ss-text-inverse disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ss-primary-hover transition-colors"
-            data-testid="nl-formula-generate"
-          >
-            {loading ? 'Generating...' : 'Generate ↵'}
-          </button>
-          {activeFormula && (
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'generate', 'generate']}>
             <button
-              type="button"
-              onClick={onExplain}
-              className="shrink-0 px-3 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
-              data-testid="nl-formula-explain"
+              type="submit"
+              disabled={loading || !prompt.trim()}
+              className="shrink-0 px-3 py-0.5 rounded text-xs font-medium bg-ss-primary text-ss-text-inverse disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ss-primary-hover transition-colors"
+              data-testid="nl-formula-generate"
             >
-              Explain
+              {loading ? 'Generating...' : 'Generate ↵'}
             </button>
+          </RibbonVisibilityPathItem>
+          {activeFormula && (
+            <RibbonVisibilityPathItem path={['nlFormulaBar', 'generate', 'explain']}>
+              <button
+                type="button"
+                onClick={onExplain}
+                className="shrink-0 px-3 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
+                data-testid="nl-formula-explain"
+              >
+                Explain
+              </button>
+            </RibbonVisibilityPathItem>
           )}
         </form>
       ) : error ? (
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-ss-error text-xs flex-1 min-w-0 truncate">{error}</span>
-          <button
-            onClick={onRetry}
-            className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
-            data-testid="nl-formula-retry"
-          >
-            Retry
-          </button>
-          <button
-            onClick={onDismiss}
-            className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
-          >
-            Dismiss
-          </button>
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'result', 'retry']}>
+            <button
+              onClick={onRetry}
+              className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
+              data-testid="nl-formula-retry"
+            >
+              Retry
+            </button>
+          </RibbonVisibilityPathItem>
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'result', 'dismiss']}>
+            <button
+              onClick={onDismiss}
+              className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
+            >
+              Dismiss
+            </button>
+          </RibbonVisibilityPathItem>
         </div>
       ) : result ? (
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -252,26 +267,32 @@ function NLFormulaBarImpl({
               {result.explanation}
             </span>
           </div>
-          <button
-            onClick={onAccept}
-            className="shrink-0 px-3 py-0.5 rounded text-xs font-medium bg-ss-primary text-ss-text-inverse hover:bg-ss-primary-hover transition-colors"
-            data-testid="nl-formula-accept"
-          >
-            Accept
-          </button>
-          <button
-            onClick={onRetry}
-            className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
-            data-testid="nl-formula-retry"
-          >
-            Retry
-          </button>
-          <button
-            onClick={onDismiss}
-            className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
-          >
-            Dismiss
-          </button>
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'result', 'accept']}>
+            <button
+              onClick={onAccept}
+              className="shrink-0 px-3 py-0.5 rounded text-xs font-medium bg-ss-primary text-ss-text-inverse hover:bg-ss-primary-hover transition-colors"
+              data-testid="nl-formula-accept"
+            >
+              Accept
+            </button>
+          </RibbonVisibilityPathItem>
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'result', 'retry']}>
+            <button
+              onClick={onRetry}
+              className="shrink-0 px-2 py-0.5 rounded text-xs font-medium border border-ss-border hover:bg-ss-surface-hover transition-colors"
+              data-testid="nl-formula-retry"
+            >
+              Retry
+            </button>
+          </RibbonVisibilityPathItem>
+          <RibbonVisibilityPathItem path={['nlFormulaBar', 'result', 'dismiss']}>
+            <button
+              onClick={onDismiss}
+              className="shrink-0 px-2 py-0.5 rounded text-xs text-ss-text-secondary hover:text-ss-text transition-colors"
+            >
+              Dismiss
+            </button>
+          </RibbonVisibilityPathItem>
         </div>
       ) : null}
     </div>

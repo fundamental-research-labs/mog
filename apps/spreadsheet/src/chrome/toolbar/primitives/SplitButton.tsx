@@ -29,6 +29,7 @@ import React from 'react';
 
 import type { GroupRenderMode } from '@mog-sdk/contracts/ribbon';
 import { useGroupRenderMode } from '../collapse';
+import { useRibbonButtonVisible } from '../visibility/RibbonVisibilityContext';
 import { DropdownArrowIcon } from './ToolbarIcons';
 
 type SplitButtonVariant = 'small' | 'large';
@@ -60,6 +61,8 @@ interface SplitButtonProps {
   dropdownTestId?: string;
   /** Optional stable test selector for the main action button */
   mainTestId?: string;
+  /** Optional typed ribbon visibility key. Defaults to test id, label, title, then aria-label. */
+  visibilityKey?: string;
 }
 
 /**
@@ -124,9 +127,21 @@ export const SplitButton = React.memo(function SplitButton({
   className = '',
   dropdownTestId,
   mainTestId,
+  visibilityKey,
 }: SplitButtonProps) {
   // Get group render mode from context (collapse support)
   const groupMode = useGroupRenderMode();
+  const visible = useRibbonButtonVisible({
+    visibilityKey,
+    label,
+    testId: mainTestId ?? dropdownTestId,
+    title,
+    ariaLabel,
+  });
+
+  if (!visible) {
+    return null;
+  }
 
   // Determine if label should be shown
   const showLabel = shouldShowLabel(groupMode, variant, !!label);

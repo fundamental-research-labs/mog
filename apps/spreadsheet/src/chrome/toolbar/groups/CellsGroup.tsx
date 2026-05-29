@@ -54,6 +54,7 @@ import {
   InsertSheetIcon,
   RowHeightIcon,
 } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Component
@@ -146,91 +147,93 @@ export const CellsGroup = React.memo(function CellsGroup() {
       {/* Vertical stack of three dropdown rows - matches Excel's Cells group layout */}
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Insert Row - Split button: main area inserts immediately, arrow opens dropdown */}
-        <RibbonDropdown
-          open={insertDropdownOpen}
-          onOpenChange={setInsertDropdownOpen}
-          menuTestId="ribbon-dropdown-menu-insert"
-          trigger={
-            <Tooltip title="Insert" description="Insert cells, rows, columns, or sheets">
-              {/* TODO retire ribbon-insert-button after specs migrate to
+        <RibbonVisibilityItem item="insert">
+          <RibbonDropdown
+            open={insertDropdownOpen}
+            onOpenChange={setInsertDropdownOpen}
+            menuTestId="ribbon-dropdown-menu-insert"
+            trigger={
+              <Tooltip title="Insert" description="Insert cells, rows, columns, or sheets">
+                {/* TODO retire ribbon-insert-button after specs migrate to
  ribbon-dropdown-insert. Active consumers:
  dev/app-eval/scenarios/editing/insert-cells-default.spec.ts
  and the form-control-styling/radio/* docstrings. The
  contract-aligned testid `ribbon-dropdown-insert` lives
  on the arrow button below. */}
-              <div className="flex items-center" data-testid="ribbon-insert-button">
-                {/* Main click area: insert cells immediately (shift down) */}
-                <button
-                  type="button"
-                  disabled={!sheetPermissions.insertRows}
-                  className={`flex items-center gap-1 px-1.5 h-[var(--ribbon-button-height-third)] rounded-l select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none ${
-                    sheetPermissions.insertRows ? 'cursor-pointer' : 'cursor-not-allowed'
-                  }`}
-                  aria-label="Insert"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dispatchAction('INSERT_CELLS_SHIFT_DOWN');
-                  }}
-                >
-                  <span className="flex items-center justify-center w-4 h-4">
-                    <InsertCellsIcon />
-                  </span>
-                  <span className="text-ribbon-compact leading-tight whitespace-nowrap">
-                    Insert
-                  </span>
-                </button>
-                {/* Arrow area: opens dropdown menu (click bubbles to PopoverTrigger) */}
-                <button
-                  type="button"
-                  data-testid="ribbon-dropdown-insert"
-                  className="flex items-center justify-center h-[var(--ribbon-button-height-third)] px-0.5 rounded-r cursor-pointer select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active"
-                  aria-label="Insert options"
-                  aria-expanded={insertDropdownOpen}
-                  aria-haspopup="menu"
-                >
-                  <svg width="8" height="4" viewBox="0 0 8 4" fill="currentColor">
-                    <path d="M0 0l4 4 4-4z" />
-                  </svg>
-                </button>
-              </div>
-            </Tooltip>
-          }
-          width="sm"
-          menuLabel="Insert options"
-        >
-          <RibbonDropdownItem
-            dataValue="insert-cells"
-            icon={<InsertCellsIcon />}
-            onClick={() => dispatchAction('OPEN_INSERT_CELLS_DIALOG')}
+                <div className="flex items-center" data-testid="ribbon-insert-button">
+                  {/* Main click area: insert cells immediately (shift down) */}
+                  <button
+                    type="button"
+                    disabled={!sheetPermissions.insertRows}
+                    className={`flex items-center gap-1 px-1.5 h-[var(--ribbon-button-height-third)] rounded-l select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none ${
+                      sheetPermissions.insertRows ? 'cursor-pointer' : 'cursor-not-allowed'
+                    }`}
+                    aria-label="Insert"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatchAction('INSERT_CELLS_SHIFT_DOWN');
+                    }}
+                  >
+                    <span className="flex items-center justify-center w-4 h-4">
+                      <InsertCellsIcon />
+                    </span>
+                    <span className="text-ribbon-compact leading-tight whitespace-nowrap">
+                      Insert
+                    </span>
+                  </button>
+                  {/* Arrow area: opens dropdown menu (click bubbles to PopoverTrigger) */}
+                  <button
+                    type="button"
+                    data-testid="ribbon-dropdown-insert"
+                    className="flex items-center justify-center h-[var(--ribbon-button-height-third)] px-0.5 rounded-r cursor-pointer select-none bg-transparent text-ss-text-secondary hover:bg-ss-surface-hover active:bg-ss-surface-active"
+                    aria-label="Insert options"
+                    aria-expanded={insertDropdownOpen}
+                    aria-haspopup="menu"
+                  >
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="currentColor">
+                      <path d="M0 0l4 4 4-4z" />
+                    </svg>
+                  </button>
+                </div>
+              </Tooltip>
+            }
+            width="sm"
+            menuLabel="Insert options"
           >
-            Insert Cells...
-          </RibbonDropdownItem>
-          <RibbonDropdownItem
-            dataValue="insert-rows"
-            icon={<InsertRowIcon />}
-            onClick={() => dispatchAction('INSERT_ROW_ABOVE')}
-            disabled={!sheetPermissions.insertRows}
-          >
-            Insert Sheet Rows
-          </RibbonDropdownItem>
-          <RibbonDropdownItem
-            dataValue="insert-columns"
-            icon={<InsertColumnIcon />}
-            onClick={() => dispatchAction('INSERT_COLUMN_LEFT')}
-            disabled={!sheetPermissions.insertColumns}
-          >
-            Insert Sheet Columns
-          </RibbonDropdownItem>
-          <RibbonDropdownDivider />
-          <RibbonDropdownItem
-            dataValue="insert-sheet"
-            icon={<InsertSheetIcon />}
-            onClick={() => dispatchAction('INSERT_SHEET')}
-            disabled={workbookStructureLocked}
-          >
-            Insert Sheet
-          </RibbonDropdownItem>
-        </RibbonDropdown>
+            <RibbonDropdownItem
+              dataValue="insert-cells"
+              icon={<InsertCellsIcon />}
+              onClick={() => dispatchAction('OPEN_INSERT_CELLS_DIALOG')}
+            >
+              Insert Cells...
+            </RibbonDropdownItem>
+            <RibbonDropdownItem
+              dataValue="insert-rows"
+              icon={<InsertRowIcon />}
+              onClick={() => dispatchAction('INSERT_ROW_ABOVE')}
+              disabled={!sheetPermissions.insertRows}
+            >
+              Insert Sheet Rows
+            </RibbonDropdownItem>
+            <RibbonDropdownItem
+              dataValue="insert-columns"
+              icon={<InsertColumnIcon />}
+              onClick={() => dispatchAction('INSERT_COLUMN_LEFT')}
+              disabled={!sheetPermissions.insertColumns}
+            >
+              Insert Sheet Columns
+            </RibbonDropdownItem>
+            <RibbonDropdownDivider />
+            <RibbonDropdownItem
+              dataValue="insert-sheet"
+              icon={<InsertSheetIcon />}
+              onClick={() => dispatchAction('INSERT_SHEET')}
+              disabled={workbookStructureLocked}
+            >
+              Insert Sheet
+            </RibbonDropdownItem>
+          </RibbonDropdown>
+        </RibbonVisibilityItem>
 
         {/* Delete Row */}
         <RibbonDropdown

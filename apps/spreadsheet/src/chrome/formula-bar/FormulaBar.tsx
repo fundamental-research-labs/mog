@@ -23,6 +23,7 @@ import { CheckmarkSvg, CloseSvg } from '@mog/icons';
 import { Input, Textarea } from '@mog/shell';
 import { FormulaHighlighter } from '../../components/editor/FormulaHighlighter';
 import type { FormulaBarProps } from '../../internal-api';
+import { RibbonVisibilityPathItem } from '../toolbar/visibility/RibbonVisibilityContext';
 import { NameBoxDropdown } from './NameBoxDropdown';
 
 // =============================================================================
@@ -209,59 +210,67 @@ export function FormulaBar({
       className={`flex px-2 bg-ss-surface text-ss-text gap-2 ${isExpanded ? 'items-start py-1' : 'items-center h-7'}`}
     >
       {/* Cell Address / Name Box -.2: Interactive dropdown */}
-      <NameBoxDropdown />
+      <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'nameBox']}>
+        <NameBoxDropdown />
+      </RibbonVisibilityPathItem>
 
       {/* Formula Bar Confirm/Cancel Buttons (Excel parity) */}
       {/* Hidden in read-only mode — no editing affordances */}
       {!readOnly && (
         <div className="flex items-center gap-0.5 shrink-0">
           {/* Cancel Button (X) - visible only when editing */}
-          <button
-            type="button"
-            onClick={onCancel}
-            className={`w-[22px] h-[22px] flex items-center justify-center rounded transition-colors ${
-              isEditing
-                ? 'text-ss-error hover:bg-ss-error/10 cursor-pointer'
-                : 'text-ss-text-disabled cursor-default pointer-events-none opacity-50'
-            }`}
-            title="Cancel (Escape)"
-            aria-label="Cancel edit"
-            tabIndex={isEditing ? 0 : -1}
-            disabled={!isEditing}
-          >
-            <CloseSvg className="w-4 h-4" />
-          </button>
+          <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'cancelEdit']}>
+            <button
+              type="button"
+              onClick={onCancel}
+              className={`w-[22px] h-[22px] flex items-center justify-center rounded transition-colors ${
+                isEditing
+                  ? 'text-ss-error hover:bg-ss-error/10 cursor-pointer'
+                  : 'text-ss-text-disabled cursor-default pointer-events-none opacity-50'
+              }`}
+              title="Cancel (Escape)"
+              aria-label="Cancel edit"
+              tabIndex={isEditing ? 0 : -1}
+              disabled={!isEditing}
+            >
+              <CloseSvg className="w-4 h-4" />
+            </button>
+          </RibbonVisibilityPathItem>
 
           {/* Confirm Button (Checkmark) - visible only when editing */}
-          <button
-            type="button"
-            onClick={onCommit}
-            className={`w-[22px] h-[22px] flex items-center justify-center rounded transition-colors ${
-              isEditing
-                ? 'text-ss-success hover:bg-ss-success/10 cursor-pointer'
-                : 'text-ss-text-disabled cursor-default pointer-events-none opacity-50'
-            }`}
-            title="Confirm (Enter)"
-            aria-label="Confirm edit"
-            tabIndex={isEditing ? 0 : -1}
-            disabled={!isEditing}
-          >
-            <CheckmarkSvg className="w-4 h-4" />
-          </button>
+          <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'confirmEdit']}>
+            <button
+              type="button"
+              onClick={onCommit}
+              className={`w-[22px] h-[22px] flex items-center justify-center rounded transition-colors ${
+                isEditing
+                  ? 'text-ss-success hover:bg-ss-success/10 cursor-pointer'
+                  : 'text-ss-text-disabled cursor-default pointer-events-none opacity-50'
+              }`}
+              title="Confirm (Enter)"
+              aria-label="Confirm edit"
+              tabIndex={isEditing ? 0 : -1}
+              disabled={!isEditing}
+            >
+              <CheckmarkSvg className="w-4 h-4" />
+            </button>
+          </RibbonVisibilityPathItem>
         </div>
       )}
 
       {/* Function Icon - clickable (Excel parity quickwin A8) */}
       {/* Hidden in read-only mode */}
       {!readOnly && (
-        <button
-          type="button"
-          onClick={onFxClick}
-          className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary text-body-lg italic shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
-          title="Insert Function"
-        >
-          <span className="font-serif">fx</span>
-        </button>
+        <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'insertFunction']}>
+          <button
+            type="button"
+            onClick={onFxClick}
+            className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary text-body-lg italic shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
+            title="Insert Function"
+          >
+            <span className="font-serif">fx</span>
+          </button>
+        </RibbonVisibilityPathItem>
       )}
 
       {/* Value/Formula Input with Syntax Highlighting Overlay */}
@@ -370,65 +379,78 @@ export function FormulaBar({
       {/* Chrome-symmetry: hide the formula bar. Reopen via View ribbon
  "Show formula bar" toggle (data-action="open-panel-formula-bar"). */}
       {onClosePanel && (
-        <button
-          type="button"
-          onClick={onClosePanel}
-          data-testid="panel-formula-bar-close"
-          className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
-          title="Hide formula bar"
-          aria-label="Hide formula bar"
-        >
-          <CloseSvg className="w-3 h-3" />
-        </button>
+        <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'hideFormulaBar']}>
+          <button
+            type="button"
+            onClick={onClosePanel}
+            data-testid="panel-formula-bar-close"
+            className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
+            title="Hide formula bar"
+            aria-label="Hide formula bar"
+          >
+            <CloseSvg className="w-3 h-3" />
+          </button>
+        </RibbonVisibilityPathItem>
       )}
 
       {/* AI Formula Bar Toggle (Ctrl+Shift+I) */}
       {onToggleNLBar && (
-        <button
-          type="button"
-          onClick={onToggleNLBar}
-          className={`w-[22px] h-[22px] flex items-center justify-center shrink-0 rounded cursor-pointer transition-colors ${
-            nlBarVisible
-              ? 'text-ss-accent bg-ss-accent/10'
-              : 'text-ss-text-secondary hover:bg-ss-surface-hover'
-          }`}
-          title="Toggle AI Formula Bar (Ctrl+Shift+I)"
-          aria-label="Toggle AI formula bar"
-          data-testid="toggle-nl-formula-bar"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M8 1l1.5 3.5L13 6l-3.5 1.5L8 11 6.5 7.5 3 6l3.5-1.5L8 1z"
-              fill="currentColor"
-            />
-            <path
-              d="M12 9l.75 1.75L14.5 11.5l-1.75.75L12 14l-.75-1.75L9.5 11.5l1.75-.75L12 9z"
-              fill="currentColor"
-              opacity="0.6"
-            />
-          </svg>
-        </button>
+        <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'toggleAiFormulaBar']}>
+          <button
+            type="button"
+            onClick={onToggleNLBar}
+            className={`w-[22px] h-[22px] flex items-center justify-center shrink-0 rounded cursor-pointer transition-colors ${
+              nlBarVisible
+                ? 'text-ss-accent bg-ss-accent/10'
+                : 'text-ss-text-secondary hover:bg-ss-surface-hover'
+            }`}
+            title="Toggle AI Formula Bar (Ctrl+Shift+I)"
+            aria-label="Toggle AI formula bar"
+            data-testid="toggle-nl-formula-bar"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M8 1l1.5 3.5L13 6l-3.5 1.5L8 11 6.5 7.5 3 6l3.5-1.5L8 1z"
+                fill="currentColor"
+              />
+              <path
+                d="M12 9l.75 1.75L14.5 11.5l-1.75.75L12 14l-.75-1.75L9.5 11.5l1.75-.75L12 9z"
+                fill="currentColor"
+                opacity="0.6"
+              />
+            </svg>
+          </button>
+        </RibbonVisibilityPathItem>
       )}
 
       {/* Expand/Collapse Toggle Button (Ctrl+Shift+U) */}
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
-        title={
-          isExpanded ? 'Collapse Formula Bar (Ctrl+Shift+U)' : 'Expand Formula Bar (Ctrl+Shift+U)'
-        }
-      >
-        {/* Chevron icon: up when expanded, down when collapsed */}
-        <svg
-          className={`w-3 h-3 transition-transform ${isExpanded ? '' : 'rotate-180'}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+      <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'expandCollapse']}>
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
+          title={
+            isExpanded
+              ? 'Collapse Formula Bar (Ctrl+Shift+U)'
+              : 'Expand Formula Bar (Ctrl+Shift+U)'
+          }
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-        </svg>
-      </button>
+          {/* Chevron icon: up when expanded, down when collapsed */}
+          <svg
+            className={`w-3 h-3 transition-transform ${isExpanded ? '' : 'rotate-180'}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 15l7-7 7 7"
+            />
+          </svg>
+        </button>
+      </RibbonVisibilityPathItem>
     </div>
   );
 }

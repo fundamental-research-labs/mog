@@ -59,6 +59,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         chart_auxiliary_files: Vec::new(),
         chart_auxiliary_parts: Vec::new(),
         chart_ex_replay: None,
+        standard_chart_provenance: None,
+        standard_chart_export_authority: None,
         is_chart_ex: false,
         cnv_pr_name: None,
         cnv_pr_id: None,

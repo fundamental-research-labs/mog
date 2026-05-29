@@ -952,8 +952,48 @@ export interface ChartLineData {
 export interface ChartOoxmlProps {
   definition?: unknown;
   drawingFrame?: ChartDrawingFrameOoxmlProps;
+  chartRelationships?: ChartRelationshipData[];
+  chartAuxiliaryFiles?: [string, number[]][];
+  chartAuxiliaryParts?: unknown[];
+  standardChartProvenance?: StandardChartProvenance;
+  standardChartExportAuthority?: StandardChartExportAuthority;
   isChartEx?: boolean;
 }
+
+export interface ChartRelationshipData {
+  rId: string;
+  relationshipType?: string;
+  target?: string;
+  targetMode?: string;
+}
+
+export interface StandardChartProvenance {
+  originalPath?: string;
+  relsPath?: string;
+  projectionSchemaVersion: number;
+  projectionFingerprint?: string;
+  relationships?: ChartRelationshipData[];
+  auxiliaryPaths?: string[];
+}
+
+export interface StandardChartExportAuthority {
+  schemaVersion: number;
+  validity: StandardChartAuthorityValidity;
+  chartPartRevision: number;
+  packageOwner?: string;
+  relationshipClosureCurrent: boolean;
+  projectionFingerprint?: string;
+  invalidatedOwnerIds?: string[];
+  staleReason?: string;
+}
+
+export type StandardChartAuthorityValidity =
+  | "unverified"
+  | "current"
+  | "partiallyInvalidated"
+  | "stale"
+  | "unsafe"
+  | "unsupported";
 
 export interface ChartRoundTripData {
   chartGroupsMeta?: ChartGroupMeta[];

@@ -11,7 +11,8 @@ use super::floating_object::{
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
-    ChartView3DData, DataLabelData, LegendData, ObjectSize,
+    ChartView3DData, DataLabelData, LegendData, ObjectSize, StandardChartExportAuthority,
+    StandardChartProvenance,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
@@ -169,6 +170,12 @@ pub struct ChartSpec {
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
     #[serde(skip)]
     pub chart_ex_replay: Option<ChartExReplayData>,
+    /// Durable standard chart import provenance used by XLSX export planning.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub standard_chart_provenance: Option<StandardChartProvenance>,
+    /// Durable standard chart authority used to decide whether imported typed owners are current.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub standard_chart_export_authority: Option<StandardChartExportAuthority>,
 
     /// Whether this chart uses ChartEx format (cx: namespace) instead of standard c: namespace.
     /// ChartEx covers modern chart types: Waterfall, Treemap, Sunburst, Funnel, etc.
@@ -301,6 +308,10 @@ impl ChartSpec {
             .map(|o| o.chart_auxiliary_parts.clone())
             .unwrap_or_default();
         let chart_ex_replay = ooxml.and_then(|o| o.chart_ex_replay.clone());
+        let standard_chart_provenance =
+            ooxml.and_then(|o| o.standard_chart_provenance.clone());
+        let standard_chart_export_authority =
+            ooxml.and_then(|o| o.standard_chart_export_authority.clone());
         let is_chart_ex = ooxml.map(|o| o.is_chart_ex).unwrap_or_else(|| {
             matches!(
                 ooxml.and_then(|o| o.definition.as_ref()),
@@ -434,6 +445,8 @@ impl ChartSpec {
             chart_auxiliary_files,
             chart_auxiliary_parts,
             chart_ex_replay,
+            standard_chart_provenance,
+            standard_chart_export_authority,
             is_chart_ex,
             cnv_pr_name,
             cnv_pr_id,
@@ -536,6 +549,8 @@ impl ChartSpec {
             && self.chart_auxiliary_files.is_empty()
             && self.chart_auxiliary_parts.is_empty()
             && self.chart_ex_replay.is_none()
+            && self.standard_chart_provenance.is_none()
+            && self.standard_chart_export_authority.is_none()
             && !self.is_chart_ex
         {
             None
@@ -546,6 +561,8 @@ impl ChartSpec {
                 chart_relationships: self.chart_relationships.clone(),
                 chart_auxiliary_files: self.chart_auxiliary_files.clone(),
                 chart_auxiliary_parts: self.chart_auxiliary_parts.clone(),
+                standard_chart_provenance: self.standard_chart_provenance.clone(),
+                standard_chart_export_authority: self.standard_chart_export_authority.clone(),
                 chart_ex_replay: self.chart_ex_replay.clone(),
                 is_chart_ex: self.is_chart_ex,
             })

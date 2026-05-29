@@ -43,6 +43,78 @@ pub enum ChartDefinition {
     ChartEx(ooxml_types::chart_ex::ChartExSpace),
 }
 
+/// Durable provenance captured for an imported standard OOXML `c:chartSpace`.
+///
+/// This is package evidence for export planning. It does not make imported OOXML
+/// authoritative by itself; export still needs a current authority record.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct StandardChartProvenance {
+    /// Original chart part path, e.g. `xl/charts/chart2.xml`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_path: Option<String>,
+    /// Original chart `.rels` part path, when present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rels_path: Option<String>,
+    /// Schema version for owner projection fingerprints.
+    pub projection_schema_version: u32,
+    /// Import-time fingerprint of the live typed chart projection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projection_fingerprint: Option<String>,
+    /// Relationship evidence owned by the imported chart part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<ChartRelationshipData>,
+    /// Imported auxiliary package part paths owned by the chart.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auxiliary_paths: Vec<String>,
+}
+
+/// Export authority state for an imported standard OOXML chart.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct StandardChartExportAuthority {
+    /// Schema version for the authority record.
+    pub schema_version: u32,
+    /// Current export validity of the imported chart owner package.
+    pub validity: StandardChartAuthorityValidity,
+    /// Monotonic chart-part revision known to the chart owner.
+    pub chart_part_revision: u64,
+    /// Package owner identity, normally the original chart part path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_owner: Option<String>,
+    /// Whether imported chart relationships and auxiliary parts form a closed package graph.
+    pub relationship_closure_current: bool,
+    /// Current live typed projection fingerprint that authority was granted for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projection_fingerprint: Option<String>,
+    /// Owner IDs invalidated since import or last validation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invalidated_owner_ids: Vec<String>,
+    /// Persisted stale/unsafe reason for diagnostics.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<String>,
+}
+
+/// Standard chart export authority validity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StandardChartAuthorityValidity {
+    Unverified,
+    Current,
+    PartiallyInvalidated,
+    Stale,
+    Unsafe,
+    Unsupported,
+}
+
+impl Default for StandardChartAuthorityValidity {
+    fn default() -> Self {
+        Self::Unverified
+    }
+}
+
 /// Chart type discriminator.
 ///
 /// Serializes as a plain JSON string. Known variants map to fixed strings;

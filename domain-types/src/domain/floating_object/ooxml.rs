@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::chart::{
     ChartAuxiliaryPart, ChartDefinition, ChartExReplayData, ChartRelationshipData,
+    StandardChartExportAuthority, StandardChartProvenance,
 };
 
 // ===========================================================================
@@ -200,6 +201,12 @@ pub struct ChartOoxmlProps {
     /// Typed chart-owned auxiliary parts imported with the chart part.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
+    /// Durable standard `c:chartSpace` import provenance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub standard_chart_provenance: Option<StandardChartProvenance>,
+    /// Durable standard `c:chartSpace` export authority.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub standard_chart_export_authority: Option<StandardChartExportAuthority>,
     #[serde(skip)]
     pub chart_ex_replay: Option<ChartExReplayData>,
     /// Whether this chart uses ChartEx format.

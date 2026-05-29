@@ -2,18 +2,43 @@ use super::chart_auxiliary;
 use crate::write::write_error::WriteError;
 
 pub(super) fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
-    if has_modeled_chart_space_state(chart_spec) {
-        return true;
-    }
+    !can_serialize_current_imported_chart_space(chart_spec)
+}
 
-    if matches!(
+fn can_serialize_current_imported_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
+    if !matches!(
         chart_spec.definition,
         Some(domain_types::ChartDefinition::Chart(_))
     ) {
         return false;
     }
 
-    false
+    let Some(provenance) = chart_spec.standard_chart_provenance.as_ref() else {
+        return false;
+    };
+    let Some(authority) = chart_spec.standard_chart_export_authority.as_ref() else {
+        return false;
+    };
+    if authority.schema_version == 0
+        || !matches!(
+            authority.validity,
+            domain_types::chart::StandardChartAuthorityValidity::Current
+        )
+        || !authority.relationship_closure_current
+        || !authority.invalidated_owner_ids.is_empty()
+    {
+        return false;
+    }
+
+    if provenance.projection_schema_version != STANDARD_CHART_PROJECTION_SCHEMA_VERSION {
+        return false;
+    }
+    if provenance.original_path.as_deref() != authority.package_owner.as_deref() {
+        return false;
+    }
+    let current_fingerprint = standard_chart_projection_fingerprint(chart_spec);
+    provenance.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
+        && authority.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
 }
 
 fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -67,6 +92,93 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.floor_format.is_some()
         || chart_spec.side_wall_format.is_some()
         || chart_spec.back_wall_format.is_some()
+}
+
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;
+
+fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -> String {
+    let mut fingerprint = Fnv1a64::default();
+    fingerprint.write_str(chart_spec.chart_type.as_str());
+    fingerprint.write_json(&chart_spec.title);
+    fingerprint.write_json(&chart_spec.series);
+    fingerprint.write_json(&chart_spec.sub_type);
+    fingerprint.write_json(&chart_spec.legend);
+    fingerprint.write_json(&chart_spec.axes);
+    fingerprint.write_json(&chart_spec.data_labels);
+    fingerprint.write_json(&chart_spec.data_range);
+    fingerprint.write_json(&chart_spec.style);
+    fingerprint.write_json(&chart_spec.rounded_corners);
+    fingerprint.write_json(&chart_spec.auto_title_deleted);
+    fingerprint.write_json(&chart_spec.show_data_labels_over_max);
+    fingerprint.write_json(&chart_spec.chart_format);
+    fingerprint.write_json(&chart_spec.plot_format);
+    fingerprint.write_json(&chart_spec.title_format);
+    fingerprint.write_json(&chart_spec.title_rich_text);
+    fingerprint.write_json(&chart_spec.title_formula);
+    fingerprint.write_json(&chart_spec.data_table);
+    fingerprint.write_json(&chart_spec.display_blanks_as);
+    fingerprint.write_json(&chart_spec.plot_visible_only);
+    fingerprint.write_json(&chart_spec.gap_width);
+    fingerprint.write_json(&chart_spec.overlap);
+    fingerprint.write_json(&chart_spec.doughnut_hole_size);
+    fingerprint.write_json(&chart_spec.first_slice_angle);
+    fingerprint.write_json(&chart_spec.bubble_scale);
+    fingerprint.write_json(&chart_spec.split_type);
+    fingerprint.write_json(&chart_spec.split_value);
+    fingerprint.write_json(&chart_spec.category_label_level);
+    fingerprint.write_json(&chart_spec.series_name_level);
+    fingerprint.write_json(&chart_spec.show_all_field_buttons);
+    fingerprint.write_json(&chart_spec.second_plot_size);
+    fingerprint.write_json(&chart_spec.vary_by_categories);
+    fingerprint.write_json(&chart_spec.title_h_align);
+    fingerprint.write_json(&chart_spec.title_v_align);
+    fingerprint.write_json(&chart_spec.title_show_shadow);
+    fingerprint.write_json(&chart_spec.pivot_options);
+    fingerprint.write_json(&chart_spec.bar_shape);
+    fingerprint.write_json(&chart_spec.bubble_3d_effect);
+    fingerprint.write_json(&chart_spec.wireframe);
+    fingerprint.write_json(&chart_spec.surface_top_view);
+    fingerprint.write_json(&chart_spec.color_scheme);
+    fingerprint.write_json(&chart_spec.view_3d);
+    fingerprint.write_json(&chart_spec.floor_format);
+    fingerprint.write_json(&chart_spec.side_wall_format);
+    fingerprint.write_json(&chart_spec.back_wall_format);
+    format!("{:016x}", fingerprint.finish())
+}
+
+#[derive(Clone, Copy)]
+struct Fnv1a64(u64);
+
+impl Default for Fnv1a64 {
+    fn default() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+}
+
+impl Fnv1a64 {
+    fn write_json<T: serde::Serialize>(&mut self, value: &T) {
+        match serde_json::to_vec(value) {
+            Ok(bytes) => self.write_bytes(&bytes),
+            Err(_) => self.write_bytes(b"<serde-error>"),
+        }
+        self.write_bytes(&[0xff]);
+    }
+
+    fn write_str(&mut self, value: &str) {
+        self.write_bytes(value.as_bytes());
+        self.write_bytes(&[0xff]);
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+    }
+
+    fn finish(self) -> u64 {
+        self.0
+    }
 }
 
 pub(super) fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {

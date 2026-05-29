@@ -65,10 +65,138 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 .unwrap_or_default();
             spec.chart_auxiliary_parts =
                 chart_auxiliary_parts(&spec.chart_relationships, &spec.chart_auxiliary_files);
+            let projection_fingerprint = standard_chart_projection_fingerprint(&spec);
+            let relationship_closure_current =
+                standard_chart_relationship_closure_current(&spec.chart_relationships);
+            spec.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
+                original_path: chart.original_path.clone(),
+                rels_path: chart.chart_rels_bytes.as_ref().map(|(path, _)| path.clone()),
+                projection_schema_version: STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
+                projection_fingerprint: Some(projection_fingerprint.clone()),
+                relationships: spec.chart_relationships.clone(),
+                auxiliary_paths: spec
+                    .chart_auxiliary_files
+                    .iter()
+                    .map(|(path, _)| path.clone())
+                    .collect(),
+            });
+            spec.standard_chart_export_authority =
+                Some(domain_types::chart::StandardChartExportAuthority {
+                    schema_version: 1,
+                    validity: if relationship_closure_current {
+                        domain_types::chart::StandardChartAuthorityValidity::Current
+                    } else {
+                        domain_types::chart::StandardChartAuthorityValidity::Unsafe
+                    },
+                    chart_part_revision: 0,
+                    package_owner: chart.original_path.clone(),
+                    relationship_closure_current,
+                    projection_fingerprint: Some(projection_fingerprint),
+                    invalidated_owner_ids: Vec::new(),
+                    stale_reason: (!relationship_closure_current)
+                        .then(|| "chart relationship graph is not closed".to_string()),
+                });
 
             spec
         })
         .collect()
+}
+
+fn standard_chart_relationship_closure_current(
+    relationships: &[domain_types::chart::ChartRelationshipData],
+) -> bool {
+    relationships
+        .iter()
+        .all(|rel| {
+            !crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+        })
+}
+
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;
+
+fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
+    let mut fingerprint = Fnv1a64::default();
+    fingerprint.write_str(spec.chart_type.as_str());
+    fingerprint.write_json(&spec.title);
+    fingerprint.write_json(&spec.series);
+    fingerprint.write_json(&spec.sub_type);
+    fingerprint.write_json(&spec.legend);
+    fingerprint.write_json(&spec.axes);
+    fingerprint.write_json(&spec.data_labels);
+    fingerprint.write_json(&spec.data_range);
+    fingerprint.write_json(&spec.style);
+    fingerprint.write_json(&spec.rounded_corners);
+    fingerprint.write_json(&spec.auto_title_deleted);
+    fingerprint.write_json(&spec.show_data_labels_over_max);
+    fingerprint.write_json(&spec.chart_format);
+    fingerprint.write_json(&spec.plot_format);
+    fingerprint.write_json(&spec.title_format);
+    fingerprint.write_json(&spec.title_rich_text);
+    fingerprint.write_json(&spec.title_formula);
+    fingerprint.write_json(&spec.data_table);
+    fingerprint.write_json(&spec.display_blanks_as);
+    fingerprint.write_json(&spec.plot_visible_only);
+    fingerprint.write_json(&spec.gap_width);
+    fingerprint.write_json(&spec.overlap);
+    fingerprint.write_json(&spec.doughnut_hole_size);
+    fingerprint.write_json(&spec.first_slice_angle);
+    fingerprint.write_json(&spec.bubble_scale);
+    fingerprint.write_json(&spec.split_type);
+    fingerprint.write_json(&spec.split_value);
+    fingerprint.write_json(&spec.category_label_level);
+    fingerprint.write_json(&spec.series_name_level);
+    fingerprint.write_json(&spec.show_all_field_buttons);
+    fingerprint.write_json(&spec.second_plot_size);
+    fingerprint.write_json(&spec.vary_by_categories);
+    fingerprint.write_json(&spec.title_h_align);
+    fingerprint.write_json(&spec.title_v_align);
+    fingerprint.write_json(&spec.title_show_shadow);
+    fingerprint.write_json(&spec.pivot_options);
+    fingerprint.write_json(&spec.bar_shape);
+    fingerprint.write_json(&spec.bubble_3d_effect);
+    fingerprint.write_json(&spec.wireframe);
+    fingerprint.write_json(&spec.surface_top_view);
+    fingerprint.write_json(&spec.color_scheme);
+    fingerprint.write_json(&spec.view_3d);
+    fingerprint.write_json(&spec.floor_format);
+    fingerprint.write_json(&spec.side_wall_format);
+    fingerprint.write_json(&spec.back_wall_format);
+    format!("{:016x}", fingerprint.finish())
+}
+
+#[derive(Clone, Copy)]
+struct Fnv1a64(u64);
+
+impl Default for Fnv1a64 {
+    fn default() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+}
+
+impl Fnv1a64 {
+    fn write_json<T: serde::Serialize>(&mut self, value: &T) {
+        match serde_json::to_vec(value) {
+            Ok(bytes) => self.write_bytes(&bytes),
+            Err(_) => self.write_bytes(b"<serde-error>"),
+        }
+        self.write_bytes(&[0xff]);
+    }
+
+    fn write_str(&mut self, value: &str) {
+        self.write_bytes(value.as_bytes());
+        self.write_bytes(&[0xff]);
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+    }
+
+    fn finish(self) -> u64 {
+        self.0
+    }
 }
 
 fn chart_owned_relationships(rels_xml: &[u8]) -> Vec<domain_types::chart::ChartRelationshipData> {
@@ -544,6 +672,8 @@ pub(crate) fn build_fallback_chart_spec(
         chart_auxiliary_files: Vec::new(),
         chart_auxiliary_parts: Vec::new(),
         chart_ex_replay: None,
+        standard_chart_provenance: None,
+        standard_chart_export_authority: None,
         is_chart_ex: false,
         cnv_pr_name: None,
         cnv_pr_id: None,
@@ -695,6 +825,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                         .unwrap_or_default(),
                     auxiliary_files: cx.auxiliary_files.clone(),
                 }),
+                standard_chart_provenance: None,
+                standard_chart_export_authority: None,
                 is_chart_ex: true,
                 cnv_pr_name: None,
                 cnv_pr_id: None,

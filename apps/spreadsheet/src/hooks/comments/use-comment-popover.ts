@@ -110,16 +110,16 @@ export interface UseCommentPopoverReturn {
   updateDraft: (content: RichText | string) => void;
 
   /** Add a new comment to the current cell */
-  addComment: (content: RichText | string) => void;
+  addComment: (content: RichText | string) => Promise<void>;
 
   /** Update an existing comment */
-  updateComment: (commentId: string, content: RichText | string) => void;
+  updateComment: (commentId: string, content: RichText | string) => Promise<void>;
 
   /** Delete a comment */
-  deleteComment: (commentId: string) => void;
+  deleteComment: (commentId: string) => Promise<void>;
 
   /** Reply to an existing comment */
-  replyToComment: (parentCommentId: string, content: RichText | string) => void;
+  replyToComment: (parentCommentId: string, content: RichText | string) => Promise<void>;
 
   /** Resolve/unresolve a thread */
   resolveThread: (threadId: string, resolved: boolean) => void;
@@ -378,48 +378,48 @@ export function useCommentPopover(): UseCommentPopoverReturn {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const addComment = useCallback(
-    (content: RichText | string) => {
+    async (content: RichText | string) => {
       if (!target) return;
 
       const ws = wb.getSheetById(target.sheetId);
       if (!ws) return;
 
       const text = typeof content === 'string' ? content : toPlainText(content);
-      void ws.comments.add(target.row, target.col, text, currentAuthor);
+      await ws.comments.add(target.row, target.col, text, currentAuthor);
     },
     [wb, target, currentAuthor],
   );
 
   const updateComment = useCallback(
-    (commentId: string, content: RichText | string) => {
+    async (commentId: string, content: RichText | string) => {
       if (!target) return;
       const ws = wb.getSheetById(target.sheetId);
       if (!ws) return;
       const text = typeof content === 'string' ? content : toPlainText(content);
-      void ws.comments.update(commentId, { text });
+      await ws.comments.update(commentId, { text });
     },
     [wb, target],
   );
 
   const deleteComment = useCallback(
-    (commentId: string) => {
+    async (commentId: string) => {
       if (!target) return;
       const ws = wb.getSheetById(target.sheetId);
       if (!ws) return;
-      void ws.comments.remove(commentId);
+      await ws.comments.remove(commentId);
     },
     [wb, target],
   );
 
   const replyToComment = useCallback(
-    (parentCommentId: string, content: RichText | string) => {
+    async (parentCommentId: string, content: RichText | string) => {
       if (!target) return;
 
       const ws = wb.getSheetById(target.sheetId);
       if (!ws) return;
 
       const text = typeof content === 'string' ? content : toPlainText(content);
-      void ws.comments.addReply(parentCommentId, text, currentAuthor);
+      await ws.comments.addReply(parentCommentId, text, currentAuthor);
     },
     [wb, target, currentAuthor],
   );

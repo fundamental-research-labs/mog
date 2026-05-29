@@ -50,7 +50,7 @@ import {
 import type { Comment } from '@mog-sdk/contracts/api';
 import { clipboardSelectors } from '../../selectors';
 import type { ClipboardState } from '@mog-sdk/contracts/actors';
-import { cellId, type CellId } from '@mog-sdk/contracts/cell-identity';
+import { cellId } from '@mog-sdk/contracts/cell-identity';
 import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { ClipboardSnapshot } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
@@ -352,6 +352,7 @@ async function prefetchClipboardData(
     formatEntries,
     rangeSchemas,
     conditionalFormats,
+    commentEntries,
   ] = await Promise.all([
     ws.getRange(minRow, minCol, maxRow, maxCol),
     ws.structure.getMergedRegions(),
@@ -379,6 +380,16 @@ async function prefetchClipboardData(
     // carry validation rules along with copied cells.
     ws._internal.getRangeSchemas().catch(() => []),
     ws.conditionalFormats.list().catch(() => []),
+    Promise.all(
+      Array.from({ length: numRows * numCols }, (_, idx) => {
+        const r = minRow + Math.floor(idx / numCols);
+        const c = minCol + (idx % numCols);
+        return ws.comments
+          .getForCell(r, c)
+          .then((comments) => [`${r},${c}`, comments] as [string, Comment[]])
+          .catch(() => [`${r},${c}`, []] as [string, Comment[]]);
+      }),
+    ),
   ]);
 
   // Build sync lookup maps
@@ -396,6 +407,7 @@ async function prefetchClipboardData(
   const formatLookup = new Map<string, any>(formatEntries);
   const hiddenRowSet = new Set(hiddenRowEntries.filter(([, h]) => h).map(([r]) => r));
   const hiddenColSet = new Set(hiddenColEntries.filter(([, h]) => h).map(([c]) => c));
+  const commentsByPosition = new Map<string, Comment[]>(commentEntries);
 
   // Build merge origin lookup for export options
   const mergeLookup = new Map<
@@ -428,6 +440,7 @@ async function prefetchClipboardData(
     isColHidden: (_sid, col) => hiddenColSet.has(col),
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
+    getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
   const exportOptions = {
@@ -477,18 +490,16 @@ async function prefetchSparseClipboardData(
   const commentPositions = await ws._internal
     .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
     .catch(() => new Map<string, { row: number; col: number }>());
-  const commentsByCellId = new Map<CellId, Comment[]>();
-  const cellIdByPosition = new Map<string, CellId>();
+  const commentsByPosition = new Map<string, Comment[]>();
   for (const comment of allComments) {
     const position = commentPositions.get(comment.cellRef);
     if (!position || !isCellInAnyRange(position.row, position.col, mutableRanges)) continue;
-    const id = cellId(comment.cellRef);
-    cellIdByPosition.set(`${position.row},${position.col}`, id);
-    const existing = commentsByCellId.get(id);
+    const key = `${position.row},${position.col}`;
+    const existing = commentsByPosition.get(key);
     if (existing) {
       existing.push(comment);
     } else {
-      commentsByCellId.set(id, [comment]);
+      commentsByPosition.set(key, [comment]);
     }
   }
 
@@ -563,8 +574,7 @@ async function prefetchSparseClipboardData(
       })),
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
-    getCellIdAt: (_sid, row, col) => cellIdByPosition.get(`${row},${col}`) ?? null,
-    getCommentsForCell: (_sid, cellId) => commentsByCellId.get(cellId) ?? [],
+    getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
   const buildData = (clipRanges: CellRange[]) =>

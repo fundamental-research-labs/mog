@@ -351,9 +351,9 @@ export function CommentPopover() {
     cancel();
   }, [cancel]);
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback(async () => {
     if (localEditingCommentId && editContent.trim()) {
-      updateComment(localEditingCommentId, editContent.trim());
+      await updateComment(localEditingCommentId, editContent.trim());
       setLocalMode('view');
       setLocalEditingCommentId(null);
       setEditContent('');
@@ -374,9 +374,9 @@ export function CommentPopover() {
     setNewContent('');
   }, []);
 
-  const handleSubmitReply = useCallback(() => {
+  const handleSubmitReply = useCallback(async () => {
     if (replyingToId && newContent.trim()) {
-      replyToComment(replyingToId, newContent.trim());
+      await replyToComment(replyingToId, newContent.trim());
       handleCancelReply();
     }
   }, [replyingToId, newContent, replyToComment, handleCancelReply]);
@@ -397,9 +397,9 @@ export function CommentPopover() {
     cancel();
   }, [comments.length, close, cancel]);
 
-  const handleSubmitComment = useCallback(() => {
+  const handleSubmitComment = useCallback(async () => {
     if (newContent.trim()) {
-      addComment(newContent.trim());
+      await addComment(newContent.trim());
       setNewContent('');
       setLocalMode('view');
       // Close the popover after a successful "Add Comment" — matches Excel
@@ -422,8 +422,8 @@ export function CommentPopover() {
   }, [comments, resolveThread]);
 
   const handleDelete = useCallback(
-    (commentId: string) => {
-      deleteComment(commentId);
+    async (commentId: string) => {
+      await deleteComment(commentId);
     },
     [deleteComment],
   );

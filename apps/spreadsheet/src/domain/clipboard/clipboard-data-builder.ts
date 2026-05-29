@@ -9,7 +9,6 @@
  *
  */
 
-import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import type { Comment } from '@mog-sdk/contracts/api';
 import type { ConditionalFormat } from '@mog-sdk/contracts/conditional-format';
 import type { CellFormat, SheetId } from '@mog-sdk/contracts/core';
@@ -70,15 +69,10 @@ export interface ClipboardStoreReader {
    */
   getRangeSchemas?(sheetId: SheetId): RangeSchema[];
   /**
-   * Get CellId at a given position.
-   * Comments in Clipboard - needed to look up comments by cell position.
-   */
-  getCellIdAt?(sheetId: SheetId, row: number, col: number): CellId | null;
-  /**
-   * Get comments for a cell by CellId.
+   * Get comments for a cell by row/column position.
    * Comments in Clipboard - captures comments when copying cells.
    */
-  getCommentsForCell?(sheetId: SheetId, cellId: CellId): Comment[];
+  getCommentsForCellAt?(sheetId: SheetId, row: number, col: number): Comment[];
   /**
    * Get all conditional formatting rules for a sheet.
    * Used to capture CF rules within the copied selection.
@@ -660,19 +654,7 @@ function captureCommentsForCell(
   col: number,
   store: ClipboardStoreReader,
 ): RelativeComment[] | undefined {
-  // Skip if store doesn't support comment reading
-  if (!store.getCellIdAt || !store.getCommentsForCell) {
-    return undefined;
-  }
-
-  // Get CellId for this position
-  const cellId = store.getCellIdAt(sheetId, row, col);
-  if (!cellId) {
-    return undefined;
-  }
-
-  // Get comments for this cell
-  const comments = store.getCommentsForCell(sheetId, cellId);
+  const comments = store.getCommentsForCellAt?.(sheetId, row, col);
   if (!comments || comments.length === 0) {
     return undefined;
   }

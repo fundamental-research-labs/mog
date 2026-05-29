@@ -30,7 +30,7 @@ import type {
 } from '@mog-sdk/contracts/actions';
 import type { Comment } from '@mog-sdk/contracts/api';
 import type { ClipboardData } from '@mog-sdk/contracts/actors';
-import { cellId, type CellId } from '@mog-sdk/contracts/cell-identity';
+import { cellId } from '@mog-sdk/contracts/cell-identity';
 import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
 import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 // Cell/merge reads and row/col visibility migrated to Worksheet API.
@@ -143,29 +143,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
   }
 
   const usedRange = await ws.getUsedRange().catch(() => null);
-  const allComments = await ws.comments.list().catch((): Comment[] => []);
-  const commentPositions = await ws._internal
-    .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
-    .catch(() => new Map<string, { row: number; col: number }>());
-  const commentsByCellId = new Map<CellId, Comment[]>();
-  const cellIdByPosition = new Map<string, CellId>();
-  for (const comment of allComments) {
-    const position = commentPositions.get(comment.cellRef);
-    if (!position) continue;
-    if (!isCellInAnyRange(position.row, position.col, ranges)) continue;
-    const id = cellId(comment.cellRef);
-    cellIdByPosition.set(`${position.row},${position.col}`, id);
-    const existing = commentsByCellId.get(id);
-    if (existing) {
-      existing.push(comment);
-    } else {
-      commentsByCellId.set(id, [comment]);
-    }
-  }
-
-  const captureRanges = ranges.map((range) =>
-    boundClipboardCaptureRange(range, usedRange, commentPositions),
-  );
+  const captureRanges = ranges.map((range) => boundClipboardCaptureRange(range, usedRange));
 
   // Compute the bounding box across all ranges for batch queries
   let minRow = Infinity,
@@ -202,6 +180,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     fetchedFormats,
     rangeSchemas,
     conditionalFormats,
+    commentEntries,
   ] = await Promise.all([
     ws.getRange(minRow, minCol, maxRow, maxCol),
     ws.structure.getMergedRegions(),
@@ -222,8 +201,19 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     // carry validation rules along with copied cells.
     ws._internal.getRangeSchemas().catch(() => []),
     ws.conditionalFormats.list().catch(() => []),
+    Promise.all(
+      Array.from({ length: numRows * numCols }, (_, idx) => {
+        const r = minRow + Math.floor(idx / numCols);
+        const c = minCol + (idx % numCols);
+        return ws.comments
+          .getForCell(r, c)
+          .then((comments) => [`${r},${c}`, comments] as [string, Comment[]])
+          .catch(() => [`${r},${c}`, []] as [string, Comment[]]);
+      }),
+    ),
   ]);
   formatEntries = fetchedFormats;
+  const commentsByPosition = new Map<string, Comment[]>(commentEntries);
 
   // Build lookup maps for sync access from 2D CellData[][] array.
   // ws.getRange() returns {value, format, formatted} but buildClipboardCellData
@@ -277,8 +267,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     isColHidden: (_sid, col) => hiddenColsMap.get(col) ?? false,
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
-    getCellIdAt: (_sid, row, col) => cellIdByPosition.get(`${row},${col}`) ?? null,
-    getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
+    getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
   // Export options using pre-fetched data
@@ -338,18 +327,16 @@ async function createSparseFullShapeCopyCutDeps(
     .batchGetCellPositions(allComments.map((comment) => comment.cellRef))
     .catch(() => new Map<string, { row: number; col: number }>());
 
-  const commentsByCellId = new Map<CellId, Comment[]>();
-  const cellIdByPosition = new Map<string, CellId>();
+  const commentsByPosition = new Map<string, Comment[]>();
   for (const comment of allComments) {
     const position = commentPositions.get(comment.cellRef);
     if (!position || !isCellInAnyRange(position.row, position.col, ranges)) continue;
-    const id = cellId(comment.cellRef);
-    cellIdByPosition.set(`${position.row},${position.col}`, id);
-    const existing = commentsByCellId.get(id);
+    const key = `${position.row},${position.col}`;
+    const existing = commentsByPosition.get(key);
     if (existing) {
       existing.push(comment);
     } else {
-      commentsByCellId.set(id, [comment]);
+      commentsByPosition.set(key, [comment]);
     }
   }
 
@@ -426,8 +413,7 @@ async function createSparseFullShapeCopyCutDeps(
       })),
     getRangeSchemas: (_sid) => rangeSchemas,
     getConditionalFormats: (_sid) => conditionalFormats,
-    getCellIdAt: (_sid, row, col) => cellIdByPosition.get(`${row},${col}`) ?? null,
-    getCommentsForCell: (_sid, id) => commentsByCellId.get(id) ?? [],
+    getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
   return {
@@ -481,7 +467,7 @@ function escapeHTML(value: string): string {
 function boundClipboardCaptureRange(
   range: CellRange,
   usedRange: CellRange | null,
-  commentPositions: Map<string, { row: number; col: number }>,
+  commentPositions: Map<string, { row: number; col: number }> = new Map(),
 ): CellRange {
   const hasFullColumnIntent = range.isFullColumn === true;
   const hasFullRowIntent = range.isFullRow === true;

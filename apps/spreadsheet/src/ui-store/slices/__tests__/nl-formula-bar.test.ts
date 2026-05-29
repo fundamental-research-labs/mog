@@ -162,7 +162,7 @@ describe('NLFormulaBarSlice', () => {
   });
 
   describe('nlRetry', () => {
-    it('clears nlResult, nlError, and nlRequest, sets nlLoading false', () => {
+    it('clears nlResult and nlError, then resubmits the last request', () => {
       const store = createTestStore();
       store.getState().setNLPrompt('test');
       store.getState().nlSubmitPrompt(TEST_CONTEXT);
@@ -172,8 +172,8 @@ describe('NLFormulaBarSlice', () => {
 
       expect(store.getState().nlResult).toBeNull();
       expect(store.getState().nlError).toBeNull();
-      expect(store.getState().nlRequest).toBeNull();
-      expect(store.getState().nlLoading).toBe(false);
+      expect(store.getState().nlRequest).toEqual({ prompt: 'test', context: TEST_CONTEXT });
+      expect(store.getState().nlLoading).toBe(true);
     });
 
     it('keeps nlPrompt intact', () => {

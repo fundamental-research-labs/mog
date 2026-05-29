@@ -129,7 +129,7 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
       const mergedRegion =
         request.mergedRegion ?? options.getMergedRegion?.(request.sheetId, request.cell);
       let formulaInputIsLiteral = request.formulaInputIsLiteral ?? false;
-      if (request.formulaInputIsLiteral === undefined && ws.formats.get) {
+      if (request.formulaInputIsLiteral === undefined && ws.formats?.get) {
         try {
           const format = await ws.formats.get(request.cell.row, request.cell.col);
           formulaInputIsLiteral = detectFormatType(format.numberFormat ?? 'General') === 'text';

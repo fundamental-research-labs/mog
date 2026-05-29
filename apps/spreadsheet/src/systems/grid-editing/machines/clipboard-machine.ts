@@ -494,7 +494,6 @@ function buildClipboardDataFromParsed(
       sourceRanges,
       cells: clipboardCells,
       sourceSheetId: EXTERNAL_SOURCE_SHEET_ID,
-      timestamp: Date.now(),
     },
     sourceRanges,
   };
@@ -736,7 +735,6 @@ export const clipboardMachine = setup({
           sourceRanges: [],
           sourceSheetId: EXTERNAL_SOURCE_SHEET_ID,
           cells: {},
-          timestamp: Date.now(),
         } satisfies ClipboardData,
         viewData: null,
         isCut: false,
@@ -1227,7 +1225,6 @@ export function createClipboardData(
     sourceRanges: ranges,
     cells,
     sourceSheetId: sheetId,
-    timestamp: Date.now(),
   };
 }
 

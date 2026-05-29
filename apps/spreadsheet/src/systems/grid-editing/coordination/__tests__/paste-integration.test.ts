@@ -83,7 +83,6 @@ describe('Clipboard Paste Integration', () => {
         '1,0': { raw: 'src2' },
       },
       textSignature: 'src1\nsrc2',
-      timestamp: Date.now(),
     };
 
     const relocateCells = jest.fn(async () => ({ success: true, movedCount: 2 }));
@@ -143,7 +142,6 @@ describe('Clipboard Paste Integration', () => {
         '0,0': { raw: 'src' },
       },
       textSignature: 'src',
-      timestamp: Date.now(),
     };
 
     let releaseRelocation: (() => void) | undefined;

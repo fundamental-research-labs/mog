@@ -209,7 +209,6 @@ export function buildClipboardData(
     sourceRanges: ranges,
     cells,
     sourceSheetId: sheetId,
-    timestamp: Date.now(),
     merges: merges.length > 0 ? merges : undefined,
     validation: validation.length > 0 ? validation : undefined,
     conditionalFormatting: conditionalFormatting.length > 0 ? conditionalFormatting : undefined,
@@ -242,7 +241,6 @@ export function buildSparseClipboardData(
       sourceRanges: ranges,
       cells,
       sourceSheetId: sheetId,
-      timestamp: Date.now(),
     };
   }
 
@@ -283,7 +281,6 @@ export function buildSparseClipboardData(
     sourceRanges: ranges,
     cells,
     sourceSheetId: sheetId,
-    timestamp: Date.now(),
     merges: merges.length > 0 ? merges : undefined,
     validation: validation.length > 0 ? validation : undefined,
     conditionalFormatting: conditionalFormatting.length > 0 ? conditionalFormatting : undefined,

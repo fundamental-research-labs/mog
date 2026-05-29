@@ -149,8 +149,6 @@ export interface ClipboardData {
   cells: Record<string, ClipboardCellData>;
   /** Original sheet ID for cross-sheet paste detection */
   sourceSheetId: string;
-  /** Timestamp for staleness detection */
-  timestamp: number;
   /**
    * Text signature written to system clipboard (TSV format).
    * Used to detect if system clipboard was overwritten by another app.

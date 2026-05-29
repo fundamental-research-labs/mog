@@ -231,6 +231,21 @@ fn remap_formula_refs(refs_json: &str, remap: &HashMap<String, String>) -> Strin
 }
 
 impl YrsStorage {
+    fn sheet_exists(&self, sheet_id: &SheetId) -> bool {
+        let txn = self.doc.transact();
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        self.sheets.get(&txn, &sheet_hex).is_some()
+    }
+
+    fn next_unused_sheet_id(&self, id_alloc: &cell_types::IdAllocator) -> SheetId {
+        loop {
+            let sheet_id = id_alloc.next_sheet_id();
+            if !self.sheet_exists(&sheet_id) {
+                return sheet_id;
+            }
+        }
+    }
+
     // -----------------------------------------------------------------
     // High-level CRUD wrappers (used by TS bridge path + direct callers)
     // -----------------------------------------------------------------
@@ -259,7 +274,7 @@ impl YrsStorage {
         id_alloc: &cell_types::IdAllocator,
         origin: Origin,
     ) -> Result<SheetId, ComputeError> {
-        let sheet_id = id_alloc.next_sheet_id();
+        let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
         self.add_sheet_with_origin(mirror, sheet_id, name, 100, 26, origin)?;
         Ok(sheet_id)
@@ -302,7 +317,7 @@ impl YrsStorage {
         id_alloc: &cell_types::IdAllocator,
     ) -> Result<SheetId, ComputeError> {
         let source_hex = id_to_hex(source_id.as_u128());
-        let new_id = id_alloc.next_sheet_id();
+        let new_id = self.next_unused_sheet_id(id_alloc);
         let new_hex = id_to_hex(new_id.as_u128());
 
         // Pass 1: Read source sheet into a recursive YValue tree, plus build
@@ -477,6 +492,11 @@ impl YrsStorage {
         origin: Origin,
     ) -> Result<(), ComputeError> {
         let sheet_hex = id_to_hex(sheet_id.as_u128());
+        if self.sheet_exists(&sheet_id) {
+            return Err(ComputeError::InvalidInput {
+                message: format!("Sheet already exists: {}", sheet_hex),
+            });
+        }
 
         {
             let mut txn = self.doc.transact_mut_with(origin);
@@ -662,6 +682,8 @@ mod tests {
     use super::super::test_support::{make_sheet_id, setup};
     use crate::mirror::CellMirror;
     use crate::storage::YrsStorage;
+    use cell_types::IdAllocator;
+    use value_types::ComputeError;
 
     #[test]
     fn test_create_sheet() {
@@ -738,6 +760,61 @@ mod tests {
         assert_eq!(
             get_sheet_name(storage.doc(), storage.sheets(), &copy_id),
             Some("Sheet1 (2)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_copy_sheet_skips_existing_allocated_id() {
+        let (mut storage, mut mirror, sid) = setup();
+        let alloc = IdAllocator::with_seed(1);
+
+        let copy_id = storage
+            .copy_sheet(&mut mirror, &sid, "Sheet1 (2)", &alloc)
+            .unwrap();
+
+        assert_eq!(copy_id, make_sheet_id(2));
+        assert_eq!(
+            get_sheet_order(storage.doc(), storage.workbook_map()),
+            vec![sid, copy_id]
+        );
+        assert_eq!(
+            get_sheet_name(storage.doc(), storage.sheets(), &sid),
+            Some("Sheet1".to_string())
+        );
+        assert_eq!(
+            get_sheet_name(storage.doc(), storage.sheets(), &copy_id),
+            Some("Sheet1 (2)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_create_sheet_skips_existing_allocated_id() {
+        let (mut storage, mut mirror, sid) = setup();
+        let alloc = IdAllocator::with_seed(1);
+
+        let created_id = storage.create_sheet(&mut mirror, "Sheet2", &alloc).unwrap();
+
+        assert_eq!(created_id, make_sheet_id(2));
+        assert_eq!(
+            get_sheet_order(storage.doc(), storage.workbook_map()),
+            vec![sid, created_id]
+        );
+    }
+
+    #[test]
+    fn test_add_sheet_rejects_duplicate_id() {
+        let (mut storage, mut mirror, sid) = setup();
+
+        let result = storage.add_sheet(&mut mirror, sid, "Duplicate", 10, 5);
+
+        assert!(matches!(result, Err(ComputeError::InvalidInput { .. })));
+        assert_eq!(
+            get_sheet_order(storage.doc(), storage.workbook_map()),
+            vec![sid]
+        );
+        assert_eq!(
+            get_sheet_name(storage.doc(), storage.sheets(), &sid),
+            Some("Sheet1".to_string())
         );
     }
 

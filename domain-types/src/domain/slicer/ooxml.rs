@@ -234,7 +234,12 @@ pub fn xlsx_import_to_stored_slicer(
         cache_ext_lst_xml: cache.and_then(|c| c.ext_lst.clone()),
         position,
         anchor_object_id: anchor.and_then(|a| a.object_id),
-        z_index: 0,
+        anchor_macro_name: anchor.and_then(|a| a.macro_name.clone()),
+        anchor_nv_ext_lst_xml: anchor.and_then(|a| a.nv_ext_lst.clone()),
+        z_index: anchor
+            .and_then(|a| a.drawing.anchor_index)
+            .and_then(|idx| i32::try_from(idx).ok())
+            .unwrap_or(0),
         locked: slicer.locked_position,
         show_header: slicer.show_caption,
         start_item: slicer.start_item.map(|v| v as i32),
@@ -424,6 +429,11 @@ pub fn stored_slicer_to_anchor(stored: &StoredSlicer) -> Option<OoxmlSlicerAncho
             })
         } else {
             None
+        },
+        macro_name: stored.anchor_macro_name.clone(),
+        nv_ext_lst: stored.anchor_nv_ext_lst_xml.clone(),
+        drawing: ooxml_types::drawings::DrawingAnchorMetadata {
+            anchor_index: usize::try_from(stored.z_index).ok(),
         },
     })
 }

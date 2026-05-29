@@ -3,7 +3,7 @@
 //! These are shared vocabulary records. Parser/writer integration owns package
 //! relationships, cache invalidation, and any raw extension replay policy.
 
-use crate::drawings::{CellAnchor, Extent, Position};
+use crate::drawings::{CellAnchor, DrawingAnchorMetadata, Extent};
 
 pub const CONTENT_TYPE_TIMELINE: &str = "application/vnd.ms-excel.timeline+xml";
 pub const CONTENT_TYPE_TIMELINE_CACHE: &str = "application/vnd.ms-excel.timelineCache+xml";
@@ -77,20 +77,7 @@ pub struct TimelineAnchor {
     pub macro_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nv_ext_lst: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fallback: Option<TimelineFallbackShape>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TimelineFallbackShape {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub macro_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub textlink: Option<String>,
-    pub c_nv_pr_id: u32,
-    pub c_nv_pr_name: String,
-    pub position: Position,
-    pub extent: Extent,
-    pub text: String,
+    /// Metadata from the owning sheet drawing anchor.
+    #[serde(default, skip_serializing_if = "DrawingAnchorMetadata::is_empty")]
+    pub drawing: DrawingAnchorMetadata,
 }

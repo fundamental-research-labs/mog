@@ -7,6 +7,7 @@ mod anchors;
 mod connectors;
 mod hyperlinks;
 mod images;
+mod layer_order;
 mod objects;
 mod ooxml_props;
 mod shapes;
@@ -22,6 +23,7 @@ use crate::domain::drawings::write::DrawingAnchor;
 pub use anchors::{
     anchor_position_to_absolute, anchor_position_to_one_cell, anchor_position_to_two_cell,
 };
+pub use layer_order::{add_ordered_anchors, build_feature_drawing_anchors};
 
 /// Result of assembling drawing data for a single sheet.
 ///

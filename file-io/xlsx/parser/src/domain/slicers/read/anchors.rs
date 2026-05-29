@@ -4,7 +4,7 @@ use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find
 use crate::infra::xml::{parse_string_attr, parse_u32_attr};
 
 use super::super::types::SlicerAnchor;
-use ooxml_types::drawings::{CellAnchor, Extent};
+use ooxml_types::drawings::{CellAnchor, DrawingAnchorMetadata, Extent};
 use ooxml_types::slicers::SlicerAnchorMode;
 
 /// Parse slicer anchors from drawing XML.
@@ -35,6 +35,8 @@ pub fn parse_slicer_anchors_from_drawing(drawing_xml: &[u8]) -> Vec<SlicerAnchor
                             extract_anchor_for_slicer(drawing_xml, ac_start, &slicer_name)
                         {
                             anchor.object_id = object_id;
+                            anchor.macro_name = extract_graphic_frame_macro(ac_block);
+                            anchor.nv_ext_lst = extract_cnvpr_ext_lst(ac_block);
                             anchors.push(anchor);
                         }
                     }
@@ -81,6 +83,30 @@ fn extract_slicer_object_id_from_block(block: &[u8]) -> Option<u32> {
     parse_u32_attr(&block[c_nv_pr..elem_end], b"id=\"")
 }
 
+fn extract_graphic_frame_macro(block: &[u8]) -> Option<String> {
+    let start = find_tag_simd(block, b"graphicFrame", 0)?;
+    let end = find_gt_simd(block, start)
+        .map(|p| p + 1)
+        .unwrap_or(block.len());
+    parse_string_attr(&block[start..end], b"macro=\"")
+}
+
+fn extract_cnvpr_ext_lst(block: &[u8]) -> Option<String> {
+    let cnv_start = find_tag_simd(block, b"cNvPr", 0)?;
+    let cnv_close = find_closing_tag(block, b"cNvPr", cnv_start)?;
+    let cnv_end = find_gt_simd(block, cnv_close).map(|p| p + 1)?;
+    extract_ext_lst(&block[cnv_start..cnv_end])
+}
+
+fn extract_ext_lst(xml: &[u8]) -> Option<String> {
+    let start = find_tag_simd(xml, b"extLst", 0)?;
+    let close = find_closing_tag(xml, b"extLst", start)?;
+    let end = find_gt_simd(xml, close).map(|p| p + 1).unwrap_or(close);
+    std::str::from_utf8(&xml[start..end])
+        .ok()
+        .map(str::to_string)
+}
+
 fn extract_anchor_for_slicer(
     drawing_xml: &[u8],
     ac_start: usize,
@@ -110,6 +136,11 @@ fn extract_two_cell_anchor_for_slicer(
         to: parse_cell_anchor_element(two_cell_block, b"to")?,
         anchor_mode: Some(SlicerAnchorMode::TwoCell),
         extent: None,
+        macro_name: None,
+        nv_ext_lst: None,
+        drawing: DrawingAnchorMetadata {
+            anchor_index: drawing_anchor_index(drawing_xml, two_cell_start),
+        },
     })
 }
 
@@ -134,7 +165,29 @@ fn extract_one_cell_anchor_for_slicer(
         to: from,
         anchor_mode: Some(SlicerAnchorMode::OneCell),
         extent: parse_extent_element(one_cell_block),
+        macro_name: None,
+        nv_ext_lst: None,
+        drawing: DrawingAnchorMetadata {
+            anchor_index: drawing_anchor_index(drawing_xml, one_cell_start),
+        },
     })
+}
+
+fn drawing_anchor_index(xml: &[u8], anchor_start: usize) -> Option<usize> {
+    let mut anchors = Vec::new();
+    collect_anchor_starts(xml, b"twoCellAnchor", &mut anchors);
+    collect_anchor_starts(xml, b"oneCellAnchor", &mut anchors);
+    collect_anchor_starts(xml, b"absoluteAnchor", &mut anchors);
+    anchors.sort_unstable();
+    anchors.iter().position(|&start| start == anchor_start)
+}
+
+fn collect_anchor_starts(xml: &[u8], tag_name: &[u8], anchors: &mut Vec<usize>) {
+    let mut pos = 0;
+    while let Some(found) = find_tag_simd(xml, tag_name, pos) {
+        anchors.push(found);
+        pos = find_gt_simd(xml, found).map(|p| p + 1).unwrap_or(found + 1);
+    }
 }
 
 fn find_enclosing_two_cell_anchor(xml: &[u8], before_pos: usize) -> Option<usize> {

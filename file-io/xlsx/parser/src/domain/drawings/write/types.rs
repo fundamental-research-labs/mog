@@ -643,6 +643,10 @@ pub enum DrawingObject {
         name: String,
         /// Relationship ID to slicer part (for the containing drawing's .rels)
         r_id: String,
+        /// Optional graphicFrame macro attribute.
+        macro_name: Option<String>,
+        /// Optional cNvPr extension list.
+        nv_ext_lst: Option<String>,
     },
     /// Timeline (mc:AlternateContent with tsle:timeslicer in graphicFrame).
     Timeline {
@@ -654,8 +658,6 @@ pub enum DrawingObject {
         macro_name: Option<String>,
         /// Optional cNvPr extension list.
         nv_ext_lst: Option<String>,
-        /// Optional typed fallback shape for older consumers.
-        fallback: Option<ooxml_types::timelines::TimelineFallbackShape>,
     },
 }
 

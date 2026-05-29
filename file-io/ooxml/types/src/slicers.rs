@@ -13,7 +13,7 @@
 //! writer modules own relationship closure, dirty invalidation, and any opaque
 //! extension payload replay.
 
-use crate::drawings::{CellAnchor, Extent};
+use crate::drawings::{CellAnchor, DrawingAnchorMetadata, Extent};
 
 // ============================================================================
 // Content Type & Relationship Constants
@@ -307,6 +307,15 @@ pub struct SlicerAnchor {
     /// Object extent for one-cell anchors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extent: Option<Extent>,
+    /// Optional `xdr:graphicFrame/@macro` attribute from the slicer frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_name: Option<String>,
+    /// Optional `xdr:cNvPr/a:extLst` XML from non-visual drawing properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nv_ext_lst: Option<String>,
+    /// Metadata from the owning sheet drawing anchor.
+    #[serde(default, skip_serializing_if = "DrawingAnchorMetadata::is_empty")]
+    pub drawing: DrawingAnchorMetadata,
 }
 
 /// Drawing anchor mode for a slicer control.

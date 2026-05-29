@@ -192,6 +192,8 @@ fn slicer_round_trips_table_binding_style_position_and_selection() {
         cache_ext_lst_xml: Some("<cacheExtLst/>".to_string()),
         position: None,
         anchor_object_id: Some(7),
+        anchor_macro_name: Some("".to_string()),
+        anchor_nv_ext_lst_xml: Some("<a:extLst/>".to_string()),
         z_index: 3,
         locked: true,
         show_header: true,

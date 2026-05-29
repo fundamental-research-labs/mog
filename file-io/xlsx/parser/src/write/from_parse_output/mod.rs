@@ -659,75 +659,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             // Build drawing .rels (drawing→chart references, image refs).
             let mut drawing_rels = RelationshipManager::new();
 
-            // Build DrawingWriter with all anchors (charts + floating objects).
+            // Build DrawingWriter with all anchors (features + charts + floating objects).
             let mut drawing_writer = DrawingWriter::new();
             drawing_writer.set_suppress_unregistered_relationships(true);
-            for anchor in &sheet_data.timeline_anchors {
-                drawing_writer.add_anchor(DrawingAnchor::OneCell(
-                    OneCellAnchor {
-                        from: CellAnchor {
-                            col: anchor.from.col,
-                            col_off: anchor.from.col_off,
-                            row: anchor.from.row,
-                            row_off: anchor.from.row_off,
-                        },
-                        extent: anchor.extent.clone().unwrap_or_default(),
-                        client_data: ClientData::default(),
-                        mc_alternate_content: None,
-                    },
-                    DrawingObject::Timeline {
-                        original_id: anchor.object_id,
-                        name: anchor.timeline_name.clone(),
-                        macro_name: anchor.macro_name.clone(),
-                        nv_ext_lst: anchor.nv_ext_lst.clone(),
-                        fallback: anchor.fallback.clone(),
-                    },
-                ));
-            }
-            for anchor in &sheet_data.slicer_anchors {
-                let object = DrawingObject::Slicer {
-                    original_id: anchor.object_id,
-                    name: anchor.slicer_name.clone(),
-                    r_id: String::new(),
-                };
-                if anchor.anchor_mode == Some(ooxml_types::slicers::SlicerAnchorMode::OneCell) {
-                    drawing_writer.add_anchor(DrawingAnchor::OneCell(
-                        OneCellAnchor {
-                            from: CellAnchor {
-                                col: anchor.from.col,
-                                col_off: anchor.from.col_off,
-                                row: anchor.from.row,
-                                row_off: anchor.from.row_off,
-                            },
-                            extent: anchor.extent.clone().unwrap_or_default(),
-                            client_data: ClientData::default(),
-                            mc_alternate_content: None,
-                        },
-                        object,
-                    ));
-                } else {
-                    drawing_writer.add_anchor(DrawingAnchor::TwoCell(
-                        TwoCellAnchor {
-                            from: CellAnchor {
-                                col: anchor.from.col,
-                                col_off: anchor.from.col_off,
-                                row: anchor.from.row,
-                                row_off: anchor.from.row_off,
-                            },
-                            to: CellAnchor {
-                                col: anchor.to.col,
-                                col_off: anchor.to.col_off,
-                                row: anchor.to.row,
-                                row_off: anchor.to.row_off,
-                            },
-                            edit_as: None,
-                            client_data: ClientData::default(),
-                            mc_alternate_content: None,
-                        },
-                        object,
-                    ));
-                }
-            }
+            let deferred_feature_anchors =
+                super::drawing_writer_helpers::build_feature_drawing_anchors(
+                    &sheet_data.timeline_anchors,
+                    &sheet_data.slicer_anchors,
+                );
             // ── Floating objects (images, shapes, text boxes, groups, connectors, SmartArt) ──
             // IMPORTANT: Image rels must be registered BEFORE chart rels so that
             // `add_with_id` bumps `next_id` past the provisional image rIds. Otherwise
@@ -1117,59 +1056,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 }
             }
 
-            // ── Interleave all deferred anchors in original drawing order ──
-            // Floating objects have explicit anchor indices from ooxml props.
-            // Charts now also carry explicit anchor indices from ChartSpec.anchor_index.
-            // Any anchors without explicit indices fill the remaining slots in order.
-            {
-                // Collect all known (occupied) anchor indices from fobj and charts.
-                let mut occupied: std::collections::BTreeSet<usize> =
-                    std::collections::BTreeSet::new();
-                for (idx, _) in &deferred_fobj_anchors {
-                    if let Some(i) = idx {
-                        occupied.insert(*i);
-                    }
-                }
-                // Charts with explicit anchor_index from ChartSpec
-                for (idx, _) in &deferred_chart_anchors {
-                    if let Some(i) = idx {
-                        occupied.insert(*i);
-                    }
-                }
-
-                // Assign unindexed chart anchors to the remaining (free) indices.
-                let total = deferred_fobj_anchors.len() + deferred_chart_anchors.len();
-                let mut free_indices: Vec<usize> =
-                    (0..total).filter(|i| !occupied.contains(i)).collect();
-                let unindexed_chart_count = deferred_chart_anchors
-                    .iter()
-                    .filter(|(idx, _)| idx.is_none())
-                    .count();
-                while free_indices.len() < unindexed_chart_count {
-                    let next = free_indices.last().map_or(total, |&i| i + 1);
-                    free_indices.push(next);
-                }
-
-                // Build a combined list of (index, anchor).
-                let mut all_anchors: Vec<(usize, DrawingAnchor)> = Vec::with_capacity(total);
-
-                for (idx, anchor) in deferred_fobj_anchors {
-                    let i = idx.unwrap_or(usize::MAX);
-                    all_anchors.push((i, anchor));
-                }
-                let mut free_idx_iter = free_indices.into_iter();
-                for (idx, anchor) in deferred_chart_anchors {
-                    let i = idx.unwrap_or_else(|| free_idx_iter.next().unwrap_or(usize::MAX));
-                    all_anchors.push((i, anchor));
-                }
-
-                // Sort by anchor index to restore original order.
-                all_anchors.sort_by_key(|&(idx, _)| idx);
-
-                for (_, anchor) in all_anchors {
-                    drawing_writer.add_anchor(anchor);
-                }
-            }
+            super::drawing_writer_helpers::add_ordered_anchors(
+                &mut drawing_writer,
+                [
+                    deferred_feature_anchors,
+                    deferred_fobj_anchors,
+                    deferred_chart_anchors,
+                ],
+            );
 
             drawing_xml_data.push(None);
             drawing_writer_data.push(Some(drawing_writer));

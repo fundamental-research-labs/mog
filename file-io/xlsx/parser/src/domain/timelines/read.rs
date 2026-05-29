@@ -173,8 +173,27 @@ fn extract_one_cell_anchor(
         extent: parse_extent(anchor_block),
         macro_name: extract_graphic_frame_macro(block),
         nv_ext_lst: extract_cnvpr_ext_lst(block),
-        fallback: extract_fallback_shape(block),
+        drawing: ooxml_types::drawings::DrawingAnchorMetadata {
+            anchor_index: drawing_anchor_index(xml, anchor_start),
+        },
     })
+}
+
+fn drawing_anchor_index(xml: &[u8], anchor_start: usize) -> Option<usize> {
+    let mut anchors = Vec::new();
+    collect_anchor_starts(xml, b"twoCellAnchor", &mut anchors);
+    collect_anchor_starts(xml, b"oneCellAnchor", &mut anchors);
+    collect_anchor_starts(xml, b"absoluteAnchor", &mut anchors);
+    anchors.sort_unstable();
+    anchors.iter().position(|&start| start == anchor_start)
+}
+
+fn collect_anchor_starts(xml: &[u8], tag_name: &[u8], anchors: &mut Vec<usize>) {
+    let mut pos = 0;
+    while let Some(found) = find_tag_simd(xml, tag_name, pos) {
+        anchors.push(found);
+        pos = find_gt_simd(xml, found).map(|p| p + 1).unwrap_or(found + 1);
+    }
 }
 
 fn extract_graphic_frame_macro(block: &[u8]) -> Option<String> {
@@ -190,65 +209,6 @@ fn extract_cnvpr_ext_lst(block: &[u8]) -> Option<String> {
     let cnv_close = find_closing_tag(block, b"cNvPr", cnv_start)?;
     let cnv_end = find_gt_simd(block, cnv_close).map(|p| p + 1)?;
     extract_ext_lst(&block[cnv_start..cnv_end])
-}
-
-fn extract_fallback_shape(block: &[u8]) -> Option<ooxml_types::timelines::TimelineFallbackShape> {
-    let fallback_start = find_tag_simd(block, b"Fallback", 0)?;
-    let fallback_close = find_closing_tag(block, b"Fallback", fallback_start)?;
-    let fallback_end = find_gt_simd(block, fallback_close).map(|p| p + 1)?;
-    let fallback = &block[fallback_start..fallback_end];
-
-    let sp_start = find_tag_simd(fallback, b"sp", 0)?;
-    let sp_end = find_gt_simd(fallback, sp_start)
-        .map(|p| p + 1)
-        .unwrap_or(fallback.len());
-    let sp_elem = &fallback[sp_start..sp_end];
-
-    let cnv_start = find_tag_simd(fallback, b"cNvPr", sp_end)?;
-    let cnv_end = find_gt_simd(fallback, cnv_start)
-        .map(|p| p + 1)
-        .unwrap_or(fallback.len());
-    let cnv = &fallback[cnv_start..cnv_end];
-
-    let xfrm_start = find_tag_simd(fallback, b"xfrm", cnv_end)?;
-    let xfrm_close = find_closing_tag(fallback, b"xfrm", xfrm_start)?;
-    let xfrm_end = find_gt_simd(fallback, xfrm_close).map(|p| p + 1)?;
-    let xfrm = &fallback[xfrm_start..xfrm_end];
-
-    Some(ooxml_types::timelines::TimelineFallbackShape {
-        macro_name: parse_string_attr(sp_elem, b"macro=\""),
-        textlink: parse_string_attr(sp_elem, b"textlink=\""),
-        c_nv_pr_id: parse_u32_attr(cnv, b"id=\"").unwrap_or(0),
-        c_nv_pr_name: parse_string_attr(cnv, b"name=\"").unwrap_or_default(),
-        position: ooxml_types::drawings::Position {
-            x: parse_tag_i64_attr(xfrm, b"off", b"x=\"").unwrap_or(0),
-            y: parse_tag_i64_attr(xfrm, b"off", b"y=\"").unwrap_or(0),
-        },
-        extent: ooxml_types::drawings::Extent {
-            cx: parse_tag_i64_attr(xfrm, b"ext", b"cx=\"").unwrap_or(0),
-            cy: parse_tag_i64_attr(xfrm, b"ext", b"cy=\"").unwrap_or(0),
-        },
-        text: extract_text(fallback).unwrap_or_else(|| {
-            "Timeline: Works in Excel 2013 or higher. Do not move or resize.".to_string()
-        }),
-    })
-}
-
-fn parse_tag_i64_attr(block: &[u8], tag: &[u8], attr: &[u8]) -> Option<i64> {
-    let start = find_tag_simd(block, tag, 0)?;
-    let end = find_gt_simd(block, start)
-        .map(|p| p + 1)
-        .unwrap_or(block.len());
-    parse_i64_attr(&block[start..end], attr)
-}
-
-fn extract_text(block: &[u8]) -> Option<String> {
-    let start = find_tag_simd(block, b"t", 0)?;
-    let content_start = find_gt_simd(block, start).map(|p| p + 1)?;
-    let close = find_closing_tag(block, b"t", content_start)?;
-    std::str::from_utf8(&block[content_start..close])
-        .ok()
-        .map(str::to_string)
 }
 
 fn extract_object_id(block: &[u8]) -> Option<u32> {

@@ -33,6 +33,8 @@ const KEY_EXT_LST_XML: &str = "ex";
 const KEY_CACHE_EXT_LST_XML: &str = "ce";
 const KEY_POSITION: &str = "po"; // JSON
 const KEY_ANCHOR_OBJECT_ID: &str = "ao";
+const KEY_ANCHOR_MACRO_NAME: &str = "am";
+const KEY_ANCHOR_NV_EXT_LST_XML: &str = "ax";
 const KEY_Z_INDEX: &str = "zi";
 const KEY_LOCKED: &str = "lk";
 const KEY_SHOW_HEADER: &str = "sh";
@@ -92,6 +94,14 @@ pub fn to_yrs_prelim(slicer: &StoredSlicer) -> Vec<(&str, Any)> {
     ));
     entries.push((KEY_ROW_HEIGHT, option_u32(&slicer.row_height)));
     entries.push((KEY_ANCHOR_OBJECT_ID, option_u32(&slicer.anchor_object_id)));
+    entries.push((
+        KEY_ANCHOR_MACRO_NAME,
+        option_string(&slicer.anchor_macro_name),
+    ));
+    entries.push((
+        KEY_ANCHOR_NV_EXT_LST_XML,
+        option_string(&slicer.anchor_nv_ext_lst_xml),
+    ));
     entries.push((KEY_CREATED_AT, option_number(&slicer.created_at)));
     entries.push((KEY_UPDATED_AT, option_number(&slicer.updated_at)));
 
@@ -183,6 +193,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
     let ext_lst_xml = read_string(map, txn, KEY_EXT_LST_XML);
     let cache_ext_lst_xml = read_string(map, txn, KEY_CACHE_EXT_LST_XML);
     let anchor_object_id = read_u32(map, txn, KEY_ANCHOR_OBJECT_ID);
+    let anchor_macro_name = read_string(map, txn, KEY_ANCHOR_MACRO_NAME);
+    let anchor_nv_ext_lst_xml = read_string(map, txn, KEY_ANCHOR_NV_EXT_LST_XML);
     let multi_select = read_bool(map, txn, KEY_MULTI_SELECT).unwrap_or(true);
 
     let selected_values: Vec<value_types::CellValue> = read_string(map, txn, KEY_SELECTED_VALUES)
@@ -216,6 +228,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
         cache_ext_lst_xml,
         position,
         anchor_object_id,
+        anchor_macro_name,
+        anchor_nv_ext_lst_xml,
         z_index,
         locked,
         show_header,

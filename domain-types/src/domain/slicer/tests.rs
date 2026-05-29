@@ -1,6 +1,6 @@
 use super::*;
 
-use ooxml_types::drawings::CellAnchor;
+use ooxml_types::drawings::{CellAnchor, DrawingAnchorMetadata};
 use ooxml_types::slicers::{
     SlicerAnchor as OoxmlSlicerAnchor, SlicerCacheDef as OoxmlSlicerCacheDef,
     SlicerDef as OoxmlSlicerDef, SlicerTabularItem, TableSlicerCache,
@@ -45,6 +45,8 @@ fn stored_slicer_table_source_round_trip() {
         cache_ext_lst_xml: None,
         position: None,
         anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 0,
         locked: false,
         show_header: true,
@@ -117,6 +119,8 @@ fn stored_slicer_pivot_source_round_trip() {
             ..Default::default()
         }),
         anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 5,
         locked: true,
         show_header: false,
@@ -213,6 +217,8 @@ fn apply_update_partial_merge() {
         cache_ext_lst_xml: None,
         position: None,
         anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 0,
         locked: false,
         show_header: true,
@@ -402,6 +408,11 @@ fn xlsx_import_table_slicer_conversion() {
         },
         anchor_mode: None,
         extent: None,
+        macro_name: None,
+        nv_ext_lst: None,
+        drawing: DrawingAnchorMetadata {
+            anchor_index: Some(7),
+        },
     };
 
     let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), Some(&anchor), "sheet-hex-1");
@@ -420,6 +431,7 @@ fn xlsx_import_table_slicer_conversion() {
     assert_eq!(pos.anchor_col, 5);
     assert_eq!(pos.end_row, Some(10));
     assert_eq!(pos.anchor_mode, AnchorMode::TwoCell);
+    assert_eq!(stored.z_index, 7);
 }
 
 #[test]
@@ -607,6 +619,8 @@ fn stored_slicer_round_trip_to_ooxml_types() {
             extent_cy: None,
         }),
         anchor_object_id: Some(7),
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 0,
         locked: true,
         show_header: true,
@@ -669,6 +683,8 @@ fn make_test_slicer(id: &str, name: Option<&str>) -> StoredSlicer {
         cache_ext_lst_xml: None,
         position: None,
         anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
         z_index: 0,
         locked: false,
         show_header: true,
@@ -923,6 +939,7 @@ fn timeline_tokens_defaults_and_omissions_are_stable() {
     assert_eq!(timeline.level, TimelineLevel::Months);
     assert!(timeline.caption.is_none());
     assert!(timeline.cache.is_none());
+    assert_eq!(timeline.z_index, 0);
 
     let cache = StoredTimelineCache {
         name: "Timeline_Date".into(),

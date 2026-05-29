@@ -977,6 +977,8 @@ fn test_roundtrip_6e_slicer_position_drawing() {
             original_id: None,
             name: "Slicer_Position_Test".to_string(),
             r_id: "rId1".to_string(),
+            macro_name: None,
+            nv_ext_lst: None,
         },
     ));
 

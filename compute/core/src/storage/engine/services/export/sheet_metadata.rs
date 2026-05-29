@@ -586,6 +586,7 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     // filtered to this sheet.
     if slicers.is_empty() {
         if let Some(Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
+            let mut stored_slicers = Vec::new();
             for (_, value) in slicers_map.iter(&txn) {
                 if let Out::Any(Any::String(json_str)) = value
                     && let Ok(stored) = serde_json::from_str::<
@@ -593,67 +594,51 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
                     >(&json_str)
                     && sheet_hex == stored.sheet_id
                 {
-                    slicers.push(domain_types::domain::slicer::stored_slicer_to_slicer_def(
-                        &stored,
-                    ));
-                    if let Some(anchor) =
-                        domain_types::domain::slicer::stored_slicer_to_anchor(&stored)
-                    {
-                        slicer_anchors.push(anchor);
-                    }
+                    stored_slicers.push(stored);
+                }
+            }
+            stored_slicers.sort_by(|a, b| {
+                a.z_index
+                    .cmp(&b.z_index)
+                    .then_with(|| a.id.cmp(&b.id))
+            });
+            for stored in stored_slicers {
+                slicers.push(domain_types::domain::slicer::stored_slicer_to_slicer_def(
+                    &stored,
+                ));
+                if let Some(anchor) = domain_types::domain::slicer::stored_slicer_to_anchor(&stored)
+                {
+                    slicer_anchors.push(anchor);
                 }
             }
         }
     }
 
     if let Some(Out::YMap(timelines_map)) = workbook.get(&txn, KEY_TIMELINES) {
+        let mut stored_timelines = Vec::new();
         for (_, value) in timelines_map.iter(&txn) {
             if let Out::Any(Any::String(json_str)) = value
                 && let Ok(stored) =
                     serde_json::from_str::<domain_types::domain::slicer::StoredTimeline>(&json_str)
                 && sheet_hex == stored.sheet_id
             {
-                timelines
-                    .push(domain_types::domain::slicer::stored_timeline_to_timeline_def(&stored));
-                if let Some(anchor) =
-                    domain_types::domain::slicer::stored_timeline_to_anchor(&stored)
-                {
-                    timeline_anchors.push(anchor);
-                }
+                stored_timelines.push(stored);
+            }
+        }
+        stored_timelines.sort_by(|a, b| {
+            a.z_index
+                .cmp(&b.z_index)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        for stored in stored_timelines {
+            timelines.push(domain_types::domain::slicer::stored_timeline_to_timeline_def(
+                &stored,
+            ));
+            if let Some(anchor) = domain_types::domain::slicer::stored_timeline_to_anchor(&stored) {
+                timeline_anchors.push(anchor);
             }
         }
     }
-    let timeline_positions: std::collections::HashMap<String, (u32, u32, i64, i64)> =
-        timeline_anchors
-            .iter()
-            .map(|anchor| {
-                (
-                    anchor.timeline_name.clone(),
-                    (
-                        anchor.from.row,
-                        anchor.from.col,
-                        anchor.from.row_off,
-                        anchor.from.col_off,
-                    ),
-                )
-            })
-            .collect();
-    timelines.sort_by_key(|timeline| {
-        timeline_positions.get(&timeline.name).copied().unwrap_or((
-            u32::MAX,
-            u32::MAX,
-            i64::MAX,
-            i64::MAX,
-        ))
-    });
-    timeline_anchors.sort_by_key(|anchor| {
-        (
-            anchor.from.row,
-            anchor.from.col,
-            anchor.from.row_off,
-            anchor.from.col_off,
-        )
-    });
 
     (
         floating_objects,

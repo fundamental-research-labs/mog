@@ -37,6 +37,24 @@ pub enum DrawingAnchor {
     Absolute(AbsoluteAnchor),
 }
 
+/// Parse/export metadata owned by the sheet drawing anchor sequence.
+///
+/// `anchor_index` is the ordinal of an `xdr:*Anchor` inside `xdr:wsDr`. It is
+/// not an OOXML attribute; it is bridge metadata used to map the ordered XML
+/// sequence to domain floating-object layer state.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DrawingAnchorMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_index: Option<usize>,
+}
+
+impl DrawingAnchorMetadata {
+    pub fn is_empty(&self) -> bool {
+        self.anchor_index.is_none()
+    }
+}
+
 // =============================================================================
 // Anchor Types
 // =============================================================================

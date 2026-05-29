@@ -65,6 +65,12 @@ pub struct StoredSlicer {
     /// Drawing object identity (`xdr:cNvPr/@id`) for the slicer anchor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor_object_id: Option<u32>,
+    /// Optional `xdr:graphicFrame/@macro` from the slicer anchor frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_macro_name: Option<String>,
+    /// Optional `xdr:cNvPr/a:extLst` XML from slicer anchor non-visual props.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_nv_ext_lst_xml: Option<String>,
     #[serde(default)]
     pub z_index: i32,
     #[serde(default)]

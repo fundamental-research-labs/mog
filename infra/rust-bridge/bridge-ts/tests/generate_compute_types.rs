@@ -726,11 +726,19 @@ fn generate_combined() {
         format!(
             "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/classification.rs"
         ),
-        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/value_ref.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/style.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/visual.rs"),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/value_ref.rs"
+        ),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/style.rs"
+        ),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/visual.rs"
+        ),
         format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/rule.rs"),
-        format!("{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/format.rs"),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/conditional_format/types/format.rs"
+        ),
         format!("{manifest_dir}/../../../domain-types/src/domain/table.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/spec.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/schema_types.rs"),

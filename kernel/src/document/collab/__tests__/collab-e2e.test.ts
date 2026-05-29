@@ -108,8 +108,7 @@ const SERVER_ENTRY = join(
 );
 const hasCollabServer = existsSync(SERVER_ENTRY);
 
-const describeWithCollabStack =
-  hasEngineSupport && hasCollabServer ? describe : describe.skip;
+const describeWithCollabStack = hasEngineSupport && hasCollabServer ? describe : describe.skip;
 
 async function getFreePort(): Promise<number> {
   const { createServer } = await import('node:net');

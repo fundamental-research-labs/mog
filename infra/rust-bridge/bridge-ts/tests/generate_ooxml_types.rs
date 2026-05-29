@@ -177,7 +177,10 @@ fn shape_preset_def() -> TsTypeDef {
         .filter_map(|line| {
             let (_, token) = line.split_once("=>")?;
             let token = token.trim().trim_end_matches(',').trim();
-            token.strip_prefix('"')?.strip_suffix('"').map(str::to_string)
+            token
+                .strip_prefix('"')?
+                .strip_suffix('"')
+                .map(str::to_string)
         })
         .collect();
 
@@ -572,14 +575,8 @@ fn generate_combined() {
         // print/ defines Orientation (Default/Portrait/Landscape) and PageSetup
         // which collide with charts/enums.rs Orientation (MinMax/MaxMin) and
         // charts/properties.rs PageSetup.
-        (
-            "print/enums.rs",
-            &[("Orientation", "PrintOrientation")],
-        ),
-        (
-            "print/setup.rs",
-            &[("PageSetup", "PrintPageSetup")],
-        ),
+        ("print/enums.rs", &[("Orientation", "PrintOrientation")]),
+        ("print/setup.rs", &[("PageSetup", "PrintPageSetup")]),
         // charts/style.rs defines ColorTransform (simple tuple variants) which
         // collides with drawings/color.rs ColorTransform (comprehensive tagged union).
         (

@@ -536,6 +536,8 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     Vec<FloatingObject>,
     Vec<ooxml_types::slicers::SlicerDef>,
     Vec<ooxml_types::slicers::SlicerAnchor>,
+    Vec<ooxml_types::timelines::TimelineDef>,
+    Vec<ooxml_types::timelines::TimelineAnchor>,
 ) {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
@@ -544,44 +546,45 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
 
     let sheet_map = match sheets.get(&txn, &sheet_hex) {
         Some(Out::YMap(m)) => m,
-        _ => return (vec![], vec![], vec![]),
+        _ => return (vec![], vec![], vec![], vec![], vec![]),
     };
-    let fobj_map = match sheet_map.get(&txn, KEY_FLOATING_OBJECTS) {
-        Some(Out::YMap(m)) => m,
-        _ => return (vec![], vec![], vec![]),
-    };
-
     let mut floating_objects = Vec::new();
     let mut slicers = Vec::new();
     let mut slicer_anchors = Vec::new();
+    let mut timelines = Vec::new();
+    let mut timeline_anchors = Vec::new();
 
-    for (key, value) in sorted_map_entries(&fobj_map, &txn) {
-        if key.starts_with("slicer-anchor-") {
-            if let Out::Any(Any::String(json)) = value
-                && let Ok(sa) = serde_json::from_str::<ooxml_types::slicers::SlicerAnchor>(&json)
-            {
-                slicer_anchors.push(sa);
-            }
-        } else if key.starts_with("slicer-") {
-            if let Out::Any(Any::String(json)) = value
-                && let Ok(sl) = serde_json::from_str::<ooxml_types::slicers::SlicerDef>(&json)
-            {
-                slicers.push(sl);
-            }
-        } else if let Out::YMap(map) = value {
-            // Any non-slicer YMap entry is a floating object.  Keys may be
-            // `fobj-{ts}-{random}` (API-created) or the object's own ID such
-            // as `chart-import-{index}` (XLSX-imported).
-            if let Some(obj) = yrs_schema::floating_object::from_yrs_map(&map, &txn) {
-                floating_objects.push(obj);
+    if let Some(Out::YMap(fobj_map)) = sheet_map.get(&txn, KEY_FLOATING_OBJECTS) {
+        for (key, value) in sorted_map_entries(&fobj_map, &txn) {
+            if key.starts_with("slicer-anchor-") {
+                if let Out::Any(Any::String(json)) = value
+                    && let Ok(sa) =
+                        serde_json::from_str::<ooxml_types::slicers::SlicerAnchor>(&json)
+                {
+                    slicer_anchors.push(sa);
+                }
+            } else if key.starts_with("slicer-") {
+                if let Out::Any(Any::String(json)) = value
+                    && let Ok(sl) = serde_json::from_str::<ooxml_types::slicers::SlicerDef>(&json)
+                {
+                    slicers.push(sl);
+                }
+            } else if let Out::YMap(map) = value {
+                // Any non-slicer YMap entry is a floating object. Keys may be
+                // `fobj-{ts}-{random}` (API-created) or the object's own ID
+                // such as `chart-import-{index}` (XLSX-imported).
+                if let Some(obj) = yrs_schema::floating_object::from_yrs_map(&map, &txn) {
+                    floating_objects.push(obj);
+                }
             }
         }
     }
 
+    let workbook = stores.storage.workbook_map();
+
     // New format: read StoredSlicer entries from workbook slicers map,
     // filtered to this sheet.
     if slicers.is_empty() {
-        let workbook = stores.storage.workbook_map();
         if let Some(Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
             for (_, value) in slicers_map.iter(&txn) {
                 if let Out::Any(Any::String(json_str)) = value
@@ -603,7 +606,60 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         }
     }
 
-    (floating_objects, slicers, slicer_anchors)
+    if let Some(Out::YMap(timelines_map)) = workbook.get(&txn, KEY_TIMELINES) {
+        for (_, value) in timelines_map.iter(&txn) {
+            if let Out::Any(Any::String(json_str)) = value
+                && let Ok(stored) =
+                    serde_json::from_str::<domain_types::domain::slicer::StoredTimeline>(&json_str)
+                && sheet_hex == stored.sheet_id
+            {
+                timelines
+                    .push(domain_types::domain::slicer::stored_timeline_to_timeline_def(&stored));
+                if let Some(anchor) =
+                    domain_types::domain::slicer::stored_timeline_to_anchor(&stored)
+                {
+                    timeline_anchors.push(anchor);
+                }
+            }
+        }
+    }
+    let timeline_positions: std::collections::HashMap<String, (u32, u32, i64, i64)> =
+        timeline_anchors
+            .iter()
+            .map(|anchor| {
+                (
+                    anchor.timeline_name.clone(),
+                    (
+                        anchor.from.row,
+                        anchor.from.col,
+                        anchor.from.row_off,
+                        anchor.from.col_off,
+                    ),
+                )
+            })
+            .collect();
+    timelines.sort_by_key(|timeline| {
+        timeline_positions
+            .get(&timeline.name)
+            .copied()
+            .unwrap_or((u32::MAX, u32::MAX, i64::MAX, i64::MAX))
+    });
+    timeline_anchors.sort_by_key(|anchor| {
+        (
+            anchor.from.row,
+            anchor.from.col,
+            anchor.from.row_off,
+            anchor.from.col_off,
+        )
+    });
+
+    (
+        floating_objects,
+        slicers,
+        slicer_anchors,
+        timelines,
+        timeline_anchors,
+    )
 }
 
 // -------------------------------------------------------------------

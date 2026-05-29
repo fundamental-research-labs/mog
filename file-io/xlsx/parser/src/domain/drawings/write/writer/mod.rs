@@ -421,6 +421,18 @@ impl DrawingWriter {
         })
     }
 
+    /// Check if any anchor contains a timeline object.
+    fn has_timelines(&self) -> bool {
+        self.anchors.iter().any(|a| {
+            let obj = match a {
+                DrawingAnchor::TwoCell(_, o) => o,
+                DrawingAnchor::OneCell(_, o) => o,
+                DrawingAnchor::Absolute(_, o) => o,
+            };
+            matches!(obj, DrawingObject::Timeline { .. })
+        })
+    }
+
     /// Check if any anchor contains a ChartEx object.
     fn has_chart_ex(&self) -> bool {
         self.anchors.iter().any(|a| {
@@ -538,8 +550,9 @@ impl DrawingWriter {
         w.write_declaration();
 
         let has_slicers = self.has_slicers();
+        let has_timelines = self.has_timelines();
         let has_chart_ex = self.has_chart_ex();
-        let needs_mc = has_slicers || has_chart_ex;
+        let needs_mc = has_slicers || has_timelines || has_chart_ex;
 
         // Start root element with namespaces.
         // If we have root namespace attrs from the original file, use those
@@ -599,7 +612,7 @@ impl DrawingWriter {
                     .iter()
                     .any(|(k, _)| k == "xmlns:cx");
                 // mc may have been added above for slicers; only add if still missing
-                if !has_mc && !has_slicers {
+                if !has_mc && !has_slicers && !has_timelines {
                     w.attr("xmlns:mc", NS_MC);
                 }
                 if !has_cx {
@@ -758,6 +771,9 @@ impl DrawingWriter {
                 name,
                 r_id,
             } => self.write_slicer(w, name, r_id, *original_id, object_id),
+            DrawingObject::Timeline { original_id, name } => {
+                self.write_timeline(w, name, *original_id, object_id)
+            }
         }
     }
 }

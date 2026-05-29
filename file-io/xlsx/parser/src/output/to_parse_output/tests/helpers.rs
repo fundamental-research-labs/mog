@@ -221,6 +221,7 @@ pub(super) fn threading_result(
         pivot_caches: std::collections::HashMap::new(),
         pivot_cache_packages: Vec::new(),
         slicer_caches: Vec::new(),
+        timeline_caches: Vec::new(),
         theme_part_path: None,
         theme_relationship_id_hint: None,
         theme_relationship_type: None,

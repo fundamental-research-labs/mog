@@ -101,7 +101,8 @@ fn register_object_hyperlink_relationships(
         | DrawingObject::OpaqueRaw(_)
         | DrawingObject::ContentPart(_)
         | DrawingObject::SmartArt(_)
-        | DrawingObject::Slicer { .. } => {}
+        | DrawingObject::Slicer { .. }
+        | DrawingObject::Timeline { .. } => {}
     }
 }
 

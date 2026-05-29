@@ -29,7 +29,7 @@ use super::workbook::{
     hydrate_workbook_pivot_cache_sources, hydrate_workbook_protection,
     hydrate_workbook_root_namespaces, hydrate_workbook_slicers, hydrate_workbook_table_styles,
     hydrate_workbook_tables, hydrate_workbook_theme, hydrate_workbook_threaded_comment_persons,
-    hydrate_workbook_views, hydrate_workbook_web_publishing,
+    hydrate_workbook_timelines, hydrate_workbook_views, hydrate_workbook_web_publishing,
 };
 use super::{HydrationIdMap, IdAllocator};
 
@@ -213,6 +213,13 @@ impl YrsStorage {
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
+            &mut txn,
+        );
+        hydrate_workbook_timelines(
+            &self.workbook,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &output.timeline_caches,
             &mut txn,
         );
 
@@ -439,6 +446,13 @@ impl YrsStorage {
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
+            &mut txn,
+        );
+        hydrate_workbook_timelines(
+            &self.workbook,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &output.timeline_caches,
             &mut txn,
         );
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);

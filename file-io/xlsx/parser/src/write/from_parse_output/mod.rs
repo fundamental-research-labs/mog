@@ -166,6 +166,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_table_relationships: Vec<(usize, usize, Option<String>)> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, String, String)> = Vec::new();
     let mut worksheet_slicer_relationships: Vec<(usize, usize)> = Vec::new();
+    let mut worksheet_timeline_relationships: Vec<(usize, usize)> = Vec::new();
 
     // Per-sheet drawing XML (the drawingN.xml content).
     let mut drawing_xml_data: Vec<Option<Vec<u8>>> = Vec::with_capacity(output.sheets.len());
@@ -196,6 +197,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     // Global ctrlProp counter for archive paths (xl/ctrlProps/ctrlProp{N}.xml).
     let mut global_ctrl_prop_idx: usize = 0;
     let mut global_slicer_idx: usize = 0;
+    let mut global_timeline_idx: usize = 0;
 
     // Also re-process hyperlinks to assign correct r:ids.
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
@@ -204,13 +206,18 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let has_threaded_comments = extras.threaded_comments.is_some();
         let has_tables = !extras.tables.is_empty();
         let has_slicers = !sheet_data.slicers.is_empty();
+        let has_timelines = !sheet_data.timelines.is_empty();
         let has_hyperlinks = extras.has_external_hyperlinks;
         let has_charts = extras.has_charts;
         let has_chart_ex = extras.has_chart_ex;
         let has_floating_objects = extras.has_floating_objects;
         let has_slicer_anchors = !sheet_data.slicer_anchors.is_empty();
-        let needs_drawing =
-            has_charts || has_chart_ex || has_floating_objects || has_slicer_anchors;
+        let has_timeline_anchors = !sheet_data.timeline_anchors.is_empty();
+        let needs_drawing = has_charts
+            || has_chart_ex
+            || has_floating_objects
+            || has_slicer_anchors
+            || has_timeline_anchors;
 
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
@@ -234,6 +241,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             && !has_custom_properties
             && !has_pivot_tables
             && !has_slicers
+            && !has_timelines
         {
             drawing_xml_data.push(None);
             drawing_writer_data.push(None);
@@ -515,6 +523,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 worksheet_slicer_relationships.push((sheet_idx, global_slicer_idx));
             }
         }
+        if has_timelines {
+            global_timeline_idx += 1;
+            worksheet_timeline_relationships.push((sheet_idx, global_timeline_idx));
+        }
 
         // Pivot table rels (sheet → pivotTable) and worksheet-level references.
         //
@@ -560,6 +572,28 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             // Build DrawingWriter with all anchors (charts + floating objects).
             let mut drawing_writer = DrawingWriter::new();
             drawing_writer.set_suppress_unregistered_relationships(true);
+            for anchor in &sheet_data.timeline_anchors {
+                drawing_writer.add_anchor(DrawingAnchor::OneCell(
+                    OneCellAnchor {
+                        from: CellAnchor {
+                            col: anchor.from.col,
+                            col_off: anchor.from.col_off,
+                            row: anchor.from.row,
+                            row_off: anchor.from.row_off,
+                        },
+                        extent: anchor.extent.clone().unwrap_or_default(),
+                        client_data: ClientData::default(),
+                        mc_alternate_content: anchor
+                            .raw_anchor_xml
+                            .clone()
+                            .map(|raw_xml| crate::domain::drawings::McAlternateContent { raw_xml }),
+                    },
+                    DrawingObject::Timeline {
+                        original_id: anchor.object_id,
+                        name: anchor.timeline_name.clone(),
+                    },
+                ));
+            }
             for anchor in &sheet_data.slicer_anchors {
                 let object = DrawingObject::Slicer {
                     original_id: anchor.object_id,
@@ -1551,8 +1585,23 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             None,
         )?;
     }
+    for (sheet_idx, global_idx) in &worksheet_timeline_relationships {
+        crate::write::package_graph::register_worksheet_timeline(
+            &mut package_graph_builder,
+            *sheet_idx,
+            *global_idx,
+            None,
+        )?;
+    }
     for (idx, _) in output.slicer_caches.iter().enumerate() {
         crate::write::package_graph::register_workbook_slicer_cache(
+            &mut package_graph_builder,
+            idx + 1,
+            None,
+        )?;
+    }
+    for (idx, _) in output.timeline_caches.iter().enumerate() {
+        crate::write::package_graph::register_workbook_timeline_cache(
             &mut package_graph_builder,
             idx + 1,
             None,

@@ -953,13 +953,12 @@ impl RowColItem {
 
         w.end_attrs();
 
-        for (i, x) in self.x_values.iter().enumerate() {
-            if i == 0 && x.is_none() {
-                // Default x element (no value)
-                w.empty_element("x", &[]);
-            } else if let Some(v) = x {
+        for x in &self.x_values {
+            if let Some(v) = x {
                 let v_str = v.to_string();
                 w.empty_element("x", &[("v", &v_str)]);
+            } else {
+                w.empty_element("x", &[]);
             }
         }
 

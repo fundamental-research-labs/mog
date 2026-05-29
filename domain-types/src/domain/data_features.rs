@@ -80,12 +80,14 @@ impl WorkbookDataFeatures {
         pivot_cache_sources: &[PivotCacheSourceDef],
         pivot_cache_records: &std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
         slicer_caches: &[ooxml_types::slicers::SlicerCacheDef],
+        timeline_caches: &[ooxml_types::timelines::TimelineCacheDef],
         metadata: &Option<WorkbookMetadata>,
         data_table_regions: &[DataTableRegion],
     ) -> Self {
         let mut tables = Vec::new();
         let mut query_tables = Vec::new();
         let mut slicers = Vec::new();
+        let mut timelines = Vec::new();
 
         for (sheet_index, sheet) in sheets.iter().enumerate() {
             let sheet_owner = SheetFeatureOwner {
@@ -117,6 +119,18 @@ impl WorkbookDataFeatures {
                         .slicer_anchors
                         .iter()
                         .find(|anchor| anchor.slicer_name == slicer.name)
+                        .cloned(),
+                });
+            }
+
+            for timeline in &sheet.timelines {
+                timelines.push(WorkbookTimelineFeature {
+                    owner: sheet_owner.clone(),
+                    timeline: timeline.clone(),
+                    anchor: sheet
+                        .timeline_anchors
+                        .iter()
+                        .find(|anchor| anchor.timeline_name == timeline.name)
                         .cloned(),
                 });
             }
@@ -159,8 +173,8 @@ impl WorkbookDataFeatures {
             pivot_tables: pivot_tables.to_vec(),
             slicer_caches: slicer_caches.to_vec(),
             slicers,
-            timeline_caches: Vec::new(),
-            timelines: Vec::new(),
+            timeline_caches: timeline_caches.to_vec(),
+            timelines,
             metadata: metadata.clone(),
             what_if: WorkbookWhatIfFeatures {
                 data_table_regions: data_table_regions.to_vec(),

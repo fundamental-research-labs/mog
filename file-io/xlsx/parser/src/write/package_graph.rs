@@ -20,7 +20,7 @@ use super::{
     REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
 };
 use crate::domain::content_types::write::{
-    CT_CHART_COLOR_STYLE, CT_CHART_STYLE, ContentTypesManager,
+    CT_CHART_COLOR_STYLE, CT_CHART_STYLE, CT_TIMELINE, CT_TIMELINE_CACHE, ContentTypesManager,
 };
 use crate::write::package_ownership::AuxiliaryPackagePartPolicy;
 

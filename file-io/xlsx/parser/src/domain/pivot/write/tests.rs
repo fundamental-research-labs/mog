@@ -582,6 +582,16 @@ fn test_row_col_item_xml() {
 }
 
 #[test]
+fn test_row_col_item_xml_preserves_middle_blank_refs() {
+    let mut w = XmlWriter::new();
+    let item = RowColItem::data(vec![Some(3), None, Some(75)]);
+    item.write_xml(&mut w);
+    let xml = w.finish_string();
+
+    assert_eq!(xml, r#"<i><x v="3"/><x/><x v="75"/></i>"#);
+}
+
+#[test]
 fn test_row_col_item_grand_xml() {
     let mut w = XmlWriter::new();
     let item = RowColItem::grand();

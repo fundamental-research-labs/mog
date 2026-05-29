@@ -52,6 +52,11 @@ pub const NS_A14: &str = "http://schemas.microsoft.com/office/drawing/2010/main"
 pub const NS_SLE: &str = "http://schemas.microsoft.com/office/drawing/2010/slicer";
 /// URI for slicer graphicData
 pub const SLICER_GRAPHIC_DATA_URI: &str = "http://schemas.microsoft.com/office/drawing/2010/slicer";
+/// Namespace for timeline drawing extension (tsle)
+pub const NS_TSLE: &str = "http://schemas.microsoft.com/office/drawing/2012/timeslicer";
+/// URI for timeline graphicData
+pub const TIMELINE_GRAPHIC_DATA_URI: &str =
+    "http://schemas.microsoft.com/office/drawing/2012/timeslicer";
 /// Namespace for ChartEx (cx)
 pub const NS_CX: &str = "http://schemas.microsoft.com/office/drawing/2014/chartex";
 /// Namespace for ChartEx 2015 extension (cx1) — used in mc:Choice Requires
@@ -638,6 +643,13 @@ pub enum DrawingObject {
         name: String,
         /// Relationship ID to slicer part (for the containing drawing's .rels)
         r_id: String,
+    },
+    /// Timeline (mc:AlternateContent with tsle:timeslicer in graphicFrame).
+    Timeline {
+        /// Original cNvPr `id` from the parsed file (round-trip preservation).
+        original_id: Option<u32>,
+        /// Timeline name (matches TimelineDef.name).
+        name: String,
     },
 }
 

@@ -913,6 +913,33 @@ pub(in crate::storage::engine) fn export_workbook_slicer_caches(
     caches
 }
 
+pub(in crate::storage::engine) fn export_workbook_timeline_caches(
+    stores: &EngineStores,
+) -> Vec<ooxml_types::timelines::TimelineCacheDef> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+
+    let timelines_map = match workbook.get(&txn, KEY_TIMELINES) {
+        Some(Out::YMap(m)) => m,
+        _ => return vec![],
+    };
+
+    let mut caches = Vec::new();
+    for (_, value) in timelines_map.iter(&txn) {
+        if let Out::Any(Any::String(json_str)) = value
+            && let Ok(stored) =
+                serde_json::from_str::<domain_types::domain::slicer::StoredTimeline>(&json_str)
+            && let Some(cache) = domain_types::domain::slicer::stored_timeline_to_cache_def(&stored)
+        {
+            caches.push(cache);
+        }
+    }
+    caches.sort_by(|left, right| left.name.cmp(&right.name));
+    caches.dedup_by(|left, right| left.name == right.name);
+    caches
+}
+
 /// Export parsed pivot tables from workbook-level pivotSpecs map AND sheet-level
 /// pivotTables maps.
 ///

@@ -13,6 +13,10 @@ use ooxml_types::slicers::{
     SlicerAnchor as OoxmlSlicerAnchor, SlicerCacheDef as OoxmlSlicerCacheDef,
     SlicerDef as OoxmlSlicerDef,
 };
+use ooxml_types::timelines::{
+    TimelineAnchor as OoxmlTimelineAnchor, TimelineCacheDef as OoxmlTimelineCacheDef,
+    TimelineDef as OoxmlTimelineDef,
+};
 use ooxml_types::workbook::SheetState;
 use value_types::CellValue;
 
@@ -213,6 +217,8 @@ pub struct ParseOutput {
     pub pivot_cache_records: std::collections::HashMap<u32, Vec<Vec<CellValue>>>,
     pub data_table_regions: Vec<DataTableRegion>,
     pub slicer_caches: Vec<OoxmlSlicerCacheDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timeline_caches: Vec<OoxmlTimelineCacheDef>,
     /// Workbook-level table style definitions from `xl/styles.xml`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_table_styles: Vec<ooxml_types::styles::TableStyleDef>,
@@ -929,6 +935,7 @@ impl ParseOutput {
             &self.pivot_cache_sources,
             &self.pivot_cache_records,
             &self.slicer_caches,
+            &self.timeline_caches,
             &self.metadata,
             &self.data_table_regions,
         )
@@ -955,6 +962,7 @@ impl ParseOutput {
             })
             .collect();
         self.slicer_caches = data_features.slicer_caches;
+        self.timeline_caches = data_features.timeline_caches;
         self.metadata = data_features.metadata;
         if !data_features.feature_properties.is_empty() {
             self.metadata
@@ -967,6 +975,8 @@ impl ParseOutput {
             sheet.tables.clear();
             sheet.slicers.clear();
             sheet.slicer_anchors.clear();
+            sheet.timelines.clear();
+            sheet.timeline_anchors.clear();
         }
 
         for table in data_features.tables {
@@ -981,6 +991,15 @@ impl ParseOutput {
                     sheet.slicer_anchors.push(anchor);
                 }
                 sheet.slicers.push(slicer.slicer);
+            }
+        }
+
+        for timeline in data_features.timelines {
+            if let Some(sheet) = find_data_feature_sheet_mut(&mut self.sheets, &timeline.owner) {
+                if let Some(anchor) = timeline.anchor {
+                    sheet.timeline_anchors.push(anchor);
+                }
+                sheet.timelines.push(timeline.timeline);
             }
         }
     }
@@ -1443,6 +1462,10 @@ pub struct SheetData {
     pub tables: Vec<TableSpec>,
     pub slicers: Vec<OoxmlSlicerDef>,
     pub slicer_anchors: Vec<OoxmlSlicerAnchor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timelines: Vec<OoxmlTimelineDef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timeline_anchors: Vec<OoxmlTimelineAnchor>,
     pub floating_objects: Vec<FloatingObject>,
     // Print & Protection
     pub print_settings: Option<PrintSettings>,

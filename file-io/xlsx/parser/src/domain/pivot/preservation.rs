@@ -278,7 +278,9 @@ fn element_span_for_name(xml: &[u8], name: &[u8], start: usize) -> Option<Elemen
     let end = if self_closing {
         tag_end + 1
     } else {
-        find_closing_tag(xml, name, start).unwrap_or(xml.len())
+        find_closing_tag(xml, name, start)
+            .and_then(|closing_start| find_gt_simd(xml, closing_start).map(|gt| gt + 1))
+            .unwrap_or(xml.len())
     };
     Some(ElementSpan {
         start,
@@ -286,4 +288,38 @@ fn element_span_for_name(xml: &[u8], name: &[u8], start: usize) -> Option<Elemen
         end,
         self_closing,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::pivot::reader::elements::first_element_span;
+
+    #[test]
+    fn preserved_child_blocks_include_closing_tag() {
+        let xml = br#"<pivotTableDefinition><pivotFields><pivotField><extLst><ext uri="u"/></extLst></pivotField></pivotFields></pivotTableDefinition>"#;
+        let root = first_element_span(xml, b"pivotTableDefinition", 0).unwrap();
+
+        let preservation = capture_root_preservation(xml, root);
+
+        assert_eq!(preservation.fields.len(), 1);
+        assert_eq!(preservation.fields[0].children.len(), 1);
+        assert_eq!(
+            preservation.fields[0].children[0].xml,
+            r#"<extLst><ext uri="u"/></extLst>"#
+        );
+    }
+
+    #[test]
+    fn preserved_nested_auto_sort_scope_is_well_formed() {
+        let xml = br#"<pivotTableDefinition><pivotFields><pivotField><autoSortScope><pivotArea><references><reference field="4294967294"><x v="0"/></reference></references></pivotArea></autoSortScope></pivotField></pivotFields></pivotTableDefinition>"#;
+        let root = first_element_span(xml, b"pivotTableDefinition", 0).unwrap();
+
+        let preservation = capture_root_preservation(xml, root);
+
+        assert_eq!(
+            preservation.fields[0].children[0].xml,
+            r#"<autoSortScope><pivotArea><references><reference field="4294967294"><x v="0"/></reference></references></pivotArea></autoSortScope>"#
+        );
+    }
 }

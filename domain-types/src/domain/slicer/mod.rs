@@ -27,7 +27,10 @@ pub use style::{
     CrossFilterMode, NamedSlicerStyle, SlicerCustomStyle, SlicerSortOrder, SlicerStyle,
     SlicerStylePreset,
 };
-pub use timeline::{StoredTimeline, StoredTimelineCache, TimelineLevel};
+pub use timeline::{
+    StoredTimeline, StoredTimelineCache, TimelineLevel, stored_timeline_to_anchor,
+    stored_timeline_to_cache_def, stored_timeline_to_timeline_def, xlsx_import_to_stored_timeline,
+};
 
 #[cfg(test)]
 mod tests;

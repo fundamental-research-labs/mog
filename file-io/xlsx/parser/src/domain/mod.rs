@@ -28,6 +28,7 @@ pub mod strings;
 pub mod styles;
 pub mod tables;
 pub mod themes;
+pub mod timelines;
 pub mod validation;
 pub mod vba;
 pub mod web_extensions;

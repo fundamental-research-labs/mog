@@ -354,6 +354,8 @@ impl YrsComputeEngine {
         Vec<FloatingObject>,
         Vec<ooxml_types::slicers::SlicerDef>,
         Vec<ooxml_types::slicers::SlicerAnchor>,
+        Vec<ooxml_types::timelines::TimelineDef>,
+        Vec<ooxml_types::timelines::TimelineAnchor>,
     ) {
         super::services::export::export_floating_objects_for_sheet(&self.stores, sheet_id)
     }

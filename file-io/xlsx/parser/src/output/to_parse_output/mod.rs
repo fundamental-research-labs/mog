@@ -286,6 +286,7 @@ pub fn full_parse_result_to_parse_output(
         pivot_cache_records,
         data_table_regions: all_data_table_regions,
         slicer_caches,
+        timeline_caches: result.timeline_caches.clone(),
         custom_table_styles: result.styles.raw_table_styles.clone(),
         default_table_style: result.styles.default_table_style.clone(),
         default_pivot_style: result.styles.default_pivot_style.clone(),

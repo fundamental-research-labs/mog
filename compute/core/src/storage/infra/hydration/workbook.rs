@@ -614,6 +614,52 @@ pub(super) fn hydrate_workbook_slicers(
     }
 }
 
+pub(super) fn hydrate_workbook_timelines(
+    workbook: &MapRef,
+    sheets: &[SheetData],
+    sheet_ids: &[SheetId],
+    timeline_caches: &[ooxml_types::timelines::TimelineCacheDef],
+    txn: &mut yrs::TransactionMut,
+) {
+    let cache_by_name: std::collections::HashMap<&str, &ooxml_types::timelines::TimelineCacheDef> =
+        timeline_caches
+            .iter()
+            .map(|cache| (cache.name.as_str(), cache))
+            .collect();
+
+    if sheets.iter().all(|sheet| sheet.timelines.is_empty()) {
+        return;
+    }
+
+    let timelines_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_TIMELINES);
+    for (sheet_idx, sheet) in sheets.iter().enumerate() {
+        if sheet.timelines.is_empty() {
+            continue;
+        }
+
+        let sheet_hex = id_to_hex(sheet_ids[sheet_idx].as_u128());
+        let anchor_by_name: std::collections::HashMap<
+            &str,
+            &ooxml_types::timelines::TimelineAnchor,
+        > = sheet
+            .timeline_anchors
+            .iter()
+            .map(|anchor| (anchor.timeline_name.as_str(), anchor))
+            .collect();
+
+        for timeline in &sheet.timelines {
+            let cache = cache_by_name.get(timeline.cache.as_str()).copied();
+            let anchor = anchor_by_name.get(timeline.name.as_str()).copied();
+            let stored = domain_types::domain::slicer::xlsx_import_to_stored_timeline(
+                timeline, cache, anchor, &sheet_hex,
+            );
+            let json = serde_json::to_string(&stored)
+                .expect("StoredTimeline serialization should not fail");
+            timelines_map.insert(txn, &*stored.id, Any::String(Arc::from(json.as_str())));
+        }
+    }
+}
+
 /// Hydrate parsed pivot tables into the workbook-level pivotSpecs map.
 /// Stores `ParsedPivotTable` (JSON-serialized) so the export path can reconstruct them.
 /// TODO: Remove this — pivots will be stored per-sheet.

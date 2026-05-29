@@ -339,6 +339,10 @@ pub struct FullParsedSheet {
     pub slicers: Vec<ooxml_types::slicers::SlicerDef>,
     /// Slicer anchors (positions in the drawing layer) for this sheet
     pub slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
+    /// Timeline definitions parsed from this sheet's timeline parts.
+    pub timelines: Vec<ooxml_types::timelines::TimelineDef>,
+    /// Timeline anchors (positions in the drawing layer) for this sheet.
+    pub timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
     /// Form controls (checkboxes, dropdowns, buttons, scroll bars, etc.)
     pub form_controls: Vec<FormControlOutput>,
     /// Raw worksheet-level controls XML for verbatim round-trip passthrough.
@@ -606,6 +610,8 @@ pub struct FullParseResult {
     pub pivot_cache_packages: Vec<domain_types::PivotCachePackageFidelity>,
     /// Slicer cache definitions (workbook-level, shared across sheets)
     pub slicer_caches: Vec<ooxml_types::slicers::SlicerCacheDef>,
+    /// Timeline cache definitions (workbook-level, shared across sheets)
+    pub timeline_caches: Vec<ooxml_types::timelines::TimelineCacheDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme_part_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

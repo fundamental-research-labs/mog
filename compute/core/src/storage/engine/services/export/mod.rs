@@ -589,7 +589,8 @@ fn export_single_sheet(
     let tables: Vec<TableSpec> = export_tables_for_sheet(stores, mirror, sheet_id);
 
     // --- Floating objects (unified), slicers ---
-    let (all_fobjs, slicers, slicer_anchors) = export_floating_objects_for_sheet(stores, sheet_id);
+    let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
+        export_floating_objects_for_sheet(stores, sheet_id);
 
     let mut charts: Vec<ChartSpec> = Vec::new();
     let mut floating_objects: Vec<FloatingObject> = Vec::new();
@@ -801,6 +802,8 @@ fn export_single_sheet(
         tables,
         slicers,
         slicer_anchors,
+        timelines,
+        timeline_anchors,
         floating_objects,
         page_breaks,
         auto_filter,
@@ -927,6 +930,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
     let slicer_caches = export_workbook_slicer_caches(stores);
+    let timeline_caches = workbook::export_workbook_timeline_caches(stores);
     let (custom_table_styles, default_table_style, default_pivot_style) =
         export_workbook_table_styles(stores);
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
@@ -951,6 +955,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         pivot_cache_records: workbook::export_pivot_cache_records(stores),
         data_table_regions,
         slicer_caches,
+        timeline_caches,
         custom_table_styles,
         default_table_style,
         default_pivot_style,

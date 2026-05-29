@@ -72,6 +72,12 @@ pub const CT_SLICER: &str = "application/vnd.ms-excel.slicer+xml";
 /// Content type for slicer cache definitions (x14 extension)
 pub const CT_SLICER_CACHE: &str = "application/vnd.ms-excel.slicerCache+xml";
 
+/// Content type for timeline parts (x15 extension)
+pub const CT_TIMELINE: &str = "application/vnd.ms-excel.timeline+xml";
+
+/// Content type for timeline cache definitions (x15 extension)
+pub const CT_TIMELINE_CACHE: &str = "application/vnd.ms-excel.timelineCache+xml";
+
 /// Content type for generic XML
 pub const CT_XML: &str = "application/xml";
 

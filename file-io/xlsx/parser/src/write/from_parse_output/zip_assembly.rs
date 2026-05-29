@@ -505,6 +505,34 @@ pub(super) fn write_zip_package(
         )?;
     }
 
+    // Timeline XML files
+    {
+        let mut timeline_global = 0usize;
+        for sheet in &output.sheets {
+            if sheet.timelines.is_empty() {
+                continue;
+            }
+            timeline_global += 1;
+            let xml = crate::domain::timelines::write::write_timeline_part(&sheet.timelines);
+            add_registered_part(
+                package_graph,
+                &mut zip,
+                &format!("xl/timelines/timeline{}.xml", timeline_global),
+                xml,
+            )?;
+        }
+    }
+
+    for (idx, cache) in output.timeline_caches.iter().enumerate() {
+        let xml = crate::domain::timelines::write::write_timeline_cache(cache);
+        add_registered_part(
+            package_graph,
+            &mut zip,
+            &format!("xl/timelineCaches/timelineCache{}.xml", idx + 1),
+            xml,
+        )?;
+    }
+
     // Pivot table and cache XML files
     for entry in &pivot_data.pivot_table_entries {
         add_registered_part(package_graph, &mut zip, &entry.path, entry.xml.clone())?;

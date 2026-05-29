@@ -505,6 +505,8 @@ pub(super) fn convert_sheet(
         tables: Vec::new(), // Populated by caller with per-sheet tables.
         slicers,
         slicer_anchors,
+        timelines: sheet.timelines.clone(),
+        timeline_anchors: sheet.timeline_anchors.clone(),
         floating_objects,
         print_settings,
         page_breaks,

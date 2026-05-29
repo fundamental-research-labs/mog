@@ -1,6 +1,8 @@
 use crate::write::xml_writer::XmlWriter;
 
-use super::super::super::types::{ChartExRef, NS_CX, NS_CX1, NS_R, SLICER_GRAPHIC_DATA_URI};
+use super::super::super::types::{
+    ChartExRef, NS_CX, NS_CX1, NS_R, NS_TSLE, SLICER_GRAPHIC_DATA_URI, TIMELINE_GRAPHIC_DATA_URI,
+};
 use super::super::DrawingWriter;
 
 impl DrawingWriter {
@@ -71,6 +73,58 @@ impl DrawingWriter {
         // Fallback (empty — non-a14 consumers see nothing)
         w.start_element("mc:Fallback").self_close();
 
+        w.end_element("mc:AlternateContent");
+    }
+
+    pub(in crate::domain::drawings::write::writer) fn write_timeline(
+        &self,
+        w: &mut XmlWriter,
+        name: &str,
+        original_id: Option<u32>,
+        object_id: &mut u32,
+    ) {
+        let id = original_id.unwrap_or(*object_id);
+        *object_id += 1;
+
+        w.start_element("mc:AlternateContent").end_attrs();
+        w.start_element("mc:Choice")
+            .attr("xmlns:tsle", NS_TSLE)
+            .attr("Requires", "tsle")
+            .end_attrs();
+
+        w.start_element("xdr:graphicFrame").end_attrs();
+        w.start_element("xdr:nvGraphicFramePr").end_attrs();
+        w.start_element("xdr:cNvPr")
+            .attr_num("id", id)
+            .attr("name", name)
+            .self_close();
+        w.start_element("xdr:cNvGraphicFramePr").self_close();
+        w.end_element("xdr:nvGraphicFramePr");
+
+        w.start_element("xdr:xfrm").end_attrs();
+        w.start_element("a:off")
+            .attr_num("x", 0)
+            .attr_num("y", 0)
+            .self_close();
+        w.start_element("a:ext")
+            .attr_num("cx", 0)
+            .attr_num("cy", 0)
+            .self_close();
+        w.end_element("xdr:xfrm");
+
+        w.start_element("a:graphic").end_attrs();
+        w.start_element("a:graphicData")
+            .attr("uri", TIMELINE_GRAPHIC_DATA_URI)
+            .end_attrs();
+        w.start_element("tsle:timeslicer")
+            .attr("name", name)
+            .self_close();
+        w.end_element("a:graphicData");
+        w.end_element("a:graphic");
+
+        w.end_element("xdr:graphicFrame");
+        w.end_element("mc:Choice");
+        w.start_element("mc:Fallback").self_close();
         w.end_element("mc:AlternateContent");
     }
 

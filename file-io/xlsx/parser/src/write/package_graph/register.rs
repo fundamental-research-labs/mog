@@ -3,16 +3,16 @@ use super::{
     CT_COMMENTS, CT_CONNECTIONS, CT_DRAWING, CT_EMF, CT_FEATURE_PROPERTY_BAG, CT_GIF, CT_JPEG,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_PNG, CT_PRINTER_SETTINGS,
     CT_QUERY_TABLE, CT_SLICER, CT_SLICER_CACHE, CT_TABLE, CT_TABLE_SINGLE_CELLS,
-    CT_THREADED_COMMENTS, CT_VML_DRAWING, CT_VOLATILE_DEPENDENCIES, CT_WMF,
-    CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner, PackagePart, PackagePartKind,
-    PackageRelationship, PackageRelationshipTarget, REL_CHART, REL_CHART_EX, REL_COMMENTS,
-    REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK, REL_FEATURE_PROPERTY_BAG,
-    REL_HYPERLINK, REL_IMAGE, REL_PIVOT_CACHE, REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS,
-    REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE,
-    REL_TABLE, REL_TABLE_SINGLE_CELLS, REL_THREADED_COMMENT, REL_VML_DRAWING,
-    REL_VOLATILE_DEPENDENCIES, REL_WORKSHEET_CUSTOM_PROPERTY, RegisteredRelationshipKey,
-    RelationshipIdentityHint, is_external_target_mode, modeled_part,
-    normalize_external_link_part_path, normalize_part_path,
+    CT_THREADED_COMMENTS, CT_TIMELINE, CT_TIMELINE_CACHE, CT_VML_DRAWING, CT_VOLATILE_DEPENDENCIES,
+    CT_WMF, CT_WORKSHEET_CUSTOM_PROPERTY, PackageGraphBuilder, PackageOwner, PackagePart,
+    PackagePartKind, PackageRelationship, PackageRelationshipTarget, REL_CHART, REL_CHART_EX,
+    REL_COMMENTS, REL_CONNECTIONS, REL_CTRL_PROP, REL_DRAWING, REL_EXTERNAL_LINK,
+    REL_FEATURE_PROPERTY_BAG, REL_HYPERLINK, REL_IMAGE, REL_PIVOT_CACHE,
+    REL_PIVOT_CACHE_DEFINITION, REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS,
+    REL_QUERY_TABLE, REL_SLICER, REL_SLICER_CACHE, REL_TABLE, REL_TABLE_SINGLE_CELLS,
+    REL_THREADED_COMMENT, REL_VML_DRAWING, REL_VOLATILE_DEPENDENCIES,
+    REL_WORKSHEET_CUSTOM_PROPERTY, RegisteredRelationshipKey, RelationshipIdentityHint,
+    is_external_target_mode, modeled_part, normalize_external_link_part_path, normalize_part_path,
 };
 use crate::write::write_error::WriteError;
 
@@ -278,6 +278,39 @@ pub fn register_workbook_slicer_cache(
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Workbook,
         relationship_type: REL_SLICER_CACHE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_worksheet_timeline(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/timelines/timeline{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_TIMELINE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: crate::infra::opc::REL_TIMELINE.to_string(),
+        target: PackageRelationshipTarget::InternalPart { path },
+        identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
+    });
+    Ok(())
+}
+
+pub fn register_workbook_timeline_cache(
+    graph: &mut PackageGraphBuilder,
+    global_idx: usize,
+    relationship_id_hint: Option<&str>,
+) -> Result<(), WriteError> {
+    let path = format!("xl/timelineCaches/timelineCache{global_idx}.xml");
+    graph.register_part(modeled_part(&path, CT_TIMELINE_CACHE))?;
+    graph.add_relationship(PackageRelationship {
+        owner: PackageOwner::Workbook,
+        relationship_type: crate::infra::opc::REL_TIMELINE_CACHE.to_string(),
         target: PackageRelationshipTarget::InternalPart { path },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });

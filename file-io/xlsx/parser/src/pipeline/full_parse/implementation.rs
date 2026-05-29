@@ -35,6 +35,7 @@ use crate::domain::strings::read::SharedStrings;
 use crate::domain::styles::read::{parse_known_fonts, parse_styles};
 use crate::domain::tables::read::parse_tables_for_sheet;
 use crate::domain::themes;
+use crate::domain::timelines::read::{parse_all_timeline_caches, parse_timelines_for_sheet};
 use crate::domain::validation::read::{parse_data_validations, parse_x14_data_validations};
 use crate::domain::workbook::read as workbook;
 use crate::domain::workbook::read::{SheetPackageContext, parse_calc_settings};
@@ -585,6 +586,7 @@ pub(super) fn parse_xlsx_full_native_impl(
 
     // Parse all slicer cache definitions (workbook-level)
     let slicer_caches = parse_all_slicer_caches(&archive);
+    let timeline_caches = parse_all_timeline_caches(&archive);
     ensure_no_archive_safety_error(&archive)?;
 
     let t4 = tick(&timings);
@@ -627,6 +629,8 @@ pub(super) fn parse_xlsx_full_native_impl(
             smartart_diagrams: Vec<SmartArtPartsOutput>,
             slicers: Vec<ooxml_types::slicers::SlicerDef>,
             slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
+            timelines: Vec<ooxml_types::timelines::TimelineDef>,
+            timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
             form_controls: Vec<FormControlOutput>,
             ole_objects: Vec<OleObjectOutput>,
             connectors: Vec<ConnectorOutput>,
@@ -678,6 +682,7 @@ pub(super) fn parse_xlsx_full_native_impl(
             let smartart_diagrams =
                 convert_smartart_parts(parse_smartart_for_sheet(&archive, sheet_num));
             let (slicers, slicer_anchors) = parse_slicers_for_sheet(&archive, sheet_num);
+            let (timelines, timeline_anchors) = parse_timelines_for_sheet(&archive, sheet_num);
             let form_controls = parse_form_controls_for_sheet(&archive, sheet_num, &worksheet_xml);
             let ole_objects = parse_ole_objects_for_sheet(&archive, sheet_num, &worksheet_xml);
             let connectors = parse_connectors_for_sheet(&archive, sheet_num);
@@ -731,6 +736,8 @@ pub(super) fn parse_xlsx_full_native_impl(
                 smartart_diagrams,
                 slicers,
                 slicer_anchors,
+                timelines,
+                timeline_anchors,
                 form_controls,
                 ole_objects,
                 connectors,
@@ -764,6 +771,8 @@ pub(super) fn parse_xlsx_full_native_impl(
                     ps.smartart_diagrams,
                     ps.slicers,
                     ps.slicer_anchors,
+                    ps.timelines,
+                    ps.timeline_anchors,
                     ps.form_controls,
                     ps.ole_objects,
                     ps.connectors,
@@ -986,6 +995,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         pivot_caches,
         pivot_cache_packages,
         slicer_caches,
+        timeline_caches,
         theme_part_path,
         theme_relationship_id_hint,
         theme_relationship_type,
@@ -1056,10 +1066,9 @@ pub(super) fn parse_xlsx_full_native_impl(
                 if entry.name.starts_with("xl/printerSettings/")
                     || entry.name.starts_with("xl/customProperty")
                     || entry.name.starts_with("xl/vbaProject.bin")
-                    || entry.name.starts_with("xl/timelineCaches/")
-                    || entry.name.starts_with("xl/timelines/")
-                    // Pivots and slicers are modeled features. Do not capture
-                    // their package parts through generic roundtrip passthrough.
+                    // Pivots, slicers, and timelines are modeled features. Do
+                    // not capture their package parts through generic roundtrip
+                    // passthrough.
                     // Note: xl/ctrlProps/ is NOT included here because the structured
                     // ControlsWriter in from_parse_output.rs already regenerates ctrlProp files
                     // from parsed FormControl data. Adding them to binary passthrough would
@@ -1133,6 +1142,8 @@ fn process_sheet_core(
     smartart_diagrams: Vec<SmartArtPartsOutput>,
     slicers: Vec<ooxml_types::slicers::SlicerDef>,
     slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
+    timelines: Vec<ooxml_types::timelines::TimelineDef>,
+    timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
     form_controls: Vec<FormControlOutput>,
     ole_objects: Vec<OleObjectOutput>,
     connectors: Vec<ConnectorOutput>,
@@ -1427,6 +1438,8 @@ fn process_sheet_core(
         smartart_diagrams,
         slicers,
         slicer_anchors,
+        timelines,
+        timeline_anchors,
         form_controls,
         worksheet_controls_xml,
         ole_objects,
@@ -1468,6 +1481,8 @@ fn process_sheet_parallel(
     smartart_diagrams: Vec<SmartArtPartsOutput>,
     slicers: Vec<ooxml_types::slicers::SlicerDef>,
     slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
+    timelines: Vec<ooxml_types::timelines::TimelineDef>,
+    timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
     form_controls: Vec<FormControlOutput>,
     ole_objects: Vec<OleObjectOutput>,
     connectors: Vec<ConnectorOutput>,
@@ -1489,6 +1504,8 @@ fn process_sheet_parallel(
         smartart_diagrams,
         slicers,
         slicer_anchors,
+        timelines,
+        timeline_anchors,
         form_controls,
         ole_objects,
         connectors,
@@ -1802,6 +1819,7 @@ fn parse_sheets_sequential(
         // Parse slicers (requires ZIP reads for slicer XML files, drawing XML for anchors)
         let az_t5 = tick(timings);
         let (slicers, slicer_anchors) = parse_slicers_for_sheet(archive, sheet_num);
+        let (timelines, timeline_anchors) = parse_timelines_for_sheet(archive, sheet_num);
 
         // Parse form controls (requires ZIP reads for ctrlProp XML files, VML drawings, and .rels)
         let az_t6 = tick(timings);
@@ -1962,6 +1980,8 @@ fn parse_sheets_sequential(
             smartart_diagrams,
             slicers,
             slicer_anchors,
+            timelines,
+            timeline_anchors,
             form_controls,
             worksheet_controls_xml,
             ole_objects,

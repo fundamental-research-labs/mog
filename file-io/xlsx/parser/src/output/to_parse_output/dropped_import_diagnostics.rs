@@ -129,8 +129,6 @@ fn append_suppressed_auxiliary_diagnostics<'a>(
             dropped.push(format!("ActiveX active content suppressed at {}", path));
         } else if path == "xl/volatileDependencies.xml" {
             dropped.push("volatile dependency calculation sidecar".to_string());
-        } else if path.starts_with("xl/timelineCaches/") || path.starts_with("xl/timelines/") {
-            dropped.push("timeline package parts".to_string());
         } else if path.starts_with("xl/featurePropertyBag/") {
             dropped.push("feature property bag package parts".to_string());
         }

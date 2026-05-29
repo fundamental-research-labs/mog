@@ -28,6 +28,10 @@ pub struct TimelineDef {
     pub cache: String,
     pub caption: Option<String>,
     pub level: TimelineLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_level: Option<TimelineLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scroll_position: Option<String>,
     pub uid: Option<String>,
     pub ext_lst: Option<String>,
 }
@@ -39,6 +43,16 @@ pub struct TimelineCacheDef {
     pub uid: Option<String>,
     pub source_name: String,
     pub pivot_cache_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimal_refresh_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_refresh_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
     pub pivot_tables: Vec<TimelinePivotTableRef>,
     pub ext_lst: Option<String>,
 }
@@ -57,4 +71,8 @@ pub struct TimelineAnchor {
     pub from: CellAnchor,
     pub to: CellAnchor,
     pub object_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extent: Option<crate::drawings::Extent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_anchor_xml: Option<String>,
 }

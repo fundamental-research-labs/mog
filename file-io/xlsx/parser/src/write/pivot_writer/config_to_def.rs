@@ -64,17 +64,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 compact,
                 outline,
                 show_all: field.show_all,
-                sort_type: axis_placement.and_then(|p| {
-                    p.sort_order.map(|sort| match sort {
-                        domain_types::domain::analytics::SortDirection::Asc => {
-                            "ascending".to_string()
-                        }
-                        domain_types::domain::analytics::SortDirection::Desc => {
-                            "descending".to_string()
-                        }
-                        _ => "manual".to_string(),
-                    })
-                }),
+                sort_type: axis_placement.and_then(sort_type_for_axis_placement),
                 auto_sort_data_field: axis_placement
                     .and_then(|p| p.sort_by_value.as_ref())
                     .and_then(|sort| {
@@ -260,6 +250,22 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
     }
 }
 
+fn sort_type_for_axis_placement(
+    placement: &pivot_types::PivotFieldPlacementFlat,
+) -> Option<String> {
+    let sort = placement
+        .sort_order
+        .or_else(|| placement.sort_by_value.as_ref().map(|sort| sort.order))?;
+    Some(
+        match sort {
+            domain_types::domain::analytics::SortDirection::Asc => "ascending",
+            domain_types::domain::analytics::SortDirection::Desc => "descending",
+            _ => "manual",
+        }
+        .to_string(),
+    )
+}
+
 fn map_agg_function(
     agg: pivot_types::AggregateFunction,
 ) -> domain_types::domain::pivot::PivotFieldFunction {
@@ -317,4 +323,63 @@ fn show_values_as_ooxml(config: &pivot_types::ShowValuesAsConfig) -> String {
         _ => "normal",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pivot_types::{
+        FieldId, PivotFieldArea, PivotFieldPlacementFlat, SortByValueConfig, SortDirection,
+    };
+
+    fn axis_placement() -> PivotFieldPlacementFlat {
+        PivotFieldPlacementFlat {
+            placement_id: pivot_types::PlacementId::new("p0"),
+            field_id: FieldId::from("Region"),
+            calculated_field_id: None,
+            area: PivotFieldArea::Row,
+            position: 0,
+            aggregate_function: None,
+            sort_order: None,
+            custom_sort_list: None,
+            sort_by_value: None,
+            date_grouping: None,
+            number_grouping: None,
+            show_subtotals: None,
+            display_name: None,
+            number_format: None,
+            show_values_as: None,
+        }
+    }
+
+    #[test]
+    fn sort_type_uses_sort_by_value_order_when_label_sort_order_is_cleared() {
+        let mut placement = axis_placement();
+        placement.sort_by_value = Some(SortByValueConfig {
+            value_field_id: FieldId::from("Sales"),
+            order: SortDirection::Desc,
+            column_key: None,
+        });
+
+        assert_eq!(
+            sort_type_for_axis_placement(&placement),
+            Some("descending".to_string())
+        );
+    }
+
+    #[test]
+    fn explicit_label_sort_order_wins_over_sort_by_value_order() {
+        let mut placement = axis_placement();
+        placement.sort_order = Some(SortDirection::Asc);
+        placement.sort_by_value = Some(SortByValueConfig {
+            value_field_id: FieldId::from("Sales"),
+            order: SortDirection::Desc,
+            column_key: None,
+        });
+
+        assert_eq!(
+            sort_type_for_axis_placement(&placement),
+            Some("ascending".to_string())
+        );
+    }
 }

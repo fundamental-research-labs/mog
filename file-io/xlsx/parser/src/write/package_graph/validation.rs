@@ -6,11 +6,11 @@ use super::{
     CT_DOC_METADATA_LABEL_INFO, CT_DRAWING, CT_EXTENDED_PROPERTIES, CT_METADATA, CT_OLE_OBJECT,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_QUERY_TABLE, CT_SHARED_STRINGS,
     CT_SLICER, CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME,
-    CT_THREADED_COMMENTS, CT_VOLATILE_DEPENDENCIES, CT_WORKBOOK, CT_WORKSHEET,
-    CT_WORKSHEET_CUSTOM_PROPERTY, PackageIntegrityIssue, PackagePart, PackagePartKind, REL_CHART,
-    REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS, REL_CORE_PROPERTIES, REL_CTRL_PROP,
-    REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK, REL_IMAGE,
-    REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
+    CT_THREADED_COMMENTS, CT_TIMELINE, CT_TIMELINE_CACHE, CT_VOLATILE_DEPENDENCIES, CT_WORKBOOK,
+    CT_WORKSHEET, CT_WORKSHEET_CUSTOM_PROPERTY, PackageIntegrityIssue, PackagePart,
+    PackagePartKind, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CONNECTIONS, REL_CORE_PROPERTIES,
+    REL_CTRL_PROP, REL_CUSTOM_PROPERTIES, REL_DRAWING, REL_EXTENDED_PROPERTIES, REL_EXTERNAL_LINK,
+    REL_IMAGE, REL_METADATA, REL_OFFICE_DOCUMENT, REL_OLE_OBJECT, REL_PERSON, REL_PIVOT_CACHE,
     REL_PIVOT_CACHE_RECORDS, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_QUERY_TABLE,
     REL_SHARED_STRINGS, REL_SLICER, REL_SLICER_CACHE, REL_STYLES, REL_TABLE,
     REL_TABLE_SINGLE_CELLS, REL_THEME, REL_THREADED_COMMENT, REL_VML_DRAWING, REL_WORKSHEET,
@@ -521,6 +521,12 @@ fn required_owner_relationship_for_modeled_part(path: &str) -> Option<RequiredRe
             relationship_type: REL_SLICER_CACHE,
         });
     }
+    if path.starts_with("xl/timelineCaches/timelineCache") && path.ends_with(".xml") {
+        return Some(RequiredRelationship {
+            rels_path: Some(workbook_rels.to_string()),
+            relationship_type: crate::infra::opc::REL_TIMELINE_CACHE,
+        });
+    }
     if let Some(relationship_type) = relationship_type_for_worksheet_child(path) {
         return Some(RequiredRelationship {
             rels_path: None,
@@ -606,6 +612,10 @@ fn required_content_type_for_modeled_part(path: &str) -> Option<&'static str> {
         Some(CT_SLICER)
     } else if path.starts_with("xl/slicerCaches/slicerCache") && path.ends_with(".xml") {
         Some(CT_SLICER_CACHE)
+    } else if path.starts_with("xl/timelines/timeline") && path.ends_with(".xml") {
+        Some(CT_TIMELINE)
+    } else if path.starts_with("xl/timelineCaches/timelineCache") && path.ends_with(".xml") {
+        Some(CT_TIMELINE_CACHE)
     } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
         Some(CT_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {
@@ -646,6 +656,8 @@ fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
         Some(REL_TABLE)
     } else if path.starts_with("xl/slicers/slicer") && path.ends_with(".xml") {
         Some(REL_SLICER)
+    } else if path.starts_with("xl/timelines/timeline") && path.ends_with(".xml") {
+        Some(crate::infra::opc::REL_TIMELINE)
     } else if path.starts_with("xl/comments") && path.ends_with(".xml") {
         Some(REL_COMMENTS)
     } else if path.starts_with("xl/threadedComments/threadedComment") && path.ends_with(".xml") {

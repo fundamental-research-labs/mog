@@ -328,6 +328,152 @@ fn test_set_cell_date_formula_applies_date_format() {
 }
 
 #[test]
+fn test_set_cell_datevalue_formula_keeps_general_serial_display() {
+    use crate::bridge_types::CellInput;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                3u32,
+                CellInput::Parse {
+                    text: "=DATEVALUE(\"2/29/1900\")".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    let cell_value = engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
+    match cell_value {
+        Some(CellValue::Number(serial)) => assert_eq!(serial.get(), 60.0),
+        other => panic!(
+            "expected Number for DATEVALUE formula result, got {:?}",
+            other
+        ),
+    }
+
+    assert!(matches!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        None | Some("General")
+    ));
+    assert_eq!(engine.format_cell_display(&sid, 0, 3), "60");
+}
+
+#[test]
+fn test_date_pair_formulas_inherit_shared_reference_date_format() {
+    use crate::bridge_types::CellInput;
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 1)],
+            &CellFormat {
+                number_format: Some("yyyy-MM-dd".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sid,
+                    0u32,
+                    2u32,
+                    CellInput::Parse {
+                        text: "=DATEDIF(A1,B1,\"d\")".to_string(),
+                    },
+                ),
+                (
+                    sid,
+                    0u32,
+                    3u32,
+                    CellInput::Parse {
+                        text: "=NETWORKDAYS(A1,B1)".to_string(),
+                    },
+                ),
+                (
+                    sid,
+                    0u32,
+                    4u32,
+                    CellInput::Parse {
+                        text: "=DAYS(B1,A1)".to_string(),
+                    },
+                ),
+            ],
+            true,
+        )
+        .unwrap();
+
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 2).as_deref(),
+        Some("yyyy-MM-dd")
+    );
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        Some("yyyy-MM-dd")
+    );
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 4).as_deref(),
+        Some("yyyy-MM-dd")
+    );
+}
+
+#[test]
+fn test_networkdays_expression_argument_keeps_numeric_format() {
+    use crate::bridge_types::CellInput;
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                number_format: Some("M/d/yyyy".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                2u32,
+                CellInput::Parse {
+                    text: "=NETWORKDAYS(A1,A1+7)".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    assert!(matches!(
+        stored_number_format_at(&engine, &sid, 0, 2).as_deref(),
+        None | Some("General")
+    ));
+}
+
+#[test]
 fn test_set_cell_date_formula_preserves_explicit_destination_format() {
     use crate::bridge_types::CellInput;
     use domain_types::CellFormat;

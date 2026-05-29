@@ -420,16 +420,23 @@ fn formula_result_format_intent(template: &str) -> FormulaResultFormatIntent {
         return FormulaResultFormatIntent::Unknown;
     };
     match root.as_str() {
-        "DATE" | "DATEVALUE" | "EDATE" | "EOMONTH" | "NOW" | "TODAY" => {
+        "DATE" | "EDATE" | "EOMONTH" | "NOW" | "TODAY" => {
             FormulaResultFormatIntent::Apply("M/d/yyyy")
         }
         "TIME" | "TIMEVALUE" => FormulaResultFormatIntent::Apply("h:mm"),
-        "NETWORKDAYS" | "NETWORKDAYS.INTL" | "DAYS" | "DATEDIF" | "COUNT" | "COUNTA"
-        | "COUNTBLANK" | "COUNTIF" | "COUNTIFS" | "SUM" | "SUMIF" | "SUMIFS" | "AVERAGE"
-        | "AVERAGEIF" | "AVERAGEIFS" | "MIN" | "MAX" | "MEDIAN" | "MODE" | "MODE.SNGL"
-        | "MODE.MULT" | "STDEV" | "STDEV.S" | "STDEV.P" | "VAR" | "VAR.S" | "VAR.P" => {
+        "DATEVALUE" => FormulaResultFormatIntent::Numeric,
+        "NETWORKDAYS" | "NETWORKDAYS.INTL" | "DAYS" | "DATEDIF"
+            if date_difference_uses_simple_date_refs(trimmed) =>
+        {
+            FormulaResultFormatIntent::InheritReference
+        }
+        "NETWORKDAYS" | "NETWORKDAYS.INTL" | "DAYS" | "DATEDIF" => {
             FormulaResultFormatIntent::Numeric
         }
+        "COUNT" | "COUNTA" | "COUNTBLANK" | "COUNTIF" | "COUNTIFS" | "SUM" | "SUMIF" | "SUMIFS"
+        | "AVERAGE" | "AVERAGEIF" | "AVERAGEIFS" | "MIN" | "MAX" | "MEDIAN" | "MODE"
+        | "MODE.SNGL" | "MODE.MULT" | "STDEV" | "STDEV.S" | "STDEV.P" | "VAR" | "VAR.S"
+        | "VAR.P" => FormulaResultFormatIntent::Numeric,
         "TEXT" | "TEXTJOIN" | "CONCAT" | "CONCATENATE" | "LEFT" | "RIGHT" | "MID"
         | "TEXTBEFORE" | "TEXTAFTER" | "TEXTSPLIT" => FormulaResultFormatIntent::NonInheriting,
         _ => FormulaResultFormatIntent::Unknown,
@@ -453,6 +460,99 @@ fn formula_root_name(template: &str) -> Option<String> {
         root = stripped.to_string();
     }
     Some(root)
+}
+
+fn date_difference_uses_simple_date_refs(template: &str) -> bool {
+    let Some(args) = top_level_formula_args(template) else {
+        return false;
+    };
+    if args.len() < 2 {
+        return false;
+    }
+    args.iter()
+        .take(2)
+        .all(|arg| is_simple_a1_cell_ref(arg.trim()))
+}
+
+fn top_level_formula_args(template: &str) -> Option<Vec<&str>> {
+    let open = template.find('(')?;
+    let close = template.rfind(')')?;
+    if close <= open {
+        return None;
+    }
+
+    let mut args = Vec::new();
+    let mut start = open + 1;
+    let mut depth = 0u32;
+    let mut in_string = false;
+    let bytes = template.as_bytes();
+    let mut idx = start;
+
+    while idx < close {
+        let b = bytes[idx];
+        if in_string {
+            if b == b'"' {
+                if idx + 1 < close && bytes[idx + 1] == b'"' {
+                    idx += 2;
+                    continue;
+                }
+                in_string = false;
+            }
+            idx += 1;
+            continue;
+        }
+
+        match b {
+            b'"' => in_string = true,
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                args.push(template[start..idx].trim());
+                start = idx + 1;
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+    args.push(template[start..close].trim());
+    Some(args)
+}
+
+fn is_simple_a1_cell_ref(value: &str) -> bool {
+    if is_simple_identity_ref(value) {
+        return true;
+    }
+
+    let reference = value
+        .rsplit_once('!')
+        .map(|(_, cell)| cell)
+        .unwrap_or(value)
+        .replace('$', "");
+    let mut saw_col = false;
+    let mut saw_row = false;
+    let mut in_row = false;
+
+    for ch in reference.chars() {
+        if ch.is_ascii_alphabetic() && !in_row {
+            saw_col = true;
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            in_row = true;
+            saw_row = true;
+            continue;
+        }
+        return false;
+    }
+
+    saw_col && saw_row
+}
+
+fn is_simple_identity_ref(value: &str) -> bool {
+    let Some(inner) = value.strip_prefix('{').and_then(|v| v.strip_suffix('}')) else {
+        return false;
+    };
+    !inner.is_empty() && inner.chars().all(|ch| ch.is_ascii_digit())
 }
 
 pub(in crate::storage::engine) fn is_formula_parse_input(input: &mutation::CellInput) -> bool {

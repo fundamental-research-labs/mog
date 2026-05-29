@@ -675,6 +675,7 @@ export function FormulasRibbon() {
   const wb = useWorkbook();
   const setSidePanelContent = useUIStore((s) => s.setSidePanelContent);
   const setSidePanelVisible = useUIStore((s) => s.setSidePanelVisible);
+  const mruFunctions = useUIStore((s) => s.mruFunctions);
 
   // AutoSum dispatch hook
   const dispatchAction = useDispatch();
@@ -691,6 +692,7 @@ export function FormulasRibbon() {
 
   // Dropdown states (F1)
   const [autoSumOpen, setAutoSumOpen] = useState(false);
+  const [recentlyUsedOpen, setRecentlyUsedOpen] = useState(false);
 
   // Remove Arrows dropdown state (B2.5)
   const [removeArrowsOpen, setRemoveArrowsOpen] = useState(false);
@@ -890,6 +892,9 @@ export function FormulasRibbon() {
       </RibbonDropdownItem>
     ));
 
+  const recentlyUsedFunctions =
+    mruFunctions.length > 0 ? mruFunctions : ['SUM', 'AVERAGE', 'IF', 'COUNT'];
+
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
   // `tabId`, `elementId` here; the unified keyboard system fires the action
@@ -1028,19 +1033,33 @@ export function FormulasRibbon() {
           {/* Excel shows: Recently Used, Financial, Logical, Text, Date & Time, Lookup & Reference, Math & Trig, More Functions */}
           {/* All as compact buttons with icon above label in a single row */}
 
-          {/* Recently Used - stub for now */}
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            data-testid="ribbon-dropdown-recently-used"
-            icon={<RecentlyUsedIcon />}
-            label={'Recently\nUsed'}
-            hasDropdown
-            disabled
-            title="Recently Used Functions (coming soon)"
-            aria-label="Recently Used"
-          />
+          <RibbonDropdown
+            open={recentlyUsedOpen}
+            onOpenChange={setRecentlyUsedOpen}
+            menuTestId="ribbon-dropdown-menu-recently-used"
+            trigger={
+              <RibbonButton
+                layout="vertical"
+                height="full"
+                width="normal"
+                data-testid="ribbon-dropdown-recently-used"
+                icon={<RecentlyUsedIcon />}
+                label={'Recently\nUsed'}
+                hasDropdown
+                isOpen={recentlyUsedOpen}
+                title="Recently Used Functions"
+                aria-label="Recently Used"
+              />
+            }
+            width="auto"
+            menuLabel="Recently used functions"
+          >
+            {renderFunctionItems(recentlyUsedFunctions)}
+            <RibbonDropdownDivider />
+            <RibbonDropdownItem dataValue="insert-function" onClick={handleInsertFunction}>
+              Insert Function...
+            </RibbonDropdownItem>
+          </RibbonDropdown>
 
           <RibbonDropdown
             open={financialOpen}
@@ -1252,6 +1271,47 @@ export function FormulasRibbon() {
               {renderFunctionItems(FUNCTION_CATEGORIES.more.database)}
             </RibbonDropdownSubmenu>
           </RibbonDropdown>
+        </div>
+      </ToolbarGroup>
+
+      <ToolbarGroup label="Python" dropdownIcon={<FunctionIcon />}>
+        <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="normal"
+            icon={<FunctionIcon />}
+            label={'Insert\nPython'}
+            title="Insert Python"
+            aria-label="Insert Python"
+          />
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="narrow"
+            icon={<CalculateIcon />}
+            label="Reset"
+            title="Reset Python"
+            aria-label="Reset"
+          />
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="narrow"
+            icon={<TextFunctionIcon />}
+            label="Editor"
+            title="Python Editor"
+            aria-label="Editor"
+          />
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="normal"
+            icon={<MoreFunctionsIcon />}
+            label="Initialization"
+            title="Python Initialization"
+            aria-label="Initialization"
+          />
         </div>
       </ToolbarGroup>
 
@@ -1468,8 +1528,17 @@ export function FormulasRibbon() {
                   onValueChange={handleCalculationModeChange}
                 >
                   <DropdownMenuRadioItem value="auto">Automatic</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="partial" disabled>
+                    Partial
+                  </DropdownMenuRadioItem>
                   <DropdownMenuRadioItem value="manual">Manual</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
+                <DropdownMenuCheckboxItem checked={false} disabled>
+                  Format Stale Values
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={false} disabled>
+                  Compatibility Version
+                </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   id="formulas-iterative-calculation"
                   checked={iterativeCalculationEnabled}

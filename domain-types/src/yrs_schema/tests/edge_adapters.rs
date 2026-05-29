@@ -154,6 +154,7 @@ fn slicer_round_trips_table_binding_style_position_and_selection() {
         table_column_index: Some(1),
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: Some(24),
         level: 0,
         uid: Some("{slicer-uid}".to_string()),

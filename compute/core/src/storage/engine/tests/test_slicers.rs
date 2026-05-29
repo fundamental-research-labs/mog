@@ -35,6 +35,7 @@ fn table_slicer(id: &str) -> StoredSlicer {
         table_column_index: None,
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: None,
         level: 0,
         uid: None,

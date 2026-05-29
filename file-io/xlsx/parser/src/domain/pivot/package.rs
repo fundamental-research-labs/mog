@@ -350,24 +350,20 @@ fn resolve_cache_records_link(
 
 pub(crate) fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, String)> {
     use crate::infra::scanner::{
-        extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+        extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd,
     };
     let mut entries = Vec::new();
 
-    let section_start = match find_tag_simd(workbook_xml, b"pivotCaches", 0) {
-        Some(pos) => pos,
-        None => return entries,
-    };
-    let section_end =
-        find_closing_tag(workbook_xml, b"pivotCaches", section_start).unwrap_or(workbook_xml.len());
-    let section = &workbook_xml[section_start..section_end];
-
     let mut pos = 0;
-    while let Some(pc_start) = find_tag_simd(section, b"pivotCache", pos) {
-        let pc_end = find_gt_simd(section, pc_start)
+    while let Some(pc_start) = find_tag_simd(workbook_xml, b"pivotCache", pos) {
+        let pc_end = find_gt_simd(workbook_xml, pc_start)
             .map(|p| p + 1)
-            .unwrap_or(section.len());
-        let pc_elem = &section[pc_start..pc_end];
+            .unwrap_or(workbook_xml.len());
+        let pc_elem = &workbook_xml[pc_start..pc_end];
+        if !is_pivot_cache_element(pc_elem) {
+            pos = pc_start + 1;
+            continue;
+        }
 
         let cache_id = find_attr_simd(pc_elem, b"cacheId=\"", 0).and_then(|p| {
             let vs = p + 9;
@@ -393,6 +389,30 @@ pub(crate) fn extract_pivot_cache_entries(workbook_xml: &[u8]) -> Vec<(u32, Stri
     }
 
     entries
+}
+
+fn is_pivot_cache_element(element: &[u8]) -> bool {
+    let Some(open) = element.iter().position(|b| *b == b'<') else {
+        return false;
+    };
+    let mut name_start = open + 1;
+    if element.get(name_start) == Some(&b'/') {
+        name_start += 1;
+    }
+    let mut name_end = name_start;
+    while let Some(b) = element.get(name_end) {
+        if b.is_ascii_whitespace() || matches!(*b, b'/' | b'>') {
+            break;
+        }
+        name_end += 1;
+    }
+    let name = &element[name_start..name_end];
+    let local_name = name
+        .iter()
+        .rposition(|b| *b == b':')
+        .map(|idx| &name[idx + 1..])
+        .unwrap_or(name);
+    local_name == b"pivotCache"
 }
 
 pub(crate) fn extract_pivot_table_paths_for_sheet(
@@ -455,6 +475,37 @@ mod tests {
         assert_eq!(
             extract_pivot_cache_entries(xml),
             vec![(4, "rId7".to_string()), (9, "rId8".to_string())]
+        );
+    }
+
+    #[test]
+    fn workbook_pivot_cache_entries_extract_extension_cache_refs() {
+        let xml = br#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"
+            xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">
+            <pivotCaches>
+                <pivotCache cacheId="181" r:id="rId33"/>
+                <pivotCache cacheId="182" r:id="rId34"/>
+            </pivotCaches>
+            <extLst>
+                <ext><x14:pivotCaches>
+                    <x14:pivotCache cacheId="184" r:id="rId35"/>
+                    <x14:pivotCache cacheId="183" r:id="rId36"/>
+                </x14:pivotCaches></ext>
+                <ext><x15:timelineCachePivotCaches>
+                    <x15:pivotCache cacheId="185" r:id="rId40"/>
+                </x15:timelineCachePivotCaches></ext>
+            </extLst>
+        </workbook>"#;
+        assert_eq!(
+            extract_pivot_cache_entries(xml),
+            vec![
+                (181, "rId33".to_string()),
+                (182, "rId34".to_string()),
+                (184, "rId35".to_string()),
+                (183, "rId36".to_string()),
+                (185, "rId40".to_string()),
+            ]
         );
     }
 

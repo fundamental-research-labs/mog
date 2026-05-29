@@ -81,7 +81,7 @@ pub fn xlsx_import_to_stored_slicer(
                 table_id: tsc.table_id.to_string(),
                 column_cell_id: cache_def.source_name.clone(),
             }
-        } else if !cache_def.pivot_tables.is_empty() {
+        } else if cache_def.tabular_data.is_some() || !cache_def.pivot_tables.is_empty() {
             // Pivot-backed slicer
             SlicerSource::Pivot {
                 pivot_id: cache_def
@@ -145,6 +145,10 @@ pub fn xlsx_import_to_stored_slicer(
                 .map(|item| CellValue::from(item.x.to_string()))
                 .collect()
         })
+        .unwrap_or_default();
+    let pivot_tabular_items = cache
+        .and_then(|c| c.tabular_data.as_ref())
+        .map(|tab| tab.items.clone())
         .unwrap_or_default();
 
     // Map OOXML style name → preset enum
@@ -222,6 +226,7 @@ pub fn xlsx_import_to_stored_slicer(
         pivot_table_tab_id: cache
             .and_then(|c| c.pivot_tables.first())
             .map(|pt| pt.tab_id),
+        pivot_tabular_items,
         row_height: slicer.row_height,
         level: slicer.level,
         uid: slicer.uid.clone(),
@@ -274,25 +279,34 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
             field_name,
             ..
         } => {
-            let items: Vec<SlicerTabularItem> = stored
-                .selected_values
-                .iter()
-                .enumerate()
-                .map(|(i, _v)| SlicerTabularItem {
-                    x: i as u32,
-                    s: true,
-                    nd: false,
-                    unknown_attrs: Vec::new(),
-                })
-                .collect();
+            let items: Vec<SlicerTabularItem> = if stored.pivot_tabular_items.is_empty() {
+                stored
+                    .selected_values
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _v)| SlicerTabularItem {
+                        x: i as u32,
+                        s: true,
+                        nd: false,
+                        unknown_attrs: Vec::new(),
+                    })
+                    .collect()
+            } else {
+                stored.pivot_tabular_items.clone()
+            };
+            let pivot_tables = if pivot_id.is_empty() && stored.pivot_table_tab_id.is_none() {
+                Vec::new()
+            } else {
+                vec![ooxml_types::slicers::SlicerPivotTableRef {
+                    tab_id: stored.pivot_table_tab_id.unwrap_or(0),
+                    name: pivot_id.clone(),
+                }]
+            };
             OoxmlSlicerCacheDef {
                 name: cache_name,
                 uid: stored.cache_uid.clone(),
                 source_name: field_name.clone(),
-                pivot_tables: vec![ooxml_types::slicers::SlicerPivotTableRef {
-                    tab_id: stored.pivot_table_tab_id.unwrap_or(0),
-                    name: pivot_id.clone(),
-                }],
+                pivot_tables,
                 tabular_data: Some(ooxml_types::slicers::SlicerTabularData {
                     pivot_cache_id: stored.pivot_cache_id.unwrap_or(0),
                     sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),

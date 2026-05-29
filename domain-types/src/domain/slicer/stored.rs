@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use ooxml_types::slicers::SlicerTabularItem;
 use value_types::CellValue;
 
 use super::super::floating_object::FloatingObjectAnchor;
@@ -33,6 +34,12 @@ pub struct StoredSlicer {
     /// Pivot-backed slicer pivot table tab id from `x14:pivotTable/@tabId`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pivot_table_tab_id: Option<u32>,
+    /// Full pivot-backed slicer item state from `x14:tabular/x14:items`.
+    ///
+    /// `selected_values` is the runtime selection API. This field preserves the
+    /// OOXML item index/no-data/unknown-attribute state owned by the slicer cache.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_tabular_items: Vec<SlicerTabularItem>,
     /// OOXML slicer row height.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_height: Option<u32>,

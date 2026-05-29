@@ -37,6 +37,7 @@ fn stored_slicer_table_source_round_trip() {
         table_column_index: None,
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: None,
         level: 0,
         uid: None,
@@ -103,6 +104,7 @@ fn stored_slicer_pivot_source_round_trip() {
         table_column_index: None,
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: None,
         level: 0,
         uid: None,
@@ -203,6 +205,7 @@ fn apply_update_partial_merge() {
         table_column_index: None,
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: None,
         level: 0,
         uid: None,
@@ -488,6 +491,68 @@ fn xlsx_import_pivot_slicer_conversion() {
     assert_eq!(stored.selected_values.len(), 2);
     assert_eq!(stored.selected_values[0], CellValue::from("0".to_string()));
     assert_eq!(stored.selected_values[1], CellValue::from("2".to_string()));
+    assert_eq!(stored.pivot_tabular_items.len(), 3);
+}
+
+#[test]
+fn xlsx_import_tabular_slicer_without_pivot_table_refs_stays_pivot_backed() {
+    let slicer = OoxmlSlicerDef {
+        name: "FiscalYear".into(),
+        cache: "Slicer_FiscalYear".into(),
+        caption: None,
+        column_count: 1,
+        style: None,
+        locked_position: false,
+        show_caption: true,
+        level: 0,
+        start_item: None,
+        row_height: None,
+        uid: None,
+        ext_lst: None,
+    };
+    let cache = OoxmlSlicerCacheDef {
+        name: "Slicer_FiscalYear".into(),
+        uid: None,
+        source_name: "Fiscal Year".into(),
+        pivot_tables: vec![],
+        tabular_data: Some(ooxml_types::slicers::SlicerTabularData {
+            pivot_cache_id: 452406247,
+            sort_order: ooxml_types::slicers::SlicerSortOrder::Ascending,
+            custom_list_sort: true,
+            show_missing: false,
+            cross_filter: ooxml_types::slicers::SlicerCrossFilter::ShowItemsWithDataAtTop,
+            items: vec![
+                SlicerTabularItem {
+                    x: 0,
+                    s: true,
+                    nd: false,
+                    unknown_attrs: Vec::new(),
+                },
+                SlicerTabularItem {
+                    x: 1,
+                    s: false,
+                    nd: true,
+                    unknown_attrs: Vec::new(),
+                },
+            ],
+            ext_lst: None,
+        }),
+        table_slicer_cache: None,
+        ext_lst: None,
+    };
+
+    let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), None, "sheet-hex-3");
+    assert!(
+        matches!(stored.source, SlicerSource::Pivot { ref pivot_id, ref field_name, .. }
+        if pivot_id.is_empty() && field_name == "Fiscal Year")
+    );
+    assert_eq!(stored.pivot_cache_id, Some(452406247));
+    assert_eq!(stored.pivot_tabular_items, cache.tabular_data.unwrap().items);
+
+    let exported = stored_slicer_to_cache_def(&stored);
+    assert!(exported.table_slicer_cache.is_none());
+    assert!(exported.pivot_tables.is_empty());
+    assert_eq!(exported.tabular_data.unwrap().items[1].nd, true);
 }
 
 #[test]
@@ -517,6 +582,7 @@ fn stored_slicer_round_trip_to_ooxml_types() {
         table_column_index: Some(2),
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: Some(241300),
         level: 0,
         uid: Some("{SLICER-UID}".into()),
@@ -592,6 +658,7 @@ fn make_test_slicer(id: &str, name: Option<&str>) -> StoredSlicer {
         table_column_index: None,
         pivot_cache_id: None,
         pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
         row_height: None,
         level: 0,
         uid: None,

@@ -25,6 +25,7 @@ const KEY_STYLE: &str = "sy"; // JSON
 const KEY_TABLE_COLUMN_INDEX: &str = "tc";
 const KEY_PIVOT_CACHE_ID: &str = "pc";
 const KEY_PIVOT_TABLE_TAB_ID: &str = "pt";
+const KEY_PIVOT_TABULAR_ITEMS: &str = "pi"; // JSON
 const KEY_ROW_HEIGHT: &str = "rh";
 const KEY_LEVEL: &str = "lv";
 const KEY_UID: &str = "ui";
@@ -121,6 +122,16 @@ pub fn to_yrs_prelim(slicer: &StoredSlicer) -> Vec<(&str, Any)> {
             Any::String(Arc::from(sv_json.as_str())),
         ));
     }
+    if slicer.pivot_tabular_items.is_empty() {
+        entries.push((KEY_PIVOT_TABULAR_ITEMS, Any::Null));
+    } else {
+        let pi_json =
+            serde_json::to_string(&slicer.pivot_tabular_items).unwrap_or_else(|_| "[]".to_string());
+        entries.push((
+            KEY_PIVOT_TABULAR_ITEMS,
+            Any::String(Arc::from(pi_json.as_str())),
+        ));
+    }
 
     entries
 }
@@ -177,6 +188,10 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
     let selected_values: Vec<value_types::CellValue> = read_string(map, txn, KEY_SELECTED_VALUES)
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
+    let pivot_tabular_items: Vec<ooxml_types::slicers::SlicerTabularItem> =
+        read_string(map, txn, KEY_PIVOT_TABULAR_ITEMS)
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
 
     let created_at = read_number(map, txn, KEY_CREATED_AT);
     let updated_at = read_number(map, txn, KEY_UPDATED_AT);
@@ -193,6 +208,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
         table_column_index,
         pivot_cache_id,
         pivot_table_tab_id,
+        pivot_tabular_items,
         row_height,
         level,
         uid,

@@ -1,113 +1,165 @@
 # Known Formula Discrepancies
 
-Documented cases where compute-core produces results that differ from Excel's cached values, along with root cause analysis and resolution status. These are **not bugs** — they are understood precision or behavioral differences between Mog's standard precision profile and Excel's internal implementation.
+This page records accepted formula-result differences between Mog's current
+precision policy and Excel cached values. These are not open correctness bugs in
+the shipped default precision profile; they are known differences with explicit
+implementation reasons.
 
-The standard evaluator stores numeric cell values as finite `f64` values, uses compensated aggregation for functions such as `SUM`, and applies an Excel-compatible 15-significant-digit model for numeric comparisons and direct subtraction cancellation. Double-double arithmetic is implemented behind the opt-in `dd-precision` feature; it is not part of the default build profile.
+Public status notes:
+
+- The default precision profile is shipped through the current public SDK and
+  runtime surfaces.
+- `compute-core` and `value-types` are workspace-internal Rust crates
+  (`publish = false`) that implement the shipped runtime behavior.
+- `dd-precision` is implemented in public source as an opt-in compile feature,
+  but it is not part of the default build profile.
+- The real-workbook corpus observations behind these cases are
+  workspace-internal. This public page intentionally omits workbook IDs, sheet
+  names, cell addresses, and private cached values that are not reproducible
+  from the public checkout.
+
+The standard evaluator stores numeric cell values as finite `f64` values, uses
+compensated aggregation where implemented, and applies a 15-significant-digit
+model for numeric comparisons and direct subtraction cancellation. The
+double-double arithmetic types (`F64x2`, `DdSum`) are always present in
+`value-types`; engine propagation through arithmetic and `SUM` is gated by the
+`dd-precision` feature.
 
 ---
 
-## KFD-001: Catastrophic Cancellation in SUM of Large-Magnitude Values
+## KFD-001: Cancellation After SUM of Large Values
 
-**Status**: Accepted for the default precision profile
-**Impact**: Rare — requires two large sums (~10^9) that nearly cancel to a small difference (~10^0)
+**Status**: Accepted for the shipped default precision profile
+**Observation status**: workspace-internal corpus observation; no public XLSX
+fixture is committed
+**Impact**: Rare - requires two large aggregates that nearly cancel to a small
+result
 
-### Example
+### Signature
 
-| Field | Value |
-|-------|-------|
-| File | `c05Z52WSEaRrkn2CRnYPkvZGcKSQaGbR/latest.xlsx` |
-| Cell | `BS Mapping!M50` |
-| Formula | `=SUM(M3:M33)-SUM(M34:M49)` |
-| Computed | `0.4925038814544678` |
-| Expected | `0.492504358291626` |
-| Error | `~3.6e-7` absolute, `~7.3e-7` relative |
+| Field | Public description |
+|-------|--------------------|
+| Formula shape | `=SUM(range_a)-SUM(range_b)` |
+| Operand scale | Each `SUM` is large, commonly around `1e9` in the observed case |
+| Result scale | The final difference is small, commonly around `1e0` in the observed case |
+| Default engine behavior | Each aggregate is materialized as a finite `f64` numeric cell value before the subtraction |
+| Public fixture | Not shipped |
 
 ### Root Cause
 
-The formula subtracts two sums that are nearly equal:
+This is a cancellation-sensitive formula:
 
+```text
+SUM(range_a) = large f64 aggregate
+SUM(range_b) = nearby large f64 aggregate
+difference   = small residual
 ```
-SUM(M3:M33) ≈ 1,246,420,004.05
-SUM(M34:M49) ≈ 1,246,420,003.56
-Difference   ≈ 0.49
-```
 
-IEEE 754 f64 has a 52-bit mantissa (~15.9 decimal digits). At magnitude ~10^9, the representable precision is ~2.2e-7 (1 ULP). The ~0.49 difference lives in the low-order bits that f64 cannot fully represent at this scale. You need ~19 significant digits to preserve the difference accurately, but f64 only provides ~16.
+At magnitude `~1e9`, a binary `f64` has spacing on the order of `1e-7`. The
+small residual depends on low-order bits of the two large intermediate totals.
+Mog's default `SUM` implementation uses Kahan compensated summation, not naive
+addition, but the default aggregate result is still emitted as one finite `f64`.
+Once both aggregate totals have been materialized, the later subtraction cannot
+recover low-order information that was not carried forward.
 
-The default `SUM` implementation uses Kahan compensated summation, not naive addition. For this case, compensation alone does not remove the mismatch because the two aggregate results are still materialized as single `f64` values before the cancellation-sensitive subtraction.
+### Why Excel Can Differ
 
-### Why Excel Gets a Different Answer
-
-The exact Excel calculation path is outside this repository. The historical cached value is consistent with Excel carrying more intermediate precision through the aggregate/subtraction path than Mog's default precision profile carries.
-
-Mog has an opt-in `F64x2`/`DdSum` double-double path behind `dd-precision` for this class of cancellation-heavy arithmetic, but standard builds leave that feature off.
+The exact Excel calculation path for the private corpus workbook is outside this
+repository. The observed cached value is consistent with Excel carrying a
+different intermediate precision or rounding path across the aggregate and
+subtraction boundary than Mog's default profile carries.
 
 ### Codebase Evidence
 
-- `compute/core/src/eval/engine/aggregate.rs`: default `agg_sum` uses `value_types::KahanSum`; `DdSum` is selected only with `dd-precision`.
-- `compute/core/src/eval/engine/operators.rs`: default arithmetic emits single-`f64` numeric results; the double-double operator path is gated by `dd-precision`.
-- `compute/core/Cargo.toml`: default features include `native`, while `dd-precision` is opt-in.
+- `compute/core/src/eval/engine/aggregate.rs`: default `agg_sum` uses
+  `value_types::KahanSum`; with `dd-precision`, it uses `value_types::DdSum` and
+  returns `CellValue::number_dd`.
+- `compute/core/src/eval/engine/operators.rs`: default arithmetic emits
+  single-`f64` numeric results; with `dd-precision`, arithmetic propagates
+  `F64x2` high/low terms.
+- `compute/core/Cargo.toml`: default features include `native`; `dd-precision`
+  is opt-in.
+- `compute/core/crates/types/value-types/src/lib.rs`: `F64x2` and `DdSum` are
+  public in the crate even when the engine does not enable the feature.
+- `compute/core/crates/types/value-types/Cargo.toml`: `dd-precision` adds the
+  `FiniteF64` low error term for intermediate arithmetic.
 
 ### Mitigations
 
 | Approach | Current status | Notes |
 |----------|----------------|-------|
-| **Double-double arithmetic** | Available behind `dd-precision` | Carries `hi`/`lo` terms through arithmetic and `SUM`, but is not the default profile. |
-| **15-digit comparison/subtraction handling** | Enabled in standard builds | Helps balance-check comparisons and direct near-zero subtraction, but does not recover low-order bits lost by materialized `f64` aggregates. |
-| **Broader tolerances** | Not preferred | Would mask real numeric regressions instead of addressing the precision profile. |
+| Kahan aggregation | shipped default behavior | Reduces aggregation error before the result is materialized as `f64`. |
+| 15-digit comparison/subtraction cancellation | shipped default behavior | Handles equality checks and direct near-zero subtraction between two operands, but does not reconstruct low-order bits already lost by materialized aggregate totals. |
+| Double-double engine lane | not shipped by default | Available as the `dd-precision` compile feature for engine arithmetic and `SUM`; useful for investigation or custom builds that prioritize cancellation parity. |
+| Broader result tolerances | not preferred | Would hide numeric regressions without changing the underlying precision policy. |
 
 ### Decision
 
-Accepted as-is for the standard precision profile. The mismatch only manifests when catastrophic cancellation eliminates ~9 orders of magnitude of precision. Use the opt-in double-double path to investigate or support workloads that require tighter parity for cancellation-heavy arithmetic.
+Keep the default behavior. The current profile is finite-`f64` plus targeted
+compensation and Excel-style 15-digit comparison semantics. Workloads that need
+tighter parity for cancellation-heavy arithmetic should be evaluated with the
+opt-in `dd-precision` lane or a dedicated public repro fixture before changing
+the shipped default profile.
 
 ---
 
-## KFD-002: Balance Check Branch Flip from Accumulated Rounding
+## KFD-002: Balance-Check Branch Flip from Low-Order Drift
 
-**Status**: Accepted (handled by 15-digit comparison semantics)
-**Impact**: Rare — requires an equality check on two values computed via independent long arithmetic chains
+**Status**: Accepted under the shipped 15-significant-digit comparison model
+**Observation status**: workspace-internal corpus observation; no public XLSX
+fixture is committed
+**Impact**: Rare - requires an equality branch over totals computed through
+independent arithmetic chains
 
-### Example
+### Signature
 
-| Field | Value |
-|-------|-------|
-| File | `RZwXzojfKAJnnKDHnsG8Dkq6HPQCTmlP/latest.xlsx` |
-| Cell | `Cash_Flow!X78` |
-| Formula | `=IF(Balance_Sheet!Y7=X38,"OK",Balance_Sheet!Y7-X38)` |
-| Computed | `"OK"` (string) |
-| Expected | `0.0000000009313225746154785` (number) |
-| Category | `wrong_type` — string vs number |
+| Field | Public description |
+|-------|--------------------|
+| Formula shape | `=IF(total_a=total_b,"OK",total_a-total_b)` |
+| Predicate operands | Two independently computed totals that agree at the 15-significant-digit comparison scale |
+| Default engine behavior | The comparison evaluates equal and `IF` returns the true branch |
+| Observed Excel cache shape | A private corpus workbook cached the residual numeric branch instead |
+| Public fixture | Not shipped |
 
 ### Root Cause
 
-The formula is a **balance check** that verifies total assets equal total liabilities + equity. The two operands are computed via independent paths through a financial model:
+The formula is a balance check. Two totals represent the same business quantity
+but arrive through independent dependency chains. At the observed scale, their
+low-order difference is below the precision model used by Mog comparisons.
 
-| Cell | Our engine | Excel cached |
-|------|-----------|-------------|
-| `Balance_Sheet!Y7` | `2551956.848113` | `2551956.848112736` |
-| `Cash_Flow!X38` | `2551956.848113` | `2551956.848112735` |
+Mog's comparison path snaps numeric operands to the 15-significant-digit model
+before ordering or equality checks. Therefore:
 
-Both values agree to ~13 significant digits. The divergence is ~1 ULP at this magnitude (~10^6), well within ordinary floating-point noise for long arithmetic chains.
+```text
+total_a == total_b  -> TRUE
+IF(TRUE, "OK", residual) -> "OK"
+```
 
-- **Our engine**: Numeric comparisons use the 15-significant-digit precision model, so `Y7 == X38` is `TRUE` → returns `"OK"`
-- **Excel cached value**: The two paths retain a tiny residual → `Y7 - X38 ≈ 9.3e-10` → returns the residual
+This is a branch-selection difference, not a `SUM` implementation difference.
+Once the predicate is true, `IF` evaluates and returns only the selected branch.
 
 ### Codebase Evidence
 
-- `compute/core/src/eval/engine/operators.rs`: number comparisons call `cmp_15_significant_digits`.
-- `compute/core/crates/types/value-types/src/precision.rs`: `cmp_15_significant_digits` snaps both operands before comparing.
-- `compute/core/src/eval/engine/logical_primitives.rs`: `IF` evaluates the condition, coerces it to boolean, and returns only the selected branch.
+- `compute/core/src/eval/engine/operators.rs`: numeric comparisons call
+  `cmp_15_significant_digits`.
+- `compute/core/crates/types/value-types/src/precision.rs`:
+  `cmp_15_significant_digits` snaps both operands before comparing, and
+  `subtraction_cancels_at_15_digits` handles direct near-zero subtraction under
+  the same precision policy.
+- `compute/core/src/eval/engine/logical_primitives.rs`: scalar `IF` evaluates
+  the condition, coerces it to boolean, and evaluates only the selected branch.
 
-### Why Our Result Is Defensible
+### Why We Do Not Change This
 
-Mathematically, `Balance_Sheet!Y7` and `Cash_Flow!X38` represent the same quantity computed two ways. The intended result of the balance check is `"OK"`. Excel's `9.3e-10` residual is a floating-point artifact — it does not represent a real financial discrepancy. Mog's comparison model deliberately treats this scale of low-order drift as equal.
-
-### Why We Don't Fix This
-
-1. The mismatch is in the **IF branch taken**, not in any arithmetic function
-2. "Fixing" this would mean weakening the 15-significant-digit comparison model to match an Excel residual
-3. No targeted summation change would be appropriate; the branch depends on equality semantics between independently computed totals
+Changing this case to match a cached residual would require weakening or
+bypassing the 15-significant-digit comparison model for equality predicates. That
+would affect balance checks broadly and could reintroduce low-order drift as
+user-visible branch changes. The current result follows the implemented
+precision policy consistently.
 
 ### Decision
 
-Accepted as-is. This is the inverse of a bug — our engine produces the mathematically expected result while Excel does not. Documented for transparency when evaluating corpus accuracy.
+Keep the default behavior and document the discrepancy. If a public fixture is
+added later, it should make clear whether the intended compatibility target is
+Excel's cached branch for that workbook or Mog's current 15-digit comparison
+semantics.

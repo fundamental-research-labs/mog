@@ -228,16 +228,41 @@ pub(in crate::storage::engine) fn set_custom_setting(
     key: &str,
     value: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    let pre = workbook::get_settings(
+        engine.stores.storage.doc(),
+        engine.stores.storage.workbook_map(),
+    );
+    let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
+
     workbook::set_custom_setting(
         engine.stores.storage.doc(),
         engine.stores.storage.workbook_map(),
         key,
         value.as_deref(),
     );
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+
+    let post = workbook::get_settings(
+        engine.stores.storage.doc(),
+        engine.stores.storage.workbook_map(),
+    );
+    if post == pre {
+        return Ok((
+            serialize_multi_viewport_patches(&[]),
+            MutationResult::empty(),
+        ));
+    }
+
+    let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
+    let changed_keys = diff_top_level_keys(&pre_json, &post_json);
+    let mut result = MutationResult::empty();
+    result
+        .workbook_settings_changes
+        .push(WorkbookSettingsChange {
+            kind: ChangeKind::Set,
+            changed_keys,
+            settings: post_json,
+        });
+    Ok((serialize_multi_viewport_patches(&[]), result))
 }
 
 pub(in crate::storage::engine) fn list_custom_settings(

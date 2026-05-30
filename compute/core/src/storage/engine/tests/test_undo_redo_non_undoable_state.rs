@@ -111,9 +111,20 @@ fn custom_settings_do_not_clear_redo_stack() {
     engine.undo().unwrap();
     assert!(engine.can_redo(), "cell edit should be redoable after undo");
 
-    engine
-        .set_custom_setting("mog.activeSheetId", Some(sheet_id().to_uuid_string()))
+    let active_sheet_id = sheet_id().to_uuid_string();
+    let (_patches, result) = engine
+        .set_custom_setting("mog.activeSheetId", Some(active_sheet_id.clone()))
         .expect("custom setting state write should succeed");
+    assert_eq!(result.workbook_settings_changes.len(), 1);
+    let change = &result.workbook_settings_changes[0];
+    assert_eq!(change.changed_keys, vec!["customSettings".to_string()]);
+    assert_eq!(
+        change
+            .settings
+            .pointer("/customSettings/mog.activeSheetId")
+            .and_then(|value| value.as_str()),
+        Some(active_sheet_id.as_str())
+    );
 
     assert!(
         engine.can_redo(),

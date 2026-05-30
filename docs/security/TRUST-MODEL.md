@@ -12,16 +12,16 @@ reviewers: [architecture, runtime, release]
 
 Mog is a spreadsheet for humans and agents. For enterprise review, the current trust claim is about standalone or customer-controlled deployments, not a hosted SaaS tenant boundary.
 
-> Mog can run inside the customer's security boundary. Current controls include local data-flow documentation, reviewable network configuration, a desktop target with Tauri capability configuration, generated trust-document artifacts, and a Rust-owned workbook policy engine for application-level access decisions. Product artifact signing, hosted compliance controls, and hostile-client service isolation are separate release or deployment responsibilities unless explicitly documented.
+> Mog can run inside the customer's security boundary. Current controls include local data-flow documentation, reviewable runtime/package configuration, a public security-document manifest, and a Rust-owned workbook policy engine for application-level access decisions. Product artifact signing, hosted compliance controls, packaged desktop controls, and hostile-client service isolation are separate release or deployment responsibilities unless explicitly documented.
 
 ## Deployment Modes
 
 | Mode | Current status | Trust boundary | Claim class | Notes |
 |------|----------------|----------------|-------------|-------|
-| Desktop deployment | Available desktop target | Local OS user account, Tauri capability model, configured CSP, Rust engine running inside the packaged app boundary | Verified; Deployment-controlled | Desktop architecture and capability configuration are reviewable in the repo; installer trust, OS management policy, and egress hardening remain customer-controlled. |
+| Desktop/Tauri host integration | Adapter and transport code present; packaged desktop distribution not present in current workspace | Shipping host app, local OS user account, Tauri/webview configuration, customer OS policy | Deployment-controlled; Not claimed for packaged controls | Tauri transport/platform helpers and shell adapters are reviewable, but packaged Tauri backend capability, CSP, installer, and updater controls are distribution-specific. |
 | Node SDK | Available SDK surface | Customer process and runtime environment | Verified; Deployment-controlled | The SDK is same-process trusted automation; it is not a hostile-client boundary. |
-| Headless HTTP server | Developer and automation surface | Whoever can reach the HTTP server | Not claimed | Current routes expose sessions, upload/download, execution, agent, and optional database surfaces without a documented enterprise authentication contract. |
-| Collaboration server | Coordination process | WebSocket origin allowlist and customer network perimeter | Not claimed | Coordinates CRDT rooms and awareness; origin allowlist is not tenant authentication, durable ACL, or persistence policy. |
+| Headless HTTP service | Not present by default | Any separate service deployment and whoever can reach it | Not claimed | The current workspace does not include a supported `runtime/server` package or headless HTTP route contract; any distribution that adds service routes needs its own authentication and authorization boundary. |
+| Collaboration runtime/server | Coordination primitives and WebSocket client sidecar exist; service deployment not claimed | Customer service boundary, room-grant design, and network perimeter | Not claimed | Coordinates CRDT rooms and awareness when a service is deployed; origin checks or room URLs are not tenant authentication, durable ACL, or persistence policy by themselves. |
 | Same-page embed | Shipped SDK surface | Host web application origin | Deployment-controlled | Same-page embeds trust the host page and should not be used as isolation for hostile workbook content. |
 | iframe embed | Reserved/evaluated host-controlled boundary | Browser origin isolation and `postMessage` contract | Roadmap | Iframe host/child code exists for evaluation, but it is not a customer-facing isolation guarantee yet. |
 | Self-hosted service | Reserved | Customer network perimeter and service authentication | Roadmap | Existing docs describe a planned self-hosting shape; customer-facing claims require approved runtime service contracts. |
@@ -33,7 +33,7 @@ Mog is a spreadsheet for humans and agents. For enterprise review, the current t
 |-------|-----------|----------|
 | Rust compute/document engine | Persistent workbook state, formulas, calculation, access-control policy evaluation, redaction filtering for covered bridge surfaces | `docs/architecture/README.md`, `docs/security/ACCESS-CONTROL.md`, `compute/core/crates/compute-security/` |
 | TypeScript SDK and app shell | UI state, command routing, host integration, principal selection for a session; not a security boundary against malicious same-process callers | `docs/architecture/README.md`, `kernel/src/api/workbook/security.ts`, `runtime/spreadsheet-app/src/public-types.ts` |
-| Host application or customer environment | Identity, install policy, firewall/proxy policy, persistence location, update policy, browser isolation shape, embed source authorization | `docs/guides/embed-react.md`, `docs/guides/embed-web-component.md`, `runtime/src-tauri/capabilities/default.json`, `runtime/spreadsheet-app/src/public-types.ts` |
+| Host application or customer environment | Identity, install policy, firewall/proxy policy, persistence location, update policy, browser isolation shape, embed source authorization | `docs/guides/embed-react.md`, `docs/guides/embed-web-component.md`, `infra/transport/`, `infra/platform/tauri/`, `runtime/spreadsheet-app/src/public-types.ts` |
 | Future hosted services | Authentication, multi-tenant isolation, durable audit logs, cloud storage | Not claimed |
 
 ## Boundary Diagram

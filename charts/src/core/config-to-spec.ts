@@ -788,6 +788,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
+  applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
 }
@@ -903,6 +904,23 @@ function applyStackedValueDomain(
       tickCount: valueChannel.axis?.tickCount ?? 6,
     };
   }
+}
+
+function applyAutomaticCategoryAxisCrossing(encoding: EncodingSpec): void {
+  const x = encoding.x;
+  const y = encoding.y;
+  if (!x || !y || x.type !== 'nominal' || y.type !== 'quantitative') return;
+  if (x.axis === null || x.axis?.crossesAt !== undefined) return;
+
+  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
+  const min = explicitDomainBound(scaleDomain, 0);
+  const max = explicitDomainBound(scaleDomain, 1);
+  if (min === undefined || max === undefined || min >= 0 || max <= 0) return;
+
+  x.axis = {
+    ...(x.axis ?? {}),
+    crossesAt: 'automatic',
+  };
 }
 
 // =============================================================================

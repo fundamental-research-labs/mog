@@ -1,6 +1,6 @@
 # Pivot Tables
 
-Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet engine. The pivot table system uses Rust-backed storage and computation, TypeScript kernel bridges, and React UI integration.
+Internal implementation notes for the Pivot Table feature in the Mog spreadsheet engine. The shipped path uses Rust-backed storage, computation, and materialization, TypeScript kernel bridges, public worksheet/contract types, and React UI integration.
 
 ## Table of Contents
 
@@ -24,7 +24,18 @@ Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet e
 
 Pivot tables summarize large datasets by grouping, filtering, and aggregating data along configurable row and column axes. Users select source data, define field placements (rows, columns, values, filters), and the engine produces a materialized result table with headers, aggregated values, subtotals, and grand totals.
 
-The implementation tracks Excel pivot-table concepts across field areas, aggregation functions, date/number grouping, Show Values As transforms, expand/collapse hierarchies, drill-down, and layout modes. UI support varies by command; see [Current Status](#current-status).
+The implementation tracks Excel pivot-table concepts across field areas, aggregation functions, date/number grouping, Show Values As calculations, expand/collapse hierarchies, drill-down, and layout modes. UI support varies by command; see [Current Status](#current-status).
+
+### Surface Status
+
+| Surface | Status | Notes |
+| --- | --- | --- |
+| `Worksheet.pivots` API types | public | `types/api/src/api/worksheet/pivots.ts`, re-exported through `contracts/src/api/worksheet/pivots.ts`. Placement-id-first methods are preferred; name/field facades remain as deprecated compatibility paths. |
+| Pivot data/event/bridge contracts | public | `types/data`, `types/events`, and `types/bridges` source packages feed the `@mog-sdk/contracts` shims. |
+| `@mog-sdk/kernel`, spreadsheet UI hooks/components | workspace-internal | Used by the app/runtime, not published as a direct public integration surface. |
+| Rust `compute-pivot` / `compute-relational` crates | workspace-internal | `publish = false`; reached from public runtimes through generated compute bridge bindings. |
+| Rust `compute/api/src/sheet/pivots.rs` | reserved | Not the shipped sheet-level API; persisted pivot CRUD is implemented on `YrsComputeEngine` bridge methods under `compute/core/src/storage/engine/objects/pivots.rs`. |
+| `PivotTableResult.measureDescriptors` / `valueRecords` | reserved | Public/generated types include them, and the TS bridge can translate them, but the current Rust projection initializes them as empty vectors. |
 
 ### Source Layout
 
@@ -33,9 +44,10 @@ The implementation tracks Excel pivot-table concepts across field areas, aggrega
 | Pivot facade, presenter, Show Values As | `compute/core/crates/compute-pivot/` |
 | Relational filter/group/aggregate engine | `compute/core/crates/compute-relational/` |
 | Rust pivot data types | `domain-types/src/domain/pivot/`, `compute/core/crates/types/pivot-types/` |
-| TypeScript pivot contracts | `types/data/src/data/pivot.ts`, `types/bridges/src/pivot-bridge.ts`, `types/events/src/pivot-events.ts` |
+| Rust storage and materialization | `compute/core/src/storage/engine/objects/pivots.rs`, `compute/core/src/storage/sheet/pivots.rs`, `compute/core/src/mirror/write/pivot_materialization.rs` |
+| TypeScript pivot contracts | `types/data/src/data/pivot.ts`, `types/api/src/api/worksheet/pivots.ts`, `types/bridges/src/pivot-bridge.ts`, `types/events/src/pivot-events.ts` |
 | Kernel bridge and worksheet API | `kernel/src/bridges/pivot-bridge.ts`, `kernel/src/api/worksheet/pivots.ts` |
-| Spreadsheet UI | `apps/spreadsheet/src/components/pivot/`, `apps/spreadsheet/src/hooks/data/` |
+| Spreadsheet UI | `apps/spreadsheet/src/components/pivot/`, `apps/spreadsheet/src/hooks/data/`, `apps/spreadsheet/src/systems/pivot/` |
 
 ---
 
@@ -70,7 +82,7 @@ The implementation tracks Excel pivot-table concepts across field areas, aggrega
 |                                         |                        |
 |  +--------------------------------------+----------------------+ |
 |  |  PivotEventBridge                                           | |
-|  |  - Subscribes to pivot:created/updated/deleted              | |
+|  |  - Subscribes to pivot lifecycle/expansion events           | |
 |  |  - Triggers recomputation when source data changes          | |
 |  +-------------------------------------------------------------+ |
 +------------------------------------------------------------------+
@@ -84,11 +96,11 @@ The implementation tracks Excel pivot-table concepts across field areas, aggrega
 |  |                                                              ||
 |  |  compute-pivot facade                                        ||
 |  |    validate -> query mapping -> compute-relational::execute  ||
-|  |    -> presenter projection -> show_values_as                 ||
+|  |    -> presenter projection -> optional show_values_as        ||
 |  |                                                              ||
 |  |  +----------+ +----------+ +---------+ +-------------------+ ||
 |  |  | grouper  | | filter   | | engine/ | | show_values_as    | ||
-|  |  | - text   | | - include| | compute | | - 13 transforms   | ||
+|  |  | - text   | | - include| | compute | | - 12 transforms   | ||
 |  |  | - date   | | - exclude| | - rows  | | - hierarchy-aware | ||
 |  |  | - number | | - cond   | | - cols  | | - Kahan summation | ||
 |  |  | - expand | | - top/N  | | - agg   | +-------------------+ ||
@@ -103,7 +115,7 @@ The implementation tracks Excel pivot-table concepts across field areas, aggrega
 ### Communication Flow
 
 1. `PivotBridge` delegates pivot reads, writes, and materialization to `ComputeBridge`.
-2. Generated `ComputeBridge` methods call transport keys such as `compute_pivot_create`, `compute_pivot_get_all`, `compute_pivot_compute_from_source`, `compute_pivot_materialize`, `pivot_detect_fields`, and `pivot_drill_down`.
+2. Generated `ComputeBridge` methods call transport keys such as `compute_pivot_create`, `compute_pivot_create_with_sheet`, `compute_pivot_get_all`, `compute_pivot_compute_from_source`, `compute_pivot_materialize`, `compute_pivot_get_all_items`, `pivot_detect_fields`, and `pivot_drill_down`.
 3. The `ComputeBridge` transport layer owns runtime routing for desktop/native and web runtimes; `PivotBridge` does not perform its own Tauri/WASM dispatch.
 
 ### Data Marshaling
@@ -164,7 +176,7 @@ The types module follows a parse-don't-validate philosophy:
 
 `From` implementations convert between flat and type-safe representations at the boundary.
 
-### Round 68 Identity and UX Contract
+### Placement Identity and UX Contract
 
 Pivot UX is placement-id-first. A pivot placement has stable identity independent of source field, area, position, display label, aggregate function, and show-values-as transform. This is required because a pivot can place the same field multiple times in Values, place a calculated measure beside source-field measures, or sort/filter an axis by a specific measure.
 
@@ -172,12 +184,12 @@ The architectural boundary is:
 
 | Concern | Owner |
 | --- | --- |
-| Persistent pivot config, placement identity, calculated-field identity, expansion keys, typed result metadata contracts | Rust domain/compute/storage |
+| Persistent pivot config, placement identity, calculated-field identity, expansion keys | Rust domain/compute/storage |
 | Public mutation API and kernel mutation receipts | Kernel worksheet pivot API / `PivotBridge` |
 | User mutation entry | Spreadsheet action handlers via `dispatch(PIVOT_*)` |
 | UI sessions, semantic targets, dialog drafts, range-pick drafts, command readiness receipts | `apps/spreadsheet/src/systems/pivot` |
 | Presentational markup and `data-pivot-*` attributes | `apps/spreadsheet/src/components/pivot` |
-| App-eval readback | Read-only model/surface/UI contracts |
+| Readback surfaces | `PivotModelReadback`, `PivotSurfaceReadback`, and `PivotUiStateReadback` API types |
 
 Materialized grid cells own workbook-visible pivot values. The pivot overlay owns semantic affordances, hit targets, context metadata, and pivot-specific interaction UI. Expansion that changes materialized cells is persistent pivot config/kernel state; overlay-only preview expansion must be modeled separately if it is introduced later.
 
@@ -190,20 +202,20 @@ UI input -> dispatch(PIVOT_*) -> action handler -> ws.pivots/kernel bridge
   -> PivotCommandReceipt
 ```
 
-App-eval keeps real UI input paths. Only readback changes: assertions should read stable model/surface/UI snapshots or visible grid snapshots, not scrape pivot overlay table structure.
+Test and automation paths should keep real UI input paths. Readback assertions should use stable model/surface/UI snapshots or visible grid snapshots instead of scraping pivot overlay table structure.
 
 ---
 
 ## Computation Pipeline
 
-The current compute path validates the pivot config, translates it into a relational query, executes that query, then projects the query result back into pivot layout structures:
+The shared compute path validates the pivot config, translates it into a relational query, executes that query, then projects the query result back into pivot layout structures. The plain pure `compute()` entry point stops after projection; production storage/materialization and `pivot_compute_from_source` use `compute_with_show_values_as_resolved()` so configured Show Values As calculations are applied.
 
 ```
 validate_and_resolve
   -> pivot_config_to_query
   -> compute_relational::execute
   -> query_result_to_pivot
-  -> apply_show_values_as_to_result (when configured)
+  -> apply_show_values_as_to_result (production and explicit Show Values As path only)
 ```
 
 ### Stage 1: Validate (`validate_and_resolve`)
@@ -301,6 +313,8 @@ pub struct PivotTableResult {
 }
 ```
 
+`measure_descriptors` and `value_records` are reserved metadata fields in the Rust/generated/public contracts. As of the current projection in `presenter/result_projection.rs`, they are initialized as empty vectors; the kernel bridge preserves and translates them if a future compute path populates them.
+
 ---
 
 ## Bridges
@@ -309,16 +323,16 @@ pub struct PivotTableResult {
 
 **Path**: [`kernel/src/bridges/pivot-bridge.ts`](../../../kernel/src/bridges/pivot-bridge.ts)
 
-The `PivotBridge` is the single entry point connecting the UI layer to the Rust pivot engine. It implements `IPivotBridge`. The former `PivotStore` was deleted in Phase 4 -- all pivot config state now lives in Rust, accessed via `ComputeBridge`.
+The `PivotBridge` is the workspace-internal bridge connecting worksheet/UI code to the Rust pivot engine. It implements `IPivotBridge`. The former TypeScript `PivotStore` path is gone; persisted pivot config state now lives in Rust/Yrs storage and is accessed via `ComputeBridge`.
 
 **Key responsibilities**:
 - **CRUD**: `createPivot()`, `getPivot()`, `getAllPivots()`, `updatePivot()`, `deletePivot()`, `createPivotWithSheet()` -- all delegate to ComputeBridge methods (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`, `pivotCreateWithSheet`)
-- **Placement mutations**: `addPlacement()`, `updatePlacement()`, `removePlacement()`, `movePlacement()`, `setAggregateFunction()`, `setShowValuesAs()`, `setSortOrder()`, `setSortByValue()`
+- **Placement mutations**: `addPlacement()`, `updatePlacement()`, `removePlacement()`, `movePlacement()`, `setAggregateFunction()`, `setShowValuesAs()`, `renameValuePlacement()`, `setSortOrder()`, `setSortByValue()`, `resetPlacement()`
 - **Computation/materialization**: `compute()` calls `pivotComputeFromSource()` for read-only results; `refresh()` calls `pivotMaterialize()` for the production write path
 - **Field detection**: `detectFields()` -- analyzes source data to infer field names/types
 - **Drill-down**: `drillDown()`, `getDrillDownData()` -- retrieve source rows for a pivot cell
 - **Caching**: Result cache with version-based invalidation (config version + data version)
-- **Subscriptions**: `subscribe(pivotId, callback)` for reactive UI updates
+- **Subscriptions**: `subscribe(pivotId, callback)` for ephemeral result-cache notifications
 
 **Cache invalidation strategy**:
 - `invalidateCache()` clears a pivot result and bumps its config version; PivotBridge calls it for pivot lifecycle events and explicit refreshes.
@@ -364,13 +378,15 @@ useEffect(() => {
   const disconnect = connectPivotToEventBus({
     sheetId: activeSheetId,
     pivotBridge: ctx.pivot,
+    eventBus: ctx.eventBus,
+    getSheetName: (sheetId) => ctx.computeBridge.getSheetName(sheetId),
     onPivotRefresh: (pivotId) => { /* trigger re-render */ },
   });
   return disconnect;
-}, [activeSheetId, ctx.pivot]);
+}, [activeSheetId, ctx.pivot, ctx.eventBus, ctx.computeBridge]);
 ```
 
-The `createPivotEventBridge()` factory supports dynamic sheet ID tracking -- call `setSheetId()` when the active sheet changes without reconnecting all event listeners.
+The `createPivotEventBridge()` factory supports dynamic sheet ID tracking; `setSheetId()` disconnects and reconnects the bridge with the new active sheet ID.
 
 ---
 
@@ -389,7 +405,7 @@ The contracts define the shared type interface between kernel, UI, and engine.
 | `PivotFieldArea` | `types/data/src/data/pivot.ts` | `'row' \| 'column' \| 'value' \| 'filter'` |
 | `AggregateFunction` | `types/data/src/data/pivot.ts` | 12 aggregation names |
 | `PivotFilter` | `types/data/src/data/pivot.ts` | Include/exclude/condition/topBottom per field |
-| `PivotTableConfig` | `types/data/src/data/pivot.ts` | Complete pivot definition |
+| `PivotTableConfig` | `types/data/src/data/pivot.ts` | Public/common pivot definition |
 | `PivotTableResult` | `types/data/src/data/pivot.ts` | Computed output |
 | `PivotRow`, `PivotHeader` | `types/data/src/data/pivot.ts` | Row/header structures in results |
 | `ShowValuesAs` | `types/data/src/data/pivot.ts` | 13 post-aggregation calculation names |
@@ -453,6 +469,8 @@ The `PivotDialogSlice` manages UI state for pivot table creation and editing:
 
 ### PivotTableConfig Structure
 
+The persisted Rust/generated compute DTO is the superset shown below. The public `types/data/src/data/pivot.ts` contract carries the common fields used by worksheet APIs and UI code, but currently omits some OOXML-only preservation fields such as `dataOnRows`, `firstHeaderRow`, `rowsPerPage`, `colsPerPage`, and some style flags.
+
 ```
 PivotTableConfig
   schemaVersion: number           -- Persisted config schema version
@@ -474,9 +492,13 @@ PivotTableConfig
   autoFormat?: boolean
   preserveFormatting?: boolean
   cacheId?: number                -- OOXML pivot cache ID
+  dataOnRows?: boolean            -- OOXML data-axis placement
   refRange?: string               -- OOXML rendered pivot range
   firstDataRow?: number
+  firstHeaderRow?: number
   firstDataCol?: number
+  rowsPerPage?: number
+  colsPerPage?: number
   rowItems?: PivotRowColItem[]    -- OOXML layout reconstruction
   colItems?: PivotRowColItem[]    -- OOXML layout reconstruction
   createdAt?: number              -- Unix milliseconds
@@ -497,7 +519,7 @@ All variants share `PlacementBase { field_id, placement_id, position, display_na
 
 ### Storage (Rust-Backed)
 
-Pivot configs are persisted in Rust via ComputeBridge. The `PivotBridge` delegates all CRUD to ComputeBridge methods (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`). Configs are stored by **output sheet** (where they are displayed), matching Excel's model.
+Pivot configs are persisted in Rust/Yrs storage via ComputeBridge. The `PivotBridge` delegates CRUD to ComputeBridge methods (`pivotCreate`, `pivotCreateWithSheet`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`). Configs are stored by **output sheet** (where they are displayed), matching Excel's model.
 
 ### Key Encoding
 
@@ -511,7 +533,7 @@ Headers use NUL-separated compound keys for unique identification:
 
 ## Show Values As
 
-The Show Values As system transforms aggregated values into derived metrics. It is one of the most complex parts of the pivot table engine, with 13 calculation types that are all hierarchy-aware.
+The Show Values As system transforms aggregated values into derived metrics. The public contract has 13 calculation names: `NoCalculation` plus 12 non-noop transforms. The non-noop transforms are hierarchy-aware.
 
 ### Entry Point
 
@@ -577,6 +599,7 @@ Calculated fields create derived value columns using formulas that reference oth
 Revenue / Units                    -- Simple division
 (Revenue - Cost) / Revenue * 100   -- Margin percentage
 'Cost of Goods' + Shipping         -- Quoted field names
+"Cost of Goods" + Shipping         -- Double-quoted field names are also accepted
 -Revenue                           -- Unary negation
 ```
 
@@ -632,14 +655,18 @@ The pivot table engine is Rust-backed for computation, storage, and materializat
 - Rust `compute-pivot` facade with presenter, Show Values As, hierarchy, drill-down, field detection, and calculated-field support
 - `compute-relational` engine for filtering, grouping, aggregation, sorting, calculated measures, and grand totals
 - `PivotBridge` updated to call Rust via ComputeBridge
-- `PivotStore` deleted (Phase 4) -- all config state now lives in Rust
+- Former TypeScript `PivotStore` config ownership removed; persisted config state now lives in Rust/Yrs storage
 - ComputeBridge pivot CRUD and materialization paths (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`, `pivotCreateWithSheet`, `pivotComputeFromSource`, `pivotMaterialize`)
 - Show Values As UI dispatch persists via `PIVOT_SET_SHOW_VALUES_AS` / `WorksheetPivots.setShowValuesAs()`
+- Public worksheet API types include placement-id-first mutation methods (`addPlacement`, `updatePlacement`, `removePlacement`, `movePlacement`, `setSortByValue`, `resetPlacement`) alongside deprecated name/field facades
 
 ### Known Limitations
 
 - Group/Ungroup UI is not enabled in the context-menu hook (`canGroup = false`, `canUngroup = false`)
-- Some imported OOXML layout metadata (`rowItems`, `colItems`, `refRange`, page counts) is preserved for reconstruction but is not part of the simple API creation flow
+- `PivotBridge.setExpansion()` currently returns a mutation receipt but does not update the expansion provider; UI expansion state is managed by `PivotExpansionStateProvider` / `PivotExpansionManager`
+- `PivotTableResult.measureDescriptors`, `PivotTableResult.valueRecords`, and TS `records` derived from them are reserved; the current Rust presenter emits empty metadata vectors
+- Some imported OOXML layout metadata (`rowItems`, `colItems`, `refRange`, `dataOnRows`, `firstHeaderRow`, page counts) is preserved for reconstruction in Rust/generated DTOs but is not part of the simple public API creation flow
+- `compute/api/src/sheet/pivots.rs` is a reserved stub and should not be treated as the shipped Rust sheet-level pivot API
 
 ---
 
@@ -663,6 +690,11 @@ The pivot table engine is Rust-backed for computation, storage, and materializat
 | hierarchy.rs | [`compute/core/crates/compute-pivot/src/hierarchy.rs`](../../../compute/core/crates/compute-pivot/src/hierarchy.rs) |
 | calc_field module | [`compute/core/crates/compute-pivot/src/calc_field/mod.rs`](../../../compute/core/crates/compute-pivot/src/calc_field/mod.rs) |
 | resolved.rs | [`compute/core/crates/compute-pivot/src/resolved.rs`](../../../compute/core/crates/compute-pivot/src/resolved.rs) |
+| storage bridge methods | [`compute/core/src/storage/engine/objects/pivots.rs`](../../../compute/core/src/storage/engine/objects/pivots.rs) |
+| Yrs pivot storage | [`compute/core/src/storage/sheet/pivots.rs`](../../../compute/core/src/storage/sheet/pivots.rs) |
+| import/recalc materialization | [`compute/core/src/storage/engine/pivot_materialization.rs`](../../../compute/core/src/storage/engine/pivot_materialization.rs) |
+| mirror materializer | [`compute/core/src/mirror/write/pivot_materialization.rs`](../../../compute/core/src/mirror/write/pivot_materialization.rs) |
+| reserved compute API sheet stub | [`compute/api/src/sheet/pivots.rs`](../../../compute/api/src/sheet/pivots.rs) |
 
 ### TypeScript Kernel
 
@@ -676,9 +708,10 @@ The pivot table engine is Rust-backed for computation, storage, and materializat
 | File | Path |
 |------|------|
 | Pivot types | [`types/data/src/data/pivot.ts`](../../../types/data/src/data/pivot.ts) |
+| Worksheet pivot API | [`types/api/src/api/worksheet/pivots.ts`](../../../types/api/src/api/worksheet/pivots.ts) |
 | Bridge interface | [`types/bridges/src/pivot-bridge.ts`](../../../types/bridges/src/pivot-bridge.ts) |
 | Events | [`types/events/src/pivot-events.ts`](../../../types/events/src/pivot-events.ts) |
-| Contracts shims | [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts), [`contracts/src/bridges/pivot-bridge.ts`](../../../contracts/src/bridges/pivot-bridge.ts), [`contracts/src/events/pivot-events.ts`](../../../contracts/src/events/pivot-events.ts) |
+| Contracts shims | [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts), [`contracts/src/api/worksheet/pivots.ts`](../../../contracts/src/api/worksheet/pivots.ts), [`contracts/src/bridges/pivot-bridge.ts`](../../../contracts/src/bridges/pivot-bridge.ts), [`contracts/src/events/pivot-events.ts`](../../../contracts/src/events/pivot-events.ts) |
 
 ### UI
 

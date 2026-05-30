@@ -2,7 +2,9 @@
 
 ## Overview
 
-The CoordinateSystem is the **single source of truth for all coordinate conversions**. Without a central service, each component implements its own math, creating bugs across selection, rendering, scrolling, and hit testing.
+The `CoordinateSystem` contract is the public type boundary for document, viewport, and layer conversions. `CoordinateSystemImpl` is the workspace-internal implementation exposed through `GridRenderer.getCoordinateSystem()` and SheetView geometry helpers.
+
+It is not the only coordinate math in the renderer. Current hot paths also use `GridCoordinateSystem` for grid cell/document lookups, `ViewportLayout` for split/freeze viewport geometry, and `canvasToDocXY`/`docToCanvasXY` helpers for viewport transforms. New coordinate work should use one of these code-backed helpers instead of ad hoc math.
 
 ## Type-Safe Coordinate Spaces (Branded Types)
 
@@ -15,7 +17,7 @@ type ViewportPoint = Point & { readonly [ViewportBrand]: true };
 type LayerPoint = Point & { readonly [LayerBrand]: true };
 ```
 
-**Import branded types and factories:**
+The shipped public `@mog-sdk/contracts` package exposes the branded types; its `./rendering` and `./rendering/coordinates` subpaths are marked `public-experimental` in `tools/package-inventory.jsonc`. Factory helpers currently live in the private `@mog/spreadsheet-utils` workspace package; use that import inside this monorepo, but do not present it as an external integration path.
 
 ```typescript
 import type {
@@ -100,10 +102,12 @@ selectLayerElement(layerPt); // Now coordinates match.
 
 ## Core Interface
 
-**Interface:** `@mog-sdk/contracts/rendering` (canonical public package)
-**Implementation:** `canvas/grid-renderer/src/coordinates/coordinate-system.ts` (`CoordinateSystemImpl`)
+**Interface:** `@mog-sdk/contracts/rendering` - `public-experimental` subpath of shipped public `@mog-sdk/contracts`
+**Source:** `types/rendering/src/coordinates.ts`
+**Implementation:** `canvas/grid-renderer/src/coordinates/coordinate-system.ts` (`CoordinateSystemImpl`, workspace-internal `@mog/grid-renderer`)
+**Factory helpers:** `spreadsheet-utils/src/rendering/coordinates.ts` (workspace-internal `@mog/spreadsheet-utils`)
 
-> **Note:** Core types and branded types live in `types/rendering/src/coordinates.ts`; `contracts/src/rendering/coordinates.ts` is a re-export shim for `@mog-sdk/contracts`. Coordinate factories live in `spreadsheet-utils/src/rendering/coordinates.ts`. The `canvas/grid-renderer/src/coordinates/types.ts` file re-exports the renderer-facing types.
+> **Note:** `contracts/src/rendering/coordinates.ts` is a re-export shim for `@mog-sdk/contracts`. The `canvas/grid-renderer/src/coordinates/types.ts` file re-exports the renderer-facing subset.
 
 ```typescript
 export interface CoordinateSystem {
@@ -170,7 +174,9 @@ export interface CoordinateSystem {
 }
 ```
 
-> **Note:** Most conversion methods take a `sheetId` parameter. Methods that operate purely in viewport/layer space (like `viewportToLayer`) do not need it.
+> **Note:** Most conversion methods take a `sheetId` parameter. Methods that operate purely in viewport/layer space (like `viewportToLayer`) do not need it. `CoordinateSystemImpl` itself does not track the active sheet; `getCurrentSheetId()` currently returns `null`, so callers must pass the sheet ID they are rendering.
+
+> **Current limitation:** `rangeToViewport()` has an array return type for split/freeze-aware callers, but `CoordinateSystemImpl` currently computes one bounding `ViewportRect` and returns either `[rect]` or `[]`.
 
 ## Creating Branded Coordinates
 
@@ -200,6 +206,7 @@ const layerBounds = coords.documentToLayerViewport(sheetId, docBounds);
 function handleMouseDown(sheetId: string, event: MouseEvent, renderer: GridRenderer) {
   // 1. Mouse events are in viewport space
   const vp = viewportPoint(event.offsetX, event.offsetY);
+  const coords = renderer.getCoordinateSystem();
 
   // 2. Unified renderer hit testing expects viewport coords
   const hit = renderer.hitTest(vp.x, vp.y);
@@ -230,15 +237,15 @@ function renderLayerObject(sheetId: string, object: FloatingObject, ctx: RenderC
 
 ```typescript
 function queryPointer(vpPoint: ViewportPoint, renderer: GridRenderer) {
-  // GridRenderer.hitTest queries overlay, drawing, and grid hit providers,
-  // then falls back to CoordinateSystem.classifyPoint().
+  // GridRenderer.hitTest asks the canvas engine first. Overlay and drawing hits
+  // become floatingObject results; grid/header fallback uses classifyPoint().
   return renderer.hitTest(vpPoint.x, vpPoint.y);
 }
 ```
 
 ## Position & Merge Indexes
 
-The legacy `DimensionProvider` interface has been replaced by two specialized index classes that provide O(1) lookups from binary viewport buffer data. These are injected into `CoordinateSystemImpl` via setter methods.
+The old broad `DimensionProvider` pattern has been replaced on the hot render path by two specialized index classes. SheetView populates them from `ViewportReader` data in `views/sheet-view/src/viewport-wiring.ts`, then the renderer, scheduler, layers, and `CoordinateSystemImpl` consume them.
 
 ### ViewportPositionIndex
 
@@ -252,6 +259,8 @@ class ViewportPositionIndex {
                startRow: number, startCol: number,
                rowCount?: number, colCount?: number,
                defaultRowHeight?: number, defaultColWidth?: number): void;
+  setHiddenState(hiddenRows: Set<number>, hiddenCols: Set<number>): void;
+  setTotalDimensions(totalRows: number, totalCols: number): void;
 
   getRowTop(row: number): number;   // O(1) pixel position of row's top edge
   getColLeft(col: number): number;  // O(1) pixel position of column's left edge
@@ -261,6 +270,9 @@ class ViewportPositionIndex {
   isColHidden(col: number): boolean;
   findRowAtY(y: number): number | null;  // Binary search
   findColAtX(x: number): number | null;  // Binary search
+  get hasData(): boolean;
+  get totalRows(): number;
+  get totalCols(): number;
 }
 ```
 
@@ -274,10 +286,14 @@ Provides O(1) merge point-queries. Uses a flat `Map<number, MergeRegion>` keyed 
 class ViewportMergeIndex {
   setMerges(merges: BinaryMergeInput[]): void;
   getMergedRegion(row: number, col: number): MergeRegion | null;
+  getMerges(): readonly MergeRegion[];
+  clear(): void;
+  get hasMerges(): boolean;
+  get mergeCount(): number;
 }
 ```
 
-The `CoordinateSystem` consumes these via minimal interfaces (`ViewportPositionIndexLike`, `ViewportMergeIndexLike`) defined in `@mog-sdk/contracts/rendering`.
+The `CoordinateSystem` consumes these via minimal public interfaces (`ViewportPositionIndexLike`, `ViewportMergeIndexLike`) defined in `@mog-sdk/contracts/rendering`. Those interfaces include lookup, hidden-state, and total-dimension reads, not the population methods.
 
 ## Frozen Panes
 
@@ -301,7 +317,7 @@ interface VisibleRegions {
 
 **File:** `canvas/grid-renderer/src/coordinates/coordinate-system.ts`
 
-`GridRenderer.hitTest(x, y)` is the unified hit-test entry point for overlay, drawing, and grid hits. `CoordinateSystem.classifyPoint()` is the grid/header fallback that classifies a viewport point:
+`GridRenderer.hitTest(x, y)` is the public renderer hit-test entry point. The current implementation asks the canvas engine for topmost hits, maps overlay and drawing hits to `floatingObject`, and otherwise falls back to `CoordinateSystem.classifyPoint()` for grid/header classification:
 
 ```typescript
 classifyPoint(sheetId: string, point: ViewportPoint, isTouch = false): HitTestResult {
@@ -319,7 +335,7 @@ classifyPoint(sheetId: string, point: ViewportPoint, isTouch = false): HitTestRe
 }
 ```
 
-**Touch-aware hit areas:** When `isTouch` is true, hit areas are expanded to meet accessibility guidelines (Apple HIG recommends 44x44 points minimum for touch targets).
+**Touch-aware hit areas:** When `isTouch` is true, resize and hidden-boundary tolerances expand from 5px to 22px on each side, matching the code comment's 44px target-size reference.
 
 ## Helper Functions
 
@@ -372,7 +388,10 @@ Cell lookup uses binary search for O(log n) performance:
 ```typescript
 documentToCell(sheetId: string, point: DocumentPoint): CellCoord | null {
   const row = this.binarySearchRow(sheetId, point.y);
+  if (row === null) return null;
+
   const col = this.binarySearchCol(sheetId, point.x);
+  if (col === null) return null;
 
   // Check for merged regions
   const merged = this.mergeIndex?.getMergedRegion(row, col);
@@ -466,18 +485,19 @@ function handleArrowKey(sheetId: string, direction: Direction, selection: Select
 
 **Locations:** `canvas/grid-renderer/src/viewports/` for shared viewport math and `canvas/grid-canvas/src/viewports/` for layout computation.
 
-The viewports module provides higher-level viewport management on top of the coordinate system:
+The viewports modules provide higher-level viewport management alongside `CoordinateSystemImpl`. They use `ViewportPositionIndex`, contract viewport types, and canvas transform helpers to compute split/freeze layouts and layout hit tests.
 
 ### Core Files
 
-| File                                                   | Description                                                            |
-| ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `canvas/grid-renderer/src/viewports/viewport.ts`       | Viewport calculations for virtual scrolling and header hit helpers     |
-| `canvas/grid-canvas/src/viewports/compute-layout.ts`   | Pure function to compute complete ViewportLayout from inputs           |
-| `canvas/grid-renderer/src/layout/compute-visible-range.ts` | Compute which cells are visible, properly excluding hidden rows/cols |
-| `canvas/grid-renderer/src/viewports/hit-testing.ts`    | Hit testing against ViewportLayout with divider and viewport detection |
-| `canvas/grid-renderer/src/viewports/scroll.ts`         | Scroll behavior computation, clamping, and scroll-to-cell              |
-| `canvas/grid-renderer/src/viewports/types.ts`          | Renderer viewport type re-exports plus internal compute input types    |
+| File                                                       | Description                                                            |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `canvas/grid-renderer/src/viewports/viewport.ts`           | Legacy virtual scrolling calculations and viewport estimates           |
+| `canvas/grid-canvas/src/viewports/compute-layout.ts`       | Pure function to compute complete `ViewportLayout` from inputs         |
+| `canvas/grid-canvas/src/viewports/scroll.ts`               | Scroll clamping and max-scroll helpers used by layout computation      |
+| `canvas/grid-renderer/src/layout/compute-visible-range.ts` | Compute which cells are visible, properly excluding hidden rows/cols   |
+| `canvas/grid-renderer/src/viewports/hit-testing.ts`        | Hit testing against `ViewportLayout` with divider and viewport checks  |
+| `canvas/grid-renderer/src/viewports/scroll.ts`             | Scroll behavior computation, clamping, and scroll-to-cell              |
+| `canvas/grid-renderer/src/viewports/types.ts`              | Renderer viewport type re-exports plus internal compute input types    |
 
 ### Viewport Layout Structure
 
@@ -485,12 +505,12 @@ The `computeViewportLayout()` function returns:
 
 ```typescript
 interface ViewportLayout {
-  viewports: Viewport[]; // All viewports in z-order
-  primaryViewportId: string; // Main scrollable viewport ID
-  dividers: ViewportDivider[]; // Freeze pane divider lines
-  contentSize: Size; // Total content dimensions
-  maxScroll: Point; // Maximum scroll position
-  headerInfo: HeaderRenderInfo; // Freeze-aware header rendering info
+  readonly viewports: readonly Viewport[]; // All viewports in z-order
+  readonly primaryViewportId: string; // Keyboard/scroll target viewport
+  readonly dividers: readonly ViewportDivider[]; // Freeze lines or split bars
+  readonly contentSize: Size; // Total content dimensions
+  readonly maxScroll: Point; // Maximum scroll position
+  readonly headerInfo: HeaderRenderInfo; // Freeze-aware header rendering info
 }
 ```
 
@@ -546,20 +566,21 @@ canvas/grid-renderer/src/coordinates/
 +-- coordinate-system.ts          # CoordinateSystemImpl
 +-- viewport-position-index.ts    # O(1) position lookups from binary buffer
 +-- viewport-merge-index.ts       # O(1) merge lookups from binary buffer
-+-- index.ts                      # Public exports
++-- index.ts                      # Workspace package exports
 
 canvas/grid-renderer/src/viewports/
 +-- types.ts                      # Viewport, ViewportLayout, ScrollBehavior
 +-- viewport.ts                   # Viewport calculations, pixelToCell
 +-- hit-testing.ts                # Layout hit testing
 +-- scroll.ts                     # Scroll behavior and clamping
-+-- index.ts                      # Public exports
++-- index.ts                      # Workspace package exports
 
 canvas/grid-renderer/src/layout/
 +-- compute-visible-range.ts      # Visible cell range calculation
 
 canvas/grid-canvas/src/viewports/
 +-- compute-layout.ts             # ViewportLayout computation
++-- scroll.ts                     # Layout scroll clamping and max-scroll helpers
 +-- types.ts                      # grid-canvas viewport type shim
-+-- index.ts                      # Public exports
++-- index.ts                      # Workspace package exports
 ```

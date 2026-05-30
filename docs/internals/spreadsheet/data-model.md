@@ -2,22 +2,28 @@
 
 ## Overview
 
-Persistent spreadsheet state lives in the Rust compute/document storage layer. The kernel talks to it through `ComputeBridge`, using WASM in browsers, Tauri IPC in desktop hosts, and N-API in Node/headless runtimes. Rust owns cell storage, formula evaluation, dependency tracking, recalculation, CRDT sync bytes, and undo origins.
+Persistent spreadsheet state lives in the Rust compute/document storage layer. Workspace-internal kernel code talks to it through `ComputeBridge`, using WASM in browsers, Tauri IPC in desktop hosts, and N-API in Node/headless runtimes. Rust owns cell storage, formula evaluation, dependency tracking, recalculation, CRDT sync bytes, and undo origins.
 
 The spreadsheet uses the **Identity Model** for cells, rows, and columns. Cells are keyed by stable `CellId` values, while row and column order is tracked separately by stable `RowId` and `ColId` values. Structural edits update identity/order indexes instead of rewriting cell keys.
+
+This page documents the internal storage contract. Public consumers should use shipped public packages such as `@mog-sdk/node`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/sheet-view`, and `@mog-sdk/contracts`; `@mog-sdk/kernel` and direct `ComputeBridge` access are workspace-internal integration surfaces.
 
 ```
 Yrs document
 │
 ├── workbook: Y.Map
 │   ├── sheetOrder: Y.Array<SheetId>
-│   ├── schemaVersion: number
+│   ├── schemaVersion: u32 schema-version sentinel stored as Yrs BigInt
 │   ├── workbookSettings: Y.Map
 │   ├── workbookIdentity: Y.Map
 │   ├── workbookLinks: Y.Map
 │   ├── workbookConnections: Y.Map
+│   ├── importedExternalCache / importedExternalUsageProvenance: Y.Map
+│   ├── importedExternalPackageArtifacts / packageFidelityMetadata: Y.Map
 │   ├── namedRanges: Y.Map                         ◄── Defined names
 │   ├── tables: Y.Map                              ◄── Workbook-level table registry
+│   ├── customTableStyles / xlsxTableStyles: Y.Map
+│   ├── dataTableRegions: Y.Map
 │   ├── slicers: Y.Map                             ◄── Workbook-level slicer registry
 │   ├── timelines: Y.Map
 │   ├── powerQuery: Y.Map
@@ -28,7 +34,11 @@ Yrs document
 │   ├── theme: Y.Map
 │   ├── custom_cell_styles: Y.Map
 │   ├── rangeBindings: Y.Map
-│   └── xlsxMetadata / document-property maps
+│   ├── stylePalette / workbookStylesheet / differentialFormatRegistry: Y.Map
+│   ├── sharedStringHints: Y.Map
+│   ├── documentProperties / extendedDocumentProperties: Y.Map
+│   ├── xlsxMetadata / fileVersion / fileSharing / webPublishing: Y.Map
+│   └── threadedCommentPersons: Y.Map / threadedCommentPersonsPartPresent: bool
 │
 ├── security: Y.Map
 │   ├── policies: Y.Map
@@ -42,7 +52,8 @@ Yrs document
         ├── cellProperties: Y.Map<CellId, Y.Map>   ◄── Formatting and non-compute metadata
         ├── gridIndex: Y.Map
         │   ├── posToId: Y.Map<"rowIdHex:colIdHex", CellId>
-        │   └── idToPos: Y.Map<CellId, "rowIdHex:colIdHex">
+        │   ├── idToPos: Y.Map<CellId, "rowIdHex:colIdHex">
+        │   └── rowAxis / colAxis: compact identity stores when present
         ├── rowOrder: Y.Array<RowId>
         ├── colOrder: Y.Array<ColId>
         ├── rowHeights: Y.Map<RowId, number>
@@ -73,7 +84,7 @@ Yrs document
         └── floatingObjectGroups: Y.Map
 ```
 
-Many workbook child maps are created lazily when loaded from provider replay or imported workbooks. New canonical collaboration state pre-creates the maps needed for deterministic Yrs type IDs.
+`compute/core/crates/compute-document/src/schema.rs` defines the key names and the current schema version sentinel. New canonical collaboration state pre-creates root maps and high-churn workbook/sheet maps needed for deterministic Yrs type IDs. Some workbook maps, especially style, document-property, file-sharing, threaded-comment-person, data-table, and custom table-style maps, are still created lazily by hydration/export/service paths when data is present.
 
 ## Identity Model
 
@@ -92,7 +103,7 @@ Many workbook child maps are created lazily when loaded from provider replay or 
 | ---------------- | ---------------------------- | -------------------------------------------- |
 | `cells`          | `CellId`                     | Primary cell value/formula storage           |
 | `cellProperties` | `CellId`                     | Sparse formatting and non-compute metadata   |
-| `gridIndex`      | `rowIdHex:colIdHex` / CellId | Position-to-cell and cell-to-position mirror |
+| `gridIndex`      | `rowIdHex:colIdHex` / CellId | Position-to-cell, cell-to-position, and optional compact-axis identity state |
 | `rowOrder`       | array index                  | Current visual row order                     |
 | `colOrder`       | array index                  | Current visual column order                  |
 | `rowHeights`     | `RowId`                      | Custom row heights                           |
@@ -100,7 +111,7 @@ Many workbook child maps are created lazily when loaded from provider replay or 
 | `rowFormats`     | `RowId`                      | Row-level format inheritance                 |
 | `colFormats`     | `ColId`                      | Column-level format inheritance              |
 
-`gridIndex/posToId` and `gridIndex/idToPos` are the authoritative Yrs-side identity mirrors. Runtime read paths usually use the in-memory `GridIndex` and `CellMirror` for speed, then fall back to Yrs when rebuilding from sync or undo.
+`gridIndex/posToId` and `gridIndex/idToPos` are the authoritative Yrs-side cell identity mirrors. Optional `gridIndex/rowAxis` and `gridIndex/colAxis` entries store compact row/column identity payloads; when they are absent, readers fall back to dense `rowOrder` and `colOrder`. Runtime read paths usually use the in-memory `GridIndex` and `CellMirror` for speed, then fall back to Yrs when rebuilding from sync or undo.
 
 For the full design, see [Cell Identity](cell-identity.md).
 
@@ -180,9 +191,13 @@ When reading values, formula cells must use the computed result, including `null
 
 ### CellProperties
 
-**Location:** `types/core/src/core.ts` (re-exported by `contracts/src/core/core.ts`)
+**Locations:**
 
-`CellProperties` holds non-computational cell state. The public TypeScript type includes formatting plus provenance, validation, data-connection, formula-auditing, and extension fields:
+- `types/core/src/core.ts` - public TypeScript contract shape
+- `domain-types/src/yrs_schema/cell_properties.rs` - flat Yrs map field codec
+- `compute/core/src/storage/properties.rs` - Rust storage helpers and inheritance
+
+`cellProperties` is the canonical per-sheet map for non-computational cell state. The public TypeScript `CellProperties` type includes formatting plus provenance, validation, data-connection, formula-auditing, and extension fields:
 
 ```typescript
 interface CellProperties {
@@ -199,7 +214,9 @@ interface CellProperties {
 }
 ```
 
-The generated compute bridge may carry additional import/export and fidelity metadata fields on its internal `CellProperties` wire type.
+The Rust/Yrs storage shape is not a literal copy of that public interface. It is a flat structured Y.Map keyed by `CellId`: `CellFormat` fields use the short keys from `yrs_schema::cell_format`, and metadata uses compact keys such as `pv`, `vl`, `ci`, `si`, `cm`, `vm`, `frt`, `ecv`, `fcp`, `sst`, and `ov`. XLSX hydration may store compact JSON strings that reference the workbook-level `stylePalette`; user edits expand those entries into structured Y.Map fields.
+
+The generated compute bridge `CellProperties` type is the Rust snapshot/domain view. It carries `format`, `provenance`, `validation`, `connectionId`, style palette indexes, formula-cache provenance, SST/original-value fidelity fields, and CSE flags. Do not assume that public TypeScript metadata fields such as `modifiedBy` or `validationErrors` are persisted with the same field names in Yrs.
 
 ### CellFormat
 
@@ -214,7 +231,7 @@ The generated compute bridge may carry additional import/export and fidelity met
 | `properties`           | field name           | Sheet metadata and sheet-scoped settings |
 | `cells`                | `CellId`             | Cell value/formula maps                  |
 | `cellProperties`       | `CellId`             | Sparse formatting and metadata           |
-| `gridIndex`            | `posToId` / `idToPos` | Yrs-side position/cell identity mirror   |
+| `gridIndex`            | `posToId` / `idToPos` / optional `rowAxis` / `colAxis` | Yrs-side cell and axis identity state |
 | `rowOrder`             | array index          | Current row identity order               |
 | `colOrder`             | array index          | Current column identity order            |
 | `rowHeights`           | `RowId`              | Custom row heights                       |
@@ -247,7 +264,7 @@ The generated compute bridge may carry additional import/export and fidelity met
 
 ### Workbook
 
-Workbook-level maps are under the root `workbook` map. The active set includes `sheetOrder`, `schemaVersion`, settings/identity/link maps, named ranges, workbook-level table and slicer registries, pivot cache/spec maps, Power Query/scenario/theme metadata, custom cell styles, document properties, imported external-data caches, and package-fidelity metadata.
+Workbook-level maps are under the root `workbook` map. The active set includes `sheetOrder`, `schemaVersion`, settings/identity/link/connection maps, named ranges, workbook-level table and slicer registries, custom table styles, pivot cache/spec maps, Power Query/scenario/theme metadata, custom cell styles, document properties, imported external-data caches, data-table regions, style palettes, shared-string hints, threaded-comment persons, and package-fidelity metadata.
 
 Tables and slicers are workbook-level registries even though their APIs can query by sheet. Conditional formats and pivot table instances are sheet-level maps (`conditionalFormat`, `cfRules`, `pivotTables`), with workbook-level pivot cache/spec data stored separately.
 
@@ -256,10 +273,14 @@ Tables and slicers are workbook-level registries even though their APIs can quer
 **Locations:**
 
 - `types/data/src/data/named-ranges.ts`
+- `domain-types/src/yrs_schema/named_range.rs`
 - `kernel/src/bridges/compute/compute-types.gen.ts`
+- `compute/core/src/storage/workbook/named_ranges/`
 - `compute/core/src/storage/engine/construction/named_ranges.rs`
 
-Defined names are stored under `workbook.namedRanges`. The canonical storage boundary serializes `IdentityFormula` JSON for the reference, while display/API paths can expose A1 strings.
+Defined names are stored under `workbook.namedRanges` as structured Y.Map entries. The `refersTo` Yrs field is a string field; in the current engine-loaded canonical form that string contains JSON-serialized `IdentityFormula`. XLSX hydration can initially write A1 text, then `normalize_named_range_refs` canonicalizes it before engine readers use the data. Opaque or unsupported references can be preserved in `rawRefersTo` for export fidelity.
+
+The typed bridge view exposes the decoded identity formula:
 
 ```typescript
 interface DefinedNameWire {
@@ -272,7 +293,7 @@ interface DefinedNameWire {
 }
 ```
 
-The generated bridge also exposes a display-oriented `DefinedName` with `refersTo: string` and additional OOXML fidelity flags.
+The generated bridge also exposes a display-oriented `DefinedName` with `refersTo: string`, `rawRefersTo?: string`, and additional OOXML fidelity flags. Storage keys are uppercase name keys for workbook scope and `NAME:sheetId` keys for sheet scope.
 
 ### Connections & Bindings
 
@@ -319,20 +340,22 @@ interface FilterState {
 
 ### Comments
 
-Comments are sheet-level entries keyed by comment ID. They reference cells through `cellRef` (`CellId`) so comments survive structural edits.
+Comments are sheet-level entries keyed by comment ID. Runtime-created comments reference cells through `cellRef` (`CellId`) so comments survive structural edits; import/export paths also preserve OOXML comment and note metadata on the same structured Y.Map entry.
 
 ```typescript
 interface Comment {
   id: string;
-  cellRef: CellId;
+  cellRef: string;
   author: string;
   authorId?: string;
-  createdAt: number;
-  modifiedAt?: number;
-  content: RichText;
-  threadId?: string;
-  parentId?: string;
+  authorEmail?: string;
+  content: string | null;
+  runs: RichTextRun[];
+  threadId: string | null;
+  parentId: string | null;
   resolved?: boolean;
+  createdAt: number | null;
+  modifiedAt: number | null;
   commentType: 'note' | 'threadedComment';
 }
 ```
@@ -352,9 +375,11 @@ The Yrs grid index stores row/column identity keys, not plain numeric positions:
 ```text
 gridIndex/posToId: "rowIdHex:colIdHex" -> cellIdHex
 gridIndex/idToPos: cellIdHex -> "rowIdHex:colIdHex"
+gridIndex/rowAxis: JSON AxisIdentityStore<RowId> when compact axis storage is present
+gridIndex/colAxis: JSON AxisIdentityStore<ColId> when compact axis storage is present
 ```
 
-When callers ask for row/column numbers, Rust resolves the row and column IDs through `rowOrder` and `colOrder`.
+When callers ask for row/column numbers, Rust resolves row and column identities through the compact axis stores when present, or through `rowOrder` and `colOrder` otherwise.
 
 Kernel helpers delegate to `ComputeBridge` rather than reading Yrs maps directly:
 
@@ -369,7 +394,7 @@ The generated bridge surface also exposes lower-level calls such as `getCellIdAt
 
 ## Accessing Data
 
-Use the public workbook/worksheet APIs or `ComputeBridge` methods. Direct Yrs access is storage-internal and must preserve the identity invariants described above.
+Public consumers should use the workbook/worksheet APIs from shipped public packages such as `@mog-sdk/node`. Inside the workspace, use `ComputeBridge` methods or kernel domain helpers. Direct Yrs access is storage-internal and must preserve the identity invariants described above.
 
 Common internal access patterns:
 

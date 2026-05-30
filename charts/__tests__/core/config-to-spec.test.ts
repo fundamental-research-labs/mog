@@ -755,6 +755,49 @@ describe('buildConfigSpec - colors', () => {
     expect(configSpec!.overlap).toBe(100);
   });
 
+  it('estimates imported value-axis label gutter from formatted tick labels', () => {
+    const config = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      axis: {
+        yAxis: {
+          type: 'value',
+          max: 1800000,
+          numberFormat: '#,##0_);\\(#,##0\\);\\–_);"–"_)',
+          format: { font: { size: 9, color: { theme: 'tx1' } } },
+        },
+      },
+    });
+    const shortLabelConfig = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      axis: {
+        yAxis: {
+          type: 'value',
+          numberFormat: '#,##0_);\\(#,##0\\);\\–_);"–"_)',
+          format: { font: { size: 9, color: { theme: 'tx1' } } },
+        },
+      },
+    });
+    const shortData: ChartData = {
+      categories: ['A'],
+      series: [
+        { name: 'Positive', data: [{ x: 'A', y: 88000 }] },
+        { name: 'Negative', data: [{ x: 'A', y: -12000 }] },
+      ],
+    };
+    const longEncoding = buildEncoding(config, SINGLE_SERIES_DATA);
+    const shortEncoding = buildEncoding(shortLabelConfig, shortData);
+
+    const longConfigSpec = buildConfigSpec(config, longEncoding);
+    const shortConfigSpec = buildConfigSpec(shortLabelConfig, shortEncoding);
+
+    expect(longConfigSpec?.layoutHints?.yAxisLabelWidth).toBeGreaterThan(
+      shortConfigSpec?.layoutHints?.yAxisLabelWidth ?? 0,
+    );
+    expect(shortConfigSpec?.layoutHints?.yAxisLabelWidth).toBeLessThan(62);
+  });
+
   it('should derive category colors from imported series theme fills', () => {
     const config = makeConfig({
       colors: ['#ff0000'],

@@ -488,6 +488,29 @@ describe('toFloatingObject — ChartObject', () => {
       expect(obj.anchorMode).toBe('oneCell');
     }
   });
+
+  it('preserves imported chart spacing and hidden-data settings in chartConfig', () => {
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: 'column',
+        gapWidth: 150,
+        overlap: 100,
+        plotVisibleOnly: true,
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.chartConfig).toEqual(
+        expect.objectContaining({
+          gapWidth: 150,
+          overlap: 100,
+          plotVisibleOnly: true,
+        }),
+      );
+    }
+  });
 });
 
 // =============================================================================

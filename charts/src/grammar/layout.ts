@@ -111,6 +111,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
 function calculateMargins(spec: ChartSpec): Layout['margin'] {
   const margin = { ...DEFAULT_LAYOUT.margin };
   const encoding = spec.encoding;
+  const layoutHints = spec.config?.layoutHints;
 
   // Handle padding from config
   if (spec.config?.padding) {
@@ -150,7 +151,7 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     const yAxis = encoding.y.axis;
     // Add space for labels
     if (yAxis?.labels !== false) {
-      margin.left += DEFAULT_LAYOUT.yAxisLabelSpace;
+      margin.left += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
     }
     // Add space for title
     if (yAxis?.title || encoding.y.title) {

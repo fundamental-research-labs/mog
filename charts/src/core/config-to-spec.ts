@@ -40,6 +40,8 @@ import type {
   SeriesConfig,
   TrendlineConfig,
 } from '../types';
+import { formatTickValue } from '../grammar/axis-generator';
+import { generateTicks, niceLinear } from '../primitives/scales/linear';
 
 // =============================================================================
 // Layout Constants
@@ -998,7 +1000,10 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 /**
  * Build the ConfigSpec from chart-level settings: stacking, colors, data labels.
  */
-export function buildConfigSpec(config: ChartConfig): ConfigSpec | undefined {
+export function buildConfigSpec(
+  config: ChartConfig,
+  encoding?: EncodingSpec,
+): ConfigSpec | undefined {
   const configSpec: ConfigSpec = {};
   let hasConfig = false;
 
@@ -1034,7 +1039,47 @@ export function buildConfigSpec(config: ChartConfig): ConfigSpec | undefined {
     hasConfig = true;
   }
 
+  const yAxisLabelWidth = estimateYAxisLabelWidth(encoding);
+  if (yAxisLabelWidth !== undefined) {
+    configSpec.layoutHints = { yAxisLabelWidth };
+    hasConfig = true;
+  }
+
   return hasConfig ? configSpec : undefined;
+}
+
+function estimateYAxisLabelWidth(
+  encoding: EncodingSpec | undefined,
+): number | undefined {
+  const y = encoding?.y;
+  if (!y || y.type !== 'quantitative' || y.axis === null || y.axis?.labels === false) {
+    return undefined;
+  }
+
+  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
+  const min = explicitDomainBound(scaleDomain, 0);
+  const max = explicitDomainBound(scaleDomain, 1);
+  if (min === undefined || max === undefined) return undefined;
+
+  const axis = y.axis;
+  const tickCount = axis?.tickCount ?? 10;
+  const domain =
+    y.scale?.nice === false
+      ? ([min, max] as [number, number])
+      : niceLinear(min, max, typeof y.scale?.nice === 'number' ? y.scale.nice : tickCount);
+  const ticks = generateTicks(domain[0], domain[1], tickCount);
+  const values = ticks.length > 0 ? ticks : domain;
+  const maxLabelLength = Math.max(
+    0,
+    ...values.map((value) => formatTickValue(value, y.format ?? axis?.format).length),
+  );
+  if (maxLabelLength === 0) return undefined;
+
+  const fontSize = axis?.labelFontSize ?? 11;
+  const maxMagnitude = Math.max(Math.abs(domain[0]), Math.abs(domain[1]));
+  const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
+  const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);
+  return Math.max(36, Math.min(90, estimatedWidth));
 }
 
 // =============================================================================
@@ -1419,7 +1464,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   const mark = buildMark(config);
 
   // 5. Build config (stacking, colors)
-  const configSpec = buildConfigSpec(config);
+  const configSpec = buildConfigSpec(config, encoding);
 
   // 6. Build transforms
   const transforms: Transform[] = [];

@@ -616,6 +616,10 @@ export interface ConfigSpec {
   scheme?: string;
   /** Custom color range */
   range?: { category?: string[]; ordinal?: string[]; ramp?: string[] };
+  /** Layout hints computed from imported workbook chart semantics. */
+  layoutHints?: {
+    yAxisLabelWidth?: number;
+  };
 }
 
 // =============================================================================

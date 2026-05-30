@@ -157,6 +157,31 @@ describe('Margin Calculation', () => {
     expect(layout.margin.bottom).toBeGreaterThanOrEqual(30);
     expect(layout.margin.left).toBeGreaterThanOrEqual(40);
   });
+
+  test('uses imported value-axis label width hints for the left gutter', () => {
+    const baseSpec: ChartSpec = {
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative', axis: {} },
+      },
+    };
+    const shortLabelSpec: ChartSpec = {
+      ...baseSpec,
+      config: { layoutHints: { yAxisLabelWidth: 43 } },
+    };
+    const longLabelSpec: ChartSpec = {
+      ...baseSpec,
+      config: { layoutHints: { yAxisLabelWidth: 72 } },
+    };
+
+    const shortLayout = calculateLayout(shortLabelSpec, { width: 796, height: 436 });
+    const longLayout = calculateLayout(longLabelSpec, { width: 796, height: 436 });
+
+    expect(shortLayout.plotArea.x).toBe(93);
+    expect(longLayout.plotArea.x).toBe(122);
+    expect(shortLayout.plotArea.width).toBeGreaterThan(longLayout.plotArea.width);
+  });
 });
 
 // =============================================================================

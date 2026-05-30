@@ -12,6 +12,7 @@ import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 
 type AxisPart = 'domain' | 'tick' | 'label' | 'grid' | 'title';
+type AxisSpecWithTickStep = AxisSpec & { tickStep?: number };
 
 function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
   return { role, axisPart };
@@ -86,12 +87,7 @@ export function generateXAxis(
   }
 
   // Get ticks
-  const ticks: unknown[] =
-    typeof scale.ticks === 'function'
-      ? scale.ticks(axisSpec.tickCount ?? 10)
-      : typeof scale.domain === 'function'
-        ? scale.domain()
-        : [];
+  const ticks = getAxisTicks(scale, axisSpec);
 
   // Compute label skip interval to prevent overlap.
   // Estimate label widths and determine how many labels to skip so adjacent
@@ -101,8 +97,7 @@ export function generateXAxis(
   if (axisSpec.labels !== false && ticks.length > 1) {
     const avgCharWidth = fontSize * 0.6;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
-      const text =
-        channel.type === 'temporal' ? formatTemporalTick(t) : formatTickValue(t, tickFormat);
+      const text = formatAxisTick(channel, axisSpec, t, tickFormat);
       return Math.max(max, text.length);
     }, 0);
     const estimatedLabelWidth = maxLabelLen * avgCharWidth;
@@ -151,10 +146,12 @@ export function generateXAxis(
 
     // Label (skip labels that would overlap)
     if (axisSpec.labels !== false && showThisTick) {
-      const labelText =
-        channel.type === 'temporal'
-          ? formatTemporalTick(tick)
-          : formatTickValue(tick, axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat);
+      const labelText = formatAxisTick(
+        channel,
+        axisSpec,
+        tick,
+        axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
+      );
       const labelAngle = axisSpec.labelAngle ?? 0;
       const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? (labelAngle ? 2 : 3);
@@ -293,12 +290,7 @@ export function generateYAxis(
   }
 
   // Get ticks
-  const ticks: unknown[] =
-    typeof scale.ticks === 'function'
-      ? scale.ticks(axisSpec.tickCount ?? 10)
-      : typeof scale.domain === 'function'
-        ? scale.domain()
-        : [];
+  const ticks = getAxisTicks(scale, axisSpec);
 
   // Compute label skip interval to prevent vertical overlap on y-axis.
   const yFontSize = axisSpec.labelFontSize ?? 11;
@@ -348,10 +340,12 @@ export function generateYAxis(
 
     // Label (skip labels that would overlap vertically)
     if (axisSpec.labels !== false && showThisTick) {
-      const labelText =
-        channel.type === 'temporal'
-          ? formatTemporalTick(tick)
-          : formatTickValue(tick, axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat);
+      const labelText = formatAxisTick(
+        channel,
+        axisSpec,
+        tick,
+        axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
+      );
 
       marks.push({
         type: 'text',
@@ -444,6 +438,137 @@ export function formatTemporalTick(value: unknown): string {
   if (isNaN(ts)) return String(value);
   const date = new Date(ts);
   return MONTHS[date.getMonth()] + ' ' + date.getFullYear();
+}
+
+function getAxisTicks(scale: AnyScale, axisSpec: AxisSpec): unknown[] {
+  const steppedAxis = axisSpec as AxisSpecWithTickStep;
+  if (
+    steppedAxis.tickStep !== undefined &&
+    steppedAxis.tickStep > 0 &&
+    typeof scale.domain === 'function'
+  ) {
+    const domain = scale.domain();
+    const start = numericTickValue(domain?.[0]);
+    const stop = numericTickValue(domain?.[1]);
+    if (start !== undefined && stop !== undefined) {
+      return generateSteppedTicks(start, stop, steppedAxis.tickStep);
+    }
+  }
+
+  if (typeof scale.ticks === 'function') return scale.ticks(axisSpec.tickCount ?? 10);
+  if (typeof scale.domain === 'function') return scale.domain();
+  return [];
+}
+
+function numericTickValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? time : undefined;
+  }
+  return undefined;
+}
+
+function generateSteppedTicks(start: number, stop: number, step: number): number[] {
+  const ascending = start <= stop;
+  const lo = ascending ? start : stop;
+  const hi = ascending ? stop : start;
+  const ticks: number[] = [];
+  const epsilon = step / 1_000_000;
+
+  for (let tick = lo, count = 0; tick <= hi + epsilon && count < 1000; tick += step, count += 1) {
+    ticks.push(parseFloat(tick.toPrecision(12)));
+  }
+
+  return ascending ? ticks : ticks.reverse();
+}
+
+function formatAxisTick(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  value: unknown,
+  format: string | undefined,
+): string {
+  if (channel.type === 'temporal') return formatTemporalTick(value);
+  if (axisSpec.formatType === 'time') return formatExcelSerialDateTick(value, format);
+  return formatTickValue(value, format);
+}
+
+const EXCEL_SERIAL_UNIX_EPOCH = 25569;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Format an Excel 1900-system serial date value.
+ */
+export function formatExcelSerialDateTick(value: unknown, format?: string): string {
+  const serial =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : NaN;
+
+  if (!Number.isFinite(serial)) return String(value);
+  const date = new Date((serial - EXCEL_SERIAL_UNIX_EPOCH) * MS_PER_DAY);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return formatUtcDate(date, format);
+}
+
+function formatUtcDate(date: Date, format?: string): string {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  const pattern = normalizeExcelDateFormat(format);
+
+  if (!/[dmy]/i.test(pattern)) return `${month}/${day}/${year}`;
+
+  const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  const shortMonthNames = monthNames.map((name) => name.slice(0, 3));
+
+  return pattern.replace(/yyyy|yy|mmmm|mmm|mm|m|dd|d/gi, (token) => {
+    switch (token.toLowerCase()) {
+      case 'yyyy':
+        return String(year);
+      case 'yy':
+        return String(year % 100).padStart(2, '0');
+      case 'mmmm':
+        return monthNames[month - 1];
+      case 'mmm':
+        return shortMonthNames[month - 1];
+      case 'mm':
+        return String(month).padStart(2, '0');
+      case 'm':
+        return String(month);
+      case 'dd':
+        return String(day).padStart(2, '0');
+      case 'd':
+        return String(day);
+      default:
+        return token;
+    }
+  });
+}
+
+function normalizeExcelDateFormat(format: string | undefined): string {
+  return (format ?? 'm/d/yyyy')
+    .split(';')[0]
+    .replace(/"([^"]*)"/g, '$1')
+    .replace(/\\(.)/g, '$1')
+    .trim();
 }
 
 /**

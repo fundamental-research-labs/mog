@@ -22,6 +22,7 @@ import type {
   LegendOrient,
   MarkSpec,
   MarkType,
+  ScaleSpec,
   StackMode,
   TitleSpec,
   Transform,
@@ -38,6 +39,7 @@ import type {
   DataLabelConfig,
   LegendConfig,
   SeriesConfig,
+  SingleAxisConfig,
   TrendlineConfig,
 } from '../types';
 import { formatTickValue } from '../grammar/axis-generator';
@@ -64,6 +66,8 @@ const CANDLESTICK_BAR_WIDTH = 14;
 
 /** Tick count used to simulate minor gridlines. */
 const MINOR_GRIDLINE_TICK_COUNT = 10;
+
+type AxisSpecWithTickStep = AxisSpec & { tickStep?: number };
 
 // =============================================================================
 // Imported Style Helpers
@@ -400,16 +404,23 @@ const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
  * For stock charts with OHLC data, we also emit open/high/low/close fields
  * from the data point's extra properties when available.
  */
-export function chartDataToRows(data: ChartData): DataRow[] {
+export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[] {
   const rows: DataRow[] = [];
   const categories = data.categories ?? [];
+  const useExcelDateSerialCategories = config
+    ? shouldUseDateSerialCategoryAxis(config, data, isHorizontalBarType(config.type))
+    : false;
   for (let i = 0; i < categories.length; i++) {
-    const category = categories[i];
+    const rawCategory = categories[i];
+    const category = useExcelDateSerialCategories
+      ? toFiniteNumber(rawCategory)
+      : undefined;
+    const rowCategory = category ?? String(rawCategory);
     for (const series of data.series) {
       const point = series.data[i];
       if (point) {
         const row: DataRow = {
-          category: String(category),
+          category: rowCategory,
           value: point.y,
           series: series.name,
         };
@@ -508,7 +519,7 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
  */
 function mapAxisConfigToAxisSpec(
-  axisConf: NonNullable<AxisConfig['categoryAxis']>,
+  axisConf: SingleAxisConfig,
 ): AxisSpec {
   const spec: AxisSpec = {};
   spec.title = axisConf.title ?? null;
@@ -529,6 +540,13 @@ function mapAxisConfigToAxisSpec(
   }
   if (axisConf.tickMarks === 'none') spec.ticks = false;
   if (axisConf.numberFormat) spec.format = axisConf.numberFormat;
+  if (isDateAxisConfig(axisConf)) {
+    spec.formatType = 'time';
+    const majorUnit = toFiniteNumber(axisConf.majorUnit);
+    if (majorUnit !== undefined && majorUnit > 0) {
+      (spec as AxisSpecWithTickStep).tickStep = majorUnit;
+    }
+  }
   if (axisConf.crossesAt) spec.crossesAt = axisConf.crossesAt;
   if (axisConf.crossesAtValue !== undefined) spec.crossesAtValue = axisConf.crossesAtValue;
 
@@ -612,6 +630,87 @@ function buildAxisScaleDomain(
     // Only set domain if at least one bound is given
     const domain: [number | undefined, number | undefined] = [axisConf.min, axisConf.max];
     return { domain };
+  }
+  return undefined;
+}
+
+function buildAxisScaleSpec(
+  axisConf: SingleAxisConfig | undefined,
+  useDateSerialCategoryAxis: boolean,
+): ScaleSpec | undefined {
+  if (!axisConf) {
+    return useDateSerialCategoryAxis ? { type: 'linear', zero: false, nice: false } : undefined;
+  }
+
+  const scaleDomain = buildAxisScaleDomain(axisConf);
+  const scaleType = useDateSerialCategoryAxis ? 'linear' : axisTypeToScaleType(axisConf.type);
+  const scaleSpec: ScaleSpec = {
+    ...(scaleDomain ?? {}),
+    ...(scaleType ? { type: scaleType } : {}),
+    ...(useDateSerialCategoryAxis ? { zero: false, nice: false } : {}),
+  };
+
+  return Object.keys(scaleSpec).length > 0 ? scaleSpec : undefined;
+}
+
+function resolveAxisConfigForChannel(
+  axis: AxisConfig | undefined,
+  channel: 'x' | 'y',
+  isHorizontal: boolean,
+): SingleAxisConfig | undefined {
+  if (!axis) return undefined;
+  if (channel === 'x') {
+    return axis.xAxis ?? (isHorizontal ? axis.valueAxis : axis.categoryAxis);
+  }
+  return axis.yAxis ?? (isHorizontal ? axis.categoryAxis : axis.valueAxis);
+}
+
+function isDateAxisConfig(axisConf: SingleAxisConfig | undefined): boolean {
+  if (!axisConf) return false;
+  const axisType = axisConf.axisType?.toLowerCase();
+  return (
+    axisType === 'dateax' ||
+    axisType === 'date' ||
+    axisConf.categoryType === 'dateAxis' ||
+    axisConf.type === 'time'
+  );
+}
+
+function shouldUseDateSerialCategoryAxis(
+  config: ChartConfig,
+  data: ChartData,
+  isHorizontal: boolean,
+): boolean {
+  if (!supportsContinuousCategoryAxis(config.type) || isHorizontal) return false;
+  const categoryAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
+  return isDateAxisConfig(categoryAxis) && hasFiniteCategorySerials(data);
+}
+
+function supportsContinuousCategoryAxis(chartType: ChartType): boolean {
+  if (chartType === 'combo') return true;
+  if (chartType === 'radar') return false;
+  const markType = MARK_TYPE_MAP[chartType];
+  return markType === 'line' || markType === 'area';
+}
+
+function hasFiniteCategorySerials(data: ChartData): boolean {
+  const categories = data.categories ?? [];
+  if (categories.length === 0) return false;
+
+  let finiteCount = 0;
+  for (const category of categories) {
+    const serial = toFiniteNumber(category);
+    if (serial === undefined) return false;
+    finiteCount += 1;
+  }
+  return finiteCount > 0;
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
   }
   return undefined;
 }
@@ -745,38 +844,35 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
 
   // --- X/Y encoding for all other chart types ---
   // Excel column charts are vertical; Excel bar charts are horizontal.
-  if (isHorizontalBarType(chartType)) {
-    encoding.x = { field: 'value', type: 'quantitative' };
-    encoding.y = { field: 'category', type: 'nominal' };
-  } else {
-    encoding.x = { field: 'category', type: 'nominal' };
-    encoding.y = { field: 'value', type: 'quantitative' };
-  }
   const isHorizontal = isHorizontalBarType(chartType);
+  const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
+  const categoryChannel: ChannelSpec = {
+    field: 'category',
+    type: useDateSerialCategoryAxis ? 'quantitative' : 'nominal',
+    ...(useDateSerialCategoryAxis ? { scale: { type: 'linear', zero: false, nice: false } } : {}),
+  };
+  const valueChannel: ChannelSpec = { field: 'value', type: 'quantitative' };
+  if (isHorizontal) {
+    encoding.x = valueChannel;
+    encoding.y = categoryChannel;
+  } else {
+    encoding.x = categoryChannel;
+    encoding.y = valueChannel;
+  }
 
   // Apply axis config
   if (config.axis) {
-    if (config.axis.xAxis && encoding.x) {
-      encoding.x.axis = mapAxisConfigToAxisSpec(config.axis.xAxis);
-      const scaleDomain = buildAxisScaleDomain(config.axis.xAxis);
-      const scaleType = axisTypeToScaleType(config.axis.xAxis.type);
-      if (scaleDomain || scaleType) {
-        encoding.x.scale = {
-          ...(scaleDomain ?? {}),
-          ...(scaleType ? { type: scaleType } : {}),
-        };
-      }
+    const xAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
+    if (xAxis && encoding.x) {
+      encoding.x.axis = mapAxisConfigToAxisSpec(xAxis);
+      const scaleSpec = buildAxisScaleSpec(xAxis, useDateSerialCategoryAxis);
+      if (scaleSpec) encoding.x.scale = { ...(encoding.x.scale ?? {}), ...scaleSpec };
     }
-    if (config.axis.yAxis && encoding.y) {
-      encoding.y.axis = mapAxisConfigToAxisSpec(config.axis.yAxis);
-      const scaleDomain = buildAxisScaleDomain(config.axis.yAxis);
-      const scaleType = axisTypeToScaleType(config.axis.yAxis.type);
-      if (scaleDomain || scaleType) {
-        encoding.y.scale = {
-          ...(scaleDomain ?? {}),
-          ...(scaleType ? { type: scaleType } : {}),
-        };
-      }
+    const yAxis = resolveAxisConfigForChannel(config.axis, 'y', isHorizontal);
+    if (yAxis && encoding.y) {
+      encoding.y.axis = mapAxisConfigToAxisSpec(yAxis);
+      const scaleSpec = buildAxisScaleSpec(yAxis, false);
+      if (scaleSpec) encoding.y.scale = { ...(encoding.y.scale ?? {}), ...scaleSpec };
     }
   }
 
@@ -1242,6 +1338,8 @@ export function buildComboLayers(
 ): UnitSpec[] {
   const layers: UnitSpec[] = [];
   const seriesConfigs = config.series ?? [];
+  const baseEncoding = buildEncoding(config, data);
+  const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' };
 
   for (let i = 0; i < data.series.length; i++) {
     const series = data.series[i];
@@ -1250,7 +1348,7 @@ export function buildComboLayers(
     const markType = MARK_TYPE_MAP[seriesType] ?? 'bar';
 
     const layerEncoding: EncodingSpec = {
-      x: { field: 'category', type: 'nominal' },
+      x: { ...xEncoding },
       y: { field: 'value', type: 'quantitative' },
     };
 
@@ -1312,7 +1410,7 @@ export function buildComboLayers(
       const trendLayer: UnitSpec = {
         mark: trendMark,
         encoding: {
-          x: { field: 'category', type: 'nominal' },
+          x: { ...xEncoding },
           y: { field: 'value', type: 'quantitative' },
         },
         transform: [
@@ -1542,7 +1640,7 @@ function buildResolve(config: ChartConfig): ChartSpec['resolve'] | undefined {
  */
 export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   // 1. Convert data
-  const rows = chartDataToRows(data);
+  const rows = chartDataToRows(data, config);
 
   // 2. Build title
   const title = buildTitle(config);

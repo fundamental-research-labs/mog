@@ -2,7 +2,8 @@
 
 > **Status**: Living document
 > **Scope**: All table-related code across 4+ packages and Rust crates
-> **Test coverage**: ~1,235 tests (806 Rust in compute-table, 429 TS in table-engine)
+> **Test coverage**: Rust and TypeScript source-level suites cover `compute-table`
+> and `table-engine`; exact counts are intentionally omitted because they change often.
 
 ## 1. Overview
 
@@ -52,8 +53,8 @@ Tables are non-overlapping: no two tables can occupy the same cell on a sheet.
                                 v
 +------------------------------------------------------------------+
 |  TS Engine (@mog/table-engine)                              |
-|  Pure stateless computation. No DOM, no Yjs, no React.           |
-|  Delegates heavy work to Rust/WASM via wasm-backend.ts           |
+|  Thin TypeScript API. No DOM, no Yjs, no React.                 |
+|  Delegates most operations to Rust/WASM via wasm-backend.ts      |
 |  - types.ts, table.ts, filter.ts, sort.ts, visibility.ts        |
 |  - structured-refs.ts, slicer.ts, slicer-cache.ts, styles.ts    |
 |  - filter-dropdown.ts, filter-resolve.ts, compare.ts            |
@@ -64,9 +65,9 @@ Tables are non-overlapping: no two tables can occupy the same cell on a sheet.
 +------------------------------------------------------------------+
 |  Rust Engine (compute-table crate)                               |
 |  Pure stateless computation. No DOM, no Yjs, no React.           |
-|  806 tests. Compiled to WASM for browser, native for Tauri.      |
+|  Exposed through generated WASM and native/N-API bridge surfaces.|
 |  - types.rs, table.rs, queries.rs, operations.rs                 |
-|  - filter.rs, filter_resolve.rs, filter_dropdown.rs              |
+|  - filter.rs, filter_resolve.rs, filter_dropdown.rs, advanced_filter.rs |
 |  - sort.rs, visibility.rs, compare.rs                            |
 |  - structured_refs/ (resolution, adjustment, formatting)         |
 |  - slicer.rs, slicer_cache.rs, timeline.rs                      |
@@ -78,18 +79,21 @@ Tables are non-overlapping: no two tables can occupy the same cell on a sheet.
 
 ### Design Principles
 
-1. **Stateless engines**: Both `compute-table` (Rust) and `@mog/table-engine` (TS)
-   are pure computation libraries. They receive data as arguments and return results.
-   No internal state, no side effects.
+1. **Stateless computation surface**: `compute-table` (Rust) exposes pure table
+   operations. `@mog/table-engine` (TS) is mostly a thin WASM delegation layer plus
+   small immutable helpers; `wasm-backend.ts` holds initialized exports and
+   `styles.ts` caches built-in style definitions.
 
 2. **Bridge owns caching**: The `TableBridge` class in the kernel owns per-column bitmap
-   caches, CellId translation, and EventBus subscriptions for cache invalidation.
+   caches and EventBus subscriptions for cache invalidation. CellId resolution for
+   table-adjacent features happens in the domain layer before engine calls.
 
-3. **WASM acceleration**: The TS table-engine delegates heavy computation (filter
-   evaluation, sort, slicer cache, structured ref resolution) to Rust via WASM exports.
+3. **WASM delegation**: The TS table-engine delegates most table computation (table
+   model operations, filters, sort, slicer cache, structured refs, styles, and value
+   comparison) to Rust via WASM exports.
    The `wasm-backend.ts` module manages this delegation.
 
-4. **Contracts as boundary**: `@mog/spreadsheet-contracts` defines the persistence
+4. **Contracts as boundary**: `@mog-sdk/contracts` defines the persistence
    types (`TableConfig`, `ColumnFilterCriteria`). The bridge converts between contracts
    types and engine types.
 
@@ -99,22 +103,25 @@ Tables are non-overlapping: no two tables can occupy the same cell on a sheet.
 
 ### TableConfig (Contracts -- Persistence Layer)
 
-The `TableConfig` interface in `contracts/src/data/tables.ts` is the source of truth
-stored in Yjs. Key fields:
+`contracts/src/data/tables.ts` re-exports the public contract; the source definition
+lives in `types/data/src/data/tables.ts`. Key persisted fields:
 
 ```typescript
 interface TableConfig {
   id: string;                // Unique ID
   name: string;              // Used in structured references ("Table1")
   sheetId: string;           // Owning sheet
-  range: CellRange;          // Position: { startRow, startCol, endRow, endCol }
-  rangeIdentity?: CellIdRange; // CRDT-safe corners (P0-07)
+  rangeIdentity?: CellIdRange; // Preferred CRDT-safe corners
+  range: CellRange;          // Legacy/deprecated position range, still carried
   hasHeaderRow: boolean;     // Default: true
   hasTotalRow: boolean;      // Default: false
   columns: TableColumn[];    // Ordered column definitions
   style: TableStyle;         // Preset or custom style
   autoExpand: boolean;       // Default: true
+  autoCalculatedColumns: boolean; // Default: true
   showFilterButtons: boolean; // Default: true
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 interface TableColumn {
@@ -170,7 +177,7 @@ Row regions:
 **Location**: `compute/core/crates/compute-table/`
 **Dependencies**: `formula-types`, `serde`, `serde_json`, `rustc-hash`, `chrono`
 **Dev-only**: `compute-parser` (used only in tests for structured ref parsing)
-**Tests**: 806
+**Tests**: source-level Rust tests live throughout the crate and submodules
 
 ### Module Breakdown
 
@@ -180,8 +187,9 @@ Row regions:
 | `table`               | `pub`       | Single-table CRUD (create, resize, rename, etc.)    |
 | `queries`             | `pub`       | Collection queries (find, overlap, validate)         |
 | `operations`          | `pub`       | Validated operations combining table + queries       |
+| `advanced_filter`     | `pub`       | Advanced Filter DNF criteria evaluation              |
 | `filter`              | `pub`       | Per-column filter evaluation -> bitmap               |
-| `filter_resolve`      | `pub(crate)` | Dynamic/top-bottom -> concrete filter resolution    |
+| `filter_resolve`      | `pub`       | Dynamic/top-bottom -> concrete filter resolution     |
 | `filter_dropdown`     | `pub`       | Filter dropdown UI data                             |
 | `sort`                | `pub`       | Sort permutation computation                         |
 | `visibility`          | `pub`       | Bitmap composition (AND across columns)              |
@@ -189,14 +197,14 @@ Row regions:
 | `slicer_cache`        | `pub`       | Slicer cache builder                                |
 | `timeline`            | `pub`       | Timeline slicer date utilities                       |
 | `structured_refs`     | `pub`       | Resolution, adjustment, formatting                   |
-| `styles`              | `pub`       | 60 built-in Excel table styles                       |
+| `styles`              | `pub`       | 67 built-in Excel table styles                       |
 | `custom_styles`       | `pub`       | Custom style CRUD                                   |
 | `range_resolution`    | `pub`       | CellId-based range resolution                        |
 | `calculated_columns`  | `pub`       | Calculated column formula helpers                    |
 | `auto_expansion`      | `pub`       | Auto-expand on adjacent cell edit                    |
 | `selection`           | `pub`       | Selection range helpers (Ctrl+Space, header click)   |
 | `events`              | `pub`       | Table lifecycle events + diff                        |
-| `compare`             | `mod`       | Private: shared comparison utilities                 |
+| `compare`             | `pub`       | Shared comparison utilities exposed for bridge use    |
 
 ### Filter System
 
@@ -211,12 +219,14 @@ The filter system is the most complex subsystem. It operates on **per-column bit
 | `"condition"` | `ConditionFilter`| 1+ conditions combined with AND/OR           |
 | `"topBottom"` | `TopBottomFilter`| Top/bottom N items, percent, or sum          |
 | `"dynamic"`   | `DynamicFilter`  | Data-dependent rules (aboveAverage, thisMonth)|
-| `"color"`     | `ColorFilter`    | Cell/font color (evaluated by bridge layer)  |
+| `"color"`     | `TableColorFilter` | Cell/font color; format-aware when formats are supplied |
+| `"icon"`      | `IconFilter`     | Conditional-formatting icon; bridge-layer evaluation |
 
 **Filter evaluation pipeline** (in `filter.rs`):
 
 1. TopBottom filters use `evaluate_top_bottom_direct()` -- index-based to handle ties
-2. Color filters return all-visible (bridge evaluates them separately)
+2. Color filters evaluate against supplied per-row formats; the pure FFI path has no
+   formats and treats them as all-visible. Icon filters are bridge-layer no-ops.
 3. Dynamic filters are resolved to concrete ValueFilter/ConditionFilter first
 4. ValueFilter uses pre-computed `HashSet` for O(1) per-row lookup
 5. ConditionFilter pre-computes lowercased string for single-condition string operators
@@ -249,15 +259,15 @@ Key semantics:
 
 ### Edge Value Semantics
 
-The crate includes an authoritative reference at
-`compute/core/crates/compute-table/src/EDGE_VALUE_SEMANTICS.md` defining behavior
-for edge cases (NaN, Infinity, Error, Null, Array, Lambda) across all subsystems.
+The crate includes a table-engine edge-case reference at
+`compute/core/crates/compute-table/src/EDGE_VALUE_SEMANTICS.md`.
 
-Key rules:
-- **NaN** sorts last, fails positive filter ops, passes negative ops, NaN == NaN for equality
-- **Blank (Null, Array, Lambda)** all have rank 4, always sort last
-- **Empty string** (`""`) is NOT blank -- it is a Text value with rank 1
-- **Infinity (+/-)** treated as normal numbers for sort, excluded from TopBottom/Average
+Current implementation notes:
+- `CellValue::Number` stores `FiniteF64`, so NaN and infinities are not representable as
+  numbers at the value boundary; `CellValue::number()` maps non-finite values to `#NUM!`.
+- **Blank-like values** (`Null`, `Array`) rank last for table sorting.
+- **Empty string** (`""`) is NOT blank -- it is a Text value with rank 1.
+- Errors sort after booleans and before blanks using the fixed Excel error ordering.
 
 ---
 
@@ -265,8 +275,8 @@ Key rules:
 
 **Location**: `table-engine/`
 **Package**: `@mog/table-engine`
-**Dependency**: `@mog/spreadsheet-contracts` (types only)
-**Tests**: 429
+**Dependencies**: `@mog-sdk/contracts`, `@mog/spreadsheet-utils`
+**Tests**: source-level Jest tests under `table-engine/src/__tests__/`
 
 ### Module Breakdown
 
@@ -292,10 +302,10 @@ Key rules:
 
 The `wasm-backend.ts` module provides a thin delegation layer. The kernel initializes it
 by calling `initTableWasm(exports)` with the compute-core WASM module's exported functions.
-After initialization, heavy computation functions in `structured-refs.ts`, `filter.ts`,
-`sort.ts`, `slicer-cache.ts`, etc., delegate to Rust/WASM via `getWasm()`.
+After initialization, table-engine modules delegate to Rust/WASM via `getWasm()`.
 
-**WASM-accelerated operations**:
+Delegated operations include:
+- Table creation, resize, option, range, lookup, and totals helpers
 - `table_evaluate_column_filter` -- filter bitmap computation
 - `table_compute_sort_order` -- sort permutation
 - `table_build_slicer_cache` -- slicer cache from column data
@@ -305,11 +315,13 @@ After initialization, heavy computation functions in `structured-refs.ts`, `filt
 - `table_parse_structured_ref` / `table_resolve_structured_ref` -- structured refs
 - `table_compose_bitmaps` / `table_create_row_visibility` -- visibility
 - Slicer operations (toggle, select, clear, sort)
+- Compare/value-identity operations (ordering, display text, canonical keys)
 
 ### The convert.ts Module
 
 This is the single source of truth for converting contracts `ColumnFilterCriteria` to
-engine `FilterCriteria`. Used by both `table-bridge.ts` and `filters.ts`.
+engine `FilterCriteria`. It is consumed by `table-bridge.ts` and re-exported from the
+package API for other callers.
 
 Key conversions:
 - `type: 'value'` -> `ValueFilter` (strips null from included list, derives `includeBlanks`)
@@ -324,9 +336,9 @@ Key conversions:
 
 **Location**: `kernel/src/domain/tables/`
 
-The kernel domain layer provides the application-level API for table operations. All
-modules are async and delegate to `ComputeBridge` (Rust compute-core) for reads and
-mutations.
+The kernel domain layer provides the application-level API for table operations. CRUD,
+query, and mutation functions generally call `ComputeBridge` (Rust compute-core);
+range, selection, and hit-test helpers also do local position calculations.
 
 ### core.ts -- CRUD Operations
 
@@ -473,13 +485,14 @@ and the reactive Store/EventBus system.
 3. **Incremental recomposition**: When a single column filter changes, only that column's
    bitmap is re-evaluated. The composed RowVisibility is rebuilt from all cached bitmaps.
 
-4. **CellId -> columnId translation**: Converts header CellIds to table column indices.
+4. **Column data extraction**: Resolves table ranges and column indices before calling
+   engine helpers.
 
 5. **EventBus subscriptions**: Automatic cache invalidation:
 
    | Event               | Action                                        |
    |---------------------|-----------------------------------------------|
-   | `cells:batch-changed` | Clear all column bitmaps for affected tables |
+   | `cells:batch-changed` | Clear cached table bitmaps                    |
    | `filter:cleared`    | Clear all bitmap caches                        |
    | `table:deleted`     | Remove cache entry for deleted table           |
    | `columns:deleted`   | Clear all caches (indices changed)             |
@@ -588,8 +601,8 @@ enum TableStructureChange {
 }
 ```
 
-The kernel's `formula-structured-ref-updater` module walks all formulas in the workbook
-and applies adjustments. For example, renaming column "Sales" to "Revenue" rewrites
+The kernel's `kernel/src/domain/formulas/structured-ref-updater.ts` module walks all
+formulas in the workbook and applies adjustments. For example, renaming column "Sales" to "Revenue" rewrites
 `Table1[Sales]` to `Table1[Revenue]` in all formulas.
 
 ---
@@ -624,12 +637,12 @@ interface Slicer {
   id: string;
   name: string;
   sourceType: 'table' | 'pivot';
-  sourceId: string;          // Table ID
-  sourceColumnId: string;    // Table column ID (not CellId)
+  sourceId: string;          // Table or pivot ID
+  sourceColumnId: string;    // Engine field; stored table slicers use header CellId
   selectedValues: CellValue[]; // Empty = all selected
   multiSelect: boolean;
   showItemsWithNoData: boolean;
-  sortOrder: 'ascending' | 'descending' | 'dataSource';
+  sortOrder: 'ascending' | 'descending' | 'dataSourceOrder';
 }
 ```
 
@@ -732,7 +745,7 @@ rows. This prevents showing values that would produce zero results.
 ### Cache Invalidation
 
 The TableBridge subscribes to EventBus events for automatic invalidation:
-- Cell data changes -> clear affected table's bitmaps
+- Cell data changes -> clear cached table bitmaps
 - Row/column insert/delete -> clear all bitmaps (lengths changed)
 - Filter cleared -> clear all bitmaps
 - Table deleted -> remove cache entry
@@ -752,8 +765,8 @@ When a formula is entered in a table data cell:
 
 1. `checkCalculatedColumnAutoFill(ctx, sheetId, row, col, value)` -- detects if the cell
    is in a table data row and the value starts with `=`
-2. `setCalculatedColumn(ctx, tableId, colIndex, formula)` -- sets the column metadata
-   and fills all data cells via `computeBridge.setCells()` (fire-and-forget)
+2. `setCalculatedColumn(ctx, tableId, colIndex, formula)` -- finds the worksheet through
+   the Workbook API, then delegates to `ws.tables.setCalculatedColumn()`
 3. `applyCalculatedFormulasToNewRow(ctx, tableId, rowIndex)` -- called after table
    auto-expansion to apply calculated formulas to the new row
 
@@ -865,7 +878,8 @@ event whenever any field differs.
 - Table Bridge: [`kernel/src/bridges/table-bridge.ts`](../../../kernel/src/bridges/table-bridge.ts)
 
 ### Contracts
-- Table Types: [`contracts/src/data/tables.ts`](../../../contracts/src/data/tables.ts)
+- Table Types re-export: [`contracts/src/data/tables.ts`](../../../contracts/src/data/tables.ts)
+- Table Types source: [`types/data/src/data/tables.ts`](../../../types/data/src/data/tables.ts)
 
 ### Coordinator
 - Table Mutations: [`apps/spreadsheet/src/coordinator/mutations/tables.ts`](../../../apps/spreadsheet/src/coordinator/mutations/tables.ts)

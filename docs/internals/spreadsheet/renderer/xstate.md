@@ -2,103 +2,99 @@
 
 ## Overview
 
-Every complex interaction is modeled as an **explicit XState state machine**. Machines are pure TypeScript, testable without React or DOM. The **coordinator pattern** handles cross-machine communication, and **Rust/Yrs CRDT integration** makes collaboration a first-class concern.
+Spreadsheet grid interaction state is modeled with **XState v5 state machines** owned by systems. Machine definitions are TypeScript modules that do not depend on React or the DOM; system and coordinator classes create actors, provide side-effect implementations, and wire cross-machine communication. Persistent collaborative document state lives in Rust/Yrs-backed compute and workbook APIs, while XState owns local UI/session state.
 
 ## Why XState
 
-| Approach              | Verdict  | Reasoning                                                          |
-| --------------------- | -------- | ------------------------------------------------------------------ |
-| **XState v5**         | Chosen   | Battle-tested, TypeScript-first, visualizer, time-travel debugging |
-| Zustand + custom      | Rejected | Manual state machine enforcement, easy to violate invariants       |
-| Custom implementation | Rejected | Reinventing wheels, edge cases in guards/actions/async             |
+| Approach              | Verdict       | Reasoning                                                                  |
+| --------------------- | ------------- | -------------------------------------------------------------------------- |
+| **XState v5**         | Used          | Grid, renderer, input, object, ink, focus, and lifecycle actors use XState. |
+| Zustand / UI store    | Complementary | UI stores hold view/chrome state; machines enforce interaction invariants.  |
+| Custom implementation | Avoided       | Machines rely on XState guards, actions, actors, and typed snapshots.       |
 
 **Key benefits:**
 
 - Type-safe states, events, and context
-- [Stately visualizer](https://stately.ai/viz) for debugging
-- First-class support for spawning child machines
-- Used by Netflix, Microsoft, AWS Console
+- Actors owned by systems/coordinators, not React components
+- Hooks can subscribe to narrow XState snapshot slices with `@xstate/react`
+- Side effects can be injected by systems while machine transitions stay explicit
 
 ## Machine Definition Pattern
 
 ```typescript
 // apps/spreadsheet/src/systems/grid-editing/machines/grid-selection-machine.ts
-import { setup, assign } from 'xstate';
+import { setup, type ActorRefFrom } from 'xstate';
 
-// 1. Define context (data that persists across states)
-interface SelectionContext {
-  anchor: CellRef | null;
-  ranges: CellRange[];
-  activeCell: CellRef;
-}
+import type { SelectionContext, SelectionEmitted, SelectionEvent } from './selection/types';
+import { selectionGuards } from './selection/guards';
+import { initialSelectionContext, selectionCoreActions } from './selection/core-actions';
 
-// 2. Define events (all possible inputs)
-type SelectionEvent =
-  | { type: 'MOUSE_DOWN'; cell: CellRef; shiftKey: boolean; ctrlKey: boolean }
-  | { type: 'MOUSE_MOVE'; cell: CellRef }
-  | { type: 'MOUSE_UP' }
-  | { type: 'ENTER_FORMULA_RANGE_MODE'; color: string }
-  | { type: 'RESET' };
-
-// 3. Define the machine with setup() for type inference
 export const selectionMachine = setup({
   types: {
     context: {} as SelectionContext,
-    events: {} as SelectionEvent
+    events: {} as SelectionEvent,
+    emitted: {} as SelectionEmitted,
   },
-  actions: {
-    setAnchor: assign({ anchor: (_, event) => event.cell }),
-    addRange: assign({ ranges: (ctx, event) => [...ctx.ranges, event.range] })
-  },
-  guards: {
-    isShiftClick: (_, event) => event.shiftKey,
-    isCtrlClick: (_, event) => event.ctrlKey
-  }
+  guards: selectionGuards,
+  actions: selectionCoreActions,
 }).createMachine({
   id: 'selection',
   initial: 'idle',
-  context: { anchor: null, ranges: [], activeCell: { row: 0, col: 0 } },
+  context: initialSelectionContext,
+  on: {
+    STRUCTURE_CHANGE: { actions: 'adjustForStructureChange' },
+    SET_LAYOUT_CALLBACKS: { actions: 'setLayoutCallbacks' },
+  },
   states: {
     idle: {
       on: {
         MOUSE_DOWN: [
-          { guard: 'isShiftClick', target: 'extending' },
-          { guard: 'isCtrlClick', target: 'multiSelecting' },
-          { target: 'selecting', actions: 'setAnchor' }
-        ]
-      }
+          {
+            guard: 'isShiftAndCtrlClick',
+            target: 'multiSelecting',
+            actions: ['startMultiSelectAndExtend', 'emitUserSelectionChanged'],
+          },
+          {
+            guard: 'isShiftOnlyClick',
+            target: 'extending',
+            actions: ['extendToCell', 'emitUserSelectionChanged'],
+          },
+          {
+            guard: 'isCtrlOnlyClick',
+            target: 'multiSelecting',
+            actions: ['startMultiSelect', 'emitUserSelectionChanged'],
+          },
+          { target: 'selecting', actions: ['setAnchorAndSelect', 'emitUserSelectionChanged'] },
+        ],
+      },
     },
-    selecting: {
-      /* ... */
-    },
-    extending: {
-      /* ... */
-    },
-    multiSelecting: {
-      /* ... */
-    }
-  }
+    /* selecting, extending, multiSelecting, selectingRangeForFormula, ... */
+  },
 });
+
+export type SelectionActor = ActorRefFrom<typeof selectionMachine>;
 ```
 
 ## Coordinator Pattern
 
-**Core Rule: Machines never import each other.**
+**Core Rule: machine definitions never import each other.**
 
-All cross-machine communication goes through the coordinator.
+Cross-machine communication is centralized in system-level coordination modules or in `SheetCoordinator` wiring.
 
 ```typescript
-// WRONG - Direct coupling
-import { selectionMachine } from './selection-machine';
-onEnterFormulaEditing: () => {
-  selectionMachine.send({ type: 'ENTER_FORMULA_RANGE_MODE' });
+// WRONG - hidden direct coupling from one machine implementation to another actor
+editorActions.onEnterFormulaEditing = () => {
+  selectionActor.send({ type: 'ENTER_FORMULA_RANGE_MODE' });
 };
 
 // CORRECT - Coordinator mediates
 // apps/spreadsheet/src/systems/grid-editing/coordination/cross-coordination.ts
 editorActor.subscribe((state) => {
-  if (state.matches('formulaEditing') && !prevState.matches('formulaEditing')) {
-    selectionActor.send({ type: 'ENTER_FORMULA_RANGE_MODE', color: state.context.rangeColor });
+  if (!wasFormulaEditing && state.matches('formulaEditing')) {
+    selectionActor.send({
+      type: 'ENTER_FORMULA_RANGE_MODE',
+      color: state.context.currentRangeColor,
+    });
   }
 });
 ```
@@ -107,13 +103,13 @@ editorActor.subscribe((state) => {
 
 **File:** `apps/spreadsheet/src/coordinator/sheet-coordinator.ts`
 
-The SheetCoordinator is a ~250-line **composition root** that creates 5 systems and wires cross-system events. All domain logic lives inside the systems. The coordinator only:
+The SheetCoordinator is the spreadsheet **composition root**. It creates the 5 grid systems, starts them in dependency order, owns the shared focus actor, and wires cross-system subscriptions. The current file also contains floating-object projection, receipt processing, and toolbar/cache wiring, so it is no longer a tiny wrapper.
 
 1. Creates systems with narrow configs
 2. Calls `system.start()` in dependency order
 3. Wires cross-system events (via `wireCrossSystemEvents()`)
 4. Implements `handlePointerUp`/`handlePointerCancel` via DragTerminators
-5. Implements `dispose()`
+5. Implements receipt processing and disposal
 
 ```typescript
 class SheetCoordinator {
@@ -137,6 +133,9 @@ class SheetCoordinator {
   // Late-arriving dependencies (React layer -> systems)
   setRendererDependencies(deps: RendererDependencies): void;
 
+  handlePointerUp(): void;
+  handlePointerCancel(): void;
+  processReceipts(receipts: MutationReceipt[]): void;
   dispose(): void;
 }
 ```
@@ -156,26 +155,18 @@ Each system owns its own machines, actors, and domain logic. The coordinator onl
 
 ### Cross-Coordination Rules
 
-Cross-system events are wired in `SheetCoordinator.wireCrossSystemEvents()`. Within a system, cross-machine coordination is handled internally (e.g., `systems/grid-editing/coordination/`).
+Cross-system events are wired in `SheetCoordinator.wireCrossSystemEvents()`. Tightly coupled machines inside a system are wired in that system's `coordination/` and `features/` modules.
 
-| Source            | Trigger                       | Target            | Action                      |
-| ----------------- | ----------------------------- | ----------------- | --------------------------- |
-| Editor            | enters `formulaEditing`       | Selection         | ENTER_FORMULA_RANGE_MODE    |
-| Editor            | exits `formulaEditing`        | Selection         | EXIT_FORMULA_RANGE_MODE     |
-| Selection         | range changes in formula mode | Editor            | FORMULA_RANGE_SELECTED      |
-| Editor            | COMMIT with direction         | Selection         | SET_SELECTION               |
-| Any               | state change                  | Renderer          | INVALIDATE layer            |
-| Clipboard         | hasCut state                  | Renderer          | INVALIDATE ui layer         |
-| FindReplace       | match found                   | Selection         | SET_SELECTION               |
-| FindReplace       | mode activated                | Editor            | CANCEL (exit editing)       |
-| ObjectInteraction | object selected               | Selection         | CLEAR (deselect cells)      |
-| Chart             | chart selected                | ObjectInteraction | OBJECT_SELECT               |
-| Selection         | table resize handle drag      | Renderer          | INVALIDATE table layer      |
-| Input             | scroll gesture                | Renderer          | SCROLL                      |
-| Validation        | circles toggled               | Renderer          | INVALIDATE validation layer |
-| PageBreak         | break dragged                 | Renderer          | INVALIDATE page breaks      |
-| Sparkline         | data changed                  | Renderer          | INVALIDATE sparkline cells  |
-| CF                | rules changed                 | Renderer          | INVALIDATE affected range   |
+| Area                         | Wiring                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| Formula editing              | Editor state enters/exits formula mode -> selection formula range mode |
+| Formula range insertion      | Selection changes in formula mode -> editor `FORMULA_RANGE_SELECTED`   |
+| Commit navigation            | Editor commit transitions -> selection `KEY_TAB`, `KEY_ENTER`, or `SET_SELECTION` |
+| Selection/object exclusivity | Grid selection activity deselects objects, and object activity resets cell selection |
+| Editor focus                 | Grid edit start/end -> input focus editor/grid                         |
+| Render invalidation          | Grid, objects, ink, find/replace, and feature coordination invalidate renderer work |
+| Sheet switching              | Sheet switch coordination saves/restores selection and scroll state     |
+| Structure changes            | Structure coordination forwards `STRUCTURE_CHANGE` to selection, clipboard, and affected edits |
 
 ### Cross-System Wiring Examples
 
@@ -183,50 +174,73 @@ From `SheetCoordinator.wireCrossSystemEvents()`:
 
 - **Selection context exclusivity**: grid `onSelectionActive` notifies objects to deselect, and vice versa
 - **Editor-focus sync**: grid `onEditStart` / `onEditEnd` tells input system to focus editor / grid
-- **Render invalidation**: grid, objects, and ink `onStateChange` all trigger `renderer.invalidate()`
+- **Render invalidation**: grid, objects, and ink `onStateChange` trigger `renderer.invalidate()`
 - **Sheet switch**: saves/restores view state (selection + scroll) when active sheet changes
 - **Named ranges**: recalculates dependent formulas on name CRUD events
+- **Floating objects**: workbook floating-object events update the cache and push renderer patches
 
 ## Rust/Yrs CRDT Integration
 
-**Core Rule: Remote updates are first-class events.**
+**Core Rule: collaborative document state is handled below UI state.**
 
-Every state machine handles `REMOTE_*` events explicitly:
+Persistent workbook state is backed by Rust/Yrs and reached through the workbook and compute APIs. Machines that need to react to remote or external changes define explicit events; not every machine has `REMOTE_*` events.
 
 ```typescript
+// apps/spreadsheet/src/systems/grid-editing/machines/editor/types.ts
 type EditorEvent =
-  | { type: 'START_EDITING'; cell: CellRef }
-  | { type: 'INPUT'; value: string }
-  | { type: 'COMMIT' }
-  | { type: 'REMOTE_CELL_CHANGED'; cell: CellRef; newValue: unknown } // Another user
-  | { type: 'REMOTE_CELL_DELETED'; cell: CellRef }
-  | { type: 'REMOTE_SHEET_DELETED'; sheetId: string };
+  | { type: 'START_EDITING'; cell: CellCoord; sheetId: string; initialValue?: string }
+  | { type: 'INPUT'; value: string; cursorPosition: number }
+  | { type: 'COMMIT'; direction: Direction | 'none'; commitKey?: 'tab' | 'shift-tab' | 'enter' | 'shift-enter' }
+  | { type: 'REMOTE_CELL_CHANGED'; cell: CellCoord; newValue: unknown }
+  | { type: 'REMOTE_CELL_DELETED'; cell: CellCoord }
+  | { type: 'REMOTE_SHEET_DELETED'; sheetId: string }
+  | { type: 'REMOTE_SCHEMA_CHANGED'; cell: CellCoord }
+  | {
+      type: 'REMOTE_STRUCTURE_CHANGE';
+      sheetId: string;
+      operation: 'insertRows' | 'deleteRows' | 'insertColumns' | 'deleteColumns';
+      startIndex: number;
+      count: number;
+    };
 ```
 
 ### Collaboration Integration
 
-Collaboration is integrated through the coordinator's cross-system wiring and the workbook API. Remote events from Rust/Yrs are surfaced as first-class machine events (`REMOTE_*`) through the workbook's event system.
+Collaboration is split across the kernel sidecar, workbook event subscriptions, and UI coordination. The app stores presence in `chrome/collab/use-collab-store.ts`; hooks broadcast local selection and convert remote participant presence into renderer cursors. Workbook events also feed UI machines for structure changes, floating-object deletions, validation updates, and related invalidations.
 
 ### Awareness Sync
 
-Awareness synchronization is handled within the collaboration feature module:
+Presence synchronization uses the kernel collaboration sidecar `PresenceState` shape:
 
 ```typescript
-interface AwarenessState {
-  user: { id: string; name: string; color: string };
-  cursor: { selection: CellRange[]; activeCell: CellRef; sheetId: string } | null;
-  editing: { cell: CellRef; sheetId: string } | null;
+interface PresenceState {
+  displayName: string;
+  color: string;
+  avatarUrl?: string;
+  selection?: {
+    sheetId: string;
+    row: number;
+    col: number;
+    endRow?: number;
+    endCol?: number;
+  };
+  editing?: {
+    sheetId: string;
+    row: number;
+    col: number;
+  };
 }
 ```
 
 ### Conflict Resolution
 
-| Scenario                         | Resolution             | UI Feedback                 |
-| -------------------------------- | ---------------------- | --------------------------- |
-| Both editing same cell           | Last write wins (CRDT) | "Also being edited by X"    |
-| Remote deletes cell being edited | Cancel local edit      | Toast "Cell deleted by X"   |
-| Cut cells modified remotely      | Convert cut to copy    | Marching ants stop          |
-| Selection conflicts              | No conflict            | Each user has own selection |
+| Machine       | Remote/external handling                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Editor        | `REMOTE_CELL_CHANGED` sets `hasConflict`; remote deletion/sheet deletion reset with flags |
+| Selection     | `REMOTE_SELECTION_CHANGED` is an intentional no-op; non-user `SET_SELECTION` does not emit viewport-follow |
+| Clipboard     | `STRUCTURE_CHANGE` adjusts copied/cut ranges for row/column mutations                    |
+| Objects/Chart | Object selection and chart deletion have explicit remote/external events                 |
+| Slicer        | `REMOTE_UPDATE` refreshes slicer state                                                   |
 
 ## Undo/Redo Boundary
 
@@ -234,10 +248,10 @@ Two state systems with different undo semantics:
 
 | System     | Purpose                | Shared? | Has Undo?         |
 | ---------- | ---------------------- | ------- | ----------------- |
-| **Rust/Yrs** | Document state (data)  | Yes     | Yes (Yrs UndoManager) |
-| **XState** | Interaction state (UI) | No      | No                |
+| **Rust compute/Yrs history** | Document state (data)  | Yes     | Yes, through `ComputeBridge` / `UndoService` |
+| **XState**                  | Interaction state (UI) | No      | No                                      |
 
-**Document State (Rust/Yrs) - Undo-able:**
+**Document State (Rust compute/Yrs) - Undo-able:**
 
 - Cell values, formulas, formatting
 - Row/column structure
@@ -247,7 +261,7 @@ Two state systems with different undo semantics:
 **Session State (XState) - NOT Undo-able:**
 
 - Selection position
-- Clipboard state
+- Clipboard UI state
 - Editor buffer
 - Scroll position
 
@@ -257,51 +271,45 @@ Two state systems with different undo semantics:
 
 **Directory:** `apps/spreadsheet/src/hooks/` (organized by domain subdirectory)
 
-Thin wrappers around XState actors:
+Thin wrappers around coordinator-owned actors:
 
 ```typescript
 export function useSelection() {
   const coordinator = useCoordinator();
-  const [state, send] = useActor(coordinator.getSelectionActor());
+  const actor = coordinator.grid.access.actors.selection;
+  const snapshot = useSelector(actor, getSelectionSnapshot, selectionSnapshotEqual);
+  const commands = coordinator.grid.access.commands.selection;
 
   return {
-    // State
-    ranges: state.context.ranges,
-    activeCell: state.context.activeCell,
-    isSelecting: state.matches('selecting'),
-
-    // Actions
-    onMouseDown: (cell, e) => send({ type: 'MOUSE_DOWN', cell, ... }),
-    onMouseMove: (cell) => send({ type: 'MOUSE_MOVE', cell }),
-    onMouseUp: () => send({ type: 'MOUSE_UP' }),
+    ranges: snapshot.ranges,
+    activeCell: snapshot.activeCell,
+    isSelecting: snapshot.isSelecting,
+    onMouseDown: (cell, shiftKey, ctrlKey) => commands.mouseDown(cell, shiftKey, ctrlKey),
+    onMouseMove: (cell) => commands.mouseMove(cell),
+    onMouseUp: () => commands.mouseUp(),
   };
 }
 ```
 
 **Available hooks:**
 
-| Hook                      | Purpose                           |
-| ------------------------- | --------------------------------- |
-| `useSelection()`          | Selection state and actions       |
-| `useEditor()`             | Editor state and actions          |
-| `useClipboard()`          | Clipboard state and actions       |
-| `useRenderer()`           | Renderer state and actions        |
-| `useInput()`              | Input/scroll state and actions    |
-| `useFocus()`              | Focus layer management            |
-| `useChart()`              | Chart interaction state           |
-| `useFindReplace()`        | Find/replace state and actions    |
-| `useObjectInteraction()`  | Floating object interaction state |
-| `useKeyboard()`           | Keyboard event handling           |
-| `useCollaboration()`      | Remote user awareness             |
-| `useActiveCell()`         | Active cell computed state        |
-| `useCellProperties()`     | Cell property subscriptions       |
-| `useGranularSelection()`  | Fine-grained selection updates    |
-| `useActionDependencies()` | Action dependency tracking        |
-| `usePrintSettings()`      | Print settings state              |
+| Hook family                                                            | Purpose                           |
+| ---------------------------------------------------------------------- | --------------------------------- |
+| `useSelection()`, `useSelectionActions()`, `useActiveCell()`           | Selection state and actions       |
+| `useSelectionRanges()`, `useSelectionSummary()`, `useSelectionModes()` | Fine-grained selection updates    |
+| `useEditor()`, `useEditorState()`, `useEditorActions()`                | Editor state and actions          |
+| `useClipboard()`                                                       | Clipboard state and actions       |
+| `useRenderer()`, `useRendererStatus()`, `useRendererActions()`         | Renderer state and actions        |
+| `useInputState()`, `useInputEventHandlers()`                           | Input/editor event handling       |
+| `useFocus()`, `useKeyboard()`, `useFindReplace()`                      | Navigation and find/replace       |
+| `useObjectInteraction()`, `useInk()`, `useDiagram()`                   | Floating object and ink state     |
+| `useChartUI()`, `useCharts()`, `useChartEditorActions()`               | Chart interaction state           |
+| `useCollabPresence()`, `useRemoteCursors()`                            | Remote user awareness             |
+| `useCellProperties()`, `useActionDependencies()`, `usePrintSettings()` | Settings, toolbar, and print UI   |
 
 ## State Machines
 
-State machines are distributed across the 5 systems in `apps/spreadsheet/src/systems/`. Machines are pure TypeScript, testable without React or DOM. The focus machine comes from `@mog/shell`.
+Grid state machines are distributed across the 5 systems in `apps/spreadsheet/src/systems/`. Machines are TypeScript modules without React dependencies. The focus machine comes from `@mog/shell`.
 
 ### Machine Locations
 
@@ -310,13 +318,11 @@ apps/spreadsheet/src/systems/
 ├── grid-editing/machines/
 │   ├── grid-selection-machine.ts     # Cell/range selection
 │   ├── selection/                    # Selection machine modules
-│   │   ├── types.ts, events.ts, guards.ts, derived-state.ts
+│   │   ├── types.ts, events.ts, guards.ts, derived-state.ts, emits.ts
 │   │   ├── core-actions.ts, mouse-actions.ts, keyboard-actions.ts
-│   │   ├── page-actions.ts, system-actions.ts, helpers.ts
-│   │   ├── formula-mode.ts, formula-actions.ts
-│   │   ├── fill-handle.ts, header-selection.ts, header-resize.ts
-│   │   ├── header-actions.ts, cell-drag-drop.ts, drag-actions.ts
-│   │   └── table-resize.ts
+│   │   ├── page-actions.ts, system-actions.ts, drag-actions.ts
+│   │   ├── header-actions.ts, formula-mode.ts, formula-actions.ts
+│   │   └── cycle.ts, merge-escape.ts, helpers.ts
 │   ├── grid-editor-machine.ts        # Cell editing
 │   ├── editor/                       # Editor machine modules
 │   │   ├── types.ts, events.ts, guards.ts, core-actions.ts
@@ -376,7 +382,7 @@ shell/src/machines/
 ```
 apps/spreadsheet/src/
 ├── coordinator/                      # Composition root
-│   ├── sheet-coordinator.ts          # ~250-line composition root
+│   ├── sheet-coordinator.ts          # Composition root and cross-system wiring
 │   ├── shell-coordinator.ts          # Shell-level coordinator
 │   ├── factory.ts                    # createSheetCoordinator factory
 │   ├── types.ts                      # Config and dependency types
@@ -413,6 +419,10 @@ apps/spreadsheet/src/
     ├── view/                         # use-renderer, use-page-breaks, etc.
     ├── objects/                      # use-object-interaction, use-diagram
     ├── charts/                       # use-chart, use-charts
+    ├── collab/                       # useCollabPresence, useRemoteCursors
+    ├── comments/                     # use-comments, use-comment-popover
+    ├── data/                         # data feature hooks
+    ├── file-io/                      # persistence, export, print
     ├── settings/                     # use-cell-properties, etc.
     ├── toolbar/                      # use-action-dependencies, etc.
     └── ...

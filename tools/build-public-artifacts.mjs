@@ -487,6 +487,15 @@ for (const name of shipPublicNames) {
   errors.push(...verifyPackageArtifact(pkg, inventory));
 }
 
+if (shipPublicNames.includes('@mog-sdk/contracts') && !skipTsBuild) {
+  console.log('\n=== Contracts declaration finalization ===');
+  try {
+    run('pnpm', ['--filter', '@mog-sdk/contracts', 'build']);
+  } catch (error) {
+    errors.push(`@mog-sdk/contracts finalization: ${error.message}`);
+  }
+}
+
 console.log('\n=== Host native artifact ===');
 const hostNative = hostNativePackageName();
 if (!hostNative) {

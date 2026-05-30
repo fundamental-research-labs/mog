@@ -59,7 +59,6 @@
     },
     "./host-lifecycle-internal": {
       "types": "./dist/host-lifecycle-internal.d.ts",
-      "development": "./src/host-lifecycle-internal.ts",
       "import": "./dist/host-lifecycle-internal.js"
     }
   },

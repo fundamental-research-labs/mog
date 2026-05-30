@@ -16,6 +16,7 @@
     "src/api/index.ts",
     "src/api/app/index.ts",
     "src/contracts/api.ts",
+    "src/internal.ts",
     "src/security/index.ts",
     "src/services/capabilities/index.ts",
     "src/storage/index.ts",

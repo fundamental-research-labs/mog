@@ -211,6 +211,25 @@ describe('buildEncoding - bar/column chart encoding', () => {
 
     expect(encoding.x?.scale?.domain).toEqual([0, 90]);
   });
+
+  it('combines explicit imported value-axis max with stacked negative extent', () => {
+    const config = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      axis: { yAxis: { type: 'value', max: 100 } },
+    });
+    const data = {
+      categories: ['A'],
+      series: [
+        { name: 'Positive', data: [{ x: 'A', y: 40 }] },
+        { name: 'Negative', data: [{ x: 'A', y: -12 }] },
+      ],
+    };
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.y?.scale?.domain).toEqual([-12, 100]);
+  });
 });
 
 // =============================================================================

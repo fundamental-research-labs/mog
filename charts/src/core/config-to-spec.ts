@@ -400,6 +400,7 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
     ...(config.subtitle ? { subtitle: config.subtitle } : {}),
   };
   if (font?.size !== undefined) titleSpec.fontSize = pointsToCanvasPx(font.size);
+  if (font?.name) titleSpec.fontFamily = font.name;
   if (font?.bold) titleSpec.fontWeight = 'bold';
   if (font?.italic !== undefined) titleSpec.fontStyle = font.italic ? 'italic' : 'normal';
   const titleColor = resolveChartTextColor(font?.color);
@@ -452,6 +453,7 @@ function mapAxisConfigToAxisSpec(
 
   const labelFont = axisConf.format?.font;
   if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
+  if (labelFont?.name) spec.labelFontFamily = labelFont.name;
   const labelColor = resolveChartTextColor(labelFont?.color);
   if (labelColor) spec.labelColor = labelColor;
 
@@ -479,6 +481,7 @@ function mapAxisConfigToAxisSpec(
 
   const titleFont = axisConf.titleFormat?.font;
   if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);
+  if (titleFont?.name) spec.titleFontFamily = titleFont.name;
   const titleColor = resolveChartTextColor(titleFont?.color);
   if (titleColor) spec.titleColor = titleColor;
   return spec;
@@ -503,14 +506,19 @@ function axisTypeToScaleType(
  */
 function buildAxisScaleDomain(
   axisConf: { min?: number; max?: number } | undefined,
-): { domain?: [number, number] } | undefined {
+): { domain?: [number | undefined, number | undefined] } | undefined {
   if (!axisConf) return undefined;
   if (axisConf.min !== undefined || axisConf.max !== undefined) {
     // Only set domain if at least one bound is given
-    const domain: [number, number] = [axisConf.min ?? 0, axisConf.max ?? Number.MAX_SAFE_INTEGER];
+    const domain: [number | undefined, number | undefined] = [axisConf.min, axisConf.max];
     return { domain };
   }
   return undefined;
+}
+
+function explicitDomainBound(domain: unknown[] | undefined, index: number): number | undefined {
+  const value = domain?.[index];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -572,6 +580,7 @@ function buildColorEncoding(
         ...(legendFont?.size !== undefined
           ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
           : {}),
+        ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
         ...(labelColor ? { labelColor } : {}),
       };
     }
@@ -626,6 +635,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
           ...(legendFont?.size !== undefined
             ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
             : {}),
+          ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
           ...(labelColor ? { labelColor } : {}),
         };
       }
@@ -739,8 +749,9 @@ function applyStackedValueDomain(
   const valueChannel = isHorizontalBarType(chartType) ? encoding.x : encoding.y;
   if (!valueChannel) return;
 
-  const existingDomain = valueChannel.scale?.domain;
-  if (Array.isArray(existingDomain)) return;
+  const existingDomain = Array.isArray(valueChannel.scale?.domain)
+    ? valueChannel.scale.domain
+    : undefined;
 
   let maxPositive = 0;
   let minNegative = 0;
@@ -759,7 +770,10 @@ function applyStackedValueDomain(
 
   valueChannel.scale = {
     ...(valueChannel.scale ?? {}),
-    domain: [minNegative, maxPositive],
+    domain: [
+      explicitDomainBound(existingDomain, 0) ?? minNegative,
+      explicitDomainBound(existingDomain, 1) ?? maxPositive,
+    ],
   };
 }
 

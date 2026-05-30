@@ -55,7 +55,7 @@ export function generateColorLegend(
       y,
       text: title,
       fontSize: legendSpec.titleFontSize ?? 12,
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: legendSpec.titleFontFamily ?? 'system-ui, sans-serif',
       textAlign: 'left',
       textBaseline: 'top',
       fontWeight: 'bold',
@@ -100,7 +100,7 @@ export function generateColorLegend(
       text: String(value),
       datum: { entryIndex: i },
       fontSize: legendSpec.labelFontSize ?? 11,
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: legendSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: 'left',
       textBaseline: 'middle',
       style: {

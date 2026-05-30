@@ -39,6 +39,8 @@ export const DEFAULT_LAYOUT = {
   subtitleHeight: 20,
   legendWidth: 130,
   axisLabelSpace: 62,
+  xAxisLabelSpace: 18,
+  yAxisLabelSpace: 62,
   axisTitleSpace: 25,
   tickLength: 6,
   minPlotSize: 50,
@@ -131,7 +133,7 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     const xAxis = encoding.x.axis;
     // Add space for labels
     if (xAxis?.labels !== false) {
-      margin.bottom += DEFAULT_LAYOUT.axisLabelSpace;
+      margin.bottom += DEFAULT_LAYOUT.xAxisLabelSpace;
     }
     // Add space for title
     if (xAxis?.title || encoding.x.title) {
@@ -148,7 +150,7 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     const yAxis = encoding.y.axis;
     // Add space for labels
     if (yAxis?.labels !== false) {
-      margin.left += DEFAULT_LAYOUT.axisLabelSpace;
+      margin.left += DEFAULT_LAYOUT.yAxisLabelSpace;
     }
     // Add space for title
     if (yAxis?.title || encoding.y.title) {

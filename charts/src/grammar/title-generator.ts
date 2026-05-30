@@ -28,7 +28,7 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
     y,
     text: titleSpec.text,
     fontSize: titleSpec.fontSize ?? 16,
-    fontFamily: 'system-ui, sans-serif',
+    fontFamily: titleSpec.fontFamily ?? 'system-ui, sans-serif',
     textAlign:
       titleSpec.anchor === 'start' ? 'left' : titleSpec.anchor === 'end' ? 'right' : 'center',
     textBaseline: 'top',
@@ -46,7 +46,7 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
       y: y + (titleSpec.fontSize ?? 16) + 5,
       text: titleSpec.subtitle,
       fontSize: titleSpec.subtitleFontSize ?? 12,
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: titleSpec.fontFamily ?? 'system-ui, sans-serif',
       textAlign:
         titleSpec.anchor === 'start' ? 'left' : titleSpec.anchor === 'end' ? 'right' : 'center',
       textBaseline: 'top',

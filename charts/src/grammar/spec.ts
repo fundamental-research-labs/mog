@@ -274,10 +274,12 @@ export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
 export interface AxisSpec {
   title?: string | null;
   titleFontSize?: number;
+  titleFontFamily?: string;
   titleColor?: string;
   titlePadding?: number;
   labels?: boolean;
   labelFontSize?: number;
+  labelFontFamily?: string;
   labelColor?: string;
   labelAngle?: number;
   labelPadding?: number;
@@ -325,10 +327,12 @@ export type LegendOrient =
 export interface LegendSpec {
   title?: string | null;
   titleFontSize?: number;
+  titleFontFamily?: string;
   titleColor?: string;
   orient?: LegendOrient;
   direction?: 'horizontal' | 'vertical';
   labelFontSize?: number;
+  labelFontFamily?: string;
   labelColor?: string;
   /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
   reverse?: boolean;
@@ -566,6 +570,7 @@ export interface TitleSpec {
   text: string;
   anchor?: 'start' | 'middle' | 'end';
   fontSize?: number;
+  fontFamily?: string;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
   color?: string;

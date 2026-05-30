@@ -817,6 +817,46 @@ describe('resolveChartData imported visibility semantics', () => {
         },
       ],
     } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 2,
+    });
+    const chartCrudMock = jest.requireMock('../chart-crud') as {
+      get: jest.Mock;
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartCrudMock.get.mockResolvedValue(chart);
+    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:C1', range: range(0) },
+          categories: { ref: 'Sheet1!A10:C10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:C2', range: range(1) },
+          categories: { ref: 'Sheet1!A10:C10', range: range(9) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20, 30][col]
+          : row === 1
+            ? [100, 200, 300][col]
+            : row === 9
+              ? ['FY19', 'FY20', 'FY21'][col]
+              : null;
+      return raw ?? null;
+    });
     (ctx as unknown as { computeBridge: unknown }).computeBridge = {
       getChart: jest.fn(async () => chart),
       getSheetOrder: jest.fn(async () => [SHEET_A]),
@@ -885,6 +925,52 @@ describe('resolveChartData imported visibility semantics', () => {
         },
       ],
     } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartCrudMock = jest.requireMock('../chart-crud') as {
+      get: jest.Mock;
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartCrudMock.get.mockResolvedValue(chart);
+    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A3:B3', range: range(2) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20][col]
+          : row === 1
+            ? [100, 200][col]
+            : row === 2
+              ? [30, 40][col]
+              : row === 9
+                ? ['FY19', 'FY20'][col]
+                : null;
+      return raw ?? null;
+    });
     (ctx as unknown as { computeBridge: unknown }).computeBridge = {
       getChart: jest.fn(async () => chart),
       getSheetOrder: jest.fn(async () => [SHEET_A]),

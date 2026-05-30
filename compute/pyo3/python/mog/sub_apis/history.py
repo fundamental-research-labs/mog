@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
+from mog._serde import deserialize_mutation_result, deserialize_undo_state
 from mog._unsupported import unsupported_python_path
 from mog.types import MutationResult, UndoState
 
@@ -21,23 +22,30 @@ class HistoryAPI:
 
     def undo(self) -> MutationResult:
         """Undo the last user edit."""
-        unsupported_python_path("wb.history.undo")
+        raw = self._bridge.undo()
+        if self._workbook is not None:
+            self._workbook._needs_formula_repair = True
+        return deserialize_mutation_result(raw)
 
     def redo(self) -> MutationResult:
         """Redo the last undone edit."""
-        unsupported_python_path("wb.history.redo")
+        raw = self._bridge.redo()
+        if self._workbook is not None:
+            self._workbook._needs_formula_repair = True
+        return deserialize_mutation_result(raw)
 
     def can_undo(self) -> bool:
         """Check whether undo is available."""
-        unsupported_python_path("wb.history.can_undo")
+        return self._bridge.can_undo()
 
     def can_redo(self) -> bool:
         """Check whether redo is available."""
-        unsupported_python_path("wb.history.can_redo")
+        return self._bridge.can_redo()
 
     def get_state(self) -> UndoState:
         """Get a snapshot of the undo/redo state."""
-        unsupported_python_path("wb.history.get_state")
+        raw = self._bridge.get_undo_state()
+        return deserialize_undo_state(raw)
 
     def list(self) -> List[Dict[str, Any]]:
         """Return a list of undo history entries.
@@ -63,11 +71,13 @@ class HistoryAPI:
     def begin_group(self) -> MutationResult:
         """Begin an undo group -- all mutations until ``end_group`` are
         collapsed into a single undo step.  Supports nesting."""
-        unsupported_python_path("wb.history.begin_group")
+        raw = self._bridge.begin_undo_group()
+        return deserialize_mutation_result(raw)
 
     def end_group(self) -> MutationResult:
         """End the current undo group."""
-        unsupported_python_path("wb.history.end_group")
+        raw = self._bridge.end_undo_group()
+        return deserialize_mutation_result(raw)
 
     def set_next_description(self, description: str) -> None:
         """Set the description for the next undoable operation."""

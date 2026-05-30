@@ -235,6 +235,14 @@ function resolveFormatFillColor(format: ChartFormat | undefined): string | undef
   return resolveSolidFillColor(format?.fill);
 }
 
+function resolveLineColor(line: ChartFormat['line'] | undefined): string | undefined {
+  return resolveChartColor(line?.color);
+}
+
+function resolveFormatLineColor(format: ChartFormat | undefined): string | undefined {
+  return resolveChartColor(format?.line?.color);
+}
+
 function excelStyleRepeatColor(theme: string | undefined, index: number): string | undefined {
   if (index < 6 || !theme) return undefined;
   switch (theme.toLowerCase()) {
@@ -249,24 +257,39 @@ function excelStyleRepeatColor(theme: string | undefined, index: number): string
   }
 }
 
-function resolveSeriesColor(series: SeriesConfig, index: number): string | undefined {
+function isStrokeColoredSeries(series: SeriesConfig, fallbackType: ChartType | undefined): boolean {
+  const seriesType = (series.type ?? fallbackType) as ChartType | undefined;
+  const markType = seriesType ? MARK_TYPE_MAP[seriesType] : undefined;
+  return markType === 'line' || markType === 'point' || markType === 'rule';
+}
+
+function resolveSeriesColor(
+  series: SeriesConfig,
+  index: number,
+  fallbackType?: ChartType,
+): string | undefined {
   const fill = series.format?.fill;
   const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
   const fillHasExplicitTransform =
     fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
   const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
-  return (
-    (series.color ? resolveChartColor(series.color) : undefined) ??
+  const fillColor =
     (fillHasExplicitTransform ? resolveFormatFillColor(series.format) : undefined) ??
     excelStyleRepeatColor(fillTheme, sourceIndex) ??
-    resolveFormatFillColor(series.format)
-  );
+    resolveFormatFillColor(series.format);
+  const lineColor = resolveFormatLineColor(series.format);
+
+  if (isStrokeColoredSeries(series, fallbackType)) {
+    return (series.color ? resolveChartColor(series.color) : undefined) ?? lineColor ?? fillColor;
+  }
+
+  return (series.color ? resolveChartColor(series.color) : undefined) ?? fillColor ?? lineColor;
 }
 
 function resolvedCategoryColors(config: ChartConfig): string[] | undefined {
   const seriesColors = (config.series ?? [])
     .map((series, index) =>
-      isNoFillNoLineSeries(series) ? undefined : resolveSeriesColor(series, index),
+      isNoFillNoLineSeries(series) ? undefined : resolveSeriesColor(series, index, config.type),
     )
     .filter(Boolean) as string[];
   if (seriesColors.length > 0) return seriesColors;
@@ -942,7 +965,9 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
               ...(useStableCategoryKeys
                 ? { domain: data.categories.map((_category, index) => categoryKeyForIndex(index)) }
                 : {}),
-              ...(shouldReverseHorizontalCategoryAxis(config, isHorizontal) ? { reverse: true } : {}),
+              ...(shouldReverseHorizontalCategoryAxis(config, isHorizontal)
+                ? { reverse: true }
+                : {}),
             },
           }
         : {}),
@@ -1048,10 +1073,7 @@ function applyCategoryAxisLabels(
       }
     });
   }
-  if (
-    Object.keys(labelTextByValue).length === 0 &&
-    Object.keys(labelFormatByValue).length === 0
-  ) {
+  if (Object.keys(labelTextByValue).length === 0 && Object.keys(labelFormatByValue).length === 0) {
     return;
   }
 
@@ -1170,6 +1192,18 @@ function applyPieSliceExplosion(mark: MarkSpec, config: ChartConfig): void {
   }
 }
 
+function applyImportedBarOutline(mark: MarkSpec, config: ChartConfig): void {
+  if (MARK_TYPE_MAP[config.type] !== 'bar') return;
+  const line = config.series?.find(
+    (series) => !isNoFillNoLineSeries(series) && hasVisibleLineStyle(series.format?.line),
+  )?.format?.line;
+  if (!line) return;
+
+  mark.stroke = resolveLineColor(line) ?? mark.stroke ?? '#000000';
+  const strokeWidth = linePointsToCanvasPx(line.width);
+  if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
+}
+
 /**
  * Build the mark spec for a chart, incorporating subType props and
  * chart-type-specific settings.
@@ -1263,10 +1297,18 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // If subType props change the mark type or add interpolation
   if (subProps) {
-    return {
+    const mark: MarkSpec = {
       type: subProps.type ?? baseType,
       ...subProps,
     };
+    applyImportedBarOutline(mark, config);
+    return mark;
+  }
+
+  if (baseType === 'bar') {
+    const mark: MarkSpec = { type: baseType };
+    applyImportedBarOutline(mark, config);
+    return mark.stroke || mark.strokeWidth !== undefined ? mark : baseType;
   }
 
   // Simple mark type string
@@ -1484,6 +1526,7 @@ export function buildComboLayers(
   const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' };
   const yEncoding = baseEncoding.y ?? { field: 'value', type: 'quantitative' };
   const colorEncoding = baseEncoding.color;
+  const secondaryYAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
 
   for (let i = 0; i < data.series.length; i++) {
     const series = data.series[i];
@@ -1500,7 +1543,7 @@ export function buildComboLayers(
 
     // Per-series y-axis encoding for dual-axis support
     if (yAxisIndex === 1) {
-      const secondaryAxis = config.axis?.secondaryYAxis;
+      const secondaryAxis = secondaryYAxis;
       const secondaryAxisSpec = secondaryAxis ? mapAxisConfigToAxisSpec(secondaryAxis) : {};
       layerEncoding.y = {
         field: 'value',
@@ -1520,7 +1563,7 @@ export function buildComboLayers(
     }
 
     const layerSpec: UnitSpec = {
-      mark: buildSeriesMark(markType, seriesConf),
+      mark: buildSeriesMark(markType, seriesConf, i, config.type),
       encoding: layerEncoding,
       transform: [
         {
@@ -1583,9 +1626,15 @@ export function buildComboLayers(
  * Build a MarkSpec for an individual series (used in combo charts).
  * Handles per-series color, lineWidth, markerSize overrides.
  */
-function buildSeriesMark(markType: MarkType, seriesConf?: SeriesConfig): MarkSpec {
+function buildSeriesMark(
+  markType: MarkType,
+  seriesConf: SeriesConfig | undefined,
+  seriesIndex: number,
+  fallbackType?: ChartType,
+): MarkSpec {
   const mark: MarkSpec = { type: markType };
-  if (seriesConf?.color) mark.color = seriesConf.color;
+  const color = seriesConf ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType) : undefined;
+  if (color) mark.color = color;
   if (seriesConf?.lineWidth) mark.strokeWidth = seriesConf.lineWidth;
   if (seriesConf?.showMarkers) mark.point = true;
   if (seriesConf?.markerSize) {
@@ -1761,11 +1810,11 @@ export function buildDataLabelLayer(
 
 /**
  * Check whether a secondary Y-axis should be used.
- * Returns true when secondaryYAxis.show is set and at least one series
- * uses yAxisIndex=1.
+ * Returns true when a modeled secondary value axis is visible and at least
+ * one series uses yAxisIndex=1.
  */
 export function hasSecondaryYAxis(config: ChartConfig, data?: ChartData): boolean {
-  const secondaryAxis = config.axis?.secondaryYAxis;
+  const secondaryAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
   if (!(secondaryAxis?.show ?? secondaryAxis?.visible)) return false;
   return (
     (config.series ?? []).some((s) => s.yAxisIndex === 1) ||

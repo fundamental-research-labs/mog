@@ -9,7 +9,7 @@
  * Pure functions - no side effects.
  */
 
-import type { ChartSpec, EncodingSpec, Layout } from './spec';
+import type { ChannelSpec, ChartSpec, EncodingSpec, Layout, LegendSpec } from './spec';
 
 // =============================================================================
 // Types
@@ -73,8 +73,16 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
   // Adjust top margin for title
   const adjustedMarginTop = titleArea ? titleArea.height + margin.top : margin.top;
 
+  const legendEncoding = legendEncodingForSpec(spec);
+  const legendOrient = legendOrientForEncoding(legendEncoding);
+  const adjustedMarginBottom =
+    legendOrient === 'bottom' ? margin.bottom + DEFAULT_LAYOUT.xAxisLabelSpace + 30 : margin.bottom;
+
   // Calculate legend area
-  const legendArea = calculateLegendArea(spec.encoding, width, height, margin);
+  const legendArea = calculateLegendArea(legendEncoding, width, height, {
+    ...margin,
+    bottom: adjustedMarginBottom,
+  });
 
   // Adjust right margin for legend (if legend is on right)
   const adjustedMarginRight =
@@ -87,7 +95,10 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     x: margin.left,
     y: adjustedMarginTop,
     width: Math.max(DEFAULT_LAYOUT.minPlotSize, width - margin.left - adjustedMarginRight),
-    height: Math.max(DEFAULT_LAYOUT.minPlotSize, height - adjustedMarginTop - margin.bottom),
+    height: Math.max(
+      DEFAULT_LAYOUT.minPlotSize,
+      height - adjustedMarginTop - adjustedMarginBottom,
+    ),
   };
 
   return {
@@ -97,7 +108,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     margin: {
       top: adjustedMarginTop,
       right: adjustedMarginRight,
-      bottom: margin.bottom,
+      bottom: adjustedMarginBottom,
       left: margin.left,
     },
     title: titleArea,
@@ -110,10 +121,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
  */
 function calculateMargins(spec: ChartSpec): Layout['margin'] {
   const margin: Layout['margin'] = { ...DEFAULT_LAYOUT.margin };
-  const encodings = [
-    spec.encoding,
-    ...(Array.isArray(spec.layer) ? spec.layer.map((layer) => layer.encoding) : []),
-  ].filter((encoding): encoding is EncodingSpec => Boolean(encoding));
+  const encodings = collectEncodings(spec);
   const layoutHints = spec.config?.layoutHints;
   let bottomPadding = 0;
 
@@ -273,7 +281,7 @@ function calculateLegendArea(
             : undefined;
 
   const orient = legendSpec?.orient ?? 'right';
-  const legendWidth = DEFAULT_LAYOUT.legendWidth;
+  const legendWidth = estimateLegendWidth(encoding, legendSpec);
   const legendHeight = 180; // Estimated, depends on items
   const centeredLegendY = Math.max(margin.top + 10, height / 2 - legendHeight / 2);
 
@@ -303,7 +311,7 @@ function calculateLegendArea(
     case 'bottom':
       return {
         x: margin.left,
-        y: height - margin.bottom - 30,
+        y: height - margin.bottom + 8,
         width: width - margin.left - margin.right,
         height: 30,
       };
@@ -345,6 +353,75 @@ function calculateLegendArea(
         height: legendHeight,
       };
   }
+}
+
+function estimateLegendWidth(
+  encoding: EncodingSpec | undefined,
+  legendSpec: LegendSpec | undefined,
+): number {
+  const labels = legendDomainLabels(
+    encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size,
+  );
+  if (labels.length === 0) return DEFAULT_LAYOUT.legendWidth;
+
+  const labelFontSize = legendSpec?.labelFontSize ?? 11;
+  const symbolSize = legendSpec?.symbolSize ?? 10;
+  const maxLabelWidth = labels.reduce(
+    (max, label) => Math.max(max, label.length * labelFontSize * 0.6),
+    0,
+  );
+  return Math.max(DEFAULT_LAYOUT.legendWidth, Math.ceil(symbolSize + 6 + maxLabelWidth + 20));
+}
+
+function legendDomainLabels(channel: ChannelSpec | undefined): string[] {
+  const domain = channel?.scale && Array.isArray(channel.scale.domain) ? channel.scale.domain : [];
+  return domain.map((value) => String(value));
+}
+
+function collectEncodings(spec: ChartSpec): EncodingSpec[] {
+  return [
+    spec.encoding,
+    ...(Array.isArray(spec.layer) ? spec.layer.map((layer) => layer.encoding) : []),
+  ].filter((encoding): encoding is EncodingSpec => Boolean(encoding));
+}
+
+function hasLegendChannel(encoding: EncodingSpec | undefined): boolean {
+  return Boolean(
+    encoding?.color?.field ||
+      encoding?.fill?.field ||
+      encoding?.shape?.field ||
+      encoding?.size?.field,
+  );
+}
+
+function mergeLegendEncoding(encodings: EncodingSpec[]): EncodingSpec | undefined {
+  const merged: EncodingSpec = {};
+  for (const encoding of encodings) {
+    if (!merged.color && encoding.color) merged.color = encoding.color;
+    if (!merged.fill && encoding.fill) merged.fill = encoding.fill;
+    if (!merged.shape && encoding.shape) merged.shape = encoding.shape;
+    if (!merged.size && encoding.size) merged.size = encoding.size;
+  }
+  return hasLegendChannel(merged) ? merged : undefined;
+}
+
+function legendEncodingForSpec(spec: ChartSpec): EncodingSpec | undefined {
+  if (hasLegendChannel(spec.encoding)) return spec.encoding;
+  return mergeLegendEncoding(collectEncodings(spec));
+}
+
+function firstLegendSpec(encoding: EncodingSpec | undefined): LegendSpec | undefined {
+  const legends = [
+    encoding?.color?.legend,
+    encoding?.fill?.legend,
+    encoding?.shape?.legend,
+    encoding?.size?.legend,
+  ];
+  return legends.find((legend): legend is LegendSpec => legend !== null && legend !== undefined);
+}
+
+function legendOrientForEncoding(encoding: EncodingSpec | undefined): LegendSpec['orient'] {
+  return firstLegendSpec(encoding)?.orient ?? 'right';
 }
 
 // =============================================================================

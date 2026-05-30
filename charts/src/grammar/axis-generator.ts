@@ -610,10 +610,12 @@ export function formatTickValue(value: unknown, format?: string): string {
         return `${quotedLiteralNumber[1]}${Math.round(valueNumber)}${quotedLiteralNumber[2] ?? ''}`;
       }
       if (format.includes('#,##0')) {
-        if (valueNumber === 0 && /[–-]/.test(format)) return '–';
+        const hasCurrency = format.includes('$');
+        if (valueNumber === 0 && /[–-]/.test(format)) return hasCurrency ? '$-' : '–';
         const formatted = Math.round(Math.abs(valueNumber)).toLocaleString('en-US');
-        if (valueNumber < 0 && format.includes('(')) return `(${formatted})`;
-        return formatted;
+        if (valueNumber < 0 && format.includes('('))
+          return hasCurrency ? `($${formatted})` : `(${formatted})`;
+        return hasCurrency ? `$${formatted}` : formatted;
       }
       // Handle simple format patterns
       if (format.includes('%')) {

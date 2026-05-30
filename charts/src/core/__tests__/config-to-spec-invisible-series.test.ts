@@ -98,6 +98,11 @@ describe('configToSpec invisible stacked bar series', () => {
     const spec = asUnitSpec(configToSpec(config, data));
     const rows = inlineRows(spec);
 
+    expect(spec.mark).toMatchObject({
+      type: 'bar',
+      stroke: '#000000',
+      strokeWidth: 1.5,
+    });
     expect(rows.filter((row) => row.series === 'Series 0')).toHaveLength(2);
     expect(rows.filter((row) => row.series === 'Series 0')).toEqual(
       expect.arrayContaining([expect.objectContaining({ __mogSeriesOpacity: 0 })]),
@@ -113,6 +118,9 @@ describe('configToSpec invisible stacked bar series', () => {
     );
 
     const result = compile(spec);
+    expect(result.layout.legend?.x).toBeGreaterThanOrEqual(
+      result.layout.plotArea.x + result.layout.plotArea.width,
+    );
     const hiddenBars = result.marks.filter(
       (mark): mark is RectMark =>
         mark.type === 'rect' && (mark.datum as { series?: string } | undefined)?.series === 'Series 0',

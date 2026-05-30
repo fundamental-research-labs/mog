@@ -184,9 +184,10 @@ export interface ISpreadsheetKernelContext extends IKernelContext<SpreadsheetEve
   pivotExpansionProvider?: PivotExpansionStateProvider;
 
   /**
-   * Chart image exporter — injected by the shell/app layer (requires DOM canvas).
-   * The kernel is headless, so chart image export is delegated to this injectable
-   * dependency. If not set, exportImage() throws "not implemented in headless mode".
+   * Chart image exporter — injected by the platform host.
+   * Browser hosts use their canvas exporter; the Node SDK uses its native
+   * headless raster backend. If omitted, exportImage() fails with an explicit
+   * operation error.
    */
   chartImageExporter?: ChartImageExporter;
 

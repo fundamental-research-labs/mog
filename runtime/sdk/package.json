@@ -87,6 +87,7 @@
     "@mog-sdk/kernel": "workspace:*",
     "@mog-sdk/types-host": "workspace:*",
     "@mog/kernel-host-internal": "workspace:*",
+    "@mog/charts": "workspace:*",
     "@types/jest": "^30.0.0",
     "jest": "^30.3.0",
     "jest-environment-node": "^30.3.0",

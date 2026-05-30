@@ -25,8 +25,9 @@ import type {
 /**
  * ChartImageExporter — Injectable dependency for chart image export.
  *
- * The kernel is headless (no DOM/canvas), so actual rendering must be
- * provided by the shell or platform layer via dependency injection.
+ * The kernel does not own raster surfaces. Browser and Node hosts inject a
+ * platform exporter that compiles chart marks through IChartBridge and renders
+ * those marks to an image.
  */
 export interface ChartImageExporter {
   exportImage(
@@ -69,8 +70,10 @@ export interface WorksheetCharts {
   /**
    * Export a chart as an image.
    *
-   * Note: This is a stub — actual rendering requires a canvas context.
-   * The bridge integration will be wired in Wave 4.
+   * Supported formats are PNG and JPEG. SVG and other unsupported formats
+   * reject explicitly instead of falling back to another image type.
+   * Browser exports render through the app canvas backend; Node SDK exports
+   * render through the native headless raster backend.
    */
   exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;
 

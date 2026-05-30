@@ -1206,6 +1206,9 @@ importers:
       '@mog-sdk/types-host':
         specifier: workspace:*
         version: link:../../types/host
+      '@mog/charts':
+        specifier: workspace:*
+        version: link:../../charts
       '@mog/kernel-host-internal':
         specifier: workspace:*
         version: link:../../kernel/host-internal

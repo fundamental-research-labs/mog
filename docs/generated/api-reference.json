@@ -153,6 +153,16 @@
           "docstring": "Workbook-level change tracking (opt-in, cross-sheet).",
           "usedTypes": []
         },
+        "diagnostics": {
+          "signature": "readonly diagnostics: WorkbookDiagnostics;",
+          "docstring": "Workbook-level diagnostics and audit surfaces.",
+          "usedTypes": []
+        },
+        "links": {
+          "signature": "readonly links: WorkbookLinks;",
+          "docstring": "Cross-workbook link registry and principal-scoped runtime status.",
+          "usedTypes": []
+        },
         "records": {
           "signature": "readonly records: IRecordsAPI;",
           "docstring": "Table-aware record CRUD operations for record-backed views and apps.\n\nA record is a table data row. Removal clears the row's table cells; it does\nnot delete the physical worksheet row.",
@@ -299,8 +309,8 @@
           "usedTypes": []
         },
         "toXlsx": {
-          "signature": "toXlsx(): Promise<Uint8Array>",
-          "docstring": "Export the workbook as XLSX binary data.",
+          "signature": "toXlsx(options?: { contextStripped?: boolean | undefined; } | undefined): Promise<Uint8Array>",
+          "docstring": "Export the workbook as XLSX binary data.\n\n`contextStripped` is an internal import/export verification mode that\ndisables imported RoundTripContext preservation so corpus gates can prove\nmodeled facts do not depend on stale source package bytes.",
           "usedTypes": []
         },
         "insertWorksheets": {
@@ -356,7 +366,9 @@
         "searchAllSheets": {
           "signature": "searchAllSheets(patterns: string[], options?: SearchOptions | undefined): Promise<(SearchResult & { sheetName: string; })[]>",
           "docstring": "Search all sheets for cells matching regex patterns (single IPC call).",
-          "usedTypes": ["SearchOptions"]
+          "usedTypes": [
+            "SearchOptions"
+          ]
         },
         "getChartDataPointTrack": {
           "signature": "getChartDataPointTrack(): Promise<boolean>",
@@ -371,12 +383,21 @@
         "getSettings": {
           "signature": "getSettings(): Promise<WorkbookSettings>",
           "docstring": "Get workbook-level settings.",
-          "usedTypes": ["WorkbookSettings"]
+          "usedTypes": [
+            "WorkbookSettings"
+          ]
         },
         "setSettings": {
-          "signature": "setSettings(updates: Partial<WorkbookSettings>): Promise<void>",
+          "signature": "setSettings(updates: WorkbookSettingsPatch): Promise<void>",
           "docstring": "Update workbook-level settings.",
           "usedTypes": []
+        },
+        "replaceSettings": {
+          "signature": "replaceSettings(settings: WorkbookSettings): Promise<void>",
+          "docstring": null,
+          "usedTypes": [
+            "WorkbookSettings"
+          ]
         },
         "getCustomLists": {
           "signature": "getCustomLists(): Promise<readonly CustomList[]>",
@@ -496,7 +517,9 @@
         "cellStyles.get": {
           "signature": "cellStyles.get(styleId: string): Promise<CellFormat | null>",
           "docstring": "Get a cell format (style) by its style ID. Returns the format, or null if not found.",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "cellStyles.getStyle": {
           "signature": "cellStyles.getStyle(styleId: string): Promise<CellStyle | null>",
@@ -516,7 +539,9 @@
         "cellStyles.add": {
           "signature": "cellStyles.add(name: string, format: CellFormat): Promise<CellStyle>",
           "docstring": "Create a new custom cell style.",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "cellStyles.update": {
           "signature": "cellStyles.update(styleId: string, updates: Partial<Omit<CellStyle, \"id\" | \"builtIn\">>): Promise<CellStyle | null>",
@@ -574,8 +599,8 @@
           "usedTypes": []
         },
         "names.add": {
-          "signature": "names.add(name: string, reference: string, comment?: string | undefined): Promise<NameAddReceipt>",
-          "docstring": "Define a new named range.\n@param - The name to define.\n@param - A1-style reference (e.g. \"Sheet1!$A$1:$B$10\"). May omit leading \"=\".\n@param - Optional descriptive comment.",
+          "signature": "names.add(name: string, reference: string, comment?: string | undefined, scope?: string | undefined): Promise<NameAddReceipt>",
+          "docstring": "Define a new named range.\n@param - The name to define.\n@param - A1-style reference (e.g. \"Sheet1!$A$1:$B$10\"). May omit leading \"=\".\n@param - Optional descriptive comment.\n@param - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": []
         },
         "names.has": {
@@ -591,7 +616,9 @@
         "names.get": {
           "signature": "names.get(name: string, scope?: string | undefined): Promise<NamedRangeInfo | null>",
           "docstring": "Get a named range by name.\n@param - The name to look up.\n@param - Optional sheet name scope. Omit for workbook-scoped names.\n@returns The named range info, or null if not found.",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.getRange": {
           "signature": "names.getRange(name: string, scope?: string | undefined): Promise<NamedRangeReference | null>",
@@ -604,8 +631,8 @@
           "usedTypes": []
         },
         "names.update": {
-          "signature": "names.update(name: string, updates: NamedRangeUpdateOptions): Promise<void>",
-          "docstring": "Update an existing named range.\n@param - The current name to update.\n@param - Fields to change (name, reference, comment).",
+          "signature": "names.update(name: string, updates: NamedRangeUpdateOptions, scope?: string | undefined): Promise<void>",
+          "docstring": "Update an existing named range.\n@param - The current name to update.\n@param - Fields to change (name, reference, comment).\n@param - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": []
         },
         "names.clear": {
@@ -616,7 +643,9 @@
         "names.list": {
           "signature": "names.list(): Promise<NamedRangeInfo[]>",
           "docstring": "List all named ranges in the workbook.\n@returns Array of named range info objects.",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.createFromSelection": {
           "signature": "names.createFromSelection(sheet: string | SheetId, range: CellRange, options: CreateNamesFromSelectionOptions): Promise<CreateNamesResult>",
@@ -811,7 +840,9 @@
         "slicers.list": {
           "signature": "slicers.list(): Promise<SlicerInfo[]>",
           "docstring": "List all slicers across all sheets in the workbook.\n@returns Array of slicer summary information",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.get": {
           "signature": "slicers.get(slicerId: string): Promise<Slicer | null>",
@@ -821,22 +852,30 @@
         "slicers.getItemAt": {
           "signature": "slicers.getItemAt(index: number): Promise<SlicerInfo | null>",
           "docstring": "Get a slicer by its zero-based index in the list.\n@param - Zero-based index of the slicer\n@returns Slicer summary information, or null if index is out of range",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
           "docstring": "Get the items (values) available in a slicer by ID.\n@param - ID of the slicer\n@returns Array of slicer items with selection state",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
           "docstring": "Get a slicer item by its string key.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
           "docstring": "Get a slicer item by its string key, or null if not found.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<void>",
@@ -856,7 +895,9 @@
         "tableStyles.add": {
           "signature": "tableStyles.add(name: string, style: TableStyleConfig): Promise<string>",
           "docstring": "Create a custom table style. Returns the style name/ID.",
-          "usedTypes": ["TableStyleConfig"]
+          "usedTypes": [
+            "TableStyleConfig"
+          ]
         },
         "tableStyles.update": {
           "signature": "tableStyles.update(name: string, style: Partial<TableStyleConfig>): Promise<void>",
@@ -881,7 +922,9 @@
         "tableStyles.duplicate": {
           "signature": "tableStyles.duplicate(name: string, newName: string): Promise<TableStyleInfo>",
           "docstring": "Duplicate an existing table style. Returns the new style info.",
-          "usedTypes": ["TableStyleInfo"]
+          "usedTypes": [
+            "TableStyleInfo"
+          ]
         },
         "theme.getWorkbookTheme": {
           "signature": "theme.getWorkbookTheme(): Promise<ThemeDefinition>",
@@ -963,8 +1006,8 @@
           "docstring": "What-If analysis: goal seek, data tables, and parametric evaluation",
           "usedTypes": []
         },
-        "smartArt": {
-          "signature": "readonly smartArt: WorksheetSmartArt;",
+        "diagrams": {
+          "signature": "readonly diagrams: WorksheetDiagrams;",
           "docstring": "Diagram operations (CRUD, node ops, layout, cache).",
           "usedTypes": []
         },
@@ -1010,7 +1053,7 @@
         },
         "objects": {
           "signature": "readonly objects: WorksheetObjectCollection;",
-          "docstring": "All floating objects: shapes, pictures, text boxes, equations, wordart, smartart, ink",
+          "docstring": "All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink",
           "usedTypes": []
         },
         "shapes": {
@@ -1038,14 +1081,9 @@
           "docstring": "Equation objects.",
           "usedTypes": []
         },
-        "wordArt": {
-          "signature": "readonly wordArt: Worksheettext;",
+        "textEffects": {
+          "signature": "readonly textEffects: WorksheetTextEffectCollection;",
           "docstring": "Decorative text-effect objects.",
-          "usedTypes": []
-        },
-        "effectsCollection": {
-          "signature": "effectsCollection: any;",
-          "docstring": null,
           "usedTypes": []
         },
         "connectors": {
@@ -1166,11 +1204,13 @@
         "setCell": {
           "signature": "setCell(address: string, value: CellValuePrimitive | Date, options?: CellWriteOptions | undefined): Promise<void>",
           "docstring": "Set a cell value by A1 address.\nString values starting with \"=\" are treated as formulas (e.g. \"=SUM(B1:B10)\").\nUse `options.asFormula` to force formula interpretation without the \"=\" prefix.\nUse `options.literal` to store strings starting with \"=\" as literal text.\nDate values are automatically converted via setDateValue().",
-          "usedTypes": ["CellWriteOptions"]
+          "usedTypes": [
+            "CellWriteOptions"
+          ]
         },
         "setDateValue": {
           "signature": "setDateValue(row: number, col: number, year: number, month: number, day: number): Promise<void>",
-          "docstring": "Set a calendar date in a cell, automatically applying a date format.\n\nFour input forms (in order of preference for unambiguous semantics):\n\n1. **Calendar parts** — `setDateValue(row, col, year, month, day)` /\n   `setDateValue(addr, year, month, day)`. No `Date`, no timezone — the\n   calendar value is the input.\n2. **ISO calendar string** — `setDateValue(row, col, '2026-03-01')` /\n   `setDateValue(addr, '2026-03-01')`. No `Date`, no timezone.\n3. **`Date` instant** — `setDateValue(row, col, date)` /\n   `setDateValue(addr, date)`. Resolved against the session's\n   `userTimezone` (set when the workbook was created).\n4. **`Date` instant with explicit override** —\n   `setDateValue(row, col, date, { tz })` / `setDateValue(addr, date, { tz })`.\n   Use when a `Date` should be interpreted in a frame other than the\n   session default.\n@see /active/ux/datetime/round-1/session-user-timezone.md",
+          "docstring": "Set a calendar date in a cell, automatically applying a date format.\n\nFour input forms (in order of preference for unambiguous semantics):\n\n1. **Calendar parts** — `setDateValue(row, col, year, month, day)` /\n   `setDateValue(addr, year, month, day)`. No `Date`, no timezone — the\n   calendar value is the input.\n2. **ISO calendar string** — `setDateValue(row, col, '2026-03-01')` /\n   `setDateValue(addr, '2026-03-01')`. No `Date`, no timezone.\n3. **`Date` instant** — `setDateValue(row, col, date)` /\n   `setDateValue(addr, date)`. Resolved against the session's\n   `userTimezone` (set when the workbook was created).\n4. **`Date` instant with explicit override** —\n   `setDateValue(row, col, date, { tz })` / `setDateValue(addr, date, { tz })`.\n   Use when a `Date` should be interpreted in a frame other than the\n   session default.",
           "usedTypes": []
         },
         "setTimeValue": {
@@ -1181,17 +1221,23 @@
         "getCell": {
           "signature": "getCell(address: string): Promise<CellData>",
           "docstring": "Get cell data by A1 address.",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "getRange": {
           "signature": "getRange(range: string): Promise<CellData[][]>",
           "docstring": "Get a 2D array of cell data for a range (A1 notation).",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "getRanges": {
           "signature": "getRanges(addresses: string): Promise<CellData[][][]>",
           "docstring": "Get cell data for multiple ranges at once (spreadsheet special-cell typeWorksheet.getRanges equivalent).\n@param - Comma-separated A1-style range addresses (e.g. \"A1:B5,D1:E5,G1\")\n@returns Array of 2D cell data arrays, one per address",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "setRange": {
           "signature": "setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>",
@@ -1253,6 +1299,11 @@
           "docstring": "Validate a formula expression in the context of this sheet without writing\nit to any cell. Returns `null` when the formula is syntactically valid.\n\nUnlike {@link evaluate}, this is a raw commit-time syntax check: it does\nnot normalize or auto-correct incomplete input before parsing.",
           "usedTypes": []
         },
+        "validateFormulaCircularReference": {
+          "signature": "validateFormulaCircularReference(formula: string, row: number, col: number): Promise<FormulaCircularReferenceValidation | null>",
+          "docstring": "Validate whether entering a formula at row/col would create a circular\nreference. Returns `null` when the formula is allowed.",
+          "usedTypes": []
+        },
         "getFormula": {
           "signature": "getFormula(address: string): Promise<string | null>",
           "docstring": "Get the formula of a cell by A1 address (null if not a formula cell).",
@@ -1276,12 +1327,16 @@
         "getRawCellData": {
           "signature": "getRawCellData(address: string, includeFormula?: boolean | undefined): Promise<RawCellData>",
           "docstring": "Get raw cell data (value, formula, format, borders, etc.) by A1 address.",
-          "usedTypes": ["RawCellData"]
+          "usedTypes": [
+            "RawCellData"
+          ]
         },
         "getRawRangeData": {
           "signature": "getRawRangeData(range: string | CellRange, options?: { includeFormula?: boolean | undefined; } | undefined): Promise<RawCellData[][]>",
           "docstring": "Get raw data for a range as a 2D array (A1 notation or CellRange).",
-          "usedTypes": ["RawCellData"]
+          "usedTypes": [
+            "RawCellData"
+          ]
         },
         "getRangeWithIdentity": {
           "signature": "getRangeWithIdentity(range: string | CellRange): Promise<IdentifiedCellData[]>",
@@ -1301,7 +1356,9 @@
         "summarize": {
           "signature": "summarize(options?: SummaryOptions | undefined): Promise<string>",
           "docstring": "Get a sheet overview summary for agent context.",
-          "usedTypes": ["SummaryOptions"]
+          "usedTypes": [
+            "SummaryOptions"
+          ]
         },
         "getUsedRange": {
           "signature": "getUsedRange(): Promise<CellRange | null>",
@@ -1346,7 +1403,10 @@
         "regexSearch": {
           "signature": "regexSearch(patterns: string[], options?: SearchOptions | undefined): Promise<SearchResult[]>",
           "docstring": "Search cells using regex patterns.",
-          "usedTypes": ["SearchOptions", "SearchResult"]
+          "usedTypes": [
+            "SearchOptions",
+            "SearchResult"
+          ]
         },
         "signCheck": {
           "signature": "signCheck(range?: string | undefined, options?: SignCheckOptions | undefined): Promise<SignCheckResult>",
@@ -1356,7 +1416,9 @@
         "findInRange": {
           "signature": "findInRange(range: string, text: string, options?: FindInRangeOptions | undefined): Promise<SearchResult | null>",
           "docstring": "Find the first cell matching text within a range (spreadsheet special-cell typeRange.find equivalent).\n@param - A1 range string to search within\n@param - Text or regex pattern to search for\n@param - Search options (matchCase, entireCell)\n@returns The first matching SearchResult, or null if no match found",
-          "usedTypes": ["SearchResult"]
+          "usedTypes": [
+            "SearchResult"
+          ]
         },
         "replaceAll": {
           "signature": "replaceAll(range: string, text: string, replacement: string, options?: FindInRangeOptions | undefined): Promise<number>",
@@ -1416,7 +1478,9 @@
         "sortRange": {
           "signature": "sortRange(range: string, options: SortOptions): Promise<void>",
           "docstring": "Sort a range by the specified options (A1 notation).",
-          "usedTypes": ["SortOptions"]
+          "usedTypes": [
+            "SortOptions"
+          ]
         },
         "sortByColor": {
           "signature": "sortByColor(range: string | CellRange, opts: SortByColorOptions): Promise<void>",
@@ -1471,7 +1535,9 @@
         "getSelectionAggregates": {
           "signature": "getSelectionAggregates(ranges: CellRange[]): Promise<AggregateResult>",
           "docstring": "Get aggregates (SUM, COUNT, AVG, MIN, MAX) for selected ranges.",
-          "usedTypes": ["AggregateResult"]
+          "usedTypes": [
+            "AggregateResult"
+          ]
         },
         "formatValues": {
           "signature": "formatValues(entries: FormatEntry[]): Promise<string[]>",
@@ -1586,12 +1652,17 @@
         "charts.add": {
           "signature": "charts.add(config: ChartConfig): Promise<Chart>",
           "docstring": "Add a chart to the sheet. Returns the created chart.",
-          "usedTypes": ["Chart", "ChartConfig"]
+          "usedTypes": [
+            "Chart",
+            "ChartConfig"
+          ]
         },
         "charts.get": {
           "signature": "charts.get(chartId: string): Promise<Chart | null>",
           "docstring": "Get a chart by ID, or null if not found.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.update": {
           "signature": "charts.update(chartId: string, updates: Partial<ChartConfig>): Promise<void>",
@@ -1606,7 +1677,9 @@
         "charts.list": {
           "signature": "charts.list(): Promise<Chart[]>",
           "docstring": "List all charts in the sheet.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.clear": {
           "signature": "charts.clear(): Promise<void>",
@@ -1620,7 +1693,7 @@
         },
         "charts.exportImage": {
           "signature": "charts.exportImage(chartId: string, options?: ImageExportOptions | undefined): Promise<string>",
-          "docstring": "Export a chart as an image.\n\nNote: This is a stub — actual rendering requires a canvas context.\nThe bridge integration will be wired in Wave 4.",
+          "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; Node SDK exports\nrender through the native headless raster backend.",
           "usedTypes": []
         },
         "charts.setDataRange": {
@@ -1631,7 +1704,9 @@
         "charts.setType": {
           "signature": "charts.setType(chartId: string, type: ChartType, subType?: string | undefined): Promise<void>",
           "docstring": "Set a chart's type and optional sub-type.",
-          "usedTypes": ["ChartType"]
+          "usedTypes": [
+            "ChartType"
+          ]
         },
         "charts.has": {
           "signature": "charts.has(chartId: string): Promise<boolean>",
@@ -1646,7 +1721,9 @@
         "charts.getByName": {
           "signature": "charts.getByName(name: string): Promise<Chart | null>",
           "docstring": "Find a chart by its name, or null if not found.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.bringToFront": {
           "signature": "charts.bringToFront(chartId: string): Promise<void>",
@@ -1781,7 +1858,9 @@
         "charts.getItemAt": {
           "signature": "charts.getItemAt(index: number): Promise<Chart | null>",
           "docstring": "Get a chart by its positional index, or null if out of range.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.setBubbleSizes": {
           "signature": "charts.setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<void>",
@@ -2088,6 +2167,113 @@
           "docstring": "Clone conditional formats from source to target with offset.\nUsed by format painter and paste operations.\n@param - Source sheet ID (for cut operation reference removal)\n@param - Relative CF formats with range offsets\n@param - Target paste origin (row, col)\n@param - Whether this is a cut operation",
           "usedTypes": []
         },
+        "diagrams.add": {
+          "signature": "diagrams.add(config: DiagramConfig): Promise<DiagramObject>",
+          "docstring": "Add a diagram to the sheet. Returns the created floating object.",
+          "usedTypes": [
+            "DiagramConfig"
+          ]
+        },
+        "diagrams.get": {
+          "signature": "diagrams.get(objectId: string): Promise<Diagram | null>",
+          "docstring": "Get a diagram by object ID, or null if not found.",
+          "usedTypes": []
+        },
+        "diagrams.has": {
+          "signature": "diagrams.has(objectId: string): Promise<boolean>",
+          "docstring": "Check if a diagram exists by object ID.",
+          "usedTypes": []
+        },
+        "diagrams.getCount": {
+          "signature": "diagrams.getCount(): Promise<number>",
+          "docstring": "Get the total number of diagrams on this sheet.",
+          "usedTypes": []
+        },
+        "diagrams.remove": {
+          "signature": "diagrams.remove(objectId: string): Promise<void>",
+          "docstring": "Remove a diagram by object ID.",
+          "usedTypes": []
+        },
+        "diagrams.list": {
+          "signature": "diagrams.list(): Promise<Diagram[]>",
+          "docstring": "List all diagrams on the sheet.",
+          "usedTypes": []
+        },
+        "diagrams.clear": {
+          "signature": "diagrams.clear(): Promise<void>",
+          "docstring": "Remove all diagrams from the sheet.",
+          "usedTypes": []
+        },
+        "diagrams.duplicate": {
+          "signature": "diagrams.duplicate(objectId: string): Promise<string>",
+          "docstring": "Duplicate a diagram. Returns the new object ID.",
+          "usedTypes": []
+        },
+        "diagrams.addNode": {
+          "signature": "diagrams.addNode(objectId: string, text: string, position: NodePosition, referenceNodeId: NodeId | null): Promise<NodeId>",
+          "docstring": "Add a node to a diagram. Returns the new node ID.",
+          "usedTypes": []
+        },
+        "diagrams.removeNode": {
+          "signature": "diagrams.removeNode(objectId: string, nodeId: NodeId): Promise<void>",
+          "docstring": "Remove a node from a diagram.",
+          "usedTypes": []
+        },
+        "diagrams.updateNode": {
+          "signature": "diagrams.updateNode(objectId: string, nodeId: NodeId, updates: Partial<DiagramNode>): Promise<void>",
+          "docstring": "Update a node's properties.",
+          "usedTypes": []
+        },
+        "diagrams.moveNode": {
+          "signature": "diagrams.moveNode(objectId: string, nodeId: NodeId, direction: NodeMoveDirection): Promise<void>",
+          "docstring": "Move a node in the hierarchy.",
+          "usedTypes": []
+        },
+        "diagrams.getNode": {
+          "signature": "diagrams.getNode(objectId: string, nodeId: NodeId): Promise<DiagramNode | undefined>",
+          "docstring": "Get a node by ID.",
+          "usedTypes": []
+        },
+        "diagrams.getDiagram": {
+          "signature": "diagrams.getDiagram(objectId: string): Promise<Diagram | null>",
+          "docstring": "@deprecated Use `get(objectId)` instead. Will be removed in a future release.",
+          "usedTypes": []
+        },
+        "diagrams.getDiagramsOnSheet": {
+          "signature": "diagrams.getDiagramsOnSheet(): Promise<Diagram[]>",
+          "docstring": "@deprecated Use `list()` instead. Will be removed in a future release.",
+          "usedTypes": []
+        },
+        "diagrams.changeLayout": {
+          "signature": "diagrams.changeLayout(objectId: string, newLayoutId: string): Promise<void>",
+          "docstring": "Change the diagram layout.",
+          "usedTypes": []
+        },
+        "diagrams.changeQuickStyle": {
+          "signature": "diagrams.changeQuickStyle(objectId: string, quickStyleId: string): Promise<void>",
+          "docstring": "Change the quick style.",
+          "usedTypes": []
+        },
+        "diagrams.changeColorTheme": {
+          "signature": "diagrams.changeColorTheme(objectId: string, colorThemeId: string): Promise<void>",
+          "docstring": "Change the color theme.",
+          "usedTypes": []
+        },
+        "diagrams.getComputedLayout": {
+          "signature": "diagrams.getComputedLayout(objectId: string): Promise<ComputedLayout | undefined>",
+          "docstring": "Get the computed layout for a diagram. Returns cached result if valid.",
+          "usedTypes": []
+        },
+        "diagrams.invalidateLayout": {
+          "signature": "diagrams.invalidateLayout(objectId: string): void",
+          "docstring": "Invalidate the cached layout for a diagram.",
+          "usedTypes": []
+        },
+        "diagrams.invalidateAllLayouts": {
+          "signature": "diagrams.invalidateAllLayouts(): void",
+          "docstring": "Invalidate all cached layouts.",
+          "usedTypes": []
+        },
         "filters.add": {
           "signature": "filters.add(range: string | CellRange): Promise<void>",
           "docstring": "Add an auto-filter to the sheet.\n@param - A1-style range string (e.g. \"A1:D100\") or a CellRange object",
@@ -2106,7 +2292,9 @@
         "filters.get": {
           "signature": "filters.get(): Promise<FilterState | null>",
           "docstring": "Get the current auto-filter state.\n@returns The filter state, or null if no auto-filter is set",
-          "usedTypes": ["FilterState"]
+          "usedTypes": [
+            "FilterState"
+          ]
         },
         "filters.clear": {
           "signature": "filters.clear(): Promise<void>",
@@ -2126,7 +2314,9 @@
         "filters.getAutoFilter": {
           "signature": "filters.getAutoFilter(): Promise<FilterState | null>",
           "docstring": "@deprecated Use {@link get} instead.\nGet the current auto-filter state.\n@returns The filter state, or null if no auto-filter is set",
-          "usedTypes": ["FilterState"]
+          "usedTypes": [
+            "FilterState"
+          ]
         },
         "filters.getForRange": {
           "signature": "filters.getForRange(range: string): Promise<{ id: string; filterKind: \"autoFilter\" | \"tableFilter\" | \"advancedFilter\"; } | null>",
@@ -2156,6 +2346,11 @@
         "filters.getUniqueValues": {
           "signature": "filters.getUniqueValues(col: number, filterId?: string | undefined): Promise<any[]>",
           "docstring": "Get unique values in a column (for filter dropdowns).\n\nWhen `filterId` is omitted, uses the first auto-filter.\n@param - Column index (0-based)\n@param - Optional filter ID; defaults to first auto-filter\n@returns Array of unique values",
+          "usedTypes": []
+        },
+        "filters.getFilterDropdownData": {
+          "signature": "filters.getFilterDropdownData(col: number, filterId?: string | undefined): Promise<FilterDropdownData>",
+          "docstring": "Get complete value-list dropdown data for a filter column.\n\nReturns nonblank items plus first-class blank metadata from the same\ntable/filter engine path used to apply value filters.\n@param - Column index (0-based, absolute)\n@param - Optional filter ID; defaults to first auto-filter",
           "usedTypes": []
         },
         "filters.setCriteria": {
@@ -2271,17 +2466,23 @@
         "formats.set": {
           "signature": "formats.set(address: string, format: CellFormat): Promise<FormatChangeResult>",
           "docstring": "Set format for a single cell.\n@param - A1-style cell address (e.g. \"A1\", \"B3\")\n@param - Format properties to apply\n@example // Bold red currency\nawait ws.formats.set('A1', { bold: true, fontColor: '#ff0000', numberFormat: '$#,##0.00' });\n// Date format\nawait ws.formats.set('B1', { numberFormat: 'YYYY-MM-DD' });\n// Header style\nawait ws.formats.set('A1', { bold: true, fontSize: 14, backgroundColor: '#4472c4', fontColor: '#ffffff' });",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setRange": {
           "signature": "formats.setRange(range: string, format: CellFormat): Promise<FormatChangeResult>",
           "docstring": "Set format for a contiguous range.\n@param - A1-style range string (e.g. \"A1:B2\")\n@param - Format properties to apply\n@example // Currency column\nawait ws.formats.setRange('B2:B100', { numberFormat: '$#,##0.00' });\n// Header row with borders\nawait ws.formats.setRange('A1:F1', {\n  bold: true,\n  backgroundColor: '#4472c4',\n  fontColor: '#ffffff',\n  borders: { bottom: { style: 'medium', color: '#2f5496' } }\n});",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setRanges": {
           "signature": "formats.setRanges(ranges: CellRange[], format: CellFormat): Promise<void>",
           "docstring": "Set format for multiple ranges, with full row/column optimization.\n@param - Array of range objects\n@param - Format properties to apply",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.hasExplicit": {
           "signature": "formats.hasExplicit(address: string): Promise<boolean>",
@@ -2316,12 +2517,16 @@
         "formats.getDisplayedCellProperties": {
           "signature": "formats.getDisplayedCellProperties(address: string): Promise<CellFormat>",
           "docstring": "Get the fully-resolved displayed format of a single cell.\n\nIncludes the full 6-layer cascade (default → col → row → table → cell → CF)\nwith theme colors resolved to hex. Unlike `get()`, this includes the\nconditional formatting overlay.\n@param - A1-style cell address\n@returns The displayed cell format with CF applied",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.getDisplayedRangeProperties": {
           "signature": "formats.getDisplayedRangeProperties(range: string | CellRange): Promise<CellFormat[][]>",
           "docstring": "Get displayed formats for a rectangular range.\n\nEach element includes the full 6-layer cascade with CF overlay.\nMaximum 10,000 cells per call.\n@param - A1-style range string (e.g. \"A1:C3\")\n@returns 2D array of displayed cell formats",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.adjustIndent": {
           "signature": "formats.adjustIndent(address: string, amount: number): Promise<void>",
@@ -2341,7 +2546,9 @@
         "formats.getNumberFormatCategory": {
           "signature": "formats.getNumberFormatCategory(address: string): Promise<NumberFormatType>",
           "docstring": "Get the auto-derived number format category for a cell based on its format code.\n@param - A1-style cell address\n@returns The detected NumberFormatType category",
-          "usedTypes": ["NumberFormatType"]
+          "usedTypes": [
+            "NumberFormatType"
+          ]
         },
         "formats.getNumberFormatLocal": {
           "signature": "formats.getNumberFormatLocal(address: string): Promise<string>",
@@ -2356,12 +2563,16 @@
         "formats.applyPattern": {
           "signature": "formats.applyPattern(format: CellFormat, sourceRange: CellRange | null, targetRange: CellRange): Promise<void>",
           "docstring": "Apply a format pattern from a source range to a target range.\n\nWhen the target range is larger than the source range, the source format\npattern is tiled to fill the target (like Excel's Format Painter with\nmulti-cell sources).\n@param - The base format to apply (used when sourceRange is null or single-cell)\n@param - Source range for pattern replication, or null for simple application\n@param - Target range to apply formats to",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.getCellProperties": {
           "signature": "formats.getCellProperties(range: string): Promise<(CellFormat | null)[][]>",
           "docstring": "Get effective (resolved) cell formats for a rectangular range.\n\nReturns a 2D array (row-major) where each element is the fully resolved\nformat from the 5-layer cascade (default -> col -> row -> table -> cell).\nCells with no explicit format may return null.\n@param - A1-style range string (e.g. \"A1:C3\")\n@returns 2D array of CellFormat (or null for cells with default format)",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setCellProperties": {
           "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormat>; }[]): Promise<void>",
@@ -2371,7 +2582,9 @@
         "formats.getRowProperties": {
           "signature": "formats.getRowProperties(rows: number[]): Promise<Map<number, CellFormat>>",
           "docstring": "Get row-level formats for the specified rows.\n\nReturns a Map from row index to CellFormat (only rows with explicit\nformats are included; rows with no format are omitted).\n@param - Row indices (0-based)\n@returns Map of row index to CellFormat",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setRowProperties": {
           "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
@@ -2381,7 +2594,9 @@
         "formats.getColumnProperties": {
           "signature": "formats.getColumnProperties(cols: number[]): Promise<Map<number, CellFormat>>",
           "docstring": "Get column-level formats for the specified columns.\n\nReturns a Map from column index to CellFormat (only columns with\nexplicit formats are included).\n@param - Column indices (0-based)\n@returns Map of column index to CellFormat",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setColumnProperties": {
           "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
@@ -2571,7 +2786,9 @@
         "names.add": {
           "signature": "names.add(name: string, reference: string, comment?: string | undefined): Promise<NamedRangeInfo>",
           "docstring": "Add a named range scoped to this sheet.\n@param - Name for the range\n@param - Cell reference (e.g., \"A1:B10\" or \"=Sheet1!A1:B10\")\n@param - Optional comment\n@returns The created named range info",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.has": {
           "signature": "names.has(name: string): Promise<boolean>",
@@ -2586,7 +2803,9 @@
         "names.get": {
           "signature": "names.get(name: string): Promise<NamedRangeInfo | null>",
           "docstring": "Get a named range by name, scoped to this sheet.\n@param - Name to look up\n@returns Named range info or null if not found",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.getRange": {
           "signature": "names.getRange(name: string): Promise<NamedRangeReference | null>",
@@ -2611,7 +2830,9 @@
         "names.list": {
           "signature": "names.list(): Promise<NamedRangeInfo[]>",
           "docstring": "List all named ranges scoped to this sheet.\n@returns Array of named range info objects",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "outline.groupRows": {
           "signature": "outline.groupRows(startRow: number, endRow: number): Promise<void>",
@@ -2686,12 +2907,16 @@
         "pivots.add": {
           "signature": "pivots.add(config: PivotCreateConfig): Promise<PivotTableConfig>",
           "docstring": "Create a new pivot table on this worksheet.\n\nAccepts either:\n- **Simple config**: `{ name, dataSource: \"Sheet1!A1:D100\", rowFields: [\"Region\"], ... }`\n  Fields are auto-detected from source headers, placements are generated from field arrays.\n- **Full config**: `{ name, sourceSheetName, sourceRange, fields, placements, filters, ... }`\n  Direct wire format — no conversion needed.\n@param - Pivot table configuration\n@returns The created pivot table configuration (with generated id, timestamps)",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "pivots.addWithSheet": {
           "signature": "pivots.addWithSheet(sheetName: string, config: PivotCreateConfig): Promise<{ sheetId: string; config: PivotTableConfig; }>",
           "docstring": "Atomically create a new sheet AND a pivot table on it.\nBoth operations happen in a single transaction for undo atomicity.\n\nAccepts the same simple or full config formats as `add()`.\n@param - Name for the new sheet\n@param - Pivot table configuration\n@returns The new sheet ID and the created pivot config",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "pivots.remove": {
           "signature": "pivots.remove(name: string): Promise<void>",
@@ -2716,7 +2941,9 @@
         "pivots.get": {
           "signature": "pivots.get(name: string): Promise<PivotTableHandle | null>",
           "docstring": "Get a pivot table handle by name.\n@param - Pivot table name\n@returns A handle for the pivot table, or null if not found",
-          "usedTypes": ["PivotTableHandle"]
+          "usedTypes": [
+            "PivotTableHandle"
+          ]
         },
         "pivots.getInfo": {
           "signature": "pivots.getInfo(name: string): Promise<PivotTableInfo | null>",
@@ -3121,7 +3348,9 @@
         "protection.protectWithOptions": {
           "signature": "protection.protectWithOptions(password?: string | undefined, options?: ProtectionOptions | undefined): Promise<void>",
           "docstring": "Protect the sheet with an optional password and granular permission options.\n@param - Optional password to require for unprotection\n@param - Granular permissions (e.g., allowSort, allowFormatCells)",
-          "usedTypes": ["ProtectionOptions"]
+          "usedTypes": [
+            "ProtectionOptions"
+          ]
         },
         "protection.unprotect": {
           "signature": "protection.unprotect(password?: string | undefined): Promise<boolean>",
@@ -3151,7 +3380,9 @@
         "protection.getConfig": {
           "signature": "protection.getConfig(): Promise<ProtectionConfig>",
           "docstring": "Get the full protection configuration for the sheet.\n@returns Protection configuration including status and permission flags",
-          "usedTypes": ["ProtectionConfig"]
+          "usedTypes": [
+            "ProtectionConfig"
+          ]
         },
         "protection.getSelectionMode": {
           "signature": "protection.getSelectionMode(): Promise<\"none\" | \"normal\" | \"unlockedOnly\">",
@@ -3216,7 +3447,9 @@
         "slicers.add": {
           "signature": "slicers.add(config: SlicerConfig): Promise<Slicer>",
           "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration (table, column, position)\n@returns The created slicer with full state",
-          "usedTypes": ["SlicerConfig"]
+          "usedTypes": [
+            "SlicerConfig"
+          ]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<void>",
@@ -3231,7 +3464,9 @@
         "slicers.list": {
           "signature": "slicers.list(): Promise<SlicerInfo[]>",
           "docstring": "List all slicers on this worksheet.\n@returns Array of slicer summary information",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.has": {
           "signature": "slicers.has(slicerId: string): Promise<boolean>",
@@ -3256,22 +3491,30 @@
         "slicers.getItemAt": {
           "signature": "slicers.getItemAt(index: number): Promise<SlicerInfo | null>",
           "docstring": "Get a slicer by its zero-based index in the list.\n@param - Zero-based index of the slicer\n@returns Slicer summary information, or null if index is out of range",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
           "docstring": "Get the items (values) available in a slicer.\n@param - ID of the slicer\n@returns Array of slicer items with selection state",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
           "docstring": "Get a slicer item by its string key.\nThrows if no item matches — use when you expect the item to exist.\nFor conditional checks, use {@link getItemOrNullObject} which returns null instead.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
           "docstring": "Get a slicer item by its string key, or null if not found.\nNon-throwing alternative to {@link getItem} — use for conditional checks.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.setSelection": {
           "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>",
@@ -3296,112 +3539,9 @@
         "slicers.getState": {
           "signature": "slicers.getState(slicerId: string): Promise<SlicerState>",
           "docstring": "Get the enriched runtime state of a slicer.\n@param - ID of the slicer\n@returns Enriched slicer state including computed items and connection status",
-          "usedTypes": ["SlicerState"]
-        },
-        "smartArt.add": {
-          "signature": "smartArt.add(config: SmartArtConfig): Promise<SmartArtObject>",
-          "docstring": "Add a diagram to the sheet. Returns the created floating object.",
-          "usedTypes": ["SmartArtConfig"]
-        },
-        "smartArt.get": {
-          "signature": "smartArt.get(objectId: string): Promise<SmartArtDiagram | null>",
-          "docstring": "Get a diagram by object ID, or null if not found.",
-          "usedTypes": []
-        },
-        "smartArt.has": {
-          "signature": "smartArt.has(objectId: string): Promise<boolean>",
-          "docstring": "Check if a diagram exists by object ID.",
-          "usedTypes": []
-        },
-        "smartArt.getCount": {
-          "signature": "smartArt.getCount(): Promise<number>",
-          "docstring": "Get the total number of diagrams on this sheet.",
-          "usedTypes": []
-        },
-        "smartArt.remove": {
-          "signature": "smartArt.remove(objectId: string): Promise<void>",
-          "docstring": "Remove a diagram by object ID.",
-          "usedTypes": []
-        },
-        "smartArt.list": {
-          "signature": "smartArt.list(): Promise<SmartArtDiagram[]>",
-          "docstring": "List all diagrams on the sheet.",
-          "usedTypes": []
-        },
-        "smartArt.clear": {
-          "signature": "smartArt.clear(): Promise<void>",
-          "docstring": "Remove all diagrams from the sheet.",
-          "usedTypes": []
-        },
-        "smartArt.duplicate": {
-          "signature": "smartArt.duplicate(objectId: string): Promise<string>",
-          "docstring": "Duplicate a diagram. Returns the new object ID.",
-          "usedTypes": []
-        },
-        "smartArt.addNode": {
-          "signature": "smartArt.addNode(objectId: string, text: string, position: NodePosition, referenceNodeId: NodeId | null): Promise<NodeId>",
-          "docstring": "Add a node to a diagram. Returns the new node ID.",
-          "usedTypes": []
-        },
-        "smartArt.removeNode": {
-          "signature": "smartArt.removeNode(objectId: string, nodeId: NodeId): Promise<void>",
-          "docstring": "Remove a node from a diagram.",
-          "usedTypes": []
-        },
-        "smartArt.updateNode": {
-          "signature": "smartArt.updateNode(objectId: string, nodeId: NodeId, updates: Partial<SmartArtNode>): Promise<void>",
-          "docstring": "Update a node's properties.",
-          "usedTypes": []
-        },
-        "smartArt.moveNode": {
-          "signature": "smartArt.moveNode(objectId: string, nodeId: NodeId, direction: NodeMoveDirection): Promise<void>",
-          "docstring": "Move a node in the hierarchy.",
-          "usedTypes": []
-        },
-        "smartArt.getNode": {
-          "signature": "smartArt.getNode(objectId: string, nodeId: NodeId): Promise<SmartArtNode | undefined>",
-          "docstring": "Get a node by ID.",
-          "usedTypes": []
-        },
-        "smartArt.getDiagram": {
-          "signature": "smartArt.getDiagram(objectId: string): Promise<SmartArtDiagram | null>",
-          "docstring": "@deprecated Use `get(objectId)` instead. Will be removed in a future release.",
-          "usedTypes": []
-        },
-        "smartArt.getDiagramsOnSheet": {
-          "signature": "smartArt.getDiagramsOnSheet(): Promise<SmartArtDiagram[]>",
-          "docstring": "@deprecated Use `list()` instead. Will be removed in a future release.",
-          "usedTypes": []
-        },
-        "smartArt.changeLayout": {
-          "signature": "smartArt.changeLayout(objectId: string, newLayoutId: string): Promise<void>",
-          "docstring": "Change the diagram layout.",
-          "usedTypes": []
-        },
-        "smartArt.changeQuickStyle": {
-          "signature": "smartArt.changeQuickStyle(objectId: string, quickStyleId: string): Promise<void>",
-          "docstring": "Change the quick style.",
-          "usedTypes": []
-        },
-        "smartArt.changeColorTheme": {
-          "signature": "smartArt.changeColorTheme(objectId: string, colorThemeId: string): Promise<void>",
-          "docstring": "Change the color theme.",
-          "usedTypes": []
-        },
-        "smartArt.getComputedLayout": {
-          "signature": "smartArt.getComputedLayout(objectId: string): Promise<ComputedLayout | undefined>",
-          "docstring": "Get the computed layout for a diagram. Returns cached result if valid.",
-          "usedTypes": []
-        },
-        "smartArt.invalidateLayout": {
-          "signature": "smartArt.invalidateLayout(objectId: string): void",
-          "docstring": "Invalidate the cached layout for a diagram.",
-          "usedTypes": []
-        },
-        "smartArt.invalidateAllLayouts": {
-          "signature": "smartArt.invalidateAllLayouts(): void",
-          "docstring": "Invalidate all cached layouts.",
-          "usedTypes": []
+          "usedTypes": [
+            "SlicerState"
+          ]
         },
         "sparklines.add": {
           "signature": "sparklines.add(cell: string, dataRange: string | CellRange, type: SparklineType, options?: CreateSparklineOptions | undefined): Promise<Sparkline>",
@@ -3546,12 +3686,16 @@
         "structure.textToColumns": {
           "signature": "structure.textToColumns(range: string | CellRange, options: TextToColumnsOptions): Promise<TextToColumnsResult>",
           "docstring": "Split text in a column into multiple columns.",
-          "usedTypes": ["TextToColumnsOptions"]
+          "usedTypes": [
+            "TextToColumnsOptions"
+          ]
         },
         "structure.removeDuplicates": {
           "signature": "structure.removeDuplicates(range: string | CellRange, columns: number[], hasHeaders?: boolean | undefined): Promise<RemoveDuplicatesResult>",
           "docstring": "Remove duplicate rows in a range.",
-          "usedTypes": ["RemoveDuplicatesResult"]
+          "usedTypes": [
+            "RemoveDuplicatesResult"
+          ]
         },
         "structure.merge": {
           "signature": "structure.merge(range: string): Promise<MergeReceipt>",
@@ -3566,7 +3710,9 @@
         "structure.getMergedRegions": {
           "signature": "structure.getMergedRegions(): Promise<MergedRegion[]>",
           "docstring": "Get all merged regions in the sheet.",
-          "usedTypes": ["MergedRegion"]
+          "usedTypes": [
+            "MergedRegion"
+          ]
         },
         "structure.getMergeAtCell": {
           "signature": "structure.getMergeAtCell(address: string): Promise<CellRange | null>",
@@ -3576,12 +3722,17 @@
         "tables.add": {
           "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableInfo>",
           "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style)\n@returns The created table information",
-          "usedTypes": ["TableInfo", "TableOptions"]
+          "usedTypes": [
+            "TableInfo",
+            "TableOptions"
+          ]
         },
         "tables.get": {
           "signature": "tables.get(name: string): Promise<TableInfo | null>",
           "docstring": "Get a table by name.\n\nTables are workbook-scoped, so the name is unique across all sheets.\n@param - Table name\n@returns Table information, or null if not found",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.has": {
           "signature": "tables.has(name: string): Promise<boolean>",
@@ -3591,7 +3742,9 @@
         "tables.list": {
           "signature": "tables.list(): Promise<TableInfo[]>",
           "docstring": "List all tables in this worksheet.\n@returns Array of table information objects",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getCount": {
           "signature": "tables.getCount(): Promise<number>",
@@ -3601,12 +3754,16 @@
         "tables.getItemAt": {
           "signature": "tables.getItemAt(index: number): Promise<TableInfo | null>",
           "docstring": "Get a table by its position in the list of tables on this worksheet.\n@param - Zero-based index into the table list\n@returns Table information, or null if the index is out of range",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getFirst": {
           "signature": "tables.getFirst(): Promise<TableInfo | null>",
           "docstring": "Get the first table on this worksheet.\n\nConvenience shortcut equivalent to `getAt(0)`.\n@returns Table information, or null if no tables exist",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getColumnByName": {
           "signature": "tables.getColumnByName(tableName: string, columnName: string): Promise<TableColumn | null>",
@@ -3616,6 +3773,11 @@
         "tables.remove": {
           "signature": "tables.remove(name: string): Promise<void>",
           "docstring": "Remove a table definition, converting it back to a plain range.\n\nCell data is preserved; only the table metadata is removed.\n@param - Table name",
+          "usedTypes": []
+        },
+        "tables.convertToRange": {
+          "signature": "tables.convertToRange(name: string): Promise<number>",
+          "docstring": "Convert a table to a plain range using the table conversion path.\n\nCell data and formatting are preserved, and structured references that\npoint at the converted table are rewritten to A1 references where the\ncompute engine can resolve them.\n@param - Table name\n@returns Number of structured references converted",
           "usedTypes": []
         },
         "tables.clear": {
@@ -3636,7 +3798,9 @@
         "tables.getAtCell": {
           "signature": "tables.getAtCell(address: string): Promise<TableInfo | null>",
           "docstring": "Get the table at a specific cell position, if one exists.\n@param - A1-style cell address (e.g. \"B3\")\n@returns Table information, or null if no table exists at that cell",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.clearFilters": {
           "signature": "tables.clearFilters(tableName: string): Promise<void>",
@@ -3816,7 +3980,9 @@
         "tables.getAutoFilter": {
           "signature": "tables.getAutoFilter(tableName: string): Promise<FilterInfo | null>",
           "docstring": "Get the auto-filter associated with a table.\n@param - Table name\n@returns Filter information, or null if the table has no associated filter",
-          "usedTypes": ["FilterInfo"]
+          "usedTypes": [
+            "FilterInfo"
+          ]
         },
         "tables.getRows": {
           "signature": "tables.getRows(tableName: string): Promise<TableRowCollection>",
@@ -3826,7 +3992,9 @@
         "validation.set": {
           "signature": "validation.set(address: string, rule: ValidationRule): Promise<ValidationSetReceipt>",
           "docstring": "Set a validation rule on a cell or range.\n@param - A1-style cell or range address (e.g. \"A1\", \"A1:B5\")\n@param - Validation rule to apply",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.remove": {
           "signature": "validation.remove(address: string): Promise<void>",
@@ -3836,12 +4004,16 @@
         "validation.get": {
           "signature": "validation.get(address: string): Promise<ValidationRule | null>",
           "docstring": "Get the validation rule for a cell.\n@param - A1-style cell address\n@returns The validation rule, or null if none",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.peek": {
           "signature": "validation.peek(address: string): ValidationRule | null | undefined",
           "docstring": "Synchronously read a validation rule when this sheet's validation cache is\nalready hydrated.\n\nReturns `undefined` when the sheet cache is cold, `null` when it is warm and\nno rule covers the cell, or the covering rule when one exists.",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.has": {
           "signature": "validation.has(address: string): Promise<boolean>",
@@ -3858,10 +4030,17 @@
           "docstring": "Get dropdown items for a cell with list validation.\n@param - A1-style cell address\n@returns Array of dropdown item strings",
           "usedTypes": []
         },
+        "validation.getDropdownItemsWithRevision": {
+          "signature": "validation.getDropdownItemsWithRevision(address: string): Promise<DropdownItemsWithRevision>",
+          "docstring": "Get dropdown items with a revision token for the source data used to\nproduce them. The token changes when the resolved item set changes.",
+          "usedTypes": []
+        },
         "validation.list": {
           "signature": "validation.list(): Promise<ValidationRule[]>",
           "docstring": "List all validation rules on the sheet.\n@returns Array of validation rules",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.clear": {
           "signature": "validation.clear(range?: string | undefined): Promise<void>",
@@ -3941,7 +4120,9 @@
         "view.getViewOptions": {
           "signature": "view.getViewOptions(): Promise<ViewOptions>",
           "docstring": "Get the current view options (gridlines, headings).\n@returns Current view options",
-          "usedTypes": ["ViewOptions"]
+          "usedTypes": [
+            "ViewOptions"
+          ]
         },
         "view.setShowFormulas": {
           "signature": "view.setShowFormulas(show: boolean): Promise<void>",
@@ -3974,8 +4155,8 @@
   "types": {
     "CellFormat": {
       "name": "CellFormat",
-      "definition": "{\n  /** Spreadsheet number format code string.\n\nCommon format codes:\n- Currency:    '$#,##0.00'\n- Accounting:  '_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)'\n- Percentage:  '0.00%'\n- Date:        'M/D/YYYY', 'YYYY-MM-DD', 'MMM D, YYYY'\n- Time:        'h:mm AM/PM', 'HH:mm:ss'\n- Number:      '#,##0.00', '0.00'\n- Scientific:  '0.00E+00'\n- Text:        '@'\n- Fraction:    '# ?/?'\n\nSee the `formatPresets` section in api-spec.json for the full catalog\nof 85+ pre-defined format codes with examples.\n@example // Currency\n{ numberFormat: '$#,##0.00' }\n// Percentage with 1 decimal\n{ numberFormat: '0.0%' }\n// ISO date\n{ numberFormat: 'YYYY-MM-DD' } */\n  numberFormat?: string | undefined;\n  /** Number format category hint. Auto-detected from numberFormat when not set.\nValid values: 'general' | 'number' | 'currency' | 'accounting' | 'date' |\n             'time' | 'percentage' | 'fraction' | 'scientific' | 'text' |\n             'special' | 'custom' */\n  numberFormatType?: NumberFormatType | undefined;\n  fontFamily?: string | undefined;\n  fontSize?: number | undefined;\n  /** Theme font reference for \"+Headings\" / \"+Body\" workbook theme fonts.\n\nWhen set, the cell uses the theme's majorFont (headings) or minorFont (body)\ninstead of fontFamily. Theme fonts are resolved at render time, allowing cells\nto automatically update when the workbook theme changes.\n\nBehavior:\n- 'major': Uses theme.fonts.majorFont\n- 'minor': Uses theme.fonts.minorFont\n- undefined: Uses fontFamily property (or default font if not set)\n\nWhen fontTheme is set, fontFamily is ignored for rendering but may still be\nstored for fallback purposes. This matches Excel's behavior where \"+Headings\"\ncells can have a fontFamily that's used when the theme is unavailable.\n@see in theme.ts for resolution\n@see for theme font pair definition */\n  fontTheme?: \"major\" | \"minor\" | undefined;\n  /** Font color. Can be:\n- Absolute hex: '#4472c4' or '#ff0000'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  fontColor?: string | undefined;\n  /** Font color tint modifier (-1.0 to +1.0). Applied on top of fontColor. */\n  fontColorTint?: number | undefined;\n  bold?: boolean | undefined;\n  italic?: boolean | undefined;\n  /** Underline type. Excel supports 4 underline styles:\n- 'none': No underline (default)\n- 'single': Standard underline under all characters\n- 'double': Two parallel lines under all characters\n- 'singleAccounting': Underline under text only (not spaces), for column alignment\n- 'doubleAccounting': Double underline under text only (not spaces), for column alignment */\n  underlineType?: \"none\" | \"single\" | \"double\" | \"singleAccounting\" | \"doubleAccounting\" | undefined;\n  strikethrough?: boolean | undefined;\n  /** Superscript text (vertAlign = 'superscript' in Excel).\nText is rendered smaller and raised above the baseline. */\n  superscript?: boolean | undefined;\n  /** Subscript text (vertAlign = 'subscript' in Excel).\nText is rendered smaller and lowered below the baseline. */\n  subscript?: boolean | undefined;\n  /** Font outline effect.\nDraws only the outline of each character (hollow text).\nRare in modern spreadsheets but supported by Excel. */\n  fontOutline?: boolean | undefined;\n  /** Font shadow effect.\nAdds a shadow behind the text.\nRare in modern spreadsheets but supported by Excel. */\n  fontShadow?: boolean | undefined;\n  /** Horizontal text alignment.\n- 'general': Context-based (left for text, right for numbers) - Excel default\n- 'left': Left-align text\n- 'center': Center text\n- 'right': Right-align text\n- 'fill': Repeat content to fill cell width\n- 'justify': Justify text (distribute evenly)\n- 'centerContinuous': Center across selection without merging\n- 'distributed': Distribute text evenly with indent support */\n  horizontalAlign?: \"left\" | \"right\" | \"general\" | \"center\" | \"fill\" | \"justify\" | \"centerContinuous\" | \"distributed\" | undefined;\n  /** Vertical text alignment. The TypeScript/API contract uses `middle`\nfor centered vertical alignment.\n- 'top': Align to top of cell\n- 'middle': Center vertically\n- 'bottom': Align to bottom of cell - Excel default\n- 'justify': Justify vertically (distribute lines evenly)\n- 'distributed': Distribute text evenly with vertical spacing */\n  verticalAlign?: \"bottom\" | \"justify\" | \"distributed\" | \"top\" | \"middle\" | undefined;\n  wrapText?: boolean | undefined;\n  /** Text rotation angle in degrees.\n- 0-90: Counter-clockwise rotation\n- 91-180: Clockwise rotation (180 - value)\n- 255: Vertical text (stacked characters, read top-to-bottom) */\n  textRotation?: number | undefined;\n  /** Indent level (0-15).\nEach level adds approximately 8 pixels of indent from the cell edge.\nWorks with left and right horizontal alignment. */\n  indent?: number | undefined;\n  /** Shrink text to fit cell width.\nReduces font size to fit all text within the cell width.\nMutually exclusive with wrapText in Excel behavior. */\n  shrinkToFit?: boolean | undefined;\n  /** Text reading order for bidirectional text support.\n- 'context': Determined by first character with strong directionality\n- 'ltr': Left-to-right (forced)\n- 'rtl': Right-to-left (forced) */\n  readingOrder?: \"context\" | \"ltr\" | \"rtl\" | undefined;\n  /** Auto-indent flag (ECMA-376 CT_CellAlignment/@autoIndent). */\n  autoIndent?: boolean | undefined;\n  /** Background color. Can be:\n- Absolute hex: '#ffffff' or '#c6efce'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n\nFor solid fills, this is the only color needed.\nFor pattern fills, this is the background color behind the pattern.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  backgroundColor?: string | undefined;\n  /** Background color tint modifier (-1.0 to +1.0). Applied on top of backgroundColor. */\n  backgroundColorTint?: number | undefined;\n  /** Pattern fill type.\nXLSX supports 18 pattern types for cell backgrounds.\nWhen set (and not 'none' or 'solid'), the cell uses a pattern fill. */\n  patternType?: PatternType | undefined;\n  /** Pattern foreground color.\nThe color of the pattern itself (dots, lines, etc.).\nOnly used when patternType is set to a non-solid pattern. */\n  patternForegroundColor?: string | undefined;\n  /** Pattern foreground color tint modifier (-1.0 to +1.0). */\n  patternForegroundColorTint?: number | undefined;\n  /** Gradient fill configuration.\nWhen set, overrides backgroundColor and pattern fill.\nExcel supports linear and path (radial) gradients. */\n  gradientFill?: GradientFill | undefined;\n  /** Cell borders (top, right, bottom, left, diagonal) */\n  borders?: CellBorders | undefined;\n  /** Cell is locked when sheet protection is enabled.\nDefault is true in Excel (all cells locked by default).\nOnly effective when the sheet's isProtected flag is true. */\n  locked?: boolean | undefined;\n  /** Formula is hidden when sheet protection is enabled.\nWhen true, the cell's formula is not shown in the formula bar.\nThe computed value is still displayed in the cell.\nOnly effective when the sheet's isProtected flag is true. */\n  hidden?: boolean | undefined;\n  /** Cell value is forced to text mode (apostrophe prefix).\nWhen true:\n- Raw value includes the leading apostrophe\n- Display value strips the apostrophe\n- Formula bar shows the apostrophe\n- Value is NOT coerced to date/number/etc.\n\nSet when user types ' as first character.\nFollows cell on sort/move (keyed by CellId, Cell Identity Model).\n@see /active/spreadsheet-compatibility/08-EDITING.md - Item 8.1 */\n  forcedTextMode?: boolean | undefined;\n  /** Arbitrary extension data for future features.\nUse namespaced keys: \"myfeature.mykey\"\nExample: { ignoreError: true } to suppress error indicators. */\n  extensions?: Record<string, unknown> | undefined;\n}",
-      "docstring": "Cell formatting options\n\nThis interface defines ALL Excel format properties that can be applied to cells.\nThe implementation status of each property is tracked in format-registry.ts.\n@see in format-registry.ts for implementation status"
+      "definition": "{\n  /** Spreadsheet number format code string.\n\nCommon format codes:\n- Currency:    '$#,##0.00'\n- Accounting:  '_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)'\n- Percentage:  '0.00%'\n- Date:        'M/D/YYYY', 'YYYY-MM-DD', 'MMM D, YYYY'\n- Time:        'h:mm AM/PM', 'HH:mm:ss'\n- Number:      '#,##0.00', '0.00'\n- Scientific:  '0.00E+00'\n- Text:        '@'\n- Fraction:    '# ?/?'\n\nSee the `formatPresets` section in api-spec.json for the full catalog\nof 85+ pre-defined format codes with examples.\n@example // Currency\n{ numberFormat: '$#,##0.00' }\n// Percentage with 1 decimal\n{ numberFormat: '0.0%' }\n// ISO date\n{ numberFormat: 'YYYY-MM-DD' } */\n  numberFormat?: string | undefined;\n  /** Number format category hint. Auto-detected from numberFormat when not set.\nValid values: 'general' | 'number' | 'currency' | 'accounting' | 'date' |\n             'time' | 'percentage' | 'fraction' | 'scientific' | 'text' |\n             'special' | 'custom' */\n  numberFormatType?: NumberFormatType | undefined;\n  fontFamily?: string | undefined;\n  fontSize?: number | undefined;\n  /** Theme font reference for \"+Headings\" / \"+Body\" workbook theme fonts.\n\nWhen set, the cell uses the theme's majorFont (headings) or minorFont (body)\ninstead of fontFamily. Theme fonts are resolved at render time, allowing cells\nto automatically update when the workbook theme changes.\n\nBehavior:\n- 'major': Uses theme.fonts.majorFont\n- 'minor': Uses theme.fonts.minorFont\n- undefined: Uses fontFamily property (or default font if not set)\n\nWhen fontTheme is set, fontFamily is ignored for rendering but may still be\nstored for fallback purposes. This matches Excel's behavior where \"+Headings\"\ncells can have a fontFamily that's used when the theme is unavailable.\n@see in theme.ts for resolution\n@see for theme font pair definition */\n  fontTheme?: \"major\" | \"minor\" | undefined;\n  /** Font color. Can be:\n- Absolute hex: '#4472c4' or '#ff0000'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  fontColor?: string | undefined;\n  /** Font color tint modifier (-1.0 to +1.0). Applied on top of fontColor. */\n  fontColorTint?: number | undefined;\n  bold?: boolean | undefined;\n  italic?: boolean | undefined;\n  /** Underline type. Excel supports 4 underline styles:\n- 'none': No underline (default)\n- 'single': Standard underline under all characters\n- 'double': Two parallel lines under all characters\n- 'singleAccounting': Underline under text only (not spaces), for column alignment\n- 'doubleAccounting': Double underline under text only (not spaces), for column alignment */\n  underlineType?: \"none\" | \"single\" | \"double\" | \"singleAccounting\" | \"doubleAccounting\" | undefined;\n  strikethrough?: boolean | undefined;\n  /** Superscript text (vertAlign = 'superscript' in Excel).\nText is rendered smaller and raised above the baseline. */\n  superscript?: boolean | undefined;\n  /** Subscript text (vertAlign = 'subscript' in Excel).\nText is rendered smaller and lowered below the baseline. */\n  subscript?: boolean | undefined;\n  /** Font outline effect.\nDraws only the outline of each character (hollow text).\nRare in modern spreadsheets but supported by Excel. */\n  fontOutline?: boolean | undefined;\n  /** Font shadow effect.\nAdds a shadow behind the text.\nRare in modern spreadsheets but supported by Excel. */\n  fontShadow?: boolean | undefined;\n  /** Horizontal text alignment.\n- 'general': Context-based (left for text, right for numbers) - Excel default\n- 'left': Left-align text\n- 'center': Center text\n- 'right': Right-align text\n- 'fill': Repeat content to fill cell width\n- 'justify': Justify text (distribute evenly)\n- 'centerContinuous': Center across selection without merging\n- 'distributed': Distribute text evenly with indent support */\n  horizontalAlign?: \"left\" | \"right\" | \"general\" | \"center\" | \"fill\" | \"justify\" | \"centerContinuous\" | \"distributed\" | undefined;\n  /** Vertical text alignment. The TypeScript/API contract uses `middle`\nfor centered vertical alignment.\n- 'top': Align to top of cell\n- 'middle': Center vertically\n- 'bottom': Align to bottom of cell - Excel default\n- 'justify': Justify vertically (distribute lines evenly)\n- 'distributed': Distribute text evenly with vertical spacing */\n  verticalAlign?: \"bottom\" | \"justify\" | \"distributed\" | \"top\" | \"middle\" | undefined;\n  wrapText?: boolean | undefined;\n  /** Text rotation angle in degrees.\n- 0-90: Counter-clockwise rotation\n- 91-180: Clockwise rotation (180 - value)\n- 255: Vertical text (stacked characters, read top-to-bottom) */\n  textRotation?: number | undefined;\n  /** Indent level (0-15).\nEach level adds approximately 8 pixels of indent from the cell edge.\nWorks with left and right horizontal alignment. */\n  indent?: number | undefined;\n  /** Shrink text to fit cell width.\nReduces font size to fit all text within the cell width.\nMutually exclusive with wrapText in Excel behavior. */\n  shrinkToFit?: boolean | undefined;\n  /** Text reading order for bidirectional text support.\n- 'context': Determined by first character with strong directionality\n- 'ltr': Left-to-right (forced)\n- 'rtl': Right-to-left (forced) */\n  readingOrder?: \"context\" | \"ltr\" | \"rtl\" | undefined;\n  /** Auto-indent flag (ECMA-376 CT_CellAlignment/@autoIndent). */\n  autoIndent?: boolean | undefined;\n  /** Background color. Can be:\n- Absolute hex: '#ffffff' or '#c6efce'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n\nFor solid fills, this is the only color needed.\nFor pattern fills, this is the background color behind the pattern.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  backgroundColor?: string | undefined;\n  /** Background color tint modifier (-1.0 to +1.0). Applied on top of backgroundColor. */\n  backgroundColorTint?: number | undefined;\n  /** Pattern fill type.\nXLSX supports 18 pattern types for cell backgrounds.\nWhen set (and not 'none' or 'solid'), the cell uses a pattern fill. */\n  patternType?: PatternType | undefined;\n  /** Pattern foreground color.\nThe color of the pattern itself (dots, lines, etc.).\nOnly used when patternType is set to a non-solid pattern. */\n  patternForegroundColor?: string | undefined;\n  /** Pattern foreground color tint modifier (-1.0 to +1.0). */\n  patternForegroundColorTint?: number | undefined;\n  /** Gradient fill configuration.\nWhen set, overrides backgroundColor and pattern fill.\nExcel supports linear and path (radial) gradients. */\n  gradientFill?: GradientFill | undefined;\n  /** Cell borders (top, right, bottom, left, diagonal) */\n  borders?: CellBorders | undefined;\n  /** Cell is locked when sheet protection is enabled.\nDefault is true in Excel (all cells locked by default).\nOnly effective when the sheet's isProtected flag is true. */\n  locked?: boolean | undefined;\n  /** Formula is hidden when sheet protection is enabled.\nWhen true, the cell's formula is not shown in the formula bar.\nThe computed value is still displayed in the cell.\nOnly effective when the sheet's isProtected flag is true. */\n  hidden?: boolean | undefined;\n  /** Cell value is forced to text mode (apostrophe prefix).\nWhen true:\n- Raw value includes the leading apostrophe\n- Display value strips the apostrophe\n- Formula bar shows the apostrophe\n- Value is NOT coerced to date/number/etc.\n\nSet when user types ' as first character.\nFollows cell on sort/move (keyed by CellId, Cell Identity Model). */\n  forcedTextMode?: boolean | undefined;\n  /** Arbitrary extension data for future features.\nUse namespaced keys: \"myfeature.mykey\"\nExample: { ignoreError: true } to suppress error indicators. */\n  extensions?: Record<string, unknown> | undefined;\n}",
+      "docstring": "Cell formatting options\n\nThis interface defines the Excel/OOXML format properties that can be applied to cells.\nThe implementation status of each property is tracked in format-registry.ts.\n@see in format-registry.ts for implementation status"
     },
     "CellBorders": {
       "name": "CellBorders",
@@ -4034,7 +4215,7 @@
     },
     "SortColumn": {
       "name": "SortColumn",
-      "definition": "{\n  /** Column index (0-based, relative to the sort range) */\n  column: number;\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n} & (\n  | {\n      /** What to sort by (default: 'value' if omitted) */\n      sortBy?: 'value';\n      /**\n       * Optional Excel custom-list sort: values present in the list\n       * sort by their list position; values not in the list sort\n       * *after* list members (spreadsheet compatibility).\n       */\n      customList?: CellValue[];\n    }\n  | {\n      sortBy: 'cellColor' | 'fontColor';\n      /** Hex color to match (e.g. '#FFFF00'). */\n      targetColor: string;\n      /** Whether matched rows go to top or bottom of the sorted range. */\n      colorPosition: 'top' | 'bottom';\n    }\n)",
+      "definition": "{\n  /** Column index (0-based, relative to the sort range) */\n  column: number;\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n} & (\n  | {\n      /** What to sort by (default: 'value' if omitted) */\n      sortBy?: 'value';\n      /**\n       * Optional Excel custom-list sort: values present in the list\n       * sort by their list position; values not in the list sort\n       * *after* list members (Excel compatibility).\n       */\n      customList?: CellValue[];\n    }\n  | {\n      sortBy: 'cellColor' | 'fontColor';\n      /** Hex color to match (e.g. '#FFFF00'). */\n      targetColor: string;\n      /** Whether matched rows go to top or bottom of the sorted range. */\n      colorPosition: 'top' | 'bottom';\n    }\n)",
       "docstring": "A single column sort specification.\n\nDiscriminated on `sortBy`. The default ('value') accepts an optional\nWorkbook `customList`. Color sorts (`cellColor` / `fontColor`)\nrequire a `targetColor` and `colorPosition` so invalid combinations\ncannot be expressed."
     },
     "MergedRegion": {
@@ -4127,7 +4308,7 @@
     },
     "WorkbookSettings": {
       "name": "WorkbookSettings",
-      "definition": "{\n  /** Whether horizontal scrollbar is visible (default: true) */\n  showHorizontalScrollbar: boolean;\n  /** Whether vertical scrollbar is visible (default: true) */\n  showVerticalScrollbar: boolean;\n  /** Whether scrollbars auto-hide when not scrolling (default: false).\nWhen true, scrollbars fade out after scroll ends and reappear on hover or scroll.\nPlan 09 Group 7.2: Auto-Hide Scroll Bars */\n  autoHideScrollBars: boolean;\n  /** Whether the tab strip is visible (default: true) */\n  showTabStrip: boolean;\n  /** Whether sheets can be reordered by dragging (default: true) */\n  allowSheetReorder: boolean;\n  /** Whether the formula bar is visible (default: true) */\n  showFormulaBar: boolean;\n  /** Whether to auto-fit column width on header double-click (default: true) */\n  autoFitOnDoubleClick: boolean;\n  /** ID of active theme.\nBuilt-in theme IDs: 'office', 'slice', 'vapor-trail', etc.\nUse 'custom' to indicate a custom theme is stored in customTheme.\nIssue 4: Page Layout - Themes */\n  themeId: string;\n  /** Override for theme fonts. When set, uses this font theme instead\nof the fonts from the selected theme.\nBuilt-in font theme IDs: 'office', 'arial', 'times', 'calibri', etc.\nundefined means use fonts from themeId.\n\nPlan 12: Fonts/Typography - Theme Font UI */\n  themeFontsId?: string | undefined;\n  /** Locale/culture for number, date, and currency formatting.\nUses IETF language tags: 'en-US', 'de-DE', 'ja-JP', etc.\nDefault: 'en-US'\n\nThis affects:\n- Decimal and thousands separators (1,234.56 vs 1.234,56)\n- Currency symbol position ($100 vs 100 €)\n- Date format patterns (MM/DD/YYYY vs DD.MM.YYYY)\n- Month and day name translations\n- AM/PM designators\n\nStream G: Culture & Localization */\n  culture: string;\n  /** Whether to show cut/copy indicator (marching ants). Default: true */\n  showCutCopyIndicator: boolean;\n  /** Whether fill handle dragging is enabled. Default: true */\n  allowDragFill: boolean;\n  /** Direction to move after pressing Enter. Default: 'down' */\n  enterKeyDirection: EnterKeyDirection;\n  /** Whether cell drag-and-drop to move cells is enabled. Default: false (not yet implemented) */\n  allowCellDragDrop: boolean;\n  /** Currently selected sheet IDs for multi-sheet operations.\nDefault: undefined (falls back to [activeSheetId])\n\nThis is collaborative state - other users can see which sheets you have selected.\nUsed for operations that broadcast to multiple sheets (formatting, structure changes).\n\nWhen multiple sheets are selected:\n- Formatting operations apply to all selected sheets\n- Structure operations (insert/delete rows/cols) apply to all selected sheets\n- The active sheet is always included in the selection */\n  selectedSheetIds?: SheetId[] | undefined;\n  /** Whether the workbook structure is protected.\nWhen true, prevents adding, deleting, renaming, hiding, unhiding, or moving sheets.\nDefault: false\n\nPlan 08: Dialogs - Task 4 (Protect Workbook Dialog) */\n  isWorkbookProtected?: boolean | undefined;\n  /** Hashed protection password for workbook (optional).\nUses XLSX-compatible XOR hash algorithm for round-trip compatibility.\nEmpty string or undefined means no password protection. */\n  workbookProtectionPasswordHash?: string | undefined;\n  /** Workbook protection options (what operations are prevented).\nOnly relevant when isWorkbookProtected is true.\nIf not set, defaults to DEFAULT_WORKBOOK_PROTECTION_OPTIONS.\n@see in protection.ts */\n  workbookProtectionOptions?: WorkbookProtectionOptions | undefined;\n  /** Calculation settings including iterative calculation for circular references.\nIf not set, defaults to DEFAULT_CALCULATION_SETTINGS.\n@see /active/spreadsheet-compatibility/04-EDITING-BEHAVIORS-PLAN.md - G.3 */\n  calculationSettings?: CalculationSettings | undefined;\n  /** Whether the workbook uses the 1904 date system (affects all date calculations).\nDefault: false (1900 date system). */\n  date1904?: boolean | undefined;\n  /** Default table style ID for new tables created in this workbook.\nCan be a built-in style preset name (e.g., 'medium2', 'dark1')\nor a custom style ID (e.g., 'custom-abc123').\n\nWhen undefined, new tables use the 'medium2' preset by default.\n\nPlan 15: Tables spreadsheet compatibility - P1-8 (Set as default style) */\n  defaultTableStyleId?: string | undefined;\n  /** Whether chart data points track cell movement when cells are inserted/deleted.\nWhen true, chart data series follow their original data points even if\nthe underlying cells shift due to row/column insertion or deletion.\nDefault: true (matches the spreadsheet default).\n\nMirrors the workbook chart data point tracking behavior. */\n  chartDataPointTrack?: boolean | undefined;\n}",
+      "definition": "{\n  /** Whether horizontal scrollbar is visible (default: true) */\n  showHorizontalScrollbar: boolean;\n  /** Whether vertical scrollbar is visible (default: true) */\n  showVerticalScrollbar: boolean;\n  /** Whether scrollbars auto-hide when not scrolling (default: false).\nWhen true, scrollbars fade out after scroll ends and reappear on hover or scroll.\nAuto-Hide Scroll Bars */\n  autoHideScrollBars: boolean;\n  /** Whether the tab strip is visible (default: true) */\n  showTabStrip: boolean;\n  /** Whether sheets can be reordered by dragging (default: true) */\n  allowSheetReorder: boolean;\n  /** Whether the formula bar is visible (default: true) */\n  showFormulaBar: boolean;\n  /** Whether to auto-fit column width on header double-click (default: true) */\n  autoFitOnDoubleClick: boolean;\n  /** ID of active theme.\nBuilt-in theme IDs: 'office', 'slice', 'vapor-trail', etc.\nUse 'custom' to indicate a custom theme is stored in customTheme.\nIssue 4: Page Layout - Themes */\n  themeId: string;\n  /** Override for theme fonts. When set, uses this font theme instead\nof the fonts from the selected theme.\nBuilt-in font theme IDs: 'office', 'arial', 'times', 'calibri', etc.\nundefined means use fonts from themeId.\n\nTheme Font UI */\n  themeFontsId?: string | undefined;\n  /** Locale/culture for number, date, and currency formatting.\nUses IETF language tags: 'en-US', 'de-DE', 'ja-JP', etc.\nDefault: 'en-US'\n\nThis affects:\n- Decimal and thousands separators (1,234.56 vs 1.234,56)\n- Currency symbol position ($100 vs 100 €)\n- Date format patterns (MM/DD/YYYY vs DD.MM.YYYY)\n- Month and day name translations\n- AM/PM designators\n\nStream G: Culture & Localization */\n  culture: string;\n  /** Whether to show cut/copy indicator (marching ants). Default: true */\n  showCutCopyIndicator: boolean;\n  /** Whether fill handle dragging is enabled. Default: true */\n  allowDragFill: boolean;\n  /** Direction to move after pressing Enter. Default: 'down' */\n  enterKeyDirection: EnterKeyDirection;\n  /** Whether cell drag-and-drop to move cells is enabled. Default: false (not yet implemented) */\n  allowCellDragDrop: boolean;\n  /** Currently selected sheet IDs for multi-sheet operations.\nDefault: undefined (falls back to [activeSheetId])\n\nThis is collaborative state - other users can see which sheets you have selected.\nUsed for operations that broadcast to multiple sheets (formatting, structure changes).\n\nWhen multiple sheets are selected:\n- Formatting operations apply to all selected sheets\n- Structure operations (insert/delete rows/cols) apply to all selected sheets\n- The active sheet is always included in the selection */\n  selectedSheetIds?: SheetId[] | undefined;\n  /** Whether the workbook structure is protected.\nWhen true, prevents adding, deleting, renaming, hiding, unhiding, or moving sheets.\nDefault: false\n\nProtect Workbook dialog */\n  isWorkbookProtected?: boolean | undefined;\n  /** Hashed protection password for workbook (optional).\nUses XLSX-compatible XOR hash algorithm for round-trip compatibility.\nEmpty string or undefined means no password protection. */\n  workbookProtectionPasswordHash?: string | undefined;\n  /** Workbook protection options (what operations are prevented).\nOnly relevant when isWorkbookProtected is true.\nIf not set, defaults to DEFAULT_WORKBOOK_PROTECTION_OPTIONS.\n@see in protection.ts */\n  workbookProtectionOptions?: WorkbookProtectionOptions | undefined;\n  /** Calculation settings including iterative calculation for circular references.\nIf not set, defaults to DEFAULT_CALCULATION_SETTINGS. */\n  calculationSettings?: CalculationSettings | undefined;\n  /** Whether the workbook uses the 1904 date system (affects all date calculations).\nDefault: false (1900 date system). */\n  date1904?: boolean | undefined;\n  /** Default table style ID for new tables created in this workbook.\nCan be a built-in style preset name (e.g., 'medium2', 'dark1')\nor a custom style ID (e.g., 'custom-abc123').\n\nWhen undefined, new tables use the 'medium2' preset by default.\n\nTables Excel compatibility: set as default style */\n  defaultTableStyleId?: string | undefined;\n  /** Whether chart data points track cell movement when cells are inserted/deleted.\nWhen true, chart data series follow their original data points even if\nthe underlying cells shift due to row/column insertion or deletion.\nDefault: true (matches the spreadsheet default).\n\nMirrors the workbook chart data point tracking behavior. */\n  chartDataPointTrack?: boolean | undefined;\n  /** Workbook-level controls for future automatic conversions. */\n  automaticConversionPolicy: AutomaticConversionPolicy;\n}",
       "docstring": "Workbook-level settings (persisted in Yjs workbook metadata).\nThese apply globally to the entire workbook, not per-sheet.\nStream L: Settings & Toggles"
     },
     "FloatingObjectInfo": {
@@ -4155,14 +4336,14 @@
       "definition": "{\n  /** Updated LaTeX source. */\n  latex?: string | undefined;\n  /** Updated OMML XML. */\n  omml?: string | undefined;\n  /** Updated style options. */\n  style?: Partial<Partial<EquationStyle>> | undefined;\n}",
       "docstring": "Updates for an existing equation."
     },
-    "WordArtUpdates": {
-      "name": "WordArtUpdates",
-      "definition": "{\n  /** Updated text content. */\n  text?: string | undefined;\n  /** Warp preset name (text geometric transformation). */\n  warp?: TextWarpPreset | undefined;\n  /** Warp adjustment values. */\n  warpAdjustments?: AdjustmentValues | undefined;\n  /** Fill configuration. */\n  fill?: WordArtFill | undefined;\n  /** Outline configuration. Explicit undefined removes the outline. */\n  outline?: WordArtOutline | undefined;\n  /** Text effects (shadow, glow, reflection, etc.). */\n  effects?: TextEffects | undefined;\n  /** Full text-effect configuration batch update. */\n  config?: WordArtConfigUpdate | undefined;\n  /** Text formatting update. */\n  textFormat?: Partial<CellFormat> | undefined;\n}",
+    "TextEffectUpdates": {
+      "name": "TextEffectUpdates",
+      "definition": "{\n  /** Updated text content. */\n  text?: string | undefined;\n  /** Warp preset name (text geometric transformation). */\n  warp?: TextWarpPreset | undefined;\n  /** Warp adjustment values. */\n  warpAdjustments?: AdjustmentValues | undefined;\n  /** Fill configuration. */\n  fill?: TextEffectFill | undefined;\n  /** Outline configuration. Explicit undefined removes the outline. */\n  outline?: TextEffectOutline | undefined;\n  /** Text effects (shadow, glow, reflection, etc.). */\n  effects?: TextEffects | undefined;\n  /** Full text-effect configuration batch update. */\n  config?: TextEffectConfigUpdate | undefined;\n  /** Text formatting update. */\n  textFormat?: Partial<CellFormat> | undefined;\n}",
       "docstring": "Updates for existing text effects."
     },
-    "SmartArtConfig": {
-      "name": "SmartArtConfig",
-      "definition": "{\n  /** Layout ID (e.g., 'hierarchy/org-chart', 'process/basic-process'). */\n  layoutId: string;\n  /** X position in pixels. */\n  x?: number | undefined;\n  /** Y position in pixels. */\n  y?: number | undefined;\n  /** Width in pixels. */\n  width?: number | undefined;\n  /** Height in pixels. */\n  height?: number | undefined;\n  /** Initial nodes to create. */\n  nodes?: SmartArtNodeConfig[] | undefined;\n  /** Display name. */\n  name?: string | undefined;\n}",
+    "DiagramConfig": {
+      "name": "DiagramConfig",
+      "definition": "{\n  /** Layout ID (e.g., 'hierarchy/org-chart', 'process/basic-process'). */\n  layoutId: string;\n  /** X position in pixels. */\n  x?: number | undefined;\n  /** Y position in pixels. */\n  y?: number | undefined;\n  /** Width in pixels. */\n  width?: number | undefined;\n  /** Height in pixels. */\n  height?: number | undefined;\n  /** Initial nodes to create. */\n  nodes?: DiagramNodeConfig[] | undefined;\n  /** Display name. */\n  name?: string | undefined;\n}",
       "docstring": "Configuration for creating a new diagram."
     },
     "SlicerConfig": {
@@ -4186,7 +4367,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-05-20T02:45:54.205Z",
+  "generated": "2026-05-30T16:59:04.002Z",
   "formatPresets": {
     "general": {
       "default": {

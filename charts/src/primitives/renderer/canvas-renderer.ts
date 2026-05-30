@@ -61,9 +61,9 @@ function styleKey(mark: AnyMark): string {
   if (mark.type === 'text') {
     const t = mark as TextMark;
     const weight = t.fontWeight ?? 'normal';
-    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.opacity ?? ''}|${weight} ${t.fontSize}px ${t.fontFamily}|${t.textAlign}|${t.textBaseline}`;
+    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${weight} ${t.fontSize}px ${t.fontFamily}|${t.textAlign}|${t.textBaseline}`;
   }
-  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}`;
+  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}`;
 }
 
 // =============================================================================

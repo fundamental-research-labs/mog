@@ -18,6 +18,7 @@ snapshot-types = { path = "../core/crates/types/snapshot-types" }
 compute-parser = { path = "../core/crates/compute-parser" }
 compute-formats = { path = "../core/crates/compute-formats" }
 compute-charts = { path = "../core/crates/compute-charts" }
+compute-chart-render = { path = "../core/crates/compute-chart-render" }
 compute-stats = { path = "../core/crates/compute-stats" }
 compute-table = { path = "../core/crates/compute-table" }
 compute-cf = { path = "../core/crates/compute-cf" }

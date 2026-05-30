@@ -107,4 +107,5 @@ bridge_napi::generate!(
     xlsx_api::__bridge_descriptor_XlsxParser_0,
 );
 
+mod chart_render;
 mod coordinator;

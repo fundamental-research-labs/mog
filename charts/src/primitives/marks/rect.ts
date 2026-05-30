@@ -19,6 +19,9 @@ export function applyStyle(ctx: CanvasRenderingContext2D, style: MarkStyle): voi
   if (style.strokeWidth !== undefined) {
     ctx.lineWidth = style.strokeWidth;
   }
+  if (style.strokeDash !== undefined) {
+    ctx.setLineDash(style.strokeDash);
+  }
   if (style.opacity !== undefined) {
     ctx.globalAlpha = style.opacity;
   }

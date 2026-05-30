@@ -180,6 +180,12 @@ export type {
 
 // Export OOXML generators
 export * from './ooxml';
+export {
+  ChartImageExportOptionsError,
+  normalizeImageExportOptions,
+  type NormalizedImageExportOptions,
+  type SupportedImageExportFormat,
+} from './image-options';
 
 // =============================================================================
 // Convenience Functions

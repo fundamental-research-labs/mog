@@ -216,8 +216,8 @@
           ]
         },
         "toXlsx": {
-          "signature": "toXlsx(): Promise<Uint8Array>;",
-          "docstring": "Export the workbook as XLSX binary data.",
+          "signature": "toXlsx(options?: {\n        contextStripped?: boolean;\n    }): Promise<Uint8Array>;",
+          "docstring": "Export the workbook as XLSX binary data.\n\n`contextStripped` is an internal import/export verification mode that\ndisables imported RoundTripContext preservation so corpus gates can prove\nmodeled facts do not depend on stale source package bytes.",
           "usedTypes": []
         },
         "insertWorksheets": {
@@ -592,6 +592,13 @@
           "docstring": "Validate a formula expression in the context of this sheet without writing\nit to any cell. Returns `null` when the formula is syntactically valid.\n\nUnlike {@link evaluate}, this is a raw commit-time syntax check: it does\nnot normalize or auto-correct incomplete input before parsing.",
           "usedTypes": [
             "FormulaSyntaxValidationError"
+          ]
+        },
+        "validateFormulaCircularReference": {
+          "signature": "validateFormulaCircularReference(formula: string, row: number, col: number): Promise<FormulaCircularReferenceValidation | null>;",
+          "docstring": "Validate whether entering a formula at row/col would create a circular\nreference. Returns `null` when the formula is allowed.",
+          "usedTypes": [
+            "FormulaCircularReferenceValidation"
           ]
         },
         "getFormula": {
@@ -1293,8 +1300,8 @@
       "docstring": "",
       "functions": {
         "add": {
-          "signature": "add(name: string, reference: string, comment?: string): Promise<NameAddReceipt>;",
-          "docstring": "Define a new named range.\n@param name - The name to define.\n@param reference - A1-style reference (e.g. \"Sheet1!$A$1:$B$10\"). May omit leading \"=\".\n@param comment - Optional descriptive comment.",
+          "signature": "add(name: string, reference: string, comment?: string, scope?: string): Promise<NameAddReceipt>;",
+          "docstring": "Define a new named range.\n@param name - The name to define.\n@param reference - A1-style reference (e.g. \"Sheet1!$A$1:$B$10\"). May omit leading \"=\".\n@param comment - Optional descriptive comment.\n@param scope - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": [
             "NameAddReceipt"
           ]
@@ -1331,8 +1338,8 @@
           ]
         },
         "update": {
-          "signature": "update(name: string, updates: NamedRangeUpdateOptions): Promise<void>;",
-          "docstring": "Update an existing named range.\n@param name - The current name to update.\n@param updates - Fields to change (name, reference, comment).",
+          "signature": "update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;",
+          "docstring": "Update an existing named range.\n@param name - The current name to update.\n@param updates - Fields to change (name, reference, comment).\n@param scope - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": [
             "NamedRangeUpdateOptions"
           ]
@@ -2799,7 +2806,7 @@
         },
         "exportImage": {
           "signature": "exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;",
-          "docstring": "Export a chart as an image.\n\nNote: This is a stub — actual rendering requires a canvas context.\nThe bridge integration will be wired in Wave 4.",
+          "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; Node SDK exports\nrender through the native headless raster backend.",
           "usedTypes": [
             "ImageExportOptions"
           ]
@@ -3903,6 +3910,11 @@
         "remove": {
           "signature": "remove(name: string): Promise<void>;",
           "docstring": "Remove a table definition, converting it back to a plain range.\n\nCell data is preserved; only the table metadata is removed.\n\n@param name - Table name",
+          "usedTypes": []
+        },
+        "convertToRange": {
+          "signature": "convertToRange(name: string): Promise<number>;",
+          "docstring": "Convert a table to a plain range using the table conversion path.\n\nCell data and formatting are preserved, and structured references that\npoint at the converted table are rewritten to A1 references where the\ncompute engine can resolve them.\n\n@param name - Table name\n@returns Number of structured references converted",
           "usedTypes": []
         },
         "clear": {
@@ -5821,8 +5833,8 @@
     },
     "CFColorScale": {
       "name": "CFColorScale",
-      "definition": "{\n  minPoint: CFColorPoint;\n  midPoint?: CFColorPoint;\n  maxPoint: CFColorPoint;\n}",
-      "docstring": "Color scale configuration (2 or 3 colors)."
+      "definition": "{\n  /** Ordered OOXML color-scale stops; authoritative when present. */\n  points?: CFColorPoint[];\n  minPoint: CFColorPoint;\n  midPoint?: CFColorPoint;\n  maxPoint: CFColorPoint;\n}",
+      "docstring": "Color scale configuration."
     },
     "CFColorScaleRule": {
       "name": "CFColorScaleRule",
@@ -5866,7 +5878,7 @@
     },
     "CFIconSet": {
       "name": "CFIconSet",
-      "definition": "{\n  iconSetName: CFIconSetName;\n  thresholds?: CFIconThreshold[];\n  reverseOrder?: boolean;\n  showIconOnly?: boolean;\n  /** Per-threshold custom icon overrides (null entries use default icons). */\n  customIcons?: (CFCustomIcon | null)[];\n}",
+      "definition": "{\n  iconSetName: CFIconSetName;\n  thresholds?: CFIconThreshold[];\n  reverseOrder?: boolean;\n  showIconOnly?: boolean;\n  /** Explicit OOXML iconSet percent attribute. */\n  percent?: boolean;\n  /** Per-threshold custom icon overrides (null entries use default icons). */\n  customIcons?: (CFCustomIcon | null)[];\n}",
       "docstring": "Icon set configuration."
     },
     "CFIconSetRule": {
@@ -5941,7 +5953,7 @@
     },
     "CalculationSettings": {
       "name": "CalculationSettings",
-      "definition": "{\n  /** Whether to allow iterative calculation for circular references.\nWhen true, formulas with circular references calculate iteratively.\nWhen false (default), circular references show #CALC! error. */\n  enableIterativeCalculation: boolean;\n  /** Maximum number of iterations for iterative calculation.\nExcel default: 100 */\n  maxIterations: number;\n  /** Maximum change between iterations for convergence.\nCalculation stops when all results change by less than this amount.\nExcel default: 0.001 */\n  maxChange: number;\n  /** Calculation mode (auto/manual/autoNoTable).\nDefault: 'auto' */\n  calcMode: CalcMode;\n  /** Whether to use full (15-digit) precision for calculations.\nDefault: true */\n  fullPrecision: boolean;\n  /** Cell reference style (true = R1C1, false = A1).\nDefault: false */\n  r1c1Mode: boolean;\n  /** Whether to perform a full calculation when the file is opened.\nDefault: false */\n  fullCalcOnLoad: boolean;\n}",
+      "definition": "{\n  /** Whether to allow iterative calculation for circular references.\nWhen true, formulas with circular references calculate iteratively.\nWhen false (default), circular references show #CALC! error. */\n  enableIterativeCalculation: boolean;\n  /** Maximum number of iterations for iterative calculation.\nExcel default: 100 */\n  maxIterations: number;\n  /** Maximum change between iterations for convergence.\nCalculation stops when all results change by less than this amount.\nExcel default: 0.001 */\n  maxChange: number;\n  /** Calculation mode (auto/manual/autoNoTable).\nDefault: 'auto' */\n  calcMode: CalcMode;\n  /** Whether to use full (15-digit) precision for calculations.\nDefault: true */\n  fullPrecision: boolean;\n  /** Cell reference style (true = R1C1, false = A1).\nDefault: false */\n  r1c1Mode: boolean;\n  /** Whether to perform a full calculation when the file is opened.\nDefault: false */\n  fullCalcOnLoad: boolean;\n  /** Whether the workbook's last calculation completed.\nPreserved for XLSX calculation metadata fidelity.\nDefault: true */\n  calcCompleted: boolean;\n  /** Whether Excel should recalculate when saving.\nDefault: true */\n  calcOnSave: boolean;\n  /** Whether concurrent calculation is enabled.\nDefault: true */\n  concurrentCalc: boolean;\n  /** Explicit concurrent calculation thread count, when present.\nDefault: null */\n  concurrentManualCount: number | null;\n  /** Whether to force a full recalculation.\nDefault: false */\n  forceFullCalc: boolean;\n  /** Excel calculation engine version (`calcId` in OOXML). */\n  calcId?: number;\n  /** Whether `iterateCount` was explicitly present in the source workbook.\nPreserved for XLSX round-trip fidelity.\nDefault: false */\n  hasExplicitIterateCount: boolean;\n  /** Whether `iterateDelta` was explicitly present in the source workbook.\nPreserved for XLSX round-trip fidelity.\nDefault: false */\n  hasExplicitIterateDelta: boolean;\n}",
       "docstring": ""
     },
     "CallableDisposable": {
@@ -6100,7 +6112,7 @@
     },
     "ChartConfig": {
       "name": "ChartConfig",
-      "definition": "{\n  type: ChartType;\n  /** Chart sub-type. For type-safe usage, prefer TypedChartConfig<T> which constrains subType to match type. */\n  subType?: BarSubType | LineSubType | AreaSubType | StockSubType | RadarSubType;\n  /** Anchor row (0-based) */\n  anchorRow: number;\n  /** Anchor column (0-based) */\n  anchorCol: number;\n  /** Chart width in cells */\n  width: number;\n  /** Chart height in cells */\n  height: number;\n  /** Data range in A1 notation (e.g., \"A1:D10\"). Optional when series[].values are provided. */\n  dataRange?: string;\n  /** Series labels range in A1 notation */\n  seriesRange?: string;\n  /** Category labels range in A1 notation */\n  categoryRange?: string;\n  seriesOrientation?: SeriesOrientation;\n  title?: string;\n  subtitle?: string;\n  legend?: LegendConfig;\n  axis?: AxisConfig;\n  colors?: string[];\n  series?: SeriesConfig[];\n  dataLabels?: DataLabelConfig;\n  pieSlice?: PieSliceConfig;\n  /** @deprecated Use trendlines[] instead — kept for backward compat */\n  trendline?: TrendlineConfig;\n  /** Wire-compatible trendline array */\n  trendlines?: TrendlineConfig[];\n  /** Connect scatter points with lines (scatter-lines variant) */\n  showLines?: boolean;\n  /** Use smooth curves for scatter lines (scatter-smooth-lines variant) */\n  smoothLines?: boolean;\n  /** Fill area under radar lines */\n  radarFilled?: boolean;\n  /** Show markers on radar vertices */\n  radarMarkers?: boolean;\n  /** How blank cells are plotted: 'gap' (leave gap), 'zero' (treat as zero), 'span' (interpolate) */\n  displayBlanksAs?: 'gap' | 'zero' | 'span';\n  /** Whether to plot only visible cells (respecting row/column hiding) */\n  plotVisibleOnly?: boolean;\n  /** Gap width between bars/columns as percentage (0-500). Applied to bar/column chart types. */\n  gapWidth?: number;\n  /** Overlap between bars/columns (-100 to 100). Applied to clustered bar/column types. */\n  overlap?: number;\n  /** Hole size for doughnut charts as percentage (10-90) */\n  doughnutHoleSize?: number;\n  /** First slice angle for pie/doughnut charts in degrees (0-360) */\n  firstSliceAngle?: number;\n  /** Bubble scale for bubble charts as percentage (0-300) */\n  bubbleScale?: number;\n  /** Split type for of-pie charts (pie-of-pie, bar-of-pie) */\n  splitType?: 'auto' | 'value' | 'percent' | 'position' | 'custom';\n  /** Split value threshold for of-pie charts */\n  splitValue?: number;\n  waterfall?: WaterfallConfig;\n  histogram?: HistogramConfig;\n  boxplot?: BoxplotConfig;\n  heatmap?: HeatmapConfig;\n  violin?: ViolinConfig;\n  treemap?: TreemapConfig;\n  sunburst?: SunburstConfig;\n  regionMap?: RegionMapConfig;\n  name?: string;\n  chartTitle?: TitleConfig;\n  chartArea?: ChartAreaConfig;\n  plotArea?: PlotAreaConfig;\n  style?: number;\n  roundedCorners?: boolean;\n  autoTitleDeleted?: boolean;\n  showDataLabelsOverMaximum?: boolean;\n  chartFormat?: ChartFormat;\n  plotFormat?: ChartFormat;\n  titleFormat?: ChartFormat;\n  titleRichText?: ChartFormatString[];\n  titleFormula?: string;\n  dataTable?: DataTableConfig;\n  /** Which level of multi-level category labels to show (0-based). */\n  categoryLabelLevel?: number;\n  /** Which level of multi-level series names to show (0-based). */\n  seriesNameLevel?: number;\n  /** Show/hide all pivot field buttons on the chart. */\n  showAllFieldButtons?: boolean;\n  /** Size of the secondary plot for PieOfPie/BarOfPie charts (5-200%). OOXML c:secondPieSize. */\n  secondPlotSize?: number;\n  /** Use different colors per category. OOXML c:varyColors (chart-group level). */\n  varyByCategories?: boolean;\n  /** Pivot chart display options. */\n  pivotOptions?: PivotChartOptions;\n  /** Z-order command for layering charts.\nAccepted as a convenience field by ws.charts.update() to adjust z-index:\n- 'front': bring to top of stack\n- 'back': send to bottom of stack\n- 'forward': move one layer up\n- 'backward': move one layer down */\n  zOrder?: 'front' | 'back' | 'forward' | 'backward';\n  /** Mark shape for 3D bar/column charts (default: 'box'). Maps to OOXML c:shape. */\n  barShape?: 'box' | 'cylinder' | 'cone' | 'pyramid';\n  /** Extensible extra data for enriched chart configurations.\nContains additional chart-specific settings (e.g., chartTitle font, chartArea fill)\nthat are stored on the chart but not part of the core config schema. */\n  extra?: unknown;\n  /** Chart height in points */\n  heightPt?: number;\n  /** Chart width in points */\n  widthPt?: number;\n  /** Left offset in points */\n  leftPt?: number;\n  /** Top offset in points */\n  topPt?: number;\n  /** Enable 3D bubble effect for bubble charts */\n  bubble3DEffect?: boolean;\n  /** Render surface chart as wireframe */\n  wireframe?: boolean;\n  /** Use surface chart top-down view (contour) */\n  surfaceTopView?: boolean;\n  /** Chart color scheme index */\n  colorScheme?: number;\n}",
+      "definition": "{\n  type: ChartType;\n  /** Chart sub-type. For type-safe usage, prefer TypedChartConfig<T> which constrains subType to match type. */\n  subType?: BarSubType | LineSubType | AreaSubType | StockSubType | RadarSubType;\n  /** Anchor row (0-based) */\n  anchorRow: number;\n  /** Anchor column (0-based) */\n  anchorCol: number;\n  /** Chart width in cells */\n  width: number;\n  /** Chart height in cells */\n  height: number;\n  /** Data range in A1 notation (e.g., \"A1:D10\"). Optional when series[].values are provided. */\n  dataRange?: string;\n  /** Series labels range in A1 notation */\n  seriesRange?: string;\n  /** Category labels range in A1 notation */\n  categoryRange?: string;\n  seriesOrientation?: SeriesOrientation;\n  title?: string | null;\n  subtitle?: string;\n  legend?: LegendConfig;\n  axis?: AxisConfig;\n  colors?: string[];\n  series?: SeriesConfig[];\n  dataLabels?: DataLabelConfig;\n  pieSlice?: PieSliceConfig;\n  /** @deprecated Use trendlines[] instead — kept for backward compat */\n  trendline?: TrendlineConfig;\n  /** Wire-compatible trendline array */\n  trendlines?: TrendlineConfig[];\n  /** Connect scatter points with lines (scatter-lines variant) */\n  showLines?: boolean;\n  /** Use smooth curves for scatter lines (scatter-smooth-lines variant) */\n  smoothLines?: boolean;\n  /** Fill area under radar lines */\n  radarFilled?: boolean;\n  /** Show markers on radar vertices */\n  radarMarkers?: boolean;\n  /** How blank cells are plotted: 'gap' (leave gap), 'zero' (treat as zero), 'span' (interpolate) */\n  displayBlanksAs?: 'gap' | 'zero' | 'span';\n  /** Whether to plot only visible cells (respecting row/column hiding) */\n  plotVisibleOnly?: boolean;\n  /** Gap width between bars/columns as percentage (0-500). Applied to bar/column chart types. */\n  gapWidth?: number;\n  /** Overlap between bars/columns (-100 to 100). Applied to clustered bar/column types. */\n  overlap?: number;\n  /** Hole size for doughnut charts as percentage (10-90) */\n  doughnutHoleSize?: number;\n  /** First slice angle for pie/doughnut charts in degrees (0-360) */\n  firstSliceAngle?: number;\n  /** Bubble scale for bubble charts as percentage (0-300) */\n  bubbleScale?: number;\n  /** Split type for of-pie charts (pie-of-pie, bar-of-pie) */\n  splitType?: 'auto' | 'value' | 'percent' | 'position' | 'custom';\n  /** Split value threshold for of-pie charts */\n  splitValue?: number;\n  waterfall?: WaterfallConfig;\n  histogram?: HistogramConfig;\n  boxplot?: BoxplotConfig;\n  heatmap?: HeatmapConfig;\n  violin?: ViolinConfig;\n  treemap?: TreemapConfig;\n  sunburst?: SunburstConfig;\n  regionMap?: RegionMapConfig;\n  name?: string;\n  chartTitle?: TitleConfig;\n  chartArea?: ChartAreaConfig;\n  plotArea?: PlotAreaConfig;\n  style?: number;\n  roundedCorners?: boolean;\n  autoTitleDeleted?: boolean;\n  showDataLabelsOverMaximum?: boolean;\n  chartFormat?: ChartFormat;\n  plotFormat?: ChartFormat;\n  titleFormat?: ChartFormat;\n  titleRichText?: ChartFormatString[];\n  titleFormula?: string;\n  dataTable?: DataTableConfig;\n  /** Which level of multi-level category labels to show (0-based). */\n  categoryLabelLevel?: number;\n  /** Which level of multi-level series names to show (0-based). */\n  seriesNameLevel?: number;\n  /** Show/hide all pivot field buttons on the chart. */\n  showAllFieldButtons?: boolean;\n  /** Size of the secondary plot for PieOfPie/BarOfPie charts (5-200%). OOXML c:secondPieSize. */\n  secondPlotSize?: number;\n  /** Use different colors per category. OOXML c:varyColors (chart-group level). */\n  varyByCategories?: boolean;\n  /** Pivot chart display options. */\n  pivotOptions?: PivotChartOptions;\n  /** Z-order command for layering charts.\nAccepted as a convenience field by ws.charts.update() to adjust z-index:\n- 'front': bring to top of stack\n- 'back': send to bottom of stack\n- 'forward': move one layer up\n- 'backward': move one layer down */\n  zOrder?: 'front' | 'back' | 'forward' | 'backward';\n  /** Mark shape for 3D bar/column charts (default: 'box'). Maps to OOXML c:shape. */\n  barShape?: 'box' | 'cylinder' | 'cone' | 'pyramid';\n  /** Extensible extra data for enriched chart configurations.\nContains additional chart-specific settings (e.g., chartTitle font, chartArea fill)\nthat are stored on the chart but not part of the core config schema. */\n  extra?: unknown;\n  /** Chart height in points */\n  heightPt?: number;\n  /** Chart width in points */\n  widthPt?: number;\n  /** Left offset in points */\n  leftPt?: number;\n  /** Top offset in points */\n  topPt?: number;\n  /** Enable 3D bubble effect for bubble charts */\n  bubble3DEffect?: boolean;\n  /** Render surface chart as wireframe */\n  wireframe?: boolean;\n  /** Use surface chart top-down view (contour) */\n  surfaceTopView?: boolean;\n  /** Chart color scheme index */\n  colorScheme?: number;\n}",
       "docstring": "Public chart configuration -- the shape used by the unified API surface.\n\nThis contains all user-facing fields for creating/updating charts.\nInternal-only fields (CellId anchors, zIndex, table linking cache)\nare defined in StoredChartConfig in the charts package."
     },
     "ChartFill": {
@@ -6748,6 +6760,11 @@
       "definition": "string & { readonly [formulaA1Brand]: true }",
       "docstring": "A formula string WITH the `=` prefix: `\"=SUM(A1:B10)\"`, `\"=A1+A2\"`.\n\nThis is the display/input format used at the Rust-TS boundary and in the UI."
     },
+    "FormulaCircularReferenceValidation": {
+      "name": "FormulaCircularReferenceValidation",
+      "definition": "{\n  cellAddress: string;\n  formula: string;\n}",
+      "docstring": "Result returned when formula circular-reference validation rejects an input."
+    },
     "FormulaReferenceDiagnostic": {
       "name": "FormulaReferenceDiagnostic",
       "definition": "| FormulaReferenceEdgeDiagnosticRow\n  | FormulaReferenceParseDiagnosticRow",
@@ -7272,6 +7289,11 @@
       "definition": "{\n  top: number;\n  bottom: number;\n  left: number;\n  right: number;\n  header: number;\n  footer: number;\n}",
       "docstring": "Page margins in inches.\nFull OOXML representation including header/footer margins."
     },
+    "PageSetupProperties": {
+      "name": "PageSetupProperties",
+      "definition": "{\n  /** Fit sheet content to page dimensions */\n  fitToPage: boolean;\n  /** Automatically insert page breaks */\n  autoPageBreaks: boolean;\n}",
+      "docstring": ""
+    },
     "Path": {
       "name": "Path",
       "definition": "{\n  segments: PathSegment[];\n  closed: boolean;\n  subPaths?: SubPath[];\n}",
@@ -7594,7 +7616,7 @@
     },
     "PrintSettings": {
       "name": "PrintSettings",
-      "definition": "{\n  /** OOXML paper size code (1=Letter, 9=A4, etc.), null = not set */\n  paperSize: number | null;\n  /** Page orientation, null = not set (defaults to portrait) */\n  orientation: string | null;\n  /** Scale percentage (10-400), null = not set */\n  scale: number | null;\n  /** Fit to N pages wide, null = not set */\n  fitToWidth: number | null;\n  /** Fit to N pages tall, null = not set */\n  fitToHeight: number | null;\n  /** Print cell gridlines */\n  gridlines: boolean;\n  /** Print row/column headings */\n  headings: boolean;\n  /** Center content horizontally on page */\n  hCentered: boolean;\n  /** Center content vertically on page */\n  vCentered: boolean;\n  /** Page margins in inches (with header/footer margins) */\n  margins: PageMargins | null;\n  /** Header/footer configuration */\n  headerFooter: HeaderFooter | null;\n  /** Print in black and white */\n  blackAndWhite: boolean;\n  /** Draft quality */\n  draft: boolean;\n  /** First page number override, null = auto */\n  firstPageNumber: number | null;\n  /** Page order: \"downThenOver\" or \"overThenDown\", null = default */\n  pageOrder: string | null;\n  /** Use printer defaults */\n  usePrinterDefaults: boolean | null;\n  /** Horizontal DPI, null = not set */\n  horizontalDpi: number | null;\n  /** Vertical DPI, null = not set */\n  verticalDpi: number | null;\n  /** Relationship ID for printer settings binary, null = not set */\n  rId: string | null;\n  /** Whether the sheet had printOptions element in OOXML */\n  hasPrintOptions: boolean;\n  /** Whether the sheet had pageSetup element in OOXML */\n  hasPageSetup: boolean;\n  /** Whether to use firstPageNumber (vs auto) */\n  useFirstPageNumber: boolean;\n  /** How to print cell comments: \"none\" | \"atEnd\" | \"asDisplayed\", null = not set (defaults to none) */\n  printComments: string | null;\n  /** How to print cell errors: \"displayed\" | \"blank\" | \"dash\" | \"NA\", null = not set (defaults to displayed) */\n  printErrors: string | null;\n}",
+      "definition": "{\n  /** OOXML paper size code (1=Letter, 9=A4, etc.), null = not set */\n  paperSize: number | null;\n  /** Custom paper width such as \"210mm\" or \"8.5in\", null = not set */\n  paperWidth?: string | null;\n  /** Custom paper height such as \"297mm\" or \"11in\", null = not set */\n  paperHeight?: string | null;\n  /** Page orientation, null = not set (defaults to portrait) */\n  orientation: string | null;\n  /** Scale percentage (10-400), null = not set */\n  scale: number | null;\n  /** Fit to N pages wide, null = not set */\n  fitToWidth: number | null;\n  /** Fit to N pages tall, null = not set */\n  fitToHeight: number | null;\n  /** Print cell gridlines */\n  gridlines: boolean;\n  /** Whether gridline printing was explicitly set; OOXML defaults to true */\n  gridLinesSet?: boolean;\n  /** Print row/column headings */\n  headings: boolean;\n  /** Center content horizontally on page */\n  hCentered: boolean;\n  /** Center content vertically on page */\n  vCentered: boolean;\n  /** Page margins in inches (with header/footer margins) */\n  margins: PageMargins | null;\n  /** Header/footer configuration */\n  headerFooter: HeaderFooter | null;\n  /** Print in black and white */\n  blackAndWhite: boolean;\n  /** Draft quality */\n  draft: boolean;\n  /** First page number override, null = auto */\n  firstPageNumber: number | null;\n  /** Page order: \"downThenOver\" or \"overThenDown\", null = default */\n  pageOrder: string | null;\n  /** Use printer defaults */\n  usePrinterDefaults: boolean | null;\n  /** Horizontal DPI, null = not set */\n  horizontalDpi: number | null;\n  /** Vertical DPI, null = not set */\n  verticalDpi: number | null;\n  /** Relationship ID for printer settings binary, null = not set */\n  rId: string | null;\n  /** Whether the sheet had printOptions element in OOXML */\n  hasPrintOptions: boolean;\n  /** Whether the sheet had pageSetup element in OOXML */\n  hasPageSetup: boolean;\n  /** Number of copies, null = not set */\n  copies?: number | null;\n  /** Sheet-level page setup properties from sheetPr/pageSetUpPr */\n  pageSetupProperties?: PageSetupProperties | null;\n  /** Whether to use firstPageNumber (vs auto) */\n  useFirstPageNumber: boolean;\n  /** How to print cell comments: \"none\" | \"atEnd\" | \"asDisplayed\", null = not set (defaults to none) */\n  printComments: string | null;\n  /** How to print cell errors: \"displayed\" | \"blank\" | \"dash\" | \"NA\", null = not set (defaults to displayed) */\n  printErrors: string | null;\n}",
       "docstring": "Full print settings for a sheet, matching the Rust domain-types canonical type.\n\nReplaces the old lossy SheetPrintSettings. All fields are nullable where the\nunderlying OOXML attribute is optional, using `null` to mean \"not set / use default\".\n\nDistinct from PrintOptions (runtime-only configuration in print-export)."
     },
     "ProtectionConfig": {

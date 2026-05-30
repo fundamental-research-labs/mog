@@ -23,6 +23,7 @@ members = [
     "compute/core/crates/types/snapshot-types",
     "compute/core/crates/compute-fill",
     "compute/core/crates/compute-charts",
+    "compute/core/crates/compute-chart-render",
     "compute/core/crates/compute-solver",
     "compute/core/crates/compute-collab",
     "compute/core/crates/compute-coordinator",

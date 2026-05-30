@@ -45,6 +45,7 @@ import {
   wireToSeriesConfigArray,
 } from '../../domain/charts/chart-type-converters';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
+import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 
 // =============================================================================
@@ -979,12 +980,18 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
     const exporter = this.exporter ?? this.ctx.chartImageExporter;
     if (exporter) {
-      const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
-      if (dataUrl) return dataUrl;
-      throw operationFailed('exportChartImage', 'Exporter returned null');
+      try {
+        const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
+        if (dataUrl) return dataUrl;
+        throw operationFailed('exportChartImage', 'Exporter returned null');
+      } catch (error) {
+        if (error instanceof KernelError) throw error;
+        const reason = error instanceof Error ? error.message : String(error);
+        throw operationFailed('exportChartImage', reason);
+      }
     }
 
-    throw operationFailed('exportChartImage', 'Not implemented in headless mode');
+    throw operationFailed('exportChartImage', 'No chart image exporter registered');
   }
 
   async setDataRange(chartId: string, range: string): Promise<void> {

@@ -65,11 +65,11 @@ export function detectFlashFillPattern(
   const detectors = [
     detectTemplatePattern,
     detectCaseChangePattern,
-    detectReplacePattern,
     detectExtractionPattern,
     detectCombinePattern,
     detectSplitPattern,
     detectPrefixSuffixPattern,
+    detectReplacePattern,
   ];
 
   for (const detector of detectors) {
@@ -432,9 +432,12 @@ function findBestMatchAt(
       } else {
         // Prefix match: longest k in [1..transformed.length-1] where
         // transformed.substring(0,k) === output.substr(pos,k).
-        // We only allow prefix matches of length >= 1; full match is
-        // captured above. Prefix length must be < transformed.length so it
-        // is genuinely a prefix (else it'd be a full match).
+        // Only tokenized source parts can be prefix-matched. Allowing the
+        // whole source string to prefix-match causes over-broad templates such
+        // as "North R" + "Territory" for "North Region" -> "North Territory".
+        // Prefixing an actual token still covers Excel-style initials like
+        // "John Smith" -> "J. Smith".
+        if (c.kind === 'full') continue;
         const limit = Math.min(transformed.length - 1, output.length - pos);
         let k = 0;
         while (k < limit && output[pos + k] === transformed[k]) k++;

@@ -50,12 +50,14 @@ export function SlicerLayerContainer() {
   const {
     slicers,
     selectedSlicerId,
+    selectedSlicerIds,
     selectSlicer,
     handleItemClick,
     handleItemToggle,
     clearSelection,
     updateSlicerPosition,
     deleteSlicer,
+    deleteSlicers,
   } = useSlicers({ sheetId: activeSheetId });
 
   // Get coordinate system from renderer actions
@@ -67,8 +69,8 @@ export function SlicerLayerContainer() {
 
   // Handle slicer selection
   const handleSlicerSelect = useCallback(
-    (slicerId: string | null) => {
-      selectSlicer(slicerId);
+    (slicerId: string | null, options?: { toggle?: boolean }) => {
+      selectSlicer(slicerId, options);
     },
     [selectSlicer],
   );
@@ -100,17 +102,42 @@ export function SlicerLayerContainer() {
   // Handle position change (drag/resize)
   const handlePositionChange = useCallback(
     (slicerId: string, position: Partial<SlicerPositionRect>) => {
+      if (
+        selectedSlicerIds.includes(slicerId) &&
+        selectedSlicerIds.length > 1 &&
+        typeof position.x === 'number' &&
+        typeof position.y === 'number'
+      ) {
+        const origin = slicers.find((slicer) => slicer.config.id === slicerId);
+        if (origin) {
+          const dx = position.x - origin.config.position.x;
+          const dy = position.y - origin.config.position.y;
+          for (const selectedSlicerId of selectedSlicerIds) {
+            const selected = slicers.find((slicer) => slicer.config.id === selectedSlicerId);
+            if (!selected) continue;
+            updateSlicerPosition(selectedSlicerId, {
+              x: selected.config.position.x + dx,
+              y: selected.config.position.y + dy,
+            });
+          }
+          return;
+        }
+      }
       updateSlicerPosition(slicerId, position);
     },
-    [updateSlicerPosition],
+    [selectedSlicerIds, slicers, updateSlicerPosition],
   );
 
   // Handle delete
   const handleDelete = useCallback(
     (slicerId: string) => {
-      deleteSlicer(slicerId);
+      if (selectedSlicerIds.includes(slicerId) && selectedSlicerIds.length > 1) {
+        deleteSlicers(selectedSlicerIds);
+      } else {
+        deleteSlicer(slicerId);
+      }
     },
-    [deleteSlicer],
+    [deleteSlicer, deleteSlicers, selectedSlicerIds],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -168,6 +195,7 @@ export function SlicerLayerContainer() {
       <SlicerLayer
         slicers={slicers}
         selectedSlicerId={selectedSlicerId}
+        selectedSlicerIds={selectedSlicerIds}
         onSlicerSelect={handleSlicerSelect}
         onItemClick={handleOnItemClick}
         onItemToggle={handleOnItemToggle}

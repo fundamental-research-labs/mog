@@ -54,9 +54,10 @@ describe('ribbon visibility config', () => {
     const merged = mergeRibbonVisibilityConfig(publicConfig, APP_EVAL_RIBBON_VISIBILITY_CONFIG);
 
     expect(isRibbonPathVisible(merged, ['pageLayout', 'themes'])).toBe(true);
+    expect(isRibbonPathVisible(merged, ['data', 'importData', 'fromWeb'])).toBe(true);
   });
 
-  it('keeps public checkbox visible while hiding staged public Insert chrome', () => {
+  it('keeps public controls visible while hiding staged public ribbon chrome', () => {
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'pivotTable']),
     ).toBe(true);
@@ -82,6 +83,15 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'charts'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'links'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'comments'])).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromCsv']),
+    ).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromJson']),
+    ).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromWeb']),
+    ).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['pageLayout'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['review'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['view'])).toBe(true);

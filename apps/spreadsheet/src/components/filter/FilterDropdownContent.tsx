@@ -303,7 +303,7 @@ export function FilterDropdownContent({
 
   return (
     <div
-      className="flex min-h-0 w-full flex-col overflow-hidden"
+      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-testid="filter-dropdown-content"
     >
       {/* Sort buttons section */}
@@ -491,12 +491,8 @@ export function FilterDropdownContent({
 
       {/* Filter content */}
       <div
-        className="min-h-0 overflow-y-auto p-3"
+        className="min-h-0 flex-1 overflow-hidden p-3"
         data-testid="filter-values-panel"
-        style={{
-          maxHeight:
-            'min(300px, max(160px, calc(var(--radix-popper-available-height, 450px) - 150px)))',
-        }}
       >
         {activeTab === 'values' ? (
           columnType === 'date' ? (

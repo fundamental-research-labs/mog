@@ -16,7 +16,7 @@
  * @module @mog/spreadsheet/components/canvas-overlays
  */
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { InteractiveElementInfo } from '@mog-sdk/sheet-view';
 import { FilterDropdownContent } from '../filter/FilterDropdownContent';
@@ -41,11 +41,128 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
 
   // Controlled popover state - we manage open/close to pass onClose to content
   const [isOpen, setIsOpen] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    originX: number;
+    originY: number;
+    baseLeft: number;
+    baseTop: number;
+  } | null>(null);
+  const stopDragTrackingRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setDragOffset({ x: 0, y: 0 });
+      dragStateRef.current = null;
+      stopDragTrackingRef.current?.();
+      stopDragTrackingRef.current = null;
+    }
+  }, [isOpen, metadata.filterId, metadata.headerCellId, x, y]);
+
+  useEffect(() => {
+    return () => {
+      stopDragTrackingRef.current?.();
+    };
+  }, []);
 
   // Close handler passed to FilterDropdownContent
   const handleClose = useCallback(() => {
     setIsOpen(false);
   }, []);
+
+  const updateDragOffset = useCallback((event: Pick<PointerEvent, 'clientX' | 'clientY'>) => {
+    const drag = dragStateRef.current;
+    if (!drag) return;
+
+    const margin = 8;
+    const unclampedX = drag.originX + event.clientX - drag.startClientX;
+    const unclampedY = drag.originY + event.clientY - drag.startClientY;
+    const minX = margin - drag.baseLeft;
+    const minY = margin - drag.baseTop;
+
+    setDragOffset({
+      x: Math.max(unclampedX, minX),
+      y: Math.max(unclampedY, minY),
+    });
+  }, []);
+
+  const handleDragPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      stopDragTrackingRef.current?.();
+      const handle = event.currentTarget;
+      const root = handle.closest<HTMLElement>('[data-testid="filter-dropdown-popover"]');
+      const rect = root?.getBoundingClientRect();
+      const pointerId = event.pointerId;
+      handle.setPointerCapture(pointerId);
+      dragStateRef.current = {
+        pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        originX: dragOffset.x,
+        originY: dragOffset.y,
+        baseLeft: rect ? rect.left - dragOffset.x : 0,
+        baseTop: rect ? rect.top - dragOffset.y : 0,
+      };
+
+      const stopTracking = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleEnd);
+        window.removeEventListener('pointercancel', handleEnd);
+        stopDragTrackingRef.current = null;
+      };
+      const handleMove = (moveEvent: PointerEvent) => {
+        if (dragStateRef.current?.pointerId !== moveEvent.pointerId) return;
+        moveEvent.preventDefault();
+        updateDragOffset(moveEvent);
+      };
+      const handleEnd = (endEvent: PointerEvent) => {
+        if (dragStateRef.current?.pointerId !== endEvent.pointerId) return;
+        endEvent.preventDefault();
+        dragStateRef.current = null;
+        if (handle.hasPointerCapture(pointerId)) {
+          handle.releasePointerCapture(pointerId);
+        }
+        stopTracking();
+      };
+
+      window.addEventListener('pointermove', handleMove, { passive: false });
+      window.addEventListener('pointerup', handleEnd, { passive: false });
+      window.addEventListener('pointercancel', handleEnd, { passive: false });
+      stopDragTrackingRef.current = stopTracking;
+    },
+    [dragOffset.x, dragOffset.y, updateDragOffset],
+  );
+
+  const handleDragPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (dragStateRef.current?.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      updateDragOffset(event.nativeEvent);
+    },
+    [updateDragOffset],
+  );
+
+  const handleDragPointerEnd = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (dragStateRef.current?.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragStateRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      stopDragTrackingRef.current?.();
+    },
+    [],
+  );
 
   // 0-based column index is now directly provided in metadata.col.
   // Derive a column letter label for aria-label (A=0, B=1, ...).
@@ -95,11 +212,15 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
         side="bottom"
         align="start"
         sideOffset={4}
-        className="p-0 overflow-x-hidden overflow-y-auto"
+        className="flex flex-col p-0 overflow-hidden"
         style={{
           width: '280px',
-          maxHeight: 'min(450px, var(--radix-popper-available-height, calc(100vh - 24px)))',
+          height: 'min(620px, calc(100vh - 24px))',
+          maxHeight: 'calc(100vh - 24px)',
+          translate: `${dragOffset.x}px ${dragOffset.y}px`,
         }}
+        avoidCollisions={false}
+        disableScrollConstraints
         data-testid="filter-dropdown-popover"
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -108,6 +229,20 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
           }
         }}
       >
+        <div
+          data-testid="filter-popover-drag-handle"
+          aria-label="Move filter popover"
+          className="flex h-5 cursor-move items-center justify-center border-b border-ss-border bg-ss-surface text-ss-text-secondary"
+          style={{ touchAction: 'none' }}
+          onPointerDown={handleDragPointerDown}
+          onPointerMove={handleDragPointerMove}
+          onPointerUp={handleDragPointerEnd}
+          onPointerCancel={handleDragPointerEnd}
+        >
+          <span aria-hidden="true" className="text-caption leading-none tracking-normal">
+            ::
+          </span>
+        </div>
         {/*
  Real filter dropdown content with all functionality.
  The key insight: this Popover is triggered by a REAL button,

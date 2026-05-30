@@ -28,6 +28,7 @@ import type {
   SlicerRenderConfig,
   SlicerRenderItem,
 } from '../../adapters/slicers/slicer-render-types';
+import type { SlicerSelectOptions } from '../../hooks/data/use-slicers';
 // =============================================================================
 // Types
 // =============================================================================
@@ -54,7 +55,7 @@ export interface SlicerControlProps {
   /** Handle select all items */
   onSelectAll?: () => void;
   /** Handle slicer selection */
-  onSelect: () => void;
+  onSelect: (options?: SlicerSelectOptions) => void;
   /** Handle position change (drag/resize) */
   onPositionChange?: (position: Partial<SlicerPositionRect>) => void;
   /** Handle delete */
@@ -306,9 +307,19 @@ export function SlicerControl({
   onSelectAllExcept,
   onClearAll,
   onSelect,
+  onPositionChange,
+  onDelete,
 }: SlicerControlProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [dragPreview, setDragPreview] = useState<{ x: number; y: number } | null>(null);
   // Multi-select mode toggle (like Excel's multi-select button)
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
 
@@ -341,10 +352,33 @@ export function SlicerControl({
     return STYLE_PRESETS[config.style.preset ?? 'light1'];
   }, [config.style]);
 
+  // Get position from config
+  const { position } = config;
+  const headerHeight = config.showHeader ? 28 : 0;
+  const currentX = dragPreview?.x ?? position.x;
+  const currentY = dragPreview?.y ?? position.y;
+
+  const selectAndFocus = useCallback(
+    (options?: SlicerSelectOptions) => {
+      onSelect(options);
+      containerRef.current?.focus();
+    },
+    [onSelect],
+  );
+
+  const stopGridMouseEvent = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+  }, []);
+
+  const stopGridPointerEvent = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+  }, []);
+
   // Handle item click with modifier key detection
   const handleItemClick = useCallback(
     (item: SlicerRenderItem, e: React.MouseEvent) => {
       e.stopPropagation();
+      selectAndFocus();
 
       if (item.state === 'unavailable' || item.state === 'noData') {
         return;
@@ -363,7 +397,7 @@ export function SlicerControl({
         onItemClick(item.value);
       }
     },
-    [onItemClick, onItemToggle, onSelectAllExcept, isMultiSelectMode],
+    [onItemClick, onItemToggle, onSelectAllExcept, isMultiSelectMode, selectAndFocus],
   );
 
   // Toggle multi-select mode
@@ -386,28 +420,99 @@ export function SlicerControl({
     (e: React.MouseEvent) => {
       // Only select if clicking on container, not items
       if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-slicer-body]')) {
-        onSelect();
+        selectAndFocus({
+          toggle: e.ctrlKey || e.metaKey || e.shiftKey,
+        });
       }
     },
-    [onSelect],
+    [selectAndFocus],
+  );
+
+  const getDragPosition = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) {
+      return null;
+    }
+    return {
+      x: Math.max(0, drag.startX + e.clientX - drag.startClientX),
+      y: Math.max(0, drag.startY + e.clientY - drag.startClientY),
+    };
+  }, []);
+
+  const handleHeaderPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!onPositionChange || e.button !== 0) {
+        return;
+      }
+      if ((e.target as HTMLElement).closest('button')) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      selectAndFocus({
+        toggle: e.ctrlKey || e.metaKey || e.shiftKey,
+      });
+      dragRef.current = {
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startX: position.x,
+        startY: position.y,
+      };
+      setDragPreview({ x: position.x, y: position.y });
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [onPositionChange, selectAndFocus, position.x, position.y],
+  );
+
+  const handleHeaderPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const next = getDragPosition(e);
+      if (!next) {
+        return;
+      }
+      e.preventDefault();
+      setDragPreview(next);
+    },
+    [getDragPosition],
+  );
+
+  const finishHeaderDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const next = getDragPosition(e);
+      const drag = dragRef.current;
+      if (!next || !drag) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      dragRef.current = null;
+      setDragPreview(null);
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      if (next.x !== drag.startX || next.y !== drag.startY) {
+        onPositionChange?.({ x: next.x, y: next.y });
+      }
+    },
+    [getDragPosition, onPositionChange],
   );
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (isSelected && hasActiveFilter) {
+        if (isSelected && onDelete) {
           e.preventDefault();
-          onClearAll();
+          e.stopPropagation();
+          onDelete();
         }
       }
     },
-    [isSelected, hasActiveFilter, onClearAll],
+    [isSelected, onDelete],
   );
-
-  // Get position from config
-  const { position } = config;
-  const headerHeight = config.showHeader ? 28 : 0;
 
   const containerClasses = [
     'absolute flex flex-col overflow-hidden bg-ss-surface rounded shadow-ss-sm',
@@ -423,8 +528,8 @@ export function SlicerControl({
       ref={containerRef}
       className={containerClasses}
       style={{
-        left: position.x,
-        top: position.y,
+        left: currentX,
+        top: currentY,
         width: position.width,
         height: position.height,
         borderColor: styleConfig.border,
@@ -441,7 +546,15 @@ export function SlicerControl({
       aria-label={config.caption}
       aria-multiselectable="true"
       data-slicer-id={config.id}
+      data-selected={isSelected ? 'true' : 'false'}
+      data-no-grid-pointer="true"
       data-testid={`slicer-${config.id}`}
+      onMouseDown={stopGridMouseEvent}
+      onMouseMove={stopGridMouseEvent}
+      onMouseUp={stopGridMouseEvent}
+      onPointerDown={stopGridPointerEvent}
+      onPointerMove={stopGridPointerEvent}
+      onPointerUp={stopGridPointerEvent}
     >
       {/* Disconnected overlay */}
       {!isConnected && <DisconnectedOverlay />}
@@ -449,7 +562,12 @@ export function SlicerControl({
       {/* Header */}
       {config.showHeader && (
         <div
-          className="flex items-center justify-between px-2 flex-shrink-0"
+          className="flex items-center justify-between px-2 flex-shrink-0 cursor-move select-none touch-none"
+          data-testid="slicer-drag-handle"
+          onPointerDown={handleHeaderPointerDown}
+          onPointerMove={handleHeaderPointerMove}
+          onPointerUp={finishHeaderDrag}
+          onPointerCancel={finishHeaderDrag}
           style={{
             height: headerHeight,
             backgroundColor: styleConfig.header.bg,

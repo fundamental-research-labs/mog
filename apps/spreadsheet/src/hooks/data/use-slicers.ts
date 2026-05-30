@@ -40,6 +40,11 @@ export interface UseSlicersOptions {
   sheetId: SheetId;
 }
 
+export interface SlicerSelectOptions {
+  /** Toggle the slicer in the current object multi-selection. */
+  toggle?: boolean;
+}
+
 const DEFAULT_SLICER_STYLE: SlicerRenderConfig['style'] = {
   columnCount: 1,
   buttonHeight: 30,
@@ -57,8 +62,11 @@ export interface UseSlicersReturn {
   /** Currently selected slicer ID (for UI focus) */
   selectedSlicerId: string | null;
 
+  /** Currently selected slicer IDs (for object multi-selection) */
+  selectedSlicerIds: string[];
+
   /** Select a slicer */
-  selectSlicer: (slicerId: string | null) => void;
+  selectSlicer: (slicerId: string | null, options?: SlicerSelectOptions) => void;
 
   /** Handle single item click (exclusive selection) */
   handleItemClick: (slicerId: string, value: CellValue) => void;
@@ -77,6 +85,9 @@ export interface UseSlicersReturn {
 
   /** Delete a slicer */
   deleteSlicer: (slicerId: string) => void;
+
+  /** Delete a group of slicers */
+  deleteSlicers: (slicerIds: string[]) => void;
 }
 
 // =============================================================================
@@ -162,7 +173,8 @@ export function useSlicers({ sheetId }: UseSlicersOptions): UseSlicersReturn {
   const [dataVersion, setDataVersion] = useState(0);
 
   // Selected slicer for UI focus
-  const [selectedSlicerId, setSelectedSlicerId] = useState<string | null>(null);
+  const [selectedSlicerIds, setSelectedSlicerIds] = useState<string[]>([]);
+  const selectedSlicerId = selectedSlicerIds[0] ?? null;
 
   // Load slicers asynchronously via Worksheet API
   useEffect(() => {
@@ -213,8 +225,18 @@ export function useSlicers({ sheetId }: UseSlicersOptions): UseSlicersReturn {
   }, [wb, sheetId]);
 
   // Select a slicer
-  const selectSlicer = useCallback((slicerId: string | null) => {
-    setSelectedSlicerId(slicerId);
+  const selectSlicer = useCallback((slicerId: string | null, options?: SlicerSelectOptions) => {
+    setSelectedSlicerIds((current) => {
+      if (slicerId === null) {
+        return [];
+      }
+      if (!options?.toggle) {
+        return [slicerId];
+      }
+      return current.includes(slicerId)
+        ? current.filter((selectedId) => selectedId !== slicerId)
+        : [...current, slicerId];
+    });
   }, []);
 
   // Worksheet API: Handle single item click (exclusive selection)
@@ -305,17 +327,36 @@ export function useSlicers({ sheetId }: UseSlicersOptions): UseSlicersReturn {
         setDataVersion((v) => v + 1);
 
         // Clear selection if deleted slicer was selected
-        if (selectedSlicerId === slicerId) {
-          setSelectedSlicerId(null);
-        }
+        setSelectedSlicerIds((current) => current.filter((selectedId) => selectedId !== slicerId));
       })();
     },
-    [wb, sheetId, selectedSlicerId],
+    [wb, sheetId],
+  );
+
+  const deleteSlicers = useCallback(
+    (slicerIds: string[]) => {
+      void (async () => {
+        const uniqueSlicerIds = Array.from(new Set(slicerIds));
+        if (uniqueSlicerIds.length === 0) {
+          return;
+        }
+        const ws = wb.getSheetById(sheetId);
+        for (const slicerId of uniqueSlicerIds) {
+          await ws.slicers.remove(slicerId);
+        }
+        setDataVersion((v) => v + 1);
+        setSelectedSlicerIds((current) =>
+          current.filter((selectedId) => !uniqueSlicerIds.includes(selectedId)),
+        );
+      })();
+    },
+    [wb, sheetId],
   );
 
   return {
     slicers: slicerDefs,
     selectedSlicerId,
+    selectedSlicerIds,
     selectSlicer,
     handleItemClick,
     handleItemToggle,
@@ -323,6 +364,7 @@ export function useSlicers({ sheetId }: UseSlicersOptions): UseSlicersReturn {
     updateSlicerPosition,
     updateSlicerStyle,
     deleteSlicer,
+    deleteSlicers,
   };
 }
 

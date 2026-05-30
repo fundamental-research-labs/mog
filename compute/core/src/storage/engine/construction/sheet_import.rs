@@ -48,6 +48,11 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
     //    so that new IDs don't collide with existing ones.
     let seed = engine.stores.grid_id_alloc.high_water_mark();
     let mut allocator = DefaultIdAllocator::with_seed(seed);
+    let theme = parse_output.theme.as_ref();
+    let indexed_colors = parse_output
+        .workbook_stylesheet
+        .as_ref()
+        .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
 
     // 4. Merge style palette + hydrate sheets inside a transaction
     //    Collect the results we need for index building.
@@ -126,6 +131,8 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
                     &sheet,
                     &parse_output.style_palette,
                     &parse_output.persons,
+                    theme,
+                    indexed_colors,
                     &mut allocator,
                 )?;
 

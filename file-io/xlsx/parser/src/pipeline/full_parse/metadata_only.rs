@@ -1,7 +1,7 @@
 use crate::domain::workbook::read::SheetInfo;
 use crate::domain::worksheet::read::{
-    parse_dimension_ref_with_text, parse_frozen_pane, parse_sheet_format_pr, parse_sheet_views,
-    parse_sheet_views_ext_lst,
+    parse_dimension_ref_with_text, parse_frozen_pane, parse_sheet_format_pr,
+    parse_sheet_properties, parse_sheet_views, parse_sheet_views_ext_lst,
 };
 use crate::output::results::FullParsedSheet;
 use crate::zip::{XlsxArchive, ZipError};
@@ -58,6 +58,11 @@ pub(super) fn append_metadata_only_sheets(
             empty_sheet.zero_height = fmt_pr.zero_height;
             empty_sheet.thick_top = fmt_pr.thick_top;
             empty_sheet.thick_bottom = fmt_pr.thick_bottom;
+            empty_sheet.sheet_properties = parse_sheet_properties(pre_sd);
+            empty_sheet.outline_properties = empty_sheet
+                .sheet_properties
+                .as_ref()
+                .and_then(|properties| properties.outline_pr.clone());
         }
 
         sheets.push(empty_sheet);

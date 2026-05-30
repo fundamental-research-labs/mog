@@ -39,7 +39,7 @@ use grid_index::{collect_physical_phantom_cells, mirror_pos_map_into_grid_index}
 use identity::{
     allocate_missing_anchored_identities, insert_missing_anchored_identities, sheet_identity_extent,
 };
-use view_meta::{hydrate_sheet_view_metadata, sheet_color_to_hex};
+use view_meta::{hydrate_sheet_view_metadata, insert_sheet_properties_metadata};
 
 // ===========================================================================
 // Per-sheet hydration
@@ -54,6 +54,8 @@ pub(crate) fn hydrate_sheet(
     sheet: &SheetData,
     style_palette: &[DocumentFormat],
     persons: &[domain_types::domain::comment::PersonInfo],
+    theme: Option<&domain_types::ThemeData>,
+    indexed_colors: Option<&ooxml_types::styles::ColorsDef>,
     allocator: &mut impl IdAllocator,
 ) -> Result<
     (
@@ -118,10 +120,7 @@ pub(crate) fn hydrate_sheet(
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
     if let Some(properties) = &sheet.sheet_properties {
-        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
-        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
-            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
-        }
+        insert_sheet_properties_metadata(txn, &meta_map, properties, theme, indexed_colors);
     }
 
     // 4. Cells map
@@ -440,7 +439,7 @@ pub(crate) fn hydrate_sheet(
     // Populate meta-level domain data
     // =====================================================================
 
-    hydrate_sheet_view_metadata(txn, &meta_map, sheet, true);
+    hydrate_sheet_view_metadata(txn, &meta_map, sheet, true, theme, indexed_colors);
 
     // Collect physical phantom cells — entries in pos_map that weren't in the
     // original data cell set and are not metadata-only identities.
@@ -500,6 +499,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     sheet: &SheetData,
     style_palette: &[DocumentFormat],
     persons: &[domain_types::domain::comment::PersonInfo],
+    theme: Option<&domain_types::ThemeData>,
+    indexed_colors: Option<&ooxml_types::styles::ColorsDef>,
     alloc: &SheetIdAllocation,
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
@@ -553,10 +554,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
     if let Some(properties) = &sheet.sheet_properties {
-        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
-        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
-            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
-        }
+        insert_sheet_properties_metadata(txn, &meta_map, properties, theme, indexed_colors);
     }
 
     // Cells map
@@ -819,7 +817,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         range_style_positions,
     );
 
-    hydrate_sheet_view_metadata(txn, &meta_map, sheet, false);
+    hydrate_sheet_view_metadata(txn, &meta_map, sheet, false, theme, indexed_colors);
 
     // Physical phantom cells.
     let phantom_cells =

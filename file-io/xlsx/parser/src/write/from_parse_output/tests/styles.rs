@@ -56,6 +56,46 @@ fn writes_table_styles_from_typed_parse_output() {
 }
 
 #[test]
+fn workbook_stylesheet_indexed_colors_export_with_regenerated_live_styles() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        cells: vec![DomainCellData {
+            row: 0,
+            col: 0,
+            value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+            style_id: Some(0),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }]);
+    output.style_palette = vec![DocumentFormat::default()];
+    output.workbook_stylesheet = Some(WorkbookStylesheet {
+        indexed_colors: Some(ooxml_types::styles::ColorsDef {
+            indexed_colors: vec![
+                "FF000000".to_string(),
+                "FFFFFFFF".to_string(),
+                "FF00AA00".to_string(),
+            ],
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+
+    assert!(
+        styles_xml.contains("<indexedColors>"),
+        "custom indexed palette missing from styles.xml: {styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(r#"<rgbColor rgb="FF00AA00"/>"#),
+        "custom indexed color missing from styles.xml: {styles_xml}"
+    );
+}
+
+#[test]
 fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

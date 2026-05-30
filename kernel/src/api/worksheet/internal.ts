@@ -225,6 +225,17 @@ export class WorksheetInternalImpl implements WorksheetInternal {
           );
         }),
     );
+
+    for (const move of tableMoves) {
+      this.ctx.eventBus.emit({
+        type: 'table:updated',
+        timestamp: Date.now(),
+        sheetId: this.sheetId,
+        tableId: move.name,
+        changes: { range: move.targetRange },
+        source: 'api',
+      });
+    }
   }
 
   async getCellIdAt(row: number, col: number): Promise<string | null> {

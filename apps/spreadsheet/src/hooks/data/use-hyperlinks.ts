@@ -8,7 +8,7 @@
  *
  * Architecture note: Hyperlink activation is a SIDE EFFECT, not a state change.
  * This hook provides utility functions that OptimizedGridV2 calls directly,
- * bypassing the selection state machine when Ctrl+click opens a link.
+ * bypassing the selection state machine when a click opens a link.
  *
  * Architecture:
  * - Sync presence check: ws.viewport.getCellData(...).hasHyperlink
@@ -63,7 +63,7 @@ export interface UseHyperlinksReturn {
   isValidHyperlink: (url: string) => boolean;
 
   /**
-   * Handle Ctrl+click on a cell. Returns true (synchronously) iff the
+   * Handle hyperlink activation on a cell. Returns true (synchronously) iff the
    * cell carries a hyperlink — so the caller can suppress normal
    * click-selection behaviour. The actual link-open dispatch happens
    * asynchronously after a kernel API fetch (the URL string isn't in the
@@ -73,7 +73,7 @@ export interface UseHyperlinksReturn {
    * @returns true if the cell has a hyperlink (and a navigation has been
    * scheduled), false otherwise
    */
-  handleCtrlClick: (cell: CellCoord) => boolean;
+  handleClick: (cell: CellCoord) => boolean;
 }
 
 // =============================================================================
@@ -140,11 +140,11 @@ function safeOpenUrl(url: string): boolean {
  *
  * Usage:
  * ```tsx
- * const { handleCtrlClick, fetchHyperlink, openHyperlink } = useHyperlinks();
+ * const { handleClick, fetchHyperlink, openHyperlink } = useHyperlinks();
  *
  * // In mouse handler:
- * if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
- * if (handleCtrlClick(cell)) {
+ * if (!e.shiftKey) {
+ * if (handleClick(cell)) {
  * return; // Hyperlink was opened, don't propagate to selection
  * }
  * }
@@ -183,7 +183,7 @@ export function useHyperlinks(): UseHyperlinksReturn {
     return safeOpenUrl(url);
   }, []);
 
-  const handleCtrlClick = useCallback(
+  const handleClick = useCallback(
     (cell: CellCoord): boolean => {
       if (!hasHyperlink(cell)) return false;
       // Fire-and-forget: fetch URL, then open. We've already returned
@@ -202,6 +202,6 @@ export function useHyperlinks(): UseHyperlinksReturn {
     fetchHyperlink,
     openHyperlink,
     isValidHyperlink,
-    handleCtrlClick,
+    handleClick,
   };
 }

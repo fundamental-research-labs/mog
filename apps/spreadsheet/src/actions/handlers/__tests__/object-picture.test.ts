@@ -31,6 +31,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   checkboxAdd: jest.Mock;
   comboBoxAdd: jest.Mock;
   setCell: jest.Mock;
+  setFormat: jest.Mock;
   pictureUpdate: jest.Mock;
   canDoStructureOp: jest.Mock;
   uiState: {
@@ -46,6 +47,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   const checkboxAdd = jest.fn(async () => ({ id: 'checkbox-new-1' }));
   const comboBoxAdd = jest.fn(async () => ({ id: 'combobox-new-1' }));
   const setCell = jest.fn(async () => undefined);
+  const setFormat = jest.fn(async () => undefined);
   const pictureUpdate = jest.fn(async () => undefined);
   const canDoStructureOp = jest.fn(async () => true);
   const uiState = {
@@ -76,6 +78,9 @@ function createMockDeps(picture: PictureOverrides = {}): {
       formControls: {
         addCheckbox: checkboxAdd,
         addComboBox: comboBoxAdd,
+      },
+      formats: {
+        set: setFormat,
       },
       setCell,
       protection: {
@@ -127,6 +132,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
     checkboxAdd,
     comboBoxAdd,
     setCell,
+    setFormat,
     pictureUpdate,
     canDoStructureOp,
     uiState,
@@ -220,7 +226,7 @@ describe('object picture handlers', () => {
 
   describe('form control insertion', () => {
     it('inserts a checkbox form control through the worksheet API', async () => {
-      const { deps, checkboxAdd, setCell, canDoStructureOp } = createMockDeps();
+      const { deps, checkboxAdd, setCell, setFormat, canDoStructureOp } = createMockDeps();
 
       const result = await ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps);
 
@@ -229,8 +235,11 @@ describe('object picture handlers', () => {
       expect(checkboxAdd).toHaveBeenCalledWith({
         anchor: { row: 0, col: 0 },
         linkedCell: { row: 0, col: 0 },
+        width: 16,
+        height: 16,
       });
-      expect(setCell).not.toHaveBeenCalled();
+      expect(setCell).toHaveBeenCalledWith(0, 0, false);
+      expect(setFormat).toHaveBeenCalledWith(0, 0, { numberFormat: ';;;' });
       expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
     });
 

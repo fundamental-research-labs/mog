@@ -54,15 +54,16 @@ describe('ribbon visibility config', () => {
     const merged = mergeRibbonVisibilityConfig(publicConfig, APP_EVAL_RIBBON_VISIBILITY_CONFIG);
 
     expect(isRibbonPathVisible(merged, ['pageLayout', 'themes'])).toBe(true);
+    expect(isRibbonPathVisible(merged, ['data', 'importData', 'fromWeb'])).toBe(true);
   });
 
-  it('hides staged public chrome and tabs in the public profile', () => {
+  it('keeps public controls visible while hiding staged public ribbon chrome', () => {
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'pivotTable']),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'checkBox']),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'tables', 'comboBox']),
     ).toBe(false);
@@ -75,11 +76,22 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'sparklines'])).toBe(
       false,
     );
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(false);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(
+      true,
+    );
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'text'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'charts'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'links'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'comments'])).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromCsv']),
+    ).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromJson']),
+    ).toBe(true);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['data', 'importData', 'fromWeb']),
+    ).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['pageLayout'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['review'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['view'])).toBe(true);
@@ -89,8 +101,22 @@ describe('ribbon visibility config', () => {
         'controls',
         'toggleAiFormulaBar',
       ]),
+    ).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, [
+        'formulaBar',
+        'controls',
+        'expandCollapse',
+      ]),
     ).toBe(true);
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(true);
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['collaboration'])).toBe(false);
+    expect(
+      isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, [
+        'collaboration',
+        'tabBar',
+        'collaborate',
+      ]),
+    ).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['home'])).toBe(true);
   });
 

@@ -31,17 +31,13 @@ interface UseFilterHeaderCacheOptions {
 }
 
 function tableContainsFilterRange(table: TableInfo, range: FilterHeaderInfoRange): boolean {
-  const match = table.range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
-  if (!match) return false;
-  const tableStartCol = a1ColToIndex(match[1]);
-  const tableStartRow = Number(match[2]) - 1;
-  const tableEndCol = a1ColToIndex(match[3]);
-  const tableEndRow = Number(match[4]) - 1;
+  const tableRange = parseTableRange(table);
+  if (!tableRange) return false;
   return (
-    tableStartRow === range.startRow &&
-    tableStartCol === range.startCol &&
-    tableEndRow === range.endRow &&
-    tableEndCol === range.endCol
+    tableRange.startRow === range.startRow &&
+    tableRange.startCol === range.startCol &&
+    tableRange.endRow === range.endRow &&
+    tableRange.endCol === range.endCol
   );
 }
 
@@ -50,6 +46,18 @@ interface FilterHeaderInfoRange {
   startCol: number;
   endRow: number;
   endCol: number;
+}
+
+function parseTableRange(table: TableInfo): FilterHeaderInfoRange | null {
+  const a1Range = table.range.replace(/\$/g, '').split('!').pop() ?? table.range;
+  const match = a1Range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+  if (!match) return null;
+  return {
+    startRow: Number(match[2]) - 1,
+    startCol: a1ColToIndex(match[1]),
+    endRow: Number(match[4]) - 1,
+    endCol: a1ColToIndex(match[3]),
+  };
 }
 
 function a1ColToIndex(col: string): number {
@@ -105,9 +113,12 @@ export function useFilterHeaderCache({
           continue;
         }
 
-        const headerRow = detail.range.startRow;
-        const startCol = detail.range.startCol;
-        const endCol = detail.range.endCol;
+        const displayRange = owningTable
+          ? (parseTableRange(owningTable) ?? detail.range)
+          : detail.range;
+        const headerRow = displayRange.startRow;
+        const startCol = displayRange.startCol;
+        const endCol = displayRange.endCol;
 
         for (let col = startCol; col <= endCol; col++) {
           const cellId = await ws._internal.getCellIdAt(headerRow, col);

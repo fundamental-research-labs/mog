@@ -414,7 +414,7 @@ export function DateValueFilterList({
   );
 
   return (
-    <div className="date-value-filter-list flex flex-col gap-2">
+    <div className="date-value-filter-list flex h-full min-h-0 flex-col gap-2">
       {/* Select All / Clear buttons */}
       <div className="flex gap-2 text-caption">
         <button
@@ -438,8 +438,8 @@ export function DateValueFilterList({
 
       {/* Hierarchical date tree */}
       <div
-        className="border border-ss-border rounded overflow-y-auto bg-ss-surface"
-        style={{ maxHeight: '200px', minHeight: '100px' }}
+        data-testid="filter-value-scroll-region"
+        className="min-h-[72px] flex-1 border border-ss-border rounded overflow-y-auto bg-ss-surface"
       >
         {!hasBlank && sortedYears.length === 0 ? (
           <div className="p-3 text-center text-ss-text-secondary text-body-sm">No dates found</div>
@@ -469,13 +469,13 @@ export function DateValueFilterList({
       </div>
 
       {/* Summary */}
-      <div className="text-caption text-ss-text-secondary">
+      <div className="shrink-0 text-caption text-ss-text-secondary">
         {selectedSerials.size + (hasBlank && isBlankChecked ? 1 : 0)} of{' '}
         {totalDates + (hasBlank ? 1 : 0)} dates selected
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-2 pt-2 border-t border-ss-border">
+      <div className="flex shrink-0 gap-2 pt-2 border-t border-ss-border">
         {onCancel && (
           <button
             type="button"

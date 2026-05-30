@@ -158,7 +158,9 @@ export function FilterDropdown({
   }, [wb, activeSheetId, filterId, headerCol, isOpen]);
 
   // Detect column type for showing appropriate filter submenu (B4: Excel-parity)
-  const columnType = detectColumnType((dropdownData?.items ?? []).map((item) => item.value));
+  const columnType =
+    dropdownData?.columnType ??
+    detectColumnType((dropdownData?.items ?? []).map((item) => item.value));
 
   // Check if column has colors (for showing Color Filters submenu)
   const [hasColors, setHasColors] = useState(false);

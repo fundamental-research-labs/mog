@@ -44,6 +44,7 @@ import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 import {
   AdvancedFilterIcon,
   CircleInvalidDataIcon,
@@ -471,31 +472,37 @@ export function DataRibbon({
                 aria-label="Import data options"
               >
                 {/* From CSV */}
-                <RibbonDropdownItem
-                  dataValue="csv"
-                  icon={<CsvFileIcon />}
-                  onClick={handleImportCsv}
-                >
-                  From CSV
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromCsv">
+                  <RibbonDropdownItem
+                    dataValue="csv"
+                    icon={<CsvFileIcon />}
+                    onClick={handleImportCsv}
+                  >
+                    From CSV
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
 
                 {/* From JSON */}
-                <RibbonDropdownItem
-                  dataValue="json"
-                  icon={<JsonFileIcon />}
-                  onClick={handleImportJson}
-                >
-                  From JSON
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromJson">
+                  <RibbonDropdownItem
+                    dataValue="json"
+                    icon={<JsonFileIcon />}
+                    onClick={handleImportJson}
+                  >
+                    From JSON
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
 
                 {/* From Web (uses existing Bind Sheet functionality) */}
-                <RibbonDropdownItem
-                  dataValue="web"
-                  icon={<WebIcon />}
-                  onClick={handleImportFromWeb}
-                >
-                  From Web
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromWeb">
+                  <RibbonDropdownItem
+                    dataValue="web"
+                    icon={<WebIcon />}
+                    onClick={handleImportFromWeb}
+                  >
+                    From Web
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
               </div>
             </RibbonDropdownPanel>
           </div>

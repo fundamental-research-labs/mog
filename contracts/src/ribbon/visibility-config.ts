@@ -224,6 +224,9 @@ export const RIBBON_VISIBILITY_SCHEMA = {
     importData: {
       getData: true,
       importData: true,
+      fromCsv: true,
+      fromJson: true,
+      fromWeb: true,
     },
     queriesConnections: {
       refreshAll: true,
@@ -577,18 +580,26 @@ export type RibbonVisibilityProfileName = 'public' | 'app-eval' | 'all';
 export type RibbonVisibilityPath = readonly [RibbonVisibilityRootKey, string?, string?];
 
 export const PUBLIC_RIBBON_VISIBILITY_CONFIG = {
+  data: {
+    importData: {
+      fromWeb: false,
+    },
+  },
   insert: {
     tables: {
-      pivotTable: false,
-      checkBox: false,
       comboBox: false,
     },
     illustrations: false,
     sparklines: false,
-    filters: false,
     text: false,
   },
   pageLayout: false,
+  formulaBar: {
+    controls: {
+      toggleAiFormulaBar: false,
+    },
+  },
+  collaboration: false,
 } satisfies RibbonVisibilityConfig;
 
 export const APP_EVAL_RIBBON_VISIBILITY_CONFIG = {

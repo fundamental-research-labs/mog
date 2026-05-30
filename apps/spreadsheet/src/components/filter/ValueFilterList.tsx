@@ -254,7 +254,10 @@ export function ValueFilterList({
   const totalSelectable = items.length + (hasBlank ? 1 : 0);
 
   return (
-    <div className="value-filter-list flex min-h-0 flex-col gap-2" data-testid="filter-value-list">
+    <div
+      className="value-filter-list flex h-full min-h-0 flex-col gap-2"
+      data-testid="filter-value-list"
+    >
       {/* Search input - supports Excel wildcards (* and ?) */}
       <input
         type="text"
@@ -302,8 +305,8 @@ export function ValueFilterList({
 
       {/* Value list with checkboxes */}
       <div
-        className="border border-ss-border rounded overflow-y-auto bg-ss-surface"
-        style={{ maxHeight: '200px', minHeight: '100px' }}
+        data-testid="filter-value-scroll-region"
+        className="min-h-[72px] flex-1 border border-ss-border rounded overflow-y-auto bg-ss-surface"
       >
         {!blankVisible && filteredItems.length === 0 ? (
           <div className="p-3 text-center text-ss-text-secondary text-body-sm">No values found</div>
@@ -355,12 +358,12 @@ export function ValueFilterList({
       </div>
 
       {/* Summary */}
-      <div className="text-caption text-ss-text-secondary">
+      <div className="shrink-0 text-caption text-ss-text-secondary">
         {selectedCount} of {totalSelectable} selected
       </div>
 
       {/* Action buttons */}
-      <div className="sticky bottom-0 z-10 flex gap-2 border-t border-ss-border bg-ss-surface pt-2 pb-1">
+      <div className="z-10 flex shrink-0 gap-2 border-t border-ss-border bg-ss-surface pt-2 pb-1">
         {onCancel && (
           <button
             type="button"

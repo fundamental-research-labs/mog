@@ -851,6 +851,84 @@ describe('resolveChartData imported visibility semantics', () => {
       { category: 'FY21', value: 30, series: 'Visible' },
     ]);
   });
+
+  it('keeps source series colors aligned after plotVisibleOnly filters hidden series', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'column',
+      dataRange: '',
+      plotVisibleOnly: true,
+      series: [
+        {
+          name: 'Visible',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A10:B10',
+          idx: 0,
+          format: { fill: { type: 'solid', color: { theme: 'accent1' } } },
+        },
+        {
+          name: 'Hidden',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!A10:B10',
+          idx: 1,
+          format: { fill: { type: 'solid', color: { theme: 'accent2' } } },
+        },
+        {
+          name: 'Later',
+          values: 'Sheet1!A3:B3',
+          categories: 'Sheet1!A10:B10',
+          idx: 2,
+          format: { fill: { type: 'solid', color: { theme: 'accent3' } } },
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => [1]),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20][col]
+            : row === 1
+              ? [100, 200][col]
+              : row === 2
+                ? [30, 40][col]
+                : row === 9
+                  ? ['FY19', 'FY20'][col]
+                  : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const marks = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect(Array.isArray(marks)).toBe(true);
+    if (!Array.isArray(marks)) return;
+    const visibleMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Visible',
+    ) as any;
+    const laterMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Later',
+    ) as any;
+    const hiddenMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Hidden',
+    );
+
+    expect(hiddenMark).toBeUndefined();
+    expect(visibleMark?.style.fill).toBe('#4472C4');
+    expect(laterMark?.style.fill).toBe('#A5A5A5');
+  });
 });
 
 describe('getLayout sheet-scoped cache contract', () => {

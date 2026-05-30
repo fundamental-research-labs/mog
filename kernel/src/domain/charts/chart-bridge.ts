@@ -34,7 +34,6 @@ import {
   type ChartData,
   type ChartDataPoint,
   type ChartDataSeries,
-  type ChartSpec,
   type CompileResult,
   type DataRow,
 } from '@mog/charts';
@@ -328,6 +327,11 @@ type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['c
 type RangeSnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']
 >;
+
+type ChartRenderData = {
+  config: ChartConfig;
+  data: ChartData;
+};
 
 function defaultExportOptionsForSize(width: number, height: number): ChartExportOptionsSnapshot {
   return {
@@ -1275,19 +1279,19 @@ export class ChartBridge implements IChartBridge {
     }
 
     const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const chartDataOrError = await this.resolveChartDataForRendering(
+    const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
       chartId,
     );
-    if ('code' in chartDataOrError) {
+    if ('code' in chartRenderDataOrError) {
       return {
         success: false,
-        error: chartDataOrError,
+        error: chartRenderDataOrError,
       };
     }
 
-    const data = this.chartDataToRows(chartDataOrError);
+    const data = this.chartDataToRows(chartRenderDataOrError.data);
 
     if (data.length === 0) {
       return {
@@ -1388,16 +1392,16 @@ export class ChartBridge implements IChartBridge {
     }
 
     const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const chartDataOrError = await this.resolveChartDataForRendering(
+    const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
       chartId,
     );
-    if ('code' in chartDataOrError) {
-      this.commitError(chartId, chartDataOrError, sheetId);
-      return chartDataOrError;
+    if ('code' in chartRenderDataOrError) {
+      this.commitError(chartId, chartRenderDataOrError, sheetId);
+      return chartRenderDataOrError;
     }
-    const chartData = chartDataOrError;
+    const { config, data: chartData } = chartRenderDataOrError;
 
     if (chartData.series.length === 0) {
       const error: ChartError = {
@@ -1410,7 +1414,7 @@ export class ChartBridge implements IChartBridge {
     }
 
     // Convert to ChartSpec and compile
-    const spec = this.chartToSpec(chart, chartData);
+    const spec = configToSpec(config, chartData);
 
     // Try WASM-accelerated transforms if available
     const specDataValues =
@@ -1598,15 +1602,15 @@ export class ChartBridge implements IChartBridge {
     }
 
     const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const chartDataOrError = await this.resolveChartDataForRendering(
+    const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
       chartId,
     );
-    if ('code' in chartDataOrError) {
-      return chartDataOrError;
+    if ('code' in chartRenderDataOrError) {
+      return chartRenderDataOrError;
     }
-    const chartData = chartDataOrError;
+    const { config, data: chartData } = chartRenderDataOrError;
 
     if (chartData.series.length === 0) {
       return {
@@ -1616,7 +1620,6 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const config = toChartConfig(chart);
     const spec = configToSpec(config, chartData);
 
     // Try WASM-accelerated transforms if available
@@ -1721,7 +1724,7 @@ export class ChartBridge implements IChartBridge {
     chart: ChartFloatingObject,
     resolvedRanges: Charts.ResolvedChartRangeReferences,
     chartId: string,
-  ): Promise<ChartData | ChartError> {
+  ): Promise<ChartRenderData | ChartError> {
     const config = toChartConfig(chart);
     const hasExplicitSeriesValues = config.series?.some((series) => series.values?.trim());
 
@@ -1755,7 +1758,10 @@ export class ChartBridge implements IChartBridge {
         sheetAliases: this.seriesSheetAliases(resolvedRanges),
         hiddenVisibility,
       });
-      return extractChartData(accessor, renderConfig);
+      return {
+        config: renderConfig,
+        data: extractChartData(accessor, renderConfig),
+      };
     }
 
     const dataRange = resolvedRanges.dataRange?.range;
@@ -1776,11 +1782,14 @@ export class ChartBridge implements IChartBridge {
       ? await this.loadHiddenVisibility(dataRanges)
       : undefined;
     const cellAccessor = await this.createCellAccessor(dataRanges, { hiddenVisibility });
-    return extractChartDataFromRange(cellAccessor, dataRange, {
-      categoryRange: resolvedRanges.categoryRange?.range,
-      seriesRange: resolvedRanges.seriesRange?.range,
-      seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
-    });
+    return {
+      config,
+      data: extractChartDataFromRange(cellAccessor, dataRange, {
+        categoryRange: resolvedRanges.categoryRange?.range,
+        seriesRange: resolvedRanges.seriesRange?.range,
+        seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
+      }),
+    };
   }
 
   private async loadHiddenVisibility(
@@ -1838,13 +1847,6 @@ export class ChartBridge implements IChartBridge {
       }
     }
     return aliases;
-  }
-
-  /**
-   * Convert ChartFloatingObject + ChartData to ChartSpec for the grammar compiler.
-   */
-  private chartToSpec(rawChart: ChartFloatingObject, data: ChartData): ChartSpec {
-    return configToSpec(toChartConfig(rawChart), data);
   }
 
   // ===========================================================================

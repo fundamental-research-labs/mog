@@ -28,6 +28,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  NODE_VERSION: '24.16.0'
+  PNPM_VERSION: '11.5.0'
+  NPM_VERSION: '11.16.0'
+  NAPI_RS_CLI_VERSION: '3.7.0'
+  CARGO_ZIGBUILD_VERSION: '0.22.3'
+  WASM_PACK_VERSION: '0.15.0'
+  MATURIN_VERSION: '1.13.3'
 
 jobs:
   version:
@@ -47,11 +54,11 @@ jobs:
 
       - uses: pnpm/action-setup@v5
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Validate release branch
         id: release-branch
@@ -212,7 +219,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -228,10 +235,10 @@ jobs:
 
       - name: Install cargo-zigbuild
         if: contains(matrix.target, 'linux-musl')
-        run: cargo install cargo-zigbuild
+        run: cargo install cargo-zigbuild --version "$CARGO_ZIGBUILD_VERSION" --locked
 
       - name: Install napi-rs CLI
-        run: npm i -g @napi-rs/cli
+        run: npm i -g "@napi-rs/cli@${{ env.NAPI_RS_CLI_VERSION }}"
 
       - name: Build native addon
         run: |
@@ -267,7 +274,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack
+        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
 
       - name: Install binaryen and brotli
         run: sudo apt-get update && sudo apt-get install -y binaryen brotli
@@ -320,7 +327,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install maturin
-        run: pip install maturin
+        run: python -m pip install "maturin==$MATURIN_VERSION"
 
       - name: Build wheel
         run: |
@@ -356,11 +363,11 @@ jobs:
 
       - uses: pnpm/action-setup@v5
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -368,7 +375,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install trusted publishing npm
-        run: npm install -g npm@^11.5.1
+        run: npm install -g "npm@$NPM_VERSION"
 
       - name: Download all artifacts (current run)
         if: ${{ inputs.source-run-id == '' }}
@@ -532,7 +539,7 @@ jobs:
 
       - name: Publish Python wheels to PyPI
         run: |
-          pip install maturin
+          python -m pip install "maturin==$MATURIN_VERSION"
           PY_VERSION="${{ needs.version.outputs.py-version }}"
           echo "Publishing mog-sdk==${PY_VERSION} to PyPI..."
           for whl in artifacts/python-*/mog_sdk-*.whl; do

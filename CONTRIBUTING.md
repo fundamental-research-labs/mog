@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Mog. This guide explains how to g
 
 ## Code of Conduct
 
-All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Please read it before contributing.
+All participants are expected to keep discussion respectful, focused, and constructive.
 
 ## How to Contribute
 
@@ -57,7 +57,7 @@ pnpm build:wasm
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the system architecture, including the kernel, compute core, views, and platform layers.
+See [docs/architecture/README.md](docs/architecture/README.md) for an overview of the system architecture, including the kernel, compute core, views, and platform layers.
 
 The repository follows a layered dependency direction:
 

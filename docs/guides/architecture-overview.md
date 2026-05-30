@@ -71,5 +71,5 @@ Cells are keyed by stable UUIDs, not positions. Why this matters for formulas, c
 
 ## Related Docs
 
-- [Architecture (detailed)](../ARCHITECTURE.md) — full architecture document
-- [Compute Bridge](../compute-bridge.md) — bridge internals
+- [Architecture (detailed)](../architecture/README.md) — full architecture document
+- [Compute Bridge](../architecture/compute-bridge.md) — bridge internals

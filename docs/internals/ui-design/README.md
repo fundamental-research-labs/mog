@@ -21,11 +21,11 @@ UI Components → UI Primitives → Semantic Tokens → Tailwind v4 @theme → C
 
 | File                                                                                 | Purpose                                               |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| [`apps/spreadsheet/src/infra/styles/globals.css`](../../apps/spreadsheet/src/infra/styles/globals.css) | **Single source of truth** - spreadsheet design tokens |
-| [`apps/spreadsheet/src/infra/styles/built-in-themes.ts`](../../apps/spreadsheet/src/infra/styles/built-in-themes.ts) | 8 Excel-compatible workbook themes |
-| [`contracts/src/formatting/theme.ts`](../../contracts/src/formatting/theme.ts)       | Theme type definitions and color resolution utilities |
-| [`shell/src/components/ui/`](../../shell/src/components/ui/)                         | **UI primitives** - use these, don't build custom     |
-| [`infra/icons/src/`](../../infra/icons/src/)                                         | **Single source of truth** - all SVG icons            |
+| [`apps/spreadsheet/src/infra/styles/globals.css`](../../../apps/spreadsheet/src/infra/styles/globals.css) | **Single source of truth** - spreadsheet design tokens |
+| [`apps/spreadsheet/src/infra/styles/built-in-themes.ts`](../../../apps/spreadsheet/src/infra/styles/built-in-themes.ts) | 8 Excel-compatible workbook themes |
+| [`contracts/src/formatting/theme.ts`](../../../contracts/src/formatting/theme.ts)       | Theme type definitions and color resolution utilities |
+| [`shell/src/components/ui/`](../../../shell/src/components/ui/)                         | **UI primitives** - use these, don't build custom     |
+| [`infra/icons/src/`](../../../infra/icons/src/)                                         | **Single source of truth** - all SVG icons            |
 
 ## Icons
 
@@ -47,7 +47,7 @@ import { Bold } from '@fluentui/react-icons';
 - **175 icons** organized by category (text-formatting, alignment, clipboard, etc.)
 - **24×24 canonical size** with `currentColor` for theming
 - **Viewer**: Open `icons/viewer.html` to see all icons
-- **Design spec**: See [`infra/icons/spec.md`](../../infra/icons/spec.md) for design rules
+- **Design spec**: See [`infra/icons/spec.md`](../../../infra/icons/spec.md) for design rules
 
 ---
 
@@ -137,7 +137,7 @@ import { Bold } from '@fluentui/react-icons';
 
 Cell formats can reference theme colors: `'theme:accent1'` or `'theme:accent1:0.4'` (with tint).
 
-See [`contracts/src/formatting/theme.ts`](../../contracts/src/formatting/theme.ts) for `resolveColor()` and `resolveThemeColors()`.
+See [`contracts/src/formatting/theme.ts`](../../../contracts/src/formatting/theme.ts) for `resolveColor()` and `resolveThemeColors()`.
 
 ---
 

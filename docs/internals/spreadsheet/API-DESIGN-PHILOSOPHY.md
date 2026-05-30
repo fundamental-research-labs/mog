@@ -295,6 +295,6 @@ region.dispose();
 
 ## References
 
-- Implementation: [`contracts/src/core/disposable.ts`](../../contracts/src/core/disposable.ts)
-- ViewportRegion contract: [`contracts/src/api/workbook/viewport.ts`](../../contracts/src/api/workbook/viewport.ts)
-- Workbook interface: [`contracts/src/api/workbook.ts`](../../contracts/src/api/workbook.ts)
+- Implementation: [`contracts/src/core/disposable.ts`](../../../contracts/src/core/disposable.ts)
+- ViewportRegion contract: [`contracts/src/api/workbook/viewport.ts`](../../../contracts/src/api/workbook/viewport.ts)
+- Workbook interface: [`contracts/src/api/workbook.ts`](../../../contracts/src/api/workbook.ts)

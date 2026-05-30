@@ -141,5 +141,5 @@ Start with [Architecture Overview](architecture-overview.md) to understand the l
 ## Related Docs
 
 - [Architecture Overview](architecture-overview.md) — platform layers
-- [TypeScript Package Boundaries](../TYPESCRIPT-PACKAGE-BOUNDARIES.md) — package boundary rules
+- [TypeScript Package Boundaries](../architecture/typescript-package-boundaries.md) — package boundary rules
 - [Security Documentation](../security/README.md) — security and trust-center docs

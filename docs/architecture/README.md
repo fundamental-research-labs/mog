@@ -22,7 +22,7 @@ Round 1 ships `@mog-sdk/sheet-view` (binds to `Workbook`). Planned future views:
 
 In practice, apps may also import hardware-level packages directly (e.g., the spreadsheet app imports canvas and drawing packages) when the views/shell layers don't provide a sufficient abstraction.
 
-Details: [OS Overview](README.md)
+Details: [OS Overview](os/README.md)
 
 ---
 
@@ -38,7 +38,7 @@ Cells are keyed by **stable UUIDs (CellId)**, not positions. Position is a mutab
 - Concurrent structure changes compose correctly under CRDT
 - Range expansion is free: insert row inside `=SUM(A1:A10)` -> `=SUM(A1:A11)` automatically
 
-Details: [Cell Identity](spreadsheet/cell-identity.md) | [Data Model](spreadsheet/data-model.md)
+Details: [Cell Identity](../internals/spreadsheet/cell-identity.md) | [Data Model](../internals/spreadsheet/data-model.md)
 
 ### 1b. Range Storage (Round 13)
 
@@ -81,7 +81,7 @@ Bulk-imported data lives as typed Range payloads in Yrs, not as N per-cell Y.Map
 
 Range-resident cells get **virtual CellIds** derived deterministically from `(SheetId, RowId, ColId)` — no per-cell allocation, byte-identical across peers. The dependency graph cannot distinguish virtual from real CellIds.
 
-Details: [Cell Identity — Virtual Identity](spreadsheet/cell-identity.md#virtual-identity-for-range-resident-cells)
+Details: [Cell Identity — Virtual Identity](../internals/spreadsheet/cell-identity.md#virtual-identity-for-range-resident-cells)
 
 ### 2. Rust as Single Source of Truth
 
@@ -145,7 +145,7 @@ Type DAG: `value-types + cell-types (independent leaves) -> formula-types`; `sna
 
 Domain crates depend on the type layer they need and on narrowly scoped peer domain crates when the manifest requires it, never on the root crate. This enables independent compilation and parallel development.
 
-Details: [Compute-Core](../compute/core/README.md) | [Compute Wire](../compute/core/crates/compute-wire/README.md)
+Details: [Compute-Core](../../compute/core/README.md) | [Compute Wire](../../compute/core/crates/compute-wire/README.md)
 
 ### 3. Rust-to-TypeScript Bridge
 
@@ -185,7 +185,7 @@ The binary data plane enables 60 FPS rendering:
 - **Format palette**: Append-only interning deduplicates `CellFormat` to `u16` indices
 - **ViewportCoordinator**: Single owner per viewport region. Both mutation and viewport-fetch pipelines write through the coordinator, which uses an epoch-based overlay model: mutation patches are stored as overlays with an epoch stamp, and when a fresh viewport fetch arrives, the coordinator filters overlays — keeping only entries newer than the fetch epoch and re-applying them on top of the new buffer. This eliminates stale-detection/retry logic entirely; the epoch model guarantees consistency.
 
-Details: [Binary Wire Pipeline](spreadsheet/renderer/binary-wire-pipeline.md) | [Compute Wire Spec](../compute/core/crates/compute-wire/README.md) | [Compute Bridge](compute-bridge.md)
+Details: [Binary Wire Pipeline](../internals/spreadsheet/renderer/binary-wire-pipeline.md) | [Compute Wire Spec](../../compute/core/crates/compute-wire/README.md) | [Compute Bridge](compute-bridge.md)
 
 
 ### 5. Document Lifecycle & Three-Tier State
@@ -231,7 +231,7 @@ RustDocument (Rust storage via ComputeBridge)     -- persistent, collaborative
 - **Mutations layer**: Single source of truth for "what happens on mutation" — kernel has ~8 mutation files, action handlers provide 28+ handler files
 - **Unified Action System**: All inputs (keyboard, toolbar, context menu, AI) -> `dispatch()` -> `HANDLER_MAP`
 
-Details: [State Management](spreadsheet/state.md)
+Details: [State Management](../internals/spreadsheet/state.md)
 
 ### 6. XState Machines + Coordinator Pattern
 
@@ -254,7 +254,7 @@ SheetCoordinator
 
 **Interaction flow**: User input -> Coordinator -> XState events -> Machine transitions -> Side effects (canvas, recalc, EventBus)
 
-Details: [XState Patterns](spreadsheet/renderer/xstate.md) | [State Management](spreadsheet/state.md)
+Details: [XState Patterns](../internals/spreadsheet/renderer/xstate.md) | [State Management](../internals/spreadsheet/state.md)
 
 ### 7. Unified Spreadsheet API
 
@@ -270,7 +270,7 @@ await wb.history.undo();                  // 8 workbook sub-APIs (12 with bridge
 
 Sub-APIs are lazy (zero cost if unused). Errors throw (simpler for LLM code generation). `batch()` groups operations into a single undo step.
 
-Details: [Spreadsheet Architecture](spreadsheet/ARCHITECTURE.md)
+Details: [Spreadsheet Architecture](../internals/spreadsheet/ARCHITECTURE.md)
 
 ### 8. Handle-Based API Design
 
@@ -286,7 +286,7 @@ Three rules: (1) stateless operations are methods, (2) consumer-scoped state ret
 
 All handles implement TC39 `Symbol.dispose` for automatic cleanup via `using` declarations. Infrastructure: `IDisposable` interface in `contracts/src/core/disposable.ts`; runtime classes `DisposableBase` and `DisposableStore` in `spreadsheet-utils/src/disposable.ts`.
 
-Details: [API Design Philosophy](spreadsheet/API-DESIGN-PHILOSOPHY.md)
+Details: [API Design Philosophy](../internals/spreadsheet/API-DESIGN-PHILOSOPHY.md)
 
 ### 9. Yrs/CRDT Document Structure
 
@@ -306,7 +306,7 @@ Additional sheet-level maps: schemas, row/column dimensions, merges, filters, sl
 
 **Collaboration server** (`runtime/server/`) uses WebSocket to route Yrs document updates between connected clients.
 
-Details: [Data Model](spreadsheet/data-model.md) | [Cell Identity](spreadsheet/cell-identity.md)
+Details: [Data Model](../internals/spreadsheet/data-model.md) | [Cell Identity](../internals/spreadsheet/cell-identity.md)
 
 ---
 
@@ -325,7 +325,7 @@ drawing             Drawing primitives: engine, shapes, ink, diagrams, text effe
 lab                 Canvas experimentation sandbox
 ```
 
-Details: [Renderer](spreadsheet/renderer/README.md) | [Binary Wire Pipeline](spreadsheet/renderer/binary-wire-pipeline.md) | [Canvas](spreadsheet/renderer/canvas.md)
+Details: [Renderer](../internals/spreadsheet/renderer/README.md) | [Binary Wire Pipeline](../internals/spreadsheet/renderer/binary-wire-pipeline.md) | [Canvas](../internals/spreadsheet/renderer/canvas.md)
 
 ### Hit Testing Architecture
 
@@ -403,7 +403,7 @@ Structure changes (insert row) update positions only — no formula rewriting, C
 
 Column-level type validation lives entirely in Rust (`compute/core/crates/compute-schema/`). Validation runs automatically as part of every mutation in `prepare_recalc_for_flush()`. Results flow to TypeScript via `MutationResult.recalc.validationAnnotations`. The kernel's `schema-bridge.ts` is a thin adapter that stores results in cell metadata and emits EventBus events.
 
-Details: [Foundations](spreadsheet/foundations.md)
+Details: [Foundations](../internals/spreadsheet/foundations.md)
 
 ### Runtime
 
@@ -427,36 +427,36 @@ Details: [Foundations](spreadsheet/foundations.md)
 ### Architecture
 | Topic | Document |
 |-------|----------|
-| This document | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| OS layers | [README.md](README.md) |
-| Spreadsheet engine | [spreadsheet/ARCHITECTURE.md](spreadsheet/ARCHITECTURE.md) |
-| API design philosophy | [spreadsheet/API-DESIGN-PHILOSOPHY.md](spreadsheet/API-DESIGN-PHILOSOPHY.md) |
+| This document | [README.md](README.md) |
+| OS layers | [os/README.md](os/README.md) |
+| Spreadsheet engine | [internals/spreadsheet/ARCHITECTURE.md](../internals/spreadsheet/ARCHITECTURE.md) |
+| API design philosophy | [internals/spreadsheet/API-DESIGN-PHILOSOPHY.md](../internals/spreadsheet/API-DESIGN-PHILOSOPHY.md) |
 
 ### Core Concepts
 | Topic | Document |
 |-------|----------|
 | API layer (kernel API, rust-bridge, transport) | [api-layer.md](api-layer.md) |
-| Cell Identity Model | [spreadsheet/cell-identity.md](spreadsheet/cell-identity.md) |
-| Data model & storage | [spreadsheet/data-model.md](spreadsheet/data-model.md) |
-| State management | [spreadsheet/state.md](spreadsheet/state.md) |
-| XState patterns | [spreadsheet/renderer/xstate.md](spreadsheet/renderer/xstate.md) |
+| Cell Identity Model | [internals/spreadsheet/cell-identity.md](../internals/spreadsheet/cell-identity.md) |
+| Data model & storage | [internals/spreadsheet/data-model.md](../internals/spreadsheet/data-model.md) |
+| State management | [internals/spreadsheet/state.md](../internals/spreadsheet/state.md) |
+| XState patterns | [internals/spreadsheet/renderer/xstate.md](../internals/spreadsheet/renderer/xstate.md) |
 | Compute bridge (Rust <-> TS) | [compute-bridge.md](compute-bridge.md) |
-| Binary wire protocol | [spreadsheet/renderer/binary-wire-pipeline.md](spreadsheet/renderer/binary-wire-pipeline.md) |
-| Access control (principals, policies, redaction) | [ACCESS-CONTROL.md](ACCESS-CONTROL.md) |
+| Binary wire protocol | [internals/spreadsheet/renderer/binary-wire-pipeline.md](../internals/spreadsheet/renderer/binary-wire-pipeline.md) |
+| Access control (principals, policies, redaction) | [security/ACCESS-CONTROL.md](../security/ACCESS-CONTROL.md) |
 
 ### Subsystems
 | Topic | Document |
 |-------|----------|
-| Compute-core (Rust) | [../compute/core/README.md](../compute/core/README.md) |
-| Compute wire spec | [../compute/core/crates/compute-wire/README.md](../compute/core/crates/compute-wire/README.md) |
-| Canvas rendering | [spreadsheet/renderer/README.md](spreadsheet/renderer/README.md) |
-| Drawing system | [../canvas/drawing/README.md](../canvas/drawing/README.md) |
-| Tables | [spreadsheet/tables.md](spreadsheet/tables.md) |
-| Pivot tables | [spreadsheet/pivot-tables.md](spreadsheet/pivot-tables.md) |
-| 6 foundations | [spreadsheet/foundations.md](spreadsheet/foundations.md) |
-| Formula discrepancies | [spreadsheet/known-formula-discrepancies.md](spreadsheet/known-formula-discrepancies.md) |
+| Compute-core (Rust) | [compute/core/README.md](../../compute/core/README.md) |
+| Compute wire spec | [compute/core/crates/compute-wire/README.md](../../compute/core/crates/compute-wire/README.md) |
+| Canvas rendering | [internals/spreadsheet/renderer/README.md](../internals/spreadsheet/renderer/README.md) |
+| Drawing system | [canvas/drawing/README.md](../../canvas/drawing/README.md) |
+| Tables | [internals/spreadsheet/tables.md](../internals/spreadsheet/tables.md) |
+| Pivot tables | [internals/spreadsheet/pivot-tables.md](../internals/spreadsheet/pivot-tables.md) |
+| 6 foundations | [internals/spreadsheet/foundations.md](../internals/spreadsheet/foundations.md) |
+| Formula discrepancies | [internals/spreadsheet/known-formula-discrepancies.md](../internals/spreadsheet/known-formula-discrepancies.md) |
 
 ### Design
 | Topic | Document |
 |-------|----------|
-| UI design system | [ui-design/README.md](ui-design/README.md) |
+| UI design system | [internals/ui-design/README.md](../internals/ui-design/README.md) |

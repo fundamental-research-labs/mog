@@ -130,7 +130,7 @@ Rust serialize_multi_viewport_patches()
 | `src/palette.rs` | `FormatPalette` — append-only format interning (CellFormat → u16) |
 | `src/bin/generate_ts.rs` | Code generator: emits matching TS constants |
 | `src/bin/generate_test_fixtures.rs` | Generates cross-language `.bin` + `.json` test fixtures |
-| [README.md](../../../compute/core/crates/compute-wire/README.md) | **Full binary protocol spec** (byte layouts, flag bits, offsets) |
+| [README.md](../../../../compute/core/crates/compute-wire/README.md) | **Full binary protocol spec** (byte layouts, flag bits, offsets) |
 
 ### TypeScript: `kernel/src/bridges/wire/`
 
@@ -295,7 +295,7 @@ Header flags byte (offset 10): `0x01` = has_projection_changes (spill section pr
 
 Each patch = 8 bytes (row u32 + col u32) + 32 bytes (same cell record as viewport).
 
-For the full protocol spec with all byte offsets, see the [compute-wire README](../../../compute/core/crates/compute-wire/README.md).
+For the full protocol spec with all byte offsets, see the [compute-wire README](../../../../compute/core/crates/compute-wire/README.md).
 
 ## Regenerating Constants
 
@@ -311,7 +311,7 @@ The legacy `ViewportBuffer` JSON-based buffer was removed in round 11. The binar
 
 ## Related Documentation
 
-- [compute-wire README](../../../compute/core/crates/compute-wire/README.md) — Full binary protocol spec (Rust)
+- [compute-wire README](../../../../compute/core/crates/compute-wire/README.md) — Full binary protocol spec (Rust)
 - [Canvas & Layers](canvas.md) — Canvas rendering architecture
 - [Coordinate System](coordinates.md) — Viewport math, frozen panes
 - [Renderer Architecture](README.md) — State machines, coordinator, hooks

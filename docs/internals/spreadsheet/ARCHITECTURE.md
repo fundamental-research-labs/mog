@@ -94,7 +94,7 @@ The system spans 80+ packages (41 TS + 40+ Rust crates). The most important are 
 |--------|---------|----------|
 | `XlsxBridge` | Abstracts Tauri IPC / WASM / N-API for XLSX import/export | `xlsx-bridge.ts` |
 | `ComputeBridge` | Abstracts Tauri IPC / WASM / N-API for compute engine (auto-generated via `rust-bridge`) | `compute-bridge.ts` |
-| `compute-wire` | Binary wire format for viewport & mutation transfer (Rust crate) | [README](../../compute/core/crates/compute-wire/README.md), [Pipeline](renderer/binary-wire-pipeline.md) |
+| `compute-wire` | Binary wire format for viewport & mutation transfer (Rust crate) | [README](../../../compute/core/crates/compute-wire/README.md), [Pipeline](renderer/binary-wire-pipeline.md) |
 
 **Runtime & Application**
 

@@ -2,7 +2,7 @@
 
 A data operating system built on spreadsheet primitives. Every app is structured data + views + event handlers. ~96 packages (46 TS + 50 Rust crates), ~950K lines TS, ~620K lines Rust.
 
-**Start here:** [ARCHITECTURE.md](ARCHITECTURE.md) — core design decisions, subsystems, and the full documentation index.
+**Start here:** [architecture/README.md](architecture/README.md) — core design decisions, subsystems, and the full documentation index.
 
 Compatibility references to third-party spreadsheet applications, APIs, and
 file formats are nominative and governed by [TRADEMARKS.md](../TRADEMARKS.md).
@@ -69,13 +69,13 @@ export default function CRMApp() {
 
 | Topic | Document |
 |-------|----------|
-| **Architecture & design decisions** | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| **Architecture & design decisions** | [architecture/README.md](architecture/README.md) |
 | Trademark notices | [../TRADEMARKS.md](../TRADEMARKS.md) |
-| OS layers | [README.md](README.md) |
-| TypeScript package boundaries | [TYPESCRIPT-PACKAGE-BOUNDARIES.md](TYPESCRIPT-PACKAGE-BOUNDARIES.md) |
-| API layer (kernel API, rust-bridge, transport) | [api-layer.md](api-layer.md) |
-| Compute bridge | [compute-bridge.md](compute-bridge.md) |
-| Access control (principals, policies, redaction) | [ACCESS-CONTROL.md](ACCESS-CONTROL.md) |
+| OS layers | [architecture/os/README.md](architecture/os/README.md) |
+| TypeScript package boundaries | [architecture/typescript-package-boundaries.md](architecture/typescript-package-boundaries.md) |
+| API layer (kernel API, rust-bridge, transport) | [architecture/api-layer.md](architecture/api-layer.md) |
+| Compute bridge | [architecture/compute-bridge.md](architecture/compute-bridge.md) |
+| Access control (principals, policies, redaction) | [security/ACCESS-CONTROL.md](security/ACCESS-CONTROL.md) |
 | Compute-core (Rust) | [../compute/core/README.md](../compute/core/README.md) |
-| Spreadsheet engine | [spreadsheet/README.md](spreadsheet/README.md) |
+| Spreadsheet engine | [internals/spreadsheet/README.md](internals/spreadsheet/README.md) |
 | Drawing system | [../canvas/drawing/README.md](../canvas/drawing/README.md) |

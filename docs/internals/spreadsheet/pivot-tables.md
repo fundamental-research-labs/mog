@@ -124,7 +124,7 @@ Conversion functions: `toComputeCellValue()`, `fromComputeCellValue()`, `convert
 
 ## Rust compute-pivot Crate
 
-**Path**: [`compute/core/crates/compute-pivot/`](../../compute/core/crates/compute-pivot/)
+**Path**: [`compute/core/crates/compute-pivot/`](../../../compute/core/crates/compute-pivot/)
 
 **Dependencies**: `value-types` (CellValue, CellError, date_serial), `compute-stats` (aggregation, sorting, filtering primitives), `chrono` (date grouping), `serde`/`serde_json`.
 
@@ -316,7 +316,7 @@ pub struct PivotTableResult {
 
 ### PivotBridge
 
-**Path**: [`kernel/src/bridges/pivot-bridge.ts`](../../kernel/src/bridges/pivot-bridge.ts)
+**Path**: [`kernel/src/bridges/pivot-bridge.ts`](../../../kernel/src/bridges/pivot-bridge.ts)
 
 The `PivotBridge` is the single entry point connecting the UI layer to the Rust pivot engine. It implements `IPivotBridge`. The former `PivotStore` was deleted in Phase 4 -- all pivot config state now lives in Rust, accessed via `ComputeBridge`.
 
@@ -349,7 +349,7 @@ The `PivotBridge` is the single entry point connecting the UI layer to the Rust 
 
 ### PivotEventBridge
 
-**Path**: [`kernel/src/bridges/pivot-event-bridge.ts`](../../kernel/src/bridges/pivot-event-bridge.ts)
+**Path**: [`kernel/src/bridges/pivot-event-bridge.ts`](../../../kernel/src/bridges/pivot-event-bridge.ts)
 
 Connects the EventBus to the pivot rendering system. Subscribes to state change events and triggers pivot recalculation.
 
@@ -382,7 +382,7 @@ The `createPivotEventBridge()` factory supports dynamic sheet ID tracking -- cal
 
 ## Contracts
 
-**Path**: [`contracts/src/data/pivot.ts`](../../contracts/src/data/pivot.ts)
+**Path**: [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts)
 
 The contracts define the shared type interface between kernel, UI, and engine.
 
@@ -425,7 +425,7 @@ The contracts define the shared type interface between kernel, UI, and engine.
 
 ### React Hooks
 
-**Path**: [`apps/spreadsheet/src/hooks/data/`](../../apps/spreadsheet/src/hooks/data/)
+**Path**: [`apps/spreadsheet/src/hooks/data/`](../../../apps/spreadsheet/src/hooks/data/)
 
 | Hook | File | Purpose |
 |------|------|---------|
@@ -435,7 +435,7 @@ The contracts define the shared type interface between kernel, UI, and engine.
 
 ### Dialog State (Zustand)
 
-**Path**: [`apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts`](../../apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts)
+**Path**: [`apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts`](../../../apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts)
 
 The `PivotDialogSlice` manages UI state for pivot table creation and editing:
 - `isDialogOpen`: Whether the creation dialog is open
@@ -560,7 +560,7 @@ Built in O(R) time (one pass over flattened rows). Provides:
 
 ## Calculated Fields
 
-**Path**: [`compute/core/crates/compute-pivot/src/calc_field.rs`](../../compute/core/crates/compute-pivot/src/calc_field.rs)
+**Path**: [`compute/core/crates/compute-pivot/src/calc_field/mod.rs`](../../../compute/core/crates/compute-pivot/src/calc_field/mod.rs)
 
 Calculated fields create derived value columns using formulas that reference other fields. Formulas operate on aggregated values -- after Sum/Average/etc. has been applied.
 
@@ -642,37 +642,37 @@ The pivot table engine was fully ported from TypeScript to Rust.
 
 | File | Path |
 |------|------|
-| Crate root | [`compute/core/crates/compute-pivot/Cargo.toml`](../../compute/core/crates/compute-pivot/Cargo.toml) |
-| lib.rs | [`compute/core/crates/compute-pivot/src/lib.rs`](../../compute/core/crates/compute-pivot/src/lib.rs) |
-| types/ | [`compute/core/crates/compute-pivot/src/types/`](../../compute/core/crates/compute-pivot/src/types/) |
-| engine/ | [`compute/core/crates/compute-pivot/src/engine/`](../../compute/core/crates/compute-pivot/src/engine/) |
-| grouper.rs | [`compute/core/crates/compute-pivot/src/grouper.rs`](../../compute/core/crates/compute-pivot/src/grouper.rs) |
-| filter.rs | [`compute/core/crates/compute-pivot/src/filter.rs`](../../compute/core/crates/compute-pivot/src/filter.rs) |
-| show_values_as module | [`compute/core/crates/compute-pivot/src/show_values_as/mod.rs`](../../compute/core/crates/compute-pivot/src/show_values_as/mod.rs) |
-| hierarchy.rs | [`compute/core/crates/compute-pivot/src/hierarchy.rs`](../../compute/core/crates/compute-pivot/src/hierarchy.rs) |
-| calc_field.rs | [`compute/core/crates/compute-pivot/src/calc_field.rs`](../../compute/core/crates/compute-pivot/src/calc_field.rs) |
-| resolved.rs | [`compute/core/crates/compute-pivot/src/resolved.rs`](../../compute/core/crates/compute-pivot/src/resolved.rs) |
+| Crate root | [`compute/core/crates/compute-pivot/Cargo.toml`](../../../compute/core/crates/compute-pivot/Cargo.toml) |
+| lib.rs | [`compute/core/crates/compute-pivot/src/lib.rs`](../../../compute/core/crates/compute-pivot/src/lib.rs) |
+| types/ | [`compute/core/crates/compute-pivot/src/types/`](../../../compute/core/crates/compute-pivot/src/types/) |
+| engine/ | [`compute/core/crates/compute-pivot/src/engine/`](../../../compute/core/crates/compute-pivot/src/engine/) |
+| grouper.rs | [`compute/core/crates/compute-pivot/src/grouper.rs`](../../../compute/core/crates/compute-pivot/src/grouper.rs) |
+| filter.rs | [`compute/core/crates/compute-pivot/src/filter.rs`](../../../compute/core/crates/compute-pivot/src/filter.rs) |
+| show_values_as module | [`compute/core/crates/compute-pivot/src/show_values_as/mod.rs`](../../../compute/core/crates/compute-pivot/src/show_values_as/mod.rs) |
+| hierarchy.rs | [`compute/core/crates/compute-pivot/src/hierarchy.rs`](../../../compute/core/crates/compute-pivot/src/hierarchy.rs) |
+| calc_field module | [`compute/core/crates/compute-pivot/src/calc_field/mod.rs`](../../../compute/core/crates/compute-pivot/src/calc_field/mod.rs) |
+| resolved.rs | [`compute/core/crates/compute-pivot/src/resolved.rs`](../../../compute/core/crates/compute-pivot/src/resolved.rs) |
 
 ### TypeScript Kernel
 
 | File | Path |
 |------|------|
-| PivotBridge | [`kernel/src/bridges/pivot-bridge.ts`](../../kernel/src/bridges/pivot-bridge.ts) |
-| PivotEventBridge | [`kernel/src/bridges/pivot-event-bridge.ts`](../../kernel/src/bridges/pivot-event-bridge.ts) |
+| PivotBridge | [`kernel/src/bridges/pivot-bridge.ts`](../../../kernel/src/bridges/pivot-bridge.ts) |
+| PivotEventBridge | [`kernel/src/bridges/pivot-event-bridge.ts`](../../../kernel/src/bridges/pivot-event-bridge.ts) |
 
 ### Contracts
 
 | File | Path |
 |------|------|
-| Pivot types | [`contracts/src/data/pivot.ts`](../../contracts/src/data/pivot.ts) |
-| Bridge interface | [`contracts/src/bridges/pivot-bridge.ts`](../../contracts/src/bridges/pivot-bridge.ts) |
-| Events | [`contracts/src/events/pivot-events.ts`](../../contracts/src/events/pivot-events.ts) |
+| Pivot types | [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts) |
+| Bridge interface | [`contracts/src/bridges/pivot-bridge.ts`](../../../contracts/src/bridges/pivot-bridge.ts) |
+| Events | [`contracts/src/events/pivot-events.ts`](../../../contracts/src/events/pivot-events.ts) |
 
 ### UI
 
 | File | Path |
 |------|------|
-| usePivotTables | [`apps/spreadsheet/src/hooks/data/use-pivot-tables.ts`](../../apps/spreadsheet/src/hooks/data/use-pivot-tables.ts) |
-| usePivotEditorActions | [`apps/spreadsheet/src/hooks/data/use-pivot-editor-actions.ts`](../../apps/spreadsheet/src/hooks/data/use-pivot-editor-actions.ts) |
-| usePivotContextMenuActions | [`apps/spreadsheet/src/hooks/data/use-pivot-context-menu-actions.ts`](../../apps/spreadsheet/src/hooks/data/use-pivot-context-menu-actions.ts) |
-| Pivot dialog state | [`apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts`](../../apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts) |
+| usePivotTables | [`apps/spreadsheet/src/hooks/data/use-pivot-tables.ts`](../../../apps/spreadsheet/src/hooks/data/use-pivot-tables.ts) |
+| usePivotEditorActions | [`apps/spreadsheet/src/hooks/data/use-pivot-editor-actions.ts`](../../../apps/spreadsheet/src/hooks/data/use-pivot-editor-actions.ts) |
+| usePivotContextMenuActions | [`apps/spreadsheet/src/hooks/data/use-pivot-context-menu-actions.ts`](../../../apps/spreadsheet/src/hooks/data/use-pivot-context-menu-actions.ts) |
+| Pivot dialog state | [`apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts`](../../../apps/spreadsheet/src/ui-store/slices/dialogs/pivot-dialog.ts) |

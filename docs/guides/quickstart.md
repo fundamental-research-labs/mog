@@ -48,5 +48,5 @@ Set a formula on a cell, trigger recalc, and read the computed result.
 
 ## Related Docs
 
-- [Architecture](../ARCHITECTURE.md)
+- [Architecture](../architecture/README.md)
 - [API Reference](../reference/README.md)

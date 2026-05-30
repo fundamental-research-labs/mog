@@ -60,5 +60,5 @@ Link to SECURITY.md for responsible disclosure process.
 ## Related Docs
 
 - [SECURITY.md](../../SECURITY.md) — vulnerability disclosure policy
-- [ACCESS-CONTROL.md](../ACCESS-CONTROL.md) — access control design
+- [ACCESS-CONTROL.md](../security/ACCESS-CONTROL.md) — access control design
 - [Architecture Overview](architecture-overview.md) — platform layers

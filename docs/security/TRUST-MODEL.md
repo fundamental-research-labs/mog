@@ -31,8 +31,8 @@ Mog is a spreadsheet for humans and agents. For enterprise review, the current t
 
 | Layer | Authority | Evidence |
 |-------|-----------|----------|
-| Rust compute/document engine | Persistent workbook state, formulas, calculation, access-control policy evaluation, redaction filtering for covered bridge surfaces | `docs/ARCHITECTURE.md`, `docs/ACCESS-CONTROL.md`, `compute/core/crates/compute-security/` |
-| TypeScript SDK and app shell | UI state, command routing, host integration, principal selection for a session; not a security boundary against malicious same-process callers | `docs/ARCHITECTURE.md`, `kernel/src/api/workbook/security.ts`, `runtime/spreadsheet-app/src/public-types.ts` |
+| Rust compute/document engine | Persistent workbook state, formulas, calculation, access-control policy evaluation, redaction filtering for covered bridge surfaces | `docs/architecture/README.md`, `docs/security/ACCESS-CONTROL.md`, `compute/core/crates/compute-security/` |
+| TypeScript SDK and app shell | UI state, command routing, host integration, principal selection for a session; not a security boundary against malicious same-process callers | `docs/architecture/README.md`, `kernel/src/api/workbook/security.ts`, `runtime/spreadsheet-app/src/public-types.ts` |
 | Host application or customer environment | Identity, install policy, firewall/proxy policy, persistence location, update policy, browser isolation shape, embed source authorization | `docs/guides/embed-react.md`, `docs/guides/embed-web-component.md`, `runtime/src-tauri/capabilities/default.json`, `runtime/spreadsheet-app/src/public-types.ts` |
 | Future hosted services | Authentication, multi-tenant isolation, durable audit logs, cloud storage | Not claimed |
 

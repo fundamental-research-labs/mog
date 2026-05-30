@@ -1,4 +1,4 @@
-import type { RectMark, TextMark } from '../../primitives/types';
+import type { PathMark, RectMark, TextMark } from '../../primitives/types';
 import { compile } from '../../grammar/compiler';
 import { isLayerSpec, type ChartSpec, type LayerSpec, type UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType } from '../../types';
@@ -175,7 +175,7 @@ describe('configToSpec imported Excel date category axes', () => {
         min: 0,
         max: 50_000_000,
       },
-      secondaryYAxis: {
+      secondaryValueAxis: {
         visible: true,
         min: -0.2,
         max: 0.3,
@@ -229,6 +229,7 @@ describe('configToSpec imported Excel date category axes', () => {
       ],
     };
     const config = makeDateAxisConfig('line', 2);
+    config.height = 12;
     config.axis = {
       ...config.axis,
       valueAxis: {
@@ -240,9 +241,23 @@ describe('configToSpec imported Excel date category axes', () => {
         numberFormat: '$#,##0',
       },
     };
+    config.legend = {
+      show: true,
+      visible: true,
+      position: 'bottom',
+    };
     config.series = [
-      { name: 'Primary', type: 'line' },
-      { name: 'Secondary', type: 'line', yAxisIndex: 1 },
+      {
+        name: 'Primary',
+        type: 'line',
+        format: { line: { color: { theme: 'accent3' }, width: 2.25 } },
+      },
+      {
+        name: 'Secondary',
+        type: 'line',
+        yAxisIndex: 1,
+        format: { line: { color: { theme: 'accent2' }, width: 2.25 } },
+      },
     ];
 
     const spec = asLayerSpec(configToSpec(config, data));
@@ -255,14 +270,28 @@ describe('configToSpec imported Excel date category axes', () => {
       orient: 'right',
       format: '$#,##0',
     });
+    expect(spec.layer[0].encoding?.color?.scale).toMatchObject({
+      range: ['#A5A5A5', '#ED7D31'],
+    });
 
     const result = compile(spec);
     const rightAxisLabels = result.axes.filter((mark): mark is TextMark => {
       const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
       return mark.type === 'text' && datum?.role === 'y-axis-right' && datum.axisPart === 'label';
     });
+    const lineMarks = result.marks.filter((mark): mark is PathMark => {
+      const datum = mark.datum as Array<{ series?: string }> | undefined;
+      return mark.type === 'path' && Array.isArray(datum) && Boolean(datum[0]?.series);
+    });
+    const legendLabels = result.legends.filter((mark): mark is TextMark => mark.type === 'text');
 
     expect(rightAxisLabels.length).toBeGreaterThan(0);
+    expect(lineMarks.map((mark) => mark.style.stroke)).toEqual(['#A5A5A5', '#ED7D31']);
+    expect(legendLabels.map((mark) => mark.text)).toEqual(['Primary', 'Secondary']);
+    expect(new Set(legendLabels.map((mark) => mark.y)).size).toBe(1);
+    expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(
+      result.layout.plotArea.y + result.layout.plotArea.height,
+    );
   });
 
   it('keeps ordinary string category charts on nominal band scales', () => {

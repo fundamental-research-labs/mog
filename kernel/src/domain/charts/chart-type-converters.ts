@@ -452,7 +452,7 @@ export function leaderLinesFormatToWire(c: ChartLeaderLinesFormat): ChartLineDat
 /** Convert contract DataLabelConfig to wire DataLabelData. */
 export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
   return {
-    show: c.show ?? c.visible ?? false,
+    show: c.show ?? false,
     position: c.position,
     format: c.format,
     showValue: c.showValue,

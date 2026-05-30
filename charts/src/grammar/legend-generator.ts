@@ -73,26 +73,38 @@ export function generateColorLegend(
   const itemY = y + (title ? 20 : 0);
   const itemSpacing = 18;
   const labelFontSize = legendSpec.labelFontSize ?? 11;
+  const isHorizontalLegend = legendSpec.orient === 'bottom' || legendSpec.orient === 'top';
   const isRightLegend =
     legendSpec.orient === 'right' ||
     legendSpec.orient === 'top-right' ||
     legendSpec.orient === 'bottom-right';
-  const maxLabelWidth = legendValues.reduce<number>(
-    (max, value) => Math.max(max, estimateLegendLabelWidth(String(value), labelFontSize)),
-    0,
+  const labelWidths = legendValues.map((value) =>
+    estimateLegendLabelWidth(String(value), labelFontSize),
   );
-  const contentWidth = symbolSize + 5 + maxLabelWidth;
+  const maxLabelWidth = labelWidths.reduce<number>((max, width) => Math.max(max, width), 0);
+  const entryGap = isHorizontalLegend ? 18 : 0;
+  const entryWidths = labelWidths.map((labelWidth) => symbolSize + 5 + labelWidth + entryGap);
+  const contentWidth = isHorizontalLegend
+    ? entryWidths.reduce((total, width) => total + width, 0)
+    : symbolSize + 5 + maxLabelWidth;
   const contentX = isRightLegend ? x + layout.legend.width - contentWidth : x;
+  let horizontalX = isHorizontalLegend
+    ? x + Math.max(0, (layout.legend.width - contentWidth) / 2)
+    : contentX;
 
   for (let i = 0; i < legendValues.length; i++) {
     const value = legendValues[i];
     const color = scale(value) as string;
+    const entryX = isHorizontalLegend ? horizontalX : contentX;
+    const entryY = isHorizontalLegend
+      ? y + (layout.legend.height - symbolSize) / 2
+      : itemY + i * itemSpacing;
 
     // Symbol
     marks.push({
       type: 'rect',
-      x: contentX,
-      y: itemY + i * itemSpacing,
+      x: entryX,
+      y: entryY,
       width: symbolSize,
       height: symbolSize,
       datum: { entryIndex: i },
@@ -106,8 +118,8 @@ export function generateColorLegend(
     // Label
     marks.push({
       type: 'text',
-      x: contentX + symbolSize + 5,
-      y: itemY + i * itemSpacing + symbolSize / 2,
+      x: entryX + symbolSize + 5,
+      y: entryY + symbolSize / 2,
       text: String(value),
       datum: { entryIndex: i },
       fontSize: labelFontSize,
@@ -118,6 +130,10 @@ export function generateColorLegend(
         fill: legendSpec.labelColor ?? '#000',
       },
     } as TextMark);
+
+    if (isHorizontalLegend) {
+      horizontalX += entryWidths[i] ?? 0;
+    }
   }
 
   return marks;

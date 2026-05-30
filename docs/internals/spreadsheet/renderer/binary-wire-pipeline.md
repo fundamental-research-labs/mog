@@ -1,6 +1,8 @@
 # Binary Wire Pipeline: Rust → Canvas Rendering
 
-The binary wire pipeline is the **critical fast path** for all cell rendering. Every cell visible on the canvas is read through this path — no JSON parsing or per-cell wire-object deserialization.
+The binary wire pipeline is the **shipped fast path** for grid body cell rendering. For cells rendered by `canvas/grid-renderer/src/layers/cells.ts`, values, display text, formats, flags, conditional-format visuals, and in-cell image metadata come from binary readers — no JSON parsing or per-cell wire-object deserialization in the hot path.
+
+Status: `compute_get_viewport_binary` and `compute_get_viewport_binary_delta` are shipped bridge commands. The implementation packages in this page are workspace-internal (`compute-wire` is `publish = false`, `@mog-sdk/kernel` and `@mog/grid-renderer` are private packages). Public consumers see the narrower `ViewportReader` / `ViewportCellData` and `FormattedText` contracts through `@mog-sdk/contracts`.
 
 ## End-to-End Data Flow
 
@@ -22,6 +24,7 @@ The binary wire pipeline is the **critical fast path** for all cell rendering. E
 │  MUTATION PIPELINE (Rust-owned)     VIEWPORT MOVEMENT (TS-owned)    │
 │  ComputeCore.mutateCore()           ViewportFetchManager.refresh()  │
 │  ├─ applyMultiViewportPatches()     ├─ compute_get_viewport_binary  │
+│  │                                  │  / _delta                     │
 │  └─ commits through coordinator     └─ commits through coordinator  │
 │                                                                      │
 │  ViewportCoordinator: single owner of each viewport's state         │
@@ -35,7 +38,7 @@ The binary wire pipeline is the **critical fast path** for all cell rendering. E
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  KERNEL: wire/ module                                               │
-│  ├─ BinaryViewportBuffer  — zero-copy DataView over binary blob    │
+│  ├─ BinaryViewportBuffer  — direct DataView over binary blob       │
 │  ├─ CellAccessor          — flyweight: moveTo(row,col) reads cell  │
 │  ├─ BinaryMutationReader  — decodes mutation patches               │
 │  ├─ ViewportCoordinator   — single-owner viewport state (base+overlay) │
@@ -54,7 +57,7 @@ The binary wire pipeline is the **critical fast path** for all cell rendering. E
 │  │   ├─ hasFormula, hasComment, etc. — bitwise flag extraction     │
 │  │   ├─ isCellEmpty(r,c), peekFormat(r,c) — neighbor peek (no     │
 │  │   │   cursor clobber) for text overflow/centerContinuous        │
-│  │   └─ CF: bgColor, fontColor, dataBar, icon from binary buffer  │
+│  │   └─ CF/image: bgColor, fontColor, dataBar, icon, image metadata │
 │  ├─ CellDataSource remains for non-binary metadata:                │
 │  │   sparklines, filters, bindings, dropdowns, validation circles  │
 │  └─ no per-cell wire deserialization in the reader hot path         │
@@ -72,7 +75,7 @@ When the viewport changes (scroll, sheet switch, resize):
 ```
 Rust build_viewport_render_data()
   → serialize_viewport_binary(&data, 0, is_delta=false, palette_start=0)
-  → Vec<u8> (36B header + N×32B cells + string pool + merges + dims + binary palette)
+  → Vec<u8> (36B header + N×32B cells + string pool + merges + dims + binary palette + CF extras + positions)
   → IPC/WASM → Uint8Array
   → BinaryViewportBuffer.setBuffer(bytes)
   → CellAccessor.moveTo(row, col) per visible cell
@@ -87,22 +90,22 @@ getViewportBinaryDelta()
   → applyDelta() merges into existing buffer
 ```
 
-### 2. Mutation Path (recalc after edit)
+### 2. Mutation Path (edits + recalc patches)
 
-When cells change due to formula recalculation:
+When cells change due to edits, formula recalculation, formatting metadata, or other mutations that produce viewport patches:
 
 > **Note**: For ordinary cell/recalc mutations, Rust produces per-viewport binary patches and the TS mutation pipeline applies them synchronously. Structural changes (insert row, delete column, etc.) merge generated structural cell patches into the recalc before flushing; changes that affect viewport geometry or broad visual state can also force-refresh registered viewport buffers through `ViewportFetchManager`.
 
 ```
 Rust recalc()
-  → produce_viewport_patches() / flush_viewport_patches()
+  → produce_viewport_patches() / format-specific patch builders / flush_viewport_patches()
   → serialize_mutation_result_for_viewport(...bounds...)
   → serialize_multi_viewport_patches()
   → IPC/WASM → Uint8Array per viewport payload
   → BinaryMutationReader (decode header, iterate patches)
   → BinaryViewportBuffer.applyBinaryMutation(reader)
     → For each patch in viewport: splice 32-byte cell record in-place
-    → New display/error strings → overflow string pool
+    → New display/error strings or image metadata → overflow string pool
   → Next render frame reads updated data
 ```
 
@@ -117,9 +120,13 @@ Rust serialize_multi_viewport_patches()
   → Routes each sub-blob to the correct per-viewport ViewportCoordinator
 ```
 
+Each sub-blob is usually a mutation patch buffer. For broad visual changes, Rust can pack a full viewport binary instead; the registry detects current viewport binaries by the wire-version bits in byte 30 and commits them through `ViewportCoordinator.commitFetch()`.
+
 ## Key File Inventory
 
 ### Rust: `compute/core/crates/compute-wire/`
+
+Status: workspace-internal Rust crate (`Cargo.toml` has `publish = false`).
 
 | File | Purpose |
 |------|---------|
@@ -132,9 +139,11 @@ Rust serialize_multi_viewport_patches()
 | `src/palette_binary/` | Compact binary palette serializer/deserializer |
 | `src/bin/generate_ts.rs` | Code generator: emits matching TS constants |
 | `src/bin/generate_test_fixtures.rs` | Generates cross-language `.bin` + `.json` test fixtures |
-| [README.md](../../../../compute/core/crates/compute-wire/README.md) | Protocol notes and examples; the `src/` modules are the implementation source of truth |
+| [README.md](../../../../compute/core/crates/compute-wire/README.md) | Supplemental protocol notes; `src/` modules and generated constants are the implementation source of truth |
 
 ### TypeScript: `kernel/src/bridges/wire/`
+
+Status: workspace-internal TypeScript package (`kernel/package.json` has `"private": true`).
 
 | File | Purpose |
 |------|---------|
@@ -146,8 +155,8 @@ Rust serialize_multi_viewport_patches()
 | `viewport-coordinator-registry.ts` | Multi-viewport routing + aggregate subscription |
 | `viewport-prefetch.ts` | Overscan bounds computation + delta request optimization |
 | `cell-metadata-cache.ts` | Spill + validation metadata cache (async populate, sync read) |
-| `range-metadata-cache.ts` | Range metadata cache for render-path range lifecycle data |
-| `mutation-classifier.ts` | Three-tier mutation invalidation classifier |
+| `range-metadata-cache.ts` | Document-scoped Range metadata cache maintained from `RangeChange` entries |
+| `mutation-classifier.ts` | Workspace-internal/tested helper for three-tier prefetch invalidation; not the current production mutation dispatch path |
 | `viewport-test-builder.ts` | Test helper: builds binary viewport buffers in pure TS |
 | `mutation-test-builder.ts` | Test helper: builds binary mutation buffers in pure TS |
 | `index.ts` | Barrel re-exports |
@@ -161,6 +170,8 @@ Rust serialize_multi_viewport_patches()
 
 ### Canvas: `canvas/grid-renderer/src/`
 
+Status: workspace-internal TypeScript package (`canvas/grid-renderer/package.json` has `"private": true`).
+
 | File | Purpose |
 |------|---------|
 | `layers/cells.ts` | `BinaryCellReader` interface + render loop consuming CellAccessor |
@@ -171,7 +182,7 @@ Rust serialize_multi_viewport_patches()
 
 ### Zero-Copy Protocol
 
-Binary blobs are sent as `Uint8Array` over IPC. TypeScript reads via `DataView` directly from the backing buffer — no JSON parsing or per-cell wire-object materialization. The `CellAccessor` flyweight is reused across all cells in a frame via `moveTo()`.
+Binary blobs are sent as `Uint8Array` over IPC. TypeScript reads cell records and strings via `DataView` / `Uint8Array.subarray()` directly from the backing buffer — no JSON parsing or per-cell wire-object materialization. The `CellAccessor` flyweight is reused across all cells in a frame via `moveTo()`. The f64 row/column position sections use typed-array views when alignment allows and copy only when the backing `Uint8Array` offset is not f64-aligned.
 
 ### Dense Row-Major Storage
 
@@ -193,18 +204,19 @@ Single `u16` field encodes value type (3 bits) plus feature flags. Bitwise reads
 const valueType = flags & 0x7;       // 0=null, 1=number, 2=text, 3=bool, 4=error, 5=image
 const hasFormula = (flags & 0x8) !== 0;
 const hasComment = (flags & 0x10) !== 0;
+const hasCellImage = (flags & 0x800) !== 0;
 // ... etc.
 ```
 
 ### Generation Counter
 
-The wire headers still reserve a `u8` generation byte for compatibility, and the TS readers expose it. Current production consistency no longer depends on it: viewport fetches use request sequencing plus `ViewportCoordinator` fetch epochs, and mutation/fetch consistency comes from the base+overlay model. The generation byte is not used as a monotonically incremented TS consistency signal in current production paths.
+The wire headers still carry a `u8` generation byte, and the TS readers expose it. Current production consistency no longer depends on it: viewport fetches use request sequencing plus `ViewportCoordinator` fetch epochs, and mutation/fetch consistency comes from the base+overlay model. Current production patch/fetch builders pass `0` for this byte; it is not a monotonically incremented TS consistency signal.
 
 ### Single Source of Truth — No Dual-Path Rendering
 
-The binary viewport buffer is the **sole data source** for per-cell rendering. There is no CellDataSource callback fallback path. When the binary buffer hasn't arrived yet (sheet switch, cold start), cells.ts skips cell rendering entirely — grid lines, selection, and headers render independently. The buffer typically arrives within 1-2 frames.
+The binary viewport buffer is the **sole data source** for grid body cell value/format rendering. There is no CellDataSource callback fallback path in `cells.ts` for those fields. When the binary buffer hasn't arrived yet (sheet switch, cold start), `cells.ts` skips body cell rendering entirely — grid lines, selection, and headers render independently. The buffer typically arrives within 1-2 frames.
 
-CellDataSource still exists for non-binary metadata and non-cell layers: sparklines, filters, bindings, dropdowns, validation circles, and sticky header labels. These are complex objects or sheet-level properties that don't belong in a per-cell binary record.
+CellDataSource still exists for non-binary metadata, view options, and non-body-cell layers: sparklines, filter buttons, bindings, dropdown indicators, validation circles, sticky header labels, table lookup, and `showZeroValues`. These are complex objects, sheet-level properties, or secondary overlays that do not belong in the core per-cell binary record.
 
 ### Show Formulas Mode
 
@@ -270,8 +282,29 @@ All multi-byte values are **little-endian**.
 ### Viewport Buffer Layout
 
 ```
-[Header 36B][CellRecords N×32B][StringPool][Merges M×16B][RowDims R×12B][ColDims C×12B][PaletteBinary][DataBars D×24B][Icons I×8B][RowPositions R×8B][ColPositions C×8B]
+[Header 36B][CellRecords N×32B][StringPool][Merges M×16B][RowDims R×12B][ColDims C×12B][PaletteBinary][DataBars D×24B][Icons I×8B][RowPositions (viewport_rows+1)×8B][ColPositions (viewport_cols+1)×8B]
 ```
+
+`RowPositions` has `viewport_rows + 1` f64 entries and `ColPositions` has `viewport_cols + 1` f64 entries when layout positions are available. The extra entry is a trailing sentinel used to derive the last row height or column width.
+
+### Viewport Header (36 bytes)
+
+| Offset | Type | Field |
+|--------|------|-------|
+| 0 | u32 | `start_row` |
+| 4 | u32 | `start_col` |
+| 8 | u32 | `cell_count` |
+| 12 | u32 | `format_palette_len` (byte length of `PaletteBinary`) |
+| 16 | u32 | `string_pool_bytes` |
+| 20 | u16 | `viewport_rows` |
+| 22 | u16 | `viewport_cols` |
+| 24 | u16 | `merge_count` |
+| 26 | u16 | `row_dim_count` |
+| 28 | u16 | `col_dim_count` |
+| 30 | u8 | `flags`: bit 0 = `is_delta`; bits 4-7 = `WIRE_VERSION` (`2` currently) |
+| 31 | u8 | `generation` (reserved in current production consistency model) |
+| 32 | u16 | `data_bar_count` |
+| 34 | u16 | `icon_count` |
 
 ### Cell Record (32 bytes)
 
@@ -297,23 +330,31 @@ Header flags byte (offset 10): `0x01` = has_projection_changes (spill section pr
 
 Each patch = 8 bytes (row u32 + col u32) + 32 bytes (same cell record as viewport).
 
-For additional protocol detail, see the [compute-wire README](../../../../compute/core/crates/compute-wire/README.md) and the implementation modules under `compute/core/crates/compute-wire/src/`.
+If present, the spill section is `[u32 spill_count][spill patches...]`. If present, the palette section is `[u16 palette_start_idx][u32 palette_bytes_len][PaletteBinary bytes...]`.
 
-## Regenerating Constants
+For additional protocol detail, prefer the implementation modules under `compute/core/crates/compute-wire/src/`; the [compute-wire README](../../../../compute/core/crates/compute-wire/README.md) is supplemental.
 
-When the wire protocol changes in Rust, regenerate TS constants:
+## Regenerating Generated Wire Artifacts
+
+When the wire protocol changes in Rust, regenerate the TypeScript constants:
 
 ```bash
 cargo run -p compute-wire --bin generate-ts > kernel/src/bridges/wire/constants.gen.ts
 ```
 
+Also regenerate the cross-language binary fixtures used by `kernel/src/bridges/wire/__tests__/cross-language-roundtrip.test.ts`:
+
+```bash
+cargo run -p compute-wire --bin generate-test-fixtures
+```
+
 ## Legacy JSON Path — Removed
 
-The legacy `ViewportBuffer` JSON-based buffer has been removed. The binary path is the sole data path for all viewport rendering. The JSON viewport endpoint (`compute_get_viewport`) has been removed; format fidelity evaluation now reads binary viewport data directly.
+The legacy JSON `ViewportData` / `ViewportBuffer` bridge path is not shipped. The current bridge exposes the binary viewport commands (`compute_get_viewport_binary` and `compute_get_viewport_binary_delta`) and the renderer consumes `BinaryViewportBuffer` / `CellAccessor` for body cell values and formats.
 
 ## Related Documentation
 
-- [compute-wire README](../../../../compute/core/crates/compute-wire/README.md) — Binary protocol notes (Rust)
+- [compute-wire README](../../../../compute/core/crates/compute-wire/README.md) — Supplemental binary protocol notes (Rust)
 - [Canvas & Layers](canvas.md) — Canvas rendering architecture
 - [Coordinate System](coordinates.md) — Viewport math, frozen panes
 - [Renderer Architecture](README.md) — State machines, coordinator, hooks

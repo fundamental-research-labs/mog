@@ -4,22 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact global package version to publish (overrides bump when set, e.g. 0.5.0)'
+        description: 'Exact package version to publish; must match release/vX.Y.Z branch'
         required: false
         type: string
         default: ''
-      bump:
-        description: 'Version bump type (ignored when version or source-run-id is set)'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - prepatch
-          - preminor
-          - premajor
-          - prerelease
       dry-run:
         description: 'Dry run (skip publish, tag, and release)'
         required: false
@@ -30,10 +18,6 @@ on:
         required: false
         type: string
         default: ''
-  push:
-    tags:
-      - 'sdk-v*'
-
 concurrency:
   group: publish-sdk
 
@@ -69,24 +53,31 @@ jobs:
         with:
           node-version: 24
 
+      - name: Validate release branch
+        id: release-branch
+        shell: bash
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            echo "::error::SDK publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            exit 1
+          fi
+          echo "release-version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ inputs.source-run-id }}" ]; then
-            VERSION=$(node -p "require('./runtime/sdk/package.json').version")
-            echo "Reusing artifacts from run ${{ inputs.source-run-id }}, target version $VERSION"
-          elif [ -n "${{ inputs.version }}" ]; then
+          RELEASE_VERSION="${{ steps.release-branch.outputs.release-version }}"
+          if [ -n "${{ inputs.version }}" ]; then
             VERSION="${{ inputs.version }}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            cd runtime/sdk && npm version ${{ inputs.bump }} --no-git-tag-version
-            VERSION=$(node -p "require('./package.json').version")
           else
-            VERSION=${GITHUB_REF_NAME#sdk-v}
-            CURRENT=$(node -p "require('./runtime/sdk/package.json').version")
-            if [ "$VERSION" != "$CURRENT" ]; then
-              echo "::error::Tag version ($VERSION) != package.json ($CURRENT)"
-              exit 1
-            fi
+            VERSION="$RELEASE_VERSION"
+          fi
+          if [ "$VERSION" != "$RELEASE_VERSION" ]; then
+            echo "::error::Input version ${VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+            exit 1
+          fi
+          if [ -n "${{ inputs.source-run-id }}" ]; then
+            echo "Reusing artifacts from run ${{ inputs.source-run-id }}, target version $VERSION"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -94,6 +85,32 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           node -e "if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test('$VERSION')) { console.error('Invalid semver:', '$VERSION'); process.exit(1); }"
+
+      - name: Validate package versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          manifests=(
+            contracts/package.json
+            views/sheet-view/package.json
+            runtime/spreadsheet-app/package.json
+            runtime/embed/package.json
+            runtime/sdk/package.json
+            compute/napi/npm/darwin-arm64/package.json
+            compute/napi/npm/darwin-x64/package.json
+            compute/napi/npm/linux-x64-gnu/package.json
+            compute/napi/npm/linux-arm64-gnu/package.json
+            compute/napi/npm/linux-x64-musl/package.json
+            compute/napi/npm/linux-arm64-musl/package.json
+            compute/napi/npm/win32-x64-msvc/package.json
+            compute/wasm/npm/package.json
+          )
+          for manifest in "${manifests[@]}"; do
+            PACKAGE_VERSION=$(node -p "require('./${manifest}').version")
+            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+              echo "::error::${manifest} version ${PACKAGE_VERSION} does not match release ${VERSION}"
+              exit 1
+            fi
+          done
 
       - name: Check not already published
         run: |
@@ -132,98 +149,24 @@ jobs:
       - name: Determine Python SDK version
         id: py-version
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
           PY_CURRENT=$(python3 -c "import tomllib; print(tomllib.load(open('compute/pyo3/pyproject.toml','rb'))['project']['version'])")
-          if [ -n "${{ inputs.source-run-id }}" ]; then
-            PY_VERSION="$PY_CURRENT"
-          elif [ -n "${{ inputs.version }}" ]; then
-            PY_VERSION="${{ inputs.version }}"
-            sed -i "s/^version = \"$PY_CURRENT\"/version = \"$PY_VERSION\"/" compute/pyo3/pyproject.toml
-            sed -i "s/^version = \"$PY_CURRENT\"/version = \"$PY_VERSION\"/" compute/pyo3/Cargo.toml
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PY_VERSION=$(python3 -c "
-          import re, sys
-          version = '$PY_CURRENT'
-          bump = '${{ inputs.bump }}'
-          match = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$', version)
-          major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
-          pre = match.group(4)
-          if bump == 'patch': patch += 1; pre = None
-          elif bump == 'minor': minor += 1; patch = 0; pre = None
-          elif bump == 'major': major += 1; minor = 0; patch = 0; pre = None
-          elif bump in ('prerelease', 'prepatch', 'preminor', 'premajor'):
-              if pre and re.match(r'^pre(\d+)$', pre):
-                  n = int(re.match(r'^pre(\d+)$', pre).group(1))
-                  pre = f'pre{n + 1}'
-              else: pre = 'pre1'
-          result = f'{major}.{minor}.{patch}'
-          if pre: result += f'-{pre}'
-          print(result)
-          ")
-            sed -i "s/^version = \"$PY_CURRENT\"/version = \"$PY_VERSION\"/" compute/pyo3/pyproject.toml
-            sed -i "s/^version = \"$PY_CURRENT\"/version = \"$PY_VERSION\"/" compute/pyo3/Cargo.toml
-          else
-            PY_VERSION="$PY_CURRENT"
+          PY_CARGO=$(node -e "const fs=require('fs'); const m=fs.readFileSync('compute/pyo3/Cargo.toml','utf8').match(/^version = \"([^\"]+)\"/m); if (!m) process.exit(1); console.log(m[1]);")
+          if [ "$PY_CURRENT" != "$VERSION" ]; then
+            echo "::error::compute/pyo3/pyproject.toml version ${PY_CURRENT} does not match release ${VERSION}"
+            exit 1
           fi
-          echo "py-version=$PY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Python SDK version: $PY_VERSION"
-
-      - name: Sync versions across public npm packages
-        if: ${{ inputs.source-run-id == '' }}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          node -e "
-            const fs = require('fs');
-            const VERSION = process.env.VERSION;
-            const packageJsons = [
-              'contracts/package.json',
-              'views/sheet-view/package.json',
-              'runtime/spreadsheet-app/package.json',
-              'runtime/embed/package.json',
-              'runtime/sdk/package.json',
-              'compute/napi/npm/darwin-arm64/package.json',
-              'compute/napi/npm/darwin-x64/package.json',
-              'compute/napi/npm/linux-x64-gnu/package.json',
-              'compute/napi/npm/linux-arm64-gnu/package.json',
-              'compute/napi/npm/linux-x64-musl/package.json',
-              'compute/napi/npm/linux-arm64-musl/package.json',
-              'compute/napi/npm/win32-x64-msvc/package.json',
-              'compute/wasm/npm/package.json',
-            ];
-            for (const p of packageJsons) {
-              const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
-              pkg.version = VERSION;
-              fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
-            }
-            console.log('All public npm package versions synced to', VERSION);
-          "
-
-      - name: Update lockfile
-        if: ${{ inputs.source-run-id == '' }}
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Commit, tag, and push
-        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry-run && inputs.source-run-id == '' }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout main
-          git add contracts/package.json views/sheet-view/package.json runtime/spreadsheet-app/package.json runtime/embed/package.json runtime/sdk/package.json 'compute/napi/npm/*/package.json' compute/wasm/npm/package.json pnpm-lock.yaml compute/pyo3/pyproject.toml compute/pyo3/Cargo.toml
-          git commit -m "release: @mog-sdk public packages v${{ steps.version.outputs.version }} + mog-sdk (python) v${{ steps.py-version.outputs.py-version }}"
-          git tag "sdk-v${{ steps.version.outputs.version }}"
-          git tag "python-v${{ steps.py-version.outputs.py-version }}"
-          git push origin main
-          git push origin "sdk-v${{ steps.version.outputs.version }}"
-          git push origin "python-v${{ steps.py-version.outputs.py-version }}"
+          if [ "$PY_CARGO" != "$VERSION" ]; then
+            echo "::error::compute/pyo3/Cargo.toml version ${PY_CARGO} does not match release ${VERSION}"
+            exit 1
+          fi
+          echo "py-version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Python SDK version: $VERSION"
 
       - name: Resolve checkout ref
         id: ref
         run: |
-          if [ "${{ inputs.dry-run }}" = "true" ]; then
-            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=sdk-v${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
   build-native:
     name: Build native – ${{ matrix.artifact }}

@@ -1,6 +1,6 @@
 # Shell
 
-The shell provides reusable view components and UI primitives that apps compose with their own chrome.
+The shell provides app hosting, shell-level services, focus state, and reusable UI primitives that apps compose with their own chrome.
 
 ## Overview
 
@@ -8,14 +8,18 @@ The shell provides reusable view components and UI primitives that apps compose 
 shell/
 ├── src/
 │   ├── host/                 # App hosting (ShellHost, AppSlot, AppLoader)
-│   ├── app-launcher/         # App discovery and switching
+│   ├── app-launcher/         # Capability-gated app launch flow
 │   ├── apps/                 # App switcher UI
 │   ├── bootstrap/            # Shell initialization (create-shell, event-dispatcher)
 │   ├── components/           # Shared UI components
-│   ├── machines/             # View-specific state machines
-│   ├── hooks/                # Shell-level hooks
-│   ├── services/             # Document and project services
 │   ├── context/              # Shell contexts (capability, platform, document manager)
+│   ├── contexts/             # Portal container context
+│   ├── hooks/                # Shell-level hooks
+│   ├── host-adapters/        # Browser host adapters
+│   ├── machines/             # Shell-level state machines
+│   ├── platform/             # App platform registries, validation, and resource binding
+│   ├── selectors/            # Shell selectors
+│   ├── services/             # Document, project, capability, and lifecycle services
 │   ├── ui-store/             # Shell UI state (Zustand store)
 │   ├── lib/                  # Utility libraries (file-type-registry, path-utils)
 │   └── styles/               # Global styles
@@ -26,13 +30,13 @@ shell/
 
 Shell machines live in `src/machines/`:
 
-| Machine          | Purpose                              |
-| ---------------- | ------------------------------------ |
-| `FocusMachine`   | Focus state management within shell  |
+| Machine                             | Purpose                                                        |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `focusMachine` (`focus-machine.ts`) | Stack-based keyboard focus management for shell/app focus layers |
 
 ## UI Primitives
 
-Exported from `@mog/ui`:
+Exported from `@mog/shell/components/ui` and re-exported from `@mog/shell`:
 
 ```typescript
 import {
@@ -47,10 +51,10 @@ import {
   Tabs,
   Checkbox,
   RadioGroup
-} from '@mog/ui';
+} from '@mog/shell/components/ui';
 ```
 
-All primitives use Radix UI with semantic design tokens (`bg-ss-surface`, `text-ss-text`, etc.).
+Overlay and choice primitives such as `Select`, `Dialog`, `Popover`, `DropdownMenu`, `ContextMenu`, `Tooltip`, `Tabs`, `Checkbox`, and `RadioGroup` wrap Radix UI. Base controls such as `Button` and `Input` are shell components styled with semantic design tokens (`bg-ss-surface`, `text-ss-text`, etc.).
 
 ## App Hosting
 
@@ -60,7 +64,7 @@ The host renders apps and provides the app slot. Key files in `src/host/`:
 
 | File                   | Purpose                                    |
 | ---------------------- | ------------------------------------------ |
-| `ShellHost.tsx`        | Top-level host, provides shell context     |
+| `ShellHost.tsx`        | Top-level shell layout around the app slot |
 | `AppSlot.tsx`          | Where the active app renders               |
 | `AppLoader.tsx`        | Lazy-loads the active app                  |
 | `AppLoading.tsx`       | Loading state while app initializes        |

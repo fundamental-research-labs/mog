@@ -31,10 +31,10 @@ Mog is a monorepo with package directories organized by product surface:
 
 | Area | Paths |
 | --- | --- |
-| Public SDK contracts | `contracts`, `types` |
+| Contracts and shared types | `contracts`, `types` |
 | Kernel and services | `kernel` |
 | Runtime and embeds | `runtime`, `views` |
-| Spreadsheet app | `apps/spreadsheet`, `shell` |
+| Spreadsheet app | `runtime/spreadsheet-app`, `apps/spreadsheet`, `shell` |
 | Canvas and rendering | `canvas`, `charts` |
 | Compute and file I/O | `compute`, `file-io`, `table-engine` |
 | Tooling and docs | `tools`, `infra`, `docs` |
@@ -112,7 +112,8 @@ fix: reject disposed workbook reads
 
 ### Pull Requests
 
-Open pull requests against `dev`.
+Open pull requests against the current development branch for the active release
+line. In this repository version, use `dev-v0.7.2`.
 
 Include:
 
@@ -130,13 +131,18 @@ pnpm check:publish-readiness:fast
 
 ## Architecture Orientation
 
-Start with [Architecture Overview](architecture-overview.md) to understand the layer model. Key files to read when onboarding to a specific area.
+Start with [Architecture Overview](architecture-overview.md) for the layer model,
+then use [Architecture](../architecture/README.md) for detailed subsystem notes.
 
 ## Common Tasks
 
-- Add a new formula function — where to add it in compute-core, how to test
-- Add a new API method — kernel API layer, bridge type generation
-- Fix a rendering bug — canvas/drawing packages, SheetView
+- Add a new formula function: start in
+  `compute/core/crates/compute-functions` and cover it in `compute/core/tests`.
+- Add a new API method: start in `kernel/src/api`; Rust-backed APIs may also
+  need bridge metadata in `infra/rust-bridge`.
+- Fix a rendering bug: start in `canvas` for drawing/grid internals,
+  `views/sheet-view` for the public view package, or `apps/spreadsheet` for app
+  chrome.
 
 ## Related Docs
 

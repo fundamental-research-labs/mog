@@ -16,8 +16,9 @@ pnpm check:ci:public-boundaries
 
 ## Publish Readiness
 
-Non-eval publish readiness is a stricter local contract around CI plus public
-package consumer checks:
+Non-eval publish readiness is the release-facing package gate. It combines
+format and public-boundary checks with public artifact, naming, declaration,
+API snapshot, binary-wrapper, and external fixture checks:
 
 ```bash
 pnpm check:publish-readiness
@@ -34,9 +35,9 @@ pnpm check:publish-readiness:sdk
 `check:publish-readiness:fast` is not equivalent to the full gate. It runs the
 public boundary aggregate and release naming checks only.
 
-Eval gates remain separate from these non-eval CI/package gates. Run the
-pre-publish eval workflow when release confidence depends on formula,
-roundtrip, colab, API, or app-eval behavior.
+Eval workflows are not part of these non-eval CI/package gates. Run them
+separately when release confidence depends on formula, roundtrip,
+collaboration, API, or app behavior.
 
 ## Workflow Rule
 

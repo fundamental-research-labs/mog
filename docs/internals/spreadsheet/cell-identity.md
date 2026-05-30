@@ -2,25 +2,27 @@
 
 ## Overview
 
-The Identity Model is the architectural foundation for collaborative spreadsheets. It applies to three entity types:
+The identity model is the internal foundation for collaborative spreadsheets. It applies to three entity types:
 
-| Entity | Identity Type | Position Storage       | Properties Keyed By |
-| ------ | ------------- | ---------------------- | ------------------- |
-| Cell   | CellId (UUID) | `cell.row`, `cell.col` | CellId              |
-| Row    | RowId (UUID)  | `rowData.position`     | RowId               |
-| Column | ColId (UUID)  | `colData.position`     | ColId               |
+| Entity | Identity Type | Canonical Position State | Properties Keyed By |
+| ------ | ------------- | ------------------------ | ------------------- |
+| Cell   | CellId        | GridIndex / CellMirror   | CellId              |
+| Row    | RowId         | rowOrder / row axis      | RowId               |
+| Column | ColId         | colOrder / column axis   | ColId               |
 
-**Key Insight**: Entity movement is tracked by updating position data, not by rewriting references or shifting property keys. This eliminates O(n) operations on structure changes and makes concurrent edits compose correctly under CRDT.
+**Key Insight**: Entity movement is tracked by updating identity-to-position state, not by rewriting every reference or shifting property keys. This avoids O(n) formula rewrites on structure changes and lets concurrent edits compose through the CRDT document.
 
 ## Cell Identity Model
 
-Instead of using A1-style positional references (`=A1+B1`), formulas internally reference cells by **stable UUID identities**. This is the same approach Google Sheets uses.
+Users type and see A1-style formulas, but formulas are stored internally as a template plus stable identity references.
 
+```text
+User sees: =A1+B1
+Stored as: template "{0}+{1}"
+           refs: [IdentityCellRef(A1's CellId), IdentityCellRef(B1's CellId)]
 ```
-User sees:     =A1+B1           (A1-style display)
-Stored as:     {0}+{1}          (template with placeholders)
-               refs: [abc..., def...]   (stable cell IDs)
-```
+
+Rust stores `CellId`, `SheetId`, `RowId`, and `ColId` as `u128` newtypes over UUID bytes. TypeScript exposes them as branded strings at public boundaries.
 
 ## Why Position-Based References Fail
 
@@ -28,89 +30,78 @@ Stored as:     {0}+{1}          (template with placeholders)
 
 Consider two users editing simultaneously:
 
-```
+```text
 Initial: Cell C1 has "=A1+B1"
 
-User A: Insert column at A (concurrent)
-User B: Insert column at B (concurrent)
+User A: Insert column at A
+User B: Insert column at B
 
-User A's edit: "=A1+B1" → "=B1+C1"
-User B's edit: "=A1+B1" → "=A1+C1"
-
-CRDT merge: String conflict - neither result is correct
-Correct answer: "=C1+D1" (shifted twice)
+User A's local rewrite: "=A1+B1" -> "=B1+C1"
+User B's local rewrite: "=A1+B1" -> "=A1+C1"
 ```
 
-**A1 reference adjustment doesn't compose under concurrent structure changes.**
+If formula references are plain strings, the merged text cannot reliably represent both structure changes. Identity references avoid that conflict: the referenced cells keep their IDs, and A1 display is regenerated from the merged position state.
 
 ### Issues with Position-Based Model
 
-| Problem               | Impact                                                           |
-| --------------------- | ---------------------------------------------------------------- |
-| O(n) formula rewrites | Insert column requires parsing/rewriting ALL formulas            |
-| Concurrent conflicts  | Two users inserting columns = unresolvable conflicts             |
-| Undo atomicity        | Formula adjustment must be same transaction as cell movement     |
-| Complexity            | Reference shifting logic (absolute refs, range expansion, #REF!) |
+| Problem               | Impact                                                       |
+| --------------------- | ------------------------------------------------------------ |
+| O(n) formula rewrites | Insert/delete may require parsing and rewriting many formulas |
+| Concurrent conflicts  | Independent rewrites of the same formula text can conflict    |
+| Undo atomicity        | Formula adjustment must be grouped with cell movement         |
+| Complexity            | Absolute refs, ranges, deletes, and copy/fill all need rules  |
 
 ## How Cell Identity Solves It
 
-Every cell gets a **stable UUID** when created. Formulas reference cells by UUID, not position. Position becomes a mutable property of the cell.
+Every materialized cell has a stable `CellId`. Formula references point at identities, while the grid, mirror, and Yrs identity maps track where those identities currently live.
 
 ### On Insert Column
 
-| Model              | What Happens                                                       |
-| ------------------ | ------------------------------------------------------------------ |
-| **A1 Model**       | Parse all formulas, find refs >= position, increment, re-serialize |
-| **Identity Model** | Update `cell.col` for affected cells. Done.                        |
+| Model              | What Happens                                                        |
+| ------------------ | ------------------------------------------------------------------- |
+| A1 Model           | Parse formulas, shift affected refs, serialize updated formula text |
+| Identity Model     | Update row/column/cell position state and regenerate derived views  |
 
 ### On Concurrent Insert Columns
 
-| Model              | Result                                                   |
-| ------------------ | -------------------------------------------------------- |
-| **A1 Model**       | Formula string conflicts                                 |
-| **Identity Model** | Position numbers merge correctly (both increments apply) |
+| Model              | Result                                                        |
+| ------------------ | ------------------------------------------------------------- |
+| A1 Model           | Formula string rewrites can conflict                          |
+| Identity Model     | Formula refs remain stable; display follows merged positions  |
 
 ## Core Types
 
-**Location:** `contracts/src/cells/cell-identity.ts`
+**Public TypeScript surface:** `contracts/src/cells/cell-identity.ts` re-exports the authored types from `types/core/src/cells/cell-identity.ts`.
+
+**Rust sources:** `compute/core/crates/types/cell-types/` defines ID newtypes and allocation, and `compute/core/crates/types/formula-types/src/identity_formula/types.rs` defines identity formula refs.
 
 ### CellId
 
 ```typescript
-/**
- * Stable cell identifier - never changes even when cell moves.
- * UUID v7 (time-sortable) for uniqueness without coordination.
- */
-export type CellId = string;
+declare const __cellId: unique symbol;
+export type CellId = string & { readonly [__cellId]: true };
 ```
+
+Rust uses `cell_types::CellId`, a `u128` newtype serialized at the IPC boundary as a UUID string or compact hex string depending on the path.
 
 ### IdentityCellRef
 
 ```typescript
-/**
- * Reference to a cell by identity (for formula storage).
- * Absolute flags preserve user intent for A1 display ($A$1 vs A1).
- */
 export interface IdentityCellRef {
   type: 'cell';
   id: CellId;
-  rowAbsolute: boolean; // $1 syntax
-  colAbsolute: boolean; // $A syntax
+  rowAbsolute: boolean;
+  colAbsolute: boolean;
 }
 ```
 
 ### IdentityRangeRef
 
 ```typescript
-/**
- * Reference to a range by corner cell identities.
- * Ranges expand automatically when rows/cols are inserted
- * between corners - no special logic needed.
- */
 export interface IdentityRangeRef {
   type: 'range';
-  startId: CellId; // Top-left corner
-  endId: CellId; // Bottom-right corner
+  startId: CellId;
+  endId: CellId;
   startRowAbsolute: boolean;
   startColAbsolute: boolean;
   endRowAbsolute: boolean;
@@ -118,490 +109,346 @@ export interface IdentityRangeRef {
 }
 ```
 
+The current formula ref union also includes rectangular row/column identity refs and full-row/full-column refs. Rust also has external workbook reference variants.
+
 ### IdentityFormula
 
 ```typescript
-/**
- * Formula stored with identity references.
- * Template + refs pattern separates structure from references.
- *
- * @example
- * User types: =SUM(A1:B10)+C1*2
- * Stored as:
- * {
- *   template: "SUM({0})+{1}*2",
- *   refs: [
- *     { type: 'range', startId: 'abc...', endId: 'def...' },
- *     { type: 'cell', id: 'ghi...' }
- *   ]
- * }
- */
 export interface IdentityFormula {
-  template: string; // "SUM({0})+{1}*2"
-  refs: IdentityFormulaRef[]; // Ordered refs for placeholders
+  template: string;
+  refs: IdentityFormulaRef[];
 }
 ```
 
+Rust's `IdentityFormula` carries the same template and refs plus precomputed flags such as dynamic-array, volatile, and aggregate status.
+
 ### Additional Identity Types
 
-These types extend the identity model for specialized features:
+These types extend identity tracking to other spreadsheet features:
 
 ```typescript
-/**
- * Range reference with schema validation support.
- * Used for data validation rules that apply to cell ranges.
- */
 export interface IdentityRangeSchemaRef {
-  startId: CellId;
-  endId: CellId;
-  // Schema validation metadata
+  sheetId?: string;
+  startId: string;
+  endId: string;
 }
 
-/**
- * Range of cell IDs for features that track rectangular regions.
- * Used by: charts, tables, grouping.
- */
 export interface CellIdRange {
-  topLeftCellId: CellId;
-  bottomRightCellId: CellId;
+  topLeftCellId: string;
+  bottomRightCellId: string;
 }
 
-/**
- * Merged cell region tracked by identity.
- * Top-left cell ID determines the merge region; other cells reference it.
- */
 export interface IdentityMergedRegion {
-  topLeftId: CellId; // Top-left cell of merged region
-  bottomRightId: CellId; // Bottom-right cell of merged region
+  topLeftId: string;
+  bottomRightId: string;
 }
 ```
 
 ## Data Flow
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                          USER INPUT                                 │
-│  User types: =SUM(A1:B10)+C1*2                                     │
-└─────────────────────────────┬──────────────────────────────────────┘
-                              │
-                              ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                       FORMULA PARSER                                │
-│  toIdentityFormula() in kernel (Rust compute-parser)               │
-│                                                                     │
-│  1. Parse A1 string to AST                                         │
-│  2. For each cell/range ref:                                       │
-│     - Resolve position to CellId (getOrCreateCellId)               │
-│     - Create IdentityCellRef/IdentityRangeRef                      │
-│     - Replace in template with {n} placeholder                     │
-│                                                                     │
-│  Output: { template: "SUM({0})+{1}*2", refs: [...] }               │
-└─────────────────────────────┬──────────────────────────────────────┘
-                              │
-                              ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                        YRS STORAGE                                  │
-│  kernel/src/domain/grid-index.ts (imports from contracts)           │
-│                                                                     │
-│  SerializedCellData {                                              │
-│    id: CellId;       // Stable identity (UUID v7)                  │
-│    row: number;      // Current position (mutable)                 │
-│    col: number;      // Current position (mutable)                 │
-│    r: raw;           // User input string                          │
-│    idf?: IdentityFormula;  // Parsed formula                       │
-│    c?: computed;     // Evaluation result                          │
-│    f?: string;       // Backward-compatible A1 formula             │
-│    n?: string;       // Note/comment                               │
-│    h?: string;       // Hyperlink                                  │
-│    spillRange?: ...  // Array formula spill range                  │
-│    spillAnchor?: ... // Array formula anchor cell                  │
-│    isCSE?: boolean;  // Is array formula (Ctrl+Shift+Enter)        │
-│  }                                                                  │
-│                                                                     │
-│  Three Yrs Maps per sheet:                                         │
-│  - cells: Map<CellId, SerializedCellData>  (primary)               │
-│  - properties: Map<CellId, CellProperties> (sparse formatting)     │
-│  - grid: Map<"sheet:row:col", CellId>      (position lookup)       │
-└─────────────────────────────┬──────────────────────────────────────┘
-                              │
-                              ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                         DISPLAY                                     │
-│  toA1Display() in kernel (Rust compute-parser)                     │
-│                                                                     │
-│  1. For each ref in formula.refs:                                  │
-│     - Look up current position via ICellPositionLookup             │
-│     - Convert position to A1 string (with absolute markers)        │
-│     - If cell deleted → #REF!                                      │
-│  2. Replace {n} placeholders with A1 strings                       │
-│                                                                     │
-│  Output: "=SUM(A1:B10)+C1*2"                                       │
-└────────────────────────────────────────────────────────────────────┘
+```text
+USER INPUT
+  User types: =SUM(A1:B10)+C1*2
+
+FORMULA CONVERSION
+  Kernel bridge exposes toIdentityFormula().
+  Rust compute-parser parses the A1 formula, resolves referenced positions
+  through an IdentityResolver, and emits:
+    { template: "SUM({0})+{1}*2", refs: [...] }
+
+RUST YRS STORAGE
+  Cell payloads are keyed by CellId under each sheet's cells map.
+  Formula source/display text is stored under f.
+  Identity formula template and refs are stored under ft and fr.
+  gridIndex.posToId and gridIndex.idToPos track position <-> CellId.
+
+DISPLAY / EXPORT
+  toA1Display() walks the identity formula template and renders each ref
+  through the current workbook lookup. Missing/deleted refs render as #REF!.
 ```
 
 ## Yrs Storage Structure
 
-```typescript
-// Per-sheet structure
-sheet: Y.Map {
-  meta: Y.Map<SheetMeta>,
+The Rust Yrs document schema is defined by `compute/core/crates/compute-document/src/schema.rs` and summarized in `compute/core/src/storage/mod.rs`.
 
-  // Primary cell storage - keyed by stable CellId
-  cells: Y.Map<CellId, SerializedCellData>,
-
-  // Sparse properties - only cells with custom formatting
-  properties: Y.Map<CellId, CellProperties>,
-
-  // Position index - enables O(1) "what's at row,col?"
-  grid: Y.Map<"sheet:row:col", CellId>,
-
-  // Other sheet data...
-  rowHeights: Y.Map<number>,
-  colWidths: Y.Map<number>,
-  charts: Y.Map<SerializedChart>,
-}
+```text
+Y.Doc
++-- workbook: Y.Map
++-- sheets: Y.Map<SheetIdHex, Y.Map>
+    +-- cells: Y.Map<CellIdHex, Y.Map>
+    |   +-- v   value
+    |   +-- f   A1 formula body, without leading "="
+    |   +-- ft  identity formula template
+    |   +-- fr  serialized identity formula refs
+    |   +-- fda/fv/fa formula flags when true
+    |   +-- fm/ar OOXML formula metadata / CSE array range when present
+    +-- cellProperties: Y.Map<CellIdHex, Y.Map>
+    +-- gridIndex: Y.Map
+    |   +-- posToId: Y.Map<"rowHex:colHex", CellIdHex>
+    |   +-- idToPos: Y.Map<CellIdHex, "rowHex:colHex">
+    |   +-- rowAxis / colAxis when compact axis stores are present
+    +-- rowOrder: Y.Array<RowIdHex>
+    +-- colOrder: Y.Array<ColIdHex>
+    +-- rowHeights / colWidths / rowFormats / colFormats
+    +-- merges / comments / filters / ranges / rangePayloads / ...
 ```
 
-### Why Three Maps?
+The TypeScript `SerializedCellData` and `SheetMaps` contracts are still available through `contracts/src/store/store-types.ts`, but that file is a re-export shim over `types/api/src/store/store-types.ts`. The Rust Yrs schema above is the authoritative persisted storage shape.
 
-| Map          | Contents                    | Density                           |
-| ------------ | --------------------------- | --------------------------------- |
-| `cells`      | Values, formulas, positions | Every cell with data              |
-| `properties` | Formatting, metadata        | Only cells with custom formatting |
-| `grid`       | Position → CellId lookup    | Derived, kept in sync             |
+### Core Maps
+
+| Map / Index              | Contents                                      |
+| ------------------------ | --------------------------------------------- |
+| `cells`                  | Cell values and formula data keyed by CellId  |
+| `cellProperties`         | Sparse cell formatting keyed by CellId        |
+| `gridIndex.posToId`      | Position key to CellId lookup                 |
+| `gridIndex.idToPos`      | CellId to position key lookup                 |
+| `rowOrder` / `colOrder`  | Ordered row/column identities                 |
 
 **Benefits:**
 
-- **O(1) position lookup**: `grid.get("sheet:5:3")` → CellId
-- **O(1) cell data lookup**: `cells.get(cellId)` → SerializedCellData
-- **O(1) properties lookup**: `properties.get(cellId)` → CellProperties | undefined
-- **Sparse property storage**: No wasted space for default-formatted cells
-- **Clean CRDT merging**: Value changes and format changes don't conflict
+- O(1)-style lookup through the in-memory `GridIndex` and `CellMirror`.
+- Cell data and formatting remain keyed by stable identities.
+- Structural changes update identity-position state instead of rewriting every formula reference.
+- The observer path can rebuild derived caches from the merged Yrs document.
 
 ## Key Operations
 
-### Insert Column
+### Insert/Delete Columns
 
-**Location:** `kernel/src/domain/sheets/structures.ts`
+**TypeScript facade:** `kernel/src/domain/sheets/structures.ts`
 
 ```typescript
-function insertColumns(sheet: SheetId, startCol: number, count: number): void {
-  doc.transact(() => {
-    // Step 1: Shift positions of affected cells
-    cells.forEach((cell, id) => {
-      if (cell.col >= startCol) {
-        cells.set(id, { ...cell, col: cell.col + count });
-      }
-    });
-
-    // Step 2: Rebuild grid index
-    rebuildGridIndex(sheet);
-
-    // Step 3: Shift column widths, schemas (position-keyed)
-    shiftColumnWidths(sheet, startCol, count);
+export async function insertColumns(ctx, sheetId, _maps, startCol, count) {
+  if (count <= 0) return;
+  return await ctx.computeBridge.structureChange(sheetId, {
+    InsertCols: { at: startCol, count, new_col_ids: [] },
   });
-
-  // No formula parsing. No reference adjustment. Just position updates.
 }
-```
 
-### Delete Column
-
-```typescript
-function deleteColumns(sheet: SheetId, startCol: number, count: number): void {
-  doc.transact(() => {
-    // Step 1: Delete cells in range (formulas referencing these → #REF!)
-    deleteCellsInRange(sheet, 'col', startCol, startCol + count - 1);
-
-    // Step 2: Shift remaining cells left
-    cells.forEach((cell, id) => {
-      if (cell.col > startCol + count - 1) {
-        cells.set(id, { ...cell, col: cell.col - count });
-      }
-    });
-
-    // Step 3: Rebuild grid index
-    rebuildGridIndex(sheet);
+export async function deleteColumns(ctx, sheetId, _maps, startCol, count) {
+  if (count <= 0) return;
+  return await ctx.computeBridge.structureChange(sheetId, {
+    DeleteCols: { at: startCol, count, deleted_cell_ids: [] },
   });
 }
 ```
 
-### Range Expansion (Automatic!)
+**Rust implementation:** `compute/core/src/storage/sheet/structural/mod.rs`
 
-The identity model gives correct range expansion for free:
+Structural operations update:
 
-```
-Before: =SUM(A1:A10)
-  - startId → cell at (row: 0, col: 0)
-  - endId → cell at (row: 9, col: 0)
+- `GridIndex`, including row/column axes and sparse cell positions.
+- Yrs `rowOrder` / `colOrder`, and removed cell entries for deletes.
+- `CellMirror` via `apply_structure_change()`.
+- Range cleanup when deleted rows or columns remove range-backed cells.
 
-Insert row at row 5:
-  - Cell at (0,0) stays at (0,0)    → startId still valid
-  - Cell at (9,0) moves to (10,0)  → endId position updated
+### Range Expansion
 
-Display: =SUM(A1:A11) ✓
-```
+For a formula like `=SUM(A1:A10)`, an identity range points at durable corner identities. After inserting a row between the corners, the corner identities are unchanged but their displayed positions differ, so the rendered formula can become `=SUM(A1:A11)`.
 
-No special range expansion logic needed. Position updates handle it.
+The structure path still updates position-derived caches, range extents, and persisted A1 display strings where needed. It does not need to rewrite the source identity refs for every formula.
 
 ## Dependency Graph
 
 **Location:** `compute/core/crates/compute-graph/src/lib.rs`
 
-The dependency graph uses CellIds directly - no key shifting ever needed:
+The dependency graph is keyed by `CellId` and stores direct cell dependencies separately from range dependencies:
 
-```typescript
-class IdentityDependencyGraph {
-  // CellId keys are stable - never change on structure operations
-  private precedents = new Map<CellId, Set<CellId>>();
-  private dependents = new Map<CellId, Set<CellId>>();
+```rust
+pub enum DepTarget {
+    Cell(CellId),
+    Range(RangePos, RangeAccess),
+}
 
-  updateFormula(cellId: CellId, formula: IdentityFormula | null): void {
-    // Extract referenced CellIds from formula
-    // Update graph relationships
-    // Check for circular references
-  }
-
-  getEvaluationOrder(changedCellId: CellId): CellId[] {
-    // Topological sort for recalculation order
-  }
+pub struct DependencyGraph {
+    precedents: FxHashMap<CellId, Vec<DepTarget>>,
+    dependents: FxHashMap<CellId, FxHashSet<CellId>>,
+    range_deps: FxHashMap<RangePos, FxHashSet<CellId>>,
+    external_deps: FxHashMap<ExternalRefKey, FxHashSet<CellId>>,
 }
 ```
+
+Because graph nodes are identity keyed, structure changes do not require shifting graph keys. Position-aware range invalidation is handled through range positions and the current identity-position lookup.
 
 ## Grid Index
 
-**Location:** `kernel/src/domain/grid-index.ts`
+**Rust canonical implementation:** `compute/core/src/identity/` re-exports `compute_document::identity::GridIndex`.
 
-The grid index enables O(1) position lookups for rendering:
+**TypeScript facade:** `kernel/src/domain/grid-index.ts` delegates lookups to `ComputeBridge`.
 
-```typescript
-interface ICellPositionLookup {
-  // Position → CellId
-  getCellId(sheet: SheetId, row: number, col: number): CellId | null;
+The Rust `GridIndex` maintains:
 
-  // CellId → Position
-  getPosition(cellId: CellId): { row: number; col: number; sheet: SheetId } | null;
-
-  // Get or create (for formula parsing - referenced cells may not exist yet)
-  getOrCreateCellId(sheet: SheetId, row: number, col: number): CellId;
-
-  // Sheet name → SheetId (for cross-sheet references like Sheet2!A1)
-  getSheetIdByName?(name: string): SheetId | undefined;
-}
+```rust
+cell_at_pos: FxHashMap<(u32, u32), CellId>;
+cell_to_pos: FxHashMap<CellId, (u32, u32)>;
+row_axis: AxisIdentityStore<RowId>;
+col_axis: AxisIdentityStore<ColId>;
 ```
 
-### Key Utilities
+Key operations include:
 
-```typescript
-// Create grid key
-createGridKey(sheet, row, col) → "sheet:5:3"
+- `ensure_cell_id(row, col)` for materializing a cell identity.
+- `cell_id_at(row, col)` and `cell_position(cell_id)` for lookup.
+- `register_cell(cell_id, row, col)` for import/sync and virtual IDs.
+- `insert_rows`, `delete_rows`, `insert_cols`, and `delete_cols` for structural shifts.
 
-// Parse grid key
-parseGridKey("sheet:5:3") → { sheet, row: 5, col: 3 }
-
-// Shift positions after insert/delete
-shiftCellPositions(maps, sheet, axis, startIndex, delta)
-
-// Rebuild entire grid index after bulk operations
-rebuildGridIndex(maps, sheet)
-```
+The kernel bridge exposes the same responsibilities asynchronously through methods such as `getCellIdAt`, `getCellPosition`, and `getOrCreateCellId`.
 
 ## Why This Works for CRDT
 
-### Position Updates Compose
+### Identity References Stay Stable
 
-When two users insert columns concurrently:
+Formula refs point to `CellId`, `RowId`, or `ColId` values. Concurrent structure changes update the CRDT-backed row/column order and identity-position maps, while formula identity refs remain the source of truth.
 
-```
-User A: Insert at column 2 → shift cells at col≥2 by +1
-User B: Insert at column 5 → shift cells at col≥5 by +1
+### A1 Formula Text Is Derived
 
-CRDT merge: Both shifts apply correctly
-- Cell at col 3 → col 5 (shifted twice: +1 from A, +1 from B)
-- Cell at col 6 → col 8 (shifted twice)
-```
-
-Numbers merge correctly. Strings conflict.
-
-### Formula Strings Never Change
-
-Since formulas store CellId references (not A1 strings), there are no string conflicts:
-
-```
-User A: Insert column (no formula change)
-User B: Edit formula value (changes computed, not refs)
-
-CRDT merge: Clean - different fields modified
-```
+The persisted `f` field stores an A1 formula body for compatibility, display, search, and export. It is not the source of truth for identity references. Structural operations may regenerate and write this cached A1 text, while `ft`/`fr` identity formula fields preserve the stable references.
 
 ### Undo/Redo
 
-Formula refs are stable CellId UUIDs — they never change on structure operations, so Yrs undo doesn't need to track "what formulas were affected".
-
-**Structural undo** (undo of insert/delete rows/cols) requires rebuilding the in-memory caches (GridIndex, CellMirror, ComputeCore) from the CRDT. Structural operations only modify `meta.rows`/`meta.cols` in yrs — they don't update the yrs `idToPos` grid index. So after undo, the yrs grid index naturally contains correct pre-structural positions. The observer detects the meta change and triggers a per-sheet cache rebuild from yrs, followed by a full ComputeCore re-initialization. This is collaboration-safe: interleaved structural changes from multiple users are resolved by the CRDT, and the cache is rebuilt from the merged state. See `rebuild_after_structural_observer_change()` in `compute/core/src/storage/engine/mod.rs`.
+Structural operations run as a single Yrs transaction with `ORIGIN_STRUCTURAL`, so undo treats the operation as one undoable step. When undo/redo or remote sync reaches the observer path, `rebuild_after_structural_observer_change()` in `compute/core/src/storage/engine/sync_pipeline.rs` rebuilds `GridIndex`, `CellMirror`, layout indexes, merge state, and position-derived formula data from Yrs. The TypeScript bridge then refreshes registered viewports after undo/redo in `kernel/src/bridges/compute/compute-core.ts`.
 
 ## What Doesn't Change
 
-| Component         | Status                                               |
-| ----------------- | ---------------------------------------------------- |
-| Calculator engine | **Unchanged** - receives A1 strings after conversion |
-| Renderer          | **Unchanged** - displays A1 strings                  |
-| User input        | **Unchanged** - types A1 references                  |
-| XLSX format       | **Unchanged** - stores A1 strings                    |
+| Component      | Status                                                       |
+| -------------- | ------------------------------------------------------------ |
+| User input     | Users type A1 formulas and addresses                         |
+| Public APIs    | Worksheet APIs accept A1 strings or numeric row/column input |
+| Display/export | A1 text is rendered from identity formulas when needed        |
+| XLSX format    | XLSX import/export remains A1-based at the file boundary     |
 
-The identity model is **internal only**. The user experience is identical.
+The identity model is internal. Public spreadsheet behavior stays A1-oriented.
 
 ## Implementation Files
 
-| File                                                        | Purpose                                                              |
-| ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| `contracts/src/cells/cell-identity.ts`                      | Type definitions (CellId, IdentityFormula, etc.)                     |
-| `contracts/src/store/store-types.ts`                        | SerializedCellData type definition                                   |
-| `kernel/src/domain/grid-index.ts`                           | Cell position lookup and reverse index                               |
-| `kernel/src/domain/sheets/structures.ts`                    | Insert/delete row/col                                                |
-| `compute/core/crates/compute-parser/`                       | Formula parsing, A1 ↔ Identity conversion (Rust)                     |
-| `compute/core/crates/compute-graph/src/lib.rs`              | Stable dependency graph (Rust)                                       |
-| `kernel/src/bridges/compute/compute-bridge.ts`              | Evaluation integration                                               |
-
-**Note on Type Naming:** The canonical type definition is `SerializedCellData` in `contracts/src/store/store-types.ts`. The kernel imports this from `@mog/spreadsheet-contracts/store`.
+| File | Purpose |
+| ---- | ------- |
+| `types/core/src/cells/cell-identity.ts` | Authored public TypeScript identity types |
+| `contracts/src/cells/cell-identity.ts` | Public contracts barrel and branded constructors |
+| `types/api/src/store/store-types.ts` | TypeScript `SerializedCellData` and `SheetMaps` contracts |
+| `compute/core/crates/types/cell-types/` | Rust ID newtypes, allocator, virtual CellIds, axis identities |
+| `compute/core/crates/types/formula-types/src/identity_formula/types.rs` | Rust identity formula refs and formula type |
+| `compute/core/crates/compute-parser/` | Formula parsing and identity/A1 rendering |
+| `compute/core/src/storage/sheet/structural/mod.rs` | Rust insert/delete row/column operations |
+| `compute/core/src/storage/mod.rs` | Rust Yrs storage schema overview |
+| `compute/core/crates/compute-graph/src/lib.rs` | CellId-keyed dependency graph |
+| `kernel/src/domain/sheets/structures.ts` | TypeScript structural-operation facade |
+| `kernel/src/domain/grid-index.ts` | TypeScript cell-position facade over ComputeBridge |
+| `kernel/src/bridges/compute/compute-bridge.gen.ts` | Generated bridge API for identity conversion and lookup |
 
 ## Success Criteria
 
-1. **Insert/delete row/column**: Formulas reference same logical cells, display shows updated A1 addresses, no formula string modification
-2. **Concurrent structure changes**: Both changes apply correctly, formulas still correct after merge
-3. **Range expansion**: Insert row inside `=SUM(A1:A10)` → `=SUM(A1:A11)` automatically
-4. **Deleted references**: Delete column containing referenced cell → formula shows `#REF!`
-5. **Absolute references**: `=$A$1` displays correctly after structure changes
-6. **XLSX round-trip**: Import → edit → export preserves formulas
+1. **Insert/delete row/column**: Formula identity refs still point at the same logical identities; rendered A1 addresses update from current positions.
+2. **Concurrent structure changes**: Merged row/column order and grid identity state drive formula display and recalculation.
+3. **Range expansion**: Inserts between range boundary identities expand the rendered A1 range.
+4. **Deleted references**: References to removed cells render as `#REF!` where the lookup cannot resolve a position.
+5. **Absolute references**: Absolute flags round-trip for A1 display.
+6. **XLSX round-trip**: Import/export uses A1 formulas at the file boundary while internal refs remain identity based.
 
 ## Cell Value Resolution
 
-When reading cell values, you must correctly distinguish between formula cells and value cells.
+When reading cell values, distinguish formula cells from literal value cells.
 
 ### The Problem
 
 The `computed` field can be:
 
-- `undefined` - No computed value (non-formula cell)
-- `null` - Formula evaluated to null/empty (e.g., `=A1` where A1 is empty)
-- Other - Formula's actual result
+- `undefined`: no computed value on a non-formula cell.
+- `null`: a formula result that is intentionally empty/null.
+- Any other `CellValue`: the formula's evaluated result.
 
-**NEVER use `data.computed ?? data.raw`** - the `??` operator treats `null` as missing, which is semantically wrong.
+Do not use `data.computed ?? data.raw` for value resolution. The nullish coalescing operator treats `null` as missing, but `null` can be the correct formula result.
 
 ### The Correct Pattern
 
 Use the `formula` field as the discriminator:
 
 ```typescript
-// WRONG - treats null as missing
+// Wrong: treats null formula results as missing.
 const value = data.computed ?? rawToCellValue(data.raw);
 
-// CORRECT - formula presence determines source
+// Correct: formula presence determines source.
 if (data.formula !== undefined) {
-  return data.computed; // Formula cell: trust computed, even if null
+  return data.computed ?? null;
 }
-return rawToCellValue(data.raw); // Value cell: use raw
+return rawToCellValue(data.raw) ?? null;
 ```
 
-Or use the helper function:
+Or use the kernel helper:
 
 ```typescript
-import { getEffectiveValue } from '@mog/kernel/api';
-const value = getEffectiveValue(data);
+import { Cells } from '@mog-sdk/kernel/api';
+
+const value = Cells.getEffectiveValueFromData(data);
 ```
-
-### Why null is Valid
-
-Formula cells can legitimately evaluate to `null`:
-
-- `=A1` where A1 is empty → `null`
-- `=IF(FALSE, 1)` → `null` (no else branch)
-- `=MATCH(...)` when not found → `null`
-
-These should display as empty cells, NOT as the formula text.
 
 ### Invariants
 
-1. For cells with `data.formula !== undefined`: ALWAYS use `data.computed`
-2. For cells without formula: ALWAYS use `rawToCellValue(data.raw)`
-3. `null` is a valid computed value, not an error condition
-4. Use `getEffectiveValue()` when you need the effective cell value
+1. For cells with `data.formula !== undefined`, use `data.computed ?? null`.
+2. For cells without a formula, use `rawToCellValue(data.raw) ?? null`.
+3. `null` is a valid computed value, not an instruction to fall back to raw input.
+4. Use `Cells.getEffectiveValueFromData()` or `Cells.getEffectiveValueAt()` when possible.
 
 ## Row/Column Identity Model
 
-The same identity pattern extends to rows and columns. Properties are keyed by stable RowId/ColId, not position strings.
+Rows and columns use the same stable-identity pattern. Rust owns canonical row/column identity tracking through `GridIndex` axes, `rowOrder` / `colOrder`, and optional compact axis stores.
 
-| Property Map | Key   | Value        |
-| ------------ | ----- | ------------ |
-| `rowHeights` | RowId | number       |
-| `rowFormats` | RowId | CellFormat   |
-| `colWidths`  | ColId | number       |
-| `colFormats` | ColId | CellFormat   |
-| `schemas`    | ColId | ColumnSchema |
+| Property Map | Key   | Value      |
+| ------------ | ----- | ---------- |
+| `rowHeights` | RowId | number     |
+| `rowFormats` | RowId | CellFormat |
+| `colWidths`  | ColId | number     |
+| `colFormats` | ColId | CellFormat |
+| `schemas`    | index | ColumnSchema |
 
-**Two-tier lookups** (same as CellId):
-
-- `getRowIdAt()` / `getColIdAt()` - read-only, returns null for virtual rows/columns
-- `getOrCreateRowId()` / `getOrCreateColId()` - materializes if needed
-
-**Implementation:** `kernel/src/domain/row-col-identity.ts`
-
-Row and column identity follows the same invariant as cell identity: stable IDs are the persisted reference, and positional labels are derived views.
+`kernel/src/domain/row-col-identity.ts` contains compatibility helpers, but the canonical identities and index maintenance live in Rust.
 
 ## Virtual Identity for Range-Resident Cells
 
-When bulk data is imported (e.g., a 1M-row XLSX column), it is stored as a **Range** — a single typed payload in Yrs (`rangePayloads`) rather than N individual per-cell Y.Map entries. Cells inside a Range don't have per-cell Yrs entries until edited. They need identities for the dependency graph, but minting real CellIds for 1M cells at import time would recreate the problem Ranges solve.
+Large imported or deferred data can live in `ranges` / `rangePayloads` instead of one Yrs cell entry per cell. Range-resident cells still need identities for formulas, formatting, and dependency tracking.
 
 ### Virtual CellIds
 
-A **virtual CellId** is derived deterministically from the cell's structural position:
+A virtual `CellId` is derived deterministically from structural identity:
 
 ```rust
 CellId::virtual_at(sheet_id: SheetId, row_id: RowId, col_id: ColId) -> CellId
 ```
 
-The derivation uses SipHash-2-4 with a fixed seed, producing the same `u128` on every peer, every platform, every Rust version. Virtual CellIds are disjoint from real CellIds by construction: the upper 64 bits are set to a reserved sentinel value (`0xFFFF_FFFF_FFFF_FFFE`), which is formally excluded from the `IdAllocator` partition space.
+The derivation uses `siphasher::sip128::SipHasher`, and virtual IDs are disjoint from allocator-produced real IDs because the upper 64 bits are set to the reserved `VIRTUAL_CELL_SENTINEL`.
 
 ### Properties
 
 | Property | Guarantee |
-|----------|-----------|
-| Deterministic | Same `(SheetId, RowId, ColId)` always produces the same CellId |
-| RangeId-independent | Identity is a function of position, not of which Range contains the cell |
-| Peer-identical | No per-document seed, no allocator state — byte-identical across peers |
-| Stable across transitions | First edit writes the same CellId to `cells` — identity is continuous |
-| Stable across compaction | Compaction re-encodes payload but preserves RowId/ColId |
-| Stable across Range deletion | Deletion folds payload into `cells` keyed by the same virtual CellIds |
+| -------- | --------- |
+| Deterministic | Same `(SheetId, RowId, ColId)` gives the same `CellId` |
+| Range-independent | Identity depends on structural position, not the range payload ID |
+| Disjoint | Real allocator IDs cannot use the virtual sentinel namespace |
+| Editable | First edit can register the same virtual ID as a sparse cell override |
 
 ### Resolution
 
-`resolve_cell_id(sheet, pos)` checks `pos_to_id` first (anchored/edited cells), then queries the Range spatial index. If the position falls inside a Range, it returns `CellId::virtual_at(sheet_id, row_id, col_id)`. The dependency graph cannot distinguish virtual from real CellIds — they participate identically in topological sort, cycle detection, and invalidation.
+`CellMirror::resolve_cell_id()` checks anchored `pos_to_id` first. If no anchored cell exists, it queries the range spatial index and synthesizes `CellId::virtual_at(sheet, row_id, col_id)` for positions inside a range.
 
 ### Value Read Path
 
-```
+```text
 get_cell_value_at(sheet, row, col):
-  1. pos_to_id → cells         (sparse override or real cell — highest priority)
-  2. Range spatial index → payload  (Range-resident value from payload bytes)
-  3. col_data                  (projections, spills)
-  4. Null fallback
+  1. pos_to_id -> cells for sparse overrides or real cells
+  2. range spatial index confirms range coverage
+  3. col_data returns materialized range/projection values
+  4. real-cell Null fallback
 ```
 
-Sparse `cells` entries unconditionally shadow Range payload at the same position. This is the override mechanism: editing a Range-resident cell writes to `cells` with the virtual CellId, and subsequent reads return the override.
-
-### On First Edit
-
-When a user edits a Range-resident cell for the first time:
-1. The virtual CellId is derived from `(SheetId, RowId, ColId)` — the same id formulas already reference
-2. The value is written to Yrs `cells` keyed on this CellId
-3. `posToId`/`idToPos` entries are created (for sub-256 Ranges, these already exist from hydration)
-4. The owning RangeView's `overrides` index is updated
-5. The column's `col_data` is rebuilt and `col_version` is bumped
-
-Two peers concurrently editing the same Range-resident cell mint the same CellId on both sides; standard Yrs LWW resolves the value.
+Sparse `cells` entries shadow range payload values at the same position. That is how editing a range-resident cell overrides the imported/deferred payload without changing the cell's identity.
 
 ## References
 
-- Google Sheets architecture (uses same approach)
-- Yrs CRDT documentation
-- UUID v7 specification
+- `types/core/src/cells/cell-identity.ts`
+- `compute/core/crates/types/cell-types/src/identity/virtual_cell.rs`
+- `compute/core/crates/types/cell-types/src/id_alloc.rs`
+- `compute/core/crates/types/formula-types/src/identity_formula/types.rs`
+- `compute/core/src/mirror/read.rs`
+- `compute/core/src/storage/sheet/structural/mod.rs`
+- `compute/core/src/storage/engine/sync_pipeline.rs`

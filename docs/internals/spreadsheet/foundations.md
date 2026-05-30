@@ -2,12 +2,14 @@
 
 ## Overview
 
-Six foundational systems enable advanced features. Built on Rust/Yrs for collaboration sync.
+These foundations are the current public contracts and runtime/storage pieces
+behind spreadsheet metadata, validation, testing, links, and eventing. Rust/Yrs
+backs sheet storage where noted; some APIs are TypeScript-only.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     CONSUMER FEATURES                                │
-│  AI Agents │ Self-Healing │ Provenance │ Live Data │ Time Travel    │
+│  Validation UI │ Reactive UI │ API Generation │ Live Data │ Links   │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -17,7 +19,7 @@ Six foundational systems enable advanced features. Built on Rust/Yrs for collabo
 │  │  Metadata │ │  EventBus │ │   Types   │                         │
 │  └───────────┘ └───────────┘ └───────────┘                         │
 │  ┌───────────┐ ┌───────────┐ ┌───────────┐                         │
-│  │ Versioning│ │  Testing  │ │Connections│                         │
+│  │ Workflows │ │  Testing  │ │Connections│                         │
 │  └───────────┘ └───────────┘ └───────────┘                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -26,11 +28,16 @@ Six foundational systems enable advanced features. Built on Rust/Yrs for collabo
 
 **Purpose:** Per-cell key-value data beyond value/formula/format.
 
-**Storage:** Embedded in `sheets/{sheetId}/properties: Y.Map<CellId, CellProperties>`
+**Storage:** Embedded in the per-sheet `properties` map keyed by `CellId`
+(`CellProperties`), with the map declared in `contracts/src/store/sheet-maps-schema.ts`.
 
 > **Note:** Cell metadata is stored as part of the unified `CellProperties` structure, not as a separate Yrs map. This eliminates redundancy and simplifies CRDT merges.
 
-**Key file:** `contracts/src/core.ts`
+**Key files:**
+
+- `types/core/src/core.ts` - source for `CellMetadata` and `CellProperties`
+- `contracts/src/core/core.ts` - public re-export and helper exports
+- `compute/core/src/storage/properties/cell.rs` - Rust/Yrs cell property storage helpers
 
 ```typescript
 interface CellDataSource {
@@ -52,7 +59,7 @@ interface CellMetadata {
   staleness?: 'fresh' | 'stale' | 'error';
   lastFetched?: number;
 
-  // === Formula Auditing (Stream B2) ===
+  // === Formula Auditing ===
   /** Whether this cell contains an array formula (CSE - Ctrl+Shift+Enter) */
   isArrayFormula?: boolean;
 
@@ -72,38 +79,20 @@ interface CellMetadata {
 **Key files:**
 
 - `kernel/src/context/event-bus.ts` - Implementation
-- `contracts/src/events/` - Full type definitions (event types across 30+ files)
+- `types/events/src/` - Source event type definitions
+- `contracts/src/events.ts` and `contracts/src/events/` - Public re-export shims
 
 **Event Categories:**
 
-| Category              | Events                                                                                                                                                                                                                                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cell**              | `cell:changed`, `cells:batch-changed`, `cell:format-changed`, `cell:borders-changed`, `cell:metadata-changed`                                                                                                                                                                                                    |
-| **Structure**         | `rows:inserted`, `rows:deleted`, `columns:inserted`, `columns:deleted`, `row:height-changed`, `column:width-changed`, `rows:hidden`, `rows:unhidden`, `columns:hidden`, `columns:unhidden`                                                                                                                       |
-| **Merge**             | `cells:merged`, `cells:unmerged`, `merges:changed`                                                                                                                                                                                                                                                               |
-| **Sheet**             | `sheet:created`, `sheet:deleted`, `sheet:renamed`, `sheet:reordered`, `sheet:colorChanged`, `sheet:visibilityChanged`, `sheet:moved`, `sheet:copied`                                                                                                                                                             |
-| **Chart**             | `chart:created`, `chart:updated`, `chart:deleted`, `chart:moved`                                                                                                                                                                                                                                                 |
-| **Pivot**             | `pivot:created`, `pivot:updated`, `pivot:deleted`, `pivot:expansion-changed`                                                                                                                                                                                                                                     |
-| **Selection**         | `selection:changed`                                                                                                                                                                                                                                                                                              |
-| **View**              | `freeze:changed`, `view:options-changed`                                                                                                                                                                                                                                                                         |
-| **Scroll**            | `scroll:changed`, `viewport:resized`                                                                                                                                                                                                                                                                             |
-| **Print**             | `print:page-breaks-changed`, `print:area-changed`, `print:titles-changed`, `print:page-break-drag-start`, `print:page-break-drag-end`, `print:pdf-export-progress`, `print:pdf-export-complete`                                                                                                                  |
-| **Settings**          | `workbook:settings-changed`, `sheet:settings-changed`, `sheet:print-settings-changed`, `workbook:theme-changed`                                                                                                                                                                                                  |
-| **Store**             | `store:ready`, `store:sync-error`                                                                                                                                                                                                                                                                                |
-| **Recalc**            | `recalc:started`, `recalc:completed`                                                                                                                                                                                                                                                                             |
-| **Schema**            | `validation:failed`, `validation:passed`, `schema:changed`, `schemas:inferred`, `range-schema:created`, `range-schema:updated`, `range-schema:deleted`                                                                                                                                                           |
-| **DataTools**         | `duplicates:removed`, `text:split`                                                                                                                                                                                                                                                                               |
-| **Table**             | `table:created`, `table:updated`, `table:deleted`, `table:resized`, `table:column-renamed`, `table:total-row-changed`, `table:renamed`, `table:calculated-column-filled`, `table:duplicates-removed`, `table:column-deleted`, `table:converted-to-range`                                                         |
-| **FloatingObject**    | `floatingObject:created`, `floatingObject:updated`, `floatingObject:deleted`, `floatingObject:moved`, `floatingObject:resized`, `floatingObject:zOrderChanged`, `floatingObject:grouped`, `floatingObject:ungrouped`, `floatingObject:selectionChanged`                                                          |
-| **Grouping**          | `group:created`, `group:deleted`, `group:collapsed`, `outline:settings-changed`, `outline:level-changed`, `outline:auto-applied`, `subtotals:created`, `subtotals:removed`                                                                                                                                       |
-| **ConditionalFormat** | `cf:rules-changed`, `cf:rule-created`, `cf:rule-deleted`, `cf:rule-updated`                                                                                                                                                                                                                                      |
-| **Sparkline**         | `sparkline:created`, `sparkline:updated`, `sparkline:deleted`, `sparklineGroup:created`, `sparklineGroup:updated`, `sparklineGroup:deleted`, `sparklines:cleared`, `sparkline:dataChanged`                                                                                                                       |
-| **Connection**        | `connection:created`, `connection:updated`, `connection:deleted`, `connection:status-changed`, `connection:cell-bound`, `connection:cell-unbound`, `connection:refreshed`, `connection:data-stale`, `connection:sheet-binding-created`, `connection:sheet-binding-refreshed`, `connection:sheet-binding-removed` |
-| **Filter**            | `filter:created`, `filter:updated`, `filter:applied`, `filter:deleted`, `filter:cleared`                                                                                                                                                                                                                         |
-| **Comment**           | `comment:added`, `comment:updated`, `comment:deleted`, `comment:resolved`, `comments:cleared`                                                                                                                                                                                                                    |
-| **NamedRange**        | `name:created`, `name:updated`, `name:deleted`                                                                                                                                                                                                                                                                   |
-| **FileIO**            | `export:progress`, `export:complete`, `import:progress`, `import:complete`                                                                                                                                                                                                                                       |
-| **Slicer**            | `slicer:created`, `slicer:updated`, `slicer:deleted`, `slicer:selectionChanged`, `slicer:cacheInvalidated`, `slicer:disconnected`                                                                                                                                                                                |
+`SpreadsheetEvent` is the union in `types/events/src/index.ts`. Domain files
+include cell, structure, merge, sheet, chart, pivot, selection, view, print,
+settings, store, recalc, validation, data tools, table, floating object,
+grouping, conditional formatting, sparkline, filter, comment, file I/O, named
+range, slicer, scenario, ink/drawing, diagram, text effect, canvas object,
+security, range, and sort events.
+
+Connection status is exposed through connection/link APIs rather than
+`connection:*` spreadsheet events in the current event union.
 
 **Interface:**
 
@@ -118,7 +107,7 @@ interface IEventBus {
 }
 ```
 
-**Enables:** Reactive UI, self-healing triggers, webhook integration.
+**Enables:** Reactive UI, decoupled domain listeners, batched semantic notifications.
 
 ---
 
@@ -128,7 +117,7 @@ interface IEventBus {
 
 **Package:** `compute/core/crates/compute-schema/` (Rust)
 
-**Contracts:** `contracts/src/schema.ts`
+**Contracts:** `contracts/src/core/schema.ts` (exported as `@mog-sdk/contracts/schema`)
 
 **Storage:** `sheets/{sheetId}/schemas: Y.Map<colIndex, ColumnSchema>`
 
@@ -177,12 +166,13 @@ interface ColumnSchema {
 
 interface SchemaConstraints {
   required?: boolean;
+  allowBlank?: boolean;
   min?: number;
   max?: number;
   exclusiveMin?: number;
   exclusiveMax?: number;
-  equal?: number;
-  notEqual?: number;
+  equal?: unknown;
+  notEqual?: unknown;
   notBetweenMin?: number;
   notBetweenMax?: number;
   minLength?: number;
@@ -212,46 +202,67 @@ interface ISchemaValidator {
 
 ---
 
-## 4. Versioning
+## 4. Workflow Versioning
 
-**Purpose:** Git-like version control for spreadsheets.
+**Purpose:** Workflow definition versioning and migration for durable workflows.
 
-**Contracts:** `contracts/src/workflows/versioning.ts`
+**Contracts:** `contracts/src/workflows/versioning.ts` re-exports
+`types/api/src/workflows/versioning.ts`.
 
-**Storage:** `versioning: Y.Map` (metadata) + IndexedDB (blobs)
+> **Note:** The current public repository does not expose a spreadsheet
+> snapshot/branch manager contract here. `contracts/src/workflows/versioning.ts`
+> is for workflow upgrades, not spreadsheet time-travel snapshots.
 
 ```typescript
-interface ListSnapshotsOptions {
-  branch?: string;
-  limit?: number;
-  offset?: number;
+type VersioningStrategy = 'replace' | 'parallel' | 'migrate';
+
+interface VersioningConfig {
+  strategy: VersioningStrategy;
+  gracePeriod?: string;
+  defaultVersion?: 'latest' | 'previous' | string;
+  migration?: MigrationConfig;
 }
 
-interface IVersionManager {
-  // === Snapshots ===
-  createSnapshot(message?: string): Promise<Snapshot>;
-  listSnapshots(options?: ListSnapshotsOptions): Promise<SnapshotMetadata[]>;
-  getSnapshot(id: string): Promise<Snapshot | undefined>;
+interface MigrationConfig {
+  functionName: string;
+  timing: 'immediate' | 'lazy';
+  reversible: boolean;
+  rollbackFunctionName?: string;
+  batchSize?: number;
+  timeout?: string;
+}
 
-  // === Branches ===
-  createBranch(name: string, fromSnapshot?: string): Promise<Branch>;
-  listBranches(): Branch[];
-  getCurrentBranch(): string;
-  checkout(branchName: string): Promise<void>;
-  deleteBranch(name: string): boolean;
+interface WorkflowVersion {
+  version: string;
+  workflowId: string;
+  active: boolean;
+  deprecated: boolean;
+  runningInstances: number;
+  deployedAt: string;
+}
 
-  // === Diff & Merge ===
-  diff(fromId: string, toId: string): Promise<SnapshotDiff>;
-  merge(sourceBranch: string, targetBranch?: string): Promise<MergeResult>;
+interface VersionMetadata {
+  commitHash?: string;
+  branch?: string;
+  description?: string;
+  breakingChanges?: string[];
+  migrationNotes?: string;
+}
 
-  // === Utility (implementation-only, not in contract interface) ===
-  // Note: The following methods exist in implementation but are not part of
-  // the contract interface: diffWithCurrent, previewMerge, hasUncommittedChanges,
-  // getHistory, restoreToSnapshot
+interface IVersionRegistry {
+  register(workflowId: string, version: string, metadata?: VersionMetadata): Promise<void>;
+  getVersions(workflowId: string): Promise<WorkflowVersion[]>;
+  getLatestVersion(workflowId: string): Promise<WorkflowVersion | null>;
+  getVersion(workflowId: string, version: string): Promise<WorkflowVersion | null>;
+  activateVersion(workflowId: string, version: string): Promise<void>;
+  deactivateVersion(workflowId: string, version: string): Promise<void>;
+  deprecateVersion(workflowId: string, version: string, message: string): Promise<void>;
+  getRunningInstanceCount(workflowId: string, version: string): Promise<number>;
 }
 ```
 
-**Enables:** Time travel, branching scenarios, diff/merge, audit trail.
+**Enables:** Durable workflow upgrades, migration metadata, active/deprecated
+version tracking.
 
 ---
 
@@ -259,10 +270,13 @@ interface IVersionManager {
 
 **Purpose:** Unit tests for spreadsheets with cell assertions.
 
-**Contracts:** `contracts/src/core/testing.ts`
-**Implementation:** testing contracts are defined in `contracts/src/core/testing.ts`.
+**Contracts:** `contracts/src/core/testing.ts` re-exports
+`types/commands/src/testing.ts` and is published as `@mog-sdk/contracts/testing`.
+**Implementation:** `runtime/spreadsheet-testing/`
 
-**Storage:** `testing: Y.Map` (assertions, suites)
+**Storage:** `runtime/spreadsheet-testing/src/test-store.ts` uses plain
+TypeScript `Map`s for assertions, suites, and config. It no longer stores tests
+in a Yjs map.
 
 ```typescript
 // Target for assertions - cell or range
@@ -352,175 +366,129 @@ interface ITestingFramework {
 }
 ```
 
-**Enables:** Spreadsheet unit tests, CI/CD validation, self-diagnosing errors.
+**Enables:** Spreadsheet unit tests, suite execution, assertion failure notifications.
 
 ---
 
 ## 6. Connections
 
-**Purpose:** Live data from external sources and cross-spreadsheet links.
+**Purpose:** External data/query surfaces, sheet-level data bindings, and
+cross-workbook link status/refresh APIs.
 
-**Contracts:** `contracts/src/connections/`
+**Key files:**
 
-**Storage:** `connections: Y.Map` (configs, bindings)
+- `contracts/src/connections/index.ts` - re-export for query formula contracts
+- `types/connections/src/query.ts` - `QUERY` formula connection/query types
+- `contracts/src/storage/connection.ts` - re-export for storage connection configs
+- `types/document/src/storage/connection.ts` - connection config and table binding types
+- `types/api/src/api/worksheet/bindings.ts` - worksheet sheet-data binding API
+- `compute/core/src/storage/sheet/bindings/` - Rust/Yrs sheet binding storage
+- `types/api/src/api/workbook.ts` and `kernel/src/services/workbook-links/` -
+  cross-workbook link API and runtime service
 
 ```typescript
-type ConnectionType = 'rest' | 'graphql' | 'remote-sheet' | 'websocket' | 'database';
+// Storage/table connection contracts
+type DriverType = 'local' | 'postgres' | 'mysql' | 'sqlite' | 'rest' | 'graphql';
+type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
 
-// Status values
-type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'refreshing' | 'stale' | 'error';
-
-interface DataConnection {
+interface BaseConnectionConfig {
   id: string;
   name: string;
-  type: ConnectionType;
-  endpoint?: string;
-  query?: string;
-  headers?: Record<string, string>;
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  body?: string;
-  remoteDocId?: string;
-  remoteRange?: string;
-  refreshInterval?: number;
-  lastRefresh?: number;
-  timeout?: number;
-  status: ConnectionStatus;
-  error?: string;
-  createdAt: number;
-  createdBy?: string;
-  modifiedAt?: number;
+  type: DriverType;
 }
 
-// Cell bindings use CellId (not position) for CRDT safety
-interface CellBinding {
+type ConnectionConfig =
+  | PostgresConnectionConfig
+  | MySQLConnectionConfig
+  | SQLiteConnectionConfig
+  | RestConnectionConfig
+  | GraphQLConnectionConfig
+  | LocalConnectionConfig;
+
+interface TableBinding {
+  tableId: TableId;
   connectionId: string;
-  cellId: CellId; // Stable cell identifier
-  sheetId: SheetId;
-  query: string;
-  transform?: string;
+  sourceConfig: SourceConfig;
 }
 
-// Sheet-level data bindings (position-based, not CellId-based)
-interface SheetDataBinding {
+// QUERY formula contracts
+type QueryDatabaseType = 'clickhouse' | 'postgres' | 'mysql' | 'bigquery' | 'duckdb';
+type QueryStatus = 'idle' | 'executing' | 'success' | 'error';
+
+interface QueryFormulaSpec {
+  connectionName: string;
+  sql: string;
+  parameters: QueryParameter[];
+  refreshPolicy: QueryRefreshPolicy;
+  includeHeaders: boolean;
+}
+
+// Sheet-level data bindings
+interface ColumnMapping {
+  columnIndex: number;
+  dataPath: string;
+  transform?: string;
+  headerText?: string;
+}
+
+interface CreateBindingConfig {
+  connectionId: string;
+  columnMappings: ColumnMapping[];
+  autoGenerateRows?: boolean;
+  headerRow?: number;
+  dataStartRow?: number;
+  preserveHeaderFormatting?: boolean;
+}
+
+interface SheetDataBindingInfo {
   id: string;
-  sheetId: SheetId;
   connectionId: string;
   columnMappings: ColumnMapping[];
   autoGenerateRows: boolean;
   headerRow: number;
   dataStartRow: number;
-  lastRowCount?: number;
+  preserveHeaderFormatting: boolean;
   lastRefresh?: number;
-  preserveHeaderFormatting?: boolean;
 }
 
-// Column mapping for sheet data bindings
-interface ColumnMapping {
-  sourceField: string; // Field name in the data source
-  targetColumn: number; // Target column index in the sheet
-  transform?: string; // Optional transformation expression
-}
-
-// Result of refreshing a sheet binding
-interface SheetBindingRefreshResult {
-  bindingId: string;
-  success: boolean;
-  rowsUpdated: number;
-  rowsAdded: number;
-  rowsRemoved: number;
-  error?: string;
-}
-
-interface IConnectionManager {
-  // === Connection CRUD ===
-  createConnection(config: Omit<DataConnection, 'id' | 'status' | 'createdAt'>): DataConnection;
-  updateConnection(id: string, config: Partial<DataConnection>): void;
-  deleteConnection(id: string): boolean;
-  getConnection(id: string): DataConnection | undefined;
-  listConnections(options?: ListConnectionsOptions): DataConnection[];
-
-  // === Credentials (in-memory only) ===
-  setCredentials(
-    connectionId: string,
-    credentials: Omit<ConnectionCredentials, 'connectionId'>
-  ): void;
-  clearCredentials(connectionId: string): void;
-
-  // === Cell Bindings (CellId-based) ===
-  bindCell(
-    cellId: CellId,
-    sheetId: SheetId,
-    connectionId: string,
-    query: string,
-    transform?: string
-  ): void;
-  unbindCell(cellId: CellId): boolean;
-  getCellBinding(cellId: CellId): CellBinding | undefined;
-  getCellIdsForConnection(connectionId: string): CellId[];
-  getBindingsForSheet(sheetId: SheetId): CellBinding[];
-  getAllBindings(): CellBinding[];
-
-  // === Cell Bindings (Position-based convenience API) ===
-  bindCellAtPosition(
-    sheetId: SheetId,
-    row: number,
-    col: number,
-    connectionId: string,
-    query: string,
-    lookup: ICellPositionLookup,
-    transform?: string
-  ): CellId;
-  getCellBindingAtPosition(
-    sheetId: SheetId,
-    row: number,
-    col: number,
-    lookup: ICellPositionLookup
-  ): CellBinding | undefined;
-
-  // === Refresh Operations ===
-  refresh(connectionId: string, lookup: ICellPositionLookup): Promise<RefreshResult>;
-  refreshAll(lookup: ICellPositionLookup): Promise<RefreshResult[]>;
-  startAutoRefresh(): void;
-  stopAutoRefresh(): void;
-  setPositionLookup(lookup: ICellPositionLookup): void;
-
-  // === Status ===
-  getStatus(connectionId: string): ConnectionStatus | undefined;
-
-  // === Event Subscriptions ===
-  onStatusChanged(
-    handler: (
-      connectionId: string,
-      oldStatus: ConnectionStatus,
-      newStatus: ConnectionStatus
-    ) => void
-  ): () => void;
-  onDataRefreshed(handler: (result: RefreshResult) => void): () => void;
-  onError(handler: (connectionId: string, error: string) => void): () => void;
+interface WorksheetBindings {
+  list(): Promise<SheetDataBindingInfo[]>;
+  get(bindingId: string): Promise<SheetDataBindingInfo | null>;
+  getCount(): Promise<number>;
+  clear(): Promise<void>;
+  add(config: CreateBindingConfig): Promise<SheetDataBindingInfo>;
+  remove(bindingId: string): Promise<void>;
+  getProjectionRange(row: number, col: number): Promise<CellRange | null>;
+  getProjectionSource(row: number, col: number): Promise<{ row: number; col: number } | null>;
+  isProjectedPosition(row: number, col: number): Promise<boolean>;
 }
 ```
 
-**Providers:**
+**Storage:** Sheet-level data bindings are position-based and stored per sheet
+in a `bindings` Y.Map keyed by binding ID. Connection credentials are not part
+of the connection config contracts.
 
-- **REST/GraphQL:** HTTP endpoints with JSONPath extraction
-- **Remote Sheet:** Cross-spreadsheet cell references
-- **WebSocket:** Real-time streaming data
-- **Database:** SQL database (via backend proxy)
+**Providers and link kinds:**
 
-**Enables:** Live stock prices, API data, linked spreadsheets.
+- **Table/storage connection configs:** local, PostgreSQL, MySQL, SQLite, REST, GraphQL
+- **QUERY formula database handles:** ClickHouse, PostgreSQL, MySQL, BigQuery, DuckDB
+- **Workbook links:** Mog workbook, Excel workbook, DDE, and OLE link records with status/refresh APIs
+
+**Enables:** QUERY formulas, sheet data projections, table-backed storage, and
+cross-workbook link status/refresh workflows.
 
 ---
 
 ## Foundation Dependencies
 
-| Feature      | Metadata | Events | Types | Versioning | Testing | Connections |
-| ------------ | :------: | :----: | :---: | :--------: | :-----: | :---------: |
-| Provenance   |    ✓     |   ✓    |       |     ✓      |         |             |
-| Self-Healing |    ✓     |   ✓    |   ✓   |            |         |             |
-| Typed Cells  |    ✓     |   ✓    |   ✓   |            |         |             |
-| Time Travel  |          |        |       |     ✓      |         |             |
-| Unit Tests   |    ✓     |   ✓    |       |            |    ✓    |             |
-| Live Data    |    ✓     |   ✓    |       |            |         |      ✓      |
+| Feature           | Metadata | Events | Types | Workflows | Testing | Connections |
+| ----------------- | :------: | :----: | :---: | :-------: | :-----: | :---------: |
+| Provenance        |    ✓     |   ✓    |       |           |         |             |
+| Reactive UI       |    ✓     |   ✓    |       |           |         |             |
+| Typed Cells       |    ✓     |   ✓    |   ✓   |           |         |             |
+| Workflow Upgrades |          |        |       |     ✓     |         |             |
+| Unit Tests        |    ✓     |   ✓    |       |           |    ✓    |             |
+| Live Data         |    ✓     |   ✓    |       |           |         |      ✓      |
 
 ---
 
@@ -528,9 +496,9 @@ interface IConnectionManager {
 
 | Foundation    | Status  | Package/File                                   |
 | ------------- | ------- | ---------------------------------------------- |
-| Cell Metadata | ✅ Done | `contracts/src/core.ts`                        |
+| Cell Metadata | ✅ Done | `types/core/src/core.ts`, `contracts/src/store/sheet-maps-schema.ts`, `compute/core/src/storage/properties/` |
 | Event Bus     | ✅ Done | `kernel/src/context/event-bus.ts`              |
-| Type System   | ✅ Done | `compute/core/crates/compute-schema/`, `contracts/src/schema.ts` |
-| Versioning    | ✅ Done | `contracts/src/workflows/versioning.ts`        |
-| Testing       | ✅ Done | `contracts/src/core/testing.ts`                 |
-| Connections   | ✅ Done | `contracts/src/connections/`                   |
+| Type System   | ✅ Done | `compute/core/crates/compute-schema/`, `contracts/src/core/schema.ts` |
+| Workflow Versioning | ✅ Done | `types/api/src/workflows/versioning.ts` |
+| Testing       | ✅ Done | `contracts/src/core/testing.ts`, `runtime/spreadsheet-testing/` |
+| Connections   | ✅ Done | `types/connections/src/query.ts`, `types/document/src/storage/connection.ts`, `compute/core/src/storage/sheet/bindings/` |

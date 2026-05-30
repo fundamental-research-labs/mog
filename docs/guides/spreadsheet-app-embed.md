@@ -1,8 +1,8 @@
 # Full Spreadsheet App Embed
 
-Use `@mog-sdk/spreadsheet-app` when a trusted same-origin host wants the real Mog spreadsheet application inside its own product. The host owns file storage, authentication, page chrome, and workbook lifetime. Mog owns the spreadsheet UI while it is attached.
+Use `@mog-sdk/spreadsheet-app` when a trusted same-origin host wants the real Mog spreadsheet application inside its own product. The host owns file storage, authentication, page chrome, and the decision to open or dispose workbook sessions. Mog owns the runtime-managed workbook session and spreadsheet UI while it is attached.
 
-For lower-level sheet/view embeds, use `@mog-sdk/embed`. Do not import `apps/spreadsheet`, `@mog/shell`, runtime internals, or `@mog-sdk/embed/full-app` from host code.
+For lower-level sheet/view embeds, use `@mog-sdk/embed`. Do not import `@mog/app-spreadsheet`, `@mog/shell`, runtime internals, or non-public full-app paths from host code.
 
 ## Ownership Model
 
@@ -33,7 +33,7 @@ import {
 } from '@mog-sdk/spreadsheet-app';
 import { useEffect, useRef, useState } from 'react';
 
-export function ShortcutSpreadsheetTab({
+export function HostSpreadsheetTab({
   fileId,
   fileName,
   versionId,
@@ -204,9 +204,9 @@ Agent or automation code should use `resolveActor(...)` when host authority is e
 
 ```ts
 const actor = await workbook.resolveActor({
-  actorId: 'shortcut-agent',
+  actorId: 'host-agent',
   kind: 'agent',
-  displayName: 'Shortcut Agent',
+  displayName: 'Host Agent',
 });
 
 await actor.undoGroup('Agent write', async () => {
@@ -218,16 +218,15 @@ await actor.undoGroup('Agent write', async () => {
 
 `exportXlsx()` is side-effect-free byte export.
 
-`requestSave()` creates a save request, calls the runtime `onSaveRequest`, and transitions clean only when the save acknowledgement matches the request tuple:
+`requestSave()` creates a save request, calls the runtime `onSaveRequest`, and transitions clean only when the save acknowledgement matches the pending save for the workbook session:
 
-- `workbookId`
 - `epoch`
 - `dirtyEpoch`
 - `changeSequence`
 - `saveRequestId`
 - `bytesHash`
 
-Shortcut should persist `request.bytes`, then return `status: 'saved'` with the same tuple and the new `versionId`. Failed saves should return `status: 'failed'`; Mog keeps the workbook dirty.
+The host should persist `request.bytes`, then return `status: 'saved'` with those fields echoed, plus the public `workbookId` and the new `versionId`. Failed saves should return `status: 'failed'` with an error; Mog keeps the workbook dirty.
 
 ## Runtime Assets
 
@@ -244,7 +243,7 @@ const runtime = await createSpreadsheetRuntime({
 });
 ```
 
-If the host uses the bundled Vite path in this monorepo, the workspace plugin resolves WASM and font assets. Packed-host distribution still needs a dedicated smoke gate before public release.
+The package build copies the WASM module and bundled fonts into `dist`; serve those files from paths that match the asset URLs configured above.
 
 ## Verification
 

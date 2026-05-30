@@ -1,172 +1,159 @@
 # Package Structure
 
-The Spreadsheet OS consists of packages organized in layers.
+The Spreadsheet OS consists of packages organized in layers. Package membership
+is defined by `pnpm-workspace.yaml`, the root `Cargo.toml`, package manifests,
+and the import-boundary rule in `tools/eslint-plugin-mog/import-boundaries.cjs`.
 
 ## Dependency Graph
 
 ```
-                                  apps/spreadsheet
-                                       │
-                    ┌──────────────────┴──────────────────┐
-                    │                                     │
-                  shell                                kernel
-                    │                                     │
-                    └──────────────────┬──────────────────┘
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-              │                        │                        │
-         domain-types              bridges                    ui
-              │                        │
-              │      ┌─────────────────┼──────────────────┐
-              │      │                 │                  │
-              │  compute-api        charts          compute-core
-              │                                          │
-              │                          @mog-sdk/wasm (wasm) / napi
-              │                                          │
-              │                   file-io           number-formats
-              │                                          │
-              └──────────────────────────────────────────┤
-                                                         │
-                                                    contracts
+Public SDK/runtime surfaces
+  @mog-sdk/node
+  @mog-sdk/embed
+  @mog-sdk/spreadsheet-app
+       |
+  @mog-sdk/contracts, @mog-sdk/wasm, @mog-sdk/sheet-view
 
-         ┌──────────────────────────────────────────────────────────────┐
-         │                  Canvas Layer (canvas/)                       │
-         │                                                              │
-         │   engine ─── grid-renderer ─── grid-canvas                   │
-         │                │                                             │
-         │         drawing-canvas ─── overlay ─── spatial               │
-         │                                                              │
-         │   canvas/drawing/ (engine, shapes, geometry, ink,            │
-         │                    diagram, text-effects)                    │
-         │                                                              │
-         │   canvas/lab (dev harness)                                   │
-         └──────────────────────────────────────────────────────────────┘
+Workspace app
+  apps/spreadsheet
+       |
+  shell, ui
+       |
+  views/sheet-view
+       |
+  kernel
+       |
+  contracts + types/*
 
-         ┌──────────────────────────────────────────────────────────────┐
-         │                  Standalone Engines                          │
-         │                                                              │
-         │   table-engine (TS filtering/sorting/slicers/visibility)     │
-         └──────────────────────────────────────────────────────────────┘
-
-         ┌──────────────────────────────────────────────────────────────┐
-         │                  Rust/WASM & Desktop                         │
-         │                                                              │
-         │   compute-core ─── @mog-sdk/wasm ─── compute-core-napi        │
-         │        │                                                     │
-         │   runtime/src-tauri (desktop)                                 │
-         └──────────────────────────────────────────────────────────────┘
+Hardware and engine layer
+  compute/*, file-io/*, canvas/*, charts, table-engine,
+  spreadsheet-utils, typeset/math-engine, infra/*
 ```
+
+Lower layers provide contracts, engines, adapters, and primitives. Higher layers
+compose those pieces into the shell, app, embed, and SDK surfaces.
 
 ## Package Categories
 
-### Base Layer (No External Dependencies)
+### Type and Contract Layer
 
-| Package          | Purpose                             | Key Exports                       |
-| ---------------- | ----------------------------------- | --------------------------------- |
-| `contracts`      | TypeScript interfaces, zero runtime | Types, events, schemas            |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `contracts` (`@mog-sdk/contracts`) | Public contract barrel and pure runtime constants | Core types, API contracts, event types, schemas |
+| `contracts/runtime-services` | Runtime service boundary contracts | Error envelopes, audit events, protocol/version types |
+| `types/*` | Workspace type shards used by `contracts` and implementation packages | `@mog/types-core`, `@mog/types-data`, `@mog/types-rendering`, etc. |
 
 ### Core OS Packages
 
-| Package          | Purpose                     | Key Exports                             |
-| ---------------- | --------------------------- | --------------------------------------- |
-| `kernel`         | Data layer, system services | APIs, EventBus, Clipboard, Undo         |
-| `shell`          | App host, UI components     | ShellHost, AppSlot, AppLoader, machines |
-| `ui`             | Radix-based UI primitives   | Button, Dialog, Popover, etc.           |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `kernel` (`@mog-sdk/kernel`) | Workbook API, document factory, data services, undo/checkpoint/clipboard service types | `createWorkbook`, `DocumentFactory`, workbook API types |
+| `views/sheet-view` (`@mog-sdk/sheet-view`) | Public sheet rendering/view contract surface | Sheet view host and event types |
+| `shell` (`@mog/shell`) | App host, shell bootstrap, Radix-based UI primitives, focus machine | `ShellHost`, `AppSlot`, `createShell`, `focusMachine` |
+| `ui` (`@mog/ui`) | Kernel-agnostic data-view and record/table UI components | Kanban, calendar, gallery, timeline, table and field components |
 
-### Domain Layer
+### Runtime and SDK Packages
 
-| Package               | Purpose                     | Key Exports                             |
-| --------------------- | --------------------------- | --------------------------------------- |
-| `domain-types`        | Shared domain type definitions | Domain types                         |
-| `spreadsheet-utils`   | Spreadsheet utility functions  | Shared helpers                       |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `runtime/sdk` (`@mog-sdk/node`) | Headless Node.js SDK with formula compute and XLSX file I/O | Node SDK entry point |
+| `runtime/embed` (`@mog-sdk/embed`) | Read-only embed package | Core embed, React, web-component, config exports |
+| `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) | Full spreadsheet app embed for trusted same-origin hosts | App embed entry point and CSS assets |
+| `runtime/spreadsheet-testing` | Workspace-private spreadsheet testing helpers | Fixtures and test helpers |
+| `runtime/test-host` | Workspace-private deterministic host for host-contract integration tests | Trusted test host |
+
+### Apps
+
+| Package | Purpose |
+| --- | --- |
+| `apps/spreadsheet` (`@mog/app-spreadsheet`) | Default spreadsheet app and classic grid view |
 
 ### Computation Layer
 
-| Package             | Purpose                                                                                                          | Key Exports                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `compute-core`      | Rust compute engine: formula parser, evaluator, 454 functions, dep graph, scheduler, CF, tables, pivots, storage, what-if | Full spreadsheet computation (IPC/WASM) |
-| `compute-api`       | TypeScript API layer for compute-core                                                                            | Compute interfaces                  |
-| `charts`            | Custom chart rendering                                                                                           | `ChartEngine`, chart types          |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `compute/core` | Rust compute engine: parser, evaluator, dependency graph, scheduler, CF, tables, pivots, storage, what-if, and file I/O integration | `compute-core` crate |
+| `compute/core/crates/compute-functions` | Rust spreadsheet function implementations | Function registry and pure functions |
+| `compute/core/crates/compute-formats` | Rust number-format engine | Locale, color, currency, and format logic |
+| `compute/core/crates/compute-table` | Rust table engine | Filters, sort, slicers, structured refs, styles |
+| `compute/core/crates/compute-cf` | Conditional-format evaluation | CF evaluation engine |
+| `compute/core/crates/compute-pivot` | Pivot-table computation | Pivot engine |
+| `compute/core/crates/compute-schema` | Schema validation and inference | Validation/coercion engine |
+| `compute/api` | Rust API facade over `compute-core` | `compute-api` crate |
+| `compute/wasm` and `compute/wasm/npm` | WASM binding layer and published browser package | `compute-core-wasm`, `@mog-sdk/wasm` |
+| `compute/napi` and `compute/napi/npm/*` | Node native binding layer and platform binary wrappers | `compute-core-napi`, `@mog-sdk/*` binary packages |
+| `compute/pyo3` | Python binding layer | `compute-core-pyo3` crate |
+
+### File I/O Layer
+
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `file-io/xlsx/parser` | Rust XLSX parser and WASM parser package scaffold | `xlsx-parser`, `@mog/xlsx-parser-wasm` |
+| `file-io/xlsx-api` | Rust API facade for the XLSX parser | `xlsx-api` crate |
+| `file-io/xlsx/bridge` | TypeScript bridge/types for the Rust XLSX parser | `@mog/xlsx-parser` |
+| `file-io/csv-parser` | Rust CSV parser feeding the same hydration path | `csv-parser` crate |
+| `file-io/ooxml/types` | OOXML vocabulary for lossless round-tripping | `ooxml-types` crate |
+| `file-io/print-export` | HTML/print/PDF export package | `@mog/print-export`, `createPdfExporter` |
+| `file-io/pdf/graphics` | PDF graphics primitives | `@mog/pdf-graphics` |
+| `file-io/pdf/layout` | PDF pagination/layout primitives | `@mog/pdf-layout` |
+| `file-io/pdf/core` | Rust PDF core crate | `pdf-core` crate |
 
 ### Canvas Layer
 
 The canvas system uses a multi-package architecture under `canvas/`:
 
-| Package                | Purpose                                                     | Key Exports                         |
-| ---------------------- | ----------------------------------------------------------- | ----------------------------------- |
-| `canvas/engine`        | Generic multi-canvas render loop, priority scheduler, input | `createCanvasEngine`, `CanvasLayer` |
-| `canvas/grid-renderer` | Cell, background, selection, header, and UI layers         | `createGridLayers`                  |
-| `canvas/drawing-canvas` | Floating object scene graph and type renderers            | `DrawingLayer`, `SceneGraph`        |
-| `canvas/overlay`       | Screen-space UX chrome (handles, guides, rubber band)       | `OverlayLayer`                      |
-| `canvas/grid-canvas`   | Thin composition facade wiring the canvas packages          | `GridRenderer` contract             |
-| `canvas/spatial`       | Spatial indexing and hit testing                             | Spatial data structures             |
-| `canvas/drawing`       | Drawing subsystem (shapes, geometry, ink, diagram, text-effects) | Drawing engine, renderers          |
-| `canvas/lab`           | Interactive test harness for canvas development             | Dev harness                         |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `canvas/engine` (`@mog/canvas-engine`) | Generic multi-canvas render loop, layer management, scheduler, input, hit testing | `createCanvasEngine`, `CanvasLayer` |
+| `canvas/grid-renderer` (`@mog/grid-renderer`) | Cell, background, selection, header, and UI layers | `createGridLayers`, layer factories |
+| `canvas/drawing-canvas` (`@mog/drawing-canvas`) | Floating object scene graph and render bridges | `SceneGraph`, `createDrawingLayer` |
+| `canvas/overlay` (`@mog/canvas-overlay`) | Screen-space UX chrome such as handles, guides, and rubber band | `OverlayLayer`, `createOverlayLayer` |
+| `canvas/grid-canvas` (`@mog/grid-canvas`) | Thin composition facade wiring the grid renderer and viewport layout | `createGridRenderer`, `computeViewportLayout` |
+| `canvas/spatial` (`@mog/spatial`) | Spatial indexing and hit testing | `createSpatialIndex`, hit-test helpers |
 
-### Drawing Subpackages (canvas/drawing/)
+### Drawing Subpackages
 
-| Subpackage                | Purpose                       | Key Exports                    |
-| ------------------------- | ----------------------------- | ------------------------------ |
-| `canvas/drawing/engine`   | Drawing/rendering operations  | Drawing engine, renderers      |
-| `canvas/drawing/shapes`   | 2D shape manipulation         | Shape types, geometry          |
-| `canvas/drawing/geometry` | Geometric calculations        | Points, rects, transforms      |
-| `canvas/drawing/ink`      | Pen/ink input and rendering   | Ink renderer, input handlers   |
-| `canvas/drawing/diagram`      | Diagram compatibility engine  | OOXML diagram parser, layout   |
-| `canvas/drawing/text-effects` | Text-effects styling          | OOXML text-effects renderer    |
+| Subpackage | Purpose | Key Exports |
+| --- | --- | --- |
+| `canvas/drawing/engine` (`@mog/drawing-engine`) | Floating-object composition, z-ordering, grouping, anchoring, rendering helpers | Drawing operations and renderers |
+| `canvas/drawing/shapes` (`@mog/shape-engine`) | OOXML shape path generation and shape metadata | Shape path generation, preset registry |
+| `canvas/drawing/geometry` (`@mog/geometry`) | Pure 2D geometry primitives | Matrix, transform, path, rect, connector routing helpers |
+| `canvas/drawing/ink` (`@mog/ink-engine`) | Ink stroke creation, smoothing, erasing, and spatial indexing | Ink stroke and pressure helpers |
+| `canvas/drawing/diagram` (`@mog/diagram-engine`) | Diagram layout, styles, gallery, and OOXML diagram parsing/layout engine | Diagram model, layout, styles, OOXML engine |
+| `canvas/drawing/text-effects` (`@mog/text-effects-engine`) | OOXML text effects and text warp engine | Warp presets, effects, drawing-object output |
 
-### Formatting
+### Supporting Engines and Utilities
 
-| Package          | Purpose                       | Key Exports                    |
-| ---------------- | ----------------------------- | ------------------------------ |
-| `number-formats` | Number formatting             | Format engine                  |
-| `typeset`        | Text typesetting              | Typeset engine                 |
+| Package | Purpose | Key Exports |
+| --- | --- | --- |
+| `charts` (`@mog/charts`) | Excel-compatible charting and custom rendering | `ChartEngine`, chart builders, grammar/primitives |
+| `table-engine` (`@mog/table-engine`) | Pure TypeScript table filtering, sorting, slicers, structured refs, visibility, styles | Table, filter, sort, slicer helpers |
+| `spreadsheet-utils` (`@mog/spreadsheet-utils`) | Shared spreadsheet helpers and UI metadata | A1 helpers, number-format helpers, function catalog/registry |
+| `typeset/math-engine` (`@mog/math-engine`) | OMML/LaTeX equation parsing, conversion, layout, diagnostics | `parseOMML`, `parseLatex`, `layoutEquation` |
+| `infra/culture` (`@mog/culture`) | Locale/culture support | Culture registry and normalization helpers |
+| `infra/icons` (`@mog/icons`) | Generated SVG icon components | React icon components |
+| `infra/platform` (`@mog/platform`) | Platform abstraction for desktop and web hosts | `createPlatform`, `isTauri`, platform identity/errors |
+| `infra/platform/memory` (`@mog/platform-memory`) | In-memory platform implementation | Memory filesystem/platform helpers |
+| `infra/env` (`@mog/env`) | Environment detection/config helpers | Environment APIs |
+| `infra/transport` (`@mog/transport`) | Rust bridge transport for WASM, NAPI, and Tauri | `createTransport`, transport implementations |
+| `infra/rust-bridge/*` | Rust bridge code generation and runtime support | Bridge macros, generated TS types, N-API/WASM/Tauri helpers |
 
-### Standalone Engines
+Number formatting is not a standalone workspace package. The current surfaces
+are `@mog-sdk/contracts/number-formats`, `@mog/spreadsheet-utils/number-formats`,
+`@mog/types-formatting`, and the Rust `compute-formats` crate.
 
-| Package          | Purpose                                         | Key Exports                    |
-| ---------------- | ----------------------------------------------- | ------------------------------ |
-| `table-engine`   | TS table filtering/sorting/visibility            | Filter, sort, slicer           |
+## Deprecated or Removed Package Names
 
-### Rust/WASM Layer
+Legacy names that are not current workspace packages include:
 
-| Package              | Purpose                          | Key Exports                    |
-| -------------------- | -------------------------------- | ------------------------------ |
-| `@mog-sdk/wasm` (`compute-core-wasm`) | WASM bindings for compute-core | JS/WASM bridge |
-| `compute-core-napi`  | Node.js native bindings          | N-API bridge                   |
-
-### File I/O Layer
-
-| Package         | Purpose                          | Key Exports                             |
-| --------------- | -------------------------------- | --------------------------------------- |
-| `file-io`       | XLSX/CSV import/export           | `importXlsx`, `exportXlsx`, `importCsv` |
-
-### Runtime Layer (runtime/)
-
-| Package                  | Purpose                          | Key Exports                        |
-| ------------------------ | -------------------------------- | ---------------------------------- |
-| `runtime/server`         | WebSocket collaboration server   | `CollaborationServer`, y-websocket |
-| `runtime/sdk`            | Runtime SDK                      | SDK exports                        |
-| `runtime/src-tauri`      | Tauri desktop app shell          | Desktop framework                  |
-
-### Infrastructure (infra/)
-
-| Package              | Purpose                 | Key Exports                        |
-| -------------------- | ----------------------- | ---------------------------------- |
-| `infra/icons`        | SVG icon library        | React icon components              |
-| `infra/culture`      | Locale/culture support  | Culture data                       |
-| `infra/platform`     | Platform abstractions   | Platform APIs                      |
-| `infra/transport`    | Network transport       | Transport layer                    |
-| `infra/rust-bridge`  | Rust bridge utilities   | Rust interop                       |
-
-### Apps
-
-| Package             | Purpose                       |
-| ------------------- | ----------------------------- |
-| `apps/spreadsheet`  | Spreadsheet app with XLSX import/export and formula compatibility |
-
-## Deprecated Packages
-
-Legacy directories that have been removed or consolidated.
+| Legacy name | Current location |
+| --- | --- |
+| `@mog/spreadsheet-contracts` | `@mog-sdk/contracts` |
+| `number-formats` | Contracts/utils/type shards plus `compute-formats` |
+| `file-io` as a single TS package | Split under `file-io/xlsx`, `file-io/pdf`, and `file-io/print-export` |
+| `canvas/lab` | Removed from the current workspace |
+| `runtime/server` | Removed from the current workspace |
+| `runtime/src-tauri` | Removed from the current workspace |
 
 ## Package Import Rules
 
@@ -175,81 +162,88 @@ Legacy directories that have been removed or consolidated.
 Lower layers cannot import higher layers:
 
 ```
-kernel can import domain-types, contracts
-shell can import kernel
-apps can import shell and kernel
-
-kernel cannot import shell
-domain-types cannot import kernel
-contracts cannot import anything except yjs types
+types/contracts -> no implementation packages
+hardware/engines -> types/contracts only, not kernel/views/shell/apps
+kernel -> types/contracts/hardware, not views/shell/apps/kernel-host-internal
+views -> lower layers, not shell/apps/kernel-host-internal
+shell/ui -> lower layers, not apps/kernel-host-internal
+apps -> lower layers, not kernel-host-internal
 ```
+
+The import-boundary rule treats `types/` and `contracts/` as the bottom layer,
+then `infra/`, `canvas/`, `charts`, `table-engine`, `spreadsheet-utils`,
+`file-io`, `typeset`, and `compute` as the hardware layer.
 
 ### Cross-Layer Communication
 
-Use events, not imports:
+Use public contracts and explicit APIs rather than importing across ownership
+boundaries:
 
 ```typescript
 // WRONG - kernel importing shell
 import { GridCanvas } from '@mog/shell';
 
-// CORRECT - shell subscribes to kernel events
-kernel.eventBus.on('cell:changed', (event) => {
+// CORRECT - shell or apps subscribe to kernel/API events
+workbook.on('cellChanged', (event) => {
   view.invalidateCell(event.cellId);
 });
 ```
 
 ## Adding a New Package
 
+For a TypeScript workspace package:
+
 ```bash
 my-package/
   src/
-    index.ts          # Public exports
+    index.ts
   __tests__/
     my-package.test.ts
-  package.json          # @mog/my-package
+  package.json
   tsconfig.json
   jest.config.cjs
 ```
+
+Add TypeScript packages to `pnpm-workspace.yaml`. Add Rust crates to the root
+`Cargo.toml` workspace. If the package participates in public boundary checks,
+also update `tools/package-inventory.jsonc` and the import-boundary rule.
 
 Dependencies should only point to packages in lower layers.
 
 ## Contracts Sub-paths
 
-The `contracts` package exports types via sub-paths:
+The `contracts` package exports types and pure values via sub-paths:
 
 ```typescript
-import { CellValue, CellFormat } from '@mog/spreadsheet-contracts/core';
-import { CellChangedEvent } from '@mog/spreadsheet-contracts/events';
-import { ColumnSchema } from '@mog/spreadsheet-contracts/schema';
-import { PivotTableConfig } from '@mog/spreadsheet-contracts/pivot';
-import { Snapshot, Branch } from '@mog/spreadsheet-contracts/versioning';
-import { CellAssertion } from '@mog/spreadsheet-contracts/testing';
-import { DataConnection } from '@mog/spreadsheet-contracts/connections';
-import { CommandBarConfig } from '@mog/spreadsheet-contracts/command-bar';
+import type { CellValue, CellFormat } from '@mog-sdk/contracts/core';
+import type { CellChangedEvent, SpreadsheetEvent } from '@mog-sdk/contracts/events';
+import type { ColumnSchema } from '@mog-sdk/contracts/schema';
+import type { PivotTableConfig } from '@mog-sdk/contracts/pivot';
+import type { CellAssertion } from '@mog-sdk/contracts/testing';
+import type { ConnectionRef } from '@mog-sdk/contracts/connections';
+import type { Workbook } from '@mog-sdk/contracts/api';
 ```
 
 ## Shell Sub-paths
 
-Shell exports host components, machines, hooks, and contexts:
+Shell exports host components, bootstrap utilities, hooks, contexts, platform
+helpers, and UI primitives:
 
 ```typescript
-import { ShellHost, AppSlot } from '@mog/shell';
-import { FocusMachine } from '@mog/shell/machines';
+import { ShellHost, AppSlot, focusMachine } from '@mog/shell';
+import { Button, Dialog, Popover } from '@mog/shell/components/ui';
+import { createShell } from '@mog/shell/bootstrap';
 ```
 
-## Excel Functions (Rust compute-core)
+## Excel Functions
 
-454 spreadsheet formula functions implemented in Rust across 10 categories, with compatibility tests for Microsoft Excel behavior where applicable:
+Spreadsheet formula support is implemented by the Rust compute engine and its
+function crates, with inline-dispatched primitives in the evaluator. The UI
+metadata catalog lives in `spreadsheet-utils/src/function-catalog.ts` and is
+populated into the lightweight registry in `spreadsheet-utils/src/function-registry.ts`.
 
-| Category           | Count |
-| ------------------ | ----- |
-| Statistical        | 143   |
-| Math               | 74    |
-| Financial          | 52    |
-| Text               | 44    |
-| Engineering        | 37    |
-| Lookup & Reference | 36    |
-| Date/Time          | 25    |
-| Logical            | 17    |
-| Information        | 14    |
-| Database           | 12    |
+The catalog currently groups functions into Math, Statistical, Text, Logical,
+Date & Time, Lookup & Reference, Financial, Information, Database, and
+Engineering categories. Because the function set changes with engine work, use
+the source catalog and `compute/core/crates/compute-functions/src/` for current
+totals instead of duplicating exact per-category counts here.

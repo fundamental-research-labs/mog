@@ -2,13 +2,13 @@
 
 ## Overview
 
-The renderer uses **explicit XState state machines** for all user interactions, with a **coordinator pattern** for cross-machine communication and **Rust/Yrs CRDT integration** for real-time collaboration.
+The spreadsheet renderer path combines **XState actors** for interaction state, a **SheetCoordinator/system boundary** for cross-system wiring, `@mog-sdk/sheet-view` for the rendering substrate, and Rust compute viewport buffers for live document data.
 
 **Related docs:**
 
 - [Binary Wire Pipeline](binary-wire-pipeline.md) - Critical fast path: Rust binary serialization → IPC → ViewportCoordinator (epoch-based overlay filtering) → zero-copy TS decoding → canvas rendering
 - [Coordinate System](coordinates.md) - Viewport math, frozen panes, hit testing
-- [Canvas & Layers](canvas.md) - Single canvas, priority scheduler, 60fps rendering
+- [Canvas & Layers](canvas.md) - Canvas engine, grid/drawing/overlay layers, scheduler-driven rendering
 - [XState Patterns](xstate.md) - Machine definitions, coordinator, Rust/Yrs integration
 
 ## Architecture Diagram
@@ -16,29 +16,40 @@ The renderer uses **explicit XState state machines** for all user interactions, 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              React Components                            │
-│  SpreadsheetGrid.tsx, CollaborationOverlay.tsx                          │
+│  SpreadsheetGrid.tsx, OverlayLayers.tsx, editor/DOM overlays             │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ uses
 ┌───────────────────────────────────▼─────────────────────────────────────┐
 │                              React Hooks                                 │
-│  use-selection, use-editor, use-clipboard, use-renderer                 │
-│  use-keyboard, use-focus, use-input, use-collaboration                  │
-│  use-find-replace, use-chart, use-object-interaction, ...               │
+│  useSelection, useEditorState/actions, useClipboard                     │
+│  useRendererStatus/actions, useGridMouse, useGridKeyboard               │
+│  useFocus, useRemoteCursors, useFindReplace, object/chart hooks         │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ wraps
 ┌───────────────────────────────────▼─────────────────────────────────────┐
 │                            SheetCoordinator                              │
-│  - Creates and owns all XState actors                                   │
-│  - Owns canvas/renderer instances (executes side effects)               │
+│  - Creates the 5 systems and shared infrastructure                      │
 │  - Wires cross-machine communication                                    │
-│  - Integrates with Rust/Yrs via ComputeBridge                           │
+│  - Delegates renderer lifecycle to RenderSystem                         │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ manages
 ┌───────────────────────────────────▼─────────────────────────────────────┐
-│                            XState Machines                               │
+│                               Systems                                    │
+│  GridEditing, Render, Objects, Input, Ink                               │
+│  - Own actors, coordination modules, execution services                  │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │ own
+┌───────────────────────────────────▼─────────────────────────────────────┐
+│                            XState Actors                                 │
 │  grid-selection, grid-editor, clipboard, grid-renderer, grid-input,    │
 │  focus (@mog/shell), chart, find-replace, diagram, ink, ...            │
-│  Pure state - no side effects                                           │
+│  State machines plus injected services; DOM/canvas effects stay in      │
+│  systems/execution layers                                               │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │ renderer execution creates
+┌───────────────────────────────────▼─────────────────────────────────────┐
+│                         @mog-sdk/sheet-view                              │
+│  Owns SheetView, CanvasEngine, grid layers, drawing layer, overlay       │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ reads/writes
 ┌───────────────────────────────────▼─────────────────────────────────────┐
@@ -49,44 +60,48 @@ The renderer uses **explicit XState state machines** for all user interactions, 
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │ backed by
 ┌───────────────────────────────────▼─────────────────────────────────────┐
-│                       Rust/Yrs Document (compute-core)                   │
+│                       Rust compute document                              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Core Design Principles
 
-### 1. Machine Owns State, Coordinator Owns Execution
+### 1. Actors Own State, Systems Own Execution
 
-The state machines are **pure** - they only define states, events, and transitions. The coordinator subscribes to machine state and **executes side effects** (creating canvas, managing renderer instances).
+The renderer lifecycle machine owns state transitions. `RenderSystem` and `renderer-execution.ts` subscribe to those transitions and execute runtime work such as creating `SheetView`, attaching the workbook, starting the render loop, switching sheets, and disposing resources. Other machines follow the same boundary where possible; async work such as editor commits is injected by the owning system rather than importing renderer or DOM dependencies directly into machine code.
 
 ```typescript
-// Machine: pure state transitions
+// Machine: lifecycle state transition
 initializing: {
   on: {
-    INITIALIZED: 'ready';
-  } // No entry action that creates things
+    INITIALIZED: {
+      target: 'ready',
+      actions: ['setCurrentSheet', 'resetRetryCount', 'clearPendingActions'],
+    },
+  }
 }
 
-// Coordinator: executes based on state
+// Execution layer: runtime side effects based on state
 rendererActor.subscribe((state) => {
-  if (state.value === 'initializing' && !this.renderer) {
-    this.renderer = this.createRenderer();
-    rendererActor.send({ type: 'INITIALIZED' });
+  if (state.value === 'initializing' && !sheetView) {
+    sheetView = createSheetView({ container, ...config });
+    sheetView.attach({ initialSheetId, workbook });
+    rendererActor.send({ type: 'INITIALIZED', sheetId: initialSheetId });
   }
 });
 ```
 
 ### 2. Machines Never Import Each Other
 
-All cross-machine communication goes through the coordinator. This keeps machines testable in isolation.
+Machine definitions do not import other machine definitions for direct sends. Cross-machine communication goes through system coordination modules, actor-access command/accessor layers, and the `SheetCoordinator`.
 
 ### 3. Remote Updates Are First-Class Events
 
-Every machine handles `REMOTE_*` events explicitly. Collaboration is not bolted on - it's integral.
+Machines that receive collaboration or replay inputs model them as explicit events, such as `REMOTE_CELL_CHANGED`, `REMOTE_SELECTION_CHANGED`, `REMOTE_CHART_DELETED`, or source-tagged `SET_SELECTION` events. Remote cursor rendering flows through the collaboration hooks and renderer context rather than yanking the local viewport.
 
 ## State Machines
 
-State machines are distributed across the 5 systems in `apps/spreadsheet/src/systems/`:
+The main spreadsheet interaction machines are grouped under the systems that `SheetCoordinator` creates in `apps/spreadsheet/src/systems/`:
 
 - **grid-editing/machines/** — selection, editor, clipboard, find-replace, comment, draw-border, slicer
 - **input/machines/** — input, pane-focus
@@ -151,6 +166,7 @@ The editor machine uses **nested states** for Enter Mode vs Edit Mode (Excel par
 | `hasCopy`      | Copied data available    |
 | `hasCut`       | Cut data (marching ants) |
 | `pastePreview` | Showing paste preview    |
+| `pasteError`   | Paste failed, retryable   |
 | `pasting`      | Paste in progress        |
 
 ### Renderer Machine
@@ -178,7 +194,7 @@ The editor machine uses **nested states** for Enter Mode vs Edit Mode (Excel par
 | **Chart Machine**              | `systems/objects/machines/chart-machine.ts`               | Chart selection and editing                 |
 | **Find Replace Machine**       | `systems/grid-editing/machines/find-replace-machine.ts`   | Find/replace dialog state                   |
 | **Object Interaction Machine** | `systems/objects/machines/object-interaction-machine.ts`  | Floating object (image, shape) interactions |
-| **Diagram Machine**           | `systems/objects/machines/diagram-machine.ts`            | Diagram object interactions                |
+| **Diagram Machine**            | `systems/objects/machines/diagram-machine.ts`             | Diagram object interactions                 |
 | **Slicer Machine**             | `systems/grid-editing/machines/slicer-machine.ts`         | Slicer filtering interactions               |
 | **Comment Machine**            | `systems/grid-editing/machines/comment-machine.ts`        | Cell comment editing                        |
 | **Draw Border Machine**        | `systems/grid-editing/machines/draw-border-machine.ts`    | Draw border tool state                      |
@@ -189,35 +205,40 @@ The editor machine uses **nested states** for Enter Mode vs Edit Mode (Excel par
 
 **File:** `apps/spreadsheet/src/coordinator/sheet-coordinator.ts`
 
-The coordinator is a ~250-line composition root that:
+The coordinator is the spreadsheet app composition root. It:
 
-1. Creates the 5 systems (GridEditing, Renderer, Objects, Input, Ink) with narrow configs
-2. Starts systems in dependency order
-3. Wires cross-system events (selection exclusivity, editor-focus sync, render invalidation, sheet switch)
-4. Implements `handlePointerUp`/`handlePointerCancel` via DragTerminators
-5. Implements `dispose()`
+1. Creates shared infrastructure such as the focus actor and floating object cache
+2. Creates the 5 systems (GridEditing, Renderer, Objects, Input, Ink) with narrow configs
+3. Starts systems in dependency order
+4. Wires cross-system events (selection exclusivity, editor-focus sync, render context/invalidation, sheet switch)
+5. Delegates renderer execution to `RenderSystem` and `renderer-execution.ts`
+6. Implements `handlePointerUp`/`handlePointerCancel` via DragTerminators
+7. Implements `dispose()`
 
 ### Coordinator Configuration
 
 ```typescript
 interface SheetCoordinatorConfig {
   initialSheetId: string;
-  workbook: Workbook;                         // Unified Workbook API (required)
+  workbook: WorkbookInternal;                 // Unified Workbook API (required)
   platform?: Platform;                        // Keyboard platform for shortcuts
   getActiveSheetId?: () => string;            // Live getter for active sheet
 
   // Explicit feature flags
   enableKeyboard?: boolean;                   // Opt-in for keyboard handling
+  readOnly?: boolean;                         // Blocks mutating operations
 
   // Action callbacks
   onUIAction?: (action: string) => void;
-  onWorkbookAction?: (action: string) => void;
   onMetric?: (metric: Metric) => void;
+  onRenderInvalidation?: (invalidation: RenderInvalidation) => void;
+  confirmDialog?: (message: string) => boolean;
 
   // Feature-specific dependency bundles
   clipboardDependencies?: ClipboardDependencies;
   editorDependencies?: EditorDependencies;
   sheetSwitchDependencies?: SheetSwitchDependencies;
+  toolbarDependencies?: ToolbarDependencies;
 
   // Input configuration
   inputConfig?: Partial<InputCoordinatorConfig>;
@@ -226,25 +247,22 @@ interface SheetCoordinatorConfig {
 
 ### Coordinator Structure
 
-The SheetCoordinator is a ~250-line composition root that creates 5 systems and wires cross-system events. All domain logic lives inside the systems. The coordinator only:
-
-1. Creates systems with narrow configs
-2. Calls `system.start()` in dependency order
-3. Wires cross-system events
-4. Implements `handlePointerUp`/`handlePointerCancel` via DragTerminators
-5. Implements `dispose()`
+`SheetCoordinator` creates the systems, then wires feature-level coordination across them. Renderer instance lifecycle is owned below the coordinator by `apps/spreadsheet/src/systems/renderer/render-system.ts` and `apps/spreadsheet/src/systems/renderer/execution/renderer-execution.ts`.
 
 ```
 apps/spreadsheet/src/coordinator/
-├── sheet-coordinator.ts        # Main composition root (~250 lines)
+├── sheet-coordinator.ts        # Main composition root
 ├── shell-coordinator.ts        # Shell-level coordinator
 ├── factory.ts                  # Coordinator factory
 ├── types.ts                    # Config and dependency types
 ├── connector-rerouting.ts      # Connector re-routing wiring
+├── editor-transition-handlers.ts
+├── receipt-processing.ts
 ├── actor-access/               # Actor access layer
 ├── features/                   # Cross-system feature coordination
 ├── mutations/                  # Document mutations
 ├── sparklines/                 # Sparkline coordination
+├── tables/                     # Table coordination helpers
 └── view-clipboard-data.ts      # Clipboard data view
 ```
 
@@ -263,6 +281,9 @@ apps/spreadsheet/src/systems/
 │   └── machines/               # grid-input, pane-focus
 ├── renderer/                   # Canvas rendering and lifecycle
 │   ├── render-system.ts
+│   ├── execution/              # SheetView lifecycle delegation
+│   ├── coordination/           # Renderer coordination modules
+│   ├── subscriptions/          # Event subscriptions
 │   └── machines/               # grid-renderer, page-break
 ├── objects/                    # Charts, images, shapes, diagrams
 │   ├── object-system.ts
@@ -301,16 +322,21 @@ Actors are accessed through the systems, e.g. `coordinator.grid.access.actors.se
 | ----------------------- | --------------- | ------------------------------ |
 | `useSelection`          | `selection/`    | Selection state and actions    |
 | `useActiveCell`         | `selection/`    | Active cell state              |
-| `useGranularSelection`  | `selection/`    | Fine-grained selection state   |
-| `useEditor`             | `editing/`      | Cell editing state and actions |
+| `useSelectionRanges`    | `selection/`    | Fine-grained selection state   |
+| `useEditorState`        | `editing/`      | Cell editing state             |
+| `useEditorActions`      | `editing/`      | Stable editor actions          |
 | `useClipboard`          | `editing/`      | Copy/cut/paste operations      |
-| `useRenderer`           | `view/`         | Renderer state and lifecycle   |
+| `useRendererStatus`     | `view/`         | Renderer state                 |
+| `useRendererActions`    | `view/`         | Stable renderer commands       |
+| `useGridMouse`          | `shared/`       | Grid pointer interaction       |
 | `useKeyboard`           | `navigation/`   | Keyboard event handling        |
+| `useGridKeyboard`       | `navigation/`   | Grid-specific keyboard wiring  |
 | `useFocus`              | `navigation/`   | Focus management               |
 | `useFindReplace`        | `navigation/`   | Find/replace dialog            |
-| `useChart`              | `charts/`       | Chart interactions             |
+| `useChartUI`            | `charts/`       | Chart UI machine state         |
+| `useCharts`             | `charts/`       | Chart data operations          |
 | `useObjectInteraction`  | `objects/`      | Floating object interactions   |
-| `useDiagram`           | `objects/`      | Diagram object interactions   |
+| `useDiagramUI`          | `objects/`      | Diagram object interactions    |
 | `useCellProperties`     | `settings/`     | Cell formatting properties     |
 | `useActionDependencies` | `toolbar/`      | Action system dependencies     |
 
@@ -318,38 +344,31 @@ Actors are accessed through the systems, e.g. `coordinator.grid.access.actors.se
 
 **File:** `apps/spreadsheet/src/components/grid/SpreadsheetGrid.tsx`
 
-The component is simplified - just sends events and renders UI:
+`SpreadsheetGrid` is the React composition layer for the grid. It uses granular state hooks and extracted effect hooks so render lifecycle, dependency injection, render-context updates, native clipboard events, and input routing flow through the coordinator and systems:
 
 ```typescript
 function SpreadsheetGrid() {
-  const renderer = useRenderer();
-  const selection = useSelection();
+  const coordinator = useCoordinator();
+  const rendererStatus = useRendererStatus();
+  const rendererActions = useRendererActions();
 
-  // Effect 1: Mount/unmount
-  useEffect(() => {
-    renderer.mount(container);
-    return () => renderer.unmount();
-  }, []);
+  useRendererDependencies({ coordinator, viewport, getCellValue, getCellFormat, ... });
+  useRenderContextConfig({ coordinator, remoteCursors, getTableAtCell, ... });
+  useRendererLifecycle({ ...rendererStatus, activeSheetId, containerRef, ...rendererActions });
+  useRendererSync({ ...rendererStatus, activeSheetId, ...rendererActions });
+  useClipboardEvents({ enabled: true, containerRef });
 
-  // Effect 2: Layout ready
-  useEffect(() => {
-    if (renderer.status === 'waitingForLayout') {
-      renderer.layoutReady(width, height);
-    }
-  }, [renderer.status]);
+  const keyboard = useGridKeyboard({ activeSheetId });
+  const mouse = useGridMouse({ activeSheetId, containerRef, coordinator, ... });
 
-  // Effect 3: Provide dependencies
-  useEffect(() => {
-    coordinator.setRendererDependencies({ ... });
-  }, []);
-
-  // Event handlers delegate to hooks
-  const handleMouseDown = (e) => {
-    const cell = renderer.getCoordinateSystem()?.viewportToCell({ x, y });
-    if (cell) selection.onMouseDown(cell, e);
-  };
-
-  return <div ref={containerRef} onMouseDown={handleMouseDown} />;
+  return (
+    <div ref={containerRef} onDoubleClick={mouse.handleDoubleClick} onKeyDown={keyboard.handleKeyDown}>
+      <ScrollContainer workbookSettings={workbookSettings} scrollWidth={scrollWidth} scrollHeight={scrollHeight} />
+      <CanvasInteractiveOverlay interactiveElements={rendererActions.getInteractiveElements()} headerOffset={headerOffset} />
+      <OverlayLayers />
+      <StatusOverlays />
+    </div>
+  );
 }
 ```
 
@@ -357,20 +376,24 @@ function SpreadsheetGrid() {
 
 **Package:** `@mog/grid-renderer` at `canvas/grid-renderer/src/layers/`
 
-Single canvas with logical layers drawn in z-order:
+The grid layers are created by `createGridLayers()` and registered into the canvas engine by `canvas/grid-canvas/src/renderer/grid-renderer.ts`. `grid-canvas` also registers the drawing layer from `@mog/drawing-canvas` and the screen-space overlay layer from `@mog/canvas-overlay`.
 
-| Z-Index | Layer             | Purpose                                      |
-| ------- | ----------------- | -------------------------------------------- |
-| 0       | background        | Grid lines, alternating rows                 |
-| 1       | cells             | Cell content, formatting                     |
-| 1.25    | validationCircles | Circle Invalid Data indicators               |
-| 1.5     | pageBreaks        | Page break preview lines                     |
-| 2       | selection         | Selection boxes, range highlights            |
-| 2.5     | traceArrows       | Formula auditing trace arrows                |
-| 3       | remoteCursors     | Collaborator selections                      |
-| 4       | ui                | Fill handle, marching ants, resize handles   |
-| 5       | overlay           | Charts, images, floating elements            |
-| 6       | stickyHeaders     | Sticky table headers (renders above overlay) |
+| Z-Index | Layer             | Package               | Purpose                                      |
+| ------- | ----------------- | --------------------- | -------------------------------------------- |
+| 0       | background        | `@mog/grid-renderer`  | Grid lines, alternating rows                 |
+| 100     | cells             | `@mog/grid-renderer`  | Cell content, formatting                     |
+| 125     | validationCircles | `@mog/grid-renderer`  | Circle Invalid Data indicators               |
+| 150     | pageBreaks        | `@mog/grid-renderer`  | Page break preview lines                     |
+| 250     | traceArrows       | `@mog/grid-renderer`  | Formula auditing trace arrows                |
+| 300     | remoteCursors     | `@mog/grid-renderer`  | Collaborator selections                      |
+| 400     | ui                | `@mog/grid-renderer`  | Fill handle, marching ants, resize handles   |
+| 500     | drawing           | `@mog/drawing-canvas` | Charts, pictures, shapes, equations, ink     |
+| 700     | stickyHeaders     | `@mog/grid-renderer`  | Sticky table headers                         |
+| 800     | headers           | `@mog/grid-renderer`  | Row/column headers and outline controls      |
+| 850     | selection         | `@mog/grid-renderer`  | Selection boxes and range highlights         |
+| 900     | dividers          | `@mog/grid-renderer`  | Freeze/split dividers                        |
+
+The overlay layer renders object handles, smart guides, drag previews, insertion previews, and ink previews on canvas 1.
 
 See [Canvas & Layers](canvas.md) for details.
 
@@ -378,14 +401,16 @@ See [Canvas & Layers](canvas.md) for details.
 
 ```
 apps/spreadsheet/src/
-├── coordinator/                       # Composition root (~250 lines)
+├── coordinator/                       # Composition root
 │   ├── sheet-coordinator.ts           # Creates 5 systems, wires cross-system events
 │   ├── shell-coordinator.ts           # Shell-level coordinator
 │   ├── factory.ts                     # Coordinator factory
 │   ├── types.ts                       # Config and dependency types
 │   ├── actor-access/                  # Actor access layer
 │   ├── features/                      # Cross-system feature coordination
-│   └── mutations/                     # Document mutations
+│   ├── mutations/                     # Document mutations
+│   ├── sparklines/                    # Sparkline coordination
+│   └── tables/                        # Table coordination helpers
 │
 ├── systems/                           # Domain logic lives here
 │   ├── grid-editing/                  # Selection, editing, clipboard
@@ -408,6 +433,10 @@ apps/spreadsheet/src/
 │   │       └── pane-focus-machine.ts
 │   │
 │   ├── renderer/                      # Canvas rendering and lifecycle
+│   │   ├── render-system.ts
+│   │   ├── execution/                 # SheetView lifecycle delegation
+│   │   ├── coordination/
+│   │   ├── subscriptions/
 │   │   └── machines/
 │   │       ├── grid-renderer-machine.ts
 │   │       └── page-break-machine.ts
@@ -447,20 +476,34 @@ canvas/grid-renderer/                  # @mog/grid-renderer package
     │   ├── headers.ts
     │   ├── dividers.ts
     │   └── sticky-headers.ts
-    ├── renderer/                      # Main renderer
-    ├── cell/                          # Cell rendering
+    ├── cells/                         # Cell rendering
+    ├── coordinates/                   # Coordinate system and viewport indices
+    ├── features/                      # Renderer feature helpers
+    ├── hit-test/                      # Grid hit testing
+    ├── layout/                        # Visible-range and layout helpers
+    ├── services/                      # Text measurement
     ├── viewports/                     # Viewport management
-    └── optimization/                  # Dirty tracking, caching
+    └── shared/                        # Shared constants and helpers
+
+canvas/grid-canvas/src/renderer/       # Composition facade
+├── grid-renderer.ts                   # Creates CanvasEngine, registers grid/drawing/overlay layers
+├── grid-render-scheduler.ts           # Buffer writes -> dirty layers -> frame requests
+└── render-context.ts                  # Renderer data-source adapters
+
+canvas/drawing-canvas/src/layer/
+└── drawing-layer.ts                   # Floating object drawing layer
+
+canvas/overlay/src/
+└── overlay-layer.ts                   # Screen-space object handles and previews
 
 shell/src/machines/
 └── focus-machine.ts                   # Focus machine (@mog/shell)
 ```
 
-## Performance Targets
+## Performance-Sensitive Paths
 
-| Metric              | Target          |
-| ------------------- | --------------- |
-| Render FPS          | 60fps sustained |
-| Edit latency        | < 16ms          |
-| Time to interactive | < 100ms         |
-| Memory growth       | < 5% per hour   |
+- `canvas/engine/src/loop/render-loop.ts` drives painting through `requestAnimationFrame`.
+- `canvas/engine/src/scheduler/priority-scheduler.ts` owns prioritized frame tasks.
+- `canvas/grid-canvas/src/renderer/grid-render-scheduler.ts` implements the buffer-write-to-render-invalidation path.
+- `kernel/src/bridges/wire/viewport-coordinator.ts` owns the per-viewport binary buffer and epoch-filtered overlays.
+- `apps/spreadsheet/src/components/grid/SpreadsheetGrid.tsx` prefers granular hooks such as `useRendererStatus`, `useRendererActions`, `useInputState`, and `useInputEventHandlers` to avoid broad React subscriptions.

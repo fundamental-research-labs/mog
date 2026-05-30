@@ -1,6 +1,8 @@
 # Mog
 
-A data operating system built on spreadsheet primitives. Every app is structured data + views + event handlers. ~96 packages (46 TS + 50 Rust crates), ~950K lines TS, ~620K lines Rust.
+A data operating system built on spreadsheet primitives. The public repo is a
+TypeScript and Rust monorepo spanning SDKs, runtime packages, kernel services,
+view components, compute crates, and file I/O.
 
 **Start here:** [architecture/README.md](architecture/README.md) — core design decisions, subsystems, and the full documentation index.
 
@@ -11,15 +13,18 @@ file formats are nominative and governed by [TRADEMARKS.md](../TRADEMARKS.md).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  APPS (TypeScript/React - import kernel & shell as libraries)               │
-│  Spreadsheet │ (more apps planned)                                          │
+│  APPS (TypeScript/React - import kernel, shell, and views as libraries)     │
+│  Spreadsheet app and published spreadsheet runtime packages                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  WINDOW MANAGER                                                              │
 │  Focus management │ Keyboard routing │ Panel layout (future)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  SHELL (UI library)                                                          │
-│  Views: Grid (implemented) │ Kanban, Timeline, Calendar, Gallery, Form (planned) │
-│  Components: Reusable UI primitives apps can import                          │
+│  SHELL (host + UI library)                                                   │
+│  App hosting │ Session/workspace services │ Reusable UI primitives           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  VIEWS                                                                       │
+│  SheetView package │ Spreadsheet app views: Grid, Kanban, Timeline,          │
+│  Calendar, Gallery, Form                                                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  KERNEL (data library + system services)                                     │
 │  Storage: Rust/Yrs CRDT, identity (CellId, RowId, ColId)                     │
@@ -28,41 +33,35 @@ file formats are nominative and governed by [TRADEMARKS.md](../TRADEMARKS.md).
 │  Recalc: ComputeBridge (Tauri IPC / WASM / N-API → Rust compute-core)       │
 │  API: Cells, Sheets, Tables, Records, Columns, Relations                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  HARDWARE (standalone computation packages - no Yrs, no React)               │
-│  Compute:   compute-core (Rust, 22 crates) │ table-engine (TS)             │
+│  HARDWARE (low-level computation, rendering, platform, and I/O packages)     │
+│  Compute:   compute-core (Rust) │ table-engine (TS)                         │
 │  Bridge:    rust-bridge (proc-macro framework → WASM / Tauri / N-API)       │
-│  Rendering: charts │ canvas (8 pkgs, incl. drawing with 6 sub-pkgs)         │
+│  Rendering: charts │ canvas/grid and drawing packages                        │
 │  File I/O:  xlsx (parser=Rust, bridge+tooling=TS) │ xlsx-api │ ooxml-types  │
 │  PDF:       pdf/core (Rust) │ pdf/graphics │ pdf/layout │ print-export       │
-│  Platform:  typeset/math-engine                                              │
-│  Desktop:   src-tauri (Rust/Tauri)                                           │
-│  Runtime:   sdk                                                              │
+│  Platform:  infra/platform (web + Tauri helpers) │ typeset/math-engine       │
+│  Runtime:   sdk │ embed │ spreadsheet-app                                    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Dependency flow: `contracts -> hardware -> kernel -> shell -> apps`
+Primary dependency flow: `contracts -> hardware -> kernel -> views -> apps`
+(shell runs parallel to views; apps import both).
 
 ## Quick Start
 
-Apps are TypeScript that import kernel (data) and shell (UI) as libraries:
+For library usage, start with the public Node SDK or embed packages:
 
 ```typescript
-// Future app example (CRM app using planned shell views):
-import { useKernel } from '@mog-sdk/kernel';
-import { KanbanBoard, DataGrid } from '@mog-sdk/app-platform'; // planned exports
+import { createWorkbook } from '@mog-sdk/node';
 
-export default function CRMApp() {
-  const kernel = useKernel();
-  const deals = kernel.records.query('deals', { status: 'open' });
+const wb = await createWorkbook();
+const ws = wb.activeSheet;
 
-  return (
-    <KanbanBoard
-      records={deals}
-      groupBy="stage"
-      onMove={(id, stage) => kernel.records.update('deals', id, { stage })}
-    />
-  );
-}
+await ws.setCell('A1', 42);
+await ws.setCell('A2', '=A1*2');
+
+console.log(await ws.getCell('A2'));
+await wb.dispose();
 ```
 
 ## Documentation

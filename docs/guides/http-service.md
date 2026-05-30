@@ -1,14 +1,14 @@
 # HTTP Service
 
-> **Reserved** — This guide is pending runtime service contracts (Plan 07). It will cover the Mog HTTP API for server-side workbook operations, real-time collaboration endpoints, and webhook integrations.
+> **Reserved** — Mog does not currently publish a supported HTTP service API. The repository includes runtime service type/config contracts, but they are not a REST route contract, webhook surface, or OpenAPI specification.
 
 When approved, this guide will document:
 
-- REST API for workbook CRUD, cell read/write, and formula evaluation
-- WebSocket endpoint for real-time collaboration sync
-- Authentication and authorization for API requests
-- Rate limiting and quota configuration
-- Webhook registration for workbook change events
-- OpenAPI specification and client SDK generation
+- HTTP endpoint contracts for workbook and session operations
+- Collaboration room handoff and WebSocket upgrade requirements
+- Authentication, authorization, rate limit, and quota configuration
+- Import/export and raw-byte materialization boundaries
+- Webhook registration for workbook change events, if supported
+- OpenAPI specification and client SDK generation, if published
 
-See [Self-Hosting](self-hosting.md) for deployment context.
+For server-side workbook automation today, use the [Node SDK](node-sdk.md). See [Self-Hosting](self-hosting.md) for deployment context.

@@ -2,138 +2,121 @@
 
 ## Overview
 
-All persistent state lives in Rust compute-core, accessed via ComputeBridge (Tauri IPC on desktop, WASM on web). The Rust engine owns cell storage, formula evaluation, dependency tracking, and recalculation.
+Persistent spreadsheet state lives in the Rust compute/document storage layer. The kernel talks to it through `ComputeBridge`, using WASM in browsers, Tauri IPC in desktop hosts, and N-API in Node/headless runtimes. Rust owns cell storage, formula evaluation, dependency tracking, recalculation, CRDT sync bytes, and undo origins.
 
-The spreadsheet uses the **Cell Identity Model** where cells are keyed by stable UUIDs (CellId) rather than positions. This enables O(1) structure changes (insert/delete row/col) and correct concurrent editing. See [Cell Identity](cell-identity.md) for the full design.
+The spreadsheet uses the **Identity Model** for cells, rows, and columns. Cells are keyed by stable `CellId` values, while row and column order is tracked separately by stable `RowId` and `ColId` values. Structural edits update identity/order indexes instead of rewriting cell keys.
 
 ```
-Rust compute-core (storage engine)
+Yrs document
 │
-├── workbook
-│   ├── sheetOrder: Array<SheetId>
-│   ├── styles: Map<CellStyle>                    ◄── Custom cell styles
-│   ├── workbookSettings: Map                     ◄── Workbook settings (culture, theme, protection)
-│   └── definedNames: Map<DefinedName>            ◄── Named ranges (uses IdentityFormula)
+├── workbook: Y.Map
+│   ├── sheetOrder: Y.Array<SheetId>
+│   ├── schemaVersion: number
+│   ├── workbookSettings: Y.Map
+│   ├── workbookIdentity: Y.Map
+│   ├── workbookLinks: Y.Map
+│   ├── workbookConnections: Y.Map
+│   ├── namedRanges: Y.Map                         ◄── Defined names
+│   ├── tables: Y.Map                              ◄── Workbook-level table registry
+│   ├── slicers: Y.Map                             ◄── Workbook-level slicer registry
+│   ├── timelines: Y.Map
+│   ├── powerQuery: Y.Map
+│   ├── scenarios: Y.Map
+│   ├── pivotSpecs: Y.Map
+│   ├── pivotCacheSources: Y.Map
+│   ├── pivotCacheRecords: Y.Map
+│   ├── theme: Y.Map
+│   ├── custom_cell_styles: Y.Map
+│   ├── rangeBindings: Y.Map
+│   └── xlsxMetadata / document-property maps
 │
-├── sheets: Map<SheetId, SheetData>               ◄── UndoManager scope
-│   └── {sheetId}: SheetData
-│       ├── meta: SheetMeta
-│       │
-│       │   === Cell Identity Model Storage ===
-│       ├── cells: Map<CellId, SerializedCellData>        ◄── Primary storage (stable keys)
-│       ├── properties: Map<CellId, CellProperties>       ◄── Sparse formatting (stable keys)
-│       ├── grid: Map<"sheet:row:col", CellId>            ◄── Position lookup (derived)
-│       │
-│       │   === Position-Keyed Metadata ===
-│       ├── schemas: Map<colIndex, ColumnSchema>
-│       ├── rangeSchemas: Map<schemaId, RangeSchema>
-│       ├── rowHeights: Map<rowIndex, number>
-│       ├── colWidths: Map<colIndex, number>
-│       ├── rowFormats: Map<rowIndex, CellFormat>         ◄── Row formatting inheritance
-│       ├── colFormats: Map<colIndex, CellFormat>         ◄── Column formatting inheritance
-│       │
-│       │   === Structural Features ===
-│       ├── merges: Map<CellId, IdentityMergedRegion>     ◄── Merged cells (keyed by topLeftId)
-│       ├── hiddenRows: Array<number>
-│       ├── hiddenCols: Array<number>
-│       ├── groupingConfig: Map<unknown>                  ◄── Row/column grouping
-│       │
-│       │   === Tables, Charts, Objects ===
-│       ├── tables: Map<tableId, TableConfig>
-│       ├── charts: Map<chartId, SerializedChart>
-│       ├── floatingObjects: Map<objectId, FloatingObject>
-│       ├── floatingObjectGroups: Map<groupId, FloatingObjectGroup>
-│       ├── formControls: Map<controlId, FormControl>     ◄── Form controls
-│       │
-│       │   === Filtering & Slicing ===
-│       ├── filters: Map<filterId, FilterState>           ◄── Auto/table filters
-│       ├── slicers: Map<slicerId, SlicerConfig>          ◄── Table/pivot slicers
-│       │
-│       │   === Collaboration ===
-│       ├── comments: Map<commentId, CellComment>         ◄── Threaded comments
-│       ├── notes: Map<cellId, CellNote>                  ◄── Simple cell notes
-│       └── dataBindings: Map<bindingId, SheetDataBinding>
+├── security: Y.Map
+│   ├── policies: Y.Map
+│   ├── templates: Y.Map
+│   └── version: number                            ◄── Created on first security write
 │
-├── conditionalFormats: Map<cfId, SerializedConditionalFormat>   ◄── Document-level CF rules
-│
-├── pivots_<sheetId>: Map<pivotId, PivotTableConfigSerialized>  ◄── Dynamic per-sheet
-├── pivotExpansion_<pivotId>: Map<headerKey, boolean>            ◄── Pivot expansion state
-│
-├── versioning                                    ◄── Document-level
-│   ├── branches: Map<name, Branch>
-│   ├── currentBranch: string
-│   └── snapshotIndex: Map<id, SnapshotMetadata>
-│
-├── testing                                       ◄── Document-level
-│   ├── assertions: Map<id, CellAssertion>
-│   ├── suites: Map<id, TestSuite>
-│   └── config: Map<unknown>                      ◄── Test configuration
-│
-└── connections                                   ◄── Document-level
-    ├── configs: Map<id, DataConnection>
-    └── bindings: Map<CellId, CellBinding>        ◄── Keyed by CellId (stable identity)
+└── sheets: Y.Map<SheetId, Y.Map>
+    └── {sheetId}: Y.Map
+        ├── properties: Y.Map                      ◄── Sheet metadata/settings
+        ├── cells: Y.Map<CellId, Y.Map>            ◄── Cell values and formulas
+        ├── cellProperties: Y.Map<CellId, Y.Map>   ◄── Formatting and non-compute metadata
+        ├── gridIndex: Y.Map
+        │   ├── posToId: Y.Map<"rowIdHex:colIdHex", CellId>
+        │   └── idToPos: Y.Map<CellId, "rowIdHex:colIdHex">
+        ├── rowOrder: Y.Array<RowId>
+        ├── colOrder: Y.Array<ColId>
+        ├── rowHeights: Y.Map<RowId, number>
+        ├── colWidths: Y.Map<ColId, number>
+        ├── rowFormats: Y.Map<RowId, CellFormat>
+        ├── colFormats: Y.Map<ColId, CellFormat>
+        ├── schemas: Y.Map
+        ├── validationRules: Y.Map
+        ├── ranges: Y.Map
+        ├── rangePayloads: Y.Map
+        ├── rangeFormats: Y.Map
+        ├── rangeBindings: Y.Map
+        ├── merges: Y.Map
+        ├── mergeBackups: Y.Map
+        ├── manualHiddenRows: Y.Map<RowId, true>
+        ├── filterHiddenRows: Y.Map<filterId, Y.Map<RowId, true>>
+        ├── hiddenRows / hiddenCols: Y.Map
+        ├── comments: Y.Map
+        ├── filters: Y.Map
+        ├── sparklines: Y.Map
+        ├── conditionalFormat: Y.Map
+        ├── cfRules: Y.Map
+        ├── bindings: Y.Map<bindingId, SheetDataBinding>
+        ├── grouping: Y.Map
+        ├── sorting: Y.Map
+        ├── pivotTables: Y.Map
+        ├── floatingObjects: Y.Map                 ◄── Charts, pictures, shapes, etc.
+        └── floatingObjectGroups: Y.Map
 ```
 
-## Cell Identity Model
+Many workbook child maps are created lazily when loaded from provider replay or imported workbooks. New canonical collaboration state pre-creates the maps needed for deterministic Yrs type IDs.
 
-**Key architectural decision**: Cells are keyed by stable UUIDs (`CellId`), not by position.
+## Identity Model
 
-### Why UUIDs, Not Positions?
+**Key architectural decision**: cells, rows, and columns have stable identities; positions are mutable.
 
-| Position Keys (`row:col`)          | Identity Keys (`CellId`)                                  |
-| ---------------------------------- | --------------------------------------------------------- |
-| Insert column = O(n) key remapping | Insert column = O(n) position updates, **no key changes** |
-| Concurrent inserts conflict        | Concurrent inserts compose correctly                      |
-| Formula strings must be rewritten  | Formula refs are stable (by CellId)                       |
-| Dependency graph keys shift        | Dependency graph keys never change                        |
+| Position-keyed model                | Identity model                                             |
+| ----------------------------------- | ---------------------------------------------------------- |
+| Insert column remaps cell keys      | Insert column updates order/index state, not cell keys     |
+| Row/column properties shift by key  | Row/column properties stay keyed by `RowId` / `ColId`      |
+| Formula references require rewrites | Formula refs can point at stable identities                |
+| Concurrent structural edits collide | CRDT merges compose over stable identities and Yrs arrays  |
 
-### Three Maps Per Sheet
+### Core Sheet Indexes
 
-| Map          | Key               | Value                | Purpose              |
-| ------------ | ----------------- | -------------------- | -------------------- |
-| `cells`      | `CellId` (UUID)   | `SerializedCellData` | Primary cell storage |
-| `properties` | `CellId` (UUID)   | `CellProperties`     | Sparse formatting    |
-| `grid`       | `"sheet:row:col"` | `CellId`             | Position → ID lookup |
+| Structure        | Storage key                  | Purpose                                      |
+| ---------------- | ---------------------------- | -------------------------------------------- |
+| `cells`          | `CellId`                     | Primary cell value/formula storage           |
+| `cellProperties` | `CellId`                     | Sparse formatting and non-compute metadata   |
+| `gridIndex`      | `rowIdHex:colIdHex` / CellId | Position-to-cell and cell-to-position mirror |
+| `rowOrder`       | array index                  | Current visual row order                     |
+| `colOrder`       | array index                  | Current visual column order                  |
+| `rowHeights`     | `RowId`                      | Custom row heights                           |
+| `colWidths`      | `ColId`                      | Custom column widths                         |
+| `rowFormats`     | `RowId`                      | Row-level format inheritance                 |
+| `colFormats`     | `ColId`                      | Column-level format inheritance              |
 
-**The `grid` map is derived state** - it's rebuilt from `cells` after structure operations. The source of truth for cell position is inside each cell's data.
+`gridIndex/posToId` and `gridIndex/idToPos` are the authoritative Yrs-side identity mirrors. Runtime read paths usually use the in-memory `GridIndex` and `CellMirror` for speed, then fall back to Yrs when rebuilding from sync or undo.
 
 For the full design, see [Cell Identity](cell-identity.md).
 
-## Design Decisions
-
-### Per-Sheet vs Document-Level
-
-**Per-sheet** (under `sheets/{sheetId}/`):
-
-- `cells` - computational data (values, formulas, positions)
-- `properties` - non-computational data (format, provenance, validation)
-- `schemas` - column-level schema definitions
-- `merges` - merged cell regions
-- `filters`, `slicers` - filtering controls
-- `comments`, `notes` - cell annotations
-- Cascading delete: removing a sheet removes all its data
-
-**Document-level** (at root):
-
-- `workbook` - sheet order, styles, settings, named ranges
-- `conditionalFormats` - CF rules (can reference multiple sheets)
-- `pivots_<sheetId>` - pivot tables (dynamic keys per sheet)
-- `versioning` - snapshots span entire document
-- `testing` - test suites can reference multiple sheets
-- `connections` - data sources are document-wide
-
-### UndoManager Scope
-
-Sheet-level operations are tracked by the undo system:
-
-- User edits (cell values, formats) are undoable
-- Versioning/testing/connections changes are NOT undoable
-
 ## Sheet Structure
 
-### SheetMeta
+### Sheet Metadata
 
-**Location:** `contracts/src/store/sheet-meta-schema.ts`
+**Locations:**
+
+- `compute/core/crates/compute-document/src/schema.rs` - canonical Yrs key names
+- `types/api/src/store/store-types.ts` - TypeScript store/snapshot view
+- `contracts/src/store/store-types.ts` - public re-export shim
+
+Rust stores per-sheet metadata under the sheet's `properties` map. Row and column counts are derived from `rowOrder.len()` and `colOrder.len()` rather than from metadata counters.
+
+The TypeScript store view includes the user-facing fields:
 
 ```typescript
 interface SheetMeta {
@@ -143,399 +126,301 @@ interface SheetMeta {
   defaultColWidth: number;
   frozenRows: number;
   frozenCols: number;
-  tabColor?: string | null; // Hex color (e.g., "#4285f4")
+  tabColor?: string | null;
   hidden?: boolean;
+  usedRange?: { endRow: number; endCol: number } | null;
 }
 ```
 
-**Note:** Extended sheet settings (showGridlines, showRowHeaders, isProtected, showZeroValues, gridlineColor, rightToLeft) are stored in the `SheetSettings` interface in `contracts/src/core.ts`, not in SheetMeta.
+Extended per-sheet settings such as `showGridlines`, `showRowHeaders`, `showColumnHeaders`, `isProtected`, `showZeroValues`, `gridlineColor`, `rightToLeft`, `showFormulas`, and `zoomScale` are tracked separately in the sheet settings contracts and bridge types.
 
-### SerializedCellData (Cell Identity Model)
+### Cell Storage
 
-**Location:** `contracts/src/store/store-types.ts`
+**Locations:**
+
+- `compute/core/crates/compute-document/src/cell_serde.rs` - Yrs cell-map serialization
+- `compute/core/crates/compute-document/src/schema.rs` - compact cell keys
+- `types/api/src/store/store-types.ts` - TypeScript compatibility shape
+
+In the Yrs document, each `cells` entry is a nested map keyed by `CellId`. Important compact keys include:
+
+| Key  | Meaning                                      |
+| ---- | -------------------------------------------- |
+| `v`  | Stored cell value                            |
+| `f`  | A1 formula body, without the leading `=`     |
+| `ft` | identity-formula template                    |
+| `fr` | identity-formula refs JSON                   |
+| `fda` | dynamic-array formula flag                  |
+| `fv` | volatile formula flag                        |
+| `fa` | aggregate formula flag                       |
+| `fm` | original OOXML formula metadata              |
+| `ar` | CSE array-formula range                      |
+| `rt` | rich shared-string state                     |
+
+The TypeScript `SerializedCellData` shape is a store/bridge view, not the literal Rust Yrs cell map:
 
 ```typescript
-/**
- * Cell data stored in Rust compute-core (compact keys for efficiency).
- * Position is stored IN the cell, enabling O(1) structure changes.
- */
 interface SerializedCellData {
-  // === Identity & Position ===
-  id: CellId; // Stable UUID (never changes)
-  row: number; // Current row (updates on insert/delete)
-  col: number; // Current col (updates on insert/delete)
-
-  // === Values ===
-  r: CellRawValue; // Raw value (user input, can be RichText)
-  c?: CellValue; // Computed value (formula result)
-
-  // === Formulas ===
-  f?: string; // A1-style formula (e.g., "SUM(A1:B10)")
-  idf?: IdentityFormula; // Identity formula (stable refs)
-
-  // === Metadata ===
-  n?: string; // Note/comment
-  h?: string; // Hyperlink URL
-
-  // === Array Formula (Spill) Support ===
-  spillRange?: { rows: number; cols: number }; // For spill anchor cells
-  spillAnchor?: CellId; // For spill member cells
-  isCSE?: boolean; // Legacy CSE array formula
+  id: CellId;
+  row: number;
+  col: number;
+  r: CellRawValue;
+  f?: string;
+  idf?: IdentityFormula;
+  c?: CellValue;
+  n?: string;
+  h?: string;
+  spillRange?: { rows: number; cols: number };
+  spillAnchor?: CellId;
+  isCSE?: boolean;
 }
 ```
 
-**Key insights**:
-
-- The `idf` (IdentityFormula) contains references by CellId. When displaying, it's converted to A1-style (`f`) for the formula bar.
-- `spillRange` marks cells containing dynamic array formulas (e.g., `=UNIQUE(A1:A10)`)
-- `spillAnchor` marks cells that are part of a spill range but not the anchor
-- `isCSE` marks legacy Ctrl+Shift+Enter array formulas that display as `{=formula}`
-
-**Value Resolution**: When reading cell values, use the formula field (`f` or `idf`) to determine whether to use `c` (computed) or `r` (raw). Never use `c ?? r` because `null` is a valid computed result. See [Cell Identity - Cell Value Resolution](cell-identity.md#cell-value-resolution) for the correct pattern.
-
-See [Cell Identity](cell-identity.md) for the conversion flow.
+When reading values, formula cells must use the computed result, including `null` when that is the computed result. Do not use `computed ?? raw` for formula cells.
 
 ### CellProperties
 
-```typescript
-/**
- * All non-computational properties of a cell.
- * Stored in a single map in Rust/Yrs for unified reactivity.
- */
-interface CellProperties {
-  // === Visual Formatting ===
-  format?: CellFormat;
+**Location:** `types/core/src/core.ts` (re-exported by `contracts/src/core/core.ts`)
 
-  // === Provenance ===
+`CellProperties` holds non-computational cell state. The public TypeScript type includes formatting plus provenance, validation, data-connection, formula-auditing, and extension fields:
+
+```typescript
+interface CellProperties {
+  format?: CellFormat;
   modifiedBy?: string;
   modifiedAt?: number;
   dataSource?: CellDataSource;
-
-  // === Validation ===
   validationErrors?: ValidationError[];
-
-  // === Live Data Connections ===
   connectionId?: string;
   staleness?: 'fresh' | 'stale' | 'error';
   lastFetched?: number;
-
-  // === Formula Auditing ===
-  isArrayFormula?: boolean; // CSE array formula display: {=FORMULA}
-
-  // === Extensible ===
+  isArrayFormula?: boolean;
   extensions?: Record<string, unknown>;
 }
 ```
 
-### CellFormat (Complete)
+The generated compute bridge may carry additional import/export and fidelity metadata fields on its internal `CellProperties` wire type.
 
-**Location:** `contracts/src/core.ts`
+### CellFormat
 
-```typescript
-interface CellFormat {
-  // === Number Format ===
-  numberFormat?: string;
-  numberFormatType?: NumberFormatType;
+**Location:** `types/core/src/core.ts` (re-exported by `contracts/src/core/core.ts`)
 
-  // === Font Properties ===
-  fontFamily?: string;
-  fontSize?: number;
-  fontTheme?: 'major' | 'minor'; // Theme font reference (+Headings/+Body)
-  fontColor?: string; // Hex or theme reference (theme:accent1:0.4)
-  bold?: boolean;
-  italic?: boolean;
-  underlineType?: 'none' | 'single' | 'double' | 'singleAccounting' | 'doubleAccounting';
-  strikethrough?: boolean;
-  superscript?: boolean;
-  subscript?: boolean;
-  fontOutline?: boolean;
-  fontShadow?: boolean;
-
-  // === Alignment ===
-  horizontalAlign?:
-    | 'general'
-    | 'left'
-    | 'center'
-    | 'right'
-    | 'fill'
-    | 'justify'
-    | 'centerContinuous'
-    | 'distributed';
-  verticalAlign?: 'top' | 'middle' | 'bottom' | 'justify' | 'distributed';
-  wrapText?: boolean;
-  textRotation?: number; // 0-90 CCW, 91-180 CW, 255=vertical
-  indent?: number; // 0-15
-  shrinkToFit?: boolean;
-  readingOrder?: 'context' | 'ltr' | 'rtl';
-
-  // === Fill Properties ===
-  backgroundColor?: string; // Hex or theme reference
-  patternType?: PatternType; // 18 Excel pattern types
-  patternForegroundColor?: string; // Pattern color
-  gradientFill?: GradientFill; // Linear or path gradient
-
-  // === Border Properties ===
-  borders?: CellBorders;
-
-  // === Protection ===
-  locked?: boolean; // Locked when sheet protected
-  hidden?: boolean; // Formula hidden when protected
-  forcedTextMode?: boolean; // Apostrophe prefix (text mode)
-}
-```
+`CellFormat` covers Excel-compatible number formats, fonts, fills, borders, alignment, protection, forced text mode, and extension data. The complete interface lives in the source file; keep docs and API snippets in sync with that file rather than duplicating the full shape here.
 
 ## Sheet-Level Maps Reference
 
-| Map                    | Key                | Value                | Purpose                       |
-| ---------------------- | ------------------ | -------------------- | ----------------------------- |
-| `cells`                | CellId             | SerializedCellData   | Primary cell storage          |
-| `properties`           | CellId             | CellProperties       | Sparse formatting             |
-| `grid`                 | "sheet:row:col"    | CellId               | Position lookup               |
-| `schemas`              | colIndex           | ColumnSchema         | Column type definitions       |
-| `rangeSchemas`         | schemaId           | RangeSchema          | Data validation rules         |
-| `rowHeights`           | rowIndex           | number               | Custom row heights            |
-| `colWidths`            | colIndex           | number               | Custom column widths          |
-| `rowFormats`           | rowIndex           | CellFormat           | Row formatting inheritance    |
-| `colFormats`           | colIndex           | CellFormat           | Column formatting inheritance |
-| `merges`               | CellId (topLeftId) | IdentityMergedRegion | Merged cell regions           |
-| `groupingConfig`       | string             | GroupingSettings     | Row/column grouping           |
-| `hiddenRows`           | -                  | Array<number>        | Hidden row indices            |
-| `hiddenCols`           | -                  | Array<number>        | Hidden column indices         |
-| `tables`               | tableId            | TableConfig          | Excel-style tables            |
-| `charts`               | chartId            | SerializedChart      | Charts                        |
-| `floatingObjects`      | objectId           | FloatingObject       | Pictures, shapes, text boxes  |
-| `floatingObjectGroups` | groupId            | FloatingObjectGroup  | Grouped floating objects      |
-| `formControls`         | controlId          | FormControl          | Form controls                 |
-| `filters`              | filterId           | FilterState          | Auto/table filters            |
-| `slicers`              | slicerId           | SlicerConfig         | Table/pivot slicers           |
-| `comments`             | commentId          | CellComment          | Threaded comments             |
-| `notes`                | cellId             | CellNote             | Simple cell notes             |
-| `dataBindings`         | bindingId          | SheetDataBinding     | Sheet data bindings           |
-
-**Note**: Many sheet-level maps are lazily created and may be `undefined` until first use. This includes: `filters`, `slicers`, `comments`, `notes`, `formControls`, `rowFormats`, and `colFormats`. Always check for existence before accessing these maps.
+| Map                    | Key                  | Purpose                                  |
+| ---------------------- | -------------------- | ---------------------------------------- |
+| `properties`           | field name           | Sheet metadata and sheet-scoped settings |
+| `cells`                | `CellId`             | Cell value/formula maps                  |
+| `cellProperties`       | `CellId`             | Sparse formatting and metadata           |
+| `gridIndex`            | `posToId` / `idToPos` | Yrs-side position/cell identity mirror   |
+| `rowOrder`             | array index          | Current row identity order               |
+| `colOrder`             | array index          | Current column identity order            |
+| `rowHeights`           | `RowId`              | Custom row heights                       |
+| `colWidths`            | `ColId`              | Custom column widths                     |
+| `rowFormats`           | `RowId`              | Row formatting inheritance               |
+| `colFormats`           | `ColId`              | Column formatting inheritance            |
+| `schemas`              | schema key           | Column/schema metadata                   |
+| `validationRules`      | rule ID              | Data-validation rule bodies              |
+| `ranges`               | `RangeId`            | Range identity records                   |
+| `rangePayloads`        | `RangeId`            | Range payload data                       |
+| `rangeFormats`         | `RangeId`            | Range-backed formatting                  |
+| `rangeBindings`        | binding key          | Sheet/range binding metadata             |
+| `merges`               | merge key            | Merged cell regions                      |
+| `manualHiddenRows`     | `RowId`              | Manually hidden rows                     |
+| `filterHiddenRows`     | filter ID            | Rows hidden by filters                   |
+| `hiddenRows` / `hiddenCols` | storage key     | Compatibility/effective hidden state     |
+| `comments`             | comment ID           | Notes and threaded comments              |
+| `filters`              | filter ID            | Auto/table/advanced filter state         |
+| `sparklines`           | sparkline key        | Sparkline state                          |
+| `conditionalFormat`    | rule key             | Per-sheet conditional-format entries     |
+| `cfRules`              | rule ID              | Shared conditional-format rule bodies    |
+| `bindings`             | binding ID           | Sheet data bindings                      |
+| `grouping`             | grouping key         | Row/column outline grouping              |
+| `sorting`              | sorting key          | Sort state                               |
+| `pivotTables`          | pivot ID             | Per-sheet pivot table configs            |
+| `floatingObjects`      | object ID            | Charts, pictures, shapes, OLE, controls  |
+| `floatingObjectGroups` | group ID             | Grouped floating objects                 |
 
 ## Document-Level Structures
 
 ### Workbook
 
-```typescript
-// workbook storage
-{
-  sheetOrder: Array<SheetId>,
-  styles: Map<string, CellStyle>,         // Custom cell styles
-  workbookSettings: Map<string, unknown>,  // Settings (culture, theme, etc.)
-  definedNames: Map<string, DefinedName>   // Named ranges
-}
-```
+Workbook-level maps are under the root `workbook` map. The active set includes `sheetOrder`, `schemaVersion`, settings/identity/link maps, named ranges, workbook-level table and slicer registries, pivot cache/spec maps, Power Query/scenario/theme metadata, custom cell styles, document properties, imported external-data caches, and package-fidelity metadata.
 
-### DefinedName (Named Ranges)
+Tables and slicers are workbook-level registries even though their APIs can query by sheet. Conditional formats and pivot table instances are sheet-level maps (`conditionalFormat`, `cfRules`, `pivotTables`), with workbook-level pivot cache/spec data stored separately.
+
+### Defined Names
+
+**Locations:**
+
+- `types/data/src/data/named-ranges.ts`
+- `kernel/src/bridges/compute/compute-types.gen.ts`
+- `compute/core/src/storage/engine/construction/named_ranges.rs`
+
+Defined names are stored under `workbook.namedRanges`. The canonical storage boundary serializes `IdentityFormula` JSON for the reference, while display/API paths can expose A1 strings.
 
 ```typescript
-interface DefinedName {
+interface DefinedNameWire {
   id: string;
   name: string;
-  refersTo: IdentityFormula; // CRDT-safe, uses CellId refs
-  scope?: SheetId; // undefined = workbook scope
+  refersTo: IdentityFormula;
+  scope: Scope;
   comment?: string;
-  visible?: boolean;
+  visible: boolean;
 }
 ```
+
+The generated bridge also exposes a display-oriented `DefinedName` with `refersTo: string` and additional OOXML fidelity flags.
 
 ### Connections & Bindings
 
-```typescript
-// connections storage
-{
-  configs: Map<string, DataConnection>,
-  bindings: Map<CellId, CellBinding>     // Keyed by CellId for stable identity
-}
+Workbook connection definitions live under the workbook connection storage (`workbookConnections` when present). Sheet data bindings live per sheet under `bindings` and are keyed by binding ID, not by `CellId`.
 
-interface CellBinding {
+```typescript
+interface SheetDataBinding {
+  id: string;
+  sheetId: string;
   connectionId: string;
-  cellId: CellId;        // Stable cell identifier
-  sheetId: SheetId;      // Sheet context for filtering
-  query: string;         // JSONPath, SQL column, etc.
-  transform?: string;    // Optional transform formula
+  columnMappings: ColumnMapping[];
+  autoGenerateRows: boolean;
+  headerRow: number;
+  dataStartRow: number;
+  preserveHeaderFormatting: boolean;
+  lastRefresh: number | null;
+  lastRowCount: number | null;
 }
 ```
 
-**Important**: Cell bindings use `CellId` (not position) as the key. This ensures bindings survive row/column insert/delete operations and compose correctly under concurrent structure changes.
-
 ### FilterState
+
+Filter ranges use stable cell IDs for their range corners. Runtime filter state exposes parsed column filters and resolved positions; the Yrs codec stores a structured map and serializes complex filter criteria as JSON strings inside that map.
 
 ```typescript
 interface FilterState {
   id: string;
-  type: 'autoFilter' | 'tableFilter' | 'advancedFilter';
-
-  // Range defined by CellIds (not positions)
-  headerStartCellId: CellId;
-  headerEndCellId: CellId;
-  dataEndCellId: CellId;
-
-  columnFilters: string; // JSON: Record<CellId, ColumnFilterCriteria>
-  sortState?: string; // JSON: FilterSortState
+  type: FilterKind;
+  headerStartCellId: string;
+  headerEndCellId: string;
+  dataEndCellId: string;
+  columnFilters: Record<string, ColumnFilter>;
+  advancedFilter?: AdvancedFilterState;
+  sortState?: FilterSortState;
   tableId?: string;
   createdAt?: number;
   updatedAt?: number;
+  startRow: number | null;
+  startCol: number | null;
+  endRow: number | null;
+  endCol: number | null;
 }
 ```
 
-### CellComment (Threaded Comments)
+### Comments
+
+Comments are sheet-level entries keyed by comment ID. They reference cells through `cellRef` (`CellId`) so comments survive structural edits.
 
 ```typescript
-interface CellComment {
+interface Comment {
   id: string;
-  cellId: CellId; // Stable reference via CellId
+  cellRef: CellId;
   author: string;
   authorId?: string;
   createdAt: number;
   modifiedAt?: number;
-  content: RichText; // Rich text formatting
-  threadId?: string; // Thread root ID
-  parentId?: string; // Parent comment for replies
+  content: RichText;
+  threadId?: string;
+  parentId?: string;
   resolved?: boolean;
+  commentType: 'note' | 'threadedComment';
 }
 ```
+
+The compute wire type carries additional OOXML fields such as rich-text runs, author email/person IDs, shape anchors, and visibility data.
 
 ## Grid Index
 
-**Location:** `kernel/src/domain/grid-index.ts`
+**Locations:**
 
-The grid index enables O(1) position lookups for rendering:
+- `compute/core/src/storage/cells/values/storage_methods.rs`
+- `compute/core/src/storage/cells/values.rs`
+- `kernel/src/domain/grid-index.ts`
 
-```typescript
-interface ICellPositionLookup {
-  // Position → CellId
-  getCellId(sheet: SheetId, row: number, col: number): CellId | null;
+The Yrs grid index stores row/column identity keys, not plain numeric positions:
 
-  // CellId → Position
-  getPosition(cellId: CellId): { row: number; col: number; sheet: SheetId } | null;
-
-  // Get or create (for formula parsing - referenced cells may not exist yet)
-  getOrCreateCellId(sheet: SheetId, row: number, col: number): CellId;
-}
+```text
+gridIndex/posToId: "rowIdHex:colIdHex" -> cellIdHex
+gridIndex/idToPos: cellIdHex -> "rowIdHex:colIdHex"
 ```
 
-### Grid Key Format
+When callers ask for row/column numbers, Rust resolves the row and column IDs through `rowOrder` and `colOrder`.
 
-Grid keys use a three-component format that includes the sheet ID:
+Kernel helpers delegate to `ComputeBridge` rather than reading Yrs maps directly:
 
 ```typescript
-// Create grid key (includes sheet ID for uniqueness)
-createGridKey(sheet, row, col) → "sheet-abc:5:3"
-
-// Parse grid key
-parseGridKey("sheet-abc:5:3") → { sheet: "sheet-abc", row: 5, col: 3 }
+getCellIdAtPosition(ctx, sheetId, row, col): Promise<CellId | null>;
+getCellDataByPosition(ctx, sheetId, row, col): Promise<SerializedCellData | undefined>;
+setCell(ctx, sheetId, row, col, data): void;
+getReverseIndex(ctx): Promise<Map<CellId, SheetId>>;
 ```
+
+The generated bridge surface also exposes lower-level calls such as `getCellIdAt(sheetId, row, col)`, `getCellPosition(sheetId, cellIdHex)`, `setCellValueParsed(sheetId, row, col, rawInput)`, and `queryRange(...)`.
 
 ## Accessing Data
 
-**SpreadsheetStore methods** (recommended):
+Use the public workbook/worksheet APIs or `ComputeBridge` methods. Direct Yrs access is storage-internal and must preserve the identity invariants described above.
+
+Common internal access patterns:
 
 ```typescript
-// Cell values (by position - uses grid index internally)
-store.getCellData(sheetId, row, col);
-store.setCellValue(sheetId, row, col, value);
+// Position -> CellId
+await ctx.computeBridge.getCellIdAt(sheetId, row, col);
 
-// Cell values (by CellId - direct lookup)
-store.getCellDataById(cellId);
-store.setCellValueById(cellId, value);
+// CellId -> current position
+await ctx.computeBridge.getCellPosition(sheetId, cellIdHex);
 
-// Unified properties
-store.getCellProperties(sheetId, row, col); // Returns full CellProperties
-store.setCellProperties(sheetId, row, col, partial);
+// User-style edit parsing
+await ctx.computeBridge.setCellValueParsed(sheetId, row, col, '=SUM(A1:A10)');
 
-// Convenience methods
-store.getCellFormat(sheetId, row, col); // Returns properties.format
-store.setCellFormat(sheetId, row, col, format);
+// View/range query
+await ctx.computeBridge.queryRange(sheetId, startRow, startCol, endRow, endCol);
 ```
 
-**React hook** (for reactive UI):
-
-```typescript
-// Reactively subscribes to property changes via coordinator
-const { properties, format } = useCellProperties(sheetId, row, col);
-```
-
-**Direct store access** (advanced, via StoreContext refs):
-
-```typescript
-const { cells, properties, grid } = ctx.refs.getSheetMaps(sheetId);
-
-// Lookup by position (grid key includes sheet ID)
-const gridKey = `${sheetId}:${row}:${col}`;
-const cellId = grid.get(gridKey);
-if (cellId) {
-  const cellData = cells.get(cellId);
-  const cellProps = properties.get(cellId);
-}
-
-// Lookup by CellId (when you have a formula reference)
-const cellData = cells.get(someCellId);
-const { row, col } = cellData; // Position is inside the cell
-```
+For UI formatting and metadata, prefer worksheet format APIs or kernel domain helpers that delegate to the bridge. React UI code can use hooks such as `useCellProperties(...)` where the spreadsheet app exports them.
 
 ## Structure Operations
 
-Insert/delete row/col updates positions without changing keys:
+Insert/delete row/column operations coordinate three pieces:
 
-```typescript
-function insertColumns(sheet: SheetId, startCol: number, count: number): void {
-  // Step 1: Shift positions of affected cells (O(n) position updates)
-  cells.forEach((cell, id) => {
-    if (cell.col >= startCol) {
-      cells.set(id, { ...cell, col: cell.col + count });
-    }
-  });
+1. `GridIndex` updates identity-to-position mappings.
+2. The Yrs document updates `rowOrder` / `colOrder` and removes cells deleted by the operation.
+3. `CellMirror` updates its fast read indexes.
 
-  // Step 2: Rebuild grid index (derived state)
-  rebuildGridIndex(sheet);
+Each structural operation commits as one Yrs transaction with the structural undo origin. Row and column counts are derived from `rowOrder` and `colOrder`; no metadata row/column counters are maintained.
 
-  // Step 3: Shift column widths, schemas (position-keyed data)
-  shiftColumnWidths(sheet, startCol, count);
+Formula identity refs remain stable across these operations. Some display-oriented A1 formula strings are refreshed after structural changes so cold rebuild/export paths see the current display text, but the identity formula fields remain the durable reference model.
 
-  // No formula parsing. No reference adjustment. Just position updates.
-}
-```
+## Undo Scope
 
-**Key benefit**: Formulas like `=SUM(A1:B10)` don't change. Their `IdentityFormula` refs point to CellIds, which are stable. Only the A1 display changes when you view the formula.
+`UndoRedoManager` wraps `yrs::undo::UndoManager` and tracks only transactions marked with user-edit or structural origins. Formula result writes, bootstrap writes, remote updates, and UI-state writes are intentionally excluded.
+
+The undo manager is scoped to shared Yrs collections and can expand its scope for additional workbook maps such as named ranges or tables when those should be undoable.
 
 ## Syncing
 
-### Local Persistence
+Collaboration is based on Yrs state vectors and update bytes exposed by the Rust engine and compute coordinator. Transports such as WebSocket, HTTP, or in-process N-API wrappers route those bytes; the storage model does not require a specific network transport.
 
-Document state is persisted locally via the Rust storage engine. On desktop (Tauri), this uses native file I/O. On web, state is serialized through the WASM bridge.
+`SyncCoordinator` provides multi-participant coordination, awareness bytes, sheet-level locks, and structural locks. Clients apply remote Yrs updates back through the compute sync bridge so mirrors, indexes, and viewport patches can be rebuilt consistently.
 
-### Remote (Collaboration)
+## Snapshot and Import Views
 
-Real-time collaboration uses a WebSocket-based sync protocol. The collaboration server routes document changes between connected clients.
+`WorkbookSnapshot` and `SheetSnapshot` are bridge/import/export views used to initialize engines, import XLSX parse output, and expose SDK snapshots. They are not a `versioning` subtree in the Yrs document.
 
-## Snapshot Storage
-
-Snapshots (versioning) are stored separately from the main document:
-
-- **Metadata** in the document store (`versioning/snapshotIndex`)
-- **Blob data** persisted locally
-
-```typescript
-// Snapshot metadata (synced)
-interface SnapshotMetadata {
-  id: string;
-  message: string;
-  timestamp: number;
-  branch: string;
-}
-
-// Snapshot blob (local storage)
-interface SnapshotBlob {
-  id: string;
-  data: Uint8Array; // Encoded state
-}
-```
+The old `DiffCellData`/versioning package path was removed; current cell storage and snapshot paths use the compute bridge and snapshot types.
 
 ## Related Documentation
 
-- [Cell Identity](cell-identity.md) - Full design of the CellId model
-- [State Management](state.md) - SpreadsheetStore, UIStore, EventBus
-- [Packages](packages.md) - All packages and dependencies
+- [Cell Identity](cell-identity.md) - Identity model details
+- [State Management](state.md) - Spreadsheet state and UI state
+- [Packages](packages.md) - Packages and dependencies

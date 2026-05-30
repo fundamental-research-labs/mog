@@ -1,46 +1,44 @@
 # Self-Hosting
 
-> **Status: skeleton — reserved until runtime service contracts are approved (Plan 07)**
+> **Status: reserved** — Mog does not currently publish a supported self-hosted service distribution or deployment guide.
 
-Self-host Mog for your organization. This guide will cover deploying Mog as a service with persistent storage, authentication, and collaboration.
+Self-hosting is a planned deployment context for organizations that want Mog to run inside their own security boundary. This guide is reserved until the service implementation and runtime service contracts are complete.
 
 ## Prerequisites
 
-- Docker and Docker Compose (planned deployment target)
-- A PostgreSQL-compatible database (planned)
-- An object storage backend (S3-compatible, planned)
+No supported self-hosting prerequisite set is published yet. The public repository currently exposes runtime service configuration contracts, but not a Docker Compose stack, service binary, or production deployment manifest.
 
 ## Planned Shape
 
-The following sections describe the intended self-hosting architecture. Implementation details are subject to change as runtime service contracts (Plan 07) are finalized.
+The following sections describe the intended self-hosting documentation shape. Implementation details are subject to change as the runtime service contracts and service implementation stabilize.
 
 ### Docker Compose Deployment
 
-Single-command deployment using Docker Compose. Service topology: API server, compute workers, web frontend, reverse proxy.
+Single-node deployment topology and service discovery. The public repository does not currently include Docker Compose files for a supported self-hosted distribution.
 
 ### Configuration Schema
 
-Environment variables and config file format for: database connection, storage backend, auth provider, feature flags, resource limits.
+Runtime service configuration for endpoints, auth, storage, collaboration, assets, limits, observability, and security.
 
 ### Authentication Adapters
 
-Pluggable auth: built-in email/password, OIDC/OAuth2 provider, SAML (enterprise). How to configure each.
+Configured service-boundary auth adapters such as OIDC, SAML, local-dev, or single-user modes as supported by the runtime contracts. Production identity and authorization behavior are not documented as shipped.
 
 ### Storage Adapters
 
-Where workbooks are stored: local filesystem, S3-compatible object storage, database BLOBs. Trade-offs and configuration.
+Object storage and metadata storage configuration, including local/object-store providers and database-backed metadata where supported by runtime contracts. Production backup, retention, encryption, and restore procedures are not documented as shipped.
 
 ### Health Checks
 
-Liveness and readiness endpoints. Monitoring integration points (Prometheus metrics, structured logging).
+Service health and readiness contracts for liveness/load-balancer probes, plus observability sinks as supported by runtime configuration.
 
 ### Backup and Restore
 
-Workbook export, database backup, point-in-time recovery considerations.
+Backup, retention, compaction, and restore procedures for workbook data once service storage lifecycle behavior is documented as supported.
 
 ### Scaling
 
-Horizontal scaling model for compute workers. Sticky sessions for collaboration. Load balancer configuration.
+Single-node and horizontal deployment profiles, collaboration scaling configuration, and load-balancer requirements once production service behavior is documented.
 
 ## Related Docs
 

@@ -1,310 +1,228 @@
 # Package Structure
 
+This page summarizes the package layout for the spreadsheet workspace. The
+source of truth for TypeScript packages is `pnpm-workspace.yaml`; individual
+public entry points live in each package's `package.json` `exports` field. The
+source of truth for Rust crates is the root `Cargo.toml` workspace.
+
 ## Dependency Graph
 
-```
-                                     collaboration-server (y-websocket)
-                                                 │
-                                         app-spreadsheet
-                                                 │
-             ┌───────────────────────────────────┼──────────────────────────────┐
-             │                                   │                              │
-           shell                            kernel                    spreadsheet-utils
-             │                                   │
-             └───────────────────────────────────┼──────────────────────────────┘
-                                                 │
-      ┌────────┬────────┬──────────┬─────────────┼──────────┬──────────┬────────┐
-      │        │        │          │             │          │          │        │
-   compute  charts   table     grid-canvas   print    xlsx-parser
-    -core           -engine        │        -export   (file-io/xlsx/)
-   (Rust)             │            │           │
-      │               │            │           │
-      └───────────────┼────────────┼───────────┤
-                      │            │           │
-                  drawing/* (under canvas/drawing/)    number-formats
-                  ├─ engine (drawing-engine)
-                  ├─ shapes (shape-engine)
-                  ├─ ink    (ink-engine)
-                  ├─ diagram
-                  ├─ text-effects (text-effects-engine)
-                  └─ geometry
-                      │  math-engine (typeset/)
-                      │            │
-                      └────────────┼───────────┤
-                                   │           │
-                          kernel (domain modules)
-                                   │
-                              contracts ◄──── yjs
-                                   │
-                         ┌─────────┼─────────┐
-                         │         │         │
-                         │         │    number-formats
-                         │         │
-                         │  ┌──────┴──────┐
-                            │             │
-                   @mog-sdk/wasm (compute-core-wasm crate)  ooxml-types
-                       (Rust/WASM)                   (Rust codegen)
-
-    Rust workspace (Cargo.toml at repo root):
-    ├── compute/core        ~303K lines
-    ├── xlsx-parser         ~147K lines (file-io/xlsx/parser)
-    ├── ooxml-types         ~45K lines  (file-io/ooxml/types)
-    ├── domain-types        ~20K lines
-    ├── rust-bridge         ~19K lines  (infra/rust-bridge/)
-    ├── src-tauri           ~9K lines   (runtime/src-tauri)
-    ├── pdf-core            ~5.7K lines (file-io/pdf/core)
-    ├── compute/api         ~5K lines
-    ├── xlsx-api            ~1.8K lines (file-io/xlsx-api)
-    ├── compute/wasm        ~92 lines
-    └── compute/napi        ~97 lines
+```text
+@mog-sdk/contracts + types/*
+        |
+        v
+spreadsheet-utils, table-engine, culture, env, platform, transport
+        |
+        v
+@mog-sdk/kernel <---------------------- compute-core Rust workspace
+        |                                      |
+        |                         @mog-sdk/wasm, @mog/compute-core-napi
+        v                                      |
+views/sheet-view, canvas/*, drawing/*, charts, print-export, xlsx bridge
+        |
+        v
+@mog/shell + @mog/app-spreadsheet
+        |
+        v
+@mog-sdk/embed, @mog-sdk/spreadsheet-app, @mog-sdk/node
 ```
 
-## All Packages
+The current workspace no longer contains a `runtime/server` package or a
+`runtime/src-tauri` Rust crate. Runtime integration is represented by the
+runtime packages, transport package, and Rust bridge crates listed below.
 
-### Base Layer (no external dependencies)
+## TypeScript Workspace Packages
 
-| Package          | LOC  | Purpose                             | Key Exports                       |
-| ---------------- | ---- | ----------------------------------- | --------------------------------- |
-| `contracts`      | ~38K | TypeScript interfaces, zero runtime | `core.ts`, `events.ts`, `ribbon/` |
+| Group | Packages | Purpose |
+| --- | --- | --- |
+| Contracts and types | `@mog-sdk/contracts`, `@mog-sdk/runtime-service-contracts`, `@mog/types-*`, `@mog-sdk/types-*` | Public contract surface and split type packages used by contracts, kernel, views, and runtimes. |
+| Kernel and views | `@mog-sdk/kernel`, `@mog/kernel-host-internal`, `@mog-sdk/sheet-view` | Kernel APIs, trusted host adapter internals, and the public sheet-view substrate. |
+| Runtime SDKs | `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/node`, `@mog-sdk/wasm`, `@mog/compute-core-napi`, platform native packages under `compute/napi/npm/` | Public embedding, full app embedding, Node SDK, browser WASM, and native Node bindings. |
+| App and shell | `@mog/shell`, `@mog/app-spreadsheet`, `@mog/spreadsheet-testing`, `@mog/test-host` | Spreadsheet application composition, shell UI, workspace-private testing helpers, and test host wiring. |
+| Rendering | `@mog/canvas-engine`, `@mog/grid-renderer`, `@mog/drawing-canvas`, `@mog/canvas-overlay`, `@mog/grid-canvas`, `@mog/spatial`, `@mog/charts`, `@mog/ui`, `@mog/icons` | Canvas engine layers, grid rendering, floating-object rendering, charting, UI components, and icons. |
+| Drawing and typeset | `@mog/drawing-engine`, `@mog/shape-engine`, `@mog/ink-engine`, `@mog/diagram-engine`, `@mog/text-effects-engine`, `@mog/geometry`, `@mog/math-engine` | Floating-object operations, shape geometry, ink, diagrams, text effects, geometry primitives, and equation layout. |
+| File I/O | `@mog/xlsx-parser-wasm`, `@mog/xlsx-parser`, `@mog/xlsx-tooling`, `@mog/print-export`, `@mog/pdf-graphics`, `@mog/pdf-layout` | XLSX parser package and bridge, XLSX tooling, print/PDF export, and PDF layout/graphics helpers. |
+| Infrastructure | `@mog/spreadsheet-utils`, `@mog/table-engine`, `@mog/platform`, `@mog/platform-memory`, `@mog/transport`, `@mog/culture`, `@mog/env`, `@mog/bridge-ts`, `@rust-bridge/client` | Shared utilities, table operations, platform abstractions, transport selection, locale helpers, environment helpers, and generated bridge bindings. |
+| Tooling | `@mog/devtools`, `eslint-plugin-mog` | Development tools and import-boundary linting. |
 
-### Core Domain Layer
+## Contracts and Type Packages
 
-| Package             | LOC  | Purpose                            | Key Exports                                                  |
-| ------------------- | ---- | ---------------------------------- | ------------------------------------------------------------ |
-| `shell`             | ~60K | View adapters, renderers, machines | `ShellCoordinator`, view adapters, XState machines, React components, hooks |
-| `kernel`            | ~10K | Core runtime and APIs              | `SpreadsheetAPI`, `SheetAPI`, store context, bridges         |
-| `spreadsheet-utils` | -    | Shared spreadsheet utilities       | Utility functions used across packages                       |
+`@mog-sdk/contracts` is the public contract package. Its `exports` field
+contains the current sub-path surface, including areas such as `./api`,
+`./core`, `./events`, `./number-formats`, `./rendering`, `./ribbon`, `./views`,
+and `./diagram`.
 
-### Computation Layer
+The `types/*` packages hold split type surfaces that contracts and higher
+layers consume. Examples include `@mog/types-core`, `@mog/types-rendering`,
+`@mog/types-formatting`, `@mog/types-events`, `@mog-sdk/types-document`, and
+`@mog-sdk/types-host`.
 
-| Package              | LOC    | Purpose                                                                                                                                              | Key Exports                                 |
-| -------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `compute-core`       | ~303K  | Rust compute engine: formula parser, evaluator, 508+ Excel functions, dependency graph, recalc scheduler, conditional formatting, table engine, pivot engine, CRDT storage, what-if analysis | Full spreadsheet computation via WASM/Tauri IPC |
-| `@mog-sdk/wasm` (`compute-core-wasm` crate) | ~92 | WASM bindings for compute-core | `wasm-bindgen` entry points for browser use |
-| `compute-core-napi`  | ~97    | Node.js native bindings for compute-core                                                                                                             | N-API entry points for Node.js              |
-| `compute-api`        | ~5K    | Rust API layer for compute-core                                                                                                                      | High-level compute API                      |
-| `domain-types`       | ~20K   | Shared Rust domain types                                                                                                                             | Core type definitions used across Rust crates |
-| `formula-eval`       | ~12K   | Rust formula accuracy evaluator                                                                                                                      | CLI: corpus run, diagnose, inspect, trace   |
-| `table-engine`       | ~2K    | TS table filtering/sorting/visibility engine                                                                                                         | Filter, sort, slicer, visibility modules    |
-| `charts`             | ~28K   | Custom chart rendering engine                                                                                                                        | `ChartEngine`, chart types, renderers       |
-| `number-formats`     | ~1K    | Number formatting utilities                                                                                                                          | Excel number format parsing and rendering   |
+`@mog-sdk/runtime-service-contracts` is a workspace-private contracts package
+for runtime service envelopes, audit events, protocol versions, and deployment
+types.
 
-### File I/O Layer (`file-io/`)
+## Core and Compute
 
-| Package              | Location                  | LOC    | Purpose                                    | Key Exports                                |
-| -------------------- | ------------------------- | ------ | ------------------------------------------ | ------------------------------------------ |
-| `xlsx-parser-wasm`   | `file-io/xlsx/parser/`    | ~147K  | High-performance Rust/WASM XLSX parser     | `parse_xlsx`, SIMD-optimized parsing       |
-| `xlsx-parser`        | `file-io/xlsx/bridge/`    | -      | TypeScript bridge for xlsx-parser-wasm     | TS wrapper, types, worker                  |
-| `xlsx-tooling`       | `file-io/xlsx/tooling/`   | -      | XLSX development tooling                   | Dev/debug tools for XLSX                   |
-| `xlsx-api`           | `file-io/xlsx-api/`       | ~1.8K  | Rust XLSX API                              | High-level XLSX access API                 |
-| `ooxml-types`        | `file-io/ooxml/types/`    | ~45K   | Rust OOXML type definitions                | Generated types matching OOXML spec        |
-| `print-export`       | `file-io/print-export/`   | ~4K    | HTML/PDF generation                        | `generatePDF`, `TableGenerator`            |
-| `pdf-graphics`       | `file-io/pdf/graphics/`   | -      | PDF graphics rendering                     | PDF graphics primitives                    |
-| `pdf-layout`         | `file-io/pdf/layout/`     | -      | PDF layout engine                          | PDF page layout                            |
-| `pdf-core`           | `file-io/pdf/core/`       | ~5.7K  | Rust PDF core engine                       | Core PDF generation in Rust                |
+| Package | Location | Purpose | Notable exports or entry points |
+| --- | --- | --- | --- |
+| `@mog-sdk/kernel` | `kernel/` | Kernel APIs and document/runtime integration. | `.`, `./api`, `./app-api`, `./security`, `./keyboard`, `./storage`, `./testing`, `./services/capabilities`, `./contracts/api`. |
+| `@mog/kernel-host-internal` | `kernel/host-internal/` | Workspace-private trusted host adapter entry. | `.` |
+| `@mog/transport` | `infra/transport/` | Runtime transport selection for NAPI, Tauri IPC, or WASM. | `createTransport` and transport helpers. |
+| `@mog-sdk/wasm` | `compute/wasm/npm/` | Browser package for the `compute-core-wasm` Rust crate. | `.`, `./wasm`. |
+| `@mog/compute-core-napi` | `compute/napi/` | Native Node binding package for `compute-core-napi`. | Native addon entry point plus platform packages under `compute/napi/npm/`. |
 
-#### xlsx-parser-wasm
+`@mog/transport` treats compute and XLSX commands as a single runtime module per
+platform: native addon for Node, Tauri IPC for desktop hosts, and
+`@mog-sdk/wasm` for web hosts.
 
-High-performance XLSX parser using Rust + WebAssembly with SIMD optimization:
+## File I/O
 
-- **SIMD-Accelerated Scanning**: Uses WASM SIMD instructions for byte scanning
-- **Zero-Copy String Access**: Shared strings parsed without unnecessary allocations
-- **Streaming Architecture**: Pre-allocated buffers for efficient memory usage
-- **Pure Rust**: No external dependencies except wasm-bindgen
+| Package or crate | Location | Purpose |
+| --- | --- | --- |
+| `@mog/xlsx-parser-wasm` / `xlsx-parser` | `file-io/xlsx/parser/` | Rust XLSX parser package and crate. The crate has native, parallel, CLI, corpus, and WASM-facing modes. |
+| `@mog/xlsx-parser` | `file-io/xlsx/bridge/` | TypeScript bridge for WASM lifecycle, progress/types exports, and worker orchestration. |
+| `@mog/xlsx-tooling` | `file-io/xlsx/tooling/` | XLSX development tooling, benchmarks, and fixture generation. |
+| `xlsx-api` | `file-io/xlsx-api/` | Rust API facade over the parser. |
+| `csv-parser` | `file-io/csv-parser/` | Rust CSV parser integrated with the same parse-output path. |
+| `ooxml-types` | `file-io/ooxml/types/` | Rust OOXML vocabulary and generated/shared types. |
+| `@mog/print-export` | `file-io/print-export/` | Spreadsheet print and PDF export APIs. |
+| `@mog/pdf-graphics` | `file-io/pdf/graphics/` | PDF graphics primitives. |
+| `@mog/pdf-layout` | `file-io/pdf/layout/` | PDF pagination and layout helpers. |
+| `pdf-core` | `file-io/pdf/core/` | Rust PDF core crate. |
 
-Performance target: Parse 500K cells in under 50ms.
+`@mog/print-export` exports `SpreadsheetPdfExporter`, `createPdfExporter`,
+HTML table/style generation helpers, print handling, and pagination types from
+`@mog/pdf-layout`.
 
-Dependencies: Rust crates (`miniz_oxide`, `wasm-bindgen`)
+## Rendering
 
-### Rendering Layer
+**Canvas packages**:
 
-**Canvas packages** (under `canvas/` + composition facade):
-
+```text
+@mog/canvas-engine
+    -> @mog/grid-renderer
+    -> @mog/drawing-canvas
+    -> @mog/canvas-overlay
+        -> @mog/grid-canvas
+            -> views/sheet-view and spreadsheet app packages
 ```
-canvas-engine (foundation, zero domain deps)
-    ├── grid-renderer (cells, headers, selection, background, UI)
-    ├── drawing-canvas (scene graph, object renderers)
-    └── canvas-overlay (handles, guides, rubber band)
-            ↓
-        grid-canvas (composition facade)
-            ↓
-        spreadsheet app
-```
 
-| Package             | Location                 | LOC  | Purpose                                                     | Key Exports                                       |
-| ------------------- | ------------------------ | ---- | ----------------------------------------------------------- | ------------------------------------------------- |
-| `canvas-engine`     | `canvas/engine/`         | ~3K  | Generic multi-canvas render loop, priority scheduler, input | `createCanvasEngine`, `CanvasLayer`, `RenderLoop` |
-| `grid-renderer`     | `canvas/grid-renderer/`  | ~12K | Cell, background, selection, header, and UI layers          | `createGridLayers`, data source interfaces        |
-| `drawing-canvas`    | `canvas/drawing-canvas/` | ~4K  | Floating object scene graph and type renderers              | `DrawingLayer`, `SceneGraph`, `HitMap`            |
-| `canvas-overlay`    | `canvas/overlay/`        | ~2K  | Screen-space UX chrome (handles, guides, rubber band)       | `OverlayLayer`, handle hit testing                |
-| `grid-canvas`       | `canvas/grid-canvas/`    | ~3K  | Thin composition facade wiring the canvas packages          | `GridRenderer` contract implementation            |
-| `spatial`           | `canvas/spatial/`        | -    | Spatial indexing for canvas objects                         | Spatial queries, hit testing                      |
-| `canvas-playground` | `canvas/lab/`            | ~1K  | Interactive test harness for canvas development             | Vite dev server for visual testing                |
+| Package | Location | Purpose | Notable exports |
+| --- | --- | --- | --- |
+| `@mog/canvas-engine` | `canvas/engine/` | Generic multi-canvas infrastructure, coordinate spaces, scheduling, dirty rects, input, and hit testing. | `createCanvasEngine`, canvas layer and geometry types. |
+| `@mog/grid-renderer` | `canvas/grid-renderer/` | Spreadsheet cell, header, selection, UI, and specialized grid layers. | Layer factories, `createGridLayers`, viewport/layout helpers. |
+| `@mog/drawing-canvas` | `canvas/drawing-canvas/` | Floating object scene graph, bridge adapters, hit map, and drawing layer factory. | `SceneGraph`, `BridgeRegistry`, `HitMap`, `createDrawingLayer`. |
+| `@mog/canvas-overlay` | `canvas/overlay/` | Screen-space handles, guides, rubber band, drag preview, and ink preview. | `OverlayLayer`, `createOverlayLayer`. |
+| `@mog/grid-canvas` | `canvas/grid-canvas/` | Composition facade that wires grid-renderer, drawing-canvas, overlay, and viewport layout. | `createGridRenderer`, `GridRenderScheduler`, `computeViewportLayout`. |
+| `@mog/spatial` | `canvas/spatial/` | Spatial indexing and hit-test helpers. | `createSpatialIndex`, `GridSpatialIndex`, hit-test pipeline helpers. |
 
-### Drawing Layer (`canvas/drawing/`)
+## Drawing and Typeset
 
-All drawing-related packages live under `canvas/drawing/` (6 packages). Package names are unchanged (e.g., `@mog/drawing-engine`).
+Drawing-related packages live under `canvas/drawing/`; package names keep their
+published names.
 
-| Package            | Location                   | LOC  | Purpose                                            | Key Exports                                |
-| ------------------ | -------------------------- | ---- | -------------------------------------------------- | ------------------------------------------ |
-| `drawing-engine`   | `canvas/drawing/engine/`   | ~2K  | Drawing/rendering operations engine                | Drawing operations, object management      |
-| `shape-engine`     | `canvas/drawing/shapes/`   | ~2K  | 2D shape manipulation and geometry                 | Shape creation, transforms, path ops       |
-| `ink-engine`       | `canvas/drawing/ink/`      | ~1K  | Pen/ink input and rendering engine                 | Ink stroke capture, smoothing, rendering   |
-| `diagram`         | `canvas/drawing/diagram/` | ~3K  | Diagram engine                                    | Diagram parser, layout engine             |
-| `text-effects-engine`   | `canvas/drawing/text-effects/`  | ~1K  | Text-effects styling/rendering                        | Text effects, transforms, gradient fills   |
-| `geometry`         | `canvas/drawing/geometry/` | ~2K  | Geometric calculations (points, rects, transforms) | Points, rects, matrices, path math         |
+| Package | Location | Purpose | Notable exports |
+| --- | --- | --- | --- |
+| `@mog/drawing-engine` | `canvas/drawing/engine/` | Pure floating-object operations: z-order, grouping, anchors, layout, rendering primitives, and diagnostics. | Z-order helpers, grouping helpers, anchor resolution, canvas/SVG renderers. |
+| `@mog/shape-engine` | `canvas/drawing/shapes/` | Shape path generation and OOXML custom geometry. | `generateShapePath`, custom geometry helpers, preset registry. |
+| `@mog/ink-engine` | `canvas/drawing/ink/` | Ink stroke creation, smoothing, spatial indexing, intersections, erasing, and pressure mapping. | Stroke, eraser, spatial, and pressure helpers. |
+| `@mog/diagram-engine` | `canvas/drawing/diagram/` | Diagram models, layouts, styles, gallery, and partial OOXML layout engine. | `createDiagram`, `computeLayout`, style/theme helpers, `DataModel`. |
+| `@mog/text-effects-engine` | `canvas/drawing/text-effects/` | OOXML text warp presets, path text layout, effects, and drawing-object output. | `warpText`, preset registry, effect helpers. |
+| `@mog/geometry` | `canvas/drawing/geometry/` | 2D geometry primitives and path/transform utilities. | `Matrix`, `Transform`, `PathOps`, `Rect`, connector routing. |
+| `@mog/math-engine` | `typeset/math-engine/` | OMML and LaTeX parsing/conversion, equation layout, templates, render plans, and diagnostics. | `parseOMML`, `parseLatex`, `latexToOmml`, `layoutEquation`, `layoutToRenderPlan`. |
 
-### Typeset Layer (`typeset/`)
+## Application and Runtime Packages
 
-| Package            | Location                   | LOC  | Purpose                                    | Key Exports                                |
-| ------------------ | -------------------------- | ---- | ------------------------------------------ | ------------------------------------------ |
-| `math-engine`      | `typeset/math-engine/`     | ~1K  | Equation/math rendering engine             | Math formula layout, symbol rendering      |
-| `typeset-lab`      | `typeset/lab/`             | ~1K  | Visual test harness for typeset rendering  | Vite dev server for visual testing         |
+| Package | Location | Purpose | Notable exports |
+| --- | --- | --- | --- |
+| `@mog/shell` | `shell/` | Shell UI, app registry, context, hooks, capabilities, host/app integration, and styling. | `.`, `./bootstrap`, `./context`, `./components`, `./components/ui`, `./capabilities`, `./hooks`, `./hooks/keyboard`, `./hooks/app-data`, `./styles`, `./platform`, `./host/app-registry`, `./apps`, `./apps/types`. |
+| `@mog/app-spreadsheet` | `apps/spreadsheet/` | Workspace-private default spreadsheet app. | `.`, `./manifest`, `./register`, `./embed-runtime`, `./services`, chrome/hook entries. |
+| `@mog-sdk/sheet-view` | `views/sheet-view/` | Public view-layer substrate for sheet rendering. | `createSheetView`, `createSheetViewDataSourceFromWorkbook`, skin helpers, public view types. |
+| `@mog-sdk/embed` | `runtime/embed/` | Public read-only embeddable component. | `.`, `./react`, `./web-component`, `./config`. |
+| `@mog-sdk/spreadsheet-app` | `runtime/spreadsheet-app/` | Public full spreadsheet app embed for trusted same-origin hosts. | `.`, CSS exports. |
+| `@mog-sdk/node` | `runtime/sdk/` | Public headless Node.js SDK. | `.` |
+| `@mog/spreadsheet-testing` | `runtime/spreadsheet-testing/` | Workspace-private spreadsheet testing utilities. | `.`, `./fixtures`. |
+| `@mog/test-host` | `runtime/test-host/` | Workspace-private deterministic trusted test host. | `.` |
 
-### Application Layer
+## OS and Infrastructure Packages
 
-| Package                | Location                      | LOC  | Purpose                                  | Key Components                                       |
-| ---------------------- | ----------------------------- | ---- | ---------------------------------------- | ---------------------------------------------------- |
-| `shell`                | `shell/`                      | ~60K | Coordination + React UI                  | Coordinator, components, hooks, actions, clipboard    |
-| `app-spreadsheet`      | `apps/spreadsheet/`           | ~2K  | Default spreadsheet app (grid view)      | Classic grid view composition, app entry point        |
-| `collaboration-server` | `runtime/server/`             | ~350 | WebSocket collaboration server           | `CollaborationServer`, y-websocket                    |
-| `spreadsheet-utils`    | `spreadsheet-utils/`          | ~2K  | Shared spreadsheet utility functions     | Domain utilities used across packages                 |
-
-#### shell
-
-The shell package provides coordination and React integration:
-
-- **Coordinator**: `ShellCoordinator`, `ActorManager`, mutations, keyboard handling
-- **Components**: React UI components (grid, toolbar, dialogs, filters, charts, tables, and diagram/text-effects pickers)
-- **Hooks**: React hooks for selection, editing, clipboard, charts, pivots, etc.
-- **Actions**: Action handlers for all user interactions (formatting, fill, clipboard, charts, ink, tables)
-- **Views**: Grid views, kanban views, view adapters
-- **UI Store**: Zustand-based UI state slices (dialog stack, trace arrows, range selection, etc.)
-- **Extensions**: Extension host, API, permissions, messaging, security
-- **Editor**: Formula highlighting, rich text editing, name completion
-- **Accessibility**: Screen reader announcements, keyboard navigation
-
-Sub-path exports:
-
-- `@mog/shell/coordinator`, `/coordinator/mutations`, `/coordinator/features`
-- `@mog/shell/components`, `/components/dialogs`, `/components/pickers`, `/components/text-effects`
-- `@mog/shell/hooks`
-- `@mog/shell/actions`, `/actions/handlers`
-- `@mog/shell/views`, `/views/grid`
-- `@mog/shell/ui-store`
-- `@mog/shell/extensions`
-- `@mog/shell/styles`
-
-Dependencies: `@mog/charts`, `@mog/icons`, `@mog/kernel`, `@mog/platform`, `@mog/print-export`, `@mog/diagram`, `@mog/spreadsheet-contracts`, `@mog/spreadsheet-utils`, `@mog/ui`, `react`, `xstate`, `zustand`
-
-### OS / Platform Layer
-
-| Package           | Location                    | LOC  | Purpose                                  | Key Exports                                 |
-| ----------------- | --------------------------- | ---- | ---------------------------------------- | ------------------------------------------- |
-| `ui`              | `ui/`                       | ~4K  | Data views and record components         | Kanban, Calendar, Timeline, Gallery, DataGrid |
-| `platform`        | `infra/platform/`           | -    | Platform abstraction layer               | Platform-specific utilities                 |
-| `platform-memory` | `infra/platform/memory/`    | ~1K  | Platform memory management               | Memory utilities                            |
-
-### Infrastructure Layer (`infra/`)
-
-| Package           | Location                          | LOC  | Purpose                                  | Key Exports                                 |
-| ----------------- | --------------------------------- | ---- | ---------------------------------------- | ------------------------------------------- |
-| `icons`           | `infra/icons/`                    | ~440 | SVG icon library for UI                  | React icon components                       |
-| `culture`         | `infra/culture/`                  | -    | Locale/culture settings                  | Culture-aware formatting, locale data       |
-| `transport`       | `infra/transport/`                | -    | Communication/transport layer            | Transport abstractions                      |
-| `bridge-ts`       | `infra/rust-bridge/bridge-ts/`    | -    | TypeScript bindings for Rust bridge      | Generated TS types                          |
-
-### Runtime Layer (`runtime/`)
-
-| Package                | Location                        | LOC  | Purpose                                  | Key Exports                                 |
-| ---------------------- | ------------------------------- | ---- | ---------------------------------------- | ------------------------------------------- |
-| `src-tauri`            | `runtime/src-tauri/`            | ~9K  | Tauri desktop application shell (Rust)   | IPC commands, window management, plugins    |
-| `collaboration-server` | `runtime/server/`               | ~350 | WebSocket collaboration server           | y-websocket server                          |
-| `sdk`                  | `runtime/sdk/`                  | -    | Headless spreadsheet SDK for Node.js     | Programmatic spreadsheet API                |
+| Package | Location | Purpose |
+| --- | --- | --- |
+| `@mog/ui` | `ui/` | Kernel-agnostic UI components for data views, records, table controls, and fields. |
+| `@mog/platform` | `infra/platform/` | Browser/Tauri platform abstraction, filesystem/path errors, identity, menus, keyboard layout, and secure invoke helpers. |
+| `@mog/platform-memory` | `infra/platform/memory/` | In-memory filesystem implementation. |
+| `@mog/culture` | `infra/culture/` | Culture and locale helpers. |
+| `@mog/env` | `infra/env/` | Environment detection/config helpers. |
+| `@mog/icons` | `infra/icons/` | React SVG icon components. |
+| `@mog/bridge-ts` | `infra/rust-bridge/bridge-ts/` | Generated TypeScript bindings for Rust bridge surfaces. |
+| `@rust-bridge/client` | `infra/rust-bridge/client/` | TypeScript bridge client interfaces. |
 
 ## Rust Workspace
 
-The Rust workspace at `Cargo.toml` (repo root) contains the following crate groups:
+The root `Cargo.toml` workspace currently contains these crate groups.
 
-### Core Crates
+### Core Compute Crates
 
-| Crate              | Location              | Lines  | Purpose                                                                                 |
-| ------------------ | --------------------- | ------ | --------------------------------------------------------------------------------------- |
-| `compute-core`     | `compute/core/`       | ~303K  | Formula parser, evaluator, 508+ Excel functions, dependency graph, recalc scheduler, conditional formatting, table engine, pivot engine, CRDT storage, what-if analysis |
-| `@mog-sdk/wasm` (`compute-core-wasm` crate) | `compute/wasm/` | ~92 | `wasm-bindgen` entry points exposing compute-core to the browser |
-| `compute-core-napi`| `compute/napi/`       | ~97    | N-API entry points exposing compute-core to Node.js                                     |
-| `compute-api`      | `compute/api/`        | ~5K    | High-level Rust API for compute-core                                                    |
-| `domain-types`     | `domain-types/`       | ~20K   | Shared domain type definitions                                                          |
-
-compute-core sub-crates (under `compute/core/crates/`):
-`compute-parser`, `compute-stats`, `compute-pivot`, `compute-table`, `compute-functions`, `compute-cf`, `compute-formats`, `compute-schema`, `compute-graph`, `compute-fill`, `compute-charts`, `compute-solver`, `compute-collab`, `compute-document`, `compute-wire`, `compute-layout-index`, `compute-text-measurement`, `value-types`, `cell-types`, `formula-types`, `snapshot-types`
+- Top-level crates: `compute-core`, `compute-api`, `compute-core-wasm`,
+  `compute-core-napi`, `compute-core-pyo3`, and `domain-types`.
+- Compute sub-crates under `compute/core/crates/`: `compute-parser`,
+  `compute-stats`, `compute-pivot`, `compute-relational`, `compute-table`,
+  `compute-functions`, `compute-cf`, `compute-formats`, `compute-schema`,
+  `compute-graph`, `compute-fill`, `compute-charts`, `compute-chart-render`,
+  `compute-solver`, `compute-collab`, `compute-coordinator`,
+  `compute-document`, `compute-wire`, `compute-layout-index`,
+  `compute-text-measurement`, `compute-screenshot`, and `compute-security`.
+- Shared type crates under `compute/core/crates/types/`: `value-types`,
+  `cell-types`, `workbook-types`, `formula-types`, `pivot-types`,
+  `snapshot-types`, `finite-at-boundary`, and
+  `finite-at-boundary-walker`.
 
 ### File I/O Crates
 
-| Crate              | Location                | Lines  | Purpose                                                                              |
-| ------------------ | ----------------------- | ------ | ------------------------------------------------------------------------------------ |
-| `xlsx-parser`      | `file-io/xlsx/parser/`  | ~147K  | SIMD-optimized XLSX parsing, ZIP decompression, XML scanning, shared strings, styles |
-| `xlsx-api`         | `file-io/xlsx-api/`     | ~1.8K  | High-level XLSX access API                                                           |
-| `ooxml-types`      | `file-io/ooxml/types/`  | ~45K   | Code-generated type definitions from OOXML spec                                      |
-| `pdf-core`         | `file-io/pdf/core/`     | ~5.7K  | PDF generation core                                                                  |
+- `xlsx-parser`, `xlsx-api`, `xlsx-test-contracts`, `xml-derive`,
+  `csv-parser`, `ooxml-types`, and `pdf-core`.
 
-### Infrastructure Crates
+### Rust Bridge Crates
 
-| Crate              | Location                          | Lines  | Purpose                                                |
-| ------------------ | --------------------------------- | ------ | ------------------------------------------------------ |
-| `bridge-types`     | `infra/rust-bridge/bridge-types/` | -      | Shared types for Rust bridge                           |
-| `bridge-derive`    | `infra/rust-bridge/bridge-derive/`| -      | Derive macros for bridge                               |
-| `bridge-core`      | `infra/rust-bridge/bridge-core/`  | -      | Core bridge logic                                      |
-| `bridge-wasm`      | `infra/rust-bridge/bridge-wasm/`  | -      | WASM transport for bridge                              |
-| `bridge-delegate`  | `infra/rust-bridge/bridge-delegate/` | -   | Delegate transport for bridge                          |
-| `bridge-tauri`     | `infra/rust-bridge/bridge-tauri/` | -      | Tauri transport for bridge                             |
-| `bridge-napi`      | `infra/rust-bridge/bridge-napi/`  | -      | N-API transport for bridge                             |
-| `bridge-ts`        | `infra/rust-bridge/bridge-ts/`    | -      | TypeScript codegen for bridge                          |
+- `bridge-describe`, `bridge-types`, `bridge-derive`, `bridge-ir`,
+  `bridge-core`, `bridge-wasm`, `bridge-wasm-macros`, `bridge-delegate`,
+  `bridge-delegate-macros`, `bridge-tauri`, `bridge-tauri-macros`,
+  `bridge-napi`, `bridge-napi-macros`, `bridge-pyo3`,
+  `bridge-pyo3-macros`, and `bridge-ts`.
 
-### Runtime Crates
+Shared workspace dependencies include `serde`, `serde_json`, `uuid`,
+`chrono`, `thiserror`, `tracing`, and `yrs`. The release profile uses
+`opt-level = 3`, LTO, and a single codegen unit.
 
-| Crate              | Location              | Lines  | Purpose                                                |
-| ------------------ | --------------------- | ------ | ------------------------------------------------------ |
-| `spreadsheet-os`   | `runtime/src-tauri/`  | ~9K    | Tauri desktop app shell, IPC commands, plugins         |
+## Excel Functions
 
-Shared workspace dependencies: `serde`, `serde_json`, `uuid`, `chrono`, `thiserror`, `tracing`, `yrs`
+Formula evaluation lives in the Rust compute workspace. `compute-core` depends
+on `compute-functions`, which is documented in `compute/core/Cargo.toml` as the
+function library for 512+ Excel-compatible pure functions.
 
-Release profile: `opt-level = 3`, LTO enabled, single codegen unit.
-
-## Contracts Sub-paths
-
-The `contracts` package exports types via sub-paths for tree-shaking. The full list of sub-path exports can be found in `contracts/package.json` under the `exports` field.
-
-## Excel Functions (Rust compute-core)
-
-508+ Excel-compatible functions implemented in Rust across 10 categories:
-
-| Category             | Count |
-| -------------------- | ----- |
-| Statistical          | 143   |
-| Math                 | 77    |
-| Engineering          | 54    |
-| Financial            | 52    |
-| Text                 | 44    |
-| Lookup & Reference   | 25    |
-| Date/Time            | 23    |
-| Information          | 13    |
-| Database             | 12    |
-| Logical              | 10    |
-
-Function modules are organized under `compute/core/crates/compute-functions/src/` with sub-modules for each category (e.g., `statistical/`, `financial/`, `text/`, `math/`).
+Function registration is centralized in
+`compute/core/crates/compute-functions/src/registry.rs`. The registered
+categories are math, text, logical, lookup, statistical, datetime, financial,
+engineering, database, information, and web. Static UI metadata for function
+names, categories, descriptions, and arity lives in
+`spreadsheet-utils/src/function-catalog.ts`.
 
 ## Adding a New Package
 
-```bash
+For a new TypeScript package, add the package directory, define its
+`package.json` with explicit `exports`, add the package to `pnpm-workspace.yaml`,
+and follow the existing `tsconfig` and test setup used by neighboring packages.
+
+```text
 {package-name}/
-├── src/
-│   └── index.ts          # Public exports
-├── __tests__/
-│   └── {name}.test.ts
-├── package.json          # @mog/{name}
-├── tsconfig.json
-└── jest.config.cjs
+  src/
+    index.ts
+  __tests__/
+    {name}.test.ts
+  package.json
+  tsconfig.json
+  jest.config.cjs
 ```
 
-Dependencies should only point to `contracts` and packages in lower layers.
+Keep dependencies aligned with the import-boundary layers and avoid adding
+dependencies on workspace-private packages from public package surfaces.

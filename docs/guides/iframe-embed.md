@@ -1,13 +1,13 @@
 # iframe Embed
 
-> **Reserved** — This guide is pending the embed product matrix promotion. It will cover embedding Mog in a cross-origin iframe with full isolation, postMessage API, and security configuration.
+> **Reserved** — Mog does not currently publish a public iframe embed entrypoint or documented embed host page. Use [Embed: Web Component](embed-web-component.md) or [Embed: React](embed-react.md) for supported public embeds.
 
-When approved, this guide will document:
+The source tree contains reserved iframe transport plumbing for a versioned postMessage protocol, but it is not exported from `@mog-sdk/embed` and should not be imported by applications.
 
-- Loading the Mog embed host page in an iframe
-- Cross-origin communication via postMessage protocol
-- Content Security Policy and sandbox attribute configuration
-- Passing workbook data and receiving edit events across the iframe boundary
-- Authentication token forwarding for self-hosted deployments
+Until a public iframe integration is released, do not rely on:
+
+- `@mog-sdk/embed/iframe` or source-internal iframe modules
+- Raw workbook URLs, bytes, provider config, storage credentials, or bearer/refresh tokens in embed config
+- Cross-origin save, edit, or collaboration behavior beyond what the public same-page embed guides document
 
 See [Security and Governance](security-and-governance.md) for trust boundary context.

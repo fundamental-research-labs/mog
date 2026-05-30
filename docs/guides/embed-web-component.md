@@ -2,7 +2,7 @@
 
 Embed a Mog spreadsheet in any browser page with `<mog-sheet>` from `@mog-sdk/embed`.
 
-The web component uses the same host-policy contract as the React component. Public markup must not pass raw `src` URLs or bytes. Set `config` to an opaque source ref and `hostPolicy` to a trusted same-origin resolver; the component boots through the web-component host adapter after source and effective-state resolution.
+The web component uses the same host-policy contract as the React component. Public markup must not pass raw `src` URLs or bytes. Set `config` to an opaque source ref and `hostPolicy` to a trusted same-origin resolver; the web-component host adapter resolves the source before creating the client, then resolves effective state into the read-only snapshot and `mog-effective-state-change` events.
 
 ```html
 <mog-sheet id="sheet" style="width: 100%; height: 600px"></mog-sheet>
@@ -48,4 +48,4 @@ The web component uses the same host-policy contract as the React component. Pub
 </script>
 ```
 
-`requestSave()` and `requestExport()` are allowed only when effective state grants the operation. Callback presence alone is never a grant: save requires `save` plus a compatible save policy, and export requires `export` plus a non-`none` save policy. A raw `src` attribute is rejected with `mog-error`.
+`requestSave()` and `requestExport()` are allowed only when effective state grants the operation. Callback presence alone is never a grant: save requires `save` plus `host-callback` or `autosave` (live collaboration only allows `autosave`), and export requires `export` plus a non-`none` save policy. A raw `src` attribute is rejected with `mog-error`.

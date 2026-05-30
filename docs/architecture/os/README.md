@@ -1,24 +1,20 @@
 # OS Architecture
 
-The Spreadsheet OS is a layered system where apps build on shell, shell builds on kernel, and kernel coordinates hardware packages.
+The Spreadsheet OS is a layered system: shell hosts apps, apps own their user experience, kernel owns document state and services, and standalone packages provide compute, rendering, file I/O, and runtime surfaces.
 
 ## Layer Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  APPS                                                                        │
-│  TypeScript/React code importing kernel & shell as libraries                 │
-│  Each app owns its chrome (toolbar, navigation, panels)                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  WINDOW MANAGER                                                              │
-│  ├── Focus: Which app/pane has keyboard focus                                │
-│  ├── Keyboard: Route shortcuts to focused app                                │
-│  └── Layout: Panel splits, tabs (future)                                     │
+│  TypeScript/React app packages loaded by shell                               │
+│  Each app owns its chrome (toolbar, navigation, panels, dialogs)             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  SHELL                                                                       │
 │  ├── Host: Renders apps, provides AppSlot                                    │
 │  ├── Components: Reusable UI primitives                                      │
-│  ├── Machines: View-specific state (selection, editing)                      │
+│  ├── Machines: Shell-level focus state                                       │
+│  ├── Services: Document, project, platform, and capability contexts          │
 │  ├── App-Launcher: App discovery and switching                               │
 │  └── Bootstrap: Shell initialization                                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -27,54 +23,68 @@ The Spreadsheet OS is a layered system where apps build on shell, shell builds o
 │  ├── Domain: Cells, sheets, tables, formatting, formulas, etc.               │
 │  ├── Services: Clipboard, Undo, Notifications, and more                      │
 │  ├── Context: EventBus, KernelContext                                        │
-│  ├── Bridges: Connect to compute-core, database, pivots, slicers             │
+│  ├── Bridges: Connect to compute-core, locale, schema, pivots, slicers       │
 │  ├── Selectors: Reactive state selectors                                     │
-│  └── API: App, Workbook, Worksheet namespaces                                │
+│  └── API: Workbook, Worksheet, and capability-gated app APIs                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  HARDWARE                                                                    │
-│  Standalone computation packages (no Yrs, no React)                          │
-│  Compute:   compute-core (Rust) │ compute-api │ number-formats              │
-│             table-engine                                                     │
+│  HARDWARE / RUNTIME PACKAGES                                                 │
+│  Standalone compute, rendering, file I/O, and runtime packages               │
+│  Compute:   compute-core (Rust) │ compute-api │ compute/wasm │ compute/napi │
+│             compute/pyo3 │ table-engine │ compute-formats                   │
 │  Canvas:    canvas/engine │ canvas/grid-renderer │ canvas/grid-canvas        │
 │             canvas/drawing-canvas │ canvas/overlay │ canvas/spatial           │
 │  Drawing:   canvas/drawing (shapes, geometry, ink, diagram, text-effects)    │
 │  Charts:    charts                                                           │
 │  File I/O:  file-io                                                          │
-│  Runtime:   runtime/server │ runtime/sdk                                     │
-│  Desktop:   runtime/src-tauri (Rust/Tauri)                                   │
+│  Runtime:   runtime/sdk │ runtime/embed │ runtime/spreadsheet-app            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Key Architectural Decisions
 
-### 1. One Kernel API
+### 1. Kernel APIs by Consumer
 
-No simplified "app API" vs "full kernel" split. Apps use the namespaces they need:
+External SDK and infrastructure code use the unified Workbook/Worksheet API:
 
 ```typescript
-// App kernel API exposes workbook and worksheet namespaces
-const kernel = useKernel();
+const wb = await createWorkbook(options);
+const ws = await wb.getSheet("Sheet1");
 
 // Workbook-level: sheets, styles, names, history
-kernel.workbook.sheets.list();
+await wb.sheets.add("Sales");
+await wb.history.undo();
 
 // Worksheet-level: cells, tables, formatting, charts, pivots, etc.
-kernel.worksheet.setCell(sheetId, row, col, value);
+await ws.setCell("A1", 42);
+await ws.tables.add("A1:D10", options);
+```
+
+Shell-hosted apps receive a capability-gated app API through `AppProps.kernel`:
+
+```typescript
+if (kernel.tables?.list) {
+  const tables = await kernel.tables.list();
+}
+
+if (kernel.records?.list) {
+  const records = await kernel.records.list(tableId);
+}
 ```
 
 ### 2. Apps Own Their Chrome
 
-Shell provides reusable view components. Apps compose them with their own chrome:
+Shell provides hosting and reusable UI primitives. Apps compose them with their own chrome:
 
 ```typescript
 // Spreadsheet app owns toolbar, formula bar, sheet tabs
 function SpreadsheetApp() {
   return (
     <>
-      <Toolbar />           {/* App-owned */}
-      <FormulaBar />        {/* App-owned */}
-      <GridCanvas {...} />  {/* From shell */}
-      <SheetTabs />         {/* App-owned */}
+      <ToolbarContainer />   {/* App-owned */}
+      <FormulaBarContainer />{/* App-owned */}
+      <SpreadsheetGrid />    {/* App-owned grid over canvas packages */}
+      <TabStrip />           {/* App-owned */}
+      <StatusBar />          {/* App-owned */}
     </>
   );
 }
@@ -85,17 +95,17 @@ function SpreadsheetApp() {
 | Service       | Data                   | Location | Rendering              |
 | ------------- | ---------------------- | -------- | ---------------------- |
 | Clipboard     | Payload, state machine | Kernel   | Apps handle paste      |
-| Undo          | Yrs UndoManager        | Kernel   | Apps show button       |
-| Notifications | Toast queue            | Kernel   | Shell renders          |
+| Undo          | Rust compute-core state | Kernel   | Apps show button       |
+| Notifications | Toast queue            | Kernel   | App/shell UI renders   |
 
 ### 4. Machine Placement by Scope
 
 | Scope         | Location               | Examples                                 |
 | ------------- | ---------------------- | ---------------------------------------- |
-| App-specific  | App (spreadsheet)      | GridSelectionMachine, GridEditorMachine, ClipboardMachine |
-| Shell-level   | Shell (machines)       | FocusMachine                             |
+| App-specific  | App (spreadsheet)      | selectionMachine, editorMachine, clipboardMachine, paneFocusMachine |
+| Shell-level   | Shell (machines)       | focusMachine                             |
 | Kernel-level  | Kernel (services)      | Clipboard, Undo, Notifications           |
-| Focus/routing | Shell (machines)       | FocusMachine                             |
+| Focus/routing | Shell + app input systems | focusMachine, paneFocusMachine        |
 
 **The test**: "Does this state need to survive switching apps?"
 
@@ -104,21 +114,14 @@ function SpreadsheetApp() {
 
 ### 5. Configurable View Components
 
-GridCanvas with feature flags enables different apps to use subsets:
+GridCanvas exposes preset and feature props for apps that embed the grid view:
 
 ```typescript
 <GridCanvas
-  kernel={kernel}
-  sheetId={activeSheet}
-  features={{
-    editing: true,
-    selection: true,
-    formulas: true,      // Spreadsheet: true, Dashboard: false
-    formatting: true,    // Spreadsheet: true, Slides: false
-    resize: true,
-    fill: true,
-    collaboration: true,
-  }}
+  workbook={workbook}
+  config={viewConfig}
+  preset="full" // also: "embedded", "readonly"
+  features={{ contextMenu: false, keyboard: true }}
 />
 ```
 
@@ -131,18 +134,18 @@ User Action (keyboard, click, etc.)
 [1] Shell routes to focused app
         │
         ▼
-[2] App handles action, calls Kernel API
+[2] App handles action, calls Workbook/Worksheet or gated app API
         │
         ▼
-[3] Kernel mutation writes to Rust/Yrs, emits event
+[3] Kernel mutation calls compute bridge; Rust mutates Yrs and recalculates
         │
-        ├──▶ [4] EventBus notifies subscribers
+        ├──▶ [4] MutationResultHandler patches state and emits events
         │         │
-        │         ├──▶ Recalc (formula dependencies)
-        │         ├──▶ Bridges (validation, charts, etc.)
-        │         └──▶ Shell views (re-render)
+        │         ├──▶ EventBus subscribers
+        │         ├──▶ Bridges (validation, pivots, slicers, charts, etc.)
+        │         └──▶ App hooks/views (re-render or invalidate)
         │
-        └──▶ [5] Yrs syncs to other clients / IndexedDB
+        └──▶ [5] RustDocument fans update_v1 to providers / collab sidecars
 ```
 
 ## Abstraction Levels
@@ -151,10 +154,10 @@ Not all data needs full typing. Users can work at any level:
 
 | Level | What Exists     | Use Case                               | API         |
 | ----- | --------------- | -------------------------------------- | ----------- |
-| 0     | Sheet + Cells   | Quick calculations, scratch work       | `Cells.*`   |
-| 1     | Table (untyped) | Data with headers, no type enforcement | `Tables.*`  |
-| 2     | Table + Schema  | Typed columns with constraints         | `Columns.*` |
-| 3     | Records         | Rows as entities, relations, views     | `Records.*` |
+| 0     | Sheet + Cells   | Quick calculations, scratch work       | `Worksheet.*` / gated `cells` |
+| 1     | Table (untyped) | Data with headers, no type enforcement | `Worksheet.tables` / app `tables` |
+| 2     | Table + Schema  | Typed columns with constraints         | App `columns` |
+| 3     | Records         | Rows as entities, relations, views     | `Workbook.records` / app `records` |
 
 Each level builds on the previous. You can always drop down.
 
@@ -164,18 +167,18 @@ Each level builds on the previous. You can always drop down.
 
 ```typescript
 // Copy selection
-kernel.clipboard.copy(payload);
+kernel.clipboard?.copy?.(payload);
 
-// Paste into target
-kernel.clipboard.paste();
+// Read payload for the target view to paste
+const payload = kernel.clipboard?.getPayload?.();
 ```
 
 ### Undo/Redo
 
 ```typescript
 // Works across the application
-kernel.undo.undo(); // Cmd+Z
-kernel.undo.redo(); // Cmd+Shift+Z
+await kernel.undo?.undo(); // Cmd+Z
+await kernel.undo?.redo(); // Cmd+Shift+Z
 ```
 
 ## Detailed Documentation

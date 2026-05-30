@@ -1,37 +1,46 @@
 # Apps
 
-Apps are TypeScript/React code that import kernel and shell as libraries. Currently the only app is **spreadsheet**.
+Apps are TypeScript/React packages loaded by the shell. The current first-party app package under `apps/` is **spreadsheet**.
 
 ## Current Apps
 
-| App                | Purpose                       |
-| ------------------ | ----------------------------- |
-| `apps/spreadsheet` | Spreadsheet app with XLSX import/export and formula compatibility |
+| App                | Purpose                                                              |
+| ------------------ | -------------------------------------------------------------------- |
+| `apps/spreadsheet` | Spreadsheet app with workbook chrome, grid integration, and formulas |
 
 ## Spreadsheet App Structure
 
 ```
 apps/spreadsheet/
+├── index.tsx               # Package entry point
+├── register.ts             # Side-effect app registration
+├── manifest.ts             # App manifest
 ├── src/
-│   ├── index.tsx           # Main app component
+│   ├── index.tsx           # Main app component and app-owned chrome
+│   ├── actions/            # User actions
+│   ├── adapters/           # Integration adapters
 │   ├── app/                # App-level setup
+│   ├── cache/              # Caching layer
 │   ├── chrome/             # Toolbar, formula bar, sheet tabs
 │   ├── components/         # App-specific UI components
 │   ├── coordinator/        # View coordination
+│   ├── dev/                # Development-only app surfaces
+│   ├── devtools/           # App devtools integration
 │   ├── dialogs/            # Dialog components
 │   ├── domain/             # App domain logic
+│   ├── entries/            # Package subpath entries
 │   ├── extensions/         # Feature extensions
 │   ├── hooks/              # App-specific hooks
+│   ├── infra/              # Infrastructure
 │   ├── keyboard/           # Keyboard shortcut handling
 │   ├── pivot/              # Pivot table UI
-│   ├── systems/            # App subsystems
-│   ├── actions/            # User actions
-│   ├── cache/              # Caching layer
+│   ├── selectors/          # App-local selectors
+│   ├── systems/            # App subsystems and state machines
 │   ├── ui-store/           # App UI state
+│   ├── ux/                 # Interaction helpers
 │   ├── utils/              # Utilities
-│   └── infra/              # Infrastructure
+│   └── views/              # App-contributed views
 ├── __mocks__/              # Test mocks
-├── manifest.ts             # App manifest
 ├── package.json
 ├── tsconfig.json
 └── jest.config.cjs
@@ -39,28 +48,27 @@ apps/spreadsheet/
 
 ## Kernel API Usage
 
-Apps access the kernel via the `useKernel()` hook. The API is organized into workbook-level and worksheet-level namespaces:
+Shell-hosted apps receive a capability-gated kernel API as an `AppProps.kernel` prop. The full app kernel interface is defined in `@mog-sdk/contracts/apps`; the gated interface exposes only the sub-APIs granted to the app, plus capability introspection.
 
 ```typescript
-const kernel = useKernel();
+import type { AppProps } from '@mog/shell/apps';
 
-// Workbook-level operations
-kernel.workbook.sheets.list();
-kernel.workbook.history.undo();
+async function loadTables({ kernel }: AppProps) {
+  if (!kernel.tables?.list) return [];
 
-// Worksheet-level operations
-kernel.worksheet.setCell(sheetId, row, col, value);
-kernel.worksheet.tables.create(sheetId, range);
+  return kernel.tables.list();
+}
 ```
 
 ## App Registration
 
-Apps are discovered via a Vite plugin in the shell (`shell/src/apps/vite-plugin-apps.ts`). The shell's app-launcher system handles app switching and loading.
+Apps register with the shell by calling `registerApps()` from `@mog/shell/host/app-registry`. The spreadsheet package does this in `apps/spreadsheet/register.ts`, and runtime entry points import that module for its side effect. `AppSlot` launches apps through the capability flow and `AppLoader` renders the registered component.
 
 ## UI Primitives
 
-Apps use the shared `@mog/ui` package for base components:
+Apps can use the shared `@mog/ui` package for kernel-agnostic UI and data-view components:
 
 ```typescript
-import { Button, Dialog, DropdownMenu, Tooltip } from '@mog/ui';
+import { KanbanBoard } from '@mog/ui';
+import type { ColumnInfo } from '@mog/ui';
 ```

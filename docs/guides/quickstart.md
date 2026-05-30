@@ -1,41 +1,67 @@
 # Quickstart
 
-> **Status: skeleton — content pending package stabilization**
-
-Get Mog running in under 5 minutes. By the end of this guide you will have a workbook in memory, written values to cells, and read them back.
+Get Mog running in under 5 minutes with the public Node SDK. By the end of
+this guide you will have a workbook in memory, written values to cells, and
+read formula results back.
 
 ## Prerequisites
 
-- Node.js 20+ or Bun 1.1+
+- Node.js 18+
 - npm, pnpm, or yarn
 - Basic familiarity with TypeScript/JavaScript
 
 ## Install
 
-How to install `@mog-sdk/kernel` (browser/WASM) or `@mog-sdk/node` (server/N-API). Package names, version constraints, and peer dependencies.
+```bash
+npm install @mog-sdk/node
+```
+
+The package loads the native N-API engine for the current platform through
+optional `@mog-sdk/*` platform packages.
 
 ## Create a Workbook
 
-Instantiate a blank workbook, add a sheet, and inspect the default state.
+Instantiate a blank workbook and inspect the active sheet.
 
 ```typescript
-// example: create workbook, add sheet
+import { createWorkbook } from '@mog-sdk/node';
+
+const wb = await createWorkbook();
+const ws = wb.activeSheet;
+
+console.log(wb.sheetCount);
+console.log(ws.name);
 ```
 
 ## Read and Write Cells
 
-Write values (strings, numbers, booleans) to cells by address or CellId. Read them back. Cover the difference between display values and raw values.
+Write primitive values by A1 address or numeric row/column position. Read
+computed values with `getValue()` and cell metadata with `getCell()`.
 
 ```typescript
-// example: set cell, get cell
+await ws.setCell('A1', 42);
+await ws.setCell(1, 0, 58); // A2, using zero-based row/column indexes
+
+console.log(await ws.getValue('A1')); // 42
+console.log(await ws.getCell('A1')); // value plus metadata such as formula/format
 ```
 
 ## Write a Formula
 
-Set a formula on a cell, trigger recalc, and read the computed result.
+Strings starting with `=` are stored as formulas. `setCell()` recalculates the
+workbook before it resolves for ordinary cell writes.
 
 ```typescript
-// example: set formula, read result
+await ws.setCell('A3', '=SUM(A1:A2)');
+
+console.log(await ws.getValue('A3')); // 100
+console.log((await ws.getCell('A3')).formula); // =SUM(A1:A2)
+```
+
+Dispose the workbook when finished so the SDK can release native resources.
+
+```typescript
+wb.dispose();
 ```
 
 ## Next Steps

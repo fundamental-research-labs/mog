@@ -74,7 +74,7 @@ import type { KeyboardInput } from '@mog-sdk/contracts/keyboard';
 Bad:
 
 ```ts
-import { KeyboardEventProcessor } from '@mog-sdk/kernel/internal';
+import { ComputeCore } from '@mog-sdk/kernel/internal';
 import { DocumentFactory } from '../../kernel/src/api/document/document-factory';
 ```
 

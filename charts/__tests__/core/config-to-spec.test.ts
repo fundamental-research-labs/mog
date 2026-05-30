@@ -473,6 +473,24 @@ describe('buildEncoding - axis config', () => {
     expect(encoding.x!.axis).toBeUndefined();
     expect(encoding.y!.axis).toBeUndefined();
   });
+
+  it('should reserve category slot geometry for imported bar gap and overlap settings', () => {
+    const columnEncoding = buildEncoding(
+      makeConfig({ type: 'column', gapWidth: 150, overlap: 100 }),
+      SINGLE_SERIES_DATA,
+    );
+    const barEncoding = buildEncoding(
+      makeConfig({ type: 'bar', gapWidth: 150, overlap: 100 }),
+      SINGLE_SERIES_DATA,
+    );
+
+    expect(columnEncoding.x!.scale).toEqual(
+      expect.objectContaining({ paddingInner: 0, paddingOuter: 0 }),
+    );
+    expect(barEncoding.y!.scale).toEqual(
+      expect.objectContaining({ paddingInner: 0, paddingOuter: 0 }),
+    );
+  });
 });
 
 // =============================================================================
@@ -563,6 +581,14 @@ describe('buildConfigSpec - colors', () => {
     expect(configSpec).toBeDefined();
     expect(configSpec!.stack).toBe('zero');
     expect(configSpec!.range).toEqual({ category: ['#aaaaaa', '#bbbbbb'] });
+  });
+
+  it('should carry imported bar gap and overlap into grammar config', () => {
+    const configSpec = buildConfigSpec(makeConfig({ gapWidth: 150, overlap: 100 }));
+
+    expect(configSpec).toBeDefined();
+    expect(configSpec!.gapWidth).toBe(150);
+    expect(configSpec!.overlap).toBe(100);
   });
 
   it('should derive category colors from imported series theme fills', () => {
@@ -1093,6 +1119,32 @@ describe('configToSpec - compile round-trip', () => {
       },
     ]);
     expect(marks[0]).toBe(result.background?.[0]);
+  });
+
+  it('should render Excel gapWidth as narrower stacked columns inside each category slot', () => {
+    const config = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      gapWidth: 150,
+      overlap: 100,
+    });
+    const spec = configToSpec(config, MULTI_SERIES_DATA);
+    const result = compile(spec, undefined, { width: 600, height: 400 });
+    const rects = result.marks.filter((mark) => mark.type === 'rect');
+    const firstCategoryBars = rects
+      .filter((mark) => (mark.datum as Record<string, unknown>).category === 'A')
+      .sort((a, b) => a.x - b.x);
+    const secondCategoryBar = rects.find(
+      (mark) => (mark.datum as Record<string, unknown>).category === 'B',
+    );
+
+    expect(firstCategoryBars).toHaveLength(2);
+    expect(firstCategoryBars[0].x).toBeCloseTo(firstCategoryBars[1].x, 6);
+    expect(firstCategoryBars[0].width).toBeCloseTo(firstCategoryBars[1].width, 6);
+    expect(secondCategoryBar).toBeDefined();
+
+    const categoryStep = secondCategoryBar!.x - firstCategoryBars[0].x;
+    expect(firstCategoryBars[0].width / categoryStep).toBeCloseTo(0.4, 2);
   });
 
   it('should produce a spec that the compiler accepts (line chart)', () => {

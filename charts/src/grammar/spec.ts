@@ -591,6 +591,10 @@ export type StackMode = 'zero' | 'normalize' | 'center' | false;
 export interface ConfigSpec {
   /** Stack mode for bar/area charts */
   stack?: StackMode;
+  /** Excel/OOXML bar-category gap width as a percentage of one bar width */
+  gapWidth?: number;
+  /** Excel/OOXML intra-category series overlap percentage (-100 to 100) */
+  overlap?: number;
   /** Background color */
   background?: string;
   /** Padding around the chart */

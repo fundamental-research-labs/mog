@@ -632,6 +632,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     encoding.x = { field: 'category', type: 'nominal' };
     encoding.y = { field: 'value', type: 'quantitative' };
   }
+  const isHorizontal = isHorizontalBarType(chartType);
 
   // Apply axis config
   if (config.axis) {
@@ -659,6 +660,8 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     }
   }
 
+  applyBarCategorySpacingScale(config, encoding, isHorizontal);
+
   // Color encoding for multi-series
   const colorChannel = buildColorEncoding(
     hasMultipleSeries,
@@ -673,6 +676,26 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   applyStackedValueDomain(config, data, encoding);
 
   return encoding;
+}
+
+function hasBarSpacingConfig(config: ChartConfig): boolean {
+  return typeof config.gapWidth === 'number' || typeof config.overlap === 'number';
+}
+
+function applyBarCategorySpacingScale(
+  config: ChartConfig,
+  encoding: EncodingSpec,
+  isHorizontal: boolean,
+): void {
+  if (MARK_TYPE_MAP[config.type] !== 'bar' || !hasBarSpacingConfig(config)) return;
+  const categoryChannel = isHorizontal ? encoding.y : encoding.x;
+  if (!categoryChannel) return;
+
+  categoryChannel.scale = {
+    ...(categoryChannel.scale ?? {}),
+    paddingInner: 0,
+    paddingOuter: 0,
+  };
 }
 
 function isHorizontalBarType(chartType: ChartType): boolean {
@@ -868,6 +891,15 @@ export function buildConfigSpec(config: ChartConfig): ConfigSpec | undefined {
   const stack = resolveStackMode(config);
   if (stack !== undefined) {
     configSpec.stack = stack;
+    hasConfig = true;
+  }
+
+  if (typeof config.gapWidth === 'number') {
+    configSpec.gapWidth = config.gapWidth;
+    hasConfig = true;
+  }
+  if (typeof config.overlap === 'number') {
+    configSpec.overlap = config.overlap;
     hasConfig = true;
   }
 

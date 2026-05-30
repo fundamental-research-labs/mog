@@ -14,6 +14,48 @@ import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 
+type BarSlotGeometry = {
+  offset: number;
+  size: number;
+};
+
+function finiteNumber(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hasExplicitBarSpacing(config: ConfigSpec | undefined): boolean {
+  return finiteNumber(config?.gapWidth) !== undefined || finiteNumber(config?.overlap) !== undefined;
+}
+
+function scaleStep(scale: AnyScale, fallback: number): number {
+  const raw = typeof scale.step === 'function' ? scale.step() : fallback;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+function excelBarSlotGeometry(
+  categoryStep: number,
+  groupCount: number,
+  groupIndex: number,
+  config: ConfigSpec | undefined,
+): BarSlotGeometry {
+  const safeGroupCount = Math.max(1, groupCount);
+  const safeGroupIndex = clamp(groupIndex, 0, safeGroupCount - 1);
+  const gapRatio = clamp(finiteNumber(config?.gapWidth) ?? 150, 0, 500) / 100;
+  const overlapRatio = clamp(finiteNumber(config?.overlap) ?? 0, -100, 100) / 100;
+  const groupStepUnits = 1 - overlapRatio;
+  const clusterUnits = 1 + (safeGroupCount - 1) * groupStepUnits;
+  const barSize = categoryStep / (clusterUnits + gapRatio);
+  const clusterSize = barSize * clusterUnits;
+  return {
+    offset: (categoryStep - clusterSize) / 2 + safeGroupIndex * barSize * groupStepUnits,
+    size: barSize,
+  };
+}
+
 /**
  * Generate bar marks.
  */
@@ -188,8 +230,12 @@ export function generateBarMarks(
       // Horizontal bar
       const barY = yScale(yValue) as number; // Category axis always uses original scale
       const fullBandHeight = typeof yScale.bandwidth === 'function' ? yScale.bandwidth() : 20;
-      const barHeight = fullBandHeight / numGroups;
-      const groupOffset = groupIndex * barHeight;
+      const explicitSpacing = hasExplicitBarSpacing(config);
+      const slot = explicitSpacing
+        ? excelBarSlotGeometry(scaleStep(yScale, fullBandHeight), numGroups, groupIndex, config)
+        : { offset: groupIndex * (fullBandHeight / numGroups), size: fullBandHeight / numGroups };
+      const barHeight = slot.size;
+      const groupOffset = slot.offset;
 
       const scaledX = effectiveXScale(xValue) as number;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.x;
@@ -248,8 +294,12 @@ export function generateBarMarks(
       // Vertical bar
       const barX = xScale(xValue) as number; // Category axis always uses original scale
       const fullBandWidth = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : 20;
-      const barWidth = fullBandWidth / numGroups;
-      const groupOffset = groupIndex * barWidth;
+      const explicitSpacing = hasExplicitBarSpacing(config);
+      const slot = explicitSpacing
+        ? excelBarSlotGeometry(scaleStep(xScale, fullBandWidth), numGroups, groupIndex, config)
+        : { offset: groupIndex * (fullBandWidth / numGroups), size: fullBandWidth / numGroups };
+      const barWidth = slot.size;
+      const groupOffset = slot.offset;
 
       const yPos = effectiveYScale(yValue) as number;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.y + layout.plotArea.height;

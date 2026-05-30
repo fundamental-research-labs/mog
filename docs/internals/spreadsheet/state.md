@@ -2,9 +2,9 @@
 
 ## Architecture Overview
 
-Mog keeps durable workbook state in the Rust compute engine and keeps
-TypeScript responsible for lifecycle, services, events, UI state, and feature
-coordination.
+Mog keeps authoritative live workbook state in the Rust compute engine and
+keeps TypeScript responsible for lifecycle, services, events, UI state, and
+feature coordination.
 
 ```
 Consumers
@@ -13,7 +13,7 @@ Consumers
       | reads and writes
       v
 DocumentContext
-  services, event bus, bridges, state mirror, write gates
+  services, event bus, bridges, state mirror, write/operation gates
       |
       | ComputeBridge / ComputeCore
       v
@@ -31,8 +31,8 @@ UI systems
 ```
 
 The important boundary is the mutation boundary. User-facing writes eventually
-flow through generated `ComputeBridge` methods, `ComputeCore.mutate(...)`, and
-Rust `apply_mutation(...)`. Rust returns binary viewport patches and a
+flow through `ComputeBridge` methods, `ComputeCore.mutate(...)`, and Rust
+`apply_mutation(...)`. Rust returns binary viewport patches and a
 `MutationResult`. TypeScript applies those results and emits semantic events
 after the Rust state has already changed.
 
@@ -48,7 +48,7 @@ after the Rust state has already changed.
 `DocumentContext` is the per-document dependency container for kernel and app
 code. It replaces the older `StoreContext` terminology.
 
-The public contract is layered:
+The context contract is layered:
 
 | Layer | Purpose |
 | --- | --- |
@@ -58,28 +58,36 @@ The public contract is layered:
 | `DocumentContext` | Kernel-local compute bridge, write gate, operation gate, workbook links, selection checkpoints |
 
 `createDocumentContext(computeBridge, options)` creates the event bus, state
-mirror, range metadata cache, feature bridges, services, write gates, workbook
-link scope, and cleanup registry. It does not fully start the document on its
-own.
+mirror, range metadata cache, feature bridges, services, write gate, operation
+gate, workbook link service/scope, and `destroy()` cleanup path. It does not
+fully start the document on its own.
 
 Document creation is owned by the document lifecycle system:
 
 ```
 DocumentFactory.create()
   -> DocumentLifecycleSystem
-     -> creates ComputeBridge
-     -> creates RustDocument
+     -> creates ComputeBridge with DeferredContext
+     -> creates RustDocument and waits for rustDocument.ready
      -> creates DocumentContext
      -> calls computeBridge.setContext(context)
      -> calls computeBridge.initMutationHandler()
-     -> starts bridge services
+     -> starts computeBridge
+     -> installs the compute-bridge WriteGate
+     -> starts SchemaValidationBridge in app/browser mode
+     -> attaches Providers after the bridge reaches STARTED
   -> returns DocumentHandle
 ```
 
-External consumers should use `DocumentFactory.create()` or the higher-level
-workbook APIs. A public `DocumentHandle` exposes `workbook()`, `eventBus`,
-`undoService`, storage/collaboration/checkpoint methods, and disposal methods.
-The raw context is an internal handle field, not the public application API.
+Shipped public package consumers should use the public runtime facade that
+matches their host, such as `createWorkbook(...)` from `@mog-sdk/node`,
+`@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`. `@mog-sdk/kernel` is
+`private: true`; its `DocumentFactory` is a workspace-internal document
+lifecycle surface used by the app, SDK boot path, and tests. A workspace
+`DocumentHandle` exposes `workbook()`, `eventBus`, `undoService`,
+storage/checkpoint methods, collaboration attachment hooks, and disposal
+methods. The raw context is only on `DocumentHandleInternal`, not on the public
+application API.
 
 Disposal follows the same ownership path. `DocumentHandle.dispose()` enters the
 document lifecycle disposal state, destroys the `DocumentContext`, destroys the
@@ -89,10 +97,14 @@ document lifecycle disposal state, destroys the `DocumentContext`, destroys the
 
 **Location:** `kernel/src/domain/`
 
-Domain modules are a thin delegation layer over `DocumentContext` and
-`ComputeBridge`. They should not own state, perform lifecycle work, or emit
-events manually. Reads await compute bridge calls. Writes delegate to compute
-bridge mutations and let the mutation pipeline emit events.
+Domain modules are primarily a thin delegation layer over `DocumentContext` and
+`ComputeBridge`. Durable workbook reads await compute bridge calls. Durable
+workbook writes should delegate to compute bridge mutations and let the mutation
+pipeline emit workbook-data events. Feature bridges and feature-specific domain
+helpers that own derived cache/UI projections, such as schema, slicer, or
+diagram helpers, may emit semantic invalidation events, but they should not
+become a second workbook state store or bypass the Rust mutation path for
+workbook data.
 
 Common domain areas include:
 
@@ -105,8 +117,10 @@ Common domain areas include:
 | UI-adjacent helpers | clipboard, selection, viewport helpers |
 
 The low-level namespace facade in `kernel/src/api/index.ts` currently exposes
-experimental `Cells`, `Sheets`, and `Records` namespaces. The stable high-level
-entry point for consumers is the workbook API created by `createWorkbook(...)`.
+experimental workspace `Cells`, `Sheets`, and `Records` namespaces. The stable
+high-level public Node entry point is the workbook API created by
+`createWorkbook(...)` from `@mog-sdk/node`; the kernel `createWorkbook(...)` is
+the workspace implementation behind that SDK surface.
 
 ## Mutation Pipeline
 
@@ -125,7 +139,7 @@ entry point for consumers is the workbook API created by `createWorkbook(...)`.
 The current mutation path is:
 
 1. A workbook API, namespace API, domain helper, or app system requests a write.
-2. The write reaches a generated `ComputeBridge` method.
+2. The write reaches a generated or hand-written `ComputeBridge` method.
 3. The bridge calls `ComputeCore.mutate(...)`.
 4. `ComputeCore` calls the Rust transport.
 5. Rust dispatches an `EngineMutation` through `apply_mutation(...)`.
@@ -135,7 +149,7 @@ The current mutation path is:
 9. `MutationResultHandler.applyAndNotify(...)` updates mirrored state and emits
    semantic events.
 10. Compute services refresh validation annotations, conditional formats,
-    viewports, geometry, and deferred update buffers as needed.
+    viewports, geometry, and provider update buffers as needed.
 
 This gives one primary write path for workbook state. The app-level
 `apps/spreadsheet/src/coordinator/mutations/` directory is not the general cell
@@ -246,7 +260,7 @@ Common event families include:
 | --- | --- |
 | Cell data | `cell:changed`, `cells:batch-changed` |
 | Cell properties | `cell:format-changed`, `cell:metadata-changed` |
-| Workbook structure | `structure:*`, `sheet:*` |
+| Workbook structure | `rows:inserted`, `columns:deleted`, `sheet:created`, `sheet:deleted` |
 | Validation | `validation:recalc-annotations`, `validation:failed`, `validation:passed` |
 | Recalculation | `recalc:completed` |
 
@@ -266,13 +280,13 @@ bridge-like services include:
 | `MutationResultHandler` | Converts Rust mutation results into state mirror updates and semantic events |
 | `SchemaValidationBridge` | Tracks schemas, validation annotations, and validation events |
 | `PivotBridge` / `PivotEventBridge` | Coordinates pivot invalidation, materialization, and event-driven refresh |
-| `TableBridge` | Maintains table-related cache and invalidation behavior |
+| `TableBridge` | Exported table bridge utility with table-engine cache/invalidation behavior; not currently instantiated by `createDocumentContext(...)` |
 | `LocaleInputBridge` | Locale-aware parsing and input normalization |
 | Chart, diagram, ink, equation, and text-effect bridges | Feature integration attached through the document context |
 
-Bridge creation is centralized in `createDocumentContext(...)`; bridge startup
-that depends on a fully wired compute bridge is handled by the document
-lifecycle system.
+Context-wired bridge creation is centralized in `createDocumentContext(...)`;
+bridge startup that depends on a fully wired compute bridge is handled by the
+document lifecycle system.
 
 ## Dependency Graph
 
@@ -345,7 +359,7 @@ Actor access separates reads from commands:
 | --- | --- |
 | Accessors | Point-in-time reads from XState actors and related state |
 | Commands | Fire-and-forget writes that send actor events |
-| Selectors | Reusable read selectors, exported from kernel selector packages |
+| Selectors | Reusable read selectors; app actor access currently imports local selector modules under `apps/spreadsheet/src/selectors/` after kernel export tightening |
 
 The coordinator-level actor-access module composes accessors from the system
 implementations. New system-specific actor access should live with the owning
@@ -361,13 +375,14 @@ that boundary.
 - `apps/spreadsheet/src/actions/handlers/`
 
 The action system routes UI and command-surface actions through one dispatcher.
-Action type contracts live in the contracts/types packages, while application
-handlers live under `apps/spreadsheet/src/actions/handlers/`.
+Action dependency/result contracts live in `contracts/src/actions/`; the action
+type unions are re-exported there from `@mog/types-editor`. Application handlers
+live under `apps/spreadsheet/src/actions/handlers/`.
 
-The dispatcher builds an `ActionExecutionContext` from injected dependencies and
-uses a `HANDLER_MAP` to route each action type to its handler. Handlers should
-use domain/workbook APIs, coordinator commands, actor commands, or UIStore
-actions instead of reaching around the state architecture.
+`dispatch(action, deps, payload?)` receives an `ActionDependencies` object and
+uses `HANDLER_MAP` to route each action type to its handler. Handlers should use
+domain/workbook APIs, coordinator commands, actor commands, or UIStore actions
+instead of reaching around the state architecture.
 
 ## Implementation Files
 
@@ -383,7 +398,7 @@ actions instead of reaching around the state architecture.
 | Domain helpers | `kernel/src/domain/`, `kernel/src/api/index.ts` |
 | UIStore | `apps/spreadsheet/src/ui-store/` |
 | App systems | `apps/spreadsheet/src/systems/`, `apps/spreadsheet/src/coordinator/sheet-coordinator.ts` |
-| Actor access | `types/machines/src/actors/`, `contracts/src/actors/index.ts`, `apps/spreadsheet/src/systems/*/actor-access/` |
+| Actor access | `types/machines/src/actors/`, `contracts/src/actors/index.ts`, `apps/spreadsheet/src/selectors/`, `apps/spreadsheet/src/systems/*/actor-access/` |
 | Actions | `contracts/src/actions/`, `apps/spreadsheet/src/actions/` |
 
 ## Related Documents

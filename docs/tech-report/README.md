@@ -8,13 +8,13 @@ This report covers what the public repository implements today, how the implemen
 
 ## Formula Engine
 
-The formula engine lives in `compute-core` and its extracted crates. The `compute-functions` crate documents a library of **512+ Excel-compatible pure functions** across math, statistical, financial, text, logical, lookup/reference, date/time, engineering, database, information, web, and related modules. The parser is built on [winnow](https://github.com/winnow-rs/winnow) and covers A1/R1C1 references, nested expressions, structured references, cross-sheet and external-workbook references, array literals, and LAMBDA call syntax.
+The formula engine lives in `compute-core` and its extracted crates. The current `compute-functions` source contains 472 explicit `FunctionRegistry` registrations across math, statistical, financial, text, logical, lookup/reference, date/time, engineering, database, information, web, and related modules; evaluator-level special forms and operators live in `compute-core` outside that registry. The parser is built on [winnow](https://github.com/winnow-rs/winnow) and covers A1 references, nested expressions, structured references, cross-sheet and external-workbook references, array literals, and LAMBDA call syntax. R1C1 is supported as display rendering from identity formulas rather than as a general formula-entry parser.
 
 **How we verify correctness.** The repository contains focused formula accuracy tests such as `compute/core/tests/formula_accuracy_*.rs`, structured-reference and lookup suites, numeric repeatability tests, and optional corpus lanes (`corpus-tests`) for real workbook coverage. These tests use the current Rust engine as the execution path rather than a separate compatibility shim.
 
 **Numerical precision.** Numeric cell values use `FiniteF64`, a wrapper over `f64` that rejects NaN and infinity at construction time. Aggregation code uses Kahan compensated summation and Welford-style variance/standard-deviation accumulation where those algorithms apply. The `dd-precision` feature in `value-types` adds a double-double error term for higher-precision intermediate arithmetic when that lane is enabled.
 
-**What we do not execute.** Embedded VBA/macros, active-content parts, and XLL-style add-ins are not interpreted as workbook code. External workbook references and external-link metadata are parsed or preserved where supported, and local-sheet external references can be rewritten during import, but live external data refresh is a host/integration concern rather than Excel automation inside the formula engine.
+**What we do not execute.** Embedded VBA/macros, active-content metadata, and XLL-style add-ins are not interpreted as workbook code. External workbook references and external-link metadata are parsed or preserved where supported, and local-sheet external references can be rewritten during import, but live external data refresh is a host/integration concern rather than Excel automation inside the formula engine.
 
 ---
 
@@ -121,7 +121,7 @@ Common verification gates are documented at the repo root and in development doc
 
 We'd rather you know these upfront than discover them in production.
 
-- **VBA/macros and active content**: Imported workbook scripts are not executed. Active-content parts may be detected, preserved, disabled, or quarantined depending on the import/export path.
+- **VBA/macros and active content**: Imported workbook scripts are not executed. Active-content metadata may be detected or preserved as opaque workbook metadata depending on the import/export path; the public repository does not ship a macro runtime.
 - **External data refresh**: External workbook references, workbook links, and connection metadata are modeled in several places, but live refresh requires an integration/resolver and is not the same as Excel automation.
 - **OOXML feature depth**: Broad parser/writer coverage exists, but complex chart variants, active content, external links, workbook connections, and other specialized OOXML parts need feature-specific verification before claiming full behavioral parity.
 - **Calculation chain**: `xl/calcChain.xml` is not exported because it is an Excel cache, not authoritative workbook state.
@@ -135,7 +135,7 @@ We'd rather you know these upfront than discover them in production.
 | Metric | Current evidence |
 |--------|------------------|
 | Compute workspace shape | `compute-core` root crate plus 30 extracted crates under `compute/core/crates` |
-| Function library | `compute-functions` documents 512+ pure Excel-compatible functions |
+| Function library | 472 explicit `FunctionRegistry` registrations in current `compute-functions` source, plus evaluator special forms/operators outside that registry |
 | SDK platform binaries | 7 optional `@mog-sdk/*` native platform packages |
 | Bridge targets | WASM, Tauri, N-API, plus bridge infrastructure for TypeScript generation |
 | Binary viewport format | 36-byte header, 32-byte cell records, 40-byte mutation patches |

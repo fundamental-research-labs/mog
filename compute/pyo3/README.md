@@ -10,11 +10,7 @@ smoke path and do not prove SDK behavior.
 
 ```bash
 cd ../mog
-python3 -m venv compute/pyo3/.venv
-compute/pyo3/.venv/bin/python -m pip install maturin pytest pyright
-compute/pyo3/.venv/bin/python -m maturin develop --manifest-path compute/pyo3/Cargo.toml
-compute/pyo3/.venv/bin/python -m pytest compute/pyo3/tests -q
-compute/pyo3/.venv/bin/python -m mog._tools.smoke --json
+pnpm check:python-sdk
 ```
 
 ## Example

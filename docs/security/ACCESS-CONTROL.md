@@ -1,18 +1,28 @@
 # Access Control
 
-Data access control for Mog workbooks. Principals carry tags; policies grant access levels to targets; the Rust engine is the single place that enforces — every SDK inherits enforcement for free.
+Data access control for Mog workbooks. Principals carry tags, policies grant
+access levels to targets, and the Rust security engine evaluates those policies
+for covered generated `ComputeService` bridge calls.
 
-**Audience:** SDK consumers (TS, Python) wiring a principal into a session, and contributors extending the gated surface.
+**Current status:** TypeScript/Node and Python session and policy APIs are
+public-experimental. The Rust `compute-security` engine, security store, and
+generated bridge delegate are workspace-internal implementation details. REST,
+Go, wildcard target IDs, and row/range policy targets are reserved/not shipped.
+
+This is not a hostile-client or process-isolation boundary. Public SDK callers
+inherit enforcement only when they call through the shipped `ComputeService`
+bridge surface and its gated descriptors.
+
+**Audience:** SDK consumers wiring a principal into a session, and contributors
+extending gated bridge surfaces.
 
 ---
 
 ## Model
 
-Four concepts. Everything else composes out of these.
-
 ### Principal
 
-A caller's identity, expressed as a set of string tags:
+A caller's identity is a set of string tags:
 
 ```ts
 { tags: ['mog:owner'] }                 // workbook owner
@@ -20,67 +30,94 @@ A caller's identity, expressed as a set of string tags:
 { tags: ['agent:copilot', 'team:ops'] } // multi-role caller
 ```
 
-Tags are arbitrary strings — the engine only matches them against policy patterns. Principals are **canonicalized** through an intern pool: two principals with the same tag set share an allocation, and pointer equality is a sound cache key. `mog:owner` is reserved — it grants default `Admin` on an empty-policy document.
+Tags are arbitrary strings; the engine only matches them against policy
+patterns. Principals are canonicalized through an intern pool by sorting and
+deduping tags. Two pool-interned principals with the same tag set share an
+allocation, so pointer identity is a cache key inside the engine.
+
+`mog:owner` is reserved. If no policy matches, an owner defaults to `admin` and
+any non-owner defaults to `none`. The engine also derives `mog:non-owner` for
+every principal that does not include `mog:owner`, including the anonymous empty
+principal.
+
+Owner lockout has a floor: if a matching owner policy resolves below `read`, the
+engine clamps the resolved level to `read` and reports the clamp as an
+ambiguity-style diagnostic.
 
 ### AccessLevel
 
-Five levels, ordered:
+Five levels, ordered from least to most permissive:
 
-| Level       | Means                                              |
-|-------------|----------------------------------------------------|
-| `none`      | No access. Reads redact; writes deny.              |
-| `structure` | Shape visible, values redacted. Formulas preserved.|
-| `read`      | Values visible. Writes denied.                     |
-| `write`     | Read + mutate data.                                |
-| `admin`     | Read + write + manage policies.                    |
+| Level | Means |
+|-------|-------|
+| `none` | No data access. Covered value reads redact; covered writes deny. |
+| `structure` | Shape, types, formatting, and selected metadata are visible; values and computed formula results redact. |
+| `read` | Values are visible. Covered writes deny. |
+| `write` | Read plus data mutation. Current policy CRUD is also workbook-write gated and attenuation-limited. |
+| `admin` | Highest grant. Required for structural bridge mutations and for granting `admin` access. |
 
-Higher is strictly more permissive. `level >= Read` is a valid and cheap comparison.
+Higher levels are strictly more permissive; Rust `AccessLevel` ordering is used
+directly for comparisons.
 
 ### AccessPolicy
 
-A policy maps a tag pattern to a level at a target:
+A policy maps a principal tag pattern to a level at a target:
 
 ```ts
-{
-  principalTag: 'agent:*',     // glob — exact > prefix > wildcard
+await wb.security.addPolicy({
+  principalTag: 'agent:*', // exact > prefix glob > wildcard
   target: { kind: 'sheet', sheetId },
   level: 'read',
   priority: 0,
   enabled: true,
-  metadata: { createdBy: 'user', createdAt: Date.now() },
-}
+  metadata: { createdBy: 'mog:owner', createdAt: Date.now() },
+});
 ```
+
+`enabled: false` policies are ignored. Within the same target and tag
+specificity, higher `priority` wins.
+
+The TypeScript contract type currently allows `TargetMatcher` wildcard IDs such
+as `{ kind: 'sheet', sheetId: '*' }`, but the shipped Rust bridge stores concrete
+targets only. Do not send wildcard target IDs to public SDKs until bridge
+support lands.
 
 ### AccessTarget
 
-What the policy applies to:
+Shipped policy targets:
 
 ```ts
 { kind: 'workbook' }
-{ kind: 'sheet',  sheetId }
+{ kind: 'sheet', sheetId }
 { kind: 'column', sheetId, colId }
-// Future: row, range
 ```
+
+Reserved/not shipped: row targets, range targets, and wildcard target IDs.
 
 ---
 
 ## Session API
 
-TypeScript exposes four methods on the `Workbook` surface. Set the active principal once per session; every subsequent call inherits it.
+Set the active principal once per session; subsequent bridge calls read it from
+the `ComputeService` session state.
 
 ### TypeScript
 
 ```ts
-import type { Workbook, AccessPrincipal } from '@mog-sdk/contracts';
+import type { AccessPrincipal, Workbook } from '@mog-sdk/node';
 
 await wb.setActivePrincipal(['agent:copilot']);           // flat tag list
-await wb.setActivePrincipal({ tags: ['agent:copilot'] }); // envelope form (symmetric with explainAccess)
-await wb.setActivePrincipal(null);                        // clear (anonymous)
+await wb.setActivePrincipal({ tags: ['agent:copilot'] }); // envelope form
+await wb.setActivePrincipal(null);                        // anonymous
 
 const current: AccessPrincipal | null = await wb.activePrincipal();
 const enforcing: boolean = await wb.securityActive();     // false when policy set is empty
-const canonical = await wb.makePrincipal(['b', 'a']);     // → { tags: ['a', 'b'] }
+const canonical = await wb.makePrincipal(['b', 'a']);     // { tags: ['a', 'b'] }
 ```
+
+On host-backed TypeScript workbooks, `setActivePrincipal` and `makePrincipal`
+throw `OperationDeniedError('HOST_PRINCIPAL_IMMUTABLE')`; the trusted host owns
+the session principal.
 
 ### Python
 
@@ -91,9 +128,15 @@ wb.security_active()
 wb.make_principal(['b', 'a'])
 ```
 
-**Important:** `securityActive` returns `false` when the policy set is empty. Setting a principal on an empty-policy document is a no-op for access decisions (the gated delegate's fast path skips the principal entirely). Once any policy exists, `null` means **anonymous** — a caller that never set a principal is denied, not owner.
+`securityActive` / `security_active()` returns `false` while the policy set is
+empty. Setting a principal on an empty-policy document does not affect access
+decisions because the gated delegate fast path skips policy evaluation. Once any
+policy exists, `null` / `None` / an unset principal means anonymous, not owner.
 
-**Cross-language divergence (intentional):** TS accepts `string[] | AccessPrincipal | null`; Python accepts `list[str] | None` only and does not expose an `active_principal()` getter today. Python callers can always pass `principal['tags']` explicitly.
+**Cross-language divergence:** TypeScript accepts
+`string[] | AccessPrincipal | null` and exposes `activePrincipal()`. Python
+accepts `list[str] | None` and does not expose an `active_principal()` getter
+today.
 
 ---
 
@@ -116,111 +159,177 @@ interface WorkbookSecurity {
 }
 ```
 
-`explainAccess` returns the winning policy, the reason string, all candidate policies considered, and any ambiguity warnings — use it when a user asks *why* a call was denied.
+Policy mutations are workbook-write gated and then attenuation-limited. A caller
+with workbook `write` can mutate policy state only up to their own ceiling; a
+`write` caller cannot grant `admin`.
 
-Template apply payloads use the Rust tagged-enum names (`protect_workbook`, `protect_sheet`, `agent_structure`); removal uses the stored template IDs (`protect-workbook`, `protect-sheet`, `agent-structure`). Prefer templates over hand-rolled policies for common scenarios.
+`explainAccess` / `explain_access` is diagnostic. The Rust payload includes
+effective tags, candidate policies, sorted policies, the matched policy, final
+level, reason, optional `ambiguity`, and `clamp_fired`. Python also exposes
+camelCase aliases for the common fields. Treat `ambiguity` as the current
+bridge signal; do not depend on an older `warnings: string[]` shape.
+
+Template apply payloads use Rust tagged-enum names:
+`protect_workbook`, `protect_sheet`, and `agent_structure`. Template removal
+uses stored template IDs: `protect-workbook`, `protect-sheet`, and
+`agent-structure`.
 
 ---
 
 ## Enforcement model
 
-### Single-gate principle
+### Covered bridge surface
 
-Every read and every write passes through exactly one place: the auto-generated delegate layer on `compute-api::ComputeService`. The delegate reads the active principal, calls the engine primitive, and post-filters the result.
+Current enforcement is attached to generated delegate methods on
+`compute-api::ComputeService` with `gated = true`. Covered methods are Rust
+engine methods annotated with `#[bridge::read(...)]`, `#[bridge::write(...)]`,
+or `#[bridge::structural(...)]` in descriptor groups consumed by
+`compute/api/src/bridge_service.rs`.
 
-```
+```text
 TS / Python SDK
-      ↓  forward method calls only; no security logic
-ComputeService   ← active_principal: ArcSwap<Option<Principal>>
-      ↓  delegate threads principal + post-filters
-YrsComputeEngine ← PolicyEngine, AccessMatrixCache, cell data
+      |  principal forwarding, host checks, error/event adaptation
+ComputeService
+      |  active_principal + generated gated delegate
+YrsComputeEngine
+      |  PolicyEngine, AccessMatrixCache, redaction filters
+Yrs document storage
 ```
 
-**The SDKs do nothing security-related.** They forward calls, convert types, surface errors. The SDK's only responsibility is to tell the service *which principal is calling* — via `setActivePrincipal`. This is what makes a new SDK (REST, Go, …) free to add.
+SDKs do not decide access levels or perform cell redaction. They forward calls,
+normalize principal inputs, surface errors, and, in the TypeScript kernel, relay
+diagnostic events. A future SDK inherits these checks only if it uses the same
+generated `ComputeService` descriptors. REST and Go SDKs are not shipped.
 
-### Attenuation
-
-A caller cannot grant more than they have. `addPolicy` with `level: admin` by a `write`-level caller fails as a security denial for an attenuation violation.
+Direct same-process calls that bypass `ComputeService`, new descriptor groups
+not added to its delegate list, and non-fallible bridge methods that cannot
+return a security error need separate review. In-tree range writes are required
+to be fallible; fallible gated writes and structural mutations return
+`ComputeError::SecurityDenied` when denied.
 
 ### Resolution order
 
-When multiple policies match, the engine picks in this order:
+When multiple enabled policies match a query target and the principal's
+effective tags, the engine resolves in this order:
 
-1. **Target specificity** — column > sheet > workbook.
-2. **Tag specificity** — exact tag > prefix glob (`agent:*`) > wildcard (`*`).
-3. **Priority** — higher `priority` wins.
-4. **Safer wins** — on a true tie, the *lower* (more restrictive) level wins, and the engine emits an `AmbiguityDetected` event so the author can fix the policy set.
+1. Target specificity: column > sheet > workbook.
+2. Tag specificity: exact tag > prefix glob (`agent:*`) > wildcard (`*`).
+3. Priority: higher `priority` wins.
+4. Safer tie-break: if the top candidates tie on target, tag, and priority, the
+   lower access level wins and an `AmbiguityDetected` diagnostic is emitted.
+5. Owner floor: a resolved owner level below `read` is clamped to `read` and
+   reported as a clamp diagnostic.
 
----
-
-## Redaction semantics
-
-Cell and range value reads below `read` do not throw. They return typed redaction values so formulas, charts, and UI code keep working without special-casing:
-
-| Level on a cell | `get_cell_value` returns                           |
-|-----------------|----------------------------------------------------|
-| `none`          | `CellValue::Null`                                  |
-| `structure`     | `Text("[Number]")`, `Text("[Text]")`, …            |
-| `read` or above | the real value                                     |
-
-Under `structure`, a formula's *computed* result also redacts — `B1 = =A1` returns `[Number]` when `A1` is protected. Formula shape is preserved (structure-preserving by design); values are not.
-
-Writes, unlike reads, *do* deny loudly: they return `ComputeError::SecurityDenied` and emit an `AccessDenied` event.
+If no policy matches, `mog:owner` defaults to `admin`; all other principals
+default to `none`.
 
 ---
 
-## Diagnostic events
+## Redaction Semantics
 
-Six event variants flow through `wb_security_drain_events`:
+Cell and range value reads below `read` generally do not throw. They return typed
+redaction values so formula, chart, and UI code can keep running:
 
-| Event                | Emitted when                                      |
-|----------------------|---------------------------------------------------|
-| `PolicyAdded`        | `addPolicy` succeeds                              |
-| `PolicyRemoved`      | `removePolicy` succeeds                           |
-| `PolicyUpdated`      | `updatePolicy` succeeds                           |
-| `PoliciesReloaded`   | Policy engine reload on snapshot load or version bump |
-| `AccessDenied`       | Every write denied by the gate, with `operation` = caller's method name (`"set_cell_value_parsed"`, `"clear_range"`, …) |
-| `AmbiguityDetected`  | Matrix-publish or evaluate resolves a true tie. Fingerprint-deduped per `policy_version` so a noisy UI doesn't drown the stream. |
+| Level on a cell | `get_cell_value` returns |
+|-----------------|--------------------------|
+| `none` | `CellValue::Null` |
+| `structure` | `Text("[Number]")`, `Text("[Text]")`, `Text("[Boolean]")`, `Text("[Error]")`, ... |
+| `read` or above | the real value |
 
-Drain the stream periodically to drive diagnostic UIs ("this call was denied because …"). The event stream is diagnostic and bounded: the engine keeps the most recent 256 pending events and drops the oldest if callers do not drain fast enough.
+Under `structure`, a formula's computed result redacts. Formula shape and some
+metadata remain visible; the engine does not claim complete derived-data
+non-interference.
 
----
-
-## Scope coverage
-
-Every bridged method returning cell data is gated. This is enforced **statically** by `coverage_audit.rs` — if a new bridge read annotation forgets to declare its scope, the audit fails the build.
-
-| Scope      | Mechanism                                                 |
-|------------|-----------------------------------------------------------|
-| `cell`     | Per-cell matrix lookup; `redact_scalar` over the result. |
-| `range`    | `filter_range_values` over range-shaped `Vec<T>` returns; per-cell matrix walk. |
-| `sheet`    | `filter_viewport_buffer` for sheet-scoped viewport byte buffers; other sheet-scoped reads are coarse checks or passthroughs. |
-| `workbook` | Workbook-level access check; no per-cell redaction. |
-
-### Known gaps
-
-- **Sheet-scope `Vec<T>` non-byte passthrough.** The delegate macro at `infra/rust-bridge/bridge-delegate/macros/src/expand/gated.rs` only filters sheet-scoped byte buffers with `filter_viewport_buffer`; non-byte `Vec<T>` sheet reads fall through the passthrough arm. Value-bearing examples include `get_comments_for_cell` and `get_unique_column_values`. The adversarial test `adversarial_comment_redacts_under_none_id_form` pins the current passthrough shape so a future macro fix flips the signal.
-- **`data_validation` family has no bridged read today.** When such a surface is added, it must carry `#[bridge::read(scope = …)]` like every other read — otherwise `coverage_audit` will fail.
+Viewport byte buffers use `filter_viewport_buffer`, which writes compact byte
+placeholders rather than the `CellValue` strings above. Workbook-scope reads do
+a workbook-level access check when the bridge signature can return an error, but
+they do not perform per-cell redaction.
 
 ---
 
-## Out of scope by design
+## Diagnostic Events
+
+Raw engine events are drained through `wb_security_drain_events` with
+snake_case `kind` values. The TypeScript kernel relay emits `security:*` events
+on its event bus; Python exposes `wb.security.drain_events()`.
+
+| Rust variant | Wire `kind` | Emitted when |
+|--------------|-------------|--------------|
+| `PolicyAdded` | `policy_added` | `addPolicy` / `add_policy` succeeds |
+| `PolicyRemoved` | `policy_removed` | `removePolicy` / `remove_policy` succeeds |
+| `PolicyUpdated` | `policy_updated` | `updatePolicy` / `update_policy` succeeds |
+| `PoliciesReloaded` | `policies_reloaded` | Policy engine reloads from snapshot or remote Yrs update |
+| `AccessDenied` | `access_denied` | A covered fallible write or structural mutation is denied |
+| `AmbiguityDetected` | `ambiguity_detected` | Resolution hits a true policy tie or owner clamp diagnostic |
+
+The event stream is diagnostic and bounded. The engine keeps the most recent 256
+pending events and drops the oldest if callers do not drain fast enough.
+
+---
+
+## Scope Coverage
+
+Bridge coverage is audited by `compute/api/tests/coverage_audit.rs`: public
+bridge methods are expected to declare an access scope, and cell-data surfaces
+are checked for explicit scope annotations. This is a regression harness, not a
+proof that every derived artifact is non-leaking.
+
+| Scope | Mechanism |
+|-------|-----------|
+| `cell` | Per-cell matrix lookup; `redact_scalar` over the returned value. |
+| `range` | `filter_range_values` over range-shaped `Vec<T>` returns; per-cell matrix walk for value vectors. |
+| `sheet` | Sheet matrix lookup; viewport `Vec<u8>` buffers are filtered, while other sheet-scoped reads may be coarse checks or passthroughs. |
+| `workbook` | Workbook-level access check for fallible reads; no per-cell redaction. |
+
+### Known gaps and limits
+
+- **Sheet-scope non-byte `Vec<T>` passthrough.** The delegate macro filters
+  sheet-scoped viewport byte buffers, but non-byte `Vec<T>` sheet reads fall
+  through the passthrough arm. Current examples include `get_unique_column_values`
+  and id-based comment APIs such as `get_comments_for_cell`; the position-based
+  comment API is cell-scoped and redacts/clears under denied access.
+- **Artifact bytes are not fine-grained redacted outputs.** XLSX export methods
+  are workbook-scoped and return workbook bytes after workbook read access.
+  `capture_screenshot` is range-scoped, but its PNG bytes are not a cell-aware
+  redaction format.
+- **Derived data is not a hard non-interference guarantee.** Formula read
+  results redact at the API boundary, but the evaluator can see source cells
+  internally. Aggregate helpers such as pivot computation can reveal derived
+  facts from protected source data.
+- **Validation/schema reads are shipped.** Schema and validation surfaces are
+  bridged and annotated as sheet/cell reads, for example
+  `get_range_schemas_for_sheet` and `validate_cell_value`. Treat them as
+  structure/metadata surfaces, not as absent APIs.
+- **Non-fallible bridge reads cannot deny through an error channel.** New
+  workbook-scope reads that need hard denial should use fallible signatures.
+
+---
+
+## Out of Scope by Design
 
 These are deferred deliberately, not by oversight:
 
 - **Encryption at rest.** Separate workstream; orthogonal to access control.
-- **Rust compute-path enforcement.** The formula evaluator currently sees through denied cells internally; redaction happens at read time. Rejected because evaluator-side per-cell-per-formula access checks would kill recalc performance.
-- **Row-level targets.** No user ask yet; matrix extension is straightforward when needed.
-- **Audit log persistence.** The diagnostic event stream is in-memory only. Persistence is future work.
-- **Out-of-process trust boundary.** Today the engine and SDK share a process. A compromised SDK process can lie about its principal. Multi-tenant server-side deployments need a trusted service between untrusted SDKs and the engine — reserved, not shipped.
+- **Complete derived-data non-interference.** Current redaction is boundary
+  redaction, not formula-evaluator isolation.
+- **Fine-grained redacted artifacts.** XLSX export, screenshots, and similar
+  byte artifacts are not guaranteed to preserve cell-level policy redaction.
+- **Row/range targets and wildcard target IDs.** Reserved/not shipped.
+- **Audit log persistence.** Diagnostic events are in-memory only.
+- **Out-of-process trust boundary.** Today the engine and SDK share a process. A
+  compromised SDK process can lie about its principal. Multi-tenant deployments
+  need a trusted service between untrusted callers and the engine.
 
 ---
 
-## Deeper reading
+## Deeper Reading
 
-| Topic | Document |
-|-------|----------|
-| Contract types (TS) | `types/document/src/security/` + `types/api/src/api/workbook/security.ts` (re-exported from `contracts/src/security/` and `contracts/src/api/workbook/security.ts`) |
-| Python surface | `compute/pyo3/python/mog/workbook.py:1408-1437` + `compute/pyo3/python/mog/sub_apis/security.py` |
-| Coverage audit test | `compute/api/tests/coverage_audit.rs` |
-| End-to-end scenarios | `compute/api/tests/security_e2e.rs` |
+| Topic | Source |
+|-------|--------|
+| Public TS contract types | `types/document/src/security/types.ts`, `types/api/src/api/workbook.ts`, `types/api/src/api/workbook/security.ts` |
+| Public SDK exports | `runtime/sdk/src/index.ts`, `runtime/sdk/package.json`, `contracts/package.json` |
+| Python surface | `compute/pyo3/python/mog/workbook.py`, `compute/pyo3/python/mog/sub_apis/security.py`, `compute/pyo3/tests/test_security_session.py` |
+| Rust policy engine | `compute/core/crates/compute-security/src/` |
+| Generated gated delegate | `compute/api/src/bridge_service.rs`, `infra/rust-bridge/bridge-delegate/macros/src/expand/gated.rs` |
+| Redaction filters | `compute/core/crates/compute-security/src/filters.rs`, `compute/core/crates/compute-wire/src/security_filter.rs` |
+| Coverage and adversarial tests | `compute/api/tests/coverage_audit.rs`, `compute/api/tests/security_e2e.rs`, `compute/api/tests/security_e2e/enforcement.rs`, `compute/api/tests/security_e2e/adversarial_bypass_runtime.rs` |

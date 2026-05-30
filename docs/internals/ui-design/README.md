@@ -1,61 +1,88 @@
 # Design Token System
 
+This is a workspace-internal guide for spreadsheet app, shell, and bundle-composition
+contributors. It is not a public UI package guide.
+
+## Current Status
+
+| Surface | Status | Notes |
+| ------- | ------ | ----- |
+| `apps/spreadsheet/src/infra/styles/globals.css` and `tokens.css` | workspace-internal source | Spreadsheet app token sources. `tokens.css` mirrors the token set without shell/global imports for source-level integration and build contexts. |
+| `@mog-sdk/spreadsheet-app/styles.css` and `@mog-sdk/spreadsheet-app/mog-embed.css` | public-experimental | Shipped stylesheet entry points for the public full-app embed package. |
+| `@mog/shell` | reserved | Private workspace package. Use its primitives in repo-local apps and bundle composition, but do not document it as a direct public dependency. |
+| `@mog/icons` | workspace-internal generated asset | Private workspace package generated from 256 SVG source assets. |
+| `@mog-sdk/contracts/theme` and `@mog-sdk/contracts/formatting/theme` | public-experimental | Public theme type exports; source lives under `types/formatting`. |
+
 ## Principles
 
-1. **Spreadsheet Token Source** - Spreadsheet tokens live in `globals.css`; `tokens.css` exports the same token set for external consumers
+1. **Spreadsheet Token Source** - Spreadsheet tokens live in `globals.css`; `tokens.css` mirrors them without shell/global imports for source-level integration and build contexts
 2. **Semantic Naming** - Tokens describe purpose, not appearance (`bg-ss-primary` not `bg-blue`)
 3. **Context-Aware Typography** - Different size scales for UI, content, and toolbar contexts
-4. **Excel-Compatible Theming** - Workbook themes with 12 OOXML color slots for cell formatting
+4. **Excel-Compatible Theming** - Workbook themes use 12 OOXML color slots for cell formatting; app source includes 8 color themes and 8 font themes
 5. **Tailwind v4 Integration** - Tokens exposed as utility classes via `@theme inline`
-6. **UI Primitives First** - Always use primitives from `@mog/shell` / `components/ui/` before building custom
+6. **UI Primitives First** - In repo-local UI, prefer `@mog/shell` / `components/ui/` primitives before building custom controls
 
 ## Architecture
 
 ```
-UI Components → UI Primitives → Semantic Tokens → Tailwind v4 @theme → CSS Variables
-                                                                     ↓
-                                                           Workbook Themes (Rust/Yrs)
+Repo-local UI -> @mog/shell primitives -> Semantic tokens -> Tailwind v4 @theme -> CSS variables/classes
+                                                          |
+                                              Workbook ThemeData via Rust bridge
 ```
 
 ## Key Files
 
 | File                                                                                 | Purpose                                               |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| [`apps/spreadsheet/src/infra/styles/globals.css`](../../../apps/spreadsheet/src/infra/styles/globals.css) | Spreadsheet app design tokens and app CSS imports |
-| [`apps/spreadsheet/src/infra/styles/tokens.css`](../../../apps/spreadsheet/src/infra/styles/tokens.css) | Token export without app/global imports for external consumers |
-| [`apps/spreadsheet/src/infra/styles/built-in-themes.ts`](../../../apps/spreadsheet/src/infra/styles/built-in-themes.ts) | 8 Excel-compatible workbook themes |
-| [`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts) | Theme type definitions |
-| [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts) | Theme color resolution utilities |
-| [`shell/src/components/ui/`](../../../shell/src/components/ui/)                         | **UI primitives** - use these, don't build custom     |
-| [`infra/icons/src/`](../../../infra/icons/src/)                                         | **Single source of truth** - all SVG icons            |
+| [`apps/spreadsheet/src/infra/styles/globals.css`](../../../apps/spreadsheet/src/infra/styles/globals.css) | Spreadsheet app design tokens, shell global import, local font faces, and app utilities |
+| [`apps/spreadsheet/src/infra/styles/tokens.css`](../../../apps/spreadsheet/src/infra/styles/tokens.css) | Source token mirror without shell/base/font imports; not a package export |
+| [`runtime/spreadsheet-app/package.json`](../../../runtime/spreadsheet-app/package.json) | Public full-app package manifest with public-experimental `./styles.css` and `./mog-embed.css` exports |
+| [`apps/spreadsheet/src/infra/styles/built-in-themes.ts`](../../../apps/spreadsheet/src/infra/styles/built-in-themes.ts) | 8 workbook color themes and 8 built-in font themes |
+| [`contracts/src/formatting/theme.ts`](../../../contracts/src/formatting/theme.ts) | Public-experimental theme type re-export via `@mog-sdk/contracts` |
+| [`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts) | Source theme type definitions |
+| [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts) | Workspace-internal theme color/font resolution utilities |
+| [`shell/src/components/ui/`](../../../shell/src/components/ui/)                         | Reserved workspace UI primitives for repo-local use |
+| [`infra/icons/src/`](../../../infra/icons/src/)                                         | Workspace-internal SVG icon source of truth |
 
 ## Icons
 
-Spreadsheet toolbar and app chrome icons should come from the `@mog/icons` package when an icon exists. Avoid adding new inline SVGs or external icon libraries for reusable spreadsheet UI icons.
+Repo-local spreadsheet toolbar and app chrome icons should come from `@mog/icons` when
+an icon exists. `@mog/icons` is a private generated-asset package today, so public
+docs should not tell external consumers to depend on it directly.
+
+Avoid adding new inline SVGs or external icon-library imports for reusable spreadsheet
+toolbar icons when an `@mog/icons` source asset exists. Existing app areas may still
+use `lucide-react` or `react-icons` for non-toolbar or not-yet-migrated icons; do not
+treat those as precedent for reusable spreadsheet chrome.
 
 ```tsx
-// ✅ Correct - import SVG components from @mog/icons
+// Preferred in repo-local toolbar code - import SVG components from @mog/icons
 import { BoldSvg, ItalicSvg, UndoSvg, wrapIcon } from '@mog/icons';
 
 const BoldIcon = wrapIcon(BoldSvg);
 
-// ❌ Wrong - inline SVG
+// Avoid for reusable toolbar icons when @mog/icons has the asset
 <svg viewBox="0 0 24 24">...</svg>;
 
-// ❌ Wrong - external library
+// Avoid adding another icon source for an existing @mog/icons asset
 import { Bold } from '@fluentui/react-icons';
 ```
 
 ### Icon Guidelines
 
 - **256 icons** organized by category (text-formatting, alignment, clipboard, etc.)
-- **24px source assets** with `currentColor` for theming and `wrapIcon` for consistent render sizes
+- **24px source assets** whose primary strokes use `currentColor`; limited accent fills/strokes follow the icon spec
+- **`wrapIcon` sizing** defaults to 16px toolbar icons and supports `toolbarLarge`, `menu`, and `dialog` sizes
 - **Viewer**: Open `infra/icons/viewer.html` to see all icons
 - **Design spec**: See [`infra/icons/spec.md`](../../../infra/icons/spec.md) for design rules
 
 ---
 
 ## Token Categories
+
+This section summarizes the common tokens. The source files also define specialized
+tokens for trace arrows, resize/drag feedback, row selection, overlays, animation,
+and dark-mode overrides.
 
 ### Colors
 
@@ -72,6 +99,8 @@ import { Bold } from '@fluentui/react-icons';
 | **Diff/Changes**           | `--color-ss-diff-added`, `--color-ss-diff-modified`, `--color-ss-diff-removed`, `--color-ss-diff-direct`, `--color-ss-diff-indirect`      | Review mode, cell changes                 |
 | **Conditional Formatting** | `--color-ss-cf-positive`, `--color-ss-cf-neutral`, `--color-ss-cf-negative`, `--color-ss-cf-blue`                                      | Excel-compatible color scales             |
 | **Data Bars**              | `--color-ss-databar-blue`, `--color-ss-databar-green`, `--color-ss-databar-red`, `--color-ss-databar-orange`                           | Excel-compatible data bars                |
+| **Trace/Drag/Resize**      | `--color-ss-trace-*`, `--color-ss-drag-*`, `--color-ss-resize-*`                                                              | Grid overlays and interaction feedback    |
+| **Selection/Overlay**      | `--color-ss-row-selected`, `--color-ss-overlay`, `--color-ss-overlay-heavy`                                                    | Selected rows and modal backdrops         |
 | **Brand**                  | `--color-ss-brand`, `--color-ss-brand-hover`, `--color-ss-brand-light`                                                              | Marketing pages, branded elements         |
 
 ### Typography
@@ -99,7 +128,7 @@ import { Bold } from '@fluentui/react-icons';
 
 ### Other Categories
 
-- **Spacing**: 4px base scale (`--spacing-ss-1` through `--spacing-ss-8`)
+- **Spacing**: 4px base scale with half steps where needed (`--spacing-ss-0_5`, `--spacing-ss-1`, `--spacing-ss-1_5`, `--spacing-ss-2`, `--spacing-ss-2_5`, `--spacing-ss-3`, `--spacing-ss-4`, `--spacing-ss-5`, `--spacing-ss-6`, `--spacing-ss-8`)
 - **Layout**: Runtime variables for ribbon/tabbar dimensions
 - **Effects**: Shadows, border radius, z-index, transitions
 
@@ -125,13 +154,17 @@ import { Bold } from '@fluentui/react-icons';
 
 ## Typography Rules
 
-**NEVER use in toolbar/ribbon components:**
+These are target rules for new or touched toolbar/ribbon components. Some legacy,
+collaboration, and specialty chrome still uses Tailwind defaults or arbitrary values;
+do not copy those patterns when updating spreadsheet chrome.
+
+**Avoid in toolbar/ribbon components:**
 
 - `text-xs`, `text-sm`, `text-base` (Tailwind defaults - wrong sizes)
 - `text-[12px]` (arbitrary values - not from source of truth)
 - `font-size: 12px` (inline styles - not from source of truth)
 
-**ALWAYS use semantic tokens:**
+**Use semantic tokens instead:**
 
 - `text-tab`, `text-ribbon`, `text-ribbon-compact`, `text-ribbon-group`, `text-dropdown`, etc.
 
@@ -139,13 +172,27 @@ import { Bold } from '@fluentui/react-icons';
 
 Cell formats can reference theme colors: `'theme:accent1'` or `'theme:accent1:0.4'` (with tint).
 
-See [`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts) for theme types and [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts) for `resolveColor()` and `resolveThemeColors()`.
+The public-experimental type export is `@mog-sdk/contracts/theme` (also available as
+`@mog-sdk/contracts/formatting/theme`). The source type file is
+[`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts).
+
+Runtime workbook theme APIs are async through the Rust bridge
+(`getWorkbookTheme()` / `setWorkbookTheme()`), while chrome theme APIs are TS-only
+session state (`getChromeTheme()` / `setChromeTheme()`). See
+[`kernel/src/api/workbook/theme.ts`](../../../kernel/src/api/workbook/theme.ts) for
+the bridge conversion and [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts)
+for `resolveColor()`, `resolveThemeColors()`, and font resolution helpers.
 
 ---
 
 ## UI Primitives
 
-Use shell primitives instead of building custom implementations. They enforce design tokens and, for Radix-backed controls, accessibility behavior. Spreadsheet code typically imports them from `@mog/shell` or `@mog/shell/components/ui`.
+Use shell primitives instead of building custom implementations in repo-local code.
+They centralize token usage and, for Radix-backed controls, accessibility behavior.
+`@mog/shell` is a reserved/private workspace package, not a shipped public UI
+library. Spreadsheet code typically imports these from `@mog/shell` or
+`@mog/shell/components/ui`; public hosts should use the shipped embed/app packages
+instead of importing shell directly.
 
 ### Form Elements
 
@@ -184,7 +231,7 @@ Use shell primitives instead of building custom implementations. They enforce de
 | Primitive         | Import              | Usage                                                                            |
 | ----------------- | ------------------- | -------------------------------------------------------------------------------- |
 | `StatusBadge`     | `from '@mog/shell'` | Status indicators - `success`, `warning`, `error`, `info`, `idle`                |
-| `ConnectionBadge` | `from '@mog/shell'` | Connection status - `idle`, `connecting`, `connected`, `synced`, `error`, etc.   |
+| `ConnectionBadge` | `from '@mog/shell'` | Connection status - `idle`, `connecting`, `connected`, `synced`, `refreshing`, `stale`, `error` |
 | `Tooltip`         | `from '@mog/shell'` | Hover tooltips with keyboard shortcut support                                    |
 | `EmptyState`      | `from '@mog/shell'` | Empty/loading/error panels                                                       |
 
@@ -330,9 +377,12 @@ Quick reference for common styling scenarios.
 | `gap-ss-1` / `p-ss-1`     | 4px   | Minimal       |
 | `gap-ss-1_5` / `p-ss-1_5` | 6px   | Compact       |
 | `gap-ss-2` / `p-ss-2`     | 8px   | Standard      |
+| `gap-ss-2_5` / `p-ss-2_5` | 10px  | In-between    |
 | `gap-ss-3` / `p-ss-3`     | 12px  | Comfortable   |
 | `gap-ss-4` / `p-ss-4`     | 16px  | Spacious      |
+| `gap-ss-5` / `p-ss-5`     | 20px  | Large gap     |
 | `gap-ss-6` / `p-ss-6`     | 24px  | Section       |
+| `gap-ss-8` / `p-ss-8`     | 32px  | Large section |
 
 ### Z-Index
 
@@ -353,13 +403,17 @@ Quick reference for common styling scenarios.
 | `shadow-ss`          | Standard elevation      |
 | `shadow-ss-md`       | Medium elevation        |
 | `shadow-ss-lg`       | High elevation (modals) |
+| `shadow-ss-xl`       | Extra high elevation    |
+| `shadow-ss-button-*` | Button hover/active/pressed feedback |
 | `shadow-ss-dropdown` | Dropdown menus          |
 
 ---
 
 ## When Inline Styles Are Acceptable
 
-Inline styles bypass the token system and should be avoided. However, these cases are **acceptable exceptions**:
+Inline styles bypass the token system and should be avoided for static app chrome.
+The current codebase still has legacy exceptions, but new or touched UI should keep
+static styling token-based. These cases are acceptable exceptions:
 
 ### ✅ Acceptable
 
@@ -397,7 +451,7 @@ Inline styles bypass the token system and should be avoided. However, these case
    <div style={{ left: `${columnOffset}px`, width: `${cellWidth}px` }} />
    ```
 
-### ❌ Never Acceptable
+### Avoid In New Or Touched App Chrome
 
 1. **Static colors that should be tokens**
 
@@ -438,7 +492,8 @@ Inline styles bypass the token system and should be avoided. However, these case
 
 ## Migration Guide for New Components
 
-When building new components, follow this checklist:
+When building new components or materially touching existing spreadsheet chrome,
+follow this checklist:
 
 ### 1. Check for Existing Primitives
 
@@ -450,10 +505,11 @@ Before writing custom UI:
 
 ### 2. Use Semantic Tokens Only
 
-- [ ] No hardcoded hex colors (`#ffffff`, `#1a73e8`)
-- [ ] No arbitrary Tailwind values (`text-[10px]`, `bg-[#e6f4ea]`)
-- [ ] No Tailwind default typography (`text-xs`, `text-sm`, `text-base`)
-- [ ] No inline font sizes (`style={{ fontSize: '12px' }}`)
+- [ ] Static app-chrome colors use tokens, not hardcoded hex (`#ffffff`, `#1a73e8`)
+- [ ] Arbitrary Tailwind values are avoided when a semantic token exists (`text-[10px]`, `bg-[#e6f4ea]`)
+- [ ] Toolbar/ribbon typography uses semantic token classes, not Tailwind defaults (`text-xs`, `text-sm`, `text-base`)
+- [ ] Inline font sizes are avoided for static UI (`style={{ fontSize: '12px' }}`)
+- [ ] Dynamic workbook, user palette, canvas, preview, and computed layout values are intentionally documented at the call site
 
 ### 3. Choose the Right Typography Token
 
@@ -502,7 +558,7 @@ Always use the `Dialog` primitive:
 - [ ] Dialogs: Use `Dialog` primitive (handles focus trap, escape key)
 - [ ] Tabs: Use `Tabs` primitive (handles keyboard navigation)
 - [ ] Forms: Use `FormField` (handles label association)
-- [ ] Status: Use `StatusBadge` (uses standard status token colors)
+- [ ] Status: Prefer `StatusBadge` / `ConnectionBadge` for shared badge behavior
 
 ### 7. When to Create New Tokens
 
@@ -510,7 +566,7 @@ If no existing token fits your use case:
 
 1. **Don't** add an arbitrary value - this defeats the system
 2. **Do** ask: Is this a new semantic concept or should I use an existing one?
-3. **Do** add a new `ss` token to `globals.css` if it represents a new semantic category, and mirror it in `tokens.css` when external consumers need it
+3. **Do** add a new `ss` token to `globals.css` if it represents a new semantic category, and mirror it in `tokens.css` when source-level integration/build contexts need it
 4. **Do** update this documentation when adding tokens
 
 ### Example Token Addition
@@ -519,8 +575,8 @@ If no existing token fits your use case:
 /* In globals.css @theme inline block */
 
 /* Only add if this is a NEW semantic concept */
---color-ss-new-semantic-thing: #hexvalue;
---color-ss-new-semantic-thing-bg: rgba(hex, 0.1);
+--color-ss-new-semantic-thing: #345c7c;
+--color-ss-new-semantic-thing-bg: rgba(52, 92, 124, 0.1);
 ```
 
 Then the Tailwind utilities become available when referenced: `bg-ss-new-semantic-thing`, `text-ss-new-semantic-thing`, etc.

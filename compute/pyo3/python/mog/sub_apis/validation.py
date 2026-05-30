@@ -7,6 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from mog._serde import deserialize_mutation_result, parse_a1, parse_range
+from mog._unsupported import unsupported_api
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -253,11 +254,8 @@ class ValidationAPI:
         er: int,
         ec: int,
     ) -> List[Dict[str, Any]]:
-        """Find validation errors in a range.
-
-        Returns a list of error dicts. Currently a stub that returns ``[]``.
-        """
-        return []
+        """Find validation errors in a range."""
+        unsupported_api("ws.validations.getErrorsInRange", "ws.validation.get_errors_in_range")
 
     # ------------------------------------------------------------------
     # Schema-level API (original methods)

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from mog._bridge import Bridge
 
 
-class FloatingObjectHandle(dict):
+class FloatingObjectHandle(dict[str, Any]):
     """A dict subclass that also exposes convenience methods like ``duplicate()``.
 
     Instances behave exactly like a plain ``dict`` (``handle.get("id")``,

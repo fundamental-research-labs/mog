@@ -19,13 +19,13 @@ class SheetsAPI:
     def __init__(self, bridge: Bridge, workbook: Any = None) -> None:
         self._bridge = bridge
         self._workbook = workbook
-        self._event_handlers: Dict[str, List[Callable]] = {}
+        self._event_handlers: Dict[str, List[Callable[[Any], Any]]] = {}
 
     # ------------------------------------------------------------------
     # Event subscription
     # ------------------------------------------------------------------
 
-    def on(self, event: str, handler: Callable) -> Callable:
+    def on(self, event: str, handler: Callable[[Any], Any]) -> Callable[[], None]:
         """Subscribe to a sheet lifecycle event. Returns an unsubscribe function.
 
         Supported events: ``"sheetAdded"``, ``"sheetRemoved"``,
@@ -35,7 +35,7 @@ class SheetsAPI:
             self._event_handlers[event] = []
         self._event_handlers[event].append(handler)
 
-        def unsubscribe():
+        def unsubscribe() -> None:
             try:
                 self._event_handlers[event].remove(handler)
             except (ValueError, KeyError):

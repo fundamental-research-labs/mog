@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set, Tuple, Union
 
 from mog._serde import deserialize_mutation_result
 from mog.types import MutationResult
@@ -77,7 +77,7 @@ class ProtectionAPI:
         except Exception:
             return deserialize_mutation_result({})
 
-    def unprotect(self, password: Optional[str] = None):
+    def unprotect(self, password: Optional[str] = None) -> Union[MutationResult, bool]:
         """Unprotect the sheet.
 
         Parameters

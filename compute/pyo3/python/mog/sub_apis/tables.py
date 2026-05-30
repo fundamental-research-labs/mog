@@ -10,6 +10,7 @@ from mog._serde import (
     normalize_value,
     parse_range,
 )
+from mog._unsupported import unsupported_api
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -281,11 +282,11 @@ class TablesAPI:
 
     def clear_filters(self, table_name: str) -> None:
         """Clear all filters on a table."""
-        pass  # Stub -- filters are managed by the engine
+        unsupported_api("ws.tables.clearFilters", "ws.tables.clear_filters")
 
     def apply_auto_expansion(self, table_name: str) -> None:
         """Apply auto-expansion to detect new adjacent data."""
-        pass  # Stub -- auto-expansion is managed by the engine
+        unsupported_api("ws.tables.applyAutoExpansion", "ws.tables.apply_auto_expansion")
 
     # ------------------------------------------------------------------
     # Column operations
@@ -516,7 +517,7 @@ class TablesAPI:
 
     def sort_clear(self, table_name: str) -> None:
         """Clear sort fields from a table."""
-        pass  # Stub
+        unsupported_api("py.ws.tables.sort_clear", "ws.tables.sort_clear")
 
     # ------------------------------------------------------------------
     # Cell lookup

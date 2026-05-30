@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 
 from mog._serde import deserialize_mutation_result
 from mog.types import MutationResult
@@ -218,7 +218,11 @@ class LayoutAPI:
         raw = self._bridge.hide_rows(self._sheet_id_json, json.dumps(rows))
         return deserialize_mutation_result(raw)
 
-    def unhide_rows(self, rows_or_start, end=None) -> MutationResult:
+    def unhide_rows(
+        self,
+        rows_or_start: Union[int, List[int], Tuple[int, ...]],
+        end: Optional[int] = None,
+    ) -> MutationResult:
         """Unhide the specified rows.
 
         Accepts either a list of row indices or a start/end range.
@@ -237,7 +241,11 @@ class LayoutAPI:
         raw = self._bridge.hide_columns(self._sheet_id_json, json.dumps(cols))
         return deserialize_mutation_result(raw)
 
-    def unhide_columns(self, cols_or_start, end=None) -> MutationResult:
+    def unhide_columns(
+        self,
+        cols_or_start: Union[int, List[int], Tuple[int, ...]],
+        end: Optional[int] = None,
+    ) -> MutationResult:
         """Unhide the specified columns.
 
         Accepts either a list of column indices or a start/end range.

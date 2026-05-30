@@ -50,8 +50,8 @@ class Bridge:
 
     def call(self, method_name: str, *args: Any) -> Any:
         """Call a method on the engine, converting native errors to MogError."""
-        fn = getattr(self._engine, method_name)
         try:
+            fn = getattr(self._engine, method_name)
             return fn(*args)
         except Exception as exc:
             raise _wrap_native_error(exc) from exc
@@ -101,6 +101,9 @@ class Bridge:
         self, sheet_id_json: str, row: int, col: int, input_str: str
     ) -> Any:
         """Set a cell value. Returns the raw (bytes, mutation_json) tuple."""
+        if not hasattr(self._engine, "compute_set_cell_value_parsed"):
+            cells_json = json.dumps([{"row": row, "col": col, "value": input_str}])
+            return self.call_json("compute_set_cells_batch", sheet_id_json, cells_json)
         return self.call_json(
             "compute_set_cell_value_parsed", sheet_id_json, row, col, input_str
         )
@@ -109,6 +112,15 @@ class Bridge:
         self, sheet_id_json: str, updates_json: str
     ) -> Any:
         """Batch-set cell values."""
+        if not hasattr(self._engine, "compute_set_cell_values_parsed"):
+            updates = json.loads(updates_json)
+            cells = [
+                {"row": int(row), "col": int(col), "value": str(value)}
+                for row, col, value in updates
+            ]
+            return self.call_json(
+                "compute_set_cells_batch", sheet_id_json, json.dumps(cells)
+            )
         return self.call_json(
             "compute_set_cell_values_parsed", sheet_id_json, updates_json
         )

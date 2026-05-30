@@ -2,28 +2,13 @@
 
 These exercise the ``wb.security`` façade end-to-end through the PyO3
 bridge. They require ``mog._native`` to be built (``maturin develop``
-from ``compute/pyo3``). When ``mog._native`` isn't available the tests
-skip cleanly so ``pytest`` runs on a fresh checkout without erroring.
+from ``compute/pyo3``) and fail if the native extension is missing.
 """
 from __future__ import annotations
 
 import pytest
 
-
-_native_available: bool
-try:
-    import mog  # noqa: F401  (import to trigger availability check)
-    from mog._native import ComputeEngine  # noqa: F401
-
-    _native_available = True
-except ImportError:
-    _native_available = False
-
-
-pytestmark = pytest.mark.skipif(
-    not _native_available,
-    reason="mog._native not built — run `maturin develop` from compute/pyo3",
-)
+from mog._native import ComputeEngine  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

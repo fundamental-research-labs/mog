@@ -13,6 +13,8 @@ the most specific subclass possible.
 """
 from __future__ import annotations
 
+from typing import Optional
+
 
 class MogError(Exception):
     """Base class for all Mog SDK exceptions."""
@@ -20,6 +22,47 @@ class MogError(Exception):
 
 class ComputeError(MogError):
     """An error originating from the Rust compute engine."""
+
+
+class NativeApiError(ComputeError):
+    """A native bridge failure surfaced by ``mog._native``."""
+
+
+class UnsupportedApiError(MogError):
+    """Raised when a documented Python SDK path is deliberately unsupported."""
+
+    def __init__(
+        self,
+        api_path: str,
+        python_path: str,
+        reason_code: str,
+        owner_package: str,
+        replacement: Optional[str] = None,
+        docs_key: Optional[str] = None,
+    ) -> None:
+        self.api_path = api_path
+        self.python_path = python_path
+        self.reason_code = reason_code
+        self.owner_package = owner_package
+        self.replacement = replacement
+        self.docs_key = docs_key
+        message = (
+            f"{python_path} is not supported by the Mog Python SDK "
+            f"({api_path}; reason={reason_code}; owner={owner_package})"
+        )
+        if replacement:
+            message += f"; use {replacement}"
+        super().__init__(message)
+
+    def to_dict(self) -> dict[str, Optional[str]]:
+        return {
+            "api_path": self.api_path,
+            "python_path": self.python_path,
+            "reason_code": self.reason_code,
+            "owner_package": self.owner_package,
+            "replacement": self.replacement,
+            "docs_key": self.docs_key,
+        }
 
 
 class AddressError(MogError):
@@ -47,4 +90,4 @@ def _wrap_native_error(exc: Exception) -> MogError:
         return AddressError(msg)
     if "engine shut down" in msg.lower():
         return EngineShutdownError(msg)
-    return ComputeError(msg)
+    return NativeApiError(msg)

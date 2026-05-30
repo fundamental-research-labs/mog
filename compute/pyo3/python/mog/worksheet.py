@@ -16,6 +16,7 @@ from mog._serde import (
     parse_range,
 )
 from mog.errors import AddressError
+from mog._unsupported import unsupported_api
 from mog.types import CellInfo, CellValue, DataBounds, MutationResult
 
 if TYPE_CHECKING:
@@ -1112,8 +1113,8 @@ class Worksheet:
 
     @property
     def settings(self):
-        """Sheet-level settings (stub)."""
-        return _SheetSettingsStub(self._bridge, self._sheet_id_json)
+        """Sheet-level settings."""
+        return _SheetSettingsUnsupported(self._bridge, self._sheet_id_json)
 
     @property
     def changes(self):
@@ -1284,24 +1285,24 @@ class Worksheet:
         return self._validation_api
 
     @property
-    def data_table(self) -> "_DataTableStub":
+    def data_table(self) -> "_DataTableUnsupported":
         """Data table (what-if) operations."""
         if self._data_table_api is None:
-            self._data_table_api = _DataTableStub(self._bridge, self._sheet_id_json)
+            self._data_table_api = _DataTableUnsupported(self._bridge, self._sheet_id_json)
         return self._data_table_api
 
     @property
-    def scenarios(self) -> "_ScenariosStub":
+    def scenarios(self) -> "_ScenariosUnsupported":
         """What-if scenario operations."""
         if self._scenarios_api is None:
-            self._scenarios_api = _ScenariosStub(self._bridge, self._sheet_id_json)
+            self._scenarios_api = _ScenariosUnsupported(self._bridge, self._sheet_id_json)
         return self._scenarios_api
 
     @property
-    def pictures(self) -> "_PicturesStub":
+    def pictures(self) -> "_PicturesUnsupported":
         """Pictures/images on this sheet."""
         if self._pictures_api is None:
-            self._pictures_api = _PicturesStub(self._bridge, self._sheet_id_json, self)
+            self._pictures_api = _PicturesUnsupported(self._bridge, self._sheet_id_json, self)
         return self._pictures_api
 
     @property
@@ -1312,17 +1313,17 @@ class Worksheet:
         return self._names_api
 
     @property
-    def form_controls(self) -> "_FormControlsStub":
+    def form_controls(self) -> "_FormControlsUnsupported":
         """Form control operations on this sheet."""
         if self._form_controls_api is None:
-            self._form_controls_api = _FormControlsStub(self._bridge, self._sheet_id_json)
+            self._form_controls_api = _FormControlsUnsupported(self._bridge, self._sheet_id_json)
         return self._form_controls_api
 
     @property
-    def text_boxes(self) -> "_TextBoxesStub":
+    def text_boxes(self) -> "_TextBoxesUnsupported":
         """Text box operations on this sheet."""
         if self._text_boxes_api is None:
-            self._text_boxes_api = _TextBoxesStub(self._bridge, self._sheet_id_json, self)
+            self._text_boxes_api = _TextBoxesUnsupported(self._bridge, self._sheet_id_json, self)
         return self._text_boxes_api
 
     # ------------------------------------------------------------------
@@ -1852,13 +1853,12 @@ class Worksheet:
         return self.summarize()
 
 
-class _DataTableStub:
-    """Stub data-table (what-if analysis) sub-API."""
+class _DataTableUnsupported:
+    """Unsupported data-table (what-if analysis) sub-API."""
 
     def __init__(self, bridge: Any, sheet_id_json: str) -> None:
         self._bridge = bridge
         self._sheet_id_json = sheet_id_json
-        self._tables: List[Dict[str, Any]] = []
 
     def create(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Create a data table (what-if table).
@@ -1868,56 +1868,42 @@ class _DataTableStub:
         config:
             Dict with ``range``, ``rowInputCell``, and optionally ``columnInputCell``.
         """
-        import uuid as _uuid
-        table_id = _uuid.uuid4().hex[:8]
-        entry = {"id": table_id, **config}
-        self._tables.append(entry)
-        return entry
+        unsupported_api("py.ws.data_table.create", "ws.data_table.create")
 
     def list(self) -> List[Dict[str, Any]]:
-        return list(self._tables)
+        unsupported_api("py.ws.data_table.list", "ws.data_table.list")
 
     def delete(self, table_id: str) -> None:
-        self._tables = [t for t in self._tables if t.get("id") != table_id]
+        unsupported_api("py.ws.data_table.delete", "ws.data_table.delete")
 
 
-class _ScenariosStub:
-    """Stub what-if scenarios sub-API."""
+class _ScenariosUnsupported:
+    """Unsupported what-if scenarios sub-API."""
 
     def __init__(self, bridge: Any, sheet_id_json: str) -> None:
         self._bridge = bridge
         self._sheet_id_json = sheet_id_json
-        self._scenarios: List[Dict[str, Any]] = []
 
     def add(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Add a what-if scenario."""
-        entry = dict(config)
-        self._scenarios.append(entry)
-        return entry
+        unsupported_api("py.ws.scenarios.add", "ws.scenarios.add")
 
     def list(self) -> List[Dict[str, Any]]:
-        return list(self._scenarios)
+        unsupported_api("py.ws.scenarios.list", "ws.scenarios.list")
 
     def update(self, name: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update a scenario by name."""
-        for s in self._scenarios:
-            if s.get("name") == name:
-                s.update(updates)
-                return s
-        return {"error": f"Scenario {name!r} not found"}
+        unsupported_api("py.ws.scenarios.update", "ws.scenarios.update")
 
     def delete(self, name: str) -> None:
-        self._scenarios = [s for s in self._scenarios if s.get("name") != name]
+        unsupported_api("py.ws.scenarios.delete", "ws.scenarios.delete")
 
     def apply(self, name: str) -> Optional[Dict[str, Any]]:
-        for s in self._scenarios:
-            if s.get("name") == name:
-                return s
-        return None
+        unsupported_api("py.ws.scenarios.apply", "ws.scenarios.apply")
 
 
-class _PicturesStub:
-    """Stub pictures sub-API -- delegates to ObjectsAPI for storage."""
+class _PicturesUnsupported:
+    """Unsupported pictures sub-API."""
 
     def __init__(self, bridge: Any, sheet_id_json: str, worksheet: Any) -> None:
         self._bridge = bridge
@@ -1926,54 +1912,49 @@ class _PicturesStub:
 
     def add(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Add a picture/image object."""
-        pic_config = {"type": "picture", **config}
-        result = self._ws.objects.add(pic_config)
-        if isinstance(result, dict):
-            return result
-        return {"id": "", "type": "picture"}
+        unsupported_api("ws.pictures.add", "ws.pictures.add")
 
     def list(self) -> List[Dict[str, Any]]:
         """List all picture objects on this sheet."""
-        all_objects = self._ws.objects.list()
-        return [o for o in all_objects if o.get("type") == "picture" or o.get("objectType") == "picture"]
+        unsupported_api("ws.pictures.list", "ws.pictures.list")
 
     def get(self, picture_id: str) -> Optional[Dict[str, Any]]:
         """Get a picture by ID."""
-        for p in self.list():
-            if p.get("id") == picture_id:
-                return p
-        # Fall back to searching all objects
-        all_objects = self._ws.objects.list()
-        for o in all_objects:
-            if o.get("id") == picture_id:
-                return o
-        return None
+        unsupported_api("ws.pictures.get", "ws.pictures.get")
 
 
-class _SheetSettingsStub:
-    """Stub sheet-level settings API."""
+class _SheetSettingsUnsupported:
+    """Unsupported sheet-level settings API."""
 
     def __init__(self, bridge, sheet_id_json):
         self._bridge = bridge
         self._sheet_id_json = sheet_id_json
-        self._local: Dict[str, Any] = {}
 
     def get(self) -> Dict[str, Any]:
-        return dict(self._local)
+        unsupported_api("ws.settings.get", "ws.settings.get")
 
     def set(self, settings: Dict[str, Any]) -> None:
-        self._local.update(settings)
+        unsupported_api("ws.settings.set", "ws.settings.set")
 
     def update(self, settings: Dict[str, Any]) -> None:
-        self._local.update(settings)
+        unsupported_api("py.ws.settings.update", "ws.settings.update")
 
     def get_standard_column_width(self) -> float:
         """Get the standard column width (default 64.0)."""
-        return self._local.get("standardColumnWidth", 64.0)
+        unsupported_api("py.ws.settings.get_standard_column_width", "ws.settings.get_standard_column_width")
+
+    def get_standard_width(self) -> float:
+        unsupported_api("ws.settings.getStandardWidth", "ws.settings.get_standard_width")
 
     def get_standard_row_height(self) -> float:
         """Get the standard row height (default 20.0)."""
-        return self._local.get("standardRowHeight", 20.0)
+        unsupported_api("py.ws.settings.get_standard_row_height", "ws.settings.get_standard_row_height")
+
+    def get_standard_height(self) -> float:
+        unsupported_api("ws.settings.getStandardHeight", "ws.settings.get_standard_height")
+
+    def set_standard_width(self, width: float) -> None:
+        unsupported_api("ws.settings.setStandardWidth", "ws.settings.set_standard_width")
 
 
 class _ChangesAPI:
@@ -2141,42 +2122,52 @@ class _SheetScopedNamesAPI:
         return list(self._local_names.values())
 
 
-class _FormControlsStub:
-    """Stub form controls sub-API for a worksheet."""
+class _FormControlsUnsupported:
+    """Unsupported form controls sub-API for a worksheet."""
 
-    __slots__ = ("_bridge", "_sheet_id_json", "_controls")
+    __slots__ = ("_bridge", "_sheet_id_json")
 
     def __init__(self, bridge: Any, sheet_id_json: str) -> None:
         self._bridge = bridge
         self._sheet_id_json = sheet_id_json
-        self._controls: List[Dict[str, Any]] = []
 
     def add(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Add a form control."""
-        import uuid as _uuid
-        ctrl_id = _uuid.uuid4().hex[:16]
-        entry = {"id": ctrl_id, **config}
-        self._controls.append(entry)
-        return entry
+        unsupported_api("ws.formControls.add", "ws.form_controls.add")
+
+    def add_checkbox(self, options: Dict[str, Any]) -> Dict[str, Any]:
+        unsupported_api("ws.formControls.addCheckbox", "ws.form_controls.add_checkbox")
+
+    def add_combo_box(self, options: Dict[str, Any]) -> Dict[str, Any]:
+        unsupported_api("ws.formControls.addComboBox", "ws.form_controls.add_combo_box")
 
     def get(self, control_id: str) -> Optional[Dict[str, Any]]:
         """Get a form control by ID."""
-        for ctrl in self._controls:
-            if ctrl.get("id") == control_id:
-                return ctrl
-        return None
+        unsupported_api("ws.formControls.get", "ws.form_controls.get")
+
+    def get_at_position(self, row: int, col: int) -> List[Dict[str, Any]]:
+        unsupported_api("ws.formControls.getAtPosition", "ws.form_controls.get_at_position")
 
     def list(self) -> List[Dict[str, Any]]:
         """List all form controls on this sheet."""
-        return list(self._controls)
+        unsupported_api("ws.formControls.list", "ws.form_controls.list")
+
+    def update(self, control_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        unsupported_api("ws.formControls.update", "ws.form_controls.update")
+
+    def move(self, control_id: str, new_anchor: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        unsupported_api("ws.formControls.move", "ws.form_controls.move")
+
+    def resize(self, control_id: str, width: float, height: float) -> Optional[Dict[str, Any]]:
+        unsupported_api("ws.formControls.resize", "ws.form_controls.resize")
 
     def remove(self, control_id: str) -> None:
         """Remove a form control by ID."""
-        self._controls = [c for c in self._controls if c.get("id") != control_id]
+        unsupported_api("ws.formControls.remove", "ws.form_controls.remove")
 
 
-class _TextBoxesStub:
-    """Stub text boxes sub-API -- delegates to ObjectsAPI for storage."""
+class _TextBoxesUnsupported:
+    """Unsupported text boxes sub-API."""
 
     __slots__ = ("_bridge", "_sheet_id_json", "_ws")
 
@@ -2190,30 +2181,16 @@ class _TextBoxesStub:
 
         Returns a dict containing at least ``{"id": "..."}``.
         """
-        tb_config = {"type": "textBox", **config}
-        result = self._ws.objects.add(tb_config)
-        if isinstance(result, dict):
-            return result
-        return {"id": "", "type": "textBox"}
+        unsupported_api("ws.textBoxes.add", "ws.text_boxes.add")
 
     def get(self, text_box_id: str) -> Optional[Dict[str, Any]]:
         """Get a text box by ID."""
-        for tb in self.list():
-            if tb.get("id") == text_box_id:
-                return tb
-        obj = self._ws.objects.get(text_box_id)
-        return obj
+        unsupported_api("ws.textBoxes.get", "ws.text_boxes.get")
 
     def list(self) -> List[Dict[str, Any]]:
         """List all text box objects on this sheet."""
-        all_objects = self._ws.objects.list()
-        return [
-            o for o in all_objects
-            if o.get("type") == "textBox"
-            or o.get("objectType") == "textBox"
-            or o.get("type") == "text_box"
-        ]
+        unsupported_api("ws.textBoxes.list", "ws.text_boxes.list")
 
     def remove(self, text_box_id: str) -> Any:
         """Remove a text box by ID."""
-        return self._ws.objects.remove(text_box_id)
+        unsupported_api("py.ws.text_boxes.remove", "ws.text_boxes.remove")

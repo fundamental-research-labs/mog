@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 from mog._serde import _col_to_a1, deserialize_mutation_result, parse_a1, parse_range
 from mog.types import MutationResult
@@ -31,7 +31,12 @@ class StructureAPI:
 
     __slots__ = ("_bridge", "_sheet_id_json", "_protection_check")
 
-    def __init__(self, bridge: Bridge, sheet_id_json: str, protection_check=None) -> None:
+    def __init__(
+        self,
+        bridge: Bridge,
+        sheet_id_json: str,
+        protection_check: Optional[Callable[[str], bool]] = None,
+    ) -> None:
         self._bridge = bridge
         self._sheet_id_json = sheet_id_json
         self._protection_check = protection_check
@@ -262,7 +267,13 @@ class StructureAPI:
     # Merge operations
     # ------------------------------------------------------------------
 
-    def merge(self, range_or_sr, sc=None, er=None, ec=None) -> MutationResult:
+    def merge(
+        self,
+        range_or_sr: Union[str, int],
+        sc: Optional[int] = None,
+        er: Optional[int] = None,
+        ec: Optional[int] = None,
+    ) -> MutationResult:
         """Merge cells in the given range.
 
         Accepts either an A1 range string (``"A1:C3"``) or four integer
@@ -271,8 +282,10 @@ class StructureAPI:
         Returns a MutationResult with kind='merge' and range in A1 notation.
         """
         if sc is not None:
+            assert er is not None and ec is not None
             sr, sc, er, ec = int(range_or_sr), int(sc), int(er), int(ec)
         else:
+            assert isinstance(range_or_sr, str)
             sr, sc, er, ec = parse_range(range_or_sr)
         raw = self._bridge.merge_range(self._sheet_id_json, sr, sc, er, ec)
         result = deserialize_mutation_result(raw)
@@ -280,7 +293,13 @@ class StructureAPI:
         result.raw["range"] = _range_to_a1(sr, sc, er, ec)
         return result
 
-    def unmerge(self, range_or_sr, sc=None, er=None, ec=None) -> MutationResult:
+    def unmerge(
+        self,
+        range_or_sr: Union[str, int],
+        sc: Optional[int] = None,
+        er: Optional[int] = None,
+        ec: Optional[int] = None,
+    ) -> MutationResult:
         """Unmerge cells in the given range.
 
         Accepts either an A1 range string or four integer arguments.
@@ -288,8 +307,10 @@ class StructureAPI:
         Returns a MutationResult with kind='unmerge' and range in A1 notation.
         """
         if sc is not None:
+            assert er is not None and ec is not None
             sr, sc, er, ec = int(range_or_sr), int(sc), int(er), int(ec)
         else:
+            assert isinstance(range_or_sr, str)
             sr, sc, er, ec = parse_range(range_or_sr)
         raw = self._bridge.unmerge_range(self._sheet_id_json, sr, sc, er, ec)
         result = deserialize_mutation_result(raw)

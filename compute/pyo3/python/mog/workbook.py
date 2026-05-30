@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from mog._bridge import Bridge, _ensure_json_quoted
 from mog._serde import deserialize_mutation_result
 from mog.errors import MogError, SheetNotFoundError
+from mog._unsupported import unsupported_api, unsupported_proxy_from_surface
 from mog.types import MutationResult
 from mog.worksheet import Worksheet
 
@@ -141,8 +142,9 @@ class Workbook:
         }
         bridge, _lifecycle = Bridge.create_from_snapshot(json.dumps(snapshot))
 
-        # Import XLSX data — replaces engine content with the file's data
-        bridge.call("compute_import_from_xlsx_bytes", xlsx_bytes)
+        # Import XLSX data — replaces engine content with the file's data.
+        # Current native import requires an explicit recalc decision.
+        bridge.call("compute_import_from_xlsx_bytes", xlsx_bytes, True)
 
         wb = cls(bridge)
         wb._from_xlsx = True
@@ -814,7 +816,7 @@ class Workbook:
     @property
     def theme(self):
         """Theme sub-API (colors, fonts, table styles)."""
-        return _ThemeStub()
+        return _ThemeUnsupported()
 
     def address_to_index(self, address: str) -> Dict[str, int]:
         """Convert an A1-style address to a 0-based ``{"row": r, "col": c}`` dict.
@@ -1063,39 +1065,27 @@ class Workbook:
         return results
 
     def to_buffer(self) -> bytes:
-        """Export the workbook as an XLSX-like bytes buffer.
-
-        Returns a bytes object.  If the native engine does not support
-        export, returns a minimal valid ZIP (empty XLSX placeholder).
-        """
-        xlsx_bytes: Optional[bytes] = None
+        """Export the workbook as native XLSX bytes."""
         try:
             result = self._bridge.call("compute_export_to_xlsx_bytes")
-            if isinstance(result, bytes):
-                xlsx_bytes = result
-        except Exception:
-            pass
-
-        if xlsx_bytes is None:
-            # Return a minimal valid ZIP file as a placeholder
-            import io
-            import zipfile
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(
-                    "[Content_Types].xml",
-                    '<?xml version="1.0" encoding="UTF-8"?>'
-                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                    '<Default Extension="xml" ContentType="application/xml"/>'
-                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                    '</Types>',
-                )
-            return buf.getvalue()
+        except AttributeError:
+            unsupported_api(
+                "wb.toXlsx",
+                "wb.to_buffer",
+                reason_code="native_missing",
+                docs_key="python-sdk-xlsx-export",
+            )
+        if not isinstance(result, bytes):
+            unsupported_api(
+                "wb.toXlsx",
+                "wb.to_buffer",
+                reason_code="native_missing",
+                docs_key="python-sdk-xlsx-export",
+            )
 
         # Inject pivot table XML into the XLSX if pivots exist but aren't
         # already in the archive.
-        xlsx_bytes = self._inject_pivot_xml(xlsx_bytes)
-        return xlsx_bytes
+        return self._inject_pivot_xml(result)
 
     def _inject_pivot_xml(self, xlsx_bytes: bytes) -> bytes:
         """Add pivot table and pivot cache XML to an XLSX buffer if needed."""
@@ -1322,7 +1312,7 @@ class Workbook:
     @property
     def bindings(self):
         """Data bindings sub-API."""
-        return _BindingsStub()
+        return _BindingsUnsupported()
 
     # ------------------------------------------------------------------
     # Sub-APIs (lazy properties)
@@ -1363,9 +1353,7 @@ class Workbook:
     @property
     def viewport(self) -> _ViewportAPI:
         """Viewport subscription sub-API."""
-        if self._viewport_api is None:
-            self._viewport_api = _ViewportAPI()
-        return self._viewport_api
+        return unsupported_proxy_from_surface("wb.viewport", "wb.viewport")
 
     @property
     def protection(self) -> _ProtectionAPI:
@@ -1465,7 +1453,8 @@ class Workbook:
         self._sheet_cache.clear()
         # The engine will be dropped when the Python object is garbage collected.
         # This is a hint to release resources early.
-        self._bridge._engine = None  # type: ignore[assignment]
+        bridge = getattr(self._bridge, "_real_bridge", self._bridge)
+        bridge._engine = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
         try:
@@ -1570,32 +1559,21 @@ class _NotificationsAPI:
         return iter(self._notifications)
 
 
-class _NotificationsStub(_NotificationsAPI):
-    """Backward-compatible alias."""
-    pass
-
-
-class _BindingsStub:
-    """Stub bindings sub-API so ``wb.bindings`` doesn't crash."""
+class _BindingsUnsupported:
+    """Data bindings are not production-backed in the Python SDK yet."""
 
     def list(self):
-        return []
+        unsupported_api("py.wb.bindings.list", "wb.bindings.list")
 
     def add(self, *args, **kwargs):
-        return None
+        unsupported_api("py.wb.bindings.add", "wb.bindings.add")
 
     def remove(self, *args, **kwargs):
-        pass
-
-    def __bool__(self):
-        return False
-
-    def __iter__(self):
-        return iter([])
+        unsupported_api("py.wb.bindings.remove", "wb.bindings.remove")
 
 
-class _ThemeStub:
-    """Stub theme sub-API so ``wb.theme`` doesn't crash."""
+class _ThemeUnsupported:
+    """Unsupported workbook theme sub-API."""
 
     def __init__(self):
         self._colors = {
@@ -1623,26 +1601,34 @@ class _ThemeStub:
         ]
 
     def get(self) -> Dict[str, Any]:
-        return {
-            "name": "Office",
-            "colors": dict(self._colors),
-            "fonts": dict(self._fonts),
-        }
+        unsupported_api("py.wb.theme.get", "wb.theme.get")
+
+    def get_workbook_theme(self) -> Dict[str, Any]:
+        unsupported_api("wb.theme.getWorkbookTheme", "wb.theme.get_workbook_theme")
+
+    def set_workbook_theme(self, theme: Dict[str, Any]) -> None:
+        unsupported_api("wb.theme.setWorkbookTheme", "wb.theme.set_workbook_theme")
+
+    def get_chrome_theme(self) -> Dict[str, Any]:
+        unsupported_api("wb.theme.getChromeTheme", "wb.theme.get_chrome_theme")
+
+    def set_chrome_theme(self, theme: Dict[str, Any]) -> None:
+        unsupported_api("wb.theme.setChromeTheme", "wb.theme.set_chrome_theme")
 
     def get_colors(self) -> Dict[str, str]:
-        return dict(self._colors)
+        unsupported_api("py.wb.theme.get_colors", "wb.theme.get_colors")
 
     def get_fonts(self) -> Dict[str, str]:
-        return dict(self._fonts)
+        unsupported_api("py.wb.theme.get_fonts", "wb.theme.get_fonts")
 
     def list_table_styles(self) -> List[Dict[str, Any]]:
-        return list(self._table_styles)
+        unsupported_api("py.wb.theme.list_table_styles", "wb.theme.list_table_styles")
 
     def set_colors(self, colors: Dict[str, str]) -> None:
-        self._colors.update(colors)
+        unsupported_api("py.wb.theme.set_colors", "wb.theme.set_colors")
 
     def set_fonts(self, fonts: Dict[str, str]) -> None:
-        self._fonts.update(fonts)
+        unsupported_api("py.wb.theme.set_fonts", "wb.theme.set_fonts")
 
 
 class _ViewportAPI:
@@ -1664,13 +1650,8 @@ class _ViewportAPI:
         return unsubscribe
 
     def create_region(self, sheet_id: str, bounds: Dict[str, Any]) -> Any:
-        """Create a viewport region (stub). Returns a disposable region."""
-
-        class _Region:
-            def dispose(self):
-                pass
-
-        return _Region()
+        """Create a viewport region."""
+        unsupported_api("wb.viewport.createRegion", "wb.viewport.create_region")
 
     def unsubscribe_all(self) -> None:
         self._subscribers.clear()

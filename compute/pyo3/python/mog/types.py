@@ -40,7 +40,7 @@ class CellError:
 # CellInfo — full cell metadata
 # ---------------------------------------------------------------------------
 
-class CellInfo(dict):
+class CellInfo(dict[str, Any]):
     """Full information about a single cell.
 
     Inherits from ``dict`` so that ``isinstance(info, dict)`` returns

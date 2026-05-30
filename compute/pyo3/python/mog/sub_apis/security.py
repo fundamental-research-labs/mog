@@ -163,7 +163,7 @@ class SecurityAPI:
     def remove_template(self, template_id: str) -> None:
         """Remove every policy emitted by the named template."""
         self._bridge.call(
-            "compute_wb_security_remove_template", json.dumps(template_id)
+            "compute_wb_security_remove_template", template_id
         )
 
     # -----------------------------------------------------------------

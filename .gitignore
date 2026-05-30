@@ -55,6 +55,7 @@ __pycache__/
 *.dylib
 *.pyd
 *.whl
+*.dSYM/
 
 # Environment
 .env*

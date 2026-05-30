@@ -6,6 +6,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result
+from mog._unsupported import unsupported_api
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -310,11 +311,8 @@ class ChartsAPI:
     # ------------------------------------------------------------------
 
     def export_image(self, chart_id: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Export a chart as an image (stub).
-
-        Returns a dict with export result metadata.
-        """
-        return {"chartId": chart_id, "format": (options or {}).get("format", "png"), "data": None}
+        """Export a chart as an image."""
+        unsupported_api("ws.charts.exportImage", "ws.charts.export_image")
 
     # ------------------------------------------------------------------
     # Table linking

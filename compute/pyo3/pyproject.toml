@@ -6,10 +6,29 @@ build-backend = "maturin"
 name = "mog-sdk"
 version = "0.6.0"
 description = "Mog spreadsheet engine — Python SDK"
+readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "LicenseRef-Mog-MIT" }
+authors = [{ name = "Mog" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
 
 [tool.maturin]
 python-source = "python"
 module-name = "mog._native"
 features = ["extension-module"]
+include = [
+  { path = "README.md", format = "sdist" },
+  { path = "python/mog/py.typed", format = "wheel" },
+  { path = "python/mog/*.pyi", format = "wheel" },
+  { path = "python/mog/api_dispositions.json", format = "wheel" },
+  { path = "python/mog/api_dispositions.schema.json", format = "wheel" },
+  { path = "python/mog/_generated/*", format = "wheel" },
+]

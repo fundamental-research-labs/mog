@@ -45,6 +45,9 @@ Use `@mog-sdk/embed` for browser, React, and Web Component embeds. See:
 This is a large monorepo. Start with the package or surface you are changing,
 then run the smallest relevant verification gate.
 
+Use `dev-v0.7.2` as the exclusive development branch for this repo unless a
+task explicitly names another branch. Do not base new local work on `dev`.
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck

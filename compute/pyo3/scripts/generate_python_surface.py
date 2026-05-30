@@ -66,6 +66,13 @@ ROOT_METHOD_OVERRIDES = {
 }
 
 KNOWN_UNSUPPORTED = {
+    "wb.createCheckpoint": "wb.create_checkpoint",
+    "wb.executeCode": "wb.execute_code",
+    "wb.getFunctionCatalog": "wb.get_function_catalog",
+    "wb.getFunctionInfo": "wb.get_function_info",
+    "wb.history.goToIndex": "wb.history.go_to_index",
+    "wb.listCheckpoints": "wb.list_checkpoints",
+    "wb.restoreCheckpoint": "wb.restore_checkpoint",
     "wb.viewport.createRegion": "wb.viewport.create_region",
     "wb.viewport.resetSheetRegions": "wb.viewport.reset_sheet_regions",
     "wb.viewport.setRenderScheduler": "wb.viewport.set_render_scheduler",
@@ -76,6 +83,8 @@ KNOWN_UNSUPPORTED = {
     "wb.theme.getChromeTheme": "wb.theme.get_chrome_theme",
     "wb.theme.setChromeTheme": "wb.theme.set_chrome_theme",
     "ws.charts.exportImage": "ws.charts.export_image",
+    "ws.autoFill": "ws.auto_fill",
+    "ws.formatValues": "ws.format_values",
     "ws.settings.get": "ws.settings.get",
     "ws.settings.set": "ws.settings.set",
     "ws.settings.getStandardHeight": "ws.settings.get_standard_height",
@@ -102,6 +111,20 @@ KNOWN_UNSUPPORTED = {
     "ws.formControls.remove": "ws.form_controls.remove",
 }
 
+UNSUPPORTED_TS_PREFIXES = {
+    "wb.names",
+    "wb.protection",
+    "ws.charts",
+    "ws.names",
+    "ws.objects",
+    "ws.print",
+    "ws.protection",
+    "ws.shapes",
+    "ws.tables",
+    "ws.validations",
+    "ws.view",
+}
+
 PYTHON_ONLY_UNSUPPORTED = {
     "wb.bindings.list",
     "wb.bindings.add",
@@ -123,8 +146,62 @@ PYTHON_ONLY_UNSUPPORTED = {
     "ws.settings.update",
     "ws.settings.get_standard_column_width",
     "ws.settings.get_standard_row_height",
-    "ws.tables.sort_clear",
     "ws.text_boxes.remove",
+    "wb.resume_calc",
+    "wb.goal_seek",
+    "wb.recalculate_sheet",
+    "wb.styles.get_table_styles",
+    "wb.suspend_calc",
+    "ws.charts.create",
+    "ws.charts.delete",
+    "ws.charts.sync_from_engine",
+    "ws.names.add",
+    "ws.names.get",
+    "ws.names.list",
+    "ws.names.remove",
+    "ws.objects.add",
+    "ws.objects.create",
+    "ws.objects.delete",
+    "ws.objects.delete_many",
+    "ws.objects.duplicate",
+    "ws.print_.clear_titles",
+    "ws.print_.get_titles",
+    "ws.print_.remove_all_page_breaks",
+    "ws.print_.set_titles",
+    "ws.protection.mark_locked",
+    "ws.protection.mark_unlocked",
+    "ws.shapes.add",
+    "ws.shapes.bring_forward",
+    "ws.shapes.bring_to_front",
+    "ws.shapes.create",
+    "ws.shapes.delete",
+    "ws.shapes.delete_many",
+    "ws.shapes.duplicate",
+    "ws.shapes.group",
+    "ws.shapes.send_backward",
+    "ws.shapes.send_to_back",
+    "ws.shapes.ungroup",
+    "ws.shapes.update",
+    "ws.tables.create",
+    "ws.tables.delete",
+    "ws.text_to_columns",
+    "ws.validation.get_schema",
+    "ws.validation.set_schema",
+    "ws.view.get_options",
+    "ws.view.set_option",
+}
+
+PYTHON_ONLY_UNSUPPORTED_PREFIXES = {
+    "wb.styles.",
+    "ws.charts.",
+    "ws.names.",
+    "ws.objects.",
+    "ws.print_.",
+    "ws.protection.",
+    "ws.shapes.",
+    "ws.tables.",
+    "ws.validation.",
+    "ws.view.",
 }
 
 SUBAPI_OWNER_OVERRIDES = {
@@ -136,6 +213,7 @@ SUBAPI_OWNER_OVERRIDES = {
     "print_": "mog.sub_apis.print_",
     "scenarios": "mog.worksheet",
     "settings": "mog.worksheet",
+    "shapes": "mog.sub_apis.objects",
     "text_boxes": "mog.worksheet",
     "validation": "mog.sub_apis.validation",
 }
@@ -283,8 +361,143 @@ def normalize_return(type_text: str) -> dict[str, Any]:
     }
 
 
+ALLOWED_TYPE_KINDS = {
+    "primitive",
+    "literal",
+    "array",
+    "tuple",
+    "objectRef",
+    "function",
+    "promise",
+    "union",
+    "intersection",
+    "record",
+    "unknown",
+    "void",
+}
+
+
 def load_spec() -> dict[str, Any]:
-    return json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text())
+    validate_api_spec_contract(spec)
+    return spec
+
+
+def validate_api_spec_contract(spec: dict[str, Any]) -> None:
+    errors: list[str] = []
+    if spec.get("schemaVersion") != "1":
+        errors.append("api-spec.json schemaVersion must be '1'")
+    if not isinstance(spec.get("interfaces"), dict):
+        errors.append("api-spec.json must include top-level interfaces")
+    subapis = spec.get("subApis")
+    if not isinstance(subapis, dict):
+        errors.append("api-spec.json must include top-level subApis")
+    else:
+        for root in ("workbook", "worksheet"):
+            if not isinstance(subapis.get(root), dict):
+                errors.append(f"api-spec.json subApis.{root} must be an object")
+    if not isinstance(spec.get("types"), dict):
+        errors.append("api-spec.json must include top-level types")
+
+    for interface_name, info in (spec.get("interfaces") or {}).items():
+        for member_name, meta in (info.get("functions") or {}).items():
+            errors.extend(validate_api_member_meta(meta, f"interfaces.{interface_name}.functions.{member_name}"))
+    for root in ("workbook", "worksheet"):
+        for accessor, meta in ((spec.get("subApis") or {}).get(root) or {}).items():
+            errors.extend(validate_api_member_meta(meta, f"subApis.{root}.{accessor}", require_target=True))
+
+    if errors:
+        preview = "\n".join(f"- {error}" for error in errors[:20])
+        suffix = f"\n... {len(errors) - 20} more" if len(errors) > 20 else ""
+        raise SystemExit(f"{SPEC_PATH.relative_to(ROOT)} contract validation failed:\n{preview}{suffix}")
+
+
+def validate_api_member_meta(meta: Any, path: str, *, require_target: bool = False) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(meta, dict):
+        return [f"{path} must be an object"]
+    for field in (
+        "stableId",
+        "canonicalPath",
+        "root",
+        "interface",
+        "method",
+        "kind",
+        "visibility",
+        "asyncModel",
+        "parameters",
+        "returns",
+    ):
+        if field not in meta:
+            errors.append(f"{path} missing {field}")
+    if require_target and "targetInterface" not in meta:
+        errors.append(f"{path} missing targetInterface")
+    if isinstance(meta.get("parameters"), list):
+        for index, param in enumerate(meta["parameters"]):
+            errors.extend(validate_parameter(param, f"{path}.parameters[{index}]"))
+    returns = meta.get("returns")
+    if isinstance(returns, dict):
+        errors.extend(validate_normalized_type(returns.get("type"), f"{path}.returns.type"))
+    else:
+        errors.append(f"{path}.returns must be an object")
+    return errors
+
+
+def validate_parameter(param: Any, path: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(param, dict):
+        return [f"{path} must be an object"]
+    for field in ("name", "position", "optional", "rest", "default", "type", "typeText"):
+        if field not in param:
+            errors.append(f"{path} missing {field}")
+    errors.extend(validate_normalized_type(param.get("type"), f"{path}.type"))
+    return errors
+
+
+def validate_normalized_type(type_info: Any, path: str) -> list[str]:
+    if not isinstance(type_info, dict):
+        return [f"{path} must be an object"]
+    kind = type_info.get("kind")
+    if kind not in ALLOWED_TYPE_KINDS:
+        return [f"{path}.kind is invalid: {kind!r}"]
+    required_by_kind = {
+        "primitive": ("name",),
+        "literal": ("value",),
+        "array": ("items",),
+        "tuple": ("items",),
+        "objectRef": ("name",),
+        "function": ("params", "returns"),
+        "promise": ("inner",),
+        "union": ("items",),
+        "intersection": ("items",),
+        "record": ("key", "value"),
+        "unknown": (),
+        "void": (),
+    }
+    errors = [f"{path} missing {field}" for field in required_by_kind[kind] if field not in type_info]
+    if kind == "array":
+        errors.extend(validate_normalized_type(type_info.get("items"), f"{path}.items"))
+    elif kind in {"tuple", "union", "intersection"}:
+        items = type_info.get("items")
+        if not isinstance(items, list):
+            errors.append(f"{path}.items must be an array")
+        else:
+            for index, item in enumerate(items):
+                errors.extend(validate_normalized_type(item, f"{path}.items[{index}]"))
+    elif kind == "function":
+        params = type_info.get("params")
+        if not isinstance(params, list):
+            errors.append(f"{path}.params must be an array")
+        else:
+            for index, param in enumerate(params):
+                errors.extend(validate_parameter(param, f"{path}.params[{index}]"))
+        errors.extend(validate_normalized_type(type_info.get("returns"), f"{path}.returns"))
+    elif kind == "promise":
+        errors.extend(validate_normalized_type(type_info.get("inner"), f"{path}.inner"))
+    elif kind == "record":
+        errors.extend(validate_normalized_type(type_info.get("key"), f"{path}.key"))
+        errors.extend(validate_normalized_type(type_info.get("value"), f"{path}.value"))
+    return errors
 
 
 def python_accessor(parent: str, accessor: str) -> str:
@@ -297,77 +510,101 @@ def root_python_member(parent: str, member: str) -> Optional[str]:
     return ROOT_METHOD_OVERRIDES.get((parent, member), camel_to_snake(member))
 
 
+def is_known_unsupported_api(api_path: str) -> bool:
+    return api_path in KNOWN_UNSUPPORTED or any(
+        api_path.startswith(prefix + ".") for prefix in UNSUPPORTED_TS_PREFIXES
+    )
+
+
+def is_python_only_unsupported(python_path: str) -> bool:
+    return python_path in PYTHON_ONLY_UNSUPPORTED or any(
+        python_path.startswith(prefix) for prefix in PYTHON_ONLY_UNSUPPORTED_PREFIXES
+    )
+
+
+def surface_return(meta: dict[str, Any]) -> dict[str, Any]:
+    returns = meta.get("returns") or {}
+    type_model = returns.get("type") or {"kind": "unknown"}
+    async_ts = meta.get("asyncModel") == "promise" or type_model.get("kind") == "promise"
+    exposed_type = type_model.get("inner") if type_model.get("kind") == "promise" else type_model
+    return {
+        "asyncTs": async_ts,
+        "type": exposed_type or {"kind": "unknown"},
+        "raw": returns.get("typeText") or meta.get("typeScript", {}).get("returnTypeText") or "unknown",
+    }
+
+
+def surface_entry(
+    *,
+    parent: str,
+    member_name: str,
+    meta: dict[str, Any],
+    python_path: Optional[str],
+    member_kind: Optional[str] = None,
+) -> SurfaceEntry:
+    return SurfaceEntry(
+        api_path=meta.get("canonicalPath") or f"{parent}.{member_name}",
+        stable_id=meta.get("stableId") or f"{meta.get('interface', 'Unknown')}.{member_name}",
+        interface=meta.get("targetInterface") if meta.get("kind") == "subApiAccessor" else meta.get("interface", ""),
+        member_name=meta.get("method") or member_name,
+        member_kind=member_kind or ("accessor" if meta.get("kind") == "subApiAccessor" else meta.get("kind", "method")),
+        parent=parent,
+        signature=meta.get("signature", ""),
+        docstring=meta.get("docstring", ""),
+        used_types=list(meta.get("usedTypes", [])),
+        python_path=python_path,
+        parameters=list(meta.get("parameters") or []),
+        return_type=surface_return(meta),
+    )
+
+
 def build_ts_surface(spec: dict[str, Any]) -> list[SurfaceEntry]:
     entries: list[SurfaceEntry] = []
     root_interfaces = {"wb": "Workbook", "ws": "Worksheet"}
     for parent, interface in root_interfaces.items():
         functions = spec["interfaces"][interface]["functions"]
         for member, meta in functions.items():
-            member_kind, params, ret = normalize_signature(meta.get("signature", ""))
             py_member = root_python_member(parent, member)
             py_path = f"{parent}.{py_member}" if py_member else None
-            entries.append(
-                SurfaceEntry(
-                    api_path=f"{parent}.{member}",
-                    stable_id=f"{interface}.{member}",
-                    interface=interface,
-                    member_name=member,
-                    member_kind=member_kind,
-                    parent=parent,
-                    signature=meta.get("signature", ""),
-                    docstring=meta.get("docstring", ""),
-                    used_types=list(meta.get("usedTypes", [])),
-                    python_path=py_path,
-                    parameters=params,
-                    return_type=ret,
-                )
-            )
+            entries.append(surface_entry(parent=parent, member_name=member, meta=meta, python_path=py_path))
 
-    for parent in ("wb", "ws"):
-        accessors = spec.get("subApis", {}).get(parent, {})
-        for accessor, interface in accessors.items():
+    interface_queue: list[tuple[str, str, str, str]] = []
+    for parent, root in (("wb", "workbook"), ("ws", "worksheet")):
+        accessors = spec.get("subApis", {}).get(root, {})
+        for accessor, meta in accessors.items():
+            interface = meta.get("targetInterface")
             py_accessor = python_accessor(parent, accessor)
-            accessor_api = f"{parent}.{accessor}"
+            accessor_api = meta.get("canonicalPath") or f"{parent}.{accessor}"
             accessor_py = f"{parent}.{py_accessor}"
             entries.append(
-                SurfaceEntry(
-                    api_path=accessor_api,
-                    stable_id=f"{parent}.{accessor}",
-                    interface=interface,
-                    member_name=accessor,
-                    member_kind="accessor",
+                surface_entry(
                     parent=parent,
-                    signature=f"{accessor}: {interface}",
-                    docstring=f"Sub-API accessor for {interface}.",
-                    used_types=[interface],
+                    member_name=accessor,
+                    meta=meta,
                     python_path=accessor_py,
-                    parameters=[],
-                    return_type={"asyncTs": False, "type": {"kind": "named", "text": interface}, "raw": interface},
+                    member_kind="accessor",
                 )
             )
-            functions = spec["interfaces"].get(interface, {}).get("functions", {})
-            for member, meta in functions.items():
-                member_kind, params, ret = normalize_signature(meta.get("signature", ""))
-                py_member = camel_to_snake(member)
-                py_path = f"{accessor_py}.{py_member}"
-                if f"{accessor_api}.{member}" in KNOWN_UNSUPPORTED:
-                    py_path = KNOWN_UNSUPPORTED[f"{accessor_api}.{member}"]
-                entries.append(
-                    SurfaceEntry(
-                        api_path=f"{accessor_api}.{member}",
-                        stable_id=f"{interface}.{member}",
-                        interface=interface,
-                        member_name=member,
-                        member_kind=member_kind,
-                        parent=parent,
-                        signature=meta.get("signature", ""),
-                        docstring=meta.get("docstring", ""),
-                        used_types=list(meta.get("usedTypes", [])),
-                        python_path=py_path,
-                        parameters=params,
-                        return_type=ret,
-                    )
-                )
+            if isinstance(interface, str):
+                interface_queue.append((interface, accessor_api, accessor_py, parent))
+
+    processed: set[tuple[str, str]] = set()
+    for interface, api_prefix, py_prefix, parent in interface_queue:
+        key = (interface, api_prefix)
+        if key in processed:
+            continue
+        processed.add(key)
+        functions = spec["interfaces"].get(interface, {}).get("functions", {})
+        for member, meta in functions.items():
+            py_member = camel_to_snake(member)
+            py_path = f"{py_prefix}.{py_member}"
+            api_path = meta.get("canonicalPath") or f"{api_prefix}.{member}"
+            if api_path in KNOWN_UNSUPPORTED:
+                py_path = KNOWN_UNSUPPORTED[api_path]
+            entries.append(surface_entry(parent=parent, member_name=member, meta=meta, python_path=py_path))
+            target = meta.get("targetInterface")
+            if meta.get("kind") == "property" and isinstance(target, str):
+                interface_queue.append((target, api_path, py_path, parent))
     return entries
 
 
@@ -393,8 +630,11 @@ def runtime_python_paths() -> set[str]:
         "wb.history": (PY_MOG / "sub_apis" / "history.py", "HistoryAPI"),
         "wb.sheets": (PY_MOG / "sub_apis" / "sheets.py", "SheetsAPI"),
         "wb.names": (PY_MOG / "sub_apis" / "names.py", "NamesAPI"),
+        "wb.notifications": (PY_MOG / "workbook.py", "_NotificationsAPI"),
+        "wb.protection": (PY_MOG / "workbook.py", "_ProtectionAPI"),
         "wb.settings": (PY_MOG / "sub_apis" / "settings.py", "SettingsAPI"),
         "wb.security": (PY_MOG / "sub_apis" / "security.py", "SecurityAPI"),
+        "wb.styles": (PY_MOG / "workbook.py", "_StylesAPI"),
         "wb.theme": (PY_MOG / "workbook.py", "_ThemeUnsupported"),
         "wb.bindings": (PY_MOG / "workbook.py", "_BindingsUnsupported"),
         "ws.formats": (PY_MOG / "sub_apis" / "formats.py", "FormatsAPI"),
@@ -412,6 +652,7 @@ def runtime_python_paths() -> set[str]:
         "ws.print_": (PY_MOG / "sub_apis" / "print_.py", "PrintAPI"),
         "ws.sparklines": (PY_MOG / "sub_apis" / "sparklines.py", "SparklinesAPI"),
         "ws.objects": (PY_MOG / "sub_apis" / "objects.py", "ObjectsAPI"),
+        "ws.shapes": (PY_MOG / "sub_apis" / "objects.py", "ObjectsAPI"),
         "ws.slicers": (PY_MOG / "sub_apis" / "slicers.py", "SlicersAPI"),
         "ws.hyperlinks": (PY_MOG / "sub_apis" / "hyperlinks.py", "HyperlinksAPI"),
         "ws.validation": (PY_MOG / "sub_apis" / "validation.py", "ValidationAPI"),
@@ -488,14 +729,21 @@ def load_dispositions() -> list[dict[str, Any]]:
 
 def initial_dispositions(entries: list[SurfaceEntry], runtime_paths: set[str]) -> list[dict[str, Any]]:
     dispositions: list[dict[str, Any]] = []
+    child_api_prefixes = {
+        entry.api_path.rsplit(".", 1)[0]
+        for entry in entries
+        if "." in entry.api_path
+    }
     for entry in entries:
         status: str
         reason: Optional[str] = None
         python_path = entry.python_path
-        if entry.api_path in KNOWN_UNSUPPORTED:
+        if is_known_unsupported_api(entry.api_path) and entry.api_path in child_api_prefixes:
+            status = "implemented" if python_path == entry.api_path else "renamed"
+        elif is_known_unsupported_api(entry.api_path):
             status = "unsupported"
             reason = "release_deferred"
-            python_path = KNOWN_UNSUPPORTED[entry.api_path]
+            python_path = KNOWN_UNSUPPORTED.get(entry.api_path, python_path)
         elif entry.member_name.startswith("[Symbol."):
             status = "out_of_scope"
             reason = "typescript_only"
@@ -516,7 +764,7 @@ def initial_dispositions(entries: list[SurfaceEntry], runtime_paths: set[str]) -
     for python_path in sorted(runtime_paths - ts_python_paths):
         status = "python_only"
         reason = None
-        if python_path in PYTHON_ONLY_UNSUPPORTED:
+        if is_python_only_unsupported(python_path):
             reason = "release_deferred"
         dispositions.append(
             {
@@ -567,7 +815,11 @@ def make_disposition(
     }
 
 
-def validate_dispositions(entries: list[SurfaceEntry], dispositions: list[dict[str, Any]]) -> list[str]:
+def validate_dispositions(
+    entries: list[SurfaceEntry],
+    dispositions: list[dict[str, Any]],
+    runtime_paths: set[str],
+) -> list[str]:
     errors: list[str] = []
     by_api = {d.get("apiPath"): d for d in dispositions}
     expected = {entry.api_path for entry in entries}
@@ -579,6 +831,43 @@ def validate_dispositions(entries: list[SurfaceEntry], dispositions: list[dict[s
         errors.append(f"Missing disposition entries: {len(missing)}; first={missing[:10]}")
     if extra_ts:
         errors.append(f"Unknown TypeScript disposition entries: {len(extra_ts)}; first={extra_ts[:10]}")
+    documented_runtime = {
+        d.get("pythonPath")
+        for d in dispositions
+        if d.get("status") in {"implemented", "renamed", "unsupported", "python_only"}
+        and d.get("pythonPath")
+    }
+    undocumented_runtime = sorted(runtime_paths - documented_runtime)
+    if undocumented_runtime:
+        errors.append(
+            "Undocumented runtime Python paths: "
+            f"{len(undocumented_runtime)}; first={undocumented_runtime[:10]}"
+        )
+    concrete_runtime = {
+        d.get("pythonPath")
+        for d in dispositions
+        if d.get("status") in {"implemented", "renamed", "python_only"}
+        and d.get("pythonPath")
+    }
+    documented_missing_runtime = sorted(concrete_runtime - runtime_paths)
+    if documented_missing_runtime:
+        errors.append(
+            "Documented Python paths not present at runtime: "
+            f"{len(documented_missing_runtime)}; first={documented_missing_runtime[:10]}"
+        )
+    missing_runtime = sorted(
+        d.get("pythonPath")
+        for d in dispositions
+        if isinstance(d.get("apiPath"), str)
+        and str(d.get("apiPath")).startswith("py.")
+        and isinstance(d.get("pythonPath"), str)
+        and d.get("pythonPath") not in runtime_paths
+    )
+    if missing_runtime:
+        errors.append(
+            "Python-only dispositions without runtime methods: "
+            f"{len(missing_runtime)}; first={missing_runtime[:10]}"
+        )
     seen: set[str] = set()
     for index, item in enumerate(dispositions):
         api_path = item.get("apiPath")
@@ -628,8 +917,8 @@ def build_surface_payload(spec: dict[str, Any], entries: list[SurfaceEntry], dis
     counts = {
         "interfaces": len(spec.get("interfaces", {})),
         "functions": sum(len(v.get("functions", {})) for v in spec.get("interfaces", {}).values()),
-        "workbookSubApis": len(spec.get("subApis", {}).get("wb", {})),
-        "worksheetSubApis": len(spec.get("subApis", {}).get("ws", {})),
+        "workbookSubApis": len(spec.get("subApis", {}).get("workbook", {})),
+        "worksheetSubApis": len(spec.get("subApis", {}).get("worksheet", {})),
         "dispositions": len(dispositions),
     }
     status_counts: dict[str, int] = {}
@@ -663,12 +952,36 @@ def surface_py_text(payload: dict[str, Any]) -> str:
 
 
 def pyi_type(type_info: dict[str, Any]) -> str:
-    text = type_info.get("text") or type_info.get("raw") or "Any"
-    if text in {"string"}:
+    kind = type_info.get("kind")
+    if kind == "promise":
+        return pyi_type(type_info.get("inner") or {"kind": "unknown"})
+    if kind == "primitive":
+        text = type_info.get("name") or "Any"
+    elif kind == "objectRef":
+        text = type_info.get("name") or "Any"
+    elif kind == "array":
+        return "list[Any]"
+    elif kind in {"union", "intersection", "record", "tuple", "function", "unknown"}:
+        return "Any"
+    elif kind == "void":
+        return "None"
+    elif kind == "literal":
+        value = type_info.get("value")
+        if value is None:
+            return "None"
+        if isinstance(value, bool):
+            return "bool"
+        if isinstance(value, (int, float)):
+            return "float"
         return "str"
-    if text in {"number"}:
+    else:
+        text = type_info.get("text") or type_info.get("raw") or "Any"
+
+    if text in {"string", "String"}:
+        return "str"
+    if text in {"number", "Number"}:
         return "float"
-    if text in {"boolean"}:
+    if text in {"boolean", "Boolean"}:
         return "bool"
     if text in {"void", "undefined"}:
         return "None"
@@ -795,7 +1108,7 @@ def main() -> int:
         )
 
     dispositions = load_dispositions()
-    validation_errors = validate_dispositions(entries, dispositions)
+    validation_errors = validate_dispositions(entries, dispositions, runtime_paths)
     if validation_errors:
         for error in validation_errors:
             print(error, file=sys.stderr)

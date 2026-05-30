@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, NoReturn, Optional
 
 from mog.errors import UnsupportedApiError
 
@@ -27,7 +27,7 @@ def unsupported_api(
     owner_package: str = OWNER_PACKAGE,
     replacement: Optional[str] = None,
     docs_key: Optional[str] = None,
-) -> None:
+) -> NoReturn:
     raise UnsupportedApiError(
         api_path=api_path,
         python_path=python_path,
@@ -36,6 +36,33 @@ def unsupported_api(
         replacement=replacement,
         docs_key=docs_key,
     )
+
+
+def unsupported_python_path(
+    python_path: str,
+    default_api_path: Optional[str] = None,
+) -> NoReturn:
+    """Raise UnsupportedApiError using the generated disposition metadata."""
+    from mog._generated.api_surface import API_SURFACE
+
+    for item in API_SURFACE["dispositions"]:
+        if item.get("pythonPath") != python_path:
+            continue
+        status = item.get("status")
+        if status != "unsupported" and not (
+            status == "python_only" and item.get("reason")
+        ):
+            break
+        unsupported_api(
+            str(item["apiPath"]),
+            python_path,
+            str(item.get("reason") or "release_deferred"),
+            str(item.get("ownerPackage") or OWNER_PACKAGE),
+            item.get("replacement"),
+            item.get("docsKey"),
+        )
+
+    unsupported_api(default_api_path or f"py.{python_path}", python_path)
 
 
 def unsupported_callable(disposition: UnsupportedDisposition) -> Callable[..., Any]:
@@ -65,10 +92,19 @@ class UnsupportedApiProxy:
     ) -> None:
         self._accessor_api_path = accessor_api_path
         self._accessor_python_path = accessor_python_path
+        self._dispositions = list(dispositions)
         self._methods: dict[str, UnsupportedDisposition] = {}
-        for item in dispositions:
+        self._children: set[str] = set()
+        prefix = accessor_python_path + "."
+        for item in self._dispositions:
             python_path = str(item["pythonPath"])
-            member_name = python_path.rsplit(".", 1)[-1]
+            if not python_path.startswith(prefix):
+                continue
+            remainder = python_path[len(prefix):]
+            member_name, sep, _tail = remainder.partition(".")
+            if sep:
+                self._children.add(member_name)
+                continue
             self._methods[member_name] = UnsupportedDisposition(
                 api_path=str(item["apiPath"]),
                 python_path=python_path,
@@ -80,6 +116,12 @@ class UnsupportedApiProxy:
 
     def __getattr__(self, name: str) -> Any:
         disposition = self._methods.get(name)
+        if disposition is None and name in self._children:
+            return UnsupportedApiProxy(
+                f"{self._accessor_api_path}.{name}",
+                f"{self._accessor_python_path}.{name}",
+                self._dispositions,
+            )
         if disposition is None:
             raise AttributeError(
                 f"{self._accessor_python_path!r} has no unsupported member {name!r}"
@@ -87,7 +129,7 @@ class UnsupportedApiProxy:
         return unsupported_callable(disposition)
 
     def __dir__(self) -> list[str]:
-        return sorted(set(super().__dir__()) | set(self._methods))
+        return sorted(set(super().__dir__()) | set(self._methods) | self._children)
 
 
 def unsupported_proxy_from_surface(
@@ -104,3 +146,23 @@ def unsupported_proxy_from_surface(
         and str(entry.get("apiPath", "")).startswith(prefix)
     ]
     return UnsupportedApiProxy(accessor_api_path, accessor_python_path, dispositions)
+
+
+class UnsupportedSubApiMixin:
+    """Mixin for implemented accessors whose child methods are unsupported."""
+
+    _UNSUPPORTED_ACCESSOR_API_PATH: str
+    _UNSUPPORTED_ACCESSOR_PYTHON_PATH: str
+
+    def __getattr__(self, name: str) -> Any:
+        return unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        ).__getattr__(name)
+
+    def __dir__(self) -> list[str]:
+        proxy = unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        )
+        return sorted(set(super().__dir__()) | set(dir(proxy)))

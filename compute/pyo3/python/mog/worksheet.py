@@ -16,7 +16,11 @@ from mog._serde import (
     parse_range,
 )
 from mog.errors import AddressError
-from mog._unsupported import unsupported_api
+from mog._unsupported import (
+    unsupported_api,
+    unsupported_proxy_from_surface,
+    unsupported_python_path,
+)
 from mog.types import CellInfo, CellValue, DataBounds, MutationResult
 
 if TYPE_CHECKING:
@@ -157,41 +161,27 @@ class Worksheet:
 
     def is_visible(self) -> bool:
         """Return whether this sheet is visible (not hidden or veryHidden)."""
-        try:
-            hidden = self._bridge.call_json(
-                "compute_is_sheet_hidden", self._sheet_id_json
-            )
-            if isinstance(hidden, bool):
-                self._visibility_state = "hidden" if hidden else "visible"
-        except Exception:
-            pass
+        hidden = self._bridge.call_json(
+            "compute_is_sheet_hidden", self._sheet_id_json
+        )
+        if isinstance(hidden, bool):
+            self._visibility_state = "hidden" if hidden else "visible"
         return self._visibility_state == "visible"
 
     def set_visible(self, visible: bool) -> bool:
         """Show or hide this sheet. Returns the new visibility state."""
         hidden = not visible
-        try:
-            self._bridge.set_sheet_hidden(self._sheet_id_json, hidden)
-        except Exception:
-            pass
+        self._bridge.set_sheet_hidden(self._sheet_id_json, hidden)
         self._visibility_state = "visible" if visible else "hidden"
         return visible
 
     def get_visibility(self) -> str:
-        """Return the visibility state: ``"visible"``, ``"hidden"``, or ``"veryHidden"``."""
-        try:
-            hidden = self._bridge.call_json(
-                "compute_is_sheet_hidden", self._sheet_id_json
-            )
-            if isinstance(hidden, bool):
-                if not hidden:
-                    self._visibility_state = "visible"
-                elif self._visibility_state not in ("hidden", "veryHidden"):
-                    # Bridge only returns a boolean; preserve "veryHidden" if
-                    # it was previously set via set_visibility().
-                    self._visibility_state = "hidden"
-        except Exception:
-            pass
+        """Return the visibility state: ``"visible"`` or ``"hidden"``."""
+        hidden = self._bridge.call_json(
+            "compute_is_sheet_hidden", self._sheet_id_json
+        )
+        if isinstance(hidden, bool):
+            self._visibility_state = "hidden" if hidden else "visible"
         return self._visibility_state
 
     def set_visibility(self, state: str) -> str:
@@ -204,11 +194,12 @@ class Worksheet:
 
         Returns the new state string.
         """
+        if state not in {"visible", "hidden", "veryHidden"}:
+            raise ValueError("visibility state must be 'visible', 'hidden', or 'veryHidden'")
+        if state == "veryHidden":
+            unsupported_api("ws.setVisibility", "ws.set_visibility")
         hidden = state != "visible"
-        try:
-            self._bridge.set_sheet_hidden(self._sheet_id_json, hidden)
-        except Exception:
-            pass
+        self._bridge.set_sheet_hidden(self._sheet_id_json, hidden)
         self._visibility_state = state
         return state
 
@@ -386,8 +377,7 @@ class Worksheet:
                 self._sheet_id_json, ranges_json
             )
         elif clear_type == "hyperlinks":
-            # Clear only hyperlinks (best-effort -- clear formatting which includes hyperlinks)
-            pass
+            unsupported_api("ws.clear", "ws.clear")
         else:
             # Clear everything
             self._bridge.clear_range(self._sheet_id_json, sr, sc, er, ec)
@@ -746,71 +736,7 @@ class Worksheet:
 
         Returns an info dict with ``status`` and ``cells_filled``.
         """
-        sr, sc, ser, sec = self._resolve_range(source)
-        tr, tc, ter, tec = self._resolve_range(target)
-
-        # Determine fill direction
-        if ter > ser:
-            direction = "down"
-        elif tr < sr:
-            direction = "up"
-        elif tec > sec:
-            direction = "right"
-        else:
-            direction = "left"
-
-        # Determine mode: use "copy" for a single non-formula, non-series cell
-        # (to repeat the value), "series" otherwise.
-        mode = "series"
-        source_rows = ser - sr + 1
-        source_cols = sec - sc + 1
-        if source_rows == 1 and source_cols == 1:
-            raw_val = self._bridge.get_raw_value(self._sheet_id_json, sr, sc)
-            if not (isinstance(raw_val, str) and raw_val.startswith("=")):
-                # Check if the value is a known series seed (day/month names)
-                if isinstance(raw_val, str) and raw_val.strip().lower() not in _SERIES_SEEDS:
-                    mode = "copy"
-
-        request = json.dumps({
-            "sourceRange": {
-                "startRow": sr,
-                "startCol": sc,
-                "endRow": ser,
-                "endCol": sec,
-            },
-            "targetRange": {
-                "startRow": tr,
-                "startCol": tc,
-                "endRow": ter,
-                "endCol": tec,
-            },
-            "direction": direction,
-            "mode": mode,
-            "includeFormulas": True,
-            "includeFormatting": True,
-            "includeValues": True,
-            "includeFormats": True,
-        })
-
-        try:
-            self._bridge.call_json(
-                "compute_auto_fill", self._sheet_id_json, request
-            )
-        except Exception:
-            # Fallback to simple tiling if native auto_fill fails
-            return self._auto_fill_fallback(sr, sc, ser, sec, tr, tc, ter, tec)
-
-        # Count filled cells (target minus source)
-        total_target = (ter - tr + 1) * (tec - tc + 1)
-        return {
-            "status": "ok",
-            "cells_filled": total_target,
-            "cellCount": total_target,
-            "cells_written": total_target,
-            "count": total_target,
-            "changes": [],
-            "diff": [],
-        }
+        unsupported_python_path("ws.auto_fill")
 
     def _auto_fill_fallback(
         self, sr, sc, ser, sec, tr, tc, ter, tec
@@ -1171,8 +1097,6 @@ class Worksheet:
         if self._charts_api is None:
             from mog.sub_apis.charts import ChartsAPI
             self._charts_api = ChartsAPI(self._bridge, self._sheet_id_json)
-            if self._from_xlsx:
-                self._charts_api.sync_from_engine()
         return self._charts_api
 
     @property
@@ -1258,7 +1182,8 @@ class Worksheet:
     @property
     def shapes(self) -> ObjectsAPI:
         """Alias for :attr:`objects`."""
-        return self.objects
+        from mog.sub_apis.objects import ObjectsAPI
+        return ObjectsAPI(self._bridge, self._sheet_id_json, python_prefix="ws.shapes")
 
     @property
     def slicers(self) -> SlicersAPI:
@@ -1476,27 +1401,7 @@ class Worksheet:
         list of str
             The formatted string representations.
         """
-        results: List[str] = []
-        # Use temp cells in a nearby but unlikely-used area
-        temp_row = 9999
-        for i, entry in enumerate(entries):
-            value = entry.get("value")
-            fmt_code = entry.get("formatCode", "")
-            temp_col = 200 + i
-            self._bridge.set_cell_value_parsed(
-                self._sheet_id_json, temp_row, temp_col, normalize_value(value)
-            )
-            # Apply number format via formats sub-API
-            addr = f"{_col_to_a1(temp_col)}{temp_row + 1}"
-            try:
-                self.formats.set(addr, {"numberFormat": fmt_code})
-            except Exception:
-                pass
-            display = self._bridge.get_display_value(self._sheet_id_json, temp_row, temp_col)
-            # Clear the temp cell
-            self._bridge.set_cell_value_parsed(self._sheet_id_json, temp_row, temp_col, "")
-            results.append(display or str(value))
-        return results
+        unsupported_python_path("ws.format_values")
 
     # ------------------------------------------------------------------
     # Query / Navigation methods
@@ -1701,39 +1606,71 @@ class Worksheet:
                         results.append((r, c))
         return results
 
-    def regex_search(self, patterns: List[str]) -> List[Tuple[int, int]]:
-        """Search for cells whose display value matches any of the given regex patterns.
+    def regex_search(
+        self,
+        patterns: List[str],
+        options: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search cells using regex patterns.
 
         Parameters
         ----------
         patterns:
             List of regex pattern strings.
+        options:
+            Optional search settings. Supports the public TypeScript option
+            names (``matchCase``, ``entireCell``, ``searchFormulas``,
+            ``range``) and Python snake_case aliases.
 
-        Returns a list of ``(row, col)`` pairs.
+        Returns a list of match dictionaries with row, col, address, value, and
+        matchedPattern fields.
         """
-        bounds = self.get_data_bounds()
-        if bounds is None:
+        if not patterns:
             return []
-        compiled = []
-        for p in patterns:
-            try:
-                compiled.append(_re.compile(p))
-            except _re.error:
-                pass
-        if not compiled:
-            return []
-        results: List[Tuple[int, int]] = []
-        for r in range(bounds.min_row, bounds.max_row + 1):
-            for c in range(bounds.min_col, bounds.max_col + 1):
-                raw = self._bridge.get_raw_value(self._sheet_id_json, r, c)
-                if raw is None or raw == "":
-                    continue
-                s = str(raw)
-                for regex in compiled:
-                    if regex.search(s):
-                        results.append((r, c))
-                        break
-        return results
+
+        opts = dict(options or {})
+        native_options: Dict[str, Any] = {
+            "patterns": list(patterns),
+        }
+        case_sensitive = opts.get("caseSensitive", opts.get("case_sensitive"))
+        case_sensitive = opts.get("matchCase", opts.get("match_case", case_sensitive))
+        if case_sensitive is not None:
+            native_options["caseSensitive"] = bool(case_sensitive)
+
+        whole_cell = opts.get("wholeCell", opts.get("whole_cell"))
+        whole_cell = opts.get("entireCell", opts.get("entire_cell", whole_cell))
+        if whole_cell is not None:
+            native_options["wholeCell"] = bool(whole_cell)
+
+        include_formulas = opts.get("includeFormulas", opts.get("include_formulas"))
+        include_formulas = opts.get("searchFormulas", opts.get("search_formulas", include_formulas))
+        if include_formulas is not None:
+            native_options["includeFormulas"] = bool(include_formulas)
+
+        range_ref = opts.get("range")
+        if isinstance(range_ref, str) and range_ref:
+            if ":" in range_ref:
+                sr, sc, er, ec = parse_range(range_ref)
+            else:
+                sr, sc = parse_a1(range_ref)
+                er, ec = sr, sc
+            native_options.update(
+                {
+                    "startRow": sr,
+                    "startCol": sc,
+                    "endRow": er,
+                    "endCol": ec,
+                }
+            )
+
+        result = self._bridge.call_json(
+            "compute_regex_search",
+            self._sheet_id_json,
+            json.dumps(native_options),
+        )
+        if isinstance(result, dict) and isinstance(result.get("matches"), list):
+            return result["matches"]
+        return []
 
     def text_to_columns(
         self, address: str, options: Optional[Dict[str, Any]] = None,
@@ -1748,47 +1685,7 @@ class Worksheet:
             Dict with ``type`` (``"delimited"`` or ``"fixedWidth"``),
             ``delimiter`` (for delimited), ``positions`` (for fixedWidth).
         """
-        opts = options or {}
-        split_type = opts.get("type", "delimited")
-
-        if ":" in address:
-            sr, sc, er, ec = parse_range(address)
-        else:
-            row, col = parse_a1(address)
-            sr, sc, er, ec = row, col, row, col
-
-        cells_written = 0
-        for r in range(sr, er + 1):
-            raw = self._bridge.get_raw_value(self._sheet_id_json, r, sc)
-            if raw is None or raw == "":
-                continue
-            text = str(raw)
-
-            if split_type == "fixedWidth":
-                positions = opts.get("positions", [])
-                parts = []
-                prev = 0
-                for pos in positions:
-                    parts.append(text[prev:pos].strip())
-                    prev = pos
-                parts.append(text[prev:].strip())
-            else:
-                delimiter = opts.get("delimiter", ",")
-                parts = text.split(delimiter)
-
-            # Write the first part back to the source cell
-            self._bridge.set_cell_value_parsed(
-                self._sheet_id_json, r, sc, normalize_value(parts[0].strip() if parts else "")
-            )
-            # Write remaining parts to adjacent columns
-            for i, part in enumerate(parts[1:], 1):
-                self._bridge.set_cell_value_parsed(
-                    self._sheet_id_json, r, sc + i, normalize_value(part.strip())
-                )
-                cells_written += 1
-            cells_written += 1
-
-        return {"cellsWritten": cells_written}
+        unsupported_python_path("ws.text_to_columns")
 
     def get_range_with_identity(
         self, sr: int, sc: int, er: int, ec: int,
@@ -2057,16 +1954,29 @@ class _ChangeTracker:
 class _SheetScopedNamesAPI:
     """Sheet-scoped named range operations.
 
-    Delegates to the bridge's named-range methods but always passes
-    the sheet ID as the scope parameter.
+    The worksheet scoped-name family is not production-backed in Python yet.
     """
 
-    __slots__ = ("_bridge", "_sheet_id", "_local_names")
+    __slots__ = ("_bridge", "_sheet_id")
+    _UNSUPPORTED_ACCESSOR_API_PATH = "ws.names"
+    _UNSUPPORTED_ACCESSOR_PYTHON_PATH = "ws.names"
 
     def __init__(self, bridge: Any, sheet_id: str) -> None:
         self._bridge = bridge
         self._sheet_id = sheet_id
-        self._local_names: Dict[str, Dict[str, Any]] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        return unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        ).__getattr__(name)
+
+    def __dir__(self) -> list[str]:
+        proxy = unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        )
+        return sorted(set(super().__dir__()) | set(dir(proxy)))
 
     def add(
         self,
@@ -2075,51 +1985,19 @@ class _SheetScopedNamesAPI:
         comment: Optional[str] = None,
     ) -> Any:
         """Create a sheet-scoped named range."""
-        input_obj: Dict[str, Any] = {
-            "name": name,
-            "refersTo": refers_to,
-            "scope": self._sheet_id,
-        }
-        if comment is not None:
-            input_obj["comment"] = comment
-        try:
-            raw = self._bridge.create_named_range(json.dumps(input_obj))
-        except Exception:
-            raw = None
-        self._local_names[name] = {
-            "name": name,
-            "reference": refers_to,
-            "scope": self._sheet_id,
-            "comment": comment,
-        }
-        from mog._serde import deserialize_mutation_result
-        return deserialize_mutation_result(raw) if raw else {}
+        unsupported_python_path("ws.names.add")
 
     def remove(self, name: str) -> Any:
         """Remove a sheet-scoped named range by name."""
-        try:
-            raw = self._bridge.remove_named_range(name)
-        except Exception:
-            raw = None
-        self._local_names.pop(name, None)
-        from mog._serde import deserialize_mutation_result
-        return deserialize_mutation_result(raw) if raw else {}
+        unsupported_python_path("ws.names.remove")
 
     def get(self, name: str) -> Optional[Dict[str, Any]]:
         """Get a sheet-scoped named range by name."""
-        if name in self._local_names:
-            return self._local_names[name]
-        try:
-            result = self._bridge.call_json("compute_get_named_range_by_name", name)
-            if isinstance(result, dict):
-                return result
-        except Exception:
-            pass
-        return None
+        unsupported_python_path("ws.names.get")
 
     def list(self) -> List[Dict[str, Any]]:
         """Return all sheet-scoped named ranges."""
-        return list(self._local_names.values())
+        unsupported_python_path("ws.names.list")
 
 
 class _FormControlsUnsupported:

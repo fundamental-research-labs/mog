@@ -405,6 +405,7 @@ jobs:
       (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
       (needs.build-python.result == 'success' || needs.build-python.result == 'skipped')
     runs-on: ubuntu-latest
+    environment: npm-production
     steps:
       - uses: actions/checkout@v6
         with:
@@ -422,6 +423,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install trusted publishing npm
+        run: npm install -g npm@^11.5.1
 
       - name: Download all artifacts (current run)
         if: ${{ inputs.source-run-id == '' }}
@@ -525,8 +529,6 @@ jobs:
             pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
             cd "$GITHUB_WORKSPACE"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish public TypeScript packages
         run: |
@@ -546,8 +548,6 @@ jobs:
             pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
             cd "$GITHUB_WORKSPACE"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Post-publish verification (npm)
         run: |

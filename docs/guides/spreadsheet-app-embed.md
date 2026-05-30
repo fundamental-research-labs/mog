@@ -1,31 +1,56 @@
 # Full Spreadsheet App Embed
 
-Use `@mog-sdk/spreadsheet-app` when a trusted same-origin host wants the real Mog spreadsheet application inside its own product. The host owns file storage, authentication, page chrome, and the decision to open or dispose workbook sessions. Mog owns the runtime-managed workbook session and spreadsheet UI while it is attached.
+> **Status: shipped public package:** `@mog-sdk/spreadsheet-app`
 
-For lower-level sheet/view embeds, use `@mog-sdk/embed`. Do not import `@mog/app-spreadsheet`, `@mog/shell`, runtime internals, or non-public full-app paths from host code.
+Use `@mog-sdk/spreadsheet-app` when a trusted same-origin browser host wants the
+full Mog spreadsheet application inside its own product. The host owns
+authentication, authorization, page chrome, file storage, and the decision to
+open or dispose workbook sessions. Mog owns the runtime-managed workbook
+session and the spreadsheet UI while it is attached.
 
-## Ownership Model
+For lower-level read-only sheet/view embeds, use `@mog-sdk/embed`. Do not import
+`@mog/app-spreadsheet`, `@mog/shell`, `@mog-sdk/kernel`, runtime internals, or
+private full-app paths from host code.
 
-```text
-SpreadsheetRuntime
-  owns shared shell services, assets, host authority, callbacks
-  -> SpreadsheetWorkbookSession
-       owns one live workbook/kernel session
-       remains usable while headless
-       -> SpreadsheetAppAttachmentHandle
-            owns one mounted full-app UI attachment
-            detach() unmounts UI only
+This is a same-page React embed. It is not an iframe isolation boundary for
+hostile workbook content or untrusted same-process code.
+
+## Install
+
+For a Vite React app:
+
+```bash
+npm create vite@latest mog-spreadsheet-app -- --template react-ts
+cd mog-spreadsheet-app
+npm install
+npm install @mog-sdk/spreadsheet-app
 ```
 
-Detach is not dispose. Closing a tab should detach the UI attachment and keep the `SpreadsheetWorkbookSession` alive. Kernel teardown is explicit: call `workbook.dispose()` or `runtime.dispose()`.
+`@mog-sdk/spreadsheet-app` has React and React DOM peer dependencies of React 19.
+The browser runtime loads `@mog-sdk/wasm` through the installed package graph, so
+use a browser bundler that supports ESM and wasm-pack-style `.wasm` assets. Vite
+satisfies that path.
+
+Prefer the scoped host CSS export:
+
+```ts
+import '@mog-sdk/spreadsheet-app/mog-embed.css';
+```
+
+The package also exports `@mog-sdk/spreadsheet-app/styles.css`, but that file is
+the unscoped app stylesheet. Host products should use `mog-embed.css` unless
+they intentionally want the app stylesheet to affect the whole page.
 
 ## Quick Start
 
+Replace `src/App.tsx` with:
+
 ```tsx
-import '@mog-sdk/spreadsheet-app/styles.css';
+import '@mog-sdk/spreadsheet-app/mog-embed.css';
 import {
   MogSpreadsheetApp,
   createSpreadsheetRuntime,
+  type SpreadsheetAppAttachmentHandle,
   type SpreadsheetRuntime,
   type SpreadsheetSaveRequest,
   type SpreadsheetSaveResult,
@@ -33,23 +58,44 @@ import {
 } from '@mog-sdk/spreadsheet-app';
 import { useEffect, useRef, useState } from 'react';
 
-export function HostSpreadsheetTab({
-  fileId,
-  fileName,
-  versionId,
-  bytes,
-  saveBytes,
-}: {
-  fileId: string;
-  fileName: string;
-  versionId?: string;
-  bytes: Uint8Array;
-  saveBytes(input: { bytes: Uint8Array; baseVersionId?: string }): Promise<{ versionId: string }>;
-}) {
-  const runtimeRef = useRef<SpreadsheetRuntime | null>(null);
+const XLSX_MIME =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function downloadXlsx(bytes: Uint8Array, fileName: string) {
+  const blob = new Blob([new Uint8Array(bytes)], { type: XLSX_MIME });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = fileName;
+  link.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function savedResult(
+  request: SpreadsheetSaveRequest,
+  versionId: string,
+): SpreadsheetSaveResult {
+  return {
+    status: 'saved',
+    workbookId: request.workbookId,
+    epoch: request.epoch,
+    baseVersionId: request.baseVersionId,
+    dirtyEpoch: request.dirtyEpoch,
+    changeSequence: request.changeSequence,
+    saveRequestId: request.saveRequestId,
+    bytesHash: request.bytesHash,
+    versionId,
+  };
+}
+
+export default function App() {
+  const attachmentRef = useRef<SpreadsheetAppAttachmentHandle | null>(null);
   const [runtime, setRuntime] = useState<SpreadsheetRuntime | null>(null);
   const [workbook, setWorkbook] = useState<SpreadsheetWorkbookSession | null>(null);
   const [uiAttached, setUiAttached] = useState(true);
+  const [lastSavedVersion, setLastSavedVersion] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,49 +104,34 @@ export function HostSpreadsheetTab({
 
     async function boot() {
       const created = await createSpreadsheetRuntime({
-        assets: {
-          wasmBaseUrl: '/mog/wasm/',
-          workerUrl: '/mog/worker.js',
-          staticBaseUrl: '/mog/assets/',
-        },
         host: {
           persistenceMode: 'host-owned-ephemeral',
+          beforeUnloadPrompt: false,
         },
-        onSaveRequest: async (request: SpreadsheetSaveRequest): Promise<SpreadsheetSaveResult> => {
-          const saved = await saveBytes({
-            bytes: request.bytes,
-            baseVersionId: request.baseVersionId,
-          });
-          return {
-            status: 'saved',
-            workbookId: request.workbookId,
-            epoch: request.epoch,
-            baseVersionId: request.baseVersionId,
-            dirtyEpoch: request.dirtyEpoch,
-            changeSequence: request.changeSequence,
-            saveRequestId: request.saveRequestId,
-            bytesHash: request.bytesHash,
-            versionId: saved.versionId,
-          };
+        onSaveRequest: async (request) => {
+          const versionId = `browser-download-${Date.now()}`;
+
+          downloadXlsx(request.bytes, 'mog-workbook.xlsx');
+          setLastSavedVersion(versionId);
+
+          return savedResult(request, versionId);
         },
       });
 
       ownedRuntime = created;
-      runtimeRef.current = created;
       await created.ready;
 
       const session = await created.openWorkbook({
-        workbookId: fileId,
-        displayName: fileName,
-        source: {
-          kind: 'xlsx-bytes',
-          bytes,
-          fileName,
-          versionId,
-        },
+        workbookId: 'demo-workbook',
+        displayName: 'Demo Workbook',
+        source: { kind: 'blank' },
       });
       ownedWorkbook = session;
       await session.ready;
+
+      const api = session.getWorkbook();
+      await api.activeSheet.setCell('A1', 'Hello from Mog');
+      await api.activeSheet.setCell('B1', '=1+1');
 
       if (cancelled) {
         await session.dispose();
@@ -113,57 +144,167 @@ export function HostSpreadsheetTab({
     }
 
     void boot();
+
     return () => {
       cancelled = true;
+      attachmentRef.current = null;
       void ownedWorkbook?.dispose();
       void ownedRuntime?.dispose();
     };
-  }, [bytes, fileId, fileName, saveBytes, versionId]);
+  }, []);
 
-  if (!runtime || !workbook) return null;
+  if (!runtime || !workbook) {
+    return <main style={{ padding: 24 }}>Loading Mog...</main>;
+  }
 
-  return uiAttached ? (
-    <MogSpreadsheetApp
-      runtime={runtime}
-      workbook={workbook}
-      workspace={{
-        mode: 'single-document',
-        fileExplorer: false,
-        appSwitcher: false,
-        settings: true,
+  const detachUi = () => {
+    const attachment = attachmentRef.current;
+    if (!attachment) {
+      setUiAttached(false);
+      return;
+    }
+
+    void attachment.detach().finally(() => {
+      attachmentRef.current = null;
+      setUiAttached(false);
+    });
+  };
+
+  return (
+    <main
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto minmax(0, 1fr)',
+        height: '100vh',
       }}
-      chrome={{
-        fileMenu: false,
-        commandBar: {
-          mode: 'mog',
-          tabs: ['home', 'insert', 'data', 'view'],
-          hiddenGroups: ['charts'],
-          disabledCommands: ['export', 'print'],
-        },
-        formulaBar: true,
-        sheetTabs: true,
-        statusBar: true,
-      }}
-      commands={{
-        save: 'host',
-        open: 'host',
-        import: 'disabled',
-        export: 'host',
-        print: 'disabled',
-      }}
-      onReady={(attachment) => {
-        void attachment.ready;
-      }}
-    />
-  ) : (
-    <button type="button" onClick={() => setUiAttached(true)}>
-      Reattach UI
-    </button>
+    >
+      <div
+        style={{
+          alignItems: 'center',
+          borderBottom: '1px solid #d0d7de',
+          display: 'flex',
+          gap: 8,
+          padding: 12,
+        }}
+      >
+        <button type="button" onClick={() => void workbook.requestSave()}>
+          Save XLSX
+        </button>
+        <button type="button" disabled={!uiAttached} onClick={detachUi}>
+          Detach UI
+        </button>
+        <button type="button" disabled={uiAttached} onClick={() => setUiAttached(true)}>
+          Reattach UI
+        </button>
+        <span>{lastSavedVersion ?? workbook.getAttachmentState().status}</span>
+      </div>
+
+      <section style={{ minHeight: 0 }}>
+        {uiAttached ? (
+          <MogSpreadsheetApp
+            runtime={runtime}
+            workbook={workbook}
+            workspace={{
+              mode: 'single-document',
+              fileExplorer: false,
+              appSwitcher: false,
+              settings: true,
+            }}
+            chrome={{
+              fileMenu: false,
+              commandBar: {
+                mode: 'mog',
+                tabs: ['home', 'insert', 'data', 'view'],
+                hiddenGroups: ['charts'],
+                disabledCommands: ['print'],
+              },
+              formulaBar: true,
+              sheetTabs: true,
+              statusBar: true,
+            }}
+            commands={{
+              save: 'host',
+              open: 'host',
+              import: 'disabled',
+              export: 'host',
+              print: 'disabled',
+            }}
+            onReady={(attachment) => {
+              attachmentRef.current = attachment;
+            }}
+            onDisposed={() => {
+              attachmentRef.current = null;
+            }}
+          />
+        ) : (
+          <div style={{ padding: 24 }}>
+            UI detached. The workbook session is still open and can be saved or
+            edited through the host API.
+          </div>
+        )}
+      </section>
+    </main>
   );
 }
 ```
 
-For tabbed hosts, create one runtime at the host-app level, then call `runtime.openWorkbook(...)` once per spreadsheet tab. Render `MogSpreadsheetApp` only for the active tab. Inactive tabs should keep their `SpreadsheetWorkbookSession` objects and no hidden app DOM.
+Then run:
+
+```bash
+npm run dev
+```
+
+This example opens a blank workbook and uses the host-owned save callback to
+download XLSX bytes. Production hosts should replace `downloadXlsx(...)` with
+their own persistence flow and should validate workbook identity and user
+authorization before returning a saved `versionId`.
+
+To open existing bytes instead of a blank workbook, resolve the bytes in trusted
+host code and pass them to `openWorkbook`:
+
+```ts
+const session = await runtime.openWorkbook({
+  workbookId: fileId,
+  displayName: fileName,
+  source: {
+    kind: 'xlsx-bytes',
+    bytes,
+    fileName,
+    versionId,
+  },
+});
+```
+
+## Ownership Model
+
+```text
+SpreadsheetRuntime
+  owns shared shell services, host policy, callbacks
+  -> SpreadsheetWorkbookSession
+       owns one live workbook/kernel session
+       remains usable while headless
+       -> SpreadsheetAppAttachmentHandle
+            owns one mounted full-app UI attachment
+            detach() unmounts UI only
+```
+
+Detach is not dispose. Unmounting `MogSpreadsheetApp` or calling
+`SpreadsheetAppAttachmentHandle.detach()` removes the UI attachment and returns
+the workbook session to `headless`. The workbook facade remains usable until
+you call `workbook.dispose()`, `runtime.disposeWorkbook(...)`, or
+`runtime.dispose()`.
+
+Only one full-app UI attachment may be active for a `SpreadsheetWorkbookSession`
+at a time. For tabbed hosts, create one `SpreadsheetRuntime` at the host-app
+level, call `runtime.openWorkbook(...)` once per spreadsheet tab, and render
+`MogSpreadsheetApp` only for the active tab. Inactive tabs should keep their
+`SpreadsheetWorkbookSession` objects and no hidden app DOM.
+
+`workbookId` is a semantic public identity. Use the generated or host-supplied
+`workbookSessionId` when you need to address an exact open session. Multiple
+open sessions may share the same `workbookId`, and
+`getWorkbookSessionByWorkbookId(...)` returns `null` when that lookup is
+ambiguous.
 
 ## Detach And Dispose
 
@@ -188,11 +329,14 @@ await workbook.dispose();
 await runtime.dispose();
 ```
 
-Disposed workbook, actor, view, and attachment handles should reject with typed lifecycle errors. Reopening a workbook with the same public `workbookId` must create a fresh internal session; do not depend on `workbookId` as the compute instance identity.
+Disposed workbook, actor, view, and attachment handles throw or reject with
+public lifecycle errors such as `Disposed`, `StaleEpoch`, `AlreadyAttached`,
+`AttachFailed`, and `DetachFailed`.
 
 ## Programmatic Access
 
-`SpreadsheetWorkbookSession.getWorkbook()` returns a capability-routed facade over the public Workbook API and works while the UI is detached.
+`SpreadsheetWorkbookSession.getWorkbook()` returns a capability-routed facade
+over the public Workbook API and works while the UI is detached.
 
 ```ts
 const api = workbook.getWorkbook();
@@ -200,7 +344,12 @@ await api.activeSheet.setCell('A1', 123);
 const cell = await api.activeSheet.getCell('A1');
 ```
 
-Agent or automation code should use `resolveActor(...)` when host authority is enabled:
+If you do not configure `host.authority`, omit the actor for trusted-host
+operations or use ordinary user actors. Explicit `host`, `agent`, `automation`,
+and `system` actor refs require a host authority adapter.
+
+Agent or automation code should use `resolveActor(...)` when host authority is
+enabled:
 
 ```ts
 const actor = await workbook.resolveActor({
@@ -218,7 +367,9 @@ await actor.undoGroup('Agent write', async () => {
 
 `exportXlsx()` is side-effect-free byte export.
 
-`requestSave()` creates a save request, calls the runtime `onSaveRequest`, and transitions clean only when the save acknowledgement matches the pending save for the workbook session:
+`requestSave()` creates a save request, calls the runtime `onSaveRequest`, and
+transitions clean only when the save acknowledgement matches the pending save
+for the workbook session:
 
 - `epoch`
 - `dirtyEpoch`
@@ -226,11 +377,25 @@ await actor.undoGroup('Agent write', async () => {
 - `saveRequestId`
 - `bytesHash`
 
-The host should persist `request.bytes`, then return `status: 'saved'` with those fields echoed, plus the public `workbookId` and the new `versionId`. Failed saves should return `status: 'failed'` with an error; Mog keeps the workbook dirty.
+The host should persist `request.bytes`, then return `status: 'saved'` with
+those fields echoed, plus the public `workbookId` and the new `versionId`.
+Failed saves should return `status: 'failed'` with a `SpreadsheetAppError`; Mog
+keeps the workbook dirty.
+
+The File menu and app chrome commands route through `commands`,
+`onSaveRequest`, and `onCommandRequest`. In `host-owned-ephemeral` mode, command
+ownership defaults to the host. Use `commands` to explicitly assign `save`,
+`open`, `import`, `export`, `print`, and `share` to `'host'`, `'mog'`, or
+`'disabled'`.
 
 ## Runtime Assets
 
-Set `assets` when the host serves Mog worker, WASM, fonts, or static assets from non-root paths:
+Most bundled React hosts should omit `assets`. The current browser transport
+loads `@mog-sdk/wasm` with a dynamic import, and Vite serves the wasm-pack
+artifact from the installed package.
+
+The runtime still accepts an asset policy for hosts that need to pass explicit
+runtime URLs into the shell host adapter:
 
 ```ts
 const runtime = await createSpreadsheetRuntime({
@@ -243,14 +408,21 @@ const runtime = await createSpreadsheetRuntime({
 });
 ```
 
-The package build copies the WASM module and bundled fonts into `dist`; serve those files from paths that match the asset URLs configured above.
+Do not assume `@mog-sdk/spreadsheet-app` publishes a standalone public
+`worker.js` file to copy. Its package `dist` currently contains
+`compute_core_wasm_bg.wasm`, `styles.css`, `mog-embed.css`, and bundled Carlito
+and Caladea font files under `assets/`. If you serve the CSS yourself instead
+of importing it through the bundler, keep those font assets available at paths
+that match the CSS URL references.
 
 ## Verification
 
-Behavior gates:
+For changes to this package, use the smallest relevant check. Package behavior
+gates include:
 
 ```bash
 pnpm --filter @mog-sdk/spreadsheet-app test
 ```
 
-Also run repo-wide `pnpm typecheck` for TypeScript changes; the wider baseline is expected to stay green.
+Also run repo-wide `pnpm typecheck` when TypeScript changes affect shared public
+contracts or runtime declarations.

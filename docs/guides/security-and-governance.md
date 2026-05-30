@@ -1,49 +1,60 @@
 # Security and Governance
 
-> **Status: high-level orientation - use the security docs and public package surfaces as the source of truth**
+> **Status: public orientation - use the security docs and public package surfaces as the source of truth**
 
-Security model overview for Mog integrators and contributors. Covers trust boundaries, workbook policy, app/embed capability gates, formula safety, release-integrity status, and vulnerability reporting.
+Security model overview for Mog integrators and contributors. Covers trust boundaries, workbook policy, app/embed capability gates, formula safety, release-integrity status, current limitations, and vulnerability reporting.
 
 ## Prerequisites
 
 - Familiarity with [Architecture Overview](architecture-overview.md)
-- Understanding of your deployment context (embedded vs. self-hosted vs. desktop)
+- Understanding of your deployment context: public same-page embed, trusted same-process SDK automation, reserved service/self-hosting, or desktop distribution
 
 ## Trust Boundaries
 
 ### Same-Page Embed
 
-`<mog-sheet>` and `MogSheet` run in the host page's origin. Public embed configuration uses an opaque source ref and a trusted same-origin `hostPolicy` to resolve authorized bytes and effective state. Same-page embeds are not an isolation boundary for hostile workbook content.
+`@mog-sdk/embed`, `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, and `@mog-sdk/embed/config` are shipped public-experimental surfaces. `<mog-sheet>` and `MogSheet` run in the host page's origin. Public embed configuration uses an opaque source ref and a trusted same-origin `hostPolicy` to resolve authorized bytes and effective state. Same-page embeds are not an isolation boundary for hostile workbook content.
+
+### Full Spreadsheet App Embed
+
+`@mog-sdk/spreadsheet-app` is a shipped public package for trusted same-origin hosts. The host owns authentication, storage, page chrome, and lifecycle decisions; the Mog runtime owns the workbook session and spreadsheet UI while attached. This surface is not a sandbox for untrusted host, plugin, or workbook code.
 
 ### iframe Embed
 
-Reserved. The repository contains internal iframe/postMessage plumbing, but Mog does not currently publish a public iframe embed entrypoint or documented iframe host page. Do not treat iframe embed as a customer-facing isolation guarantee until that surface is released.
+Reserved. The repository contains source-internal iframe/postMessage plumbing, but `@mog-sdk/embed/iframe` is not a package export, no iframe bundle is emitted, and Mog does not currently publish a documented iframe host page. Do not treat iframe embed as a customer-facing isolation guarantee until that surface is released.
 
 ### Server and Self-Hosted
 
-Reserved. The current self-hosting and HTTP service guides describe intended service shapes, not shipped authentication, authorization, rate-limit, tenant-isolation, or OpenAPI contracts. Server-side SDK use is same-process trusted automation unless a deployment adds its own service boundary.
+Reserved / not shipped. The current self-hosting and HTTP service guides describe intended service shapes, not shipped authentication, authorization, rate-limit, tenant-isolation, webhook, or OpenAPI contracts. `@mog-sdk/node` is a shipped public same-process SDK; server-side SDK use is trusted automation unless a deployment adds its own service boundary.
 
 ### Desktop and Tauri Hosts
 
-Mog includes Tauri transport and platform helpers for desktop hosts. Desktop filesystem, network, credential, and OS access must be reviewed against the shipping Tauri application configuration and customer OS policy for that distribution.
+The workspace contains Tauri transport and platform helper code for desktop hosts, but a packaged desktop distribution and final Tauri configuration are not shipped in this repository. Desktop filesystem, network, credential, updater, and OS access must be reviewed against the shipping Tauri application configuration and customer OS policy for that distribution.
 
 ## Capability Model
 
 Mog uses separate gates for separate trust questions:
 
-- **Public embeds** - callers request mode, capabilities, save policy, and collaboration mode; the trusted host policy resolves the effective state. Save and export requests are allowed only when the effective state grants them.
-- **App/runtime capabilities** - the kernel capability registry models typed grants such as cells, sheets, clipboard, filesystem, network, credentials, and table access. Grants can be scoped, expanded through dependencies, revoked, and audited by the host.
-- **Workbook access control** - the Rust security engine maps principals to workbook data access levels and enforces covered bridge reads/writes.
+- **Public same-page embeds** - callers request mode, capabilities, save policy, and collaboration mode; the trusted host policy resolves the effective state. Save and export requests are allowed only when that effective state grants them.
+- **Full app and app/runtime capabilities** - trusted shell/runtime code can use app capability services for typed grants such as `cells:read`, `filesystem:write`, `network:allowlist`, `credentials:use`, and table access. Grants can be scoped, expanded through dependencies, revoked, and logged by the host. This is a same-process app API gate, not a browser/process sandbox and not workbook data policy.
+- **Workbook access control** - the Rust `compute-security` engine maps principals to workbook data access levels and enforces covered bridge reads/writes through generated delegate gates and redaction filters.
 
 ## Principal and Policy
 
-Workbook data policy is tag-based. A principal is a set of string tags, and an access policy maps a tag matcher to an access level on a workbook, sheet, or column target.
+Workbook data policy is tag-based. A principal is a set of string tags, and an access policy maps a tag matcher to an access level on a workbook, sheet, or column target. Row and range targets are not shipped.
 
-Access levels are `none`, `structure`, `read`, `write`, and `admin`. Policy resolution uses tag specificity, target specificity, priority, and a safer tie-break. `mog:owner` has default admin access only when a workbook has no policy set. Range targets, API-key scoping, and hosted tenant isolation are not claimed by this guide.
+Access levels are `none`, `structure`, `read`, `write`, and `admin`. Policy resolution uses target specificity (`column` > `sheet` > `workbook`), tag specificity (exact > prefix glob > wildcard), priority, and a safer tie-break. `mog:owner` is reserved: when no matching policy applies, owner evaluation defaults to `admin`; explicit owner policies cannot reduce owner access below `read`. Empty-policy documents report security inactive, and once a policy set exists, anonymous callers require a matching grant. API-key scoping, hosted tenant isolation, row/range policy targets, and durable audit-log retention are not claimed by this guide.
 
 ## Formula Safety
 
-Formulas are parsed and evaluated by the Rust engine as spreadsheet expressions, not as arbitrary user script. Parser and evaluator paths include nesting, operation, scope, deadline, and recalculation-timeout limits. External workbook/provider-backed values are separate host-controlled surfaces; this guide does not claim a general released network capability gate for external data functions.
+Formulas are parsed and evaluated by the Rust engine as spreadsheet expressions, not as arbitrary user script. Parser and evaluator paths include nesting, argument, operation, scope, deadline, and recalculation-timeout limits. Workbook access control redacts outputs on covered read surfaces; formula evaluation may still access denied cells internally, so this is not a per-principal formula sandbox or non-interference guarantee. External workbook/provider-backed values are separate host-controlled surfaces; this guide does not claim a general released network capability gate for external data functions.
+
+## Current Limitations
+
+- Same-process SDK, host, shell, and runtime code is trusted by the process owner. It is not a hostile-client or multi-tenant service boundary.
+- Workbook access control covers declared/gated bridge surfaces. Known sheet-scoped non-byte vector read gaps and documented out-of-scope paths remain outside the current guarantee.
+- Workbook access control is not encryption at rest, and engine diagnostic events are bounded in-memory events rather than durable audit logs.
+- Browser rendering/content hardening, CSP, Trusted Types, clickjacking, postMessage validation, SSRF/local-network exposure, external content loading, telemetry, crash collection, updater behavior, and AI/provider egress are distribution-specific unless a security document or release artifact explicitly claims them.
 
 ## Supply Chain
 
@@ -58,7 +69,11 @@ Use [SECURITY.md](../../SECURITY.md) for supported versions, responsible disclos
 - [SECURITY.md](../../SECURITY.md) - vulnerability disclosure policy
 - [Trust Model](../security/TRUST-MODEL.md) - current deployment claims and non-goals
 - [Threat Model](../security/THREAT-MODEL.md) - reviewed attack surfaces and residual risks
-- [Access Control](../security/ACCESS-CONTROL.md) - workbook principal and policy design
+- [Access Control for Enterprise Review](../security/ACCESS-CONTROL-ENTERPRISE.md) - workbook access-control guarantees and limits
+- [Access Control](../security/ACCESS-CONTROL.md) - lower-level workbook principal and policy design
+- [Known Limitations](../security/KNOWN-LIMITATIONS.md) - unsupported claims and follow-up areas
+- [Data Flow and Network Egress](../security/DATA-FLOW-AND-EGRESS.md) - storage, network, telemetry, and AI egress status
 - [Supply Chain and Release Integrity](../security/SUPPLY-CHAIN.md) - artifact verification status
 - [Embed: React](embed-react.md) and [Embed: Web Component](embed-web-component.md) - supported public embeds
+- [Full Spreadsheet App Embed](spreadsheet-app-embed.md) - trusted same-origin full app embed
 - [iframe Embed](iframe-embed.md) and [Self-Hosting](self-hosting.md) - reserved surfaces

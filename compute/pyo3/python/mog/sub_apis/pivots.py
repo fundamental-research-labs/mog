@@ -7,6 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result
+from mog._unsupported import unsupported_python_path
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -533,6 +534,7 @@ class PivotsAPI:
 
         Uses compute_pivot_update to merge the new field placement.
         """
+        unsupported_python_path("ws.pivots.add_field")
         config = self._get_pivot_config(pivot_id)
         if config is None:
             config = {}
@@ -632,6 +634,7 @@ class PivotsAPI:
 
         Uses compute_pivot_update to remove the field placement.
         """
+        unsupported_python_path("ws.pivots.remove_field")
         config = self._get_pivot_config(pivot_id)
         if config is None:
             config = {}
@@ -654,6 +657,7 @@ class PivotsAPI:
         index: int = 0,
     ) -> Any:
         """Move a field from one area to another."""
+        unsupported_python_path("ws.pivots.move_field")
         config = self._get_pivot_config(pivot_id)
         if config is None:
             config = {}

@@ -6,6 +6,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result
+from mog._unsupported import unsupported_python_path
 from mog.errors import NativeApiError
 from mog.types import MutationResult
 
@@ -157,6 +158,7 @@ class SparklinesAPI:
 
         Uses compute_clear_sparklines_for_sheet(sheet_id).
         """
+        unsupported_python_path("ws.sparklines.clear_all")
         raw = self._bridge.call_json(
             "compute_clear_sparklines_for_sheet", self._sheet_id_json
         )

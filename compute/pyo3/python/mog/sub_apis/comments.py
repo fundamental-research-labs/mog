@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result, parse_a1
+from mog._unsupported import unsupported_python_path
 from mog.errors import NativeApiError
 from mog.types import MutationResult
 
@@ -372,6 +373,7 @@ class CommentsAPI:
         author: str = "User",
     ) -> MutationResult:
         """Set or replace the note text for a cell."""
+        unsupported_python_path("ws.comments.set_note")
         try:
             self.remove_note(address)
         except ValueError:

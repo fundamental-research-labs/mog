@@ -8698,24 +8698,22 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": "ws.comments.setNote",
-      "aliases": [
-        "ws.comments.setNote"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.comments.setNote",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.comments",
       "ownerPackage": "compute/pyo3",
       "pythonName": "set_note",
       "pythonPath": "ws.comments.set_note",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetComments.setNote",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.comments.set_note",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -9521,17 +9519,17 @@
       "apiPath": "ws.diagrams.getDiagram",
       "interface": "WorksheetDiagrams",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetDiagrams.getDiagram",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -9539,17 +9537,17 @@
       "apiPath": "ws.diagrams.getDiagramsOnSheet",
       "interface": "WorksheetDiagrams",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetDiagrams.getDiagramsOnSheet",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -10094,24 +10092,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.filters.clearAutoFilter",
-      "aliases": [
-        "ws.filters.clearAutoFilter"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.clearAutoFilter",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "clear_auto_filter",
       "pythonPath": "ws.filters.clear_auto_filter",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.clearAutoFilter",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.clear_auto_filter",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.filters.clearColumnFilter",
@@ -10134,24 +10130,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.filters.clearCriteria",
-      "aliases": [
-        "ws.filters.clearCriteria"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.clearCriteria",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "clear_criteria",
       "pythonPath": "ws.filters.clear_criteria",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.clearCriteria",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.clear_criteria",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -10172,24 +10166,22 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": "ws.filters.getAutoFilter",
-      "aliases": [
-        "ws.filters.getAutoFilter"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.getAutoFilter",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "get_auto_filter",
       "pythonPath": "ws.filters.get_auto_filter",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.getAutoFilter",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.get_auto_filter",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -10210,24 +10202,22 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": "ws.filters.getFilterUniqueValues",
-      "aliases": [
-        "ws.filters.getFilterUniqueValues"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.getFilterUniqueValues",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "get_filter_unique_values",
       "pythonPath": "ws.filters.get_filter_unique_values",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.getFilterUniqueValues",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.get_filter_unique_values",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.filters.getForRange",
@@ -10364,24 +10354,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.filters.listDetails",
-      "aliases": [
-        "ws.filters.listDetails"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.listDetails",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "list_details",
       "pythonPath": "ws.filters.list_details",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.listDetails",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.list_details",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -10402,24 +10390,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.filters.setAutoFilter",
-      "aliases": [
-        "ws.filters.setAutoFilter"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.setAutoFilter",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "set_auto_filter",
       "pythonPath": "ws.filters.set_auto_filter",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.setAutoFilter",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.set_auto_filter",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.filters.setColumnFilter",
@@ -10442,24 +10428,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.filters.setCriteria",
-      "aliases": [
-        "ws.filters.setCriteria"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.setCriteria",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.filters",
       "ownerPackage": "compute/pyo3",
       "pythonName": "set_criteria",
       "pythonPath": "ws.filters.set_criteria",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetFilters.setCriteria",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.filters.set_criteria",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.filters.setSortState",
@@ -11810,24 +11794,22 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": "ws.getSheetId",
-      "aliases": [
-        "ws.getSheetId"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.getSheetId",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.worksheet",
       "ownerPackage": "compute/pyo3",
       "pythonName": "get_sheet_id",
       "pythonPath": "ws.get_sheet_id",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "Worksheet.getSheetId",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync",
       "targetPath": "ws.get_sheet_id",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -13749,37 +13731,35 @@
       "apiPath": "ws.pivots.addCalculatedFieldLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.addCalculatedFieldLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
-      "aliasOf": "ws.pivots.addField",
-      "aliases": [
-        "ws.pivots.addField"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.pivots.addField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.pivots",
       "ownerPackage": "compute/pyo3",
       "pythonName": "add_field",
       "pythonPath": "ws.pivots.add_field",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.addField",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.add_field",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -14250,24 +14230,22 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": "ws.pivots.moveField",
-      "aliases": [
-        "ws.pivots.moveField"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.pivots.moveField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.pivots",
       "ownerPackage": "compute/pyo3",
       "pythonName": "move_field",
       "pythonPath": "ws.pivots.move_field",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.moveField",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.move_field",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -14387,37 +14365,35 @@
       "apiPath": "ws.pivots.removeCalculatedFieldLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.removeCalculatedFieldLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
-      "aliasOf": "ws.pivots.removeField",
-      "aliases": [
-        "ws.pivots.removeField"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.pivots.removeField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.pivots",
       "ownerPackage": "compute/pyo3",
       "pythonName": "remove_field",
       "pythonPath": "ws.pivots.remove_field",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.removeField",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.remove_field",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.pivots.removeFilter",
@@ -14499,17 +14475,17 @@
       "apiPath": "ws.pivots.resetField",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.resetField",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -14555,17 +14531,17 @@
       "apiPath": "ws.pivots.setAggregateFunctionLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.setAggregateFunctionLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.pivots.setAllExpanded",
@@ -14759,17 +14735,17 @@
       "apiPath": "ws.pivots.setShowValuesAsLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.setShowValuesAsLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -14815,17 +14791,17 @@
       "apiPath": "ws.pivots.setSortOrderLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.setSortOrderLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.pivots.setStyle",
@@ -14893,17 +14869,17 @@
       "apiPath": "ws.pivots.updateCalculatedFieldLegacy",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog",
       "ownerPackage": "compute/pyo3",
       "pythonName": null,
       "pythonPath": null,
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetPivots.updateCalculatedFieldLegacy",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -16666,24 +16642,22 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": "ws.sparklines.clearAll",
-      "aliases": [
-        "ws.sparklines.clearAll"
-      ],
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.sparklines.clearAll",
       "interface": "WorksheetSparklines",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.sparklines",
       "ownerPackage": "compute/pyo3",
       "pythonName": "clear_all",
       "pythonPath": "ws.sparklines.clear_all",
-      "reason": null,
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetSparklines.clearAll",
-      "status": "renamed",
+      "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.sparklines.clear_all",
-      "unsupportedUntil": null
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": "ws.sparklines.clearInRange",
@@ -18391,17 +18365,17 @@
       "apiPath": "ws.tables.toggleHeaderRow",
       "interface": "WorksheetTables",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.tables",
       "ownerPackage": "compute/pyo3",
       "pythonName": "toggle_header_row",
       "pythonPath": "ws.tables.toggle_header_row",
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetTables.toggleHeaderRow",
       "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.tables.toggle_header_row",
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -18409,17 +18383,17 @@
       "apiPath": "ws.tables.toggleTotalsRow",
       "interface": "WorksheetTables",
       "nameTransform": "snake_case",
-      "notes": null,
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
       "ownerModule": "mog.sub_apis.tables",
       "ownerPackage": "compute/pyo3",
       "pythonName": "toggle_totals_row",
       "pythonPath": "ws.tables.toggle_totals_row",
-      "reason": "release_deferred",
+      "reason": "deprecated_ts_api",
       "stableId": "WorksheetTables.toggleTotalsRow",
       "status": "unsupported",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.tables.toggle_totals_row",
-      "unsupportedUntil": "round-2"
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,

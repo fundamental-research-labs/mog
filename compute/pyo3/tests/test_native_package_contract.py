@@ -96,7 +96,12 @@ def test_comments_address_paths_use_native_position_bridge() -> None:
         ws.comments.add_note("C3", "note text")
         assert ws.comments.get_note("C3") == "note text"
 
-        ws.comments.set_note("C3", "replacement", author="Alice")
+        with pytest.raises(UnsupportedApiError) as exc_info:
+            ws.comments.set_note("C3", "replacement", author="Alice")
+        assert exc_info.value.api_path == "ws.comments.setNote"
+
+        ws.comments.remove_note("C3")
+        ws.comments.add_note("C3", {"text": "replacement", "author": "Alice"})
         by_cell = ws.comments.get_for_cell("C3")
         assert len(by_cell) == 1
         assert by_cell[0]["author"] == "Alice"

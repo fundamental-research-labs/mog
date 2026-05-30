@@ -6,6 +6,7 @@ export interface ApiSpecFunctionEntry {
   signature: string;
   docstring: string;
   usedTypes: string[];
+  targetInterface?: string;
 }
 
 export interface ApiSpecInterfaceEntry {
@@ -23,8 +24,8 @@ export interface ApiSpecTypeEntry {
 
 export interface ApiSpec {
   subApis: {
-    wb: Record<string, string>;
-    ws: Record<string, string>;
+    workbook: Record<string, ApiSpecFunctionEntry>;
+    worksheet: Record<string, ApiSpecFunctionEntry>;
   };
   interfaces: Record<string, ApiSpecInterfaceEntry>;
   types: Record<string, ApiSpecTypeEntry>;
@@ -83,10 +84,15 @@ const pathMap: Record<string, string> = {};
 // Sub-API accessor names per root: { wb: Set('sheets','history'), ws: Set('charts','formats') }
 const subApiAccessors: Record<string, Set<string>> = { wb: new Set(), ws: new Set() };
 
-for (const [root, subs] of Object.entries(spec.subApis)) {
-  for (const [accessor, ifaceName] of Object.entries(subs)) {
-    pathMap[`${root}.${accessor}`] = ifaceName;
-    subApiAccessors[root]?.add(accessor);
+function getSubApisForRoot(root: 'wb' | 'ws'): Record<string, ApiSpecFunctionEntry> {
+  return root === 'wb' ? spec.subApis.workbook : spec.subApis.worksheet;
+}
+
+for (const root of ['wb', 'ws'] as const) {
+  for (const [accessor, entry] of Object.entries(getSubApisForRoot(root))) {
+    if (!entry.targetInterface) continue;
+    pathMap[`${root}.${accessor}`] = entry.targetInterface;
+    subApiAccessors[root].add(accessor);
   }
 }
 
@@ -212,11 +218,11 @@ function describe(path?: string): DescribeResult {
     return {
       workbook: {
         methods: getMethodsExcludingAccessors('Workbook', 'wb'),
-        subApis: Object.keys(spec.subApis.wb ?? {}),
+        subApis: Object.keys(getSubApisForRoot('wb')),
       },
       worksheet: {
         methods: getMethodsExcludingAccessors('Worksheet', 'ws'),
-        subApis: Object.keys(spec.subApis.ws ?? {}),
+        subApis: Object.keys(getSubApisForRoot('ws')),
       },
     };
   }
@@ -436,8 +442,10 @@ function buildRootNode(root: 'wb' | 'ws'): RootNode {
   };
 
   // Add sub-API accessors (e.g., api.ws.charts → SubApiNode)
-  const subs = spec.subApis[root as keyof typeof spec.subApis] ?? {};
-  for (const [accessor, subIfaceName] of Object.entries(subs)) {
+  const subs = getSubApisForRoot(root);
+  for (const [accessor, entry] of Object.entries(subs)) {
+    const subIfaceName = entry.targetInterface;
+    if (!subIfaceName) continue;
     if (RESERVED_PROPS.has(accessor)) continue;
     let cached: SubApiNode | undefined;
     Object.defineProperty(node, accessor, {

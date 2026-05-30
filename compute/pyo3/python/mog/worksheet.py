@@ -612,7 +612,7 @@ class Worksheet:
 
     def get_sheet_id(self) -> str:
         """Alias for the :attr:`sheet_id` property."""
-        return self._sheet_id
+        unsupported_python_path("ws.get_sheet_id")
 
     def set_cells(self, cells: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Batch-set cells from a list of dicts.

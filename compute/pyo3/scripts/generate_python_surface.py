@@ -233,6 +233,8 @@ class SurfaceEntry:
     python_path: Optional[str]
     parameters: list[dict[str, Any]]
     return_type: dict[str, Any]
+    visibility: str
+    deprecated: bool
 
 
 def camel_to_snake(name: str) -> str:
@@ -542,6 +544,8 @@ def surface_entry(
     python_path: Optional[str],
     member_kind: Optional[str] = None,
 ) -> SurfaceEntry:
+    deprecation = meta.get("deprecation") or {}
+    deprecated = meta.get("visibility") == "deprecated" or bool(deprecation.get("deprecated"))
     return SurfaceEntry(
         api_path=meta.get("canonicalPath") or f"{parent}.{member_name}",
         stable_id=meta.get("stableId") or f"{meta.get('interface', 'Unknown')}.{member_name}",
@@ -555,6 +559,8 @@ def surface_entry(
         python_path=python_path,
         parameters=list(meta.get("parameters") or []),
         return_type=surface_return(meta),
+        visibility=str(meta.get("visibility") or ("deprecated" if deprecated else "public")),
+        deprecated=deprecated,
     )
 
 
@@ -738,7 +744,12 @@ def initial_dispositions(entries: list[SurfaceEntry], runtime_paths: set[str]) -
         status: str
         reason: Optional[str] = None
         python_path = entry.python_path
-        if is_known_unsupported_api(entry.api_path) and entry.api_path in child_api_prefixes:
+        if entry.deprecated or entry.visibility == "deprecated":
+            status = "unsupported" if python_path in runtime_paths else "omitted"
+            reason = "deprecated_ts_api"
+            if status == "omitted":
+                python_path = None
+        elif is_known_unsupported_api(entry.api_path) and entry.api_path in child_api_prefixes:
             status = "implemented" if python_path == entry.api_path else "renamed"
         elif is_known_unsupported_api(entry.api_path):
             status = "unsupported"
@@ -810,8 +821,8 @@ def make_disposition(
         "aliases": [entry.api_path] if status == "renamed" else [],
         "nameTransform": name_transform_for(entry, python_path, status),
         "syncModel": "sync-wrapper-for-async-ts" if entry.return_type.get("asyncTs") else "sync",
-        "unsupportedUntil": "round-2" if reason == "release_deferred" else None,
-        "notes": None,
+        "unsupportedUntil": "round-2" if reason == "release_deferred" else ("never" if reason == "deprecated_ts_api" else None),
+        "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented." if reason == "deprecated_ts_api" else None,
     }
 
 
@@ -1007,7 +1018,7 @@ def generate_stub_files(payload: dict[str, Any]) -> dict[Path, str]:
 
     for entry in payload["apiPaths"]:
         disp = next((d for d in payload["dispositions"] if d["apiPath"] == entry["api_path"]), None)
-        if not disp or disp.get("status") not in {"implemented", "renamed", "unsupported"}:
+        if not disp or disp.get("status") not in {"implemented", "renamed"}:
             continue
         python_path = disp.get("pythonPath")
         if not python_path:

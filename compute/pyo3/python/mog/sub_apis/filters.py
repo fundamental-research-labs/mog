@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result
+from mog._unsupported import unsupported_python_path
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ class FiltersAPI:
 
     def set_auto_filter(self, range_str: str) -> MutationResult:
         """Create an auto-filter for the given A1 range string."""
+        unsupported_python_path("ws.filters.set_auto_filter")
         from mog._serde import parse_range
         sr, sc, er, ec = parse_range(range_str)
         config = {
@@ -106,6 +108,7 @@ class FiltersAPI:
         The returned dict always includes a ``range`` key as an A1-style string
         (if the filter has range information).
         """
+        unsupported_python_path("ws.filters.get_auto_filter")
         filters = self._bridge.call_json(
             "compute_get_filters_in_sheet", self._sheet_id_json
         )
@@ -174,6 +177,7 @@ class FiltersAPI:
 
         Uses compute_clear_all_filters(sheet_id) to remove all filters.
         """
+        unsupported_python_path("ws.filters.clear_auto_filter")
         raw = self._bridge.call_json(
             "compute_clear_all_filters", self._sheet_id_json
         )
@@ -252,6 +256,7 @@ class FiltersAPI:
 
         .. deprecated:: Use :meth:`list` instead, which now returns full detail.
         """
+        unsupported_python_path("ws.filters.list_details")
         return self.list()
 
     def get_for_range(self, range_obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -362,6 +367,7 @@ class FiltersAPI:
 
         Uses compute_set_column_filter(sheet_id, filter_id, header_col, criteria).
         """
+        unsupported_python_path("ws.filters.set_criteria")
         normalized = self._normalize_criteria(criteria)
         raw = self._bridge.call_json(
             "compute_set_column_filter",
@@ -377,6 +383,7 @@ class FiltersAPI:
 
         Uses compute_clear_column_filter(sheet_id, filter_id, header_col).
         """
+        unsupported_python_path("ws.filters.clear_criteria")
         raw = self._bridge.call_json(
             "compute_clear_column_filter",
             self._sheet_id_json,
@@ -417,6 +424,7 @@ class FiltersAPI:
 
         Reads filter details and extracts unique values from the data range.
         """
+        unsupported_python_path("ws.filters.get_filter_unique_values")
         # Determine the filter range
         filter_range = None
         try:

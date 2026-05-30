@@ -1,57 +1,70 @@
 # API Reference
 
-> **Status: skeleton — content pending package stabilization**
+> **Status: public reference index.** This page indexes the public and
+> public-experimental API surfaces that exist in the current checkout. Package
+> status is defined by `tools/package-inventory.jsonc` and package manifests;
+> generated API data is committed as JSON and declaration snapshots.
 
-API reference index for Mog's public package surfaces. Detailed API docs are generated from TypeScript contract and declaration sources.
+`docs/reference` does not currently contain generated per-package Markdown or
+HTML API pages. Until those pages exist, use the source files, package
+manifests, generated JSON metadata, and API snapshots linked below as the
+code-backed reference.
 
-## Packages
+## Public TypeScript Packages
 
-### @mog-sdk/contracts
+| Package | Status | Public surface | Reference sources |
+| --- | --- | --- | --- |
+| `@mog-sdk/node` | shipped public | Headless Node.js SDK. The guide path is async `createWorkbook()` plus the root package exports for SDK errors/events, contract types, utilities, `MogDocumentFactory`, and `api.describe()` introspection. Native N-API platform packages are optional dependencies; there is no Node WASM fallback. | `runtime/sdk/package.json`, `runtime/sdk/src/index.ts`, `runtime/sdk/src/generated/api-spec.json`, `runtime/sdk/src/api-describe.ts`, `tools/api-snapshots/@mog-sdk__node.api.txt`, [Node SDK guide](../guides/node-sdk.md) |
+| `@mog-sdk/contracts` | shipped public | Contract and small runtime-value barrel for workbook/worksheet APIs, core cell types, events, rendering, document, SDK, security, app, and related contracts. The package inventory marks many subpaths as public-experimental. | `contracts/package.json`, `contracts/src/`, `types/api/src/api/`, `tools/contracts-runtime-inventory.json`, `tools/api-snapshots/@mog-sdk__contracts.api.txt` |
+| `@mog-sdk/sheet-view` | shipped public | Low-level browser sheet view package. It exports `createSheetView()`, `createSheetViewDataSourceFromWorkbook()`, skin helpers, and view/capability types from the package root only. | `views/sheet-view/package.json`, `views/sheet-view/src/index.ts`, `tools/api-snapshots/@mog-sdk__sheet-view.api.txt`, [SheetView guide](../guides/sheet-view.md) |
+| `@mog-sdk/embed` | shipped public package; API entrypoints public-experimental | Same-page browser sheet/view embed. Public entrypoints are the root web-component registration surface plus `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, and `@mog-sdk/embed/config`. `./internal/views-host` is a workspace-private friend export and is stripped from public artifacts. | `runtime/embed/package.json`, `runtime/embed/src/index.ts`, `runtime/embed/src/react/index.tsx`, `runtime/embed/src/web-component/index.ts`, `runtime/embed/src/config.ts`, `tools/api-snapshots/@mog-sdk__embed.api.txt`, [Web Component guide](../guides/embed-web-component.md), [React guide](../guides/embed-react.md) |
+| `@mog-sdk/spreadsheet-app` | shipped public | Full spreadsheet app embed for trusted same-origin React hosts. Public exports include `createSpreadsheetRuntime()`, `MogSpreadsheetApp`, `mountSpreadsheetApp()`, and typed runtime/session/attachment contracts. CSS subpaths are public-experimental. | `runtime/spreadsheet-app/package.json`, `runtime/spreadsheet-app/src/index.tsx`, `runtime/spreadsheet-app/src/public-types.ts`, `tools/api-snapshots/@mog-sdk__spreadsheet-app.api.txt`, [Full app embed guide](../guides/spreadsheet-app-embed.md) |
 
-Public contract package. Types, schemas, constants, and shared API contracts consumed by the runtime packages.
+## Runtime Wrapper Packages
 
-- Source: `contracts/`
-- API docs: (auto-generated, link TBD)
-- Architecture: [Package Structure](../architecture/os/packages.md)
+| Package | Status | Notes |
+| --- | --- | --- |
+| `@mog-sdk/wasm` | binary-wrapper | Browser WASM package for the Rust compute engine. It is used by browser runtime packages and exports the wasm-pack JavaScript module plus `./wasm`; it is not the high-level browser integration API. See `compute/wasm/npm/package.json`. |
+| `@mog-sdk/darwin-arm64`, `@mog-sdk/darwin-x64`, `@mog-sdk/linux-arm64-gnu`, `@mog-sdk/linux-arm64-musl`, `@mog-sdk/linux-x64-gnu`, `@mog-sdk/linux-x64-musl`, `@mog-sdk/win32-x64-msvc` | binary-wrapper | Optional native packages used by `@mog-sdk/node`. Install `@mog-sdk/node` rather than importing these packages directly. See `compute/napi/package.json` and `compute/napi/npm/*/package.json`. |
 
-### @mog-sdk/node
+## Python Surface
 
-Node.js SDK with native N-API bindings. Provides the workbook/document facade for server-side workbook creation, formula compute, and XLSX file I/O.
+The Python SDK source in `compute/pyo3` is public-experimental. Its package name
+is `mog-sdk`, it imports as `mog`, and `pyproject.toml` marks it alpha. The
+generated Python surface metadata is
+`compute/pyo3/python/mog/_generated/api_surface.json`, and implementation
+dispositions are tracked in `compute/pyo3/python/mog/api_dispositions.json`.
+See the [Python SDK guide](../guides/python-sdk.md).
 
-- Source: `runtime/sdk/`
-- API docs: (auto-generated, link TBD)
-- Guide: [Node SDK](../guides/node-sdk.md)
+## Generated API Data
 
-### @mog-sdk/sheet-view
+| Artifact | Generated by | Current role |
+| --- | --- | --- |
+| `docs/generated/api-reference.json` | Root `pnpm generate:api-ref`, which runs `tools/generate-api-reference.ts` against `types/api/src/api` plus selected supporting type sources. | Machine-readable Workbook/Worksheet reference data with namespaced methods flattened as dotted names such as `ws.tables.add`. This is generated data, not package-level human docs. |
+| `runtime/sdk/src/generated/api-spec.json` and `runtime/sdk/src/generated/api-spec.schema.json` | `pnpm --filter @mog-sdk/node generate:api-spec`, which runs `runtime/sdk/scripts/generate-api-spec.ts`. | Rich SDK introspection metadata used by `@mog-sdk/node` exports `api` and `apiSpec`. It includes root methods, sub-API graph data, source locations, async model metadata, types, and number-format metadata. |
+| `tools/api-snapshots/*.api.txt` | `pnpm check:api-snapshots` / `tools/check-api-snapshots.mjs` after declaration artifacts exist. | Declaration snapshot guardrails for public and source-visible surfaces. The presence of `@mog-sdk__kernel.api.txt` does not make `@mog-sdk/kernel` a public package; the package inventory marks kernel workspace-internal. |
 
-Low-level spreadsheet grid renderer. Mounts SheetView in a DOM element, attaches a workbook data source, and exposes viewport, event, render-state, and extension capabilities.
+## Workspace-Internal and Reserved Surfaces
 
-- Source: `views/sheet-view/`
-- API docs: (auto-generated, link TBD)
-- Guide: [SheetView](../guides/sheet-view.md)
-
-### @mog-sdk/embed
-
-Read-only sheet/view embed package. Provides the `<mog-sheet>` web component and, through `@mog-sdk/embed/react`, the `MogSheet` React component. Composes SheetView with embed-specific formula bar and sheet tabs.
-
-- Source: `runtime/embed/`
-- API docs: (auto-generated, link TBD)
-- Guides: [Web Component](../guides/embed-web-component.md) | [React](../guides/embed-react.md)
-
-### @mog-sdk/spreadsheet-app
-
-Full spreadsheet app embed for trusted same-origin hosts. Provides runtime/session APIs, a React app attachment surface, and CSS assets for host-controlled embedding.
-
-- Source: `runtime/spreadsheet-app/`
-- API docs: (auto-generated, link TBD)
-- Guide: [Full Spreadsheet App Embed](../guides/spreadsheet-app-embed.md)
-
-## Auto-Generation
-
-API reference data is generated with `pnpm generate:api-ref`, which runs `tools/generate-api-reference.ts` against `types/api/src/api`. Declaration rollups and package API snapshots are produced with API Extractor for shipped TypeScript entry points. The generated JSON snapshot is stored in `docs/generated/api-reference.json`; package API snapshots are stored in `tools/api-snapshots/`.
+- `@mog-sdk/kernel` is workspace-internal in the current inventory and package
+  manifest. Public consumers should use `@mog-sdk/node`,
+  `@mog-sdk/sheet-view`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`.
+- `@mog/transport`, `@mog/*` implementation packages, `types/*`, `shell`, and
+  app internals are not public setup paths.
+- Iframe embed, HTTP service, plugins, and self-hosting remain reserved or
+  deployment-specific surfaces unless their guide page explicitly states
+  otherwise.
 
 ## Conventions
 
-- Documented TypeScript APIs use JSDoc comments as source material
-- Public types are exported from package entry points; internal or workspace-private types are not documented here
-- Deprecated APIs are marked with `@deprecated` and include migration guidance where available
+- Public TypeScript imports should come from package entrypoints listed in
+  package manifests, not from `src/` files.
+- APIs marked `public-experimental` are source-visible or shipped through a
+  public package but do not yet carry a long-term compatibility promise.
+- Deprecated APIs should be marked with `@deprecated` in declaration source and
+  include migration guidance where available.
+- Async workbook and worksheet methods return promises. Synchronous properties,
+  such as `wb.activeSheet`, are called out in the guides and generated metadata.
+
+For the package inventory, status vocabulary, and dependency direction, see
+[Package Structure](../architecture/os/packages.md).

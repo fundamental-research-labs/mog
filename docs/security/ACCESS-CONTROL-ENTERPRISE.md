@@ -16,12 +16,12 @@ Mog's workbook access control is an application-level policy engine for workbook
 
 | Guarantee | Classification | Validation basis |
 |-----------|----------------|------------------|
-| Principals are expressed as canonicalized tag sets. | Verified | Access-control design and implementation tests. |
+| Session principals and public principal construction canonicalize tag sets. | Verified | Principal-pool, session API, and principal-projection tests. |
 | Policies grant ordered access levels: none, structure, read, write, admin. | Verified | Access-control design and implementation tests. |
-| Empty-policy documents do not enforce access decisions; once policies exist, anonymous callers are denied rather than treated as owner. | Verified | End-to-end security tests. |
+| Empty-policy documents do not enforce access decisions; once policies exist, anonymous callers do not inherit owner access and require a matching policy grant. | Verified | End-to-end security tests. |
 | Writes below required access fail with `SecurityDenied` and emit diagnostic events. | Verified | End-to-end security tests. |
-| Denied reads return redacted typed placeholders so application and formula consumers can handle them consistently. | Verified | Read-filter implementation and security tests. |
-| Bridged read surfaces are covered by tests that require each read to declare a security scope. | Verified | Bridge coverage tests. |
+| Covered reads below `read` are redacted consistently: `none` returns typed empty/null equivalents, while `structure` returns type placeholders. | Verified | Read-filter implementation and security tests. |
+| Gated engine read surfaces are covered by tests that require each read to declare a security scope. | Verified | Bridge coverage tests. |
 | Policy ambiguity resolves to the safer lower access level. | Verified | Access-control design and implementation tests. |
 | Host-backed workbook construction can project a verified principal, reject invalid tenant/workspace or reserved-tag claims, and lock the active principal against later public API mutation. | Verified | Principal-projection and host-principal-lock tests. |
 

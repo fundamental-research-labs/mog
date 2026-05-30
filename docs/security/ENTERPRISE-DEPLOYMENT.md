@@ -19,23 +19,23 @@ Enterprise deployments should keep a clear customer-controlled boundary: run Mog
 | Offline mode | Customer firewall/proxy, deployment configuration, feature flags | Deployment-controlled | Block outbound network except approved customer endpoints. Do not enable collaboration or provider integrations for offline deployments. |
 | Managed install | MDM, package manager, signed installer policy | Deployment-controlled | Install only approved Mog artifacts and pin versions for regulated environments. |
 | Update policy | Customer software distribution channel | Deployment-controlled | Automatic updater artifacts are not currently part of the documented enterprise distribution; distribute updates through customer-approved channels until an enterprise updater is documented. |
-| Filesystem scope | Desktop capability policy and OS permissions | Verified; Deployment-controlled | The reviewed desktop capability scope allows app-specific directories; user-opened files, shell-open behavior, deep links, and enabled runtime commands still require distribution review. |
-| Network allowlist | CSP, firewall, proxy, DNS, endpoint protection | Deployment-controlled | Review the desktop content-security policy and remove non-required destinations, including unused integration domains, from enterprise distributions. |
-| Browser embed isolation | Host app architecture | Deployment-controlled | Use cross-origin iframe isolation for untrusted workbook content; same-page embeds share the host origin. |
+| Filesystem scope | Desktop capability policy and OS permissions | Deployment-controlled | Review the shipping desktop package's capability policy and OS entitlements. User-opened files, shell-open behavior, deep links, app data paths, and enabled runtime commands are not claimed without distribution review. |
+| Network allowlist | CSP or webview policy, firewall, proxy, DNS, endpoint protection | Deployment-controlled | Define and review the shipping package's CSP, webview policy, and network allowlist; remove non-required destinations, including unused integration domains, from enterprise distributions. |
+| Browser embed isolation | Host app architecture | Deployment-controlled | Same-page public embeds share the host origin and are not hostile-content isolation. The public iframe entrypoint is reserved, so do not claim iframe isolation until a reviewed iframe host/child distribution is released. |
 | Principal assignment | Trusted service or host adapter | Deployment-controlled | Do not expose same-process SDK access to untrusted users when workbook policy decisions matter. |
-| Headless server exposure | Network policy and service architecture | Not claimed | Bind headless HTTP to trusted loopback or place it behind a real authentication and authorization service before enterprise exposure. Routes can include session control, file upload/download, code execution, agent egress, and optional database proxy behavior depending on the distribution. |
-| Collaboration server exposure | Network policy and service architecture | Not claimed | Treat the WebSocket coordinator as a sync component with origin checks, not as tenant authentication, authorization, or durable policy enforcement. |
+| Headless server exposure | Network policy and service architecture | Not claimed | Mog does not currently publish a supported HTTP service API. If a distribution includes headless HTTP or service routes, bind them to trusted loopback or place them behind real authentication and authorization before enterprise exposure. |
+| Collaboration server exposure | Network policy and service architecture | Not claimed | Treat collaboration WebSocket code as sync and awareness plumbing. Origin allowlists, room grants, tenant authentication, authorization, and durable policy enforcement must come from a reviewed service deployment. |
 
 ## Configuration Lockdown Checklist
 
 - Confirm whether the distribution is desktop, SDK/headless, same-page embed, iframe embed, or self-hosted service.
 - Disable collaboration and provider integrations unless explicitly approved.
-- Remove unneeded CSP destinations from the desktop distribution.
+- Define and review CSP, webview, and network allowlists for the desktop distribution.
 - Route updates through a customer-approved channel.
 - Define the local storage directory and retention policy.
 - Decide whether workbook files remain local only or may be synced through customer infrastructure.
 - Put a trusted service boundary in front of SDK calls for multi-user or hostile-client deployments.
-- Do not expose headless HTTP, optional database proxy, agent, code-execution, upload/download, or automation routes as an enterprise service without a separate service-security design.
+- Do not expose headless HTTP or service routes, database proxy, agent, code-execution, upload/download, automation, or collaboration routes as an enterprise service without a separate service-security design.
 
 ## Unsupported Enterprise Claims Today
 

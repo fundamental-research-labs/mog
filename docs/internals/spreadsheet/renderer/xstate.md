@@ -4,18 +4,27 @@
 
 Spreadsheet grid interaction state is modeled with **XState v5 state machines** owned by systems. Machine definitions are TypeScript modules that do not depend on React or the DOM; system and coordinator classes create actors, provide side-effect implementations, and wire cross-machine communication. Persistent collaborative document state lives in Rust/Yrs-backed compute and workbook APIs, while XState owns local UI/session state.
 
+## Status and Scope
+
+This is a **workspace-internal** architecture note for `@mog/app-spreadsheet` and related private/reserved packages. It is not a public integration guide and does not describe a supported external API for constructing grid actors directly.
+
+- `@mog/app-spreadsheet` is a private workspace app package.
+- `@mog/shell` is a reserved private package; its focus machine is consumed inside the monorepo.
+- Public setup paths are the facades listed in package inventory, such as `@mog-sdk/sheet-view`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/node`, and `@mog-sdk/contracts`.
+- The current spreadsheet app depends on `xstate` `^5.31.1` and `@xstate/react` `^6.1.0`; `pnpm-lock.yaml` currently resolves `xstate@5.31.1`.
+
 ## Why XState
 
-| Approach              | Verdict       | Reasoning                                                                  |
-| --------------------- | ------------- | -------------------------------------------------------------------------- |
-| **XState v5**         | Used          | Grid, renderer, input, object, ink, focus, and lifecycle actors use XState. |
-| Zustand / UI store    | Complementary | UI stores hold view/chrome state; machines enforce interaction invariants.  |
-| Custom implementation | Avoided       | Machines rely on XState guards, actions, actors, and typed snapshots.       |
+| Approach              | Verdict                      | Reasoning                                                                                  |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
+| **XState v5**         | Used in workspace-internal UI | Grid, renderer, input, object, ink, and focus actors use XState; separate app views also define XState machines. |
+| Zustand / UI store    | Complementary                | UI stores hold view/chrome state; machines enforce interaction invariants.                  |
+| Custom implementation | Avoided for machine behavior | Machines rely on XState guards, actions, actor emissions, invoked actors, and typed snapshots. |
 
 **Key benefits:**
 
 - Type-safe states, events, and context
-- Actors owned by systems/coordinators, not React components
+- Spreadsheet grid actors owned by systems/coordinators, not React components
 - Hooks can subscribe to narrow XState snapshot slices with `@xstate/react`
 - Side effects can be injected by systems while machine transitions stay explicit
 
@@ -103,7 +112,7 @@ editorActor.subscribe((state) => {
 
 **File:** `apps/spreadsheet/src/coordinator/sheet-coordinator.ts`
 
-The SheetCoordinator is the spreadsheet **composition root**. It creates the 5 grid systems, starts them in dependency order, owns the shared focus actor, and wires cross-system subscriptions. The current file also contains floating-object projection, receipt processing, and toolbar/cache wiring, so it is no longer a tiny wrapper.
+The SheetCoordinator is the spreadsheet **workspace-internal composition root**. It creates the 5 grid systems, starts them in dependency order, owns the shared focus actor, and wires cross-system subscriptions. The current file also contains floating-object projection, active-cell cache refresh, flash fill hooks, named-range and merge-anchor wiring, find/replace wiring, receipt processing, sheet-switch coordination, and toolbar/cache wiring, so it is no longer a tiny wrapper.
 
 1. Creates systems with narrow configs
 2. Calls `system.start()` in dependency order
@@ -166,7 +175,9 @@ Cross-system events are wired in `SheetCoordinator.wireCrossSystemEvents()`. Tig
 | Editor focus                 | Grid edit start/end -> input focus editor/grid                         |
 | Render invalidation          | Grid, objects, ink, find/replace, and feature coordination invalidate renderer work |
 | Sheet switching              | Sheet switch coordination saves/restores selection and scroll state     |
-| Structure changes            | Structure coordination forwards `STRUCTURE_CHANGE` to selection, clipboard, and affected edits |
+| Structure-change machine handlers | Selection, editor, and clipboard define `STRUCTURE_CHANGE` handlers; renderer event subscriptions independently invalidate on row/column structure events |
+
+`apps/spreadsheet/src/systems/grid-editing/features/structure/structure-coordination.ts` still exists and forwards workbook row/column events to selection, editor, and clipboard actors, but no current production setup call was found in the public app source. Treat that module as **workspace-internal, not currently wired** until a caller is added.
 
 ### Cross-System Wiring Examples
 
@@ -175,6 +186,7 @@ From `SheetCoordinator.wireCrossSystemEvents()`:
 - **Selection context exclusivity**: grid `onSelectionActive` notifies objects to deselect, and vice versa
 - **Editor-focus sync**: grid `onEditStart` / `onEditEnd` tells input system to focus editor / grid
 - **Render invalidation**: grid, objects, and ink `onStateChange` trigger `renderer.invalidate()`
+- **Viewport follow**: RenderSystem subscribes to the selection machine's `userSelectionChanged` emitted event and sends `SCROLL_TO_ACTIVE_CELL` only for local user-driven selection changes
 - **Sheet switch**: saves/restores view state (selection + scroll) when active sheet changes
 - **Named ranges**: recalculates dependent formulas on name CRUD events
 - **Floating objects**: workbook floating-object events update the cache and push renderer patches
@@ -183,7 +195,7 @@ From `SheetCoordinator.wireCrossSystemEvents()`:
 
 **Core Rule: collaborative document state is handled below UI state.**
 
-Persistent workbook state is backed by Rust/Yrs and reached through the workbook and compute APIs. Machines that need to react to remote or external changes define explicit events; not every machine has `REMOTE_*` events.
+Persistent workbook state is backed by Rust/Yrs and reached through workbook/compute APIs. In this app, the direct kernel sidecar and workbook implementation are **workspace-internal**; public callers should use the public facades rather than importing `@mog-sdk/kernel` directly. Machines that need to react to remote or external changes define explicit events; not every machine has `REMOTE_*` events.
 
 ```typescript
 // apps/spreadsheet/src/systems/grid-editing/machines/editor/types.ts
@@ -206,11 +218,11 @@ type EditorEvent =
 
 ### Collaboration Integration
 
-Collaboration is split across the kernel sidecar, workbook event subscriptions, and UI coordination. The app stores presence in `chrome/collab/use-collab-store.ts`; hooks broadcast local selection and convert remote participant presence into renderer cursors. Workbook events also feed UI machines for structure changes, floating-object deletions, validation updates, and related invalidations.
+Collaboration is split across the workspace-internal kernel sidecar, workbook event subscriptions, and UI coordination. The app stores sidecar status and participant presence in `chrome/collab/use-collab-store.ts`; `useSelectionPresenceBroadcast()` broadcasts local selection; `useRemoteCursors()` converts remote participant presence into renderer cursors. Workbook events also feed renderer invalidation and object/chart cleanup paths, including floating-object deletion.
 
 ### Awareness Sync
 
-Presence synchronization uses the kernel collaboration sidecar `PresenceState` shape:
+Presence synchronization uses the workspace-internal kernel collaboration sidecar `PresenceState` shape, exported by the kernel API as `CollaborationPresenceState`:
 
 ```typescript
 interface PresenceState {
@@ -260,12 +272,14 @@ Two state systems with different undo semantics:
 
 **Session State (XState) - NOT Undo-able:**
 
-- Selection position
+- Selection movement by itself
 - Clipboard UI state
 - Editor buffer
 - Scroll position
 
 **This matches Excel/Sheets behavior:** Ctrl+Z after moving selection does NOT return selection.
+
+There is one important workspace-internal bridge: `setupUndoSelectionCoordination()` listens to workbook history changes and restores a selection checkpoint around document undo/redo operations. That restores UI context for undoable document mutations, but selection-only movement still does not create an undo step.
 
 ## React Hooks
 
@@ -302,14 +316,18 @@ export function useSelection() {
 | `useRenderer()`, `useRendererStatus()`, `useRendererActions()`         | Renderer state and actions        |
 | `useInputState()`, `useInputEventHandlers()`                           | Input/editor event handling       |
 | `useFocus()`, `useKeyboard()`, `useFindReplace()`                      | Navigation and find/replace       |
-| `useObjectInteraction()`, `useInk()`, `useDiagram()`                   | Floating object and ink state     |
+| `useObjectInteraction()`, `useInk()`, `useDiagramUI()`                 | Floating object and ink state     |
 | `useChartUI()`, `useCharts()`, `useChartEditorActions()`               | Chart interaction state           |
 | `useCollabPresence()`, `useRemoteCursors()`                            | Remote user awareness             |
 | `useCellProperties()`, `useActionDependencies()`, `usePrintSettings()` | Settings, toolbar, and print UI   |
 
+These hooks are app-private React helpers under `apps/spreadsheet/src/hooks`. Public packages expose higher-level embed, app, and sheet-view APIs instead of this actor layer.
+
 ## State Machines
 
 Grid state machines are distributed across the 5 systems in `apps/spreadsheet/src/systems/`. Machines are TypeScript modules without React dependencies. The focus machine comes from `@mog/shell`.
+
+`apps/spreadsheet/src/systems/shared/actor-manager.ts` still exists for tests and older helper modules, but the production `SheetCoordinator` path shown above creates actors through the owning systems plus a coordinator-owned focus actor.
 
 ### Machine Locations
 

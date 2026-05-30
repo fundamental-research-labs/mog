@@ -1,85 +1,245 @@
 # Node SDK
 
-> **Status: available as `@mog-sdk/node`**
+> **Status: shipped public package:** `@mog-sdk/node`
 
-Use Mog programmatically in Node.js for server-side workbook manipulation, data pipelines, and automation.
+Use Mog programmatically in Node.js for trusted same-process workbook
+automation, data pipelines, and server-side file processing. The stable public
+entry point is async `createWorkbook()` from `@mog-sdk/node`.
+
+The Node SDK is not a hostile-client security boundary. Do not run untrusted
+agent or user code in the same process and treat the package as an automation
+SDK owned by the host application.
 
 ## Prerequisites
 
 - Node.js 18+
-- `@mog-sdk/node`
+- npm, pnpm, or yarn
+- A supported native platform package installed through `@mog-sdk/node` optional
+  dependencies
 
-The Node SDK uses native N-API platform packages. There is no WASM fallback in the Node runtime path.
+The Node SDK uses native N-API platform packages. There is no WASM fallback in
+the Node runtime path. Supported public binary wrappers are:
 
-## Install
+- `@mog-sdk/darwin-arm64`
+- `@mog-sdk/darwin-x64`
+- `@mog-sdk/linux-arm64-gnu`
+- `@mog-sdk/linux-arm64-musl`
+- `@mog-sdk/linux-x64-gnu`
+- `@mog-sdk/linux-x64-musl`
+- `@mog-sdk/win32-x64-msvc`
+
+If optional dependencies are omitted or the platform is unsupported, workbook
+creation fails when the SDK tries to load the native package.
+
+## Runnable Quickstart
 
 ```bash
+mkdir mog-node-sdk
+cd mog-node-sdk
+npm init -y
+npm pkg set type=module
 npm install @mog-sdk/node
-```
-
-`@mog-sdk/node` declares optional native packages for macOS arm64/x64, Linux x64/arm64 (glibc and musl), and Windows x64.
-
-## Create a Workbook
-
-Create a blank workbook, use the active sheet, and dispose the workbook when finished.
-
-```typescript
+cat > index.mjs <<'JS'
 import { createWorkbook } from '@mog-sdk/node';
 
-const wb = await createWorkbook();
-const ws = wb.activeSheet;
+const wb = await createWorkbook({ userTimezone: 'UTC' });
 
-await ws.setCell('A1', 100);
-await ws.setCell('A2', '=A1*2');
-console.log(await ws.getValue('A2'));
+try {
+  const ws = wb.activeSheet;
 
-wb.dispose();
+  await ws.setCell('A1', 42);
+  await ws.setCell('A2', '=A1*2');
+
+  console.log(await ws.getValue('A2'));
+} finally {
+  wb.dispose();
+}
+JS
+node index.mjs
 ```
 
-## Open an XLSX File
+Expected output:
 
-Read an existing `.xlsx` file from disk with `createWorkbook('model.xlsx')`, or pass raw bytes with `createWorkbook(xlsxBytes)`. Import warnings are available from `wb.importWarnings`.
+```text
+84
+```
+
+`createWorkbook()` also works without options. Pass `userTimezone` when `Date`
+inputs need to be interpreted in a user calendar frame; headless Node sessions
+default to `UTC`.
+
+## Create or Open Workbooks
+
+```typescript
+import { readFile } from 'node:fs/promises';
+import { createWorkbook } from '@mog-sdk/node';
+
+const blank = await createWorkbook();
+const fromPath = await createWorkbook('model.xlsx');
+const bytes = new Uint8Array(await readFile('model.xlsx'));
+const fromBytes = await createWorkbook(bytes);
+const withOptions = await createWorkbook({
+  xlsx: bytes,
+  documentId: 'model-1',
+  userTimezone: 'America/Los_Angeles',
+});
+
+blank.dispose();
+fromPath.dispose();
+fromBytes.dispose();
+withOptions.dispose();
+```
+
+The path and byte overloads also accept XLSX import options as the second
+argument. Import warnings from XLSX open are available on `wb.importWarnings`.
 
 ## Read and Write Cells
 
-Use A1 notation or zero-based numeric row/column coordinates. Writable primitive values are `string`, `number`, `boolean`, and `null`; `Date` inputs are accepted by `setCell` and `setRange`.
+Use A1 notation or zero-based numeric row/column coordinates. Writable
+primitive values are `string`, `number`, `boolean`, and `null`; `Date` inputs
+are accepted by `setCell`, `setRange`, and `setCells`.
+
+Strings that start with `=` are stored as formulas unless you pass cell write
+options that force literal text.
 
 ```typescript
 await ws.setCell('B1', 'Revenue');
-await ws.setCell(1, 1, 1250);
+await ws.setCell(1, 1, 1250); // B2
 
 const value = await ws.getValue('B2');
 const cell = await ws.getCell('B2');
 const range = await ws.getRange('A1:B10');
 ```
 
-## Formulas
+For rectangular writes, use `setRange`. For scattered writes, use `setCells`.
 
-Strings that start with `=` are written as formulas. Formula values are recalculated by the engine and can be read through `getValue`, `getFormula`, or explicit `wb.calculate()` calls.
+```typescript
+await ws.setRange('A1:B3', [
+  ['Name', 'Score'],
+  ['Alice', 92],
+  ['Bob', 85],
+]);
+
+await ws.setCells([
+  { addr: 'D1', value: 'Total' },
+  { row: 0, col: 4, value: '=SUM(B2:B3)' }, // E1
+]);
+
+const values = await ws.getValues('A1:B3');
+```
+
+## Formulas and Calculation
+
+For ordinary writes, formulas are recalculated before the write resolves. Read
+computed values with `getValue`, formula text with `getFormula`, and trigger an
+explicit full or iterative calculation with `wb.calculate()` when needed.
+
+```typescript
+await ws.setCell('A1', 10);
+await ws.setCell('A2', 20);
+await ws.setCell('A3', '=SUM(A1:A2)');
+
+console.log(await ws.getValue('A3')); // 30
+console.log(await ws.getFormula('A3')); // =SUM(A1:A2)
+
+const result = await wb.calculate();
+console.log(result.recomputedCount);
+```
 
 ## Sheets
 
-Use `wb.sheets.add`, `wb.sheets.rename`, `wb.sheets.move`, and related `wb.sheets` methods for sheet lifecycle operations. Use `wb.getSheet`, `wb.getSheetByIndex`, or `wb.getOrCreateSheet` for lookup.
+`wb.activeSheet` is a synchronous property backed by the current workbook state.
+Name and index lookups are async.
+
+```typescript
+const sheet = wb.activeSheet;
+const data = await wb.sheets.add('Data');
+await wb.sheets.rename(sheet.name, 'Summary');
+await wb.sheets.move('Data', 0);
+
+const byName = await wb.getSheet('Summary');
+const byIndex = await wb.getSheetByIndex(0);
+const { sheet: existingOrNew, created } = await wb.getOrCreateSheet('Inputs');
+```
 
 ## Tables
 
-Create tables from worksheet ranges with `ws.tables.add(range, { name, hasHeaders })`. Manage rows, columns, filters, names, and styles through `ws.tables`.
+Create tables from worksheet ranges with `ws.tables.add(range, options)`.
+Manage rows, columns, filters, names, and styles through `ws.tables`.
+
+```typescript
+await ws.setRange('A1:C3', [
+  ['Product', 'Q1', 'Q2'],
+  ['Widget', 100, 150],
+  ['Gadget', 200, 180],
+]);
+
+const table = await ws.tables.add('A1:C3', {
+  name: 'SalesData',
+  hasHeaders: true,
+});
+
+await ws.tables.addRow(table.name, undefined, ['Service', 50, 75]);
+await ws.tables.setShowBandedRows(table.name, true);
+```
 
 ## Export
 
-Export to an `.xlsx` file with `wb.save('output.xlsx')`, or get workbook bytes with `wb.save()` or `wb.toXlsx()`.
+Export to an `.xlsx` file with `wb.save(path)`, or get workbook bytes with
+`wb.save()` or `wb.toXlsx()`.
 
-## Batch Operations
+```typescript
+await wb.save('output.xlsx');
 
-Prefer `setRange` for rectangular writes and `setCells` for scattered writes.
+const savedBytes = await wb.save();
+const xlsxBytes = await wb.toXlsx();
+```
 
 ## Error Handling
 
-The package exports `MogSdkError` and the `MogSdkErrorCode` type for structured error handling. Catch errors, normalize unknown values with `MogSdkError.from`, and inspect `code`.
+The package exports `MogSdkError` and the `MogSdkErrorCode` type for structured
+error handling. Catch errors, normalize unknown values with `MogSdkError.from`,
+and inspect `code`.
+
+```typescript
+import { MogSdkError, type MogSdkErrorCode } from '@mog-sdk/node';
+
+try {
+  await wb.getSheet('MissingSheet');
+} catch (error) {
+  const err = MogSdkError.from(error, 'getSheet');
+  const code: MogSdkErrorCode = err.code;
+  console.error(code, err.message);
+}
+```
+
+## API Discovery
+
+The package includes generated SDK introspection metadata. Use `api.describe`
+to inspect root methods, sub-APIs, or a specific method signature.
+
+```typescript
+import { api } from '@mog-sdk/node';
+
+console.log(api.describe());
+console.log(api.describe('ws.tables.add'));
+console.log(api.describe('type:TableOptions'));
+```
+
+## Public Surface Notes
+
+Use `createWorkbook()` for normal Node SDK integrations. The package root also
+exports public contract types, `MogDocumentFactory`, `MogSdkError`, event
+facades, utility functions, and API introspection data.
+
+Do not import `@mog-sdk/kernel`, `@mog/transport`, or source-internal host
+adapter modules from external applications. Low-level headless boot helpers and
+collaboration wrappers are compatibility/internal implementation surfaces in the
+SDK declarations; they are not the guide path for public integrations.
 
 ## Related Docs
 
-- [Quickstart](quickstart.md) — minimal getting-started
-- [Architecture Overview](architecture-overview.md) — how the kernel and compute bridge work
-- [Python SDK](python-sdk.md) — Python equivalent (reserved)
+- [Quickstart](quickstart.md) - minimal getting-started
+- [Architecture Overview](architecture-overview.md) - public package boundaries and runtime layers
+- [Python SDK](python-sdk.md) - Python bindings status and setup
 - [API Reference](../reference/README.md)

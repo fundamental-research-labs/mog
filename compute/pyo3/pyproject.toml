@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "mog-sdk"
-version = "0.7.0"
+version = "0.7.1"
 description = "Mog spreadsheet engine — Python SDK"
 requires-python = ">=3.9"
 license = { text = "LicenseRef-Mog-MIT" }

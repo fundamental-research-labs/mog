@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Run npm publish with --dry-run
+        description: Run publish flow without publishing to npm
         required: true
         default: 'true'
         type: choice
@@ -15,33 +15,218 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: read
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  publish:
-    name: Publish ${{ matrix.package_dir }}
+  version:
+    name: Validate release
     runs-on: ubuntu-latest
-    environment: npm-production
-    concurrency:
-      group: npm-production-${{ matrix.package_dir }}
-      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dry-run: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            echo "Production publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            exit 1
+          fi
+          VERSION="${BASH_REMATCH[1]}"
+          PACKAGE_VERSION=$(node -p "require('./runtime/sdk/package.json').version")
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "runtime/sdk version ${PACKAGE_VERSION} does not match release branch ${GITHUB_REF_NAME} (${VERSION})."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate package versions
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          for manifest in \
+            contracts/package.json \
+            runtime/sdk/package.json \
+            runtime/embed/package.json \
+            runtime/spreadsheet-app/package.json \
+            views/sheet-view/package.json \
+            compute/wasm/npm/package.json \
+            compute/napi/npm/darwin-arm64/package.json \
+            compute/napi/npm/darwin-x64/package.json \
+            compute/napi/npm/linux-arm64-gnu/package.json \
+            compute/napi/npm/linux-arm64-musl/package.json \
+            compute/napi/npm/linux-x64-gnu/package.json \
+            compute/napi/npm/linux-x64-musl/package.json \
+            compute/napi/npm/win32-x64-msvc/package.json; do
+            PACKAGE_VERSION=$(node -p "require('./${manifest}').version")
+            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+              echo "${manifest} version ${PACKAGE_VERSION} does not match release ${VERSION}."
+              exit 1
+            fi
+          done
+
+      - name: Check not already published
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          packages=(
+            "@mog-sdk/darwin-arm64"
+            "@mog-sdk/darwin-x64"
+            "@mog-sdk/linux-x64-gnu"
+            "@mog-sdk/linux-arm64-gnu"
+            "@mog-sdk/linux-x64-musl"
+            "@mog-sdk/linux-arm64-musl"
+            "@mog-sdk/win32-x64-msvc"
+            "@mog-sdk/wasm"
+            "@mog-sdk/contracts"
+            "@mog-sdk/sheet-view"
+            "@mog-sdk/spreadsheet-app"
+            "@mog-sdk/embed"
+            "@mog-sdk/node"
+          )
+          for pkg in "${packages[@]}"; do
+            if npm view "$pkg@$VERSION" version 2>/dev/null; then
+              echo "::error::$pkg@$VERSION already published"
+              exit 1
+            fi
+          done
+
+  build-native:
+    name: Build native - ${{ matrix.artifact }}
+    needs: [version]
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        package_dir:
-          - contracts
-          - runtime/sdk
-          - runtime/embed
-          - runtime/spreadsheet-app
-          - views/sheet-view
-          - compute/wasm/npm
-          - compute/napi/npm/darwin-arm64
-          - compute/napi/npm/darwin-x64
-          - compute/napi/npm/linux-arm64-gnu
-          - compute/napi/npm/linux-arm64-musl
-          - compute/napi/npm/linux-x64-gnu
-          - compute/napi/npm/linux-x64-musl
-          - compute/napi/npm/win32-x64-msvc
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: native-darwin-arm64
+            npm-dir: compute/napi/npm/darwin-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: native-darwin-x64
+            npm-dir: compute/napi/npm/darwin-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: native-linux-x64-gnu
+            npm-dir: compute/napi/npm/linux-x64-gnu
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            artifact: native-linux-arm64-gnu
+            npm-dir: compute/napi/npm/linux-arm64-gnu
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: native-linux-x64-musl
+            npm-dir: compute/napi/npm/linux-x64-musl
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            artifact: native-linux-arm64-musl
+            npm-dir: compute/napi/npm/linux-arm64-musl
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: native-win32-x64-msvc
+            npm-dir: compute/napi/npm/win32-x64-msvc
+    steps:
+      - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Zig toolchain
+        if: contains(matrix.target, 'linux-musl')
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+
+      - name: Install cargo-zigbuild
+        if: contains(matrix.target, 'linux-musl')
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Install napi-rs CLI
+        run: npm install -g @napi-rs/cli
+
+      - name: Build native addon
+        shell: bash
+        run: |
+          cd compute/napi
+          EXTRA_ARGS=()
+          if [[ "${{ matrix.target }}" == *linux-musl* ]]; then
+            EXTRA_ARGS=(-x)
+          fi
+          napi build --release --target "${{ matrix.target }}" --manifest-path ../../Cargo.toml -p compute-core-napi "${EXTRA_ARGS[@]}"
+
+      - name: Copy binary to npm package
+        shell: bash
+        run: |
+          cp compute/napi/compute-core-napi.node "${{ matrix.npm-dir }}/"
+          test -s "${{ matrix.npm-dir }}/compute-core-napi.node"
+          ls -lh "${{ matrix.npm-dir }}/compute-core-napi.node"
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.npm-dir }}/compute-core-napi.node
+          if-no-files-found: error
+          retention-days: 3
+
+  build-wasm:
+    name: Build WASM
+    needs: [version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.14.0 --locked
+
+      - name: Install binaryen and brotli
+        run: sudo apt-get update && sudo apt-get install -y binaryen brotli
+
+      - name: Build WASM
+        run: bash compute/wasm/build.sh --profile release
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: compute/wasm/npm/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish packages
+    needs: [version, build-native, build-wasm]
+    runs-on: ubuntu-latest
+    environment: npm-production
     steps:
       - uses: actions/checkout@v4
 
@@ -57,37 +242,148 @@ jobs:
 
       - run: npm install -g npm@^11.5.1
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Install WASM publish toolchain
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move binaries into package directories
+        shell: bash
         run: |
-          rustup target add wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.14.0 --locked
-          sudo apt-get update
-          sudo apt-get install -y binaryen brotli
+          for pkg in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu linux-x64-musl linux-arm64-musl win32-x64-msvc; do
+            cp "artifacts/native-${pkg}/compute-core-napi.node" "compute/napi/npm/${pkg}/"
+            test -s "compute/napi/npm/${pkg}/compute-core-napi.node"
+            echo "${pkg}: $(ls -lh "compute/napi/npm/${pkg}/compute-core-napi.node" | awk '{print $5}')"
+          done
+          cp artifacts/wasm/* compute/wasm/npm/
+          test -s compute/wasm/npm/compute_core_wasm_bg.wasm
+          echo "wasm: $(ls -lh compute/wasm/npm/compute_core_wasm_bg.wasm | awk '{print $5}')"
 
-      - run: pnpm build:public-artifacts
-
-      - name: Guard production publishes to release branch
-        if: ${{ inputs.dry_run == 'false' }}
-        working-directory: ${{ matrix.package_dir }}
+      - name: Resolve npm publish tag
+        id: npm-tag
+        shell: bash
         run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
-            echo "Production publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
-            exit 1
-          fi
-          RELEASE_VERSION="${BASH_REMATCH[1]}"
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
-            echo "${{ matrix.package_dir }} version ${PACKAGE_VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
-            exit 1
-          fi
-
-      - name: Publish package
-        working-directory: ${{ matrix.package_dir }}
-        run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --access public --dry-run
+          VERSION="${{ needs.version.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%.*}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "Prerelease detected; npm packages will publish with --tag $TAG"
           else
-            npm publish --access public
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "Stable release; npm packages will publish with npm's default latest tag"
           fi
+
+      - name: Build public artifacts
+        run: pnpm build:public-artifacts -- --skip-native-build --skip-wasm-build
+
+      - name: Validate package boundaries
+        run: |
+          pnpm check:binary-wrapper-surfaces
+          pnpm check:contracts-declaration-identity
+          pnpm check:declaration-rollups
+          pnpm check:api-snapshots
+
+      - name: Assemble public package candidates
+        run: pnpm assemble:public-packages
+
+      - name: Validate package candidates
+        run: |
+          pnpm check:public-package-manifests
+          pnpm check:external-fixtures -- --skip-build
+
+      - name: Verify native candidate payloads
+        shell: bash
+        run: |
+          for pkg in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu linux-x64-musl linux-arm64-musl win32-x64-msvc; do
+            file="artifacts/public-packages/mog-sdk__${pkg}/compute-core-napi.node"
+            test -s "$file"
+            echo "${pkg}: $(ls -lh "$file" | awk '{print $5}')"
+          done
+
+      - name: Pack public package candidates
+        run: |
+          rm -rf artifacts/npm-tarballs
+          mkdir -p artifacts/npm-tarballs
+          for dir in artifacts/public-packages/mog-sdk__*; do
+            echo "Packing $(node -p "require('./$dir/package.json').name")..."
+            npm pack "$dir" --pack-destination artifacts/npm-tarballs
+          done
+          shasum -a 256 artifacts/npm-tarballs/*.tgz > artifacts/npm-tarballs/SHA256SUMS
+
+      - name: Upload npm release candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-release-candidates-${{ needs.version.outputs.version }}
+          path: artifacts/npm-tarballs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish packages
+        shell: bash
+        run: |
+          publish_args=(--access public --no-git-checks)
+          if [ -n "${{ steps.npm-tag.outputs.tag }}" ]; then
+            publish_args+=(--tag "${{ steps.npm-tag.outputs.tag }}")
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            publish_args+=(--dry-run)
+          fi
+          for dir in \
+            artifacts/public-packages/mog-sdk__darwin-arm64 \
+            artifacts/public-packages/mog-sdk__darwin-x64 \
+            artifacts/public-packages/mog-sdk__linux-x64-gnu \
+            artifacts/public-packages/mog-sdk__linux-arm64-gnu \
+            artifacts/public-packages/mog-sdk__linux-x64-musl \
+            artifacts/public-packages/mog-sdk__linux-arm64-musl \
+            artifacts/public-packages/mog-sdk__win32-x64-msvc \
+            artifacts/public-packages/mog-sdk__wasm \
+            artifacts/public-packages/mog-sdk__contracts \
+            artifacts/public-packages/mog-sdk__sheet-view \
+            artifacts/public-packages/mog-sdk__spreadsheet-app \
+            artifacts/public-packages/mog-sdk__embed \
+            artifacts/public-packages/mog-sdk__node; do
+            echo "::group::Publish $(node -p "require('./$dir/package.json').name")"
+            (cd "$dir" && npm publish "${publish_args[@]}")
+            echo "::endgroup::"
+          done
+
+      - name: Verify npm publication
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          packages=(
+            "@mog-sdk/darwin-arm64"
+            "@mog-sdk/darwin-x64"
+            "@mog-sdk/linux-x64-gnu"
+            "@mog-sdk/linux-arm64-gnu"
+            "@mog-sdk/linux-x64-musl"
+            "@mog-sdk/linux-arm64-musl"
+            "@mog-sdk/win32-x64-msvc"
+            "@mog-sdk/wasm"
+            "@mog-sdk/contracts"
+            "@mog-sdk/sheet-view"
+            "@mog-sdk/spreadsheet-app"
+            "@mog-sdk/embed"
+            "@mog-sdk/node"
+          )
+          missing=("${packages[@]}")
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            next_missing=()
+            for pkg in "${missing[@]}"; do
+              if ! npm view "$pkg@$VERSION" version 2>/dev/null; then
+                next_missing+=("$pkg")
+              fi
+            done
+            if [ "${#next_missing[@]}" -eq 0 ]; then
+              exit 0
+            fi
+            missing=("${next_missing[@]}")
+            echo "attempt $attempt: not yet visible: ${missing[*]}; sleeping..."
+            sleep 15
+          done
+          echo "::error::Package(s) not visible after 180s: ${missing[*]}"
+          exit 1

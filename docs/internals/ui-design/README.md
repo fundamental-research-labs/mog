@@ -2,12 +2,12 @@
 
 ## Principles
 
-1. **Single Source of Truth** - All tokens defined in `globals.css`, never hardcode values elsewhere
-2. **Semantic Naming** - Tokens describe purpose, not appearance (`bg-primary` not `bg-blue`)
-3. **Context-Aware Typography** - Different size scales for grid, UI, and toolbar contexts
+1. **Spreadsheet Token Source** - Spreadsheet tokens live in `globals.css`; `tokens.css` exports the same token set for external consumers
+2. **Semantic Naming** - Tokens describe purpose, not appearance (`bg-ss-primary` not `bg-blue`)
+3. **Context-Aware Typography** - Different size scales for UI, content, and toolbar contexts
 4. **Excel-Compatible Theming** - Workbook themes with 12 OOXML color slots for cell formatting
 5. **Tailwind v4 Integration** - Tokens exposed as utility classes via `@theme inline`
-6. **UI Primitives First** - Always use primitives from `components/ui/` before building custom
+6. **UI Primitives First** - Always use primitives from `@mog/shell` / `components/ui/` before building custom
 
 ## Architecture
 
@@ -21,19 +21,23 @@ UI Components → UI Primitives → Semantic Tokens → Tailwind v4 @theme → C
 
 | File                                                                                 | Purpose                                               |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| [`apps/spreadsheet/src/infra/styles/globals.css`](../../../apps/spreadsheet/src/infra/styles/globals.css) | **Single source of truth** - spreadsheet design tokens |
+| [`apps/spreadsheet/src/infra/styles/globals.css`](../../../apps/spreadsheet/src/infra/styles/globals.css) | Spreadsheet app design tokens and app CSS imports |
+| [`apps/spreadsheet/src/infra/styles/tokens.css`](../../../apps/spreadsheet/src/infra/styles/tokens.css) | Token export without app/global imports for external consumers |
 | [`apps/spreadsheet/src/infra/styles/built-in-themes.ts`](../../../apps/spreadsheet/src/infra/styles/built-in-themes.ts) | 8 Excel-compatible workbook themes |
-| [`contracts/src/formatting/theme.ts`](../../../contracts/src/formatting/theme.ts)       | Theme type definitions and color resolution utilities |
+| [`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts) | Theme type definitions |
+| [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts) | Theme color resolution utilities |
 | [`shell/src/components/ui/`](../../../shell/src/components/ui/)                         | **UI primitives** - use these, don't build custom     |
 | [`infra/icons/src/`](../../../infra/icons/src/)                                         | **Single source of truth** - all SVG icons            |
 
 ## Icons
 
-All icons live in the `@mog/icons` package. Never use inline SVGs or external icon libraries.
+Spreadsheet toolbar and app chrome icons should come from the `@mog/icons` package when an icon exists. Avoid adding new inline SVGs or external icon libraries for reusable spreadsheet UI icons.
 
 ```tsx
-// ✅ Correct - import from @mog/icons
-import { BoldIcon, ItalicIcon, UndoIcon } from '@mog/icons';
+// ✅ Correct - import SVG components from @mog/icons
+import { BoldSvg, ItalicSvg, UndoSvg, wrapIcon } from '@mog/icons';
+
+const BoldIcon = wrapIcon(BoldSvg);
 
 // ❌ Wrong - inline SVG
 <svg viewBox="0 0 24 24">...</svg>;
@@ -44,9 +48,9 @@ import { Bold } from '@fluentui/react-icons';
 
 ### Icon Guidelines
 
-- **175 icons** organized by category (text-formatting, alignment, clipboard, etc.)
-- **24×24 canonical size** with `currentColor` for theming
-- **Viewer**: Open `icons/viewer.html` to see all icons
+- **256 icons** organized by category (text-formatting, alignment, clipboard, etc.)
+- **24px source assets** with `currentColor` for theming and `wrapIcon` for consistent render sizes
+- **Viewer**: Open `infra/icons/viewer.html` to see all icons
 - **Design spec**: See [`infra/icons/spec.md`](../../../infra/icons/spec.md) for design rules
 
 ---
@@ -57,47 +61,45 @@ import { Bold } from '@fluentui/react-icons';
 
 | Category                   | Tokens                                                                                                                     | Usage                                     |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| **Primary**                | `--color-primary`, `--color-primary-hover`, `--color-primary-light`                                                        | Interactive elements, links, focus states |
-| **Surface**                | `--color-surface`, `--color-surface-secondary`, `--color-surface-hover`                                                    | Backgrounds, panels                       |
-| **Text**                   | `--color-text`, `--color-text-secondary`, `--color-text-disabled`                                                          | Typography                                |
-| **Border**                 | `--color-border`, `--color-border-light`, `--color-border-focus`                                                           | Dividers, input borders                   |
-| **Status**                 | `--color-success`, `--color-warning`, `--color-error`, `--color-info`                                                      | Icons, badges, alerts                     |
-| **Status Backgrounds**     | `--color-success-bg`, `--color-warning-bg`, `--color-error-bg`, `--color-info-bg`                                          | Alert/badge backgrounds                   |
-| **Status Text**            | `--color-success-text`, `--color-warning-text`, `--color-error-text`, `--color-info-text`                                  | Text on status backgrounds                |
-| **Connection States**      | `--color-state-idle`, `--color-state-connecting`, `--color-state-connected`, `--color-state-synced`, `--color-state-error` | Real-time connection indicators           |
-| **Diff/Changes**           | `--color-diff-added`, `--color-diff-modified`, `--color-diff-removed`, `--color-diff-direct`, `--color-diff-indirect`      | Review mode, cell changes                 |
-| **Conditional Formatting** | `--color-cf-positive`, `--color-cf-neutral`, `--color-cf-negative`, `--color-cf-blue`                                      | Excel-compatible color scales             |
-| **Data Bars**              | `--color-databar-blue`, `--color-databar-green`, `--color-databar-red`, `--color-databar-orange`                           | Excel-compatible data bars                |
-| **Brand**                  | `--color-brand`, `--color-brand-hover`, `--color-brand-light`                                                              | Marketing pages, branded elements         |
+| **Primary**                | `--color-ss-primary`, `--color-ss-primary-hover`, `--color-ss-primary-light`                                                        | Interactive elements, links, focus states |
+| **Surface**                | `--color-ss-surface`, `--color-ss-surface-secondary`, `--color-ss-surface-hover`                                                    | Backgrounds, panels                       |
+| **Text**                   | `--color-ss-text`, `--color-ss-text-secondary`, `--color-ss-text-disabled`                                                          | Typography                                |
+| **Border**                 | `--color-ss-border`, `--color-ss-border-light`, `--color-ss-border-focus`                                                           | Dividers, input borders                   |
+| **Status**                 | `--color-ss-success`, `--color-ss-warning`, `--color-ss-error`, `--color-ss-info`                                                      | Icons, badges, alerts                     |
+| **Status Backgrounds**     | `--color-ss-success-bg`, `--color-ss-warning-bg`, `--color-ss-error-bg`, `--color-ss-info-bg`                                          | Alert/badge backgrounds                   |
+| **Status Text**            | `--color-ss-success-text`, `--color-ss-warning-text`, `--color-ss-error-text`, `--color-ss-info-text`                                  | Text on status backgrounds                |
+| **Connection States**      | `--color-ss-state-idle`, `--color-ss-state-connecting`, `--color-ss-state-connected`, `--color-ss-state-synced`, `--color-ss-state-error` | Real-time connection indicators           |
+| **Diff/Changes**           | `--color-ss-diff-added`, `--color-ss-diff-modified`, `--color-ss-diff-removed`, `--color-ss-diff-direct`, `--color-ss-diff-indirect`      | Review mode, cell changes                 |
+| **Conditional Formatting** | `--color-ss-cf-positive`, `--color-ss-cf-neutral`, `--color-ss-cf-negative`, `--color-ss-cf-blue`                                      | Excel-compatible color scales             |
+| **Data Bars**              | `--color-ss-databar-blue`, `--color-ss-databar-green`, `--color-ss-databar-red`, `--color-ss-databar-orange`                           | Excel-compatible data bars                |
+| **Brand**                  | `--color-ss-brand`, `--color-ss-brand-hover`, `--color-ss-brand-light`                                                              | Marketing pages, branded elements         |
 
 ### Typography
 
-| Token                    | Size | Usage                                                      |
+| Token/Class              | Size | Usage                                                      |
 | ------------------------ | ---- | ---------------------------------------------------------- |
-| **Grid Context**         |      |                                                            |
-| `--text-cell`            | 13px | Cell content                                               |
-| `--text-cell-header`     | 12px | Column/row headers                                         |
-| `--text-row-number`      | 11px | Row numbers                                                |
 | **UI Context**           |      |                                                            |
-| `--text-title`           | 22px | Page titles                                                |
-| `--text-subtitle`        | 18px | Section titles                                             |
-| `--text-section`         | 16px | Subsection titles                                          |
-| `--text-body`            | 14px | Body text                                                  |
-| `--text-body-sm`         | 13px | Compact body text                                          |
-| `--text-label`           | 13px | Form labels                                                |
-| `--text-caption`         | 12px | Captions, help text                                        |
-| `--text-hint`            | 11px | Subtle hints                                               |
+| `.text-subtitle`         | 18px | Section titles                                             |
+| `.text-section`          | 16px | Subsection titles                                          |
+| `.text-body`             | 14px | Body text                                                  |
+| `.text-body-sm`          | 13px | Compact body text                                          |
+| `.text-body-lg`          | 16px | Larger body text                                           |
+| `.text-label`            | 13px | Form labels                                                |
+| `.text-caption`          | 12px | Captions, help text                                        |
+| `.text-hint`             | 11px | Subtle hints                                               |
 | **Toolbar Context**      |      |                                                            |
 | `--text-tab`             | 12px | Ribbon tab headers (Home, Insert...)                       |
 | `--text-ribbon`          | 11px | Ribbon button labels                                       |
 | `--text-ribbon-compact`  | 10px | Compact ribbon labels, kbd shortcuts, tooltip descriptions |
 | `--text-ribbon-group`    | 9px  | Group labels (Clipboard, Font...)                          |
+| `--text-ribbon-chip`     | 7px  | Style preview chips                                        |
 | `--text-dropdown`        | 13px | Dropdown menu items                                        |
 | `--text-dropdown-header` | 11px | Dropdown section headers                                   |
+| `--text-sheet-tab`       | 13px | Sheet tabs                                                 |
 
 ### Other Categories
 
-- **Spacing**: 4px base scale (`--spacing-1` through `--spacing-8`)
+- **Spacing**: 4px base scale (`--spacing-ss-1` through `--spacing-ss-8`)
 - **Layout**: Runtime variables for ribbon/tabbar dimensions
 - **Effects**: Shadows, border radius, z-index, transitions
 
@@ -105,20 +107,20 @@ import { Bold } from '@fluentui/react-icons';
 
 ```tsx
 // Components use semantic Tailwind classes
-<button className="bg-primary text-text-inverse hover:bg-primary-hover" />
+<button className="bg-ss-primary text-ss-text-inverse hover:bg-ss-primary-hover" />
 <span className="text-ribbon">Bold</span>           // Toolbar context
 <span className="text-ribbon-compact">Define</span> // Compact ribbon labels
 <p className="text-body">Content</p>                // UI context
 
 // Status indicators
-<div className="bg-success-bg text-success-text">Connected</div>
-<div className="bg-state-connected-bg text-state-connected">Online</div>
+<div className="bg-ss-success-bg text-ss-success-text">Connected</div>
+<div className="bg-ss-state-connected-bg text-ss-state-connected">Online</div>
 
 // Diff highlighting
-<span className="bg-diff-added-bg text-diff-added">Added</span>
+<span className="bg-ss-diff-added-bg text-ss-diff-added">Added</span>
 
 // Brand elements (marketing, not UI chrome)
-<button className="bg-brand hover:bg-brand-hover">Get Started</button>
+<button className="bg-ss-brand hover:bg-ss-brand-hover">Get Started</button>
 ```
 
 ## Typography Rules
@@ -137,57 +139,63 @@ import { Bold } from '@fluentui/react-icons';
 
 Cell formats can reference theme colors: `'theme:accent1'` or `'theme:accent1:0.4'` (with tint).
 
-See [`contracts/src/formatting/theme.ts`](../../../contracts/src/formatting/theme.ts) for `resolveColor()` and `resolveThemeColors()`.
+See [`types/formatting/src/formatting/theme.ts`](../../../types/formatting/src/formatting/theme.ts) for theme types and [`spreadsheet-utils/src/formatting/theme.ts`](../../../spreadsheet-utils/src/formatting/theme.ts) for `resolveColor()` and `resolveThemeColors()`.
 
 ---
 
 ## UI Primitives
 
-Always use these primitives instead of building custom implementations. They enforce design tokens and accessibility patterns.
+Use shell primitives instead of building custom implementations. They enforce design tokens and, for Radix-backed controls, accessibility behavior. Spreadsheet code typically imports them from `@mog/shell` or `@mog/shell/components/ui`.
 
 ### Form Elements
 
-| Primitive    | Import         | Usage                                                                     |
-| ------------ | -------------- | ------------------------------------------------------------------------- |
-| `Button`     | `from '../ui'` | All buttons - supports `primary`, `secondary`, `ghost`, `danger` variants |
-| `Input`      | `from '../ui'` | Single-line text inputs                                                   |
-| `Textarea`   | `from '../ui'` | Multi-line text inputs - supports `resize` option                         |
-| `Select`     | `from '../ui'` | Dropdown selections                                                       |
-| `Checkbox`   | `from '../ui'` | Boolean toggles                                                           |
-| `RadioGroup` | `from '../ui'` | Single selection from options - supports descriptions                     |
-| `ColorInput` | `from '../ui'` | Color picker input                                                        |
-| `Label`      | `from '../ui'` | Form labels                                                               |
-| `FormField`  | `from '../ui'` | Label + input + error wrapper                                             |
+| Primitive          | Import              | Usage                                                                     |
+| ------------------ | ------------------- | ------------------------------------------------------------------------- |
+| `Button`           | `from '@mog/shell'` | All buttons - supports `primary`, `secondary`, `ghost`, `danger` variants |
+| `Input`            | `from '@mog/shell'` | Single-line text inputs                                                   |
+| `Textarea`         | `from '@mog/shell'` | Multi-line text inputs - supports `resize` option                         |
+| `Select`           | `from '@mog/shell'` | Dropdown selections                                                       |
+| `Checkbox`         | `from '@mog/shell'` | Boolean toggles                                                           |
+| `RadioGroup`       | `from '@mog/shell'` | Single selection from options - supports descriptions                     |
+| `Switch`           | `from '@mog/shell'` | Toggle switch                                                             |
+| `SegmentedControl` | `from '@mog/shell'` | Single-choice segmented control                                           |
+| `ColorInput`       | `from '@mog/shell'` | Color picker input                                                        |
+| `Label`            | `from '@mog/shell'` | Form labels                                                               |
+| `FormField`        | `from '@mog/shell'` | Label + input + error/help wrapper                                        |
 
 ### Layout Components
 
-| Primitive         | Import         | Usage                                                                 |
-| ----------------- | -------------- | --------------------------------------------------------------------- |
-| `Dialog`          | `from '../ui'` | Modal dialogs - use with `DialogHeader`, `DialogBody`, `DialogFooter` |
-| `DialogHeader`    | `from '../ui'` | Dialog title bar with close button                                    |
-| `DialogBody`      | `from '../ui'` | Dialog content area                                                   |
-| `DialogFooter`    | `from '../ui'` | Dialog action buttons                                                 |
-| `Tabs`            | `from '../ui'` | Tab navigation - full keyboard accessibility                          |
-| `TabPanel`        | `from '../ui'` | Tab content panels                                                    |
-| `Dropdown`        | `from '../ui'` | Menu dropdowns                                                        |
-| `DropdownItem`    | `from '../ui'` | Menu items                                                            |
-| `DropdownDivider` | `from '../ui'` | Menu separators                                                       |
-| `ContextMenu`     | `from '../ui'` | Right-click menus                                                     |
+| Primitive            | Import              | Usage                                                                 |
+| -------------------- | ------------------- | --------------------------------------------------------------------- |
+| `Dialog`             | `from '@mog/shell'` | Modal dialogs - use with `DialogHeader`, `DialogBody`, `DialogFooter` |
+| `DialogHeader`       | `from '@mog/shell'` | Dialog title bar with close button                                    |
+| `DialogBody`         | `from '@mog/shell'` | Dialog content area                                                   |
+| `DialogFooter`       | `from '@mog/shell'` | Dialog action buttons                                                 |
+| `Tabs`               | `from '@mog/shell'` | Tab navigation - keyboard accessibility via Radix                     |
+| `TabPanel`           | `from '@mog/shell'` | Tab content panels                                                    |
+| `Popover`            | `from '@mog/shell'` | Anchored floating content                                             |
+| `DropdownMenu`       | `from '@mog/shell'` | Menu dropdowns - use with trigger/content/item/separator exports      |
+| `ContextMenu`        | `from '@mog/shell'` | Right-click menus - use with trigger/content/item/separator exports   |
+| `AccordionRoot`      | `from '@mog/shell'` | Collapsible sections                                                  |
+| `Listbox`            | `from '@mog/shell'` | Single-select listbox                                                 |
 
 ### Status & Feedback
 
-| Primitive         | Import         | Usage                                                             |
-| ----------------- | -------------- | ----------------------------------------------------------------- |
-| `StatusBadge`     | `from '../ui'` | Status indicators - `success`, `warning`, `error`, `info`, `idle` |
-| `ConnectionBadge` | `from '../ui'` | Connection status - `connected`, `connecting`, `synced`, `error`  |
-| `Tooltip`         | `from '../ui'` | Hover tooltips with keyboard shortcut support                     |
+| Primitive         | Import              | Usage                                                                            |
+| ----------------- | ------------------- | -------------------------------------------------------------------------------- |
+| `StatusBadge`     | `from '@mog/shell'` | Status indicators - `success`, `warning`, `error`, `info`, `idle`                |
+| `ConnectionBadge` | `from '@mog/shell'` | Connection status - `idle`, `connecting`, `connected`, `synced`, `error`, etc.   |
+| `Tooltip`         | `from '@mog/shell'` | Hover tooltips with keyboard shortcut support                                    |
+| `EmptyState`      | `from '@mog/shell'` | Empty/loading/error panels                                                       |
 
 ### Picker Helpers
 
-| Primitive      | Import         | Usage                             |
-| -------------- | -------------- | --------------------------------- |
-| `ColorSwatch`  | `from '../ui'` | Color preview squares             |
-| `SectionLabel` | `from '../ui'` | Section headers in pickers/panels |
+| Primitive      | Import              | Usage                             |
+| -------------- | ------------------- | --------------------------------- |
+| `ColorSwatch`  | `from '@mog/shell'` | Color preview squares             |
+| `SectionLabel` | `from '@mog/shell'` | Section headers in pickers/panels |
+| `Icon`         | `from '@mog/shell'` | Common shell icons sourced from `@mog/icons` |
+| `IconButton`   | `from '@mog/shell'` | Icon-only buttons                 |
 
 ### Example Usage
 
@@ -195,26 +203,21 @@ Always use these primitives instead of building custom implementations. They enf
 import {
   Button,
   Input,
-  Textarea,
-  Select,
-  Checkbox,
-  RadioGroup,
   Dialog,
   DialogHeader,
   DialogBody,
   DialogFooter,
   Tabs,
   TabPanel,
-  StatusBadge,
   FormField
-} from '../ui';
+} from '@mog/shell';
 
 function SettingsDialog({ open, onClose }) {
   const [activeTab, setActiveTab] = useState('general');
   const [name, setName] = useState('');
 
   return (
-    <Dialog open={open} onClose={onClose} dialogId="settings">
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} dialogId="settings">
       <DialogHeader onClose={onClose}>Settings</DialogHeader>
       <DialogBody>
         <Tabs
@@ -224,12 +227,16 @@ function SettingsDialog({ open, onClose }) {
           ]}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-        />
-        <TabPanel id="general" activeTab={activeTab}>
-          <FormField label="Name" required>
-            <Input value={name} onChange={setName} />
-          </FormField>
-        </TabPanel>
+        >
+          <TabPanel tabId="general">
+            <FormField label="Name" required>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.currentTarget.value)}
+              />
+            </FormField>
+          </TabPanel>
+        </Tabs>
       </DialogBody>
       <DialogFooter>
         <Button variant="secondary" onClick={onClose}>
@@ -254,58 +261,54 @@ Quick reference for common styling scenarios.
 
 | Need                 | Token Class                         | CSS Variable                |
 | -------------------- | ----------------------------------- | --------------------------- |
-| Primary button       | `bg-primary hover:bg-primary-hover` | `--color-primary`           |
-| Secondary background | `bg-surface-secondary`              | `--color-surface-secondary` |
-| Text                 | `text-text`                         | `--color-text`              |
-| Secondary text       | `text-text-secondary`               | `--color-text-secondary`    |
-| Disabled text        | `text-text-disabled`                | `--color-text-disabled`     |
-| Border               | `border-border`                     | `--color-border`            |
-| Light border         | `border-border-light`               | `--color-border-light`      |
-| Focus ring           | `border-border-focus`               | `--color-border-focus`      |
+| Primary button       | `bg-ss-primary hover:bg-ss-primary-hover` | `--color-ss-primary`           |
+| Secondary background | `bg-ss-surface-secondary`              | `--color-ss-surface-secondary` |
+| Text                 | `text-ss-text`                         | `--color-ss-text`              |
+| Secondary text       | `text-ss-text-secondary`               | `--color-ss-text-secondary`    |
+| Disabled text        | `text-ss-text-disabled`                | `--color-ss-text-disabled`     |
+| Border               | `border-ss-border`                     | `--color-ss-border`            |
+| Light border         | `border-ss-border-light`               | `--color-ss-border-light`      |
+| Focus ring           | `border-ss-border-focus`               | `--color-ss-border-focus`      |
 
 ### Status Colors
 
 | Status  | Background      | Text                | Border           |
 | ------- | --------------- | ------------------- | ---------------- |
-| Success | `bg-success-bg` | `text-success-text` | `border-success` |
-| Warning | `bg-warning-bg` | `text-warning-text` | `border-warning` |
-| Error   | `bg-error-bg`   | `text-error-text`   | `border-error`   |
-| Info    | `bg-info-bg`    | `text-info-text`    | `border-info`    |
+| Success | `bg-ss-success-bg` | `text-ss-success-text` | `border-ss-success` |
+| Warning | `bg-ss-warning-bg` | `text-ss-warning-text` | `border-ss-warning` |
+| Error   | `bg-ss-error-bg`   | `text-ss-error-text`   | `border-ss-error`   |
+| Info    | `bg-ss-info-bg`    | `text-ss-info-text`    | `border-ss-info`    |
 
 ### Connection States
 
 | State      | Background               | Text                    |
 | ---------- | ------------------------ | ----------------------- |
-| Idle       | `bg-state-idle-bg`       | `text-state-idle`       |
-| Connecting | `bg-state-connecting-bg` | `text-state-connecting` |
-| Connected  | `bg-state-connected-bg`  | `text-state-connected`  |
-| Synced     | `bg-state-synced-bg`     | `text-state-synced`     |
-| Error      | `bg-state-error-bg`      | `text-state-error`      |
+| Idle       | `bg-ss-state-idle-bg`       | `text-ss-state-idle`       |
+| Connecting | `bg-ss-state-connecting-bg` | `text-ss-state-connecting` |
+| Connected  | `bg-ss-state-connected-bg`  | `text-ss-state-connected`  |
+| Synced     | `bg-ss-state-synced-bg`     | `text-ss-state-synced`     |
+| Error      | `bg-ss-state-error-bg`      | `text-ss-state-error`      |
 
 ### Diff/Change Tracking
 
 | Change Type         | Background            | Text                 |
 | ------------------- | --------------------- | -------------------- |
-| Added               | `bg-diff-added-bg`    | `text-diff-added`    |
-| Modified            | `bg-diff-modified-bg` | `text-diff-modified` |
-| Removed             | `bg-diff-removed-bg`  | `text-diff-removed`  |
-| Direct dependency   | `bg-diff-direct-bg`   | `text-diff-direct`   |
-| Indirect dependency | `bg-diff-indirect-bg` | `text-diff-indirect` |
+| Added               | `bg-ss-diff-added-bg`    | `text-ss-diff-added`    |
+| Modified            | `bg-ss-diff-modified-bg` | `text-ss-diff-modified` |
+| Removed             | `bg-ss-diff-removed-bg`  | `text-ss-diff-removed`  |
+| Direct dependency   | `bg-ss-diff-direct-bg`   | `text-ss-diff-direct`   |
+| Indirect dependency | `bg-ss-diff-indirect-bg` | `text-ss-diff-indirect` |
 
 ### Typography
 
 | Context           | Token Class            | Size |
 | ----------------- | ---------------------- | ---- |
-| **Grid**          |                        |      |
-| Cell content      | `text-cell`            | 13px |
-| Column/row header | `text-cell-header`     | 12px |
-| Row number        | `text-row-number`      | 11px |
 | **UI**            |                        |      |
-| Page title        | `text-title`           | 22px |
 | Section title     | `text-subtitle`        | 18px |
 | Subsection        | `text-section`         | 16px |
 | Body text         | `text-body`            | 14px |
 | Compact body      | `text-body-sm`         | 13px |
+| Large body        | `text-body-lg`         | 16px |
 | Form label        | `text-label`           | 13px |
 | Caption           | `text-caption`         | 12px |
 | Hint              | `text-hint`            | 11px |
@@ -314,41 +317,43 @@ Quick reference for common styling scenarios.
 | Ribbon button     | `text-ribbon`          | 11px |
 | Compact label/kbd | `text-ribbon-compact`  | 10px |
 | Group label       | `text-ribbon-group`    | 9px  |
+| Style chip        | `text-ribbon-chip`     | 7px  |
 | Dropdown item     | `text-dropdown`        | 13px |
 | Dropdown header   | `text-dropdown-header` | 11px |
+| Sheet tab         | `text-sheet-tab`       | 13px |
 
 ### Spacing
 
 | Token               | Value | Usage         |
 | ------------------- | ----- | ------------- |
-| `gap-0.5` / `p-0.5` | 2px   | Tight spacing |
-| `gap-1` / `p-1`     | 4px   | Minimal       |
-| `gap-1.5` / `p-1.5` | 6px   | Compact       |
-| `gap-2` / `p-2`     | 8px   | Standard      |
-| `gap-3` / `p-3`     | 12px  | Comfortable   |
-| `gap-4` / `p-4`     | 16px  | Spacious      |
-| `gap-6` / `p-6`     | 24px  | Section       |
+| `gap-ss-0_5` / `p-ss-0_5` | 2px   | Tight spacing |
+| `gap-ss-1` / `p-ss-1`     | 4px   | Minimal       |
+| `gap-ss-1_5` / `p-ss-1_5` | 6px   | Compact       |
+| `gap-ss-2` / `p-ss-2`     | 8px   | Standard      |
+| `gap-ss-3` / `p-ss-3`     | 12px  | Comfortable   |
+| `gap-ss-4` / `p-ss-4`     | 16px  | Spacious      |
+| `gap-ss-6` / `p-ss-6`     | 24px  | Section       |
 
 ### Z-Index
 
 | Token        | Value | Usage               |
 | ------------ | ----- | ------------------- |
-| `z-dropdown` | 100   | Dropdown menus      |
-| `z-sticky`   | 200   | Sticky headers      |
-| `z-overlay`  | 300   | Overlays            |
-| `z-modal`    | 1000  | Modal dialogs       |
-| `z-toast`    | 1100  | Toast notifications |
-| `z-tooltip`  | 1200  | Tooltips            |
+| `z-ss-sticky`  | 200   | Sticky headers      |
+| `z-ss-overlay` | 300   | Overlays            |
+| `z-ss-modal`   | 1000  | Modal dialogs       |
+| `z-ss-popover` | 1050  | Popovers/dropdowns  |
+| `z-ss-toast`   | 1100  | Toast notifications |
+| `z-ss-tooltip` | 1200  | Tooltips            |
 
 ### Shadows
 
 | Token             | Usage                   |
 | ----------------- | ----------------------- |
-| `shadow-sm`       | Subtle elevation        |
-| `shadow`          | Standard elevation      |
-| `shadow-md`       | Medium elevation        |
-| `shadow-lg`       | High elevation (modals) |
-| `shadow-dropdown` | Dropdown menus          |
+| `shadow-ss-sm`       | Subtle elevation        |
+| `shadow-ss`          | Standard elevation      |
+| `shadow-ss-md`       | Medium elevation        |
+| `shadow-ss-lg`       | High elevation (modals) |
+| `shadow-ss-dropdown` | Dropdown menus          |
 
 ---
 
@@ -400,7 +405,7 @@ Inline styles bypass the token system and should be avoided. However, these case
    // ❌ Wrong
    <div style={{ backgroundColor: '#e6f4ea' }} />
    // ✅ Right
-   <div className="bg-success-bg" />
+   <div className="bg-ss-success-bg" />
    ```
 
 2. **Font sizes that should use typography tokens**
@@ -439,7 +444,7 @@ When building new components, follow this checklist:
 
 Before writing custom UI:
 
-- [ ] Is there a primitive in `components/ui/` that does this?
+- [ ] Is there a primitive in `@mog/shell` / `components/ui/` that does this?
 - [ ] Can an existing primitive be extended?
 - [ ] Should a new primitive be created for reuse?
 
@@ -466,10 +471,10 @@ Before writing custom UI:
 
 | If showing...     | Use                                | Not                           |
 | ----------------- | ---------------------------------- | ----------------------------- |
-| Success state     | `bg-success-bg text-success-text`  | `bg-green-100 text-green-700` |
-| Error state       | `bg-error-bg text-error-text`      | `bg-red-100 text-red-700`     |
+| Success state     | `bg-ss-success-bg text-ss-success-text`  | `bg-green-100 text-green-700` |
+| Error state       | `bg-ss-error-bg text-ss-error-text`      | `bg-red-100 text-red-700`     |
 | Connection status | `StatusBadge` or `ConnectionBadge` | custom colors                 |
-| Diff highlighting | `bg-diff-added-bg text-diff-added` | hardcoded hex                 |
+| Diff highlighting | `bg-ss-diff-added-bg text-ss-diff-added` | hardcoded hex                 |
 
 ### 5. Dialog Structure
 
@@ -477,7 +482,7 @@ Always use the `Dialog` primitive:
 
 ```tsx
 // ✅ Correct
-<Dialog open={open} onClose={onClose} dialogId="my-dialog">
+<Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} dialogId="my-dialog">
   <DialogHeader onClose={onClose}>Title</DialogHeader>
   <DialogBody>{content}</DialogBody>
   <DialogFooter>
@@ -497,7 +502,7 @@ Always use the `Dialog` primitive:
 - [ ] Dialogs: Use `Dialog` primitive (handles focus trap, escape key)
 - [ ] Tabs: Use `Tabs` primitive (handles keyboard navigation)
 - [ ] Forms: Use `FormField` (handles label association)
-- [ ] Status: Use `StatusBadge` (handles ARIA attributes)
+- [ ] Status: Use `StatusBadge` (uses standard status token colors)
 
 ### 7. When to Create New Tokens
 
@@ -505,7 +510,7 @@ If no existing token fits your use case:
 
 1. **Don't** add an arbitrary value - this defeats the system
 2. **Do** ask: Is this a new semantic concept or should I use an existing one?
-3. **Do** add a new token to `globals.css` if it represents a new semantic category
+3. **Do** add a new `ss` token to `globals.css` if it represents a new semantic category, and mirror it in `tokens.css` when external consumers need it
 4. **Do** update this documentation when adding tokens
 
 ### Example Token Addition
@@ -514,8 +519,8 @@ If no existing token fits your use case:
 /* In globals.css @theme inline block */
 
 /* Only add if this is a NEW semantic concept */
---color-new-semantic-thing: #hexvalue;
---color-new-semantic-thing-bg: rgba(hex, 0.1);
+--color-ss-new-semantic-thing: #hexvalue;
+--color-ss-new-semantic-thing-bg: rgba(hex, 0.1);
 ```
 
-Then update the Tailwind utilities become available automatically: `bg-new-semantic-thing`, `text-new-semantic-thing-bg`, etc.
+Then the Tailwind utilities become available when referenced: `bg-ss-new-semantic-thing`, `text-ss-new-semantic-thing`, etc.

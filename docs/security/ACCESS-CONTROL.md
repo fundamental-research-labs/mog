@@ -46,6 +46,8 @@ A policy maps a tag pattern to a level at a target:
   target: { kind: 'sheet', sheetId },
   level: 'read',
   priority: 0,
+  enabled: true,
+  metadata: { createdBy: 'user', createdAt: Date.now() },
 }
 ```
 
@@ -64,7 +66,7 @@ What the policy applies to:
 
 ## Session API
 
-Four methods on the `Workbook` surface. Set the active principal once per session; every subsequent call inherits it.
+TypeScript exposes four methods on the `Workbook` surface. Set the active principal once per session; every subsequent call inherits it.
 
 ### TypeScript
 
@@ -85,14 +87,13 @@ const canonical = await wb.makePrincipal(['b', 'a']);     // → { tags: ['a', '
 ```py
 wb.set_active_principal(['agent:copilot'])  # list[str]-only; envelope form is TS-only
 wb.set_active_principal(None)
-wb.active_principal()
 wb.security_active()
 wb.make_principal(['b', 'a'])
 ```
 
 **Important:** `securityActive` returns `false` when the policy set is empty. Setting a principal on an empty-policy document is a no-op for access decisions (the gated delegate's fast path skips the principal entirely). Once any policy exists, `null` means **anonymous** — a caller that never set a principal is denied, not owner.
 
-**Cross-language divergence (intentional):** TS accepts `string[] | AccessPrincipal | null`; Python accepts `list[str] | None` only. Python callers can always pass `principal['tags']` explicitly.
+**Cross-language divergence (intentional):** TS accepts `string[] | AccessPrincipal | null`; Python accepts `list[str] | None` only and does not expose an `active_principal()` getter today. Python callers can always pass `principal['tags']` explicitly.
 
 ---
 
@@ -117,7 +118,7 @@ interface WorkbookSecurity {
 
 `explainAccess` returns the winning policy, the reason string, all candidate policies considered, and any ambiguity warnings — use it when a user asks *why* a call was denied.
 
-Templates are named policy generators (`protect_workbook`, `protect_sheet`, `agent_structure`, …). Prefer templates over hand-rolled policies for common scenarios.
+Template apply payloads use the Rust tagged-enum names (`protect_workbook`, `protect_sheet`, `agent_structure`); removal uses the stored template IDs (`protect-workbook`, `protect-sheet`, `agent-structure`). Prefer templates over hand-rolled policies for common scenarios.
 
 ---
 
@@ -139,26 +140,27 @@ YrsComputeEngine ← PolicyEngine, AccessMatrixCache, cell data
 
 ### Attenuation
 
-A caller cannot grant more than they have. `addPolicy` with `level: admin` by a `write`-level caller fails with `AttenuationViolation`.
+A caller cannot grant more than they have. `addPolicy` with `level: admin` by a `write`-level caller fails as a security denial for an attenuation violation.
 
 ### Resolution order
 
 When multiple policies match, the engine picks in this order:
 
-1. **Specificity** — exact tag > prefix glob (`agent:*`) > wildcard (`*`). Target specificity: column > sheet > workbook.
-2. **Priority** — higher `priority` wins.
-3. **Safer wins** — on a true tie, the *lower* (more restrictive) level wins, and the engine emits an `AmbiguityDetected` event so the author can fix the policy set.
+1. **Target specificity** — column > sheet > workbook.
+2. **Tag specificity** — exact tag > prefix glob (`agent:*`) > wildcard (`*`).
+3. **Priority** — higher `priority` wins.
+4. **Safer wins** — on a true tie, the *lower* (more restrictive) level wins, and the engine emits an `AmbiguityDetected` event so the author can fix the policy set.
 
 ---
 
 ## Redaction semantics
 
-A denied read doesn't throw. It returns a typed placeholder so formulas, charts, and UI code keep working without special-casing:
+Cell and range value reads below `read` do not throw. They return typed redaction values so formulas, charts, and UI code keep working without special-casing:
 
 | Level on a cell | `get_cell_value` returns                           |
 |-----------------|----------------------------------------------------|
-| `none`          | `""` (empty string)                                |
-| `structure`     | `Text("[Number]")`, `Text("[Date]")`, …            |
+| `none`          | `CellValue::Null`                                  |
+| `structure`     | `Text("[Number]")`, `Text("[Text]")`, …            |
 | `read` or above | the real value                                     |
 
 Under `structure`, a formula's *computed* result also redacts — `B1 = =A1` returns `[Number]` when `A1` is protected. Formula shape is preserved (structure-preserving by design); values are not.
@@ -169,18 +171,18 @@ Writes, unlike reads, *do* deny loudly: they return `ComputeError::SecurityDenie
 
 ## Diagnostic events
 
-Five event variants flow through `wb_security_drain_events`:
+Six event variants flow through `wb_security_drain_events`:
 
 | Event                | Emitted when                                      |
 |----------------------|---------------------------------------------------|
 | `PolicyAdded`        | `addPolicy` succeeds                              |
 | `PolicyRemoved`      | `removePolicy` succeeds                           |
 | `PolicyUpdated`      | `updatePolicy` succeeds                           |
-| `PoliciesReloaded`   | Matrix rebuild on snapshot load or version bump   |
+| `PoliciesReloaded`   | Policy engine reload on snapshot load or version bump |
 | `AccessDenied`       | Every write denied by the gate, with `operation` = caller's method name (`"set_cell_value_parsed"`, `"clear_range"`, …) |
 | `AmbiguityDetected`  | Matrix-publish or evaluate resolves a true tie. Fingerprint-deduped per `policy_version` so a noisy UI doesn't drown the stream. |
 
-Drain the stream periodically to drive diagnostic UIs ("this call was denied because …"). The drain is lossless — events buffer until you pull them.
+Drain the stream periodically to drive diagnostic UIs ("this call was denied because …"). The event stream is diagnostic and bounded: the engine keeps the most recent 256 pending events and drops the oldest if callers do not drain fast enough.
 
 ---
 
@@ -191,13 +193,13 @@ Every bridged method returning cell data is gated. This is enforced **statically
 | Scope      | Mechanism                                                 |
 |------------|-----------------------------------------------------------|
 | `cell`     | Per-cell matrix lookup; `redact_scalar` over the result. |
-| `range`    | Viewport filter: `filter_viewport_buffer` on byte-vec returns; per-cell matrix walk. |
-| `sheet`    | Matrix lookup at sheet granularity. |
-| `workbook` | Matrix lookup at workbook granularity. |
+| `range`    | `filter_range_values` over range-shaped `Vec<T>` returns; per-cell matrix walk. |
+| `sheet`    | `filter_viewport_buffer` for sheet-scoped viewport byte buffers; other sheet-scoped reads are coarse checks or passthroughs. |
+| `workbook` | Workbook-level access check; no per-cell redaction. |
 
 ### Known gaps
 
-- **Sheet-scope `Vec<T>` non-byte passthrough.** The delegate macro at `infra/rust-bridge/bridge-delegate/macros/src/expand.rs:926-939` only redacts byte-vec returns at sheet scope. Non-byte `Vec<T>` returns (e.g., `Vec<Comment>`, `Vec<CellValue>`) pass through. Affects `get_comments_for_cell` and `get_unique_column_values`. The adversarial test `adversarial_comment_redacts_under_none_id_form` pins the current passthrough shape so a future macro fix flips the signal.
+- **Sheet-scope `Vec<T>` non-byte passthrough.** The delegate macro at `infra/rust-bridge/bridge-delegate/macros/src/expand/gated.rs` only filters sheet-scoped byte buffers with `filter_viewport_buffer`; non-byte `Vec<T>` sheet reads fall through the passthrough arm. Value-bearing examples include `get_comments_for_cell` and `get_unique_column_values`. The adversarial test `adversarial_comment_redacts_under_none_id_form` pins the current passthrough shape so a future macro fix flips the signal.
 - **`data_validation` family has no bridged read today.** When such a surface is added, it must carry `#[bridge::read(scope = …)]` like every other read — otherwise `coverage_audit` will fail.
 
 ---
@@ -218,7 +220,7 @@ These are deferred deliberately, not by oversight:
 
 | Topic | Document |
 |-------|----------|
-| Contract types (TS) | `contracts/src/security/` + `contracts/src/api/workbook/security.ts` |
-| Python surface | `compute/pyo3/python/mog/workbook.py:1404-1431` |
+| Contract types (TS) | `types/document/src/security/` + `types/api/src/api/workbook/security.ts` (re-exported from `contracts/src/security/` and `contracts/src/api/workbook/security.ts`) |
+| Python surface | `compute/pyo3/python/mog/workbook.py:1408-1437` + `compute/pyo3/python/mog/sub_apis/security.py` |
 | Coverage audit test | `compute/api/tests/coverage_audit.rs` |
 | End-to-end scenarios | `compute/api/tests/security_e2e.rs` |

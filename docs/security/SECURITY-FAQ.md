@@ -42,7 +42,7 @@ Classification: **Roadmap**.
 
 ## Is the headless HTTP server safe to expose to enterprise users?
 
-No. The headless server is intended for trusted local or controlled service environments; current routes include session control, upload/download, code execution, agent egress, and optional database proxy behavior depending on the distribution. It does not provide an enterprise authentication and authorization contract.
+No. Mog does not currently publish a supported HTTP service API or enterprise authentication and authorization contract. Server-side workbook automation today is same-process trusted automation through SDK/runtime surfaces; any distribution that adds headless HTTP, service routes, upload/download, code execution, agent egress, or database proxy behavior needs a separate service-security boundary before exposure.
 
 Classification: **Not claimed**.
 
@@ -60,6 +60,6 @@ Classification: **Not claimed**.
 
 ## Are macros or arbitrary scripts executed from workbook files?
 
-The current product claim is that workbook formula evaluation is handled by Mog's engine, not by running embedded workbook scripts. Separately, the headless HTTP server includes an explicit code-execution API for trusted automation clients; do not expose that API to untrusted users. Import paths still need malicious-file and import/export verification evidence before this claim is ready for enterprise reliance.
+The current product claim is that workbook formula evaluation is handled by Mog's engine, not by running embedded workbook scripts. Imported VBA and active-content parts are detected or preserved as opaque, disabled, or quarantined content rather than interpreted or executed. Separately, explicit code-execution APIs such as `workbook.executeCode()` are trusted automation surfaces and are not executed from workbook files; do not expose them to untrusted users. Import paths still need malicious-file and import/export verification evidence before this claim is ready for enterprise reliance.
 
 Classification: **Verified; Roadmap for malicious-file evidence**.

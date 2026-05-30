@@ -37,14 +37,6 @@ This security overview is for external reviewers evaluating standalone and custo
 
 ## Published Artifacts
 
-Markdown under `docs/security/` is the reviewed source content used to generate external security documentation. Generated HTML, PDFs, and the build manifest are written under `dist/trust/`.
+Markdown files listed in `docs/security/manifest.json` are the public security documentation set. The manifest declares `docs/security` as `sourceRoot`, `dist/trust` as `outputRoot`, and the reviewed document order.
 
-Generation commands:
-
-```bash
-pnpm docs:build
-pnpm docs:pdf
-pnpm docs:trust
-```
-
-The publishing pipeline validates required frontmatter, reads document order from `docs/security/manifest.json`, renders static HTML, and emits `dist/trust/manifest.json` with document metadata, commit hash, build time, source hashes, and HTML artifact hashes. PDF files are generated under `dist/trust/pdf/`; the current manifest does not hash those PDF artifacts.
+The public repository does not currently include a docs publishing command or generator for `dist/trust`; generated HTML, PDFs, and a generated trust manifest are therefore not claimed as verified artifacts in this repository.

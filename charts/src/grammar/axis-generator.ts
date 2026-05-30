@@ -11,6 +11,15 @@ import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 
+function axisPosition(scale: AnyScale, tick: unknown): number {
+  const position = scale(tick) as number;
+  const bandwidth =
+    typeof scale.bandwidth === 'function' ? (scale.bandwidth() as number) : undefined;
+  return typeof bandwidth === 'number' && Number.isFinite(bandwidth)
+    ? position + bandwidth / 2
+    : position;
+}
+
 /**
  * Generate axis marks.
  */
@@ -92,7 +101,7 @@ export function generateXAxis(
     const estimatedLabelWidth = maxLabelLen * avgCharWidth;
     // Compute minimum spacing between tick positions
     const tickPositions = ticks
-      .map((t: unknown) => scale(t) as number)
+      .map((t: unknown) => axisPosition(scale, t))
       .filter((x: number) => !isNaN(x))
       .sort((a: number, b: number) => a - b);
     if (tickPositions.length > 1) {
@@ -111,7 +120,7 @@ export function generateXAxis(
   // Generate tick marks and labels
   let labelIndex = 0;
   for (const tick of ticks) {
-    const x = scale(tick) as number;
+    const x = axisPosition(scale, tick);
 
     if (isNaN(x)) continue;
 
@@ -244,7 +253,7 @@ export function generateYAxis(
   let yLabelSkip = 1;
   if (axisSpec.labels !== false && ticks.length > 1) {
     const tickPositions = ticks
-      .map((t: unknown) => scale(t) as number)
+      .map((t: unknown) => axisPosition(scale, t))
       .filter((v: number) => !isNaN(v))
       .sort((a: number, b: number) => a - b);
     if (tickPositions.length > 1) {
@@ -263,7 +272,7 @@ export function generateYAxis(
   // Generate tick marks and labels
   let yLabelIndex = 0;
   for (const tick of ticks) {
-    const y = scale(tick) as number;
+    const y = axisPosition(scale, tick);
 
     if (isNaN(y)) continue;
 

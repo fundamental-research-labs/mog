@@ -59,6 +59,31 @@ describe('Bar Chart Compilation', () => {
     expect(result.bounds.height).toBeGreaterThan(0);
   });
 
+  test('centers category axis labels within band slots', () => {
+    const spec: ChartSpec = {
+      data: { values: barChartData.slice(0, 2) },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative' },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const firstBar = result.marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.category === 'A',
+    ) as any;
+    const firstLabel = result.axes.find(
+      (mark) => mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === 'A',
+    ) as any;
+
+    expect(firstBar).toBeDefined();
+    expect(firstLabel).toBeDefined();
+    expect(firstLabel.x).toBeCloseTo(firstBar.x + firstBar.width / 2, 6);
+  });
+
   test('compiles bar chart with color encoding', () => {
     const spec: ChartSpec = {
       data: { values: barChartData },

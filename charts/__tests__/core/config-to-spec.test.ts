@@ -442,6 +442,7 @@ describe('buildEncoding - axis config', () => {
         yAxis: {
           type: 'value',
           gridLines: true,
+          format: { line: {} },
           gridlineFormat: { color: { theme: 'tx1' }, width: 0.75 },
         },
       },
@@ -460,9 +461,11 @@ describe('buildEncoding - axis config', () => {
     expect(encoding.y!.axis).toEqual(
       expect.objectContaining({
         title: null,
+        domain: false,
         grid: true,
         gridColor: '#D9D9D9',
         gridWidth: 0.75,
+        gridOpacity: 1,
       }),
     );
   });

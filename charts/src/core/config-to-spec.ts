@@ -228,6 +228,12 @@ function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
   return sizePt === undefined ? undefined : sizePt * (96 / 72);
 }
 
+function hasVisibleLineStyle(line: unknown): boolean {
+  if (!line || typeof line !== 'object') return false;
+  const candidate = line as { color?: unknown; width?: unknown };
+  return candidate.color !== undefined || candidate.width !== undefined;
+}
+
 // =============================================================================
 // Mark Type Mapping
 // =============================================================================
@@ -453,6 +459,9 @@ function mapAxisConfigToAxisSpec(
   if (labelAngle !== undefined) spec.labelAngle = labelAngle;
 
   const axisLine = axisConf.format?.line;
+  if (axisLine && !hasVisibleLineStyle(axisLine)) {
+    spec.domain = false;
+  }
   const axisLineColor = resolveChartTextColor(axisLine?.color);
   if (axisLineColor) {
     spec.domainColor = axisLineColor;
@@ -466,6 +475,7 @@ function mapAxisConfigToAxisSpec(
   const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
   if (gridlineColor) spec.gridColor = gridlineColor;
   if (axisConf.gridlineFormat?.width !== undefined) spec.gridWidth = axisConf.gridlineFormat.width;
+  if (axisConf.gridlineFormat) spec.gridOpacity = 1;
 
   const titleFont = axisConf.titleFormat?.font;
   if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);

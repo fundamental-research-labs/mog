@@ -32,6 +32,7 @@ cargo clippy -p compute-core-pyo3
 
 "$VENV_DIR/bin/python" -m maturin develop --manifest-path compute/pyo3/Cargo.toml
 "$VENV_DIR/bin/python" -m pytest compute/pyo3/tests -q
+"$VENV_DIR/bin/python" -m mog._tools.smoke --json
 "$VENV_DIR/bin/python" compute/pyo3/scripts/generate_python_surface.py --check
 "$VENV_DIR/bin/python" -m mog._tools.verify_surface --strict --json
 "$VENV_DIR/bin/python" -m mog._tools.audit_stubs --strict

@@ -2,31 +2,33 @@
 
 ## Overview
 
-The renderer uses a **small stacked-canvas host** with logical layers, a **priority-based scheduler** for frame orchestration, and **viewport virtualization** so rendering work stays bounded by the visible sheet area.
+The shipped spreadsheet renderer uses a **small stacked-canvas host** with logical layers, a **requestAnimationFrame render loop**, a passive **priority scheduler** for frame-time tasks, and **viewport virtualization** so rendering work stays bounded by the visible sheet area.
+
+Status: the canvas packages described here are **workspace-internal** packages (`private: true` in their package manifests). The public renderer contract is exposed through `@mog-sdk/contracts/rendering`; `@mog/canvas-engine`, `@mog/grid-renderer`, `@mog/grid-canvas`, `@mog/drawing-canvas`, and `@mog/canvas-overlay` are implementation packages consumed by SheetView and the spreadsheet app.
 
 ## Canvas Stack Architecture
 
-`GridRenderer` creates a `CanvasEngine` with two stacked canvases by default:
+`GridRendererImpl` creates a `CanvasEngine` with `canvasCount: 2`:
 
 | Canvas | Layer Class      | Contents                                                |
 | ------ | ---------------- | ------------------------------------------------------- |
 | 0      | World-space      | Grid layers, headers, dividers, and floating objects    |
 | 1      | Screen-space     | Overlay chrome such as handles, guides, drag previews   |
 
-Most spreadsheet drawing still happens as logical layers on canvas 0. The overlay package renders screen-space UX chrome on canvas 1. `createCanvasEngine()` can fall back to single-canvas mode on low-memory devices; in that mode, layers targeting higher canvas indexes are proxied onto canvas 0.
+Most spreadsheet drawing happens as logical layers on canvas 0. The overlay package renders screen-space UX chrome on canvas 1. `createCanvasEngine()` can fall back to single-canvas mode on low-memory devices; in that mode, layers targeting higher canvas indexes are proxied onto canvas 0.
 
 Performance concerns are solved by:
 
 1. **Virtualization** - Only render visible cells
-2. **Dirty region tracking** - Only redraw what changed
-3. **Offscreen bitmap caching** - Cache expensive renders
-4. **requestAnimationFrame batching** - Process invalidations and paint in frame batches
+2. **Dirty region tracking** - Redraw the dirty union when layers provide rect hints
+3. **Offscreen bitmap caching** - Cache eligible `BaseLayer` renders for compositing
+4. **requestAnimationFrame batching** - Process scheduler tasks, invalidations, and paint in frame batches
 
 ## Logical Layers
 
 **Directory:** `canvas/grid-renderer/src/layers/`
 
-Grid layers are drawn in z-order on canvas 0. The default grid-renderer layer set contains 11 layers with integer z-indexes:
+Grid layers are drawn in z-order on canvas 0. The default `GridRendererImpl` path supplies a `CanvasTextMeasurer`, so the grid-renderer layer set contains these 11 layers with integer z-indexes:
 
 | Z-Index | Layer ID            | Render Mode  | Purpose                                      |
 | ------- | ------------------- | ------------ | -------------------------------------------- |
@@ -41,6 +43,15 @@ Grid layers are drawn in z-order on canvas 0. The default grid-renderer layer se
 | 800     | headers             | once         | Row/column headers (no scroll)               |
 | 850     | selection           | per-region   | Selection boxes, range highlights over chrome |
 | 900     | dividers            | once         | Freeze pane divider lines (no scroll)        |
+
+`GridRendererImpl` then registers two additional engine layers outside `@mog/grid-renderer`:
+
+| Layer ID  | Canvas | Z-Index | Source package          | Purpose                                                |
+| --------- | ------ | ------- | ----------------------- | ------------------------------------------------------ |
+| drawing   | 0      | 500     | `@mog/drawing-canvas`   | Floating objects, charts, pictures, shapes, ink, OLE   |
+| overlay   | 1      | 0       | `@mog/canvas-overlay`   | Screen-space handles, smart guides, drag/ink previews  |
+
+The overlay layer has `zIndex: 0` because it is on canvas 1, which is stacked above every layer on canvas 0.
 
 ### Layer Files
 
@@ -63,7 +74,7 @@ Grid layers are drawn in z-order on canvas 0. The default grid-renderer layer se
 
 **File:** `canvas/engine/src/core/types.ts`
 
-All layers implement the `CanvasLayer` interface from `@mog/canvas-engine`:
+Every registered engine layer implements the `CanvasLayer` interface from workspace-internal `@mog/canvas-engine`:
 
 ```typescript
 interface CanvasLayer {
@@ -91,7 +102,7 @@ interface CanvasLayer {
 
 **File:** `canvas/grid-renderer/src/layers/base-layer.ts`
 
-The `BaseLayer` abstract class provides dirty tracking and off-screen canvas caching so concrete layers only need to implement `render()`:
+Most `@mog/grid-renderer` layers extend `BaseLayer`, which provides dirty tracking and off-screen canvas caching so concrete layers only need to implement `render()`:
 
 ```typescript
 abstract class BaseLayer implements CanvasLayer {
@@ -120,6 +131,8 @@ abstract class BaseLayer implements CanvasLayer {
 }
 ```
 
+`selection`, `ui`, and `remote-cursors` still extend the base class but set `cacheable: false`. The `drawing` and `overlay` layers implement `CanvasLayer` directly and own their own dirty tracking.
+
 ### Layer Visibility
 
 Visibility is managed per-layer via `LayerRegistry.setVisibility()` in `canvas/engine/src/registry/layer-registry.ts`. There is no global `LayerVisibility` interface; instead, the `LayerRegistry` tracks a `visible` boolean per registered layer:
@@ -131,6 +144,7 @@ class LayerRegistry {
 
   // Only visible layers are returned by sorted access methods
   getLayersForCanvas(canvasIndex: number): ReadonlyArray<CanvasLayer>;
+  getVisibleLayersForCanvas(canvasIndex: number): ReadonlyArray<CanvasLayer>;
   getAllSorted(): ReadonlyArray<CanvasLayer>;
 }
 ```
@@ -155,18 +169,18 @@ layer.isFullDirty();  // Entire layer needs redraw?
 layer.getDirtyRects(); // Specific document-space dirty rects
 ```
 
-The `LayerRegistry.hasDirtyLayers()` method checks whether any visible layer on a canvas needs redraw. Full-dirty frames repaint the canvas; partial-dirty frames re-render dirty cached layers and composite the dirty region from layer caches, while non-cacheable dirty layers render directly.
+The `LayerRegistry.hasDirtyLayers()` method checks whether any visible layer on a canvas needs redraw. The render loop computes one dirty union per canvas. If any dirty layer is full-dirty or lacks dirty-rect methods, the canvas takes the full repaint path. Otherwise, the loop clears the dirty union, re-renders dirty cacheable layers into their caches, composites the dirty union from all cacheable layer caches, and clips non-cacheable layers to the dirty union while rendering them directly.
 
 ## Render Scheduling
 
 Scheduling is split between two layers:
 
-1. **Canvas Engine** (`canvas-engine`) — owns the render loop and `PriorityScheduler` for frame-level orchestration.
+1. **Canvas Engine** (`canvas-engine`) — owns the rAF render loop and the passive `PriorityScheduler` processed at the start of a frame.
 2. **GridRenderScheduler** (`canvas/grid-canvas/src/renderer/grid-render-scheduler.ts`) — bridges data mutations to canvas layer invalidation.
 
 ### GridRenderScheduler
 
-Implements the "Write = Invalidate" contract. When the `BinaryViewportBuffer` receives patches, the scheduler marks appropriate layers dirty and wakes the render loop via `CanvasEngine.requestFrame()`.
+Implements the "Write = Invalidate" contract for viewport cell and geometry updates. When the `BinaryViewportBuffer` receives patches, the scheduler marks appropriate grid layers dirty and wakes the render loop via `CanvasEngine.requestFrame()`.
 
 ```typescript
 class GridRenderScheduler implements RenderScheduler {
@@ -188,16 +202,18 @@ class GridRenderScheduler implements RenderScheduler {
 | Cell content  | `cells`                                                             |
 | Geometry      | `cells`, `headers`, `selection`, `background`, `sticky-headers`, `dividers` |
 
+This scheduler does not own full renderer lifecycle invalidation. `GridRendererImpl.markAllDirty()` also marks the `drawing` and `overlay` engine layers.
+
 ## Grid Renderer
 
 **File:** `canvas/grid-canvas/src/renderer/grid-renderer.ts`
 
-Thin composition facade that wires together 4 canvas packages:
+Workspace-internal composition facade that wires together 4 canvas packages:
 
-1. `@mog/canvas-engine` — generic multi-canvas render loop, scheduler, input
-2. `@mog/grid-renderer` — cell/background/selection/header layers
-3. `@mog/drawing-canvas` — floating object scene graph + renderers
-4. `@mog/canvas-overlay` — screen-space UX chrome (handles, guides, ink)
+1. `@mog/canvas-engine` - generic multi-canvas render loop, scheduler, input
+2. `@mog/grid-renderer` - cell/background/selection/header layers
+3. `@mog/drawing-canvas` - floating object scene graph and renderers
+4. `@mog/canvas-overlay` - screen-space UX chrome (handles, guides, ink)
 
 Implements the `GridRenderer` contract from `@mog-sdk/contracts/rendering`.
 
@@ -207,21 +223,22 @@ Implements the `GridRenderer` contract from `@mog-sdk/contracts/rendering`.
 
 The monolithic `RenderContext` interface has been retired. In its place, the grid renderer uses **typed data source adapters** defined in `@mog-sdk/contracts/rendering`. Each layer receives only the data sources it needs (e.g., `CellDataSource`, `SelectionDataSource`, `FloatingObjectDataSource`).
 
-The legacy `RenderContextConfig` (80+ fields) is still accepted by the `GridRenderer.updateContext()` facade, which dispatches each field to the appropriate typed adapter at O(1) per-field cost.
+The legacy `RenderContextConfig` is still accepted by the `GridRenderer.updateContext()` facade, which uses a dispatch table to route each supplied field to the appropriate typed adapter at O(1) per-field cost.
 
-## Visibility-Based Lifecycle
+## Lifecycle Pause/Resume
 
-**Suspended tabs use zero CPU.**
+The public code exposes pause/resume hooks; it does not install a `document.visibilitychange` listener by itself.
 
 | State       | Description                      |
 | ----------- | -------------------------------- |
-| `ready`     | Tab visible, render loop running |
-| `suspended` | Tab hidden, render loop paused   |
+| `ready`     | Host has started the render loop |
+| `suspended` | Host has paused the render loop  |
 
-On `visibilitychange`:
+Relevant entry points:
 
-- `hidden` -> suspend the renderer, pausing the render loop and scheduler
-- `visible` -> resume the renderer and request a fresh repaint
+- `GridRenderer.pause()` pauses the render loop and scheduler.
+- `GridRenderer.resume()` resumes the scheduler and render loop and requests a fresh repaint.
+- `SheetView.suspend()` and `SheetView.resume()` forward to the renderer; app hosts can wire these to page-visibility policy.
 
 ## File Structure
 
@@ -274,7 +291,7 @@ canvas/engine/src/                  # Generic render loop and layer management
 
 canvas/grid-canvas/src/renderer/    # Composition facade
 |-- grid-renderer.ts                # GridRenderer facade (wires all packages)
-|-- grid-render-scheduler.ts        # GridRenderScheduler (data → layer invalidation)
+|-- grid-render-scheduler.ts        # GridRenderScheduler (data -> layer invalidation)
 |-- render-context.ts               # Re-exports (legacy RenderContext retired)
 +-- index.ts
 

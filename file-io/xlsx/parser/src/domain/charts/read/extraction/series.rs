@@ -50,6 +50,8 @@ pub(super) fn extract_single_series(
 
     // Categories range: cat (standard) or x_val (scatter/bubble)
     let categories = extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
+    let category_label_format =
+        extract_category_label_format(&s.cat).or_else(|| extract_category_label_format(&s.x_val));
 
     let bubble_size = extract_num_ref_formula(&s.bubble_size);
 
@@ -146,6 +148,7 @@ pub(super) fn extract_single_series(
         color,
         values,
         categories,
+        category_label_format,
         bubble_size,
         smooth: s.smooth,
         explosion: s.explosion,
@@ -174,6 +177,44 @@ pub(super) fn extract_single_series(
         leader_line_format: None,
         show_leader_lines: None,
     }
+}
+
+fn extract_category_label_format(
+    cat: &Option<ooxml_types::charts::CatDataSource>,
+) -> Option<domain_types::chart::CategoryLabelFormatData> {
+    use ooxml_types::charts::CatDataSource;
+
+    let num_data = match cat {
+        Some(CatDataSource::NumRef(num_ref)) => num_ref.num_cache.as_ref(),
+        Some(CatDataSource::NumLit(num_data)) => Some(num_data),
+        _ => None,
+    }?;
+
+    let points: Vec<domain_types::chart::CategoryPointLabelFormatData> = num_data
+        .pts
+        .iter()
+        .filter_map(|point| {
+            point.format_code.as_ref().map(|format_code| {
+                domain_types::chart::CategoryPointLabelFormatData {
+                    idx: point.idx,
+                    format_code: Some(format_code.clone()),
+                }
+            })
+        })
+        .collect();
+
+    if num_data.format_code.is_none() && points.is_empty() {
+        return None;
+    }
+
+    Some(domain_types::chart::CategoryLabelFormatData {
+        format_code: num_data.format_code.clone(),
+        points: if points.is_empty() {
+            None
+        } else {
+            Some(points)
+        },
+    })
 }
 
 /// Extract error bars with line_format support.
@@ -211,6 +252,48 @@ fn extract_error_bars_new(
     }
 
     (general, x_bars, y_bars)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::charts::{CatDataSource, NumData, NumPoint, NumRef};
+
+    #[test]
+    fn extracts_category_cache_format_and_point_overrides() {
+        let cat = Some(CatDataSource::NumRef(NumRef {
+            f: "Sheet1!$A$1:$C$1".to_string(),
+            num_cache: Some(NumData {
+                format_code: Some("\"FY3/\"0".to_string()),
+                pt_count: Some(3),
+                pts: vec![
+                    NumPoint {
+                        idx: 0,
+                        v: "24".to_string(),
+                        format_code: None,
+                    },
+                    NumPoint {
+                        idx: 1,
+                        v: "25".to_string(),
+                        format_code: Some("\"FY3/\"0\"E\"".to_string()),
+                    },
+                ],
+                extensions: vec![],
+            }),
+            extensions: vec![],
+        }));
+
+        let format = extract_category_label_format(&cat).expect("category format");
+
+        assert_eq!(format.format_code.as_deref(), Some("\"FY3/\"0"));
+        assert_eq!(
+            format.points.as_ref().and_then(|points| points.first()),
+            Some(&domain_types::chart::CategoryPointLabelFormatData {
+                idx: 1,
+                format_code: Some("\"FY3/\"0\"E\"".to_string()),
+            }),
+        );
+    }
 }
 
 // Extract legend from ChartSpace.

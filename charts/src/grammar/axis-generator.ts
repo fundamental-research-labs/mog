@@ -147,7 +147,7 @@ export function generateXAxis(
       const labelText =
         channel.type === 'temporal'
           ? formatTemporalTick(tick)
-          : formatTickValue(tick, tickFormat);
+          : formatTickValue(tick, axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat);
       const labelAngle = axisSpec.labelAngle ?? 0;
       const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? (labelAngle ? 2 : 3);
@@ -301,7 +301,7 @@ export function generateYAxis(
       const labelText =
         channel.type === 'temporal'
           ? formatTemporalTick(tick)
-          : formatTickValue(tick, tickFormat);
+          : formatTickValue(tick, axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat);
 
       marks.push({
         type: 'text',
@@ -415,9 +415,9 @@ export function formatTickValue(value: unknown, format?: string): string {
   if (Number.isFinite(numericValue)) {
     const valueNumber = numericValue;
     if (format) {
-      const quotedPrefix = format.match(/"([^"]*)"\s*0/);
-      if (quotedPrefix) {
-        return `${quotedPrefix[1]}${Math.round(valueNumber)}`;
+      const quotedLiteralNumber = format.match(/^"([^"]*)"\s*0(?:\s*"([^"]*)")?$/);
+      if (quotedLiteralNumber) {
+        return `${quotedLiteralNumber[1]}${Math.round(valueNumber)}${quotedLiteralNumber[2] ?? ''}`;
       }
       if (format.includes('#,##0')) {
         if (valueNumber === 0 && /[–-]/.test(format)) return '–';

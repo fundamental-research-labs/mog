@@ -301,9 +301,7 @@ fn extract_luminance_tint_shade(transforms: &[ColorTransform]) -> Option<f64> {
     });
 
     match (lum_mod, lum_off) {
-        (Some(lum_mod), Some(lum_off))
-            if (lum_mod + lum_off - 1.0_f64).abs() < 0.00001_f64 =>
-        {
+        (Some(lum_mod), Some(lum_off)) if (lum_mod + lum_off - 1.0_f64).abs() < 0.00001_f64 => {
             Some(lum_off)
         }
         (Some(lum_mod), _) => Some(lum_mod - 1.0),

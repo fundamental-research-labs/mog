@@ -473,6 +473,7 @@ fn test_chart_roundtrip() {
                 color: None,
                 values: None,
                 categories: None,
+                category_label_format: None,
                 bubble_size: None,
                 smooth: None,
                 explosion: None,

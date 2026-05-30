@@ -384,6 +384,8 @@ export function chartDataToRows(data: ChartData): DataRow[] {
           value: point.y,
           series: series.name,
         };
+        const categoryFormatCode = data.categoryFormatCodes?.[i];
+        if (categoryFormatCode) row.categoryFormatCode = categoryFormatCode;
         // Propagate OHLC fields if present (for stock charts)
         if (point.open !== undefined) row.open = point.open;
         if (point.high !== undefined) row.high = point.high;
@@ -506,7 +508,13 @@ function mapAxisConfigToAxisSpec(
   if (labelColor) spec.labelColor = labelColor;
 
   const labelAngle = normalizeAxisLabelAngle(axisConf);
-  if (labelAngle !== undefined) spec.labelAngle = labelAngle;
+  if (labelAngle !== undefined) {
+    spec.labelAngle = labelAngle;
+    const isCategoryAxis = axisConf.axisType === 'catAx' || axisConf.type === 'category';
+    if (isCategoryAxis && axisConf.tickMarks === 'none') {
+      spec.labelPadding = 14;
+    }
+  }
 
   const axisLine = axisConf.format?.line;
   if (axisLine && !hasVisibleLineStyle(axisLine)) {
@@ -729,6 +737,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyBarCategorySpacingScale(config, encoding, isHorizontal);
+  applyCategoryAxisLabelFormats(data, encoding, isHorizontal);
 
   // Color encoding for multi-series
   const colorChannel = buildColorEncoding(
@@ -763,6 +772,28 @@ function applyBarCategorySpacingScale(
     ...(categoryChannel.scale ?? {}),
     paddingInner: 0,
     paddingOuter: 0,
+  };
+}
+
+function applyCategoryAxisLabelFormats(
+  data: ChartData,
+  encoding: EncodingSpec,
+  isHorizontal: boolean,
+): void {
+  if (!data.categoryFormatCodes?.some(Boolean)) return;
+  const categoryChannel = isHorizontal ? encoding.y : encoding.x;
+  if (!categoryChannel) return;
+
+  const labelFormatByValue: Record<string, string> = {};
+  data.categories.forEach((category, index) => {
+    const formatCode = data.categoryFormatCodes?.[index];
+    if (formatCode) labelFormatByValue[String(category)] = formatCode;
+  });
+  if (Object.keys(labelFormatByValue).length === 0) return;
+
+  categoryChannel.axis = {
+    ...(categoryChannel.axis ?? {}),
+    labelFormatByValue,
   };
 }
 

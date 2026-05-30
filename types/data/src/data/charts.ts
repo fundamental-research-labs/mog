@@ -627,6 +627,7 @@ export interface SeriesConfig {
   color?: string;
   values?: string;
   categories?: string;
+  categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
   smooth?: boolean;
   explosion?: number;
@@ -681,6 +682,22 @@ export interface SeriesConfig {
   boxwhiskerOptions?: BoxplotConfig;
   /** @deprecated Use trendlines[] instead */
   trendline?: TrendlineConfig;
+}
+
+/**
+ * Category-axis label formatting captured from imported chart category caches.
+ * The base format applies to all category values; point overrides replace it by
+ * category index.
+ */
+export interface CategoryLabelFormat {
+  formatCode?: string;
+  points?: CategoryPointLabelFormat[];
+}
+
+/** Per-category label number-format override. */
+export interface CategoryPointLabelFormat {
+  idx: number;
+  formatCode?: string;
 }
 
 /** Marker style for scatter/line chart markers. */

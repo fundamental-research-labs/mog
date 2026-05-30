@@ -25,6 +25,9 @@ pub struct ChartSeriesData {
     /// Categories range: c:cat (bar/line/pie) or c:xVal (scatter/bubble)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categories: Option<String>,
+    /// Cached category number format metadata, including per-point overrides.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_label_format: Option<CategoryLabelFormatData>,
     /// Bubble sizes range: c:bubbleSize (bubble only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bubble_size: Option<String>,
@@ -107,6 +110,26 @@ pub struct ChartSeriesData {
     pub leader_line_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_leader_lines: Option<bool>,
+}
+
+/// Category-axis label formatting captured from the series category cache.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryLabelFormatData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub points: Option<Vec<CategoryPointLabelFormatData>>,
+}
+
+/// Per-category point label format override.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryPointLabelFormatData {
+    #[serde(default)]
+    pub idx: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format_code: Option<String>,
 }
 
 /// Per-point formatting override.

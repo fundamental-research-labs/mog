@@ -80,6 +80,7 @@ pub(super) fn chart_series_data(
         color: None,
         values,
         categories,
+        category_label_format: None,
         bubble_size: None,
         smooth: None,
         explosion: None,

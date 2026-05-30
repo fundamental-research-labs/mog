@@ -333,6 +333,21 @@ type ChartRenderData = {
   data: ChartData;
 };
 
+function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
+  const categoryLabelFormat = config.series?.find((series) => series.categoryLabelFormat)
+    ?.categoryLabelFormat;
+  if (!categoryLabelFormat) return data;
+
+  const categoryFormatCodes = data.categories.map(() => categoryLabelFormat.formatCode ?? null);
+  for (const point of categoryLabelFormat.points ?? []) {
+    if (point.idx >= 0 && point.idx < categoryFormatCodes.length && point.formatCode) {
+      categoryFormatCodes[point.idx] = point.formatCode;
+    }
+  }
+
+  return categoryFormatCodes.some(Boolean) ? { ...data, categoryFormatCodes } : data;
+}
+
 function defaultExportOptionsForSize(width: number, height: number): ChartExportOptionsSnapshot {
   return {
     format: 'png',
@@ -507,7 +522,14 @@ function snapshotSeries(
     categories,
     values,
     blankMask,
-    dataHash: hashJson({ name: series.name, source, categories, values, blankMask }),
+    dataHash: hashJson({
+      name: series.name,
+      source,
+      categories,
+      categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
+      values,
+      blankMask,
+    }),
   };
 }
 
@@ -1758,9 +1780,10 @@ export class ChartBridge implements IChartBridge {
         sheetAliases: this.seriesSheetAliases(resolvedRanges),
         hiddenVisibility,
       });
+      const data = extractChartData(accessor, renderConfig);
       return {
         config: renderConfig,
-        data: extractChartData(accessor, renderConfig),
+        data: withCategoryFormatCodes(data, renderConfig),
       };
     }
 
@@ -1782,13 +1805,14 @@ export class ChartBridge implements IChartBridge {
       ? await this.loadHiddenVisibility(dataRanges)
       : undefined;
     const cellAccessor = await this.createCellAccessor(dataRanges, { hiddenVisibility });
+    const data = extractChartDataFromRange(cellAccessor, dataRange, {
+      categoryRange: resolvedRanges.categoryRange?.range,
+      seriesRange: resolvedRanges.seriesRange?.range,
+      seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
+    });
     return {
       config,
-      data: extractChartDataFromRange(cellAccessor, dataRange, {
-        categoryRange: resolvedRanges.categoryRange?.range,
-        seriesRange: resolvedRanges.seriesRange?.range,
-        seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
-      }),
+      data: withCategoryFormatCodes(data, config),
     };
   }
 

@@ -325,6 +325,8 @@ export interface ChartDataSeries {
  */
 export interface ChartData {
   categories: (string | number)[];
+  /** Optional per-category number format codes for axis label rendering. */
+  categoryFormatCodes?: Array<string | null | undefined>;
   series: ChartDataSeries[];
 }
 

@@ -122,6 +122,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 color,
                 values,
                 categories,
+                category_label_format: None,
                 bubble_size,
                 smooth: s.smooth,
                 explosion: s.explosion,

@@ -997,6 +997,16 @@ export interface ChartLineData {
   transparency?: number;
 }
 
+export interface CategoryLabelFormatData {
+  formatCode?: string;
+  points?: CategoryPointLabelFormatData[];
+}
+
+export interface CategoryPointLabelFormatData {
+  idx: number;
+  formatCode?: string;
+}
+
 export interface ChartOoxmlProps {
   definition?: unknown;
   drawingFrame?: ChartDrawingFrameOoxmlProps;
@@ -1021,6 +1031,7 @@ export interface ChartSeriesData {
   color?: string;
   values?: string;
   categories?: string;
+  categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
   smooth?: boolean;
   explosion?: number;

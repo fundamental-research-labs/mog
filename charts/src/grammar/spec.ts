@@ -295,6 +295,8 @@ export interface AxisSpec {
   gridOpacity?: number;
   gridDash?: number[];
   format?: string;
+  /** Per-category format code keyed by the raw category value. */
+  labelFormatByValue?: Record<string, string>;
   formatType?: 'number' | 'time';
   orient?: AxisOrient;
   offset?: number;

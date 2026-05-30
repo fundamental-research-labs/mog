@@ -109,6 +109,27 @@ describe('chartDataToRows', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({ category: 'A', value: 10, series: 'Sparse' });
   });
+
+  it('should preserve imported per-category format codes separately from category identity', () => {
+    const rows = chartDataToRows({
+      categories: [26, 27],
+      categoryFormatCodes: ['"FY3/"0"E"', '"FY3/"0"E"'],
+      series: [
+        {
+          name: 'Forecast',
+          data: [
+            { x: 26, y: 10 },
+            { x: 27, y: 20 },
+          ],
+        },
+      ],
+    });
+
+    expect(rows).toEqual([
+      { category: '26', categoryFormatCode: '"FY3/"0"E"', value: 10, series: 'Forecast' },
+      { category: '27', categoryFormatCode: '"FY3/"0"E"', value: 20, series: 'Forecast' },
+    ]);
+  });
 });
 
 // =============================================================================
@@ -257,6 +278,32 @@ describe('buildEncoding - bar/column chart encoding', () => {
 
     expect(encoding.y?.scale).toEqual(expect.objectContaining({ domain: [-12, 88], nice: 6 }));
     expect(encoding.y?.axis).toEqual(expect.objectContaining({ tickCount: 6 }));
+  });
+
+  it('maps imported per-category format codes onto the category axis', () => {
+    const config = makeConfig({ type: 'column' });
+    const encoding = buildEncoding(config, {
+      categories: [25, 26],
+      categoryFormatCodes: ['"FY3/"0', '"FY3/"0"E"'],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 25, y: 10 },
+            { x: 26, y: 20 },
+          ],
+        },
+      ],
+    });
+
+    expect(encoding.x?.axis?.labelFormatByValue).toEqual({
+      '25': '"FY3/"0',
+      '26': '"FY3/"0"E"',
+    });
+  });
+
+  it('formats quoted literal prefix and suffix axis labels', () => {
+    expect(formatTickValue(26, '"FY3/"0"E"')).toBe('FY3/26E');
   });
 });
 

@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 
 from mog._serde import deserialize_mutation_result
+from mog.errors import NativeApiError
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -49,67 +50,56 @@ class LayoutAPI:
 
         Returns the row height, or the default if not explicitly set.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_row_height_query", self._sheet_id_json, row
-            )
-            if isinstance(result, (int, float)):
-                return float(result)
-        except Exception:
-            pass
-        return self._get_default_row_height()
+        result = self._bridge.call_json(
+            "compute_get_row_height_query", self._sheet_id_json, row
+        )
+        if isinstance(result, (int, float)):
+            return float(result)
+        raise NativeApiError("compute_get_row_height_query returned a non-number response")
 
     def get_column_width(self, col: int) -> float:
         """Get the width of a column (in character-width units, OOXML convention).
 
         Returns the column width, or the default (8.43) if not explicitly set.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_col_width_chars_query", self._sheet_id_json, col
-            )
-            if isinstance(result, (int, float)):
-                return float(result)
-        except Exception:
-            pass
-        return self._get_default_col_width()
+        result = self._bridge.call_json(
+            "compute_get_col_width_chars_query", self._sheet_id_json, col
+        )
+        if isinstance(result, (int, float)):
+            return float(result)
+        raise NativeApiError(
+            "compute_get_col_width_chars_query returned a non-number response"
+        )
 
     def get_column_width_px(self, col: int) -> float:
         """Get the width of a column (in pixels).
 
         Returns the column width in pixels, or the default if not explicitly set.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_col_width_query", self._sheet_id_json, col
-            )
-            if isinstance(result, (int, float)):
-                return float(result)
-        except Exception:
-            pass
-        return 64.0
+        result = self._bridge.call_json(
+            "compute_get_col_width_query", self._sheet_id_json, col
+        )
+        if isinstance(result, (int, float)):
+            return float(result)
+        raise NativeApiError("compute_get_col_width_query returned a non-number response")
 
     def _get_default_row_height(self) -> float:
-        try:
-            result = self._bridge.call_json(
-                "compute_get_default_row_height", self._sheet_id_json
-            )
-            if isinstance(result, (int, float)):
-                return float(result)
-        except Exception:
-            pass
-        return 21.0
+        result = self._bridge.call_json(
+            "compute_get_default_row_height", self._sheet_id_json
+        )
+        if isinstance(result, (int, float)):
+            return float(result)
+        raise NativeApiError("compute_get_default_row_height returned a non-number response")
 
     def _get_default_col_width(self) -> float:
-        try:
-            result = self._bridge.call_json(
-                "compute_get_default_col_width_chars", self._sheet_id_json
-            )
-            if isinstance(result, (int, float)):
-                return float(result)
-        except Exception:
-            pass
-        return 8.43
+        result = self._bridge.call_json(
+            "compute_get_default_col_width_chars", self._sheet_id_json
+        )
+        if isinstance(result, (int, float)):
+            return float(result)
+        raise NativeApiError(
+            "compute_get_default_col_width_chars returned a non-number response"
+        )
 
     # ------------------------------------------------------------------
     # Batch dimension queries
@@ -120,48 +110,38 @@ class LayoutAPI:
 
         Returns a list of ``(row_index, height)`` tuples.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_row_heights_batch", self._sheet_id_json, start, end
-            )
-            if isinstance(result, list):
-                return [(int(pair[0]), float(pair[1])) for pair in result]
-        except Exception:
-            pass
-        # Fallback: query individually
-        return [(r, self.get_row_height(r)) for r in range(start, end + 1)]
+        result = self._bridge.call_json(
+            "compute_get_row_heights_batch", self._sheet_id_json, start, end
+        )
+        if isinstance(result, list):
+            return [(int(pair[0]), float(pair[1])) for pair in result]
+        raise NativeApiError("compute_get_row_heights_batch returned a non-list response")
 
     def get_col_widths_batch(self, start: int, end: int) -> List[Tuple[int, float]]:
         """Get column widths for a range of columns (in character-width units).
 
         Returns a list of ``(col_index, width)`` tuples.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_col_widths_batch_chars", self._sheet_id_json, start, end
-            )
-            if isinstance(result, list):
-                return [(int(pair[0]), float(pair[1])) for pair in result]
-        except Exception:
-            pass
-        # Fallback: query individually
-        return [(c, self.get_column_width(c)) for c in range(start, end + 1)]
+        result = self._bridge.call_json(
+            "compute_get_col_widths_batch_chars", self._sheet_id_json, start, end
+        )
+        if isinstance(result, list):
+            return [(int(pair[0]), float(pair[1])) for pair in result]
+        raise NativeApiError(
+            "compute_get_col_widths_batch_chars returned a non-list response"
+        )
 
     def get_col_widths_batch_px(self, start: int, end: int) -> List[Tuple[int, float]]:
         """Get column widths for a range of columns (in pixels).
 
         Returns a list of ``(col_index, width)`` tuples.
         """
-        try:
-            result = self._bridge.call_json(
-                "compute_get_col_widths_batch", self._sheet_id_json, start, end
-            )
-            if isinstance(result, list):
-                return [(int(pair[0]), float(pair[1])) for pair in result]
-        except Exception:
-            pass
-        # Fallback: query individually
-        return [(c, self.get_column_width_px(c)) for c in range(start, end + 1)]
+        result = self._bridge.call_json(
+            "compute_get_col_widths_batch", self._sheet_id_json, start, end
+        )
+        if isinstance(result, list):
+            return [(int(pair[0]), float(pair[1])) for pair in result]
+        raise NativeApiError("compute_get_col_widths_batch returned a non-list response")
 
     # ------------------------------------------------------------------
     # Reset dimensions
@@ -265,51 +245,39 @@ class LayoutAPI:
 
     def is_row_hidden(self, row: int) -> bool:
         """Return ``True`` if the row is hidden."""
-        try:
-            result = self._bridge.call_json(
-                "compute_is_row_hidden_query", self._sheet_id_json, row
-            )
-            if isinstance(result, bool):
-                return result
-        except Exception:
-            pass
-        return row in self.get_hidden_rows_bitmap()
+        result = self._bridge.call_json(
+            "compute_is_row_hidden_query", self._sheet_id_json, row
+        )
+        if isinstance(result, bool):
+            return result
+        raise NativeApiError("compute_is_row_hidden_query returned a non-bool response")
 
     def is_column_hidden(self, col: int) -> bool:
         """Return ``True`` if the column is hidden."""
-        try:
-            result = self._bridge.call_json(
-                "compute_is_col_hidden_query", self._sheet_id_json, col
-            )
-            if isinstance(result, bool):
-                return result
-        except Exception:
-            pass
-        return col in self.get_hidden_columns_bitmap()
+        result = self._bridge.call_json(
+            "compute_is_col_hidden_query", self._sheet_id_json, col
+        )
+        if isinstance(result, bool):
+            return result
+        raise NativeApiError("compute_is_col_hidden_query returned a non-bool response")
 
     def get_hidden_rows_bitmap(self) -> Set[int]:
         """Return the set of hidden row indices."""
-        try:
-            result = self._bridge.call_json(
-                "compute_get_hidden_rows", self._sheet_id_json
-            )
-            if isinstance(result, list):
-                return set(int(r) for r in result)
-        except Exception:
-            pass
-        return set()
+        result = self._bridge.call_json(
+            "compute_get_hidden_rows", self._sheet_id_json
+        )
+        if isinstance(result, list):
+            return set(int(r) for r in result)
+        raise NativeApiError("compute_get_hidden_rows returned a non-list response")
 
     def get_hidden_columns_bitmap(self) -> Set[int]:
         """Return the set of hidden column indices."""
-        try:
-            result = self._bridge.call_json(
-                "compute_get_hidden_columns", self._sheet_id_json
-            )
-            if isinstance(result, list):
-                return set(int(c) for c in result)
-        except Exception:
-            pass
-        return set()
+        result = self._bridge.call_json(
+            "compute_get_hidden_columns", self._sheet_id_json
+        )
+        if isinstance(result, list):
+            return set(int(c) for c in result)
+        raise NativeApiError("compute_get_hidden_columns returned a non-list response")
 
     def set_row_visible(self, row: int, visible: bool) -> MutationResult:
         """Set the visibility of a single row."""

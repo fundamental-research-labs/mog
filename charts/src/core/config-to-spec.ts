@@ -193,9 +193,10 @@ function excelStyleRepeatColor(theme: string | undefined, index: number): string
 function resolveSeriesColor(series: SeriesConfig, index: number): string | undefined {
   const fill = series.format?.fill;
   const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
+  const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
   return (
     (series.color ? resolveChartColor(series.color) : undefined) ??
-    excelStyleRepeatColor(fillTheme, index) ??
+    excelStyleRepeatColor(fillTheme, sourceIndex) ??
     resolveFormatFillColor(series.format)
   );
 }

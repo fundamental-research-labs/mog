@@ -8,7 +8,7 @@
  */
 
 import { extendDataForLayerFields, sanitizeDataForScales } from '../algebra/data-sanitize';
-import type { AnyMark } from '../primitives/types';
+import type { AnyMark, RectMark } from '../primitives/types';
 import { generateAxes } from './axis-generator';
 import { createScales, resolveEncodings } from './encoding-resolver';
 import { calculateLayout } from './layout';
@@ -120,11 +120,13 @@ export function compileLayered(
   const axes = options.skipAxes ? [] : generateAxes(mergedEncoding, scales, layout, spec.config);
   const legends = options.skipLegend ? [] : generateLegends(mergedEncoding, scales, layout);
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
+  const background = generateBackground(spec.config?.background, layout.width, layout.height);
 
   // Dev-mode assertion: all data marks must carry their source datum
   assertDataMarksHaveDatum(allMarks);
 
   return {
+    background,
     marks: allMarks,
     axes,
     legends,
@@ -138,6 +140,24 @@ export function compileLayered(
     layout,
     scales,
   };
+}
+
+function generateBackground(
+  fill: string | undefined,
+  width: number,
+  height: number,
+): AnyMark[] | undefined {
+  if (!fill) return undefined;
+  return [
+    {
+      type: 'rect',
+      x: 0,
+      y: 0,
+      width,
+      height,
+      style: { fill },
+    } as RectMark,
+  ];
 }
 
 /**

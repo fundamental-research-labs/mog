@@ -32,5 +32,11 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
  * Pure function - no DOM dependencies.
  */
 export function collectMarks(result: CompileResult): AnyMark[] {
-  return [...(result.title || []), ...result.axes, ...result.legends, ...result.marks];
+  return [
+    ...(result.background || []),
+    ...(result.title || []),
+    ...result.axes,
+    ...result.legends,
+    ...result.marks,
+  ];
 }

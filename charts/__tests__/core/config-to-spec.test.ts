@@ -19,6 +19,7 @@ import {
   resolveStackMode,
   resolveSubTypeMarkProps,
 } from '../../src/core/config-to-spec';
+import { collectMarks } from '../../src/core/chart-engine';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
 import type { EncodingSpec, MarkSpec } from '../../src/grammar/spec';
@@ -578,6 +579,28 @@ describe('buildConfigSpec - colors', () => {
     expect(encoding.color!.scale).toEqual({ range: ['#4472C4', '#ED7D31'] });
     expect(configSpec!.range).toEqual({ category: ['#4472C4', '#ED7D31'] });
   });
+
+  it('should derive repeated imported theme colors from source series index', () => {
+    const config = makeConfig({
+      series: [
+        { name: 'Staffing', idx: 0, format: { fill: { type: 'solid', color: { theme: 'accent1' } } } },
+        { name: 'APAC', idx: 6, format: { fill: { type: 'solid', color: { theme: 'accent1' } } } },
+      ],
+    });
+
+    const configSpec = buildConfigSpec(config);
+
+    expect(configSpec!.range).toEqual({ category: ['#4472C4', '#264478'] });
+  });
+
+  it('should map explicit chart fills to a chart background', () => {
+    const configSpec = buildConfigSpec(
+      makeConfig({ chartFormat: { fill: { type: 'solid', color: '#111111' } } }),
+    );
+
+    expect(configSpec).toBeDefined();
+    expect(configSpec!.background).toBe('#111111');
+  });
 });
 
 // =============================================================================
@@ -1047,6 +1070,29 @@ describe('configToSpec - compile round-trip', () => {
     expect(result).toBeDefined();
     expect(result.marks).toBeDefined();
     expect(Array.isArray(result.marks)).toBe(true);
+  });
+
+  it('should emit explicit background marks before chart content', () => {
+    const config = makeConfig({
+      type: 'column',
+      chartFormat: { fill: { type: 'solid', color: '#111111' } },
+    });
+    const spec = configToSpec(config, SINGLE_SERIES_DATA);
+    const result = compile(spec, undefined, { width: 600, height: 400 });
+    const marks = collectMarks(result);
+
+    expect(spec.config?.background).toBe('#111111');
+    expect(result.background).toEqual([
+      {
+        type: 'rect',
+        x: 0,
+        y: 0,
+        width: 600,
+        height: 400,
+        style: { fill: '#111111' },
+      },
+    ]);
+    expect(marks[0]).toBe(result.background?.[0]);
   });
 
   it('should produce a spec that the compiler accepts (line chart)', () => {

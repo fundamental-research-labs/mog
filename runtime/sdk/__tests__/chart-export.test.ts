@@ -55,6 +55,22 @@ describe('Node SDK chart image export', () => {
     expect(decoded.width).toBe(640);
     expect(decoded.height).toBe(360);
     expect(nonWhitePixels(decoded.rgba)).toBeGreaterThan(1_000);
+
+    const resolvedSpec = await wb.diagnostics.getResolvedChartSpec({
+      sheetId: sheet.sheetId,
+      chartId: chart.id,
+      exportOptions: {
+        format: 'png',
+        width: 320,
+        height: 180,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+      },
+    });
+    expect(resolvedSpec.chartId).toBe(chart.id);
+    expect(resolvedSpec.export.physicalWidth).toBe(640);
+    expect(resolvedSpec.resolved.chartType).toBe('bar');
+    expect(resolvedSpec.resolved.series[0]?.values).toEqual([12, 28, 19, 35]);
   });
 
   it('rejects unsupported SVG export explicitly', async () => {

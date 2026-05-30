@@ -33,6 +33,7 @@ export type {
   FormulaReferenceEdgeDiagnosticRow,
   FormulaReferenceLocation,
   FormulaReferenceParseDiagnosticRow,
+  ResolvedChartSpecDiagnosticsOptions,
   WorkbookDiagnostics,
 } from './workbook/diagnostics';
 export type {

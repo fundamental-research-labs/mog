@@ -748,6 +748,148 @@ export interface ImageExportOptions {
   fittingMode?: ImageFittingMode;
 }
 
+export interface ChartExportOptionsSnapshot {
+  format: 'png' | 'jpeg';
+  width: number;
+  height: number;
+  pixelRatio: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  backgroundColor: string;
+  quality?: number;
+}
+
+export interface ChartRangeReferenceSnapshot {
+  kind: string;
+  source: 'identity' | 'a1';
+  ref?: string;
+  range: {
+    sheetId?: string;
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+  };
+}
+
+export interface ChartRangeDiagnosticSnapshot {
+  kind: string;
+  code: string;
+  ref?: string;
+  sheetName?: string;
+  message: string;
+}
+
+export interface ResolvedChartAxisSnapshot {
+  present: boolean;
+  visible?: boolean;
+  title?: string;
+  axisType?: string;
+  scaleType?: string;
+  categoryType?: string;
+  min?: number;
+  max?: number;
+  majorUnit?: number;
+  minorUnit?: number;
+  logBase?: number;
+  numberFormat?: string;
+  position?: string;
+  reverse?: boolean;
+}
+
+export interface ResolvedChartLegendSnapshot {
+  present: boolean;
+  visible?: boolean;
+  position?: string;
+  entries: string[];
+  visibleEntries: string[];
+}
+
+export interface ResolvedChartSeriesSnapshot {
+  index: number;
+  order: number;
+  name: string;
+  type?: string;
+  axisGroup: 'primary' | 'secondary';
+  color?: string;
+  source: {
+    values?: string;
+    categories?: string;
+    bubbleSize?: string;
+  };
+  categories: Array<string | number | null>;
+  values: Array<number | null>;
+  blankMask: boolean[];
+  dataHash: string;
+}
+
+export interface ResolvedChartSpecSnapshot {
+  schemaVersion: 1;
+  chartId: string;
+  sheetId: string;
+  chartObject: {
+    id: string;
+    name?: string;
+    anchorRow?: number;
+    anchorCol?: number;
+    width?: number;
+    height?: number;
+    widthPt?: number;
+    heightPt?: number;
+  };
+  export: ChartExportOptionsSnapshot;
+  implementation: {
+    renderAuthority: 'chartBridge';
+    renderStatus: 'renderable';
+    compilerPathId: 'ts-grammar' | 'wasm-transforms+ts-grammar';
+    compilerInputHash: string;
+    compilerVersion: 1;
+  };
+  resolved: {
+    chartType: string;
+    subType?: string;
+    grouping?: 'clustered' | 'stacked' | 'percentStacked';
+    title: {
+      present: boolean;
+      text?: string;
+    };
+    legend: ResolvedChartLegendSnapshot;
+    axes: {
+      category?: ResolvedChartAxisSnapshot;
+      value?: ResolvedChartAxisSnapshot;
+      secondaryCategory?: ResolvedChartAxisSnapshot;
+      secondaryValue?: ResolvedChartAxisSnapshot;
+    };
+    series: ResolvedChartSeriesSnapshot[];
+    categories: Array<string | number | null>;
+    plot: {
+      displayBlanksAs?: 'gap' | 'zero' | 'span';
+      plotVisibleOnly?: boolean;
+      gapWidth?: number;
+      overlap?: number;
+    };
+    ranges: {
+      dataRange: ChartRangeReferenceSnapshot | null;
+      categoryRange: ChartRangeReferenceSnapshot | null;
+      seriesRange: ChartRangeReferenceSnapshot | null;
+      seriesReferences: Array<{
+        index: number;
+        values: ChartRangeReferenceSnapshot | null;
+        categories: ChartRangeReferenceSnapshot | null;
+      }>;
+      diagnostics: ChartRangeDiagnosticSnapshot[];
+    };
+    dataHashes: {
+      categoriesHash: string;
+      seriesHash: string;
+    };
+  };
+  diagnostics: {
+    compiler: string[];
+    unsupportedFeatures: string[];
+  };
+}
+
 /** Dimension identifiers for series data access. */
 export type ChartSeriesDimension = 'categories' | 'values' | 'bubbleSizes';
 

@@ -792,6 +792,67 @@ describe('getMarks listener-fire on real cache commits', () => {
   });
 });
 
+describe('resolveChartData imported visibility semantics', () => {
+  it('omits explicit imported series whose source value row is hidden when plotVisibleOnly is true', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'column',
+      dataRange: '',
+      plotVisibleOnly: true,
+      series: [
+        {
+          name: 'Visible',
+          values: 'Sheet1!A1:C1',
+          categories: 'Sheet1!A10:C10',
+          idx: 0,
+        },
+        {
+          name: 'Hidden',
+          values: 'Sheet1!A2:C2',
+          categories: 'Sheet1!A10:C10',
+          idx: 1,
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => [1]),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20, 30][col]
+            : row === 1
+              ? [100, 200, 300][col]
+              : row === 9
+                ? ['FY19', 'FY20', 'FY21'][col]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const result = await bridge.resolveChartData(SHEET_A, CHART_1);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).toEqual([
+      { category: 'FY19', value: 10, series: 'Visible' },
+      { category: 'FY20', value: 20, series: 'Visible' },
+      { category: 'FY21', value: 30, series: 'Visible' },
+    ]);
+  });
+});
+
 describe('getLayout sheet-scoped cache contract', () => {
   it('same imported chartId returns the layout for the requested sheet only', async () => {
     const { ctx, eventBus } = createTestCtx();

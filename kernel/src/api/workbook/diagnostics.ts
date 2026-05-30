@@ -2,8 +2,15 @@ import type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,
+  ResolvedChartSpecDiagnosticsOptions,
   WorkbookDiagnostics,
 } from '@mog-sdk/contracts/api';
+import { normalizeImageExportOptions } from '@mog/charts/export';
+import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import type {
+  ChartExportOptionsSnapshot,
+  ResolvedChartSpecSnapshot,
+} from '@mog-sdk/contracts/data/charts';
 
 import type { DocumentContext } from '../../context';
 import type {
@@ -11,6 +18,7 @@ import type {
   FormulaReferenceDiagnosticsOptions as BridgeFormulaReferenceDiagnosticsOptions,
   ExternalLinkStatusSnapshot,
 } from '../../bridges/compute/compute-types.gen';
+import { chartNotFound, operationFailed } from '../../errors/api';
 
 export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   constructor(private readonly ctx: DocumentContext) {}
@@ -33,6 +41,26 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
       nextCursor: page.nextCursor,
       snapshotVersion: page.snapshotVersion,
     };
+  }
+
+  async getResolvedChartSpec(
+    options: ResolvedChartSpecDiagnosticsOptions,
+  ): Promise<ResolvedChartSpecSnapshot> {
+    const normalized = normalizeImageExportOptions(options.exportOptions);
+    const snapshot = await this.ctx.charts.getRenderSnapshotAtSize(
+      toSheetId(options.sheetId),
+      options.chartId,
+      normalized.width,
+      normalized.height,
+      exportOptionsSnapshot(normalized),
+    );
+
+    if ('code' in snapshot) {
+      if (snapshot.code === 'CHART_NOT_FOUND') throw chartNotFound(options.chartId);
+      throw operationFailed('getResolvedChartSpec', snapshot.message);
+    }
+
+    return snapshot.resolvedChartSpec;
   }
 
   private externalLinkSnapshot(): ExternalLinkStatusSnapshot {
@@ -58,4 +86,19 @@ function projectDiagnostic(
   diagnostic: BridgeFormulaReferenceDiagnostic,
 ): FormulaReferenceDiagnostic {
   return diagnostic as unknown as FormulaReferenceDiagnostic;
+}
+
+function exportOptionsSnapshot(
+  normalized: ReturnType<typeof normalizeImageExportOptions>,
+): ChartExportOptionsSnapshot {
+  return {
+    format: normalized.format,
+    width: normalized.width,
+    height: normalized.height,
+    pixelRatio: normalized.pixelRatio,
+    physicalWidth: normalized.physicalWidth,
+    physicalHeight: normalized.physicalHeight,
+    backgroundColor: normalized.backgroundColor,
+    quality: normalized.quality,
+  };
 }

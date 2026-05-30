@@ -16,7 +16,7 @@
  * Pure functions - no side effects.
  */
 
-import type { AnyMark } from '../primitives/types';
+import type { AnyMark, RectMark } from '../primitives/types';
 import { createScales, resolveEncodings } from './encoding-resolver';
 import { calculateLayout } from './layout';
 import { isLayerSpec, type ChartSpec, type DataRow, type MarkSpec, type MarkType } from './spec';
@@ -116,11 +116,13 @@ export function compile(
 
   // Generate title
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
+  const background = generateBackground(spec.config?.background, layout.width, layout.height);
 
   // Dev-mode assertion: all data marks must carry their source datum
   assertDataMarksHaveDatum(marks);
 
   return {
+    background,
     marks,
     axes,
     legends,
@@ -134,6 +136,24 @@ export function compile(
     layout,
     scales,
   };
+}
+
+function generateBackground(
+  fill: string | undefined,
+  width: number,
+  height: number,
+): AnyMark[] | undefined {
+  if (!fill) return undefined;
+  return [
+    {
+      type: 'rect',
+      x: 0,
+      y: 0,
+      width,
+      height,
+      style: { fill },
+    } as RectMark,
+  ];
 }
 
 // =============================================================================

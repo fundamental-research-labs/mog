@@ -32,6 +32,8 @@ import {
   renderMark,
   type CellDataAccessor,
   type ChartData,
+  type ChartDataPoint,
+  type ChartDataSeries,
   type ChartSpec,
   type CompileResult,
   type DataRow,
@@ -44,10 +46,17 @@ import type {
   ChartLayoutRect,
   ChartLayoutSnapshot,
   ChartMark,
+  ChartRenderSnapshot,
   IChartBridge,
 } from '@mog-sdk/contracts/bridges';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { AxisType, ChartConfig, ChartType } from '@mog-sdk/contracts/data/charts';
+import type {
+  AxisType,
+  ChartConfig,
+  ChartExportOptionsSnapshot,
+  ChartType,
+  ResolvedChartSpecSnapshot,
+} from '@mog-sdk/contracts/data/charts';
 import type {
   CellChangedEvent,
   CellsBatchChangedEvent,
@@ -139,6 +148,16 @@ type ImportedChartRenderStatus = {
   raw: unknown;
 };
 
+type HiddenCellVisibility = {
+  hiddenRowsBySheet: Map<string, Set<number>>;
+  hiddenColsBySheet: Map<string, Set<number>>;
+};
+
+type HiddenDimensionBridge = {
+  getHiddenRows?: (sheetId: SheetId) => Promise<number[]>;
+  getHiddenColumns?: (sheetId: SheetId) => Promise<number[]>;
+};
+
 /**
  * Returns true if changedFields contains only position/layout fields.
  * Returns false for empty or undefined fields (safe default: invalidate on unknown changes).
@@ -224,6 +243,29 @@ function importStatusToTerminalRenderStatus(status: unknown): ImportedChartRende
   return { terminal: true, message, raw: status };
 }
 
+function isCellHidden(
+  sheetId: string | undefined,
+  row: number,
+  col: number,
+  visibility: HiddenCellVisibility | undefined,
+): boolean {
+  if (!sheetId || !visibility) return false;
+  const key = String(sheetId);
+  return (
+    (visibility.hiddenRowsBySheet.get(key)?.has(row) ?? false) ||
+    (visibility.hiddenColsBySheet.get(key)?.has(col) ?? false)
+  );
+}
+
+function isRangeFullyHidden(range: CellRange, visibility: HiddenCellVisibility): boolean {
+  for (let row = range.startRow; row <= range.endRow; row++) {
+    for (let col = range.startCol; col <= range.endCol; col++) {
+      if (!isCellHidden(range.sheetId, row, col, visibility)) return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Convert a ChartFloatingObject to a ChartConfig for passing to the charts library.
  * Provides defaults for required fields that are optional in the gen type.
@@ -279,6 +321,265 @@ function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     subType: normalizedChart.subType as ChartConfig['subType'],
     extra: normalizedChart.ooxml,
   };
+}
+
+type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
+type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
+type RangeSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']
+>;
+
+function defaultExportOptionsForSize(width: number, height: number): ChartExportOptionsSnapshot {
+  return {
+    format: 'png',
+    width,
+    height,
+    pixelRatio: 1,
+    physicalWidth: Math.max(1, Math.round(width)),
+    physicalHeight: Math.max(1, Math.round(height)),
+    backgroundColor: '#ffffff',
+  };
+}
+
+function buildResolvedChartSpecSnapshot(input: {
+  chart: ChartFloatingObject;
+  sheetId: SheetId;
+  config: ChartConfig;
+  chartData: ChartData;
+  resolvedRanges: Charts.ResolvedChartRangeReferences;
+  exportOptions: ChartExportOptionsSnapshot;
+  compilerPathId: CompilerPathId;
+  compilerInputHash: string;
+}): ResolvedChartSpecSnapshot {
+  const categories = input.chartData.categories.map(snapshotScalar);
+  const series = input.chartData.series.map((dataSeries, index) =>
+    snapshotSeries(dataSeries, index, categories, input.config),
+  );
+  const legend = snapshotLegend(input.config, series.map((item) => item.name));
+
+  return {
+    schemaVersion: 1,
+    chartId: input.chart.id,
+    sheetId: String(input.sheetId),
+    chartObject: {
+      id: input.chart.id,
+      name: input.chart.name,
+      anchorRow: input.chart.anchor?.anchorRow,
+      anchorCol: input.chart.anchor?.anchorCol,
+      width: input.chart.widthCells ?? input.chart.width,
+      height: input.chart.heightCells ?? input.chart.height,
+      widthPt: input.chart.widthPt,
+      heightPt: input.chart.heightPt,
+    },
+    export: input.exportOptions,
+    implementation: {
+      renderAuthority: 'chartBridge',
+      renderStatus: 'renderable',
+      compilerPathId: input.compilerPathId,
+      compilerInputHash: input.compilerInputHash,
+      compilerVersion: 1,
+    },
+    resolved: {
+      chartType: input.config.type,
+      subType: input.config.subType,
+      grouping: groupingFor(input.config),
+      title: {
+        present: titleText(input.config) !== undefined,
+        text: titleText(input.config),
+      },
+      legend,
+      axes: {
+        category: snapshotAxis(input.config.axis?.categoryAxis ?? input.config.axis?.xAxis),
+        value: snapshotAxis(input.config.axis?.valueAxis ?? input.config.axis?.yAxis),
+        secondaryCategory: snapshotAxis(input.config.axis?.secondaryCategoryAxis),
+        secondaryValue: snapshotAxis(
+          input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis,
+        ),
+      },
+      series,
+      categories,
+      plot: {
+        displayBlanksAs: input.config.displayBlanksAs,
+        plotVisibleOnly: input.config.plotVisibleOnly,
+        gapWidth: input.config.gapWidth,
+        overlap: input.config.overlap,
+      },
+      ranges: {
+        dataRange: snapshotRange(input.resolvedRanges.dataRange),
+        categoryRange: snapshotRange(input.resolvedRanges.categoryRange),
+        seriesRange: snapshotRange(input.resolvedRanges.seriesRange),
+        seriesReferences: input.resolvedRanges.seriesReferences.map((seriesReference) => ({
+          index: seriesReference.index,
+          values: snapshotRange(seriesReference.values),
+          categories: snapshotRange(seriesReference.categories),
+        })),
+        diagnostics: input.resolvedRanges.diagnostics.map((diagnostic) => ({
+          kind: diagnostic.kind,
+          code: diagnostic.code,
+          ref: diagnostic.ref,
+          sheetName: diagnostic.sheetName,
+          message: diagnostic.message,
+        })),
+      },
+      dataHashes: {
+        categoriesHash: hashJson(categories),
+        seriesHash: hashJson(series),
+      },
+    },
+    diagnostics: {
+      compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
+      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config),
+    },
+  };
+}
+
+function snapshotAxis(axis: NonNullable<ChartConfig['axis']>['categoryAxis']): AxisSnapshot | undefined {
+  if (!axis) return undefined;
+  return {
+    present: true,
+    visible: axis.visible ?? axis.show,
+    title: axis.title,
+    axisType: axis.axisType ?? axis.type,
+    scaleType: axis.scaleType,
+    categoryType: axis.categoryType,
+    min: axis.min,
+    max: axis.max,
+    majorUnit: axis.majorUnit,
+    minorUnit: axis.minorUnit,
+    logBase: axis.logBase,
+    numberFormat: axis.numberFormat,
+    position: axis.position,
+    reverse: axis.reverse,
+  };
+}
+
+function snapshotLegend(
+  config: ChartConfig,
+  seriesNames: string[],
+): ResolvedChartSpecSnapshot['resolved']['legend'] {
+  const legend = config.legend;
+  const present = !!legend && legend.position !== 'none';
+  const deletedEntries = new Set(
+    legend?.entries?.filter((entry) => entry.delete || entry.visible === false).map((entry) => entry.idx) ?? [],
+  );
+  return {
+    present,
+    visible: present ? (legend?.visible ?? legend?.show ?? true) : false,
+    position: legend?.position,
+    entries: seriesNames,
+    visibleEntries: seriesNames.filter((_name, index) => !deletedEntries.has(index)),
+  };
+}
+
+function snapshotSeries(
+  series: ChartDataSeries,
+  index: number,
+  categories: Array<string | number | null>,
+  config: ChartConfig,
+): ResolvedChartSpecSnapshot['resolved']['series'][number] {
+  const configured = config.series?.[index];
+  const values: Array<number | null> = [];
+  const blankMask: boolean[] = [];
+  const length = Math.max(categories.length, series.data.length);
+  for (let pointIndex = 0; pointIndex < length; pointIndex += 1) {
+    const value = numericPointValue(series.data[pointIndex]);
+    values.push(value);
+    blankMask.push(value === null);
+  }
+  const source = {
+    values: configured?.values,
+    categories: configured?.categories,
+    bubbleSize: configured?.bubbleSize,
+  };
+
+  return {
+    index,
+    order: configured?.order ?? configured?.idx ?? index,
+    name: series.name,
+    type: series.type ?? configured?.type,
+    axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
+    color: series.color ?? configured?.color ?? config.colors?.[index],
+    source,
+    categories,
+    values,
+    blankMask,
+    dataHash: hashJson({ name: series.name, source, categories, values, blankMask }),
+  };
+}
+
+function snapshotRange(
+  reference: Charts.ResolvedChartRangeReference | null,
+): RangeSnapshot | null {
+  if (!reference) return null;
+  return {
+    kind: reference.kind,
+    source: reference.source,
+    ref: reference.ref,
+    range: {
+      sheetId: reference.range.sheetId ? String(reference.range.sheetId) : undefined,
+      startRow: reference.range.startRow,
+      startCol: reference.range.startCol,
+      endRow: reference.range.endRow,
+      endCol: reference.range.endCol,
+    },
+  };
+}
+
+function titleText(config: ChartConfig): string | undefined {
+  const text = config.title ?? config.chartTitle?.text ?? config.titleRichText?.map((part) => part.text).join('');
+  return text || undefined;
+}
+
+function groupingFor(config: ChartConfig): ResolvedChartSpecSnapshot['resolved']['grouping'] {
+  if (config.subType === 'stacked') return 'stacked';
+  if (config.subType === 'percentStacked') return 'percentStacked';
+  if (config.subType === 'clustered') return 'clustered';
+  return undefined;
+}
+
+function numericPointValue(point: ChartDataPoint | undefined): number | null {
+  if (!point || typeof point.y !== 'number' || !Number.isFinite(point.y)) return null;
+  return point.y;
+}
+
+function snapshotScalar(value: string | number | null | undefined): string | number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') return value;
+  return null;
+}
+
+function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
+  const unsupported: string[] = [];
+  if (String(config.type).endsWith('3d')) unsupported.push('3d chart rendering is approximated by the 2d chart backend');
+  if (config.type === 'surface' || config.type === 'surface3d') unsupported.push('surface chart rendering is not fully semantic');
+  if (config.wireframe) unsupported.push('surface wireframe rendering is not fully semantic');
+  if (config.pivotOptions || config.showAllFieldButtons) unsupported.push('pivot chart field buttons are not rendered');
+  return unsupported;
+}
+
+function hashJson(value: unknown): string {
+  const text = stableStringify(value);
+  let hashA = 0x811c9dc5;
+  let hashB = 0x811c9dc5 ^ text.length;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    hashA = Math.imul(hashA ^ code, 0x01000193);
+    hashB = Math.imul(hashB ^ code, 0x01000193);
+  }
+  return `${(hashA >>> 0).toString(16).padStart(8, '0')}${(hashB >>> 0)
+    .toString(16)
+    .padStart(8, '0')}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .filter((key) => record[key] !== undefined)
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
 }
 
 // =============================================================================
@@ -1127,6 +1428,7 @@ export class ChartBridge implements IChartBridge {
 
     // Flatten all marks into a single array
     const marks: ChartMark[] = [
+      ...(compileResult.background || []),
       ...(compileResult.title || []),
       ...compileResult.axes,
       ...compileResult.legends,
@@ -1258,7 +1560,34 @@ export class ChartBridge implements IChartBridge {
     width: number,
     height: number,
   ): Promise<ChartMark[] | ChartError> {
-    // Get chart spec
+    const snapshot = await this.compileChartRenderSnapshotAtSize(
+      sheetId,
+      chartId,
+      width,
+      height,
+      defaultExportOptionsForSize(width, height),
+    );
+    if ('code' in snapshot) return snapshot;
+    return snapshot.marks;
+  }
+
+  async getRenderSnapshotAtSize(
+    sheetId: SheetId,
+    chartId: string,
+    width: number,
+    height: number,
+    exportOptions: ChartExportOptionsSnapshot,
+  ): Promise<ChartRenderSnapshot | ChartError> {
+    return this.compileChartRenderSnapshotAtSize(sheetId, chartId, width, height, exportOptions);
+  }
+
+  private async compileChartRenderSnapshotAtSize(
+    sheetId: SheetId,
+    chartId: string,
+    width: number,
+    height: number,
+    exportOptions: ChartExportOptionsSnapshot,
+  ): Promise<ChartRenderSnapshot | ChartError> {
     const chart = await Charts.get(this.ctx, sheetId, chartId);
     if (!chart) {
       return {
@@ -1287,36 +1616,52 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    // Convert to ChartSpec (uses the chart's original dimensions internally)
-    const spec = this.chartToSpec(chart, chartData);
+    const config = toChartConfig(chart);
+    const spec = configToSpec(config, chartData);
 
     // Try WASM-accelerated transforms if available
     const specDataValues =
       spec.data && 'values' in spec.data ? (spec.data.values as DataRow[]) : [];
     const wasmData = spec.transform ? tryWasmTransforms(specDataValues, spec.transform) : null;
+    const compilerPathId = wasmData ? 'wasm-transforms+ts-grammar' : 'ts-grammar';
+    const compileInput = wasmData
+      ? { ...spec, transform: undefined, data: { values: wasmData } }
+      : spec;
 
     // Compile at the target dimensions (override via CompileOptions)
-    let compileResult;
-    if (wasmData) {
-      compileResult = compile(
-        { ...spec, transform: undefined, data: { values: wasmData } },
-        undefined,
-        { width, height },
-      );
-    } else {
-      compileResult = compile(spec, undefined, { width, height });
-    }
+    const compileResult = compile(compileInput, undefined, { width, height });
 
     // Flatten all marks into a single array (same as getMarks)
     const marks: ChartMark[] = [
+      ...(compileResult.background || []),
       ...(compileResult.title || []),
       ...compileResult.axes,
       ...compileResult.legends,
       ...compileResult.marks,
     ] as ChartMark[];
 
-    // Deliberately NOT updating markCache or clearing dirtyCharts
-    return marks;
+    return {
+      marks,
+      resolvedChartSpec: buildResolvedChartSpecSnapshot({
+        chart,
+        sheetId,
+        config,
+        chartData,
+        resolvedRanges,
+        exportOptions,
+        compilerPathId,
+        compilerInputHash: hashJson({
+          chartId,
+          sheetId,
+          config,
+          chartData,
+          resolvedRanges,
+          compileInput,
+          width,
+          height,
+        }),
+      }),
+    };
   }
 
   /**
@@ -1328,6 +1673,7 @@ export class ChartBridge implements IChartBridge {
     options?: {
       defaultSheetId?: SheetId;
       sheetAliases?: Map<string, string>;
+      hiddenVisibility?: HiddenCellVisibility;
     },
   ): Promise<CellDataAccessor> {
     const valueMap = new Map<string, ReturnType<CellDataAccessor['getValue']>>();
@@ -1340,6 +1686,11 @@ export class ChartBridge implements IChartBridge {
           const key = `${range.sheetId},${row},${col}`;
           if (seen.has(key)) continue;
           seen.add(key);
+
+          if (isCellHidden(range.sheetId, row, col, options?.hiddenVisibility)) {
+            valueMap.set(key, null);
+            continue;
+          }
 
           const value = await getValue(this.ctx, toSheetId(range.sheetId), row, col);
           // CellError values are converted to null for chart data extraction.
@@ -1360,6 +1711,7 @@ export class ChartBridge implements IChartBridge {
           ? (options?.sheetAliases?.get(sheetId) ?? sheetId)
           : options?.defaultSheetId;
         if (!resolvedSheetId) return null;
+        if (isCellHidden(resolvedSheetId, row, col, options?.hiddenVisibility)) return null;
         return valueMap.get(`${resolvedSheetId},${row},${col}`) ?? null;
       },
     };
@@ -1378,6 +1730,12 @@ export class ChartBridge implements IChartBridge {
         series.values?.range,
         series.categories?.range,
       ]);
+      const hiddenVisibility = config.plotVisibleOnly
+        ? await this.loadHiddenVisibility(seriesRanges)
+        : undefined;
+      const renderConfig = hiddenVisibility
+        ? this.withHiddenSeriesFiltered(config, resolvedRanges, hiddenVisibility)
+        : config;
       const valueRanges = resolvedRanges.seriesReferences
         .map((series) => series.values?.range)
         .filter(Boolean);
@@ -1395,8 +1753,9 @@ export class ChartBridge implements IChartBridge {
       const accessor = await this.createCellAccessor(seriesRanges, {
         defaultSheetId: chart.sheetId ? toSheetId(chart.sheetId) : undefined,
         sheetAliases: this.seriesSheetAliases(resolvedRanges),
+        hiddenVisibility,
       });
-      return extractChartData(accessor, config);
+      return extractChartData(accessor, renderConfig);
     }
 
     const dataRange = resolvedRanges.dataRange?.range;
@@ -1408,16 +1767,62 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const cellAccessor = await this.createCellAccessor([
+    const dataRanges = [
       dataRange,
       resolvedRanges.categoryRange?.range,
       resolvedRanges.seriesRange?.range,
-    ]);
+    ];
+    const hiddenVisibility = config.plotVisibleOnly
+      ? await this.loadHiddenVisibility(dataRanges)
+      : undefined;
+    const cellAccessor = await this.createCellAccessor(dataRanges, { hiddenVisibility });
     return extractChartDataFromRange(cellAccessor, dataRange, {
       categoryRange: resolvedRanges.categoryRange?.range,
       seriesRange: resolvedRanges.seriesRange?.range,
       seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
     });
+  }
+
+  private async loadHiddenVisibility(
+    ranges: Array<CellRange | null | undefined>,
+  ): Promise<HiddenCellVisibility | undefined> {
+    const sheetIds = new Set<string>();
+    for (const range of ranges) {
+      if (range?.sheetId) sheetIds.add(String(range.sheetId));
+    }
+    if (sheetIds.size === 0) return undefined;
+
+    const bridge = this.ctx.computeBridge as HiddenDimensionBridge | undefined;
+    if (!bridge?.getHiddenRows && !bridge?.getHiddenColumns) return undefined;
+
+    const hiddenRowsBySheet = new Map<string, Set<number>>();
+    const hiddenColsBySheet = new Map<string, Set<number>>();
+    await Promise.all(
+      [...sheetIds].map(async (id) => {
+        const sheet = toSheetId(id);
+        const [rows, cols] = await Promise.all([
+          bridge.getHiddenRows?.(sheet) ?? Promise.resolve([]),
+          bridge.getHiddenColumns?.(sheet) ?? Promise.resolve([]),
+        ]);
+        hiddenRowsBySheet.set(id, new Set(rows));
+        hiddenColsBySheet.set(id, new Set(cols));
+      }),
+    );
+
+    return { hiddenRowsBySheet, hiddenColsBySheet };
+  }
+
+  private withHiddenSeriesFiltered(
+    config: ChartConfig,
+    resolvedRanges: Charts.ResolvedChartRangeReferences,
+    hiddenVisibility: HiddenCellVisibility,
+  ): ChartConfig {
+    if (!config.series?.length) return config;
+    const series = config.series.filter((_, index) => {
+      const valuesRange = resolvedRanges.seriesReferences[index]?.values?.range;
+      return !valuesRange || !isRangeFullyHidden(valuesRange, hiddenVisibility);
+    });
+    return series.length === config.series.length ? config : { ...config, series };
   }
 
   private seriesSheetAliases(

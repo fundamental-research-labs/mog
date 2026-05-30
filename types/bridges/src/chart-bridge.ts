@@ -14,6 +14,10 @@
  */
 
 import type { CellRange, SheetId } from '@mog/types-core';
+import type {
+  ChartExportOptionsSnapshot,
+  ResolvedChartSpecSnapshot,
+} from '@mog/types-data/data/charts';
 
 // =============================================================================
 // Types
@@ -97,6 +101,11 @@ export interface ChartBounds {
   y: number;
   width: number;
   height: number;
+}
+
+export interface ChartRenderSnapshot {
+  marks: ChartMark[];
+  resolvedChartSpec: ResolvedChartSpecSnapshot;
 }
 
 // =============================================================================
@@ -254,6 +263,20 @@ export interface IChartBridge {
     width: number,
     height: number,
   ): Promise<ChartMark[] | ChartError>;
+
+  /**
+   * Compile marks and capture the resolved chart spec used by diagnostics.
+   * Image exporters should keep using getMarksAtSize when they need pixels
+   * only; workbook diagnostics call this sibling to persist the semantic
+   * snapshot from the same production compile path.
+   */
+  getRenderSnapshotAtSize(
+    sheetId: SheetId,
+    chartId: string,
+    width: number,
+    height: number,
+    exportOptions: ChartExportOptionsSnapshot,
+  ): Promise<ChartRenderSnapshot | ChartError>;
 
   // ===========================================================================
   // Rendering

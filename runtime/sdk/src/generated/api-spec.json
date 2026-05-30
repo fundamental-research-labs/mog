@@ -1927,6 +1927,14 @@
             "FormulaReferenceDiagnosticsOptions",
             "FormulaReferenceDiagnosticsPage"
           ]
+        },
+        "getResolvedChartSpec": {
+          "signature": "getResolvedChartSpec(\n    options: ResolvedChartSpecDiagnosticsOptions,\n  ): Promise<ResolvedChartSpecSnapshot>;",
+          "docstring": "Resolve the chart spec and data that the production chart renderer uses at\na given export size. This is a diagnostics surface; image export remains\n`worksheet.charts.exportImage()`.",
+          "usedTypes": [
+            "ResolvedChartSpecDiagnosticsOptions",
+            "ResolvedChartSpecSnapshot"
+          ]
         }
       }
     },
@@ -6115,6 +6123,11 @@
       "definition": "{\n  type: ChartType;\n  /** Chart sub-type. For type-safe usage, prefer TypedChartConfig<T> which constrains subType to match type. */\n  subType?: BarSubType | LineSubType | AreaSubType | StockSubType | RadarSubType;\n  /** Anchor row (0-based) */\n  anchorRow: number;\n  /** Anchor column (0-based) */\n  anchorCol: number;\n  /** Chart width in cells */\n  width: number;\n  /** Chart height in cells */\n  height: number;\n  /** Data range in A1 notation (e.g., \"A1:D10\"). Optional when series[].values are provided. */\n  dataRange?: string;\n  /** Series labels range in A1 notation */\n  seriesRange?: string;\n  /** Category labels range in A1 notation */\n  categoryRange?: string;\n  seriesOrientation?: SeriesOrientation;\n  title?: string | null;\n  subtitle?: string;\n  legend?: LegendConfig;\n  axis?: AxisConfig;\n  colors?: string[];\n  series?: SeriesConfig[];\n  dataLabels?: DataLabelConfig;\n  pieSlice?: PieSliceConfig;\n  /** @deprecated Use trendlines[] instead — kept for backward compat */\n  trendline?: TrendlineConfig;\n  /** Wire-compatible trendline array */\n  trendlines?: TrendlineConfig[];\n  /** Connect scatter points with lines (scatter-lines variant) */\n  showLines?: boolean;\n  /** Use smooth curves for scatter lines (scatter-smooth-lines variant) */\n  smoothLines?: boolean;\n  /** Fill area under radar lines */\n  radarFilled?: boolean;\n  /** Show markers on radar vertices */\n  radarMarkers?: boolean;\n  /** How blank cells are plotted: 'gap' (leave gap), 'zero' (treat as zero), 'span' (interpolate) */\n  displayBlanksAs?: 'gap' | 'zero' | 'span';\n  /** Whether to plot only visible cells (respecting row/column hiding) */\n  plotVisibleOnly?: boolean;\n  /** Gap width between bars/columns as percentage (0-500). Applied to bar/column chart types. */\n  gapWidth?: number;\n  /** Overlap between bars/columns (-100 to 100). Applied to clustered bar/column types. */\n  overlap?: number;\n  /** Hole size for doughnut charts as percentage (10-90) */\n  doughnutHoleSize?: number;\n  /** First slice angle for pie/doughnut charts in degrees (0-360) */\n  firstSliceAngle?: number;\n  /** Bubble scale for bubble charts as percentage (0-300) */\n  bubbleScale?: number;\n  /** Split type for of-pie charts (pie-of-pie, bar-of-pie) */\n  splitType?: 'auto' | 'value' | 'percent' | 'position' | 'custom';\n  /** Split value threshold for of-pie charts */\n  splitValue?: number;\n  waterfall?: WaterfallConfig;\n  histogram?: HistogramConfig;\n  boxplot?: BoxplotConfig;\n  heatmap?: HeatmapConfig;\n  violin?: ViolinConfig;\n  treemap?: TreemapConfig;\n  sunburst?: SunburstConfig;\n  regionMap?: RegionMapConfig;\n  name?: string;\n  chartTitle?: TitleConfig;\n  chartArea?: ChartAreaConfig;\n  plotArea?: PlotAreaConfig;\n  style?: number;\n  roundedCorners?: boolean;\n  autoTitleDeleted?: boolean;\n  showDataLabelsOverMaximum?: boolean;\n  chartFormat?: ChartFormat;\n  plotFormat?: ChartFormat;\n  titleFormat?: ChartFormat;\n  titleRichText?: ChartFormatString[];\n  titleFormula?: string;\n  dataTable?: DataTableConfig;\n  /** Which level of multi-level category labels to show (0-based). */\n  categoryLabelLevel?: number;\n  /** Which level of multi-level series names to show (0-based). */\n  seriesNameLevel?: number;\n  /** Show/hide all pivot field buttons on the chart. */\n  showAllFieldButtons?: boolean;\n  /** Size of the secondary plot for PieOfPie/BarOfPie charts (5-200%). OOXML c:secondPieSize. */\n  secondPlotSize?: number;\n  /** Use different colors per category. OOXML c:varyColors (chart-group level). */\n  varyByCategories?: boolean;\n  /** Pivot chart display options. */\n  pivotOptions?: PivotChartOptions;\n  /** Z-order command for layering charts.\nAccepted as a convenience field by ws.charts.update() to adjust z-index:\n- 'front': bring to top of stack\n- 'back': send to bottom of stack\n- 'forward': move one layer up\n- 'backward': move one layer down */\n  zOrder?: 'front' | 'back' | 'forward' | 'backward';\n  /** Mark shape for 3D bar/column charts (default: 'box'). Maps to OOXML c:shape. */\n  barShape?: 'box' | 'cylinder' | 'cone' | 'pyramid';\n  /** Extensible extra data for enriched chart configurations.\nContains additional chart-specific settings (e.g., chartTitle font, chartArea fill)\nthat are stored on the chart but not part of the core config schema. */\n  extra?: unknown;\n  /** Chart height in points */\n  heightPt?: number;\n  /** Chart width in points */\n  widthPt?: number;\n  /** Left offset in points */\n  leftPt?: number;\n  /** Top offset in points */\n  topPt?: number;\n  /** Enable 3D bubble effect for bubble charts */\n  bubble3DEffect?: boolean;\n  /** Render surface chart as wireframe */\n  wireframe?: boolean;\n  /** Use surface chart top-down view (contour) */\n  surfaceTopView?: boolean;\n  /** Chart color scheme index */\n  colorScheme?: number;\n}",
       "docstring": "Public chart configuration -- the shape used by the unified API surface.\n\nThis contains all user-facing fields for creating/updating charts.\nInternal-only fields (CellId anchors, zIndex, table linking cache)\nare defined in StoredChartConfig in the charts package."
     },
+    "ChartExportOptionsSnapshot": {
+      "name": "ChartExportOptionsSnapshot",
+      "definition": "{\n  format: 'png' | 'jpeg';\n  width: number;\n  height: number;\n  pixelRatio: number;\n  physicalWidth: number;\n  physicalHeight: number;\n  backgroundColor: string;\n  quality?: number;\n}",
+      "docstring": ""
+    },
     "ChartFill": {
       "name": "ChartFill",
       "definition": "| { type: 'none' }\n  | { type: 'solid'; color: ChartColor; transparency?: number }\n  | {\n      type: 'gradient';\n      gradientType: 'linear' | 'radial' | 'rectangular';\n      angle?: number;\n      stops: { position: number; color: ChartColor; transparency?: number }[];\n    }\n  | { type: 'pattern'; pattern: string; foreground?: ChartColor; background?: ChartColor }",
@@ -6154,6 +6167,16 @@
       "name": "ChartObjectType",
       "definition": "| 'bar'\n  | 'column'\n  | 'line'\n  | 'area'\n  | 'pie'\n  | 'doughnut'\n  | 'scatter'\n  | 'bubble'\n  | 'combo'\n  | 'radar'\n  | 'stock'\n  | 'funnel'\n  | 'waterfall'",
       "docstring": "Supported chart types for the ChartObject.\nMatches the ChartType from charts package but defined here for contracts."
+    },
+    "ChartRangeDiagnosticSnapshot": {
+      "name": "ChartRangeDiagnosticSnapshot",
+      "definition": "{\n  kind: string;\n  code: string;\n  ref?: string;\n  sheetName?: string;\n  message: string;\n}",
+      "docstring": ""
+    },
+    "ChartRangeReferenceSnapshot": {
+      "name": "ChartRangeReferenceSnapshot",
+      "definition": "{\n  kind: string;\n  source: 'identity' | 'a1';\n  ref?: string;\n  range: {\n    sheetId?: string;\n    startRow: number;\n    startCol: number;\n    endRow: number;\n    endCol: number;\n  };\n}",
+      "docstring": ""
     },
     "ChartSeriesDimension": {
       "name": "ChartSeriesDimension",
@@ -7725,6 +7748,31 @@
       "name": "ResolvedCellFormat",
       "definition": "{\n  [K in keyof CellFormat]-?: CellFormat[K] | null;\n}",
       "docstring": "Dense cell format where every property is explicitly present (null when unset). Returned by formats.get()."
+    },
+    "ResolvedChartAxisSnapshot": {
+      "name": "ResolvedChartAxisSnapshot",
+      "definition": "{\n  present: boolean;\n  visible?: boolean;\n  title?: string;\n  axisType?: string;\n  scaleType?: string;\n  categoryType?: string;\n  min?: number;\n  max?: number;\n  majorUnit?: number;\n  minorUnit?: number;\n  logBase?: number;\n  numberFormat?: string;\n  position?: string;\n  reverse?: boolean;\n}",
+      "docstring": ""
+    },
+    "ResolvedChartLegendSnapshot": {
+      "name": "ResolvedChartLegendSnapshot",
+      "definition": "{\n  present: boolean;\n  visible?: boolean;\n  position?: string;\n  entries: string[];\n  visibleEntries: string[];\n}",
+      "docstring": ""
+    },
+    "ResolvedChartSeriesSnapshot": {
+      "name": "ResolvedChartSeriesSnapshot",
+      "definition": "{\n  index: number;\n  order: number;\n  name: string;\n  type?: string;\n  axisGroup: 'primary' | 'secondary';\n  color?: string;\n  source: {\n    values?: string;\n    categories?: string;\n    bubbleSize?: string;\n  };\n  categories: Array<string | number | null>;\n  values: Array<number | null>;\n  blankMask: boolean[];\n  dataHash: string;\n}",
+      "docstring": ""
+    },
+    "ResolvedChartSpecDiagnosticsOptions": {
+      "name": "ResolvedChartSpecDiagnosticsOptions",
+      "definition": "{\n  sheetId: SheetId;\n  chartId: string;\n  exportOptions?: ImageExportOptions;\n}",
+      "docstring": ""
+    },
+    "ResolvedChartSpecSnapshot": {
+      "name": "ResolvedChartSpecSnapshot",
+      "definition": "{\n  schemaVersion: 1;\n  chartId: string;\n  sheetId: string;\n  chartObject: {\n    id: string;\n    name?: string;\n    anchorRow?: number;\n    anchorCol?: number;\n    width?: number;\n    height?: number;\n    widthPt?: number;\n    heightPt?: number;\n  };\n  export: ChartExportOptionsSnapshot;\n  implementation: {\n    renderAuthority: 'chartBridge';\n    renderStatus: 'renderable';\n    compilerPathId: 'ts-grammar' | 'wasm-transforms+ts-grammar';\n    compilerInputHash: string;\n    compilerVersion: 1;\n  };\n  resolved: {\n    chartType: string;\n    subType?: string;\n    grouping?: 'clustered' | 'stacked' | 'percentStacked';\n    title: {\n      present: boolean;\n      text?: string;\n    };\n    legend: ResolvedChartLegendSnapshot;\n    axes: {\n      category?: ResolvedChartAxisSnapshot;\n      value?: ResolvedChartAxisSnapshot;\n      secondaryCategory?: ResolvedChartAxisSnapshot;\n      secondaryValue?: ResolvedChartAxisSnapshot;\n    };\n    series: ResolvedChartSeriesSnapshot[];\n    categories: Array<string | number | null>;\n    plot: {\n      displayBlanksAs?: 'gap' | 'zero' | 'span';\n      plotVisibleOnly?: boolean;\n      gapWidth?: number;\n      overlap?: number;\n    };\n    ranges: {\n      dataRange: ChartRangeReferenceSnapshot | null;\n      categoryRange: ChartRangeReferenceSnapshot | null;\n      seriesRange: ChartRangeReferenceSnapshot | null;\n      seriesReferences: Array<{\n        index: number;\n        values: ChartRangeReferenceSnapshot | null;\n        categories: ChartRangeReferenceSnapshot | null;\n      }>;\n      diagnostics: ChartRangeDiagnosticSnapshot[];\n    };\n    dataHashes: {\n      categoriesHash: string;\n      seriesHash: string;\n    };\n  };\n  diagnostics: {\n    compiler: string[];\n    unsupportedFeatures: string[];\n  };\n}",
+      "docstring": ""
     },
     "RetargetWorkbookLinkInput": {
       "name": "RetargetWorkbookLinkInput",

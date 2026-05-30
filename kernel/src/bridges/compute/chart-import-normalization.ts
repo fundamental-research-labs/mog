@@ -12,6 +12,13 @@ function hasImportedComboGroups(chart: ImportNormalizableChart): boolean {
   return (chart.rt?.chartGroupsMeta?.length ?? 0) > 1;
 }
 
+function chartTypeForImportedGroups(groups: readonly ChartGroupMeta[]): string | null {
+  if (groups.length === 0) return null;
+  const chartTypes = groups.map((group) => group.chartType).filter(Boolean);
+  if (chartTypes.length === 0) return null;
+  return chartTypes.every((chartType) => chartType === chartTypes[0]) ? chartTypes[0] : 'combo';
+}
+
 function seriesTypeAssignments(
   groups: ChartGroupMeta[],
   series: readonly ChartSeriesData[],
@@ -52,9 +59,10 @@ export function normalizeImportedComboChart<T extends ImportNormalizableChart>(c
 
   const groups = chart.rt?.chartGroupsMeta ?? [];
   const assignments = chart.series ? seriesTypeAssignments(groups, chart.series) : null;
+  const chartType = chartTypeForImportedGroups(groups) ?? chart.chartType;
   return {
     ...chart,
-    chartType: 'combo',
+    ...(chartType ? { chartType } : {}),
     series: chart.series?.map((entry, index) => {
       if (entry.type) return entry;
       const chartType = assignments?.get(index);

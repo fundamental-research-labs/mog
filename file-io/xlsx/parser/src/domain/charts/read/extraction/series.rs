@@ -34,13 +34,16 @@ pub(super) fn extract_single_series(
     use ooxml_types::charts::SeriesTextSource;
 
     // Name
-    let name = s.tx.as_ref().and_then(|tx| match tx {
-        SeriesTextSource::Value(v) => Some(v.clone()),
-        SeriesTextSource::StrRef(sr) => sr
-            .str_cache
-            .as_ref()
-            .and_then(|c| c.pts.first().map(|pt| pt.v.clone())),
-    });
+    let name =
+        s.tx.as_ref()
+            .and_then(|tx| match tx {
+                SeriesTextSource::Value(v) => Some(v.clone()),
+                SeriesTextSource::StrRef(sr) => sr
+                    .str_cache
+                    .as_ref()
+                    .and_then(|c| c.pts.first().map(|pt| pt.v.clone())),
+            })
+            .or_else(|| Some(default_series_name(s.idx, s.order)));
 
     // Legacy fill color
     let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
@@ -179,6 +182,11 @@ pub(super) fn extract_single_series(
     }
 }
 
+fn default_series_name(idx: u32, order: u32) -> String {
+    let ordinal = if idx > 0 { idx } else { order + 1 };
+    format!("Series {ordinal}")
+}
+
 fn extract_category_label_format(
     cat: &Option<ooxml_types::charts::CatDataSource>,
 ) -> Option<domain_types::chart::CategoryLabelFormatData> {
@@ -293,6 +301,32 @@ mod tests {
                 format_code: Some("\"FY3/\"0\"E\"".to_string()),
             }),
         );
+    }
+
+    #[test]
+    fn defaults_series_name_from_ooxml_idx_when_text_is_missing() {
+        let series = ooxml_types::charts::ChartSeries {
+            idx: 2,
+            order: 1,
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None);
+
+        assert_eq!(extracted.name.as_deref(), Some("Series 2"));
+    }
+
+    #[test]
+    fn defaults_zero_idx_series_name_from_plot_order() {
+        let series = ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 3,
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None);
+
+        assert_eq!(extracted.name.as_deref(), Some("Series 4"));
     }
 }
 

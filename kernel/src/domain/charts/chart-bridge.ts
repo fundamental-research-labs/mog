@@ -325,9 +325,7 @@ function toChartConfig(chart: ChartFloatingObject): ChartConfig {
 
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
-type RangeSnapshot = NonNullable<
-  ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']
->;
+type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']>;
 
 type ChartRenderData = {
   config: ChartConfig;
@@ -335,8 +333,9 @@ type ChartRenderData = {
 };
 
 function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
-  const categoryLabelFormat = config.series?.find((series) => series.categoryLabelFormat)
-    ?.categoryLabelFormat;
+  const categoryLabelFormat = config.series?.find(
+    (series) => series.categoryLabelFormat,
+  )?.categoryLabelFormat;
   if (!categoryLabelFormat) return data;
 
   const categoryFormatCodes = data.categories.map(() => categoryLabelFormat.formatCode ?? null);
@@ -372,10 +371,17 @@ function buildResolvedChartSpecSnapshot(input: {
   compilerInputHash: string;
 }): ResolvedChartSpecSnapshot {
   const categories = input.chartData.categories.map(snapshotScalar);
+  const hasExplicitSeriesReferences =
+    input.config.series?.some((item) =>
+      Boolean(item.values || item.categories || item.bubbleSize),
+    ) ?? false;
   const series = input.chartData.series.map((dataSeries, index) =>
-    snapshotSeries(dataSeries, index, categories, input.config),
+    snapshotSeries(dataSeries, index, categories, input.config, hasExplicitSeriesReferences),
   );
-  const legend = snapshotLegend(input.config, series.map((item) => item.name));
+  const legend = snapshotLegend(
+    input.config,
+    series.map((item) => item.name),
+  );
 
   return {
     schemaVersion: 1,
@@ -453,7 +459,9 @@ function buildResolvedChartSpecSnapshot(input: {
   };
 }
 
-function snapshotAxis(axis: NonNullable<ChartConfig['axis']>['categoryAxis']): AxisSnapshot | undefined {
+function snapshotAxis(
+  axis: NonNullable<ChartConfig['axis']>['categoryAxis'],
+): AxisSnapshot | undefined {
   if (!axis) return undefined;
   return {
     present: true,
@@ -480,14 +488,17 @@ function snapshotLegend(
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
   const deletedEntries = new Set(
-    legend?.entries?.filter((entry) => entry.delete || entry.visible === false).map((entry) => entry.idx) ?? [],
+    legend?.entries
+      ?.filter((entry) => entry.delete || entry.visible === false)
+      .map((entry) => entry.idx) ?? [],
   );
+  const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
   return {
     present,
-    visible: present ? (legend?.visible ?? legend?.show ?? true) : false,
+    visible,
     position: legend?.position,
-    entries: seriesNames,
-    visibleEntries: seriesNames.filter((_name, index) => !deletedEntries.has(index)),
+    entries: present ? seriesNames : [],
+    visibleEntries: visible ? seriesNames.filter((_name, index) => !deletedEntries.has(index)) : [],
   };
 }
 
@@ -496,11 +507,13 @@ function snapshotSeries(
   index: number,
   categories: Array<string | number | null>,
   config: ChartConfig,
+  hasExplicitSeriesReferences: boolean,
 ): ResolvedChartSpecSnapshot['resolved']['series'][number] {
   const configured = config.series?.[index];
   const values: Array<number | null> = [];
   const blankMask: boolean[] = [];
-  const length = Math.max(categories.length, series.data.length);
+  const seriesCategories = configured?.categories || !hasExplicitSeriesReferences ? categories : [];
+  const length = Math.max(seriesCategories.length, series.data.length);
   for (let pointIndex = 0; pointIndex < length; pointIndex += 1) {
     const value = numericPointValue(series.data[pointIndex]);
     values.push(value);
@@ -520,13 +533,13 @@ function snapshotSeries(
     axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
     color: series.color ?? configured?.color ?? config.colors?.[index],
     source,
-    categories,
+    categories: seriesCategories,
     values,
     blankMask,
     dataHash: hashJson({
       name: series.name,
       source,
-      categories,
+      categories: seriesCategories,
       categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
       values,
       blankMask,
@@ -534,9 +547,7 @@ function snapshotSeries(
   };
 }
 
-function snapshotRange(
-  reference: Charts.ResolvedChartRangeReference | null,
-): RangeSnapshot | null {
+function snapshotRange(reference: Charts.ResolvedChartRangeReference | null): RangeSnapshot | null {
   if (!reference) return null;
   return {
     kind: reference.kind,
@@ -553,7 +564,10 @@ function snapshotRange(
 }
 
 function titleText(config: ChartConfig): string | undefined {
-  const text = config.title ?? config.chartTitle?.text ?? config.titleRichText?.map((part) => part.text).join('');
+  const text =
+    config.title ??
+    config.chartTitle?.text ??
+    config.titleRichText?.map((part) => part.text).join('');
   return text || undefined;
 }
 
@@ -561,7 +575,7 @@ function groupingFor(config: ChartConfig): ResolvedChartSpecSnapshot['resolved']
   if (config.subType === 'stacked') return 'stacked';
   if (config.subType === 'percentStacked') return 'percentStacked';
   if (config.subType === 'clustered') return 'clustered';
-  return undefined;
+  return 'standard';
 }
 
 function numericPointValue(point: ChartDataPoint | undefined): number | null {
@@ -577,10 +591,13 @@ function snapshotScalar(value: string | number | null | undefined): string | num
 
 function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
   const unsupported: string[] = [];
-  if (String(config.type).endsWith('3d')) unsupported.push('3d chart rendering is approximated by the 2d chart backend');
-  if (config.type === 'surface' || config.type === 'surface3d') unsupported.push('surface chart rendering is not fully semantic');
+  if (String(config.type).endsWith('3d'))
+    unsupported.push('3d chart rendering is approximated by the 2d chart backend');
+  if (config.type === 'surface' || config.type === 'surface3d')
+    unsupported.push('surface chart rendering is not fully semantic');
   if (config.wireframe) unsupported.push('surface wireframe rendering is not fully semantic');
-  if (config.pivotOptions || config.showAllFieldButtons) unsupported.push('pivot chart field buttons are not rendered');
+  if (config.pivotOptions || config.showAllFieldButtons)
+    unsupported.push('pivot chart field buttons are not rendered');
   return unsupported;
 }
 
@@ -1671,8 +1688,6 @@ export class ChartBridge implements IChartBridge {
           chartData,
           resolvedRanges,
           compileInput,
-          width,
-          height,
         }),
       }),
     };
@@ -1758,8 +1773,7 @@ export class ChartBridge implements IChartBridge {
         return {
           code: 'DATA_UNAVAILABLE',
           message:
-            resolvedRanges.diagnostics[0]?.message ??
-            'Chart series value ranges are unavailable',
+            resolvedRanges.diagnostics[0]?.message ?? 'Chart series value ranges are unavailable',
           chartId,
         };
       }

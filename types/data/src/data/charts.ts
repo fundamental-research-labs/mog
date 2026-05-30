@@ -865,7 +865,7 @@ export interface ResolvedChartSpecSnapshot {
   resolved: {
     chartType: string;
     subType?: string;
-    grouping?: 'clustered' | 'stacked' | 'percentStacked';
+    grouping?: 'standard' | 'clustered' | 'stacked' | 'percentStacked';
     title: {
       present: boolean;
       text?: string;

@@ -17,16 +17,10 @@ pub fn extract_chart_spec_from_chart_space(
     let plot_area = &chart.plot_area;
 
     // -------------------------------------------------------------------------
-    // (a) chart_type - combo for multiple chart groups, otherwise from first group
+    // (a) chart_type - combo only when chart groups represent distinct families
     // -------------------------------------------------------------------------
     let first_group = plot_area.chart_groups.first();
-    let chart_type = if plot_area.chart_groups.len() > 1 {
-        domain_types::ChartType::Combo
-    } else {
-        first_group
-            .map(|g| map_ooxml_chart_type_to_domain(g.chart_type, &g.config))
-            .unwrap_or(domain_types::ChartType::Column)
-    };
+    let chart_type = chart_type_for_plot_area(plot_area);
 
     // -------------------------------------------------------------------------
     // (b) sub_type — from first chart group's config grouping
@@ -262,6 +256,22 @@ pub fn extract_chart_spec_from_chart_space(
 // Helpers for the new ChartSpace -> ChartSpec pipeline
 // =============================================================================
 
+fn chart_type_for_plot_area(plot_area: &ooxml_types::charts::PlotArea) -> domain_types::ChartType {
+    let mut groups = plot_area.chart_groups.iter();
+    let Some(first_group) = groups.next() else {
+        return domain_types::ChartType::Column;
+    };
+
+    let first_type = map_ooxml_chart_type_to_domain(first_group.chart_type, &first_group.config);
+    if groups
+        .any(|group| map_ooxml_chart_type_to_domain(group.chart_type, &group.config) != first_type)
+    {
+        domain_types::ChartType::Combo
+    } else {
+        first_type
+    }
+}
+
 /// Extract sub-type from a chart type config.
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
@@ -314,5 +324,68 @@ fn extract_scalar_fields_from_config(
             (c.gap_width, None, None, None, None, split_type, split_value)
         }
         _ => (None, None, None, None, None, None, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::charts::{
+        AreaChartConfig, ChartGroup, ChartType, ChartTypeConfig, LineChartConfig, PlotArea,
+    };
+
+    fn group(chart_type: ChartType, config: ChartTypeConfig) -> ChartGroup {
+        ChartGroup {
+            chart_type,
+            config,
+            series: Vec::new(),
+            d_lbls: None,
+            ax_id: Vec::new(),
+            raw_chart_type_attr: None,
+        }
+    }
+
+    #[test]
+    fn repeated_chart_groups_keep_their_single_chart_family() {
+        let plot_area = PlotArea {
+            chart_groups: vec![
+                group(
+                    ChartType::Line,
+                    ChartTypeConfig::Line(LineChartConfig::default()),
+                ),
+                group(
+                    ChartType::Line,
+                    ChartTypeConfig::Line(LineChartConfig::default()),
+                ),
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            chart_type_for_plot_area(&plot_area),
+            domain_types::ChartType::Line
+        );
+    }
+
+    #[test]
+    fn distinct_chart_group_families_become_combo() {
+        let plot_area = PlotArea {
+            chart_groups: vec![
+                group(
+                    ChartType::Area,
+                    ChartTypeConfig::Area(AreaChartConfig::default()),
+                ),
+                group(
+                    ChartType::Line,
+                    ChartTypeConfig::Line(LineChartConfig::default()),
+                ),
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            chart_type_for_plot_area(&plot_area),
+            domain_types::ChartType::Combo
+        );
     }
 }

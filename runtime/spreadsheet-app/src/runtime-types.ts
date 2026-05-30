@@ -1,5 +1,6 @@
-import type { Workbook } from '@mog-sdk/contracts/api';
+import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
+import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import type {
   AppId,
   CapabilityGrant,
@@ -34,7 +35,11 @@ export type SpreadsheetAppWorkbook = Workbook & {
   ): Promise<Uint8Array | ArrayBuffer>;
 };
 
-export type SpreadsheetAppDocumentHandle = {
+type SpreadsheetAppChartImageExporterRegistrationTarget = {
+  registerChartImageExporter(factory: (chartBridge: IChartBridge) => ChartImageExporter): void;
+};
+
+export type SpreadsheetAppDocumentHandle = SpreadsheetAppChartImageExporterRegistrationTarget & {
   readonly eventBus: {
     onAll(handler: (event: unknown) => void): (() => void) | undefined;
   };

@@ -90,6 +90,7 @@ import { DialogLayer, OverlayLayer, PanelLayer } from './chrome/layers';
 // Read-only mode safety net for dispatcher
 import { setDispatcherReadOnly } from './actions/dispatcher';
 import { ensureMetricCompatibleFontsLoaded } from './infra/styles/fonts';
+import { installChartImageExporter } from './infra/services';
 import { installImportedPivotRuntime } from './pivot/imported-pivot-runtime';
 
 type DocumentRuntime = Pick<DocumentContextValue, 'workbook' | 'uiStore' | 'eventBus'>;
@@ -111,6 +112,8 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
 
   const runtimePromise = (async () => {
     const uiStore: UIStoreApi = createShellUIStore(handle.initialSheetId, handle.undoService);
+
+    installChartImageExporter(handle);
 
     performance.mark('spreadsheetApp:createWorkbook:start');
     const workbook = await handle.workbook({

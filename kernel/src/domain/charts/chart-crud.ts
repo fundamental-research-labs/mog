@@ -20,7 +20,12 @@ import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
 
-export type ChartRangeKind = 'dataRange' | 'categoryRange' | 'seriesRange';
+export type ChartRangeKind =
+  | 'dataRange'
+  | 'categoryRange'
+  | 'seriesRange'
+  | 'seriesValues'
+  | 'seriesCategories';
 
 export interface ResolvedChartRangeReference {
   kind: ChartRangeKind;
@@ -41,7 +46,14 @@ export interface ResolvedChartRangeReferences {
   dataRange: ResolvedChartRangeReference | null;
   categoryRange: ResolvedChartRangeReference | null;
   seriesRange: ResolvedChartRangeReference | null;
+  seriesReferences: ResolvedChartSeriesReference[];
   diagnostics: ChartRangeDiagnostic[];
+}
+
+export interface ResolvedChartSeriesReference {
+  index: number;
+  values: ResolvedChartRangeReference | null;
+  categories: ResolvedChartRangeReference | null;
 }
 
 // =============================================================================
@@ -358,6 +370,35 @@ async function resolveChartRangeReference(
   return resolveA1ChartRange(ctx, chartSheetId, kind, ref, diagnostics);
 }
 
+async function resolveSeriesRangeReferences(
+  ctx: DocumentContext,
+  chartSheetId: SheetId | null,
+  chart: ChartFloatingObject,
+  diagnostics: ChartRangeDiagnostic[],
+): Promise<ResolvedChartSeriesReference[]> {
+  return Promise.all(
+    (chart.series ?? []).map(async (series, index) => {
+      const [values, categories] = await Promise.all([
+        resolveA1ChartRange(
+          ctx,
+          chartSheetId,
+          'seriesValues',
+          series.values?.trim(),
+          diagnostics,
+        ),
+        resolveA1ChartRange(
+          ctx,
+          chartSheetId,
+          'seriesCategories',
+          series.categories?.trim(),
+          diagnostics,
+        ),
+      ]);
+      return { index, values, categories };
+    }),
+  );
+}
+
 /**
  * Resolve all chart A1/identity references to workbook-scoped ranges.
  *
@@ -372,13 +413,17 @@ export async function resolveChartRangeReferences(
 ): Promise<ResolvedChartRangeReferences> {
   const chartSheetId = chart.sheetId ? toSheetId(chart.sheetId) : null;
   const diagnostics: ChartRangeDiagnostic[] = [];
-  const [dataRange, categoryRange, seriesRange] = await Promise.all([
-    resolveChartRangeReference(ctx, chartSheetId, chart, 'dataRange', diagnostics),
+  const hasExplicitSeriesValues = chart.series?.some((series) => series.values?.trim()) ?? false;
+  const [dataRange, categoryRange, seriesRange, seriesReferences] = await Promise.all([
+    hasExplicitSeriesValues && !chart.dataRange?.trim()
+      ? Promise.resolve(null)
+      : resolveChartRangeReference(ctx, chartSheetId, chart, 'dataRange', diagnostics),
     resolveChartRangeReference(ctx, chartSheetId, chart, 'categoryRange', diagnostics),
     resolveChartRangeReference(ctx, chartSheetId, chart, 'seriesRange', diagnostics),
+    resolveSeriesRangeReferences(ctx, chartSheetId, chart, diagnostics),
   ]);
 
-  return { dataRange, categoryRange, seriesRange, diagnostics };
+  return { dataRange, categoryRange, seriesRange, seriesReferences, diagnostics };
 }
 
 /**

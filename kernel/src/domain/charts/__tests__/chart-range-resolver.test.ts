@@ -111,6 +111,40 @@ describe('resolveChartRangeReferences', () => {
     expect(resolved.categoryRange?.ref).toBe("'Q1 Data''s'!$A$2:$A$4");
   });
 
+  it('resolves imported charts that use explicit per-series value ranges without a dataRange', async () => {
+    const resolved = await resolveChartRangeReferences(
+      createCtx(),
+      chart({
+        dataRange: '',
+        series: [
+          {
+            name: 'Revenue',
+            values: 'Formulas!$B$2:$D$2',
+            categories: 'Formulas!$B$1:$D$1',
+          },
+        ],
+      }),
+    );
+
+    expect(resolved.diagnostics).toEqual([]);
+    expect(resolved.dataRange).toBeNull();
+    expect(resolved.seriesReferences).toHaveLength(1);
+    expect(resolved.seriesReferences[0].values?.range).toMatchObject({
+      sheetId: FORMULAS,
+      startRow: 1,
+      startCol: 1,
+      endRow: 1,
+      endCol: 3,
+    });
+    expect(resolved.seriesReferences[0].categories?.range).toMatchObject({
+      sheetId: FORMULAS,
+      startRow: 0,
+      startCol: 1,
+      endRow: 0,
+      endCol: 3,
+    });
+  });
+
   it('prefers an explicit category range over series category references', async () => {
     const resolved = await resolveChartRangeReferences(
       createCtx(),
@@ -155,6 +189,12 @@ describe('resolveChartRangeReferences', () => {
     expect(resolved.diagnostics).toEqual([
       expect.objectContaining({
         kind: 'categoryRange',
+        code: 'UNKNOWN_SHEET',
+        ref: 'Missing!$A$2:$A$4',
+        sheetName: 'Missing',
+      }),
+      expect.objectContaining({
+        kind: 'seriesCategories',
         code: 'UNKNOWN_SHEET',
         ref: 'Missing!$A$2:$A$4',
         sheetName: 'Missing',

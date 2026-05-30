@@ -20,6 +20,7 @@ jest.mock('../chart-crud', () => ({
   get: jest.fn(),
   getAll: jest.fn(async () => [] as unknown[]),
   getChartDataRange: jest.fn(),
+  resolveChartRangeReferences: jest.fn(),
 }));
 
 // Mock cell-reads so the cell-accessor pre-fetch returns null cleanly

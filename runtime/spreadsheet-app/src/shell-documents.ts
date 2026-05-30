@@ -1,3 +1,4 @@
+import { installChartImageExporter } from '@mog/app-spreadsheet/services';
 import type { ShellBootstrapResult } from '@mog/shell/bootstrap';
 
 import { getSourceFileKind, toDocumentSource } from './bytes';
@@ -115,6 +116,12 @@ export function asSpreadsheetAppDocumentHandle(
       `Spreadsheet app document handle missing runtime internals during ${operation}`,
     );
   }
+  if (typeof candidate.registerChartImageExporter !== 'function') {
+    throw new Error(
+      `Spreadsheet app document handle missing chart image exporter registration during ${operation}`,
+    );
+  }
+  installChartImageExporter(candidate as SpreadsheetAppDocumentHandle);
   return candidate as SpreadsheetAppDocumentHandle;
 }
 

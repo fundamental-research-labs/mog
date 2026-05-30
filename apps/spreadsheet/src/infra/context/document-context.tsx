@@ -35,7 +35,7 @@ import {
   resolveInitialActiveSheetId,
   subscribeActiveSheetPersistence,
 } from '../document-active-sheet';
-import { ChartImageExporterImpl } from '../services/chart-image-exporter';
+import { installChartImageExporter } from '../services';
 
 // UIState type and createUIStore factory are injected to avoid infra/ → ui-store/ DAG violation.
 // The factory is passed as a prop to DocumentProvider; the type is kept generic here.
@@ -339,7 +339,7 @@ export function DocumentProvider({
         handle.registerPivotExpansionProvider(pivotExpansion);
 
         // Inject ChartImageExporter — requires DOM canvas, so lives in the shell
-        handle.registerChartImageExporter((charts) => new ChartImageExporterImpl(charts));
+        installChartImageExporter(handle);
 
         // Create UIStore with valid initial sheet ID
         const uiStore = createUIStore(handle.initialSheetId, handle.undoService);

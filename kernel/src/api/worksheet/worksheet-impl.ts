@@ -2515,7 +2515,11 @@ export class WorksheetImpl implements Worksheet {
 
   private _charts?: WorksheetChartsImpl;
   get charts(): WorksheetCharts {
-    return (this._charts ??= new WorksheetChartsImpl(this.ctx, this.sheetId));
+    return (this._charts ??= new WorksheetChartsImpl(
+      this.ctx,
+      this.sheetId,
+      this.ctx.chartImageExporter,
+    ));
   }
 
   private _objects?: WorksheetObjectsImpl;

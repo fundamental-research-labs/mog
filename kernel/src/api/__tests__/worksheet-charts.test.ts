@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import { WorksheetChartsImpl } from '../worksheet/charts';
+import { WorksheetImpl } from '../worksheet/worksheet-impl';
 
 const SHEET_ID = sheetId('sheet-1');
 
@@ -117,5 +118,53 @@ describe('WorksheetChartsImpl chart ref read normalization', () => {
         ],
       }),
     ]);
+  });
+});
+
+describe('Worksheet chart image export', () => {
+  it('delegates worksheet.charts.exportImage through the context chart image exporter', async () => {
+    const chart = makeChart();
+    const options = {
+      format: 'png' as const,
+      width: 640,
+      height: 360,
+      pixelRatio: 2,
+      backgroundColor: '#ffffff',
+    };
+    const dataUrl = 'data:image/png;base64,ZmFrZS1wbmc=';
+    const exporter = {
+      exportImage: jest.fn(async () => dataUrl),
+    };
+    const ctx = {
+      chartImageExporter: exporter,
+      computeBridge: {
+        getChart: jest.fn(async () => chart),
+      },
+    };
+
+    const worksheet = new WorksheetImpl(SHEET_ID, ctx as any);
+
+    await expect(worksheet.charts.exportImage(chart.id, options)).resolves.toBe(dataUrl);
+    expect(exporter.exportImage).toHaveBeenCalledWith(SHEET_ID, chart.id, options);
+  });
+
+  it('uses a chart image exporter registered after the worksheet charts API is cached', async () => {
+    const chart = makeChart();
+    const dataUrl = 'data:image/png;base64,cmVnaXN0ZXJlZC1sYXRl';
+    const ctx: any = {
+      chartImageExporter: null,
+      computeBridge: {
+        getChart: jest.fn(async () => chart),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx, SHEET_ID);
+    const exporter = {
+      exportImage: jest.fn(async () => dataUrl),
+    };
+
+    ctx.chartImageExporter = exporter;
+
+    await expect(charts.exportImage(chart.id)).resolves.toBe(dataUrl);
+    expect(exporter.exportImage).toHaveBeenCalledWith(SHEET_ID, chart.id, undefined);
   });
 });

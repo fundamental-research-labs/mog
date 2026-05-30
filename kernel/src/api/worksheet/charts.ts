@@ -977,8 +977,9 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     )) as ChartFloatingObject | null;
     if (!raw) throw chartNotFound(chartId);
 
-    if (this.exporter) {
-      const dataUrl = await this.exporter.exportImage(this.sheetId, chartId, options);
+    const exporter = this.exporter ?? this.ctx.chartImageExporter;
+    if (exporter) {
+      const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
       if (dataUrl) return dataUrl;
       throw operationFailed('exportChartImage', 'Exporter returned null');
     }

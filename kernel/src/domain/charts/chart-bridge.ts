@@ -26,6 +26,7 @@
 
 import {
   compile,
+  extractChartData,
   extractChartDataFromRange,
   renderMark,
   type CellDataAccessor,
@@ -712,7 +713,12 @@ export class ChartBridge implements IChartBridge {
     col: number,
   ): Promise<boolean> {
     const resolved = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const ranges = [resolved.dataRange, resolved.categoryRange, resolved.seriesRange];
+    const ranges = [
+      resolved.dataRange,
+      resolved.categoryRange,
+      resolved.seriesRange,
+      ...resolved.seriesReferences.flatMap((series) => [series.values, series.categories]),
+    ];
 
     return ranges.some((entry) => {
       const range = entry?.range;
@@ -962,25 +968,20 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const resolved = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const dataRange = resolved.dataRange?.range;
-    if (!dataRange) {
+    const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
+    const chartDataOrError = await this.resolveChartDataForRendering(
+      chart,
+      resolvedRanges,
+      chartId,
+    );
+    if ('code' in chartDataOrError) {
       return {
         success: false,
-        error: {
-          code: 'DATA_UNAVAILABLE',
-          message: resolved.diagnostics[0]?.message ?? 'Chart data range references deleted cells',
-          chartId,
-        },
+        error: chartDataOrError,
       };
     }
 
-    // Extract data from cells
-    const data = await this.extractDataFromRange(
-      dataRange.sheetId ? toSheetId(dataRange.sheetId) : sheetId,
-      dataRange,
-      chart,
-    );
+    const data = this.chartDataToRows(chartDataOrError);
 
     if (data.length === 0) {
       return {
@@ -996,51 +997,21 @@ export class ChartBridge implements IChartBridge {
     return { success: true, data };
   }
 
-  /**
-   * Extract data rows from a cell range.
-   *
-   * Uses the first row as headers if the chart is configured to use them,
-   * otherwise generates generic column names.
-   */
-  private async extractDataFromRange(
-    sheetId: SheetId,
-    range: CellRange,
-    _chart: ChartFloatingObject,
-  ): Promise<Record<string, unknown>[]> {
-    const data: Record<string, unknown>[] = [];
-    const { startRow, startCol, endRow, endCol } = range;
-
-    // Determine if first row is headers
-    // Default to true for charts (matches Excel behavior)
-    const hasHeaders = true;
-    const dataStartRow = hasHeaders ? startRow + 1 : startRow;
-
-    // Get column headers
-    const headers: string[] = [];
-    for (let col = startCol; col <= endCol; col++) {
-      if (hasHeaders) {
-        const headerValue = await getValue(this.ctx, sheetId, startRow, col);
-        headers.push(String(headerValue ?? `Column ${col - startCol + 1}`));
-      } else {
-        headers.push(`Column ${col - startCol + 1}`);
+  private chartDataToRows(data: ChartData): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < (data.categories?.length || 0); i++) {
+      const category = data.categories[i];
+      for (const series of data.series) {
+        const point = series.data[i];
+        if (!point) continue;
+        rows.push({
+          category: String(category),
+          value: point.y,
+          series: series.name,
+        });
       }
     }
-
-    // Extract data rows
-    for (let row = dataStartRow; row <= endRow; row++) {
-      const dataRow: Record<string, unknown> = {};
-
-      for (let col = startCol; col <= endCol; col++) {
-        const headerIndex = col - startCol;
-        const header = headers[headerIndex];
-        const value = await getValue(this.ctx, sheetId, row, col);
-        dataRow[header] = value;
-      }
-
-      data.push(dataRow);
-    }
-
-    return data;
+    return rows;
   }
 
   // ===========================================================================
@@ -1111,27 +1082,16 @@ export class ChartBridge implements IChartBridge {
     }
 
     const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const dataRange = resolvedRanges.dataRange?.range;
-    if (!dataRange) {
-      const error: ChartError = {
-        code: 'DATA_UNAVAILABLE',
-        message: resolvedRanges.diagnostics[0]?.message ?? 'Chart data range is unavailable',
-        chartId,
-      };
-      this.commitError(chartId, error, sheetId);
-      return error;
+    const chartDataOrError = await this.resolveChartDataForRendering(
+      chart,
+      resolvedRanges,
+      chartId,
+    );
+    if ('code' in chartDataOrError) {
+      this.commitError(chartId, chartDataOrError, sheetId);
+      return chartDataOrError;
     }
-
-    const cellAccessor = await this.createCellAccessor([
-      dataRange,
-      resolvedRanges.categoryRange?.range,
-      resolvedRanges.seriesRange?.range,
-    ]);
-    const chartData = extractChartDataFromRange(cellAccessor, dataRange, {
-      categoryRange: resolvedRanges.categoryRange?.range,
-      seriesRange: resolvedRanges.seriesRange?.range,
-      seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
-    });
+    const chartData = chartDataOrError;
 
     if (chartData.series.length === 0) {
       const error: ChartError = {
@@ -1304,25 +1264,15 @@ export class ChartBridge implements IChartBridge {
     }
 
     const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
-    const dataRange = resolvedRanges.dataRange?.range;
-    if (!dataRange) {
-      return {
-        code: 'DATA_UNAVAILABLE',
-        message: resolvedRanges.diagnostics[0]?.message ?? 'Chart data range is unavailable',
-        chartId,
-      };
+    const chartDataOrError = await this.resolveChartDataForRendering(
+      chart,
+      resolvedRanges,
+      chartId,
+    );
+    if ('code' in chartDataOrError) {
+      return chartDataOrError;
     }
-
-    const cellAccessor = await this.createCellAccessor([
-      dataRange,
-      resolvedRanges.categoryRange?.range,
-      resolvedRanges.seriesRange?.range,
-    ]);
-    const chartData = extractChartDataFromRange(cellAccessor, dataRange, {
-      categoryRange: resolvedRanges.categoryRange?.range,
-      seriesRange: resolvedRanges.seriesRange?.range,
-      seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
-    });
+    const chartData = chartDataOrError;
 
     if (chartData.series.length === 0) {
       return {
@@ -1370,6 +1320,10 @@ export class ChartBridge implements IChartBridge {
    */
   private async createCellAccessor(
     ranges: Array<CellRange | null | undefined>,
+    options?: {
+      defaultSheetId?: SheetId;
+      sheetAliases?: Map<string, string>;
+    },
   ): Promise<CellDataAccessor> {
     const valueMap = new Map<string, ReturnType<CellDataAccessor['getValue']>>();
     const seen = new Set<string>();
@@ -1397,10 +1351,83 @@ export class ChartBridge implements IChartBridge {
 
     return {
       getValue: (row: number, col: number, sheetId?: string) => {
-        if (!sheetId) return null;
-        return valueMap.get(`${sheetId},${row},${col}`) ?? null;
+        const resolvedSheetId = sheetId
+          ? (options?.sheetAliases?.get(sheetId) ?? sheetId)
+          : options?.defaultSheetId;
+        if (!resolvedSheetId) return null;
+        return valueMap.get(`${resolvedSheetId},${row},${col}`) ?? null;
       },
     };
+  }
+
+  private async resolveChartDataForRendering(
+    chart: ChartFloatingObject,
+    resolvedRanges: Charts.ResolvedChartRangeReferences,
+    chartId: string,
+  ): Promise<ChartData | ChartError> {
+    const config = toChartConfig(chart);
+    const hasExplicitSeriesValues = config.series?.some((series) => series.values?.trim());
+
+    if (hasExplicitSeriesValues) {
+      const seriesRanges = resolvedRanges.seriesReferences.flatMap((series) => [
+        series.values?.range,
+        series.categories?.range,
+      ]);
+      const valueRanges = resolvedRanges.seriesReferences
+        .map((series) => series.values?.range)
+        .filter(Boolean);
+
+      if (valueRanges.length === 0) {
+        return {
+          code: 'DATA_UNAVAILABLE',
+          message:
+            resolvedRanges.diagnostics[0]?.message ??
+            'Chart series value ranges are unavailable',
+          chartId,
+        };
+      }
+
+      const accessor = await this.createCellAccessor(seriesRanges, {
+        defaultSheetId: chart.sheetId ? toSheetId(chart.sheetId) : undefined,
+        sheetAliases: this.seriesSheetAliases(resolvedRanges),
+      });
+      return extractChartData(accessor, config);
+    }
+
+    const dataRange = resolvedRanges.dataRange?.range;
+    if (!dataRange) {
+      return {
+        code: 'DATA_UNAVAILABLE',
+        message: resolvedRanges.diagnostics[0]?.message ?? 'Chart data range is unavailable',
+        chartId,
+      };
+    }
+
+    const cellAccessor = await this.createCellAccessor([
+      dataRange,
+      resolvedRanges.categoryRange?.range,
+      resolvedRanges.seriesRange?.range,
+    ]);
+    return extractChartDataFromRange(cellAccessor, dataRange, {
+      categoryRange: resolvedRanges.categoryRange?.range,
+      seriesRange: resolvedRanges.seriesRange?.range,
+      seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
+    });
+  }
+
+  private seriesSheetAliases(
+    resolvedRanges: Charts.ResolvedChartRangeReferences,
+  ): Map<string, string> {
+    const aliases = new Map<string, string>();
+    for (const series of resolvedRanges.seriesReferences) {
+      for (const reference of [series.values, series.categories]) {
+        const parsed = reference?.ref ? parseCellRange(reference.ref) : null;
+        if (parsed?.sheetName && reference?.range.sheetId) {
+          aliases.set(parsed.sheetName, String(reference.range.sheetId));
+        }
+      }
+    }
+    return aliases;
   }
 
   /**

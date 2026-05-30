@@ -29,6 +29,7 @@ export default defineConfig({
     index: 'index.tsx',
     register: 'register.ts',
     'src/infra/context/embed-runtime-context': 'src/infra/context/embed-runtime-context.tsx',
+    'src/infra/services/index': 'src/infra/services/index.ts',
     'chrome-collab': 'src/entries/chrome-collab.ts',
     'chrome-layers': 'src/entries/chrome-layers.ts',
     'dev/testing-panel': 'src/dev/testing-panel-contribution.tsx',

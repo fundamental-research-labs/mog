@@ -2,9 +2,10 @@
 
 ## Overview
 
-These foundations are the current public contracts and runtime/storage pieces
-behind spreadsheet metadata, validation, testing, links, and eventing. Rust/Yrs
-backs sheet storage where noted; some APIs are TypeScript-only.
+These foundations are the current public contracts plus the workspace-internal
+runtime/storage pieces behind spreadsheet metadata, validation, testing, links,
+and eventing. Rust/Yrs backs sheet storage where noted; several surfaces here
+are public contract types without a public runtime package.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -26,20 +27,29 @@ backs sheet storage where noted; some APIs are TypeScript-only.
 
 ## 1. Cell Metadata
 
-**Purpose:** Per-cell key-value data beyond value/formula/format.
+**Purpose:** Per-cell non-compute state beyond value/formula storage.
 
-**Storage:** Embedded in the per-sheet `properties` map keyed by `CellId`
-(`CellProperties`), with the map declared in `contracts/src/store/sheet-maps-schema.ts`.
+**Storage:** Embedded in the per-sheet `cellProperties` Y.Map keyed by stable
+`CellId` hex strings. The per-sheet `properties` Y.Map is sheet
+metadata/settings, not per-cell metadata.
 
-> **Note:** Cell metadata is stored as part of the unified `CellProperties` structure, not as a separate Yrs map. This eliminates redundancy and simplifies CRDT merges.
+> **Note:** Cell metadata is stored as fields on the unified
+> `CellProperties` structure, not as a separate `CellMetadata` Yrs map. Current
+> Rust storage uses `KEY_CELL_PROPERTIES = "cellProperties"`; the
+> TypeScript `sheet-maps-schema.ts` `properties` entry is historical and should
+> not be treated as the current per-cell storage key.
 
 **Key files:**
 
 - `types/core/src/core.ts` - source for `CellMetadata` and `CellProperties`
 - `contracts/src/core/core.ts` - public re-export and helper exports
-- `compute/core/src/storage/properties/cell.rs` - Rust/Yrs cell property storage helpers
+- `compute/core/crates/compute-document/src/schema.rs` - canonical Yrs key constants
+- `compute/core/src/storage/properties.rs` and
+  `compute/core/src/storage/properties/cell.rs` - Rust/Yrs cell property storage helpers
+- `domain-types/src/yrs_schema/cell_properties.rs` - structured Yrs field layout
 
 ```typescript
+// Public TypeScript contract shape.
 interface CellDataSource {
   type: 'manual' | 'import' | 'api' | 'formula' | 'remote-link';
   source?: string;
@@ -68,7 +78,9 @@ interface CellMetadata {
 }
 ```
 
-**Enables:** Provenance tracking, validation UI, live data indicators, formula auditing.
+**Enables:** Formatting, provenance tracking, validation UI, live data
+indicators, formula auditing, and XLSX fidelity metadata in one sparse cell
+attribute bag.
 
 ---
 
@@ -97,12 +109,12 @@ Connection status is exposed through connection/link APIs rather than
 **Interface:**
 
 ```typescript
-interface IEventBus {
-  on<T extends SpreadsheetEvent>(type: T['type'], handler: EventHandler<T>): () => void;
-  onMany(types: SpreadsheetEvent['type'][], handler: EventHandler<SpreadsheetEvent>): () => void;
-  onAll(handler: AllEventsHandler): () => void;
-  emit(event: SpreadsheetEvent): void;
-  emitBatch(events: SpreadsheetEvent[]): void;
+interface IEventBus<TEvent extends { type: string } = SpreadsheetEvent> {
+  on<T extends TEvent>(type: T['type'], handler: EventHandler<T>): () => void;
+  onMany(types: TEvent['type'][], handler: EventHandler<TEvent>): () => void;
+  onAll(handler: AllEventsHandler<TEvent>): () => void;
+  emit(event: TEvent): void;
+  emitBatch(events: TEvent[]): void;
   clear(): void;
 }
 ```
@@ -115,11 +127,15 @@ interface IEventBus {
 
 **Purpose:** Schema language for cell/column types with validation and inference.
 
-**Package:** `compute/core/crates/compute-schema/` (Rust)
+**Package:** `compute/core/crates/compute-schema/` (workspace-internal Rust)
 
 **Contracts:** `contracts/src/core/schema.ts` (exported as `@mog-sdk/contracts/schema`)
 
-**Storage:** `sheets/{sheetId}/schemas: Y.Map<colIndex, ColumnSchema>`
+**Storage:** Column schemas live under `sheets/{sheetIdHex}/schemas` keyed by
+stable `ColId` hex. Public APIs accept column positions and translate through
+the grid index. Range schemas/data validations are separate range-backed
+storage (`validationRules`, `ranges`, and `rangeBindings`), not entries in the
+column schema map.
 
 **Type Hierarchy:**
 
@@ -160,7 +176,7 @@ interface ColumnSchema {
   type: CellSchemaType;
   constraints?: SchemaConstraints;
   distribution?: DistributionConfig;
-  defaultValue?: unknown;
+  defaultValue?: unknown; // Public TypeScript contract field.
   description?: string;
 }
 
@@ -198,20 +214,28 @@ interface ISchemaValidator {
 }
 ```
 
-**Enables:** Typed cells, API generation, Monte Carlo distributions.
+The public TypeScript contract includes `defaultValue`; the current Rust Yrs
+column-schema storage persists `id`, `name`, `type`, `constraints`,
+`distribution`, and `description`.
+
+**Enables:** Typed columns, validation, API generation, and Monte Carlo
+distribution metadata.
 
 ---
 
 ## 4. Workflow Versioning
 
-**Purpose:** Workflow definition versioning and migration for durable workflows.
+**Purpose:** Workflow definition versioning and migration contracts for durable
+workflows.
 
 **Contracts:** `contracts/src/workflows/versioning.ts` re-exports
 `types/api/src/workflows/versioning.ts`.
 
 > **Note:** The current public repository does not expose a spreadsheet
 > snapshot/branch manager contract here. `contracts/src/workflows/versioning.ts`
-> is for workflow upgrades, not spreadsheet time-travel snapshots.
+> is for workflow upgrades, not spreadsheet time-travel snapshots. The public
+> repo currently has these as contract types; a public runtime
+> `IVersionRegistry` implementation is not shipped.
 
 ```typescript
 type VersioningStrategy = 'replace' | 'parallel' | 'migrate';
@@ -268,11 +292,13 @@ version tracking.
 
 ## 5. Testing
 
-**Purpose:** Unit tests for spreadsheets with cell assertions.
+**Purpose:** Unit-test contracts for spreadsheets with cell assertions, plus
+workspace-internal helpers.
 
 **Contracts:** `contracts/src/core/testing.ts` re-exports
 `types/commands/src/testing.ts` and is published as `@mog-sdk/contracts/testing`.
-**Implementation:** `runtime/spreadsheet-testing/`
+**Implementation:** `runtime/spreadsheet-testing/` (`@mog/spreadsheet-testing`,
+`private: true`; not a public SDK package)
 
 **Storage:** `runtime/spreadsheet-testing/src/test-store.ts` uses plain
 TypeScript `Map`s for assertions, suites, and config. It no longer stores tests
@@ -372,7 +398,7 @@ interface ITestingFramework {
 
 ## 6. Connections
 
-**Purpose:** External data/query surfaces, sheet-level data bindings, and
+**Purpose:** External data/query contracts, sheet-level data bindings, and
 cross-workbook link status/refresh APIs.
 
 **Key files:**
@@ -382,6 +408,8 @@ cross-workbook link status/refresh APIs.
 - `contracts/src/storage/connection.ts` - re-export for storage connection configs
 - `types/document/src/storage/connection.ts` - connection config and table binding types
 - `types/api/src/api/worksheet/bindings.ts` - worksheet sheet-data binding API
+- `kernel/src/services/query-executor/query-executor.ts` - workspace-internal
+  query cache/registry plumbing; database execution is disabled in this build
 - `compute/core/src/storage/sheet/bindings/` - Rust/Yrs sheet binding storage
 - `types/api/src/api/workbook.ts` and `kernel/src/services/workbook-links/` -
   cross-workbook link API and runtime service
@@ -461,21 +489,57 @@ interface WorksheetBindings {
   getProjectionRange(row: number, col: number): Promise<CellRange | null>;
   getProjectionSource(row: number, col: number): Promise<{ row: number; col: number } | null>;
   isProjectedPosition(row: number, col: number): Promise<boolean>;
+  getViewportProjectionData(
+    range: string | CellRange,
+  ): Promise<Array<{ originRow: number; originCol: number; rows: number; cols: number }>>;
+  getViewportProjectionData(
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+  ): Promise<Array<{ originRow: number; originCol: number; rows: number; cols: number }>>;
+}
+
+// Cross-workbook link API, exposed from Workbook.links.
+type WorkbookLinkSourceKind = 'mog-workbook' | 'excel-workbook' | 'dde-link' | 'ole-link';
+type LinkStatus = 'unresolved' | 'loading' | 'ready' | 'stale' | 'denied' | 'broken' | 'ambiguous';
+
+interface WorkbookLinks {
+  list(): readonly WorkbookLinkView[];
+  get(linkId: LinkId): WorkbookLinkView | null;
+  add(input: CreateWorkbookLinkInput): WorkbookLinkView;
+  create(input: CreateWorkbookLinkInput): WorkbookLinkView;
+  retarget(linkId: LinkId, input: RetargetWorkbookLinkInput): WorkbookLinkView;
+  update(linkId: LinkId, input: UpdateWorkbookLinkInput): WorkbookLinkView;
+  break(linkId: LinkId, options: BreakWorkbookLinkOptions): boolean;
+  delete(linkId: LinkId): boolean;
+  getStatus(linkId: LinkId): LinkStatusView;
+  refresh(linkId: LinkId): Promise<LinkStatusView>;
+  refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;
+  watchStatus(linkId: LinkId, handler: (status: LinkStatusView) => void): () => void;
+  getUsages(linkId: LinkId): Promise<readonly WorkbookExternalLinkUsageView[]>;
+  copySource(linkId: LinkId): Promise<CopyWorkbookLinkSourceResult>;
+  listPackageDiagnostics(): Promise<readonly WorkbookExternalPackageArtifactView[]>;
 }
 ```
 
 **Storage:** Sheet-level data bindings are position-based and stored per sheet
-in a `bindings` Y.Map keyed by binding ID. Connection credentials are not part
-of the connection config contracts.
+in a `bindings` Y.Map keyed by binding ID. Storage/table connection config
+contracts do not include credentials; the workspace-internal query executor has
+its own in-memory registry type and currently returns an unsupported execution
+error on cache misses.
 
 **Providers and link kinds:**
 
 - **Table/storage connection configs:** local, PostgreSQL, MySQL, SQLite, REST, GraphQL
 - **QUERY formula database handles:** ClickHouse, PostgreSQL, MySQL, BigQuery, DuckDB
+  contract names; external database execution is not shipped in the current
+  public build
 - **Workbook links:** Mog workbook, Excel workbook, DDE, and OLE link records with status/refresh APIs
 
-**Enables:** QUERY formulas, sheet data projections, table-backed storage, and
-cross-workbook link status/refresh workflows.
+**Enables:** QUERY formula contract/cache plumbing, sheet data projections,
+table-backed storage contracts, and cross-workbook link status/refresh
+workflows.
 
 ---
 
@@ -483,22 +547,22 @@ cross-workbook link status/refresh workflows.
 
 | Feature           | Metadata | Events | Types | Workflows | Testing | Connections |
 | ----------------- | :------: | :----: | :---: | :-------: | :-----: | :---------: |
-| Provenance        |    ✓     |   ✓    |       |           |         |             |
-| Reactive UI       |    ✓     |   ✓    |       |           |         |             |
-| Typed Cells       |    ✓     |   ✓    |   ✓   |           |         |             |
-| Workflow Upgrades |          |        |       |     ✓     |         |             |
-| Unit Tests        |    ✓     |   ✓    |       |           |    ✓    |             |
-| Live Data         |    ✓     |   ✓    |       |           |         |      ✓      |
+| Provenance        |   yes    |  yes   |       |           |         |             |
+| Reactive UI       |   yes    |  yes   |       |           |         |             |
+| Typed Columns     |          |        |  yes  |           |         |             |
+| Workflow Upgrades |          |        |       |    yes    |         |             |
+| Unit Tests        |          |        |       |           |   yes   |             |
+| Live Data         |   yes    |        |       |           |         |     yes     |
 
 ---
 
 ## Implementation Status
 
-| Foundation    | Status  | Package/File                                   |
-| ------------- | ------- | ---------------------------------------------- |
-| Cell Metadata | ✅ Done | `types/core/src/core.ts`, `contracts/src/store/sheet-maps-schema.ts`, `compute/core/src/storage/properties/` |
-| Event Bus     | ✅ Done | `kernel/src/context/event-bus.ts`              |
-| Type System   | ✅ Done | `compute/core/crates/compute-schema/`, `contracts/src/core/schema.ts` |
-| Workflow Versioning | ✅ Done | `types/api/src/workflows/versioning.ts` |
-| Testing       | ✅ Done | `contracts/src/core/testing.ts`, `runtime/spreadsheet-testing/` |
-| Connections   | ✅ Done | `types/connections/src/query.ts`, `types/document/src/storage/connection.ts`, `compute/core/src/storage/sheet/bindings/` |
+| Foundation | Status | Package/File |
+| --- | --- | --- |
+| Cell Metadata | Shipped public TypeScript contract; workspace-internal Rust/Yrs storage | `types/core/src/core.ts`, `contracts/src/core/core.ts`, `compute/core/crates/compute-document/src/schema.rs`, `compute/core/src/storage/properties/` |
+| Event Bus | Public event types; workspace-internal bus implementation | `types/events/src/`, `contracts/src/events.ts`, `kernel/src/context/event-bus.ts` |
+| Type System | Shipped public contracts; workspace-internal Rust validation/storage | `contracts/src/core/schema.ts`, `compute/core/crates/compute-schema/`, `compute/core/src/storage/sheet/schemas/` |
+| Workflow Versioning | Shipped public contract types; public runtime registry not shipped | `types/api/src/workflows/versioning.ts`, `contracts/src/workflows/versioning.ts` |
+| Testing | Shipped public contract types; workspace-internal helper package | `contracts/src/core/testing.ts`, `types/commands/src/testing.ts`, `runtime/spreadsheet-testing/` |
+| Connections | Mixed public contracts/API plus workspace-internal services/storage; external query execution not shipped in this build | `types/connections/src/query.ts`, `types/document/src/storage/connection.ts`, `types/api/src/api/worksheet/bindings.ts`, `types/api/src/api/workbook.ts`, `kernel/src/services/query-executor/query-executor.ts`, `compute/core/src/storage/sheet/bindings/`, `kernel/src/services/workbook-links/` |

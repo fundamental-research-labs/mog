@@ -26,17 +26,26 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   return configToSpecImpl(config, data);
 }
 
+function isAxisGridline(mark: AnyMark): boolean {
+  const datum = mark.datum as { axisPart?: unknown } | undefined;
+  return datum?.axisPart === 'grid';
+}
+
 /**
  * Collect all marks from a CompileResult into a single flat array
- * in the correct render order: title, axes, legends, data marks.
+ * in the correct render order.
  * Pure function - no DOM dependencies.
  */
 export function collectMarks(result: CompileResult): AnyMark[] {
+  const axisGridlines = result.axes.filter(isAxisGridline);
+  const axisForeground = result.axes.filter((mark) => !isAxisGridline(mark));
+
   return [
     ...(result.background || []),
-    ...(result.title || []),
-    ...result.axes,
-    ...result.legends,
+    ...axisGridlines,
     ...result.marks,
+    ...axisForeground,
+    ...result.legends,
+    ...(result.title || []),
   ];
 }

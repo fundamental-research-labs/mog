@@ -25,6 +25,7 @@
  */
 
 import {
+  collectMarks,
   compile,
   configToSpec,
   extractChartData,
@@ -1453,13 +1454,7 @@ export class ChartBridge implements IChartBridge {
     }
 
     // Flatten all marks into a single array
-    const marks: ChartMark[] = [
-      ...(compileResult.background || []),
-      ...(compileResult.title || []),
-      ...compileResult.axes,
-      ...compileResult.legends,
-      ...compileResult.marks,
-    ] as ChartMark[];
+    const marks = collectMarks(compileResult) as ChartMark[];
 
     // Extract layout snapshot from compile result and cache it.
     // Gate on `started`: stop() can run mid-compile (between any two awaits
@@ -1657,13 +1652,7 @@ export class ChartBridge implements IChartBridge {
     const compileResult = compile(compileInput, undefined, { width, height });
 
     // Flatten all marks into a single array (same as getMarks)
-    const marks: ChartMark[] = [
-      ...(compileResult.background || []),
-      ...(compileResult.title || []),
-      ...compileResult.axes,
-      ...compileResult.legends,
-      ...compileResult.marks,
-    ] as ChartMark[];
+    const marks = collectMarks(compileResult) as ChartMark[];
 
     return {
       marks,

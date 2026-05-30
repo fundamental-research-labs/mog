@@ -627,7 +627,7 @@ describe('buildEncoding - axis config', () => {
         domain: false,
         grid: true,
         gridColor: '#D9D9D9',
-        gridWidth: 0.75,
+        gridWidth: 1,
         gridOpacity: 1,
       }),
     );
@@ -648,7 +648,7 @@ describe('buildEncoding - axis config', () => {
     expect(encoding.y!.axis).toEqual(
       expect.objectContaining({
         grid: true,
-        gridWidth: 0.75,
+        gridWidth: 1,
         gridDash: [4, 2, 1, 2],
         gridOpacity: 0.75,
       }),
@@ -1387,6 +1387,36 @@ describe('configToSpec - compile round-trip', () => {
       },
     ]);
     expect(marks[0]).toBe(result.background?.[0]);
+  });
+
+  it('should render gridlines behind data marks and axis labels above them', () => {
+    const config = makeConfig({
+      type: 'column',
+      axis: {
+        xAxis: {
+          visible: true,
+          type: 'category',
+          tickMarks: 'none',
+          format: { textRotation: -1000 },
+          crossesAt: 'automatic',
+        },
+        yAxis: { visible: true, type: 'value', gridLines: true, min: -10, max: 10 },
+      },
+    });
+    const spec = configToSpec(config, SINGLE_SERIES_DATA);
+    const result = compile(spec, undefined, { width: 600, height: 400 });
+    const marks = collectMarks(result);
+    const firstGridlineIndex = marks.findIndex(
+      (mark) => (mark.datum as { axisPart?: string } | undefined)?.axisPart === 'grid',
+    );
+    const firstDataMarkIndex = marks.findIndex((mark) => mark.type === 'rect');
+    const firstAxisLabelIndex = marks.findIndex(
+      (mark) => (mark.datum as { axisPart?: string } | undefined)?.axisPart === 'label',
+    );
+
+    expect(firstGridlineIndex).toBeGreaterThanOrEqual(0);
+    expect(firstDataMarkIndex).toBeGreaterThan(firstGridlineIndex);
+    expect(firstAxisLabelIndex).toBeGreaterThan(firstDataMarkIndex);
   });
 
   it('should render Excel gapWidth as narrower stacked columns inside each category slot', () => {

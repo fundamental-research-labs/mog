@@ -278,6 +278,10 @@ function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
   return sizePt === undefined ? undefined : sizePt * (96 / 72);
 }
 
+function linePointsToCanvasPx(widthPt: number | undefined): number | undefined {
+  return widthPt === undefined ? undefined : Math.max(1, widthPt * (96 / 72));
+}
+
 function hasVisibleLineStyle(line: unknown): boolean {
   if (!line || typeof line !== 'object') return false;
   const candidate = line as { color?: unknown; width?: unknown };
@@ -553,16 +557,19 @@ function mapAxisConfigToAxisSpec(
     spec.tickColor = axisLineColor;
   }
   if (axisLine?.width !== undefined) {
-    spec.domainWidth = axisLine.width;
-    spec.tickWidth = axisLine.width;
+    const lineWidth = linePointsToCanvasPx(axisLine.width);
+    spec.domainWidth = lineWidth;
+    spec.tickWidth = lineWidth;
   }
 
   const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
   if (gridlineColor) spec.gridColor = gridlineColor;
-  if (axisConf.gridlineFormat?.width !== undefined) spec.gridWidth = axisConf.gridlineFormat.width;
+  if (axisConf.gridlineFormat?.width !== undefined) {
+    spec.gridWidth = linePointsToCanvasPx(axisConf.gridlineFormat.width);
+  }
   const gridDash = dashStyleToStrokeDash(
     axisConf.gridlineFormat?.dashStyle,
-    axisConf.gridlineFormat?.width,
+    linePointsToCanvasPx(axisConf.gridlineFormat?.width),
   );
   if (gridDash) spec.gridDash = gridDash;
   if (axisConf.gridlineFormat) {

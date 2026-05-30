@@ -11,6 +11,12 @@ import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 
+type AxisPart = 'domain' | 'tick' | 'label' | 'grid' | 'title';
+
+function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
+  return { role, axisPart };
+}
+
 function axisPosition(scale: AnyScale, tick: unknown): number {
   const position = scale(tick) as number;
   const bandwidth =
@@ -70,7 +76,7 @@ export function generateXAxis(
       type: 'path',
       x: 0,
       y: 0,
-      datum: { role },
+      datum: axisDatum(role, 'domain'),
       path: `M${layout.plotArea.x},${y} L${layout.plotArea.x + layout.plotArea.width},${y}`,
       style: {
         stroke: axisSpec.domainColor ?? '#000',
@@ -134,7 +140,7 @@ export function generateXAxis(
         type: 'path',
         x: 0,
         y: 0,
-        datum: { role },
+        datum: axisDatum(role, 'tick'),
         path: `M${x},${y} L${x},${y + (axisSpec.tickSize ?? 6)}`,
         style: {
           stroke: axisSpec.tickColor ?? '#000',
@@ -158,7 +164,7 @@ export function generateXAxis(
         x,
         y: y + tickExtent + labelPadding,
         text: labelText,
-        datum: { role },
+        datum: axisDatum(role, 'label'),
         fontSize,
         fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
@@ -177,7 +183,7 @@ export function generateXAxis(
         type: 'path',
         x: 0,
         y: 0,
-        datum: { role },
+        datum: axisDatum(role, 'grid'),
         path: `M${x},${layout.plotArea.y} L${x},${y}`,
         style: {
           stroke: axisSpec.gridColor ?? '#e0e0e0',
@@ -198,7 +204,7 @@ export function generateXAxis(
         x: layout.plotArea.x + layout.plotArea.width / 2,
         y: y + 35,
         text: title,
-        datum: { role },
+        datum: axisDatum(role, 'title'),
         fontSize: axisSpec.titleFontSize ?? 12,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
@@ -277,7 +283,7 @@ export function generateYAxis(
       type: 'path',
       x: 0,
       y: 0,
-      datum: { role },
+      datum: axisDatum(role, 'domain'),
       path: `M${x},${layout.plotArea.y} L${x},${layout.plotArea.y + layout.plotArea.height}`,
       style: {
         stroke: axisSpec.domainColor ?? '#000',
@@ -331,7 +337,7 @@ export function generateYAxis(
         type: 'path',
         x: 0,
         y: 0,
-        datum: { role },
+        datum: axisDatum(role, 'tick'),
         path: `M${x - (axisSpec.tickSize ?? 6)},${y} L${x},${y}`,
         style: {
           stroke: axisSpec.tickColor ?? '#000',
@@ -352,7 +358,7 @@ export function generateYAxis(
         x: x - (axisSpec.tickSize ?? 6) - (axisSpec.labelPadding ?? 3),
         y,
         text: labelText,
-        datum: { role },
+        datum: axisDatum(role, 'label'),
         fontSize: yFontSize,
         fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'right',
@@ -370,7 +376,7 @@ export function generateYAxis(
         type: 'path',
         x: 0,
         y: 0,
-        datum: { role },
+        datum: axisDatum(role, 'grid'),
         path: `M${x},${y} L${layout.plotArea.x + layout.plotArea.width},${y}`,
         style: {
           stroke: axisSpec.gridColor ?? '#e0e0e0',
@@ -391,7 +397,7 @@ export function generateYAxis(
         x: x - 45,
         y: layout.plotArea.y + layout.plotArea.height / 2,
         text: title,
-        datum: { role },
+        datum: axisDatum(role, 'title'),
         fontSize: axisSpec.titleFontSize ?? 12,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',

@@ -37,8 +37,8 @@ export const DEFAULT_LAYOUT = {
   },
   titleHeight: 30,
   subtitleHeight: 20,
-  legendWidth: 100,
-  axisLabelSpace: 40,
+  legendWidth: 130,
+  axisLabelSpace: 62,
   axisTitleSpace: 25,
   tickLength: 6,
   minPlotSize: 50,
@@ -173,7 +173,7 @@ function calculateTitleArea(
 
   const titleSpec = typeof title === 'string' ? { text: title } : title;
   const fontSize = titleSpec.fontSize ?? 16;
-  const height = fontSize + (titleSpec.subtitle ? (titleSpec.subtitleFontSize ?? 12) + 5 : 0) + 10;
+  const height = fontSize + (titleSpec.subtitle ? (titleSpec.subtitleFontSize ?? 12) + 5 : 0) + 30;
 
   return {
     x: 0,
@@ -238,14 +238,15 @@ function calculateLegendArea(
 
   const orient = legendSpec?.orient ?? 'right';
   const legendWidth = DEFAULT_LAYOUT.legendWidth;
-  const legendHeight = 100; // Estimated, depends on items
+  const legendHeight = 180; // Estimated, depends on items
+  const centeredLegendY = Math.max(margin.top + 10, height / 2 - legendHeight / 2);
 
   // Position based on orientation
   switch (orient) {
     case 'right':
       return {
         x: width - margin.right - legendWidth - 10,
-        y: margin.top + 10,
+        y: centeredLegendY,
         width: legendWidth,
         height: legendHeight,
       };
@@ -273,7 +274,7 @@ function calculateLegendArea(
     case 'top-right':
       return {
         x: width - margin.right - legendWidth - 10,
-        y: margin.top + 10,
+        y: centeredLegendY,
         width: legendWidth,
         height: legendHeight,
       };
@@ -303,7 +304,7 @@ function calculateLegendArea(
     default:
       return {
         x: width - margin.right - legendWidth - 10,
-        y: margin.top + 10,
+        y: centeredLegendY,
         width: legendWidth,
         height: legendHeight,
       };

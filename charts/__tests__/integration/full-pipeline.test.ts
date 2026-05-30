@@ -84,7 +84,7 @@ describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () =>
   // --- column ---
 
   describe('column chart', () => {
-    it('produces rect marks for horizontal bar', () => {
+    it('produces rect marks for vertical bars', () => {
       const result = runPipeline(makeConfig({ type: 'column' }), SINGLE_DATA);
       expect(result.marks.length).toBeGreaterThan(0);
       expect(result.marks.every((m) => m.type === 'rect')).toBe(true);

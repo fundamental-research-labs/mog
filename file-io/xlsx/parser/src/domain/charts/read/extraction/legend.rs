@@ -39,7 +39,7 @@ pub(super) fn extract_legend_from_chart_space(
         };
 
         domain_types::chart::LegendData {
-            show: false,
+            show: true,
             position: position.to_string(),
             visible: true,
             overlay: l.overlay,

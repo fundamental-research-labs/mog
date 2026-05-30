@@ -19,6 +19,7 @@ import {
   resolveStackMode,
   resolveSubTypeMarkProps,
 } from '../../src/core/config-to-spec';
+import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
 import type { EncodingSpec, MarkSpec } from '../../src/grammar/spec';
 import type { ChartConfig, ChartData, ChartType, StoredChartConfig } from '../../src/types';
@@ -166,12 +167,25 @@ describe('buildMark - mark type mapping', () => {
 });
 
 // =============================================================================
-// Bar Chart Encoding Bug FIX
+// Bar/Column Chart Encoding
 // =============================================================================
 
-describe('buildEncoding - bar chart encoding fix', () => {
-  it('should have x=nominal, y=quantitative for bar (vertical bar) charts', () => {
+describe('buildEncoding - bar/column chart encoding', () => {
+  it('should have x=quantitative, y=nominal for bar (horizontal bar) charts', () => {
     const config = makeConfig({ type: 'bar' });
+    const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
+
+    expect(encoding.x).toBeDefined();
+    expect(encoding.x!.field).toBe('value');
+    expect(encoding.x!.type).toBe('quantitative');
+
+    expect(encoding.y).toBeDefined();
+    expect(encoding.y!.field).toBe('category');
+    expect(encoding.y!.type).toBe('nominal');
+  });
+
+  it('should have x=nominal, y=quantitative for column (vertical bar) charts', () => {
+    const config = makeConfig({ type: 'column' });
     const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
 
     expect(encoding.x).toBeDefined();
@@ -183,17 +197,18 @@ describe('buildEncoding - bar chart encoding fix', () => {
     expect(encoding.y!.type).toBe('quantitative');
   });
 
-  it('should have x=quantitative, y=nominal for column (horizontal bar) charts', () => {
-    const config = makeConfig({ type: 'column' });
-    const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
+  it('uses cumulative stacked totals for vertical column value domain', () => {
+    const config = makeConfig({ type: 'column', subType: 'stacked' });
+    const encoding = buildEncoding(config, MULTI_SERIES_DATA);
 
-    expect(encoding.x).toBeDefined();
-    expect(encoding.x!.field).toBe('value');
-    expect(encoding.x!.type).toBe('quantitative');
+    expect(encoding.y?.scale?.domain).toEqual([0, 90]);
+  });
 
-    expect(encoding.y).toBeDefined();
-    expect(encoding.y!.field).toBe('category');
-    expect(encoding.y!.type).toBe('nominal');
+  it('uses cumulative stacked totals for horizontal bar value domain', () => {
+    const config = makeConfig({ type: 'bar', subType: 'stacked' });
+    const encoding = buildEncoding(config, MULTI_SERIES_DATA);
+
+    expect(encoding.x?.scale?.domain).toEqual([0, 90]);
   });
 });
 
@@ -412,6 +427,45 @@ describe('buildEncoding - axis config', () => {
     expect((encoding.y!.scale as { domain: [number, number] }).domain).toEqual([0, 100]);
   });
 
+  it('should lower imported axis number formats and text styling', () => {
+    const config = makeConfig({
+      axis: {
+        xAxis: {
+          type: 'category',
+          numberFormat: '"FY3/"0',
+          format: {
+            font: { size: 9, color: { theme: 'tx1' } },
+            textRotation: -1000,
+          },
+        },
+        yAxis: {
+          type: 'value',
+          gridLines: true,
+          gridlineFormat: { color: { theme: 'tx1' }, width: 0.75 },
+        },
+      },
+    });
+    const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
+
+    expect(encoding.x!.axis).toEqual(
+      expect.objectContaining({
+        title: null,
+        format: '"FY3/"0',
+        labelFontSize: 12,
+        labelColor: '#595959',
+        labelAngle: -45,
+      }),
+    );
+    expect(encoding.y!.axis).toEqual(
+      expect.objectContaining({
+        title: null,
+        grid: true,
+        gridColor: '#D9D9D9',
+        gridWidth: 0.75,
+      }),
+    );
+  });
+
   it('should not set axis config when axis is undefined', () => {
     const config = makeConfig({ axis: undefined });
     const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
@@ -432,6 +486,25 @@ describe('buildEncoding - legend config', () => {
     const encoding = buildEncoding(config, MULTI_SERIES_DATA);
     expect(encoding.color!.legend).toBeDefined();
     expect((encoding.color!.legend as { orient: string }).orient).toBe('right');
+  });
+
+  it('should lower imported legend text styling and suppress the synthetic title', () => {
+    const config = makeConfig({
+      legend: {
+        show: true,
+        position: 'r',
+        visible: true,
+        format: { font: { size: 9, color: { theme: 'tx1' } } },
+      },
+    });
+    const encoding = buildEncoding(config, MULTI_SERIES_DATA);
+
+    expect(encoding.color!.legend).toEqual({
+      orient: 'right',
+      title: null,
+      labelFontSize: 12,
+      labelColor: '#595959',
+    });
   });
 
   it('should hide legend when show=false', () => {
@@ -488,7 +561,22 @@ describe('buildConfigSpec - colors', () => {
     const configSpec = buildConfigSpec(config);
     expect(configSpec).toBeDefined();
     expect(configSpec!.stack).toBe('zero');
-    expect(configSpec!.range).toEqual({ category: ['#aaa', '#bbb'] });
+    expect(configSpec!.range).toEqual({ category: ['#aaaaaa', '#bbbbbb'] });
+  });
+
+  it('should derive category colors from imported series theme fills', () => {
+    const config = makeConfig({
+      colors: ['#ff0000'],
+      series: [
+        { name: 'A', format: { fill: { type: 'solid', color: { theme: 'accent1' } } } },
+        { name: 'B', format: { fill: { type: 'solid', color: { theme: 'accent2' } } } },
+      ],
+    });
+    const encoding = buildEncoding(config, MULTI_SERIES_DATA);
+    const configSpec = buildConfigSpec(config);
+
+    expect(encoding.color!.scale).toEqual({ range: ['#4472C4', '#ED7D31'] });
+    expect(configSpec!.range).toEqual({ category: ['#4472C4', '#ED7D31'] });
   });
 });
 
@@ -508,6 +596,33 @@ describe('buildTitle', () => {
   it('should return TitleSpec when both title and subtitle', () => {
     const result = buildTitle(makeConfig({ title: 'Main', subtitle: 'Sub' }));
     expect(result).toEqual({ text: 'Main', subtitle: 'Sub' });
+  });
+
+  it('should lower imported title font styling', () => {
+    const result = buildTitle(
+      makeConfig({
+        title: 'Revenue (mn)',
+        titleFormat: { font: { size: 10.8, bold: false, color: { theme: 'tx1' } } },
+      }),
+    );
+    expect(result).toEqual({
+      text: 'Revenue (mn)',
+      fontSize: 14.4,
+      color: '#595959',
+    });
+  });
+});
+
+describe('formatTickValue - imported Excel number formats', () => {
+  it('formats quoted-prefix fiscal year category labels', () => {
+    expect(formatTickValue('19', '"FY3/"0')).toBe('FY3/19');
+  });
+
+  it('formats Excel comma/negative/zero value axis labels', () => {
+    const format = '#,##0_);\\(#,##0\\);\\–_);"–"_)';
+    expect(formatTickValue(200000, format)).toBe('200,000');
+    expect(formatTickValue(-200000, format)).toBe('(200,000)');
+    expect(formatTickValue(0, format)).toBe('–');
   });
 });
 
@@ -767,8 +882,8 @@ describe('configToSpec - integration', () => {
     expect(spec.mark).toBe('bar');
     expect(spec.data).toEqual({ values: expect.any(Array) });
     expect(spec.encoding).toBeDefined();
-    expect(spec.encoding!.x!.type).toBe('nominal'); // FIX verified
-    expect(spec.encoding!.y!.type).toBe('quantitative'); // FIX verified
+    expect(spec.encoding!.x!.type).toBe('quantitative');
+    expect(spec.encoding!.y!.type).toBe('nominal');
     expect(spec.title).toBe('Sales');
   });
 
@@ -882,7 +997,7 @@ describe('configToSpec - integration', () => {
     expect((spec.encoding!.y!.scale as { domain: [number, number] }).domain).toEqual([0, 1000]);
 
     // Legend
-    expect(spec.encoding!.color!.legend).toEqual({ orient: 'top' });
+    expect(spec.encoding!.color!.legend).toEqual({ orient: 'top', title: null });
   });
 
   it('should default width/height when not provided', () => {
@@ -1460,7 +1575,7 @@ describe('configToSpec -> compile round-trip: mark verification', () => {
 
   // --- column variants ---
 
-  it('column (clustered): produces rect marks (horizontal bars)', () => {
+  it('column (clustered): produces rect marks (vertical bars)', () => {
     const config = makeConfig({ type: 'column', subType: 'clustered' });
     const spec = configToSpec(config, richSingle);
     const result = compile(spec, undefined, { width: 600, height: 400 });
@@ -1702,8 +1817,8 @@ describe('chart-engine configToSpec wiring', () => {
     const spec = engineConfigToSpec(config, SINGLE_SERIES_DATA);
 
     // Should produce the comprehensive spec (not the old lossy one)
-    expect(spec.encoding!.x!.type).toBe('nominal'); // bar fix
-    expect(spec.encoding!.y!.type).toBe('quantitative'); // bar fix
+    expect(spec.encoding!.x!.type).toBe('quantitative');
+    expect(spec.encoding!.y!.type).toBe('nominal');
     expect(spec.title).toBe('Wiring Test'); // string title (no subtitle)
   });
 

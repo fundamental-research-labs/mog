@@ -330,6 +330,8 @@ export interface LegendSpec {
   direction?: 'horizontal' | 'vertical';
   labelFontSize?: number;
   labelColor?: string;
+  /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
+  reverse?: boolean;
   symbolSize?: number;
   symbolType?: 'circle' | 'square' | 'cross' | 'diamond' | 'triangle-up' | 'triangle-down';
   offset?: number;

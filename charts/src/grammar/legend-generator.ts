@@ -67,13 +67,14 @@ export function generateColorLegend(
 
   // Get domain
   const domain: unknown[] = typeof scale.domain === 'function' ? scale.domain() : [];
+  const legendValues = legendSpec.reverse ? [...domain].reverse() : domain;
 
   const symbolSize = legendSpec.symbolSize ?? 10;
   const itemY = y + (title ? 20 : 0);
   const itemSpacing = 18;
 
-  for (let i = 0; i < domain.length; i++) {
-    const value = domain[i];
+  for (let i = 0; i < legendValues.length; i++) {
+    const value = legendValues[i];
     const color = scale(value) as string;
 
     // Symbol

@@ -205,10 +205,11 @@ export function wireToAxisConfig(w: AxisData): AxisConfig {
 
 /** Convert a wire LegendData to the contract LegendConfig. */
 export function wireToLegendConfig(w: LegendData): LegendConfig {
+  const visible = w.visible === true || w.show === true;
   return {
-    show: w.show,
+    show: visible,
     position: w.position,
-    visible: w.visible,
+    visible,
     overlay: w.overlay,
     format: w.format,
     entries: w.entries,

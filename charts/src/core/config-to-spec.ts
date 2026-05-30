@@ -29,8 +29,11 @@ import type {
 } from '../grammar/spec';
 import type {
   AxisConfig,
+  ChartColor,
   ChartConfig,
   ChartData,
+  ChartFill,
+  ChartFormat,
   ChartType,
   DataLabelConfig,
   LegendConfig,
@@ -59,6 +62,170 @@ const CANDLESTICK_BAR_WIDTH = 14;
 
 /** Tick count used to simulate minor gridlines. */
 const MINOR_GRIDLINE_TICK_COUNT = 10;
+
+// =============================================================================
+// Imported Style Helpers
+// =============================================================================
+
+function normalizeHexColor(value: string): string | undefined {
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) return `#${hex}`;
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((ch) => ch + ch)
+      .join('')}`;
+  }
+  return trimmed.startsWith('#') ? trimmed : undefined;
+}
+
+function schemeColorHex(value: string): string | undefined {
+  switch (value) {
+    case 'Dk1':
+    case 'dk1':
+    case 'Tx1':
+    case 'tx1':
+      return '#000000';
+    case 'Lt1':
+    case 'lt1':
+    case 'Bg1':
+    case 'bg1':
+      return '#FFFFFF';
+    case 'Dk2':
+    case 'dk2':
+    case 'Tx2':
+    case 'tx2':
+      return '#1F497D';
+    case 'Lt2':
+    case 'lt2':
+    case 'Bg2':
+    case 'bg2':
+      return '#EEECE1';
+    case 'Accent1':
+    case 'accent1':
+      return '#4472C4';
+    case 'Accent2':
+    case 'accent2':
+      return '#ED7D31';
+    case 'Accent3':
+    case 'accent3':
+      return '#A5A5A5';
+    case 'Accent4':
+    case 'accent4':
+      return '#FFC000';
+    case 'Accent5':
+    case 'accent5':
+      return '#5B9BD5';
+    case 'Accent6':
+    case 'accent6':
+      return '#70AD47';
+    case 'Hlink':
+    case 'hlink':
+      return '#0563C1';
+    case 'FolHlink':
+    case 'folHLink':
+    case 'folHlink':
+      return '#954F72';
+    default:
+      return undefined;
+  }
+}
+
+function applyTintShade(hexColor: string, tintShade: number | undefined): string {
+  if (tintShade === undefined || tintShade === 0) return hexColor;
+  const normalized = normalizeHexColor(hexColor);
+  if (!normalized) return hexColor;
+  const hex = normalized.slice(1);
+  const channels = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  const adjusted = channels.map((channel) => {
+    const value =
+      tintShade > 0 ? channel + (255 - channel) * tintShade : channel * (1 + tintShade);
+    return Math.max(0, Math.min(255, Math.round(value)));
+  });
+  return `#${adjusted.map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function resolveChartColor(color: ChartColor | undefined): string | undefined {
+  if (typeof color === 'string') return normalizeHexColor(color) ?? color;
+  if (!color || typeof color !== 'object') return undefined;
+  const base = schemeColorHex(color.theme);
+  return base ? applyTintShade(base, color.tintShade) : undefined;
+}
+
+function themeColorKey(color: ChartColor | undefined): string | undefined {
+  return typeof color === 'object' && color !== null ? color.theme.toLowerCase() : undefined;
+}
+
+function resolveChartTextColor(color: ChartColor | undefined): string | undefined {
+  if (themeColorKey(color) === 'tx1') return '#595959';
+  return resolveChartColor(color);
+}
+
+function resolveGridlineColor(color: ChartColor | undefined): string | undefined {
+  if (themeColorKey(color) === 'tx1') return '#D9D9D9';
+  return resolveChartColor(color);
+}
+
+function resolveSolidFillColor(fill: ChartFill | undefined): string | undefined {
+  if (!fill || fill.type !== 'solid') return undefined;
+  return resolveChartColor(fill.color);
+}
+
+function resolveFormatFillColor(format: ChartFormat | undefined): string | undefined {
+  return resolveSolidFillColor(format?.fill);
+}
+
+function excelStyleRepeatColor(theme: string | undefined, index: number): string | undefined {
+  if (index < 6 || !theme) return undefined;
+  switch (theme.toLowerCase()) {
+    case 'accent1':
+      return '#264478';
+    case 'accent2':
+      return '#9E480E';
+    case 'accent3':
+      return '#636363';
+    default:
+      return undefined;
+  }
+}
+
+function resolveSeriesColor(series: SeriesConfig, index: number): string | undefined {
+  const fill = series.format?.fill;
+  const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
+  return (
+    (series.color ? resolveChartColor(series.color) : undefined) ??
+    excelStyleRepeatColor(fillTheme, index) ??
+    resolveFormatFillColor(series.format)
+  );
+}
+
+function resolvedCategoryColors(config: ChartConfig): string[] | undefined {
+  const seriesColors = (config.series ?? [])
+    .map((series, index) => resolveSeriesColor(series, index))
+    .filter(Boolean) as string[];
+  if (seriesColors.length > 0) return seriesColors;
+  const configColors = (config.colors ?? []).map((color) => resolveChartColor(color)).filter(
+    Boolean,
+  ) as string[];
+  return configColors.length > 0 ? configColors : undefined;
+}
+
+function normalizeAxisLabelAngle(
+  axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
+): number | undefined {
+  const raw = axisConf.textOrientation ?? axisConf.format?.textRotation;
+  if (raw === undefined) return undefined;
+  if (raw === 0) return 0;
+  if (Math.abs(raw) > 360 && Math.abs(raw) < 60000) return raw < 0 ? -45 : 45;
+  const degrees = Math.abs(raw) > 360 ? raw / 60000 : raw;
+  if (Math.abs(degrees) <= 90) return degrees;
+  return degrees < 0 ? -45 : 45;
+}
+
+function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
+  return sizePt === undefined ? undefined : sizePt * (96 / 72);
+}
 
 // =============================================================================
 // Mark Type Mapping
@@ -220,10 +387,29 @@ export function resolveSubTypeMarkProps(config: ChartConfig): Partial<MarkSpec> 
  */
 export function buildTitle(config: ChartConfig): TitleSpec | string | undefined {
   if (!config.title) return undefined;
-  if (!config.subtitle) return config.title;
-  return {
+  const font = config.titleFormat?.font;
+  const titleSpec: TitleSpec = {
     text: config.title,
-    subtitle: config.subtitle,
+    ...(config.subtitle ? { subtitle: config.subtitle } : {}),
+  };
+  if (font?.size !== undefined) titleSpec.fontSize = pointsToCanvasPx(font.size);
+  if (font?.bold) titleSpec.fontWeight = 'bold';
+  if (font?.italic !== undefined) titleSpec.fontStyle = font.italic ? 'italic' : 'normal';
+  const titleColor = resolveChartTextColor(font?.color);
+  if (titleColor) titleSpec.color = titleColor;
+
+  if (
+    !config.subtitle &&
+    titleSpec.fontSize === undefined &&
+    titleSpec.fontWeight === undefined &&
+    titleSpec.fontStyle === undefined &&
+    titleSpec.color === undefined
+  ) {
+    return config.title;
+  }
+  if (!config.subtitle) return titleSpec;
+  return {
+    ...titleSpec,
   };
 }
 
@@ -238,7 +424,14 @@ function mapAxisConfigToAxisSpec(
   axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
 ): AxisSpec {
   const spec: AxisSpec = {};
-  if (axisConf.title !== undefined) spec.title = axisConf.title;
+  spec.title = axisConf.title ?? null;
+  if (axisConf.visible === false || axisConf.show === false) {
+    spec.labels = false;
+    spec.ticks = false;
+    spec.domain = false;
+    spec.grid = false;
+    return spec;
+  }
   if (axisConf.gridLines !== undefined) spec.grid = axisConf.gridLines;
   if (axisConf.minorGridLines !== undefined) {
     // Minor grid lines are represented by halving the tick count
@@ -247,6 +440,36 @@ function mapAxisConfigToAxisSpec(
       spec.tickCount = MINOR_GRIDLINE_TICK_COUNT; // More ticks to simulate minor gridlines
     }
   }
+  if (axisConf.tickMarks === 'none') spec.ticks = false;
+  if (axisConf.numberFormat) spec.format = axisConf.numberFormat;
+
+  const labelFont = axisConf.format?.font;
+  if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
+  const labelColor = resolveChartTextColor(labelFont?.color);
+  if (labelColor) spec.labelColor = labelColor;
+
+  const labelAngle = normalizeAxisLabelAngle(axisConf);
+  if (labelAngle !== undefined) spec.labelAngle = labelAngle;
+
+  const axisLine = axisConf.format?.line;
+  const axisLineColor = resolveChartTextColor(axisLine?.color);
+  if (axisLineColor) {
+    spec.domainColor = axisLineColor;
+    spec.tickColor = axisLineColor;
+  }
+  if (axisLine?.width !== undefined) {
+    spec.domainWidth = axisLine.width;
+    spec.tickWidth = axisLine.width;
+  }
+
+  const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
+  if (gridlineColor) spec.gridColor = gridlineColor;
+  if (axisConf.gridlineFormat?.width !== undefined) spec.gridWidth = axisConf.gridlineFormat.width;
+
+  const titleFont = axisConf.titleFormat?.font;
+  if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);
+  const titleColor = resolveChartTextColor(titleFont?.color);
+  if (titleColor) spec.titleColor = titleColor;
   return spec;
 }
 
@@ -284,14 +507,23 @@ function buildAxisScaleDomain(
  */
 function legendPositionToOrient(position: string): LegendOrient {
   switch (position) {
+    case 't':
     case 'top':
       return 'top';
+    case 'b':
     case 'bottom':
       return 'bottom';
+    case 'l':
     case 'left':
       return 'left';
+    case 'r':
     case 'right':
       return 'right';
+    case 'tr':
+    case 'topRight':
+    case 'top-right':
+    case 'corner':
+      return 'top-right';
     case 'none':
       return 'none';
     default:
@@ -305,18 +537,31 @@ function legendPositionToOrient(position: string): LegendOrient {
 function buildColorEncoding(
   hasMultipleSeries: boolean,
   legend?: LegendConfig,
+  colors?: string[],
+  reverseLegend?: boolean,
 ): ChannelSpec | undefined {
   if (!hasMultipleSeries) return undefined;
   const channel: ChannelSpec = {
     field: 'series',
     type: 'nominal',
   };
+  if (colors && colors.length > 0) {
+    channel.scale = { range: colors };
+  }
   if (legend) {
     if (!legend.show) {
       channel.legend = null; // hide
     } else {
+      const legendFont = legend.format?.font ?? legend.font;
+      const labelColor = resolveChartTextColor(legendFont?.color);
       channel.legend = {
         orient: legendPositionToOrient(legend.position),
+        title: null,
+        ...(reverseLegend ? { reverse: true } : {}),
+        ...(legendFont?.size !== undefined
+          ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
+          : {}),
+        ...(labelColor ? { labelColor } : {}),
       };
     }
   }
@@ -329,8 +574,8 @@ function buildColorEncoding(
  * IMPORTANT: The old chart-engine.ts had a bug where bar chart x/y types were
  * inverted. This implementation FIXES that:
  *
- *   bar (vertical bars):   x = nominal (category), y = quantitative (value)
- *   column (horizontal):   x = quantitative (value), y = nominal (category)
+ *   column (vertical bars): x = nominal (category), y = quantitative (value)
+ *   bar (horizontal bars):  x = quantitative (value), y = nominal (category)
  */
 export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpec {
   const encoding: EncodingSpec = {};
@@ -352,13 +597,25 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       field: 'category',
       type: 'nominal',
     };
+    const categoryColors = resolvedCategoryColors(config);
+    if (categoryColors) {
+      encoding.color.scale = { range: categoryColors };
+    }
     // Apply legend config to color channel
     if (config.legend) {
       if (!config.legend.show) {
         encoding.color.legend = null;
       } else {
+        const legendFont = config.legend.format?.font ?? config.legend.font;
+        const labelColor = resolveChartTextColor(legendFont?.color);
         encoding.color.legend = {
           orient: legendPositionToOrient(config.legend.position),
+          title: null,
+          ...(resolveStackMode(config) ? { reverse: true } : {}),
+          ...(legendFont?.size !== undefined
+            ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
+            : {}),
+          ...(labelColor ? { labelColor } : {}),
         };
       }
     }
@@ -366,13 +623,11 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   // --- X/Y encoding for all other chart types ---
-  // column/column3d = horizontal bar: x is quantitative, y is nominal
-  // bar = vertical bar: x is nominal, y is quantitative (FIX from old code)
-  if (chartType === 'column' || chartType === 'column3d') {
+  // Excel column charts are vertical; Excel bar charts are horizontal.
+  if (isHorizontalBarType(chartType)) {
     encoding.x = { field: 'value', type: 'quantitative' };
     encoding.y = { field: 'category', type: 'nominal' };
   } else {
-    // bar, line, area, scatter, bubble, combo, radar, stock, funnel, waterfall
     encoding.x = { field: 'category', type: 'nominal' };
     encoding.y = { field: 'value', type: 'quantitative' };
   }
@@ -404,12 +659,74 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   // Color encoding for multi-series
-  const colorChannel = buildColorEncoding(hasMultipleSeries, config.legend);
+  const colorChannel = buildColorEncoding(
+    hasMultipleSeries,
+    config.legend,
+    resolvedCategoryColors(config),
+    Boolean(resolveStackMode(config)),
+  );
   if (colorChannel) {
     encoding.color = colorChannel;
   }
 
+  applyStackedValueDomain(config, data, encoding);
+
   return encoding;
+}
+
+function isHorizontalBarType(chartType: ChartType): boolean {
+  switch (chartType) {
+    case 'bar':
+    case 'bar3d':
+    case 'cylinderBarClustered':
+    case 'cylinderBarStacked':
+    case 'cylinderBarStacked100':
+    case 'coneBarClustered':
+    case 'coneBarStacked':
+    case 'coneBarStacked100':
+    case 'pyramidBarClustered':
+    case 'pyramidBarStacked':
+    case 'pyramidBarStacked100':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyStackedValueDomain(
+  config: ChartConfig,
+  data: ChartData,
+  encoding: EncodingSpec,
+): void {
+  const stack = resolveStackMode(config);
+  if (!stack || stack === 'normalize') return;
+
+  const chartType = config.type;
+  const valueChannel = isHorizontalBarType(chartType) ? encoding.x : encoding.y;
+  if (!valueChannel) return;
+
+  const existingDomain = valueChannel.scale?.domain;
+  if (Array.isArray(existingDomain)) return;
+
+  let maxPositive = 0;
+  let minNegative = 0;
+  for (let pointIndex = 0; pointIndex < (data.categories?.length ?? 0); pointIndex += 1) {
+    let positive = 0;
+    let negative = 0;
+    for (const series of data.series) {
+      const value = series.data[pointIndex]?.y;
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      if (value >= 0) positive += value;
+      else negative += value;
+    }
+    if (positive > maxPositive) maxPositive = positive;
+    if (negative < minNegative) minNegative = negative;
+  }
+
+  valueChannel.scale = {
+    ...(valueChannel.scale ?? {}),
+    domain: [minNegative, maxPositive],
+  };
 }
 
 // =============================================================================
@@ -554,8 +871,18 @@ export function buildConfigSpec(config: ChartConfig): ConfigSpec | undefined {
   }
 
   // Colors
-  if (config.colors && config.colors.length > 0) {
-    configSpec.range = { category: config.colors };
+  const categoryColors = resolvedCategoryColors(config);
+  if (categoryColors && categoryColors.length > 0) {
+    configSpec.range = { category: categoryColors };
+    hasConfig = true;
+  }
+
+  const background =
+    resolveFormatFillColor(config.chartFormat) ??
+    resolveSolidFillColor(config.chartArea?.fill) ??
+    resolveFormatFillColor(config.chartArea?.format);
+  if (background) {
+    configSpec.background = background;
     hasConfig = true;
   }
 

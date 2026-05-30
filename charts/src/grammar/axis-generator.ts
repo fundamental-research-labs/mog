@@ -49,6 +49,7 @@ export function generateXAxis(
 ): AnyMark[] {
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...channel.axis } as AxisSpec;
+  const tickFormat = channel.format ?? axisSpec.format;
   const y = layout.plotArea.y + layout.plotArea.height;
 
   const role = 'x-axis';
@@ -85,7 +86,7 @@ export function generateXAxis(
     const avgCharWidth = fontSize * 0.6;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
       const text =
-        channel.type === 'temporal' ? formatTemporalTick(t) : formatTickValue(t, channel.format);
+        channel.type === 'temporal' ? formatTemporalTick(t) : formatTickValue(t, tickFormat);
       return Math.max(max, text.length);
     }, 0);
     const estimatedLabelWidth = maxLabelLen * avgCharWidth;
@@ -137,7 +138,7 @@ export function generateXAxis(
       const labelText =
         channel.type === 'temporal'
           ? formatTemporalTick(tick)
-          : formatTickValue(tick, channel.format);
+          : formatTickValue(tick, tickFormat);
       const labelAngle = axisSpec.labelAngle ?? 0;
 
       marks.push({
@@ -177,7 +178,7 @@ export function generateXAxis(
 
   // Axis title
   if (axisSpec.title !== null) {
-    const title = axisSpec.title ?? channel.title ?? channel.field;
+    const title = axisSpec.title ?? channel.title;
     if (title) {
       marks.push({
         type: 'text',
@@ -211,6 +212,7 @@ export function generateYAxis(
 ): AnyMark[] {
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...channel.axis } as AxisSpec;
+  const tickFormat = channel.format ?? axisSpec.format;
   const x = layout.plotArea.x;
   const role = 'y-axis';
 
@@ -288,7 +290,7 @@ export function generateYAxis(
       const labelText =
         channel.type === 'temporal'
           ? formatTemporalTick(tick)
-          : formatTickValue(tick, channel.format);
+          : formatTickValue(tick, tickFormat);
 
       marks.push({
         type: 'text',
@@ -326,7 +328,7 @@ export function generateYAxis(
 
   // Axis title
   if (axisSpec.title !== null) {
-    const title = axisSpec.title ?? channel.title ?? channel.field;
+    const title = axisSpec.title ?? channel.title;
     if (title) {
       marks.push({
         type: 'text',
@@ -392,29 +394,47 @@ export function formatTickValue(value: unknown, format?: string): string {
     return value.toLocaleDateString();
   }
 
-  if (typeof value === 'number') {
+  const numericValue =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : NaN;
+
+  if (Number.isFinite(numericValue)) {
+    const valueNumber = numericValue;
     if (format) {
+      const quotedPrefix = format.match(/"([^"]*)"\s*0/);
+      if (quotedPrefix) {
+        return `${quotedPrefix[1]}${Math.round(valueNumber)}`;
+      }
+      if (format.includes('#,##0')) {
+        if (valueNumber === 0 && /[–-]/.test(format)) return '–';
+        const formatted = Math.round(Math.abs(valueNumber)).toLocaleString('en-US');
+        if (valueNumber < 0 && format.includes('(')) return `(${formatted})`;
+        return formatted;
+      }
       // Handle simple format patterns
       if (format.includes('%')) {
-        return (value * 100).toFixed(0) + '%';
+        return (valueNumber * 100).toFixed(0) + '%';
       }
       const match = format.match(/\.(\d+)f/);
       if (match) {
-        return value.toFixed(parseInt(match[1], 10));
+        return valueNumber.toFixed(parseInt(match[1], 10));
       }
     }
 
     // Default number formatting
-    if (Math.abs(value) >= 1000000) {
-      return (value / 1000000).toFixed(1) + 'M';
+    if (Math.abs(valueNumber) >= 1000000) {
+      return (valueNumber / 1000000).toFixed(1) + 'M';
     }
-    if (Math.abs(value) >= 1000) {
-      return (value / 1000).toFixed(1) + 'K';
+    if (Math.abs(valueNumber) >= 1000) {
+      return (valueNumber / 1000).toFixed(1) + 'K';
     }
-    if (Number.isInteger(value)) {
-      return value.toString();
+    if (Number.isInteger(valueNumber)) {
+      return valueNumber.toString();
     }
-    return value.toFixed(2);
+    return valueNumber.toFixed(2);
   }
 
   return String(value);

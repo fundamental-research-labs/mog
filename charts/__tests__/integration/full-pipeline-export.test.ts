@@ -97,7 +97,7 @@ describe('Full pipeline export: bar chart', () => {
     expect(result.chartXml).toBeDefined();
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
-    expect(result.chartXml).toContain('<c:barDir val="col"/>');
+    expect(result.chartXml).toContain('<c:barDir val="bar"/>');
   });
 
   it('stacked bar chart produces well-formed XML', () => {
@@ -136,22 +136,21 @@ describe('Full pipeline export: bar chart', () => {
 });
 
 // =============================================================================
-// Full Pipeline Export: Column (Horizontal Bar) Chart
+// Full Pipeline Export: Column Chart
 // =============================================================================
 
 describe('Full pipeline export: column chart', () => {
-  it('column chart produces horizontal bar XML', () => {
+  it('column chart produces vertical column XML', () => {
     const config = makeConfig({ type: 'column' });
     const data = makeData(1);
     const spec = configToSpec(config, data);
     const rows = chartDataToRows(data);
 
-    // Column chart uses bar mark with x=quantitative, y=nominal
-    // This should produce a horizontal bar in OOXML
+    // Column chart uses bar mark with x=nominal, y=quantitative.
     const result = toOOXML(spec, rows);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
-    expect(result.chartXml).toContain('<c:barDir val="bar"/>');
+    expect(result.chartXml).toContain('<c:barDir val="col"/>');
   });
 });
 
@@ -315,7 +314,7 @@ describe('Full pipeline export: support matrix', () => {
     },
   );
 
-  it('column chart exports as horizontal barChart', () => {
+  it('column chart exports as barChart with vertical column direction', () => {
     const config = makeConfig({ type: 'column' });
     const data = makeData(1);
     const spec = configToSpec(config, data);
@@ -325,6 +324,7 @@ describe('Full pipeline export: support matrix', () => {
     const result = toOOXML(spec, rows);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
+    expect(result.chartXml).toContain('<c:barDir val="col"/>');
   });
 
   it('bubble chart (point + size encoding) can be exported when spec has size', () => {

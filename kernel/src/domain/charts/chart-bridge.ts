@@ -26,6 +26,7 @@
 
 import {
   compile,
+  configToSpec,
   extractChartData,
   extractChartDataFromRange,
   renderMark,
@@ -271,6 +272,10 @@ function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     bubbleScale: normalizedChart.bubbleScale,
     splitType: normalizedChart.splitType as ChartConfig['splitType'],
     splitValue: normalizedChart.splitValue,
+    style: normalizedChart.style,
+    chartFormat: normalizedChart.chartFormat as ChartConfig['chartFormat'],
+    plotFormat: normalizedChart.plotFormat as ChartConfig['plotFormat'],
+    titleFormat: normalizedChart.titleFormat as ChartConfig['titleFormat'],
     subType: normalizedChart.subType as ChartConfig['subType'],
     extra: normalizedChart.ooxml,
   };
@@ -1434,186 +1439,7 @@ export class ChartBridge implements IChartBridge {
    * Convert ChartFloatingObject + ChartData to ChartSpec for the grammar compiler.
    */
   private chartToSpec(rawChart: ChartFloatingObject, data: ChartData): ChartSpec {
-    const chart = normalizeImportedComboChart(rawChart);
-    // Map chart type to mark type
-    const markTypeMap: Record<string, string> = {
-      bar: 'bar',
-      column: 'bar',
-      line: 'line',
-      area: 'area',
-      pie: 'arc',
-      doughnut: 'arc',
-      scatter: 'point',
-      bubble: 'point',
-      combo: 'bar',
-      radar: 'line',
-      stock: 'bar',
-      funnel: 'bar',
-      waterfall: 'bar',
-      // Statistical chart types
-      histogram: 'bar',
-      boxplot: 'boxplot',
-      heatmap: 'rect',
-      violin: 'violin',
-      pareto: 'bar',
-    };
-
-    // Convert ChartData to DataRow[] format
-    const rows: DataRow[] = [];
-    for (let i = 0; i < (data.categories?.length || 0); i++) {
-      const category = data.categories[i];
-      for (const series of data.series) {
-        if (series.data[i]) {
-          rows.push({
-            category: String(category),
-            value: series.data[i].y,
-            series: series.name,
-          });
-        }
-      }
-    }
-
-    // Build mark spec
-    const chartType = chart.chartType ?? 'bar';
-    const markType = markTypeMap[chartType] || 'bar';
-    const markSpec: ChartSpec['mark'] =
-      chartType === 'doughnut'
-        ? { type: 'arc' as const, innerRadius: 0.5 }
-        : (markType as ChartSpec['mark']);
-
-    // Build encoding
-    const encoding: ChartSpec['encoding'] = {
-      x: {
-        field: 'category',
-        type: chartType === 'bar' ? 'quantitative' : 'nominal',
-      },
-      y: {
-        field: 'value',
-        type: chartType === 'bar' ? 'nominal' : 'quantitative',
-      },
-    };
-
-    // Add color encoding if multiple series
-    if (data.series.length > 1) {
-      encoding.color = {
-        field: 'series',
-        type: 'nominal',
-      };
-    }
-
-    // For pie/doughnut, use theta encoding instead of x/y
-    if (chartType === 'pie' || chartType === 'doughnut') {
-      delete encoding.x;
-      delete encoding.y;
-      encoding.theta = {
-        field: 'value',
-        type: 'quantitative',
-      };
-      encoding.color = {
-        field: 'category',
-        type: 'nominal',
-      };
-    }
-
-    // Build title spec from enriched config fields
-    const chartTitle =
-      chart.ooxml && typeof chart.ooxml === 'object'
-        ? ((chart.ooxml as Record<string, unknown>).chartTitle as
-            | Record<string, unknown>
-            | undefined)
-        : undefined;
-    let titleSpec: ChartSpec['title'] | undefined;
-    if (chart.title) {
-      titleSpec = {
-        text: chart.title,
-        subtitle: chart.subtitle,
-        ...(chartTitle?.font && typeof chartTitle.font === 'object'
-          ? {
-              fontSize: (chartTitle.font as Record<string, unknown>).size as number | undefined,
-              color: (chartTitle.font as Record<string, unknown>).color as string | undefined,
-              fontWeight: (chartTitle.font as Record<string, unknown>).bold
-                ? ('bold' as const)
-                : undefined,
-            }
-          : {}),
-      };
-    }
-
-    // Map enriched axis config to ChartSpec config
-    const axisConfig = chart.axis as Record<string, unknown> | undefined;
-    const xAxisCfg = axisConfig?.xAxis as Record<string, unknown> | undefined;
-    const yAxisCfg = axisConfig?.yAxis as Record<string, unknown> | undefined;
-
-    // Build axis configuration for the spec
-    const specConfig: ChartSpec['config'] = {};
-    if (xAxisCfg || yAxisCfg) {
-      const axisCfg: Record<string, unknown> = {};
-      // Use the more detailed axis as the default config
-      const primaryAxis = yAxisCfg || xAxisCfg;
-      if (primaryAxis) {
-        if (primaryAxis.gridLines !== undefined) axisCfg.grid = primaryAxis.gridLines as boolean;
-        if (primaryAxis.numberFormat !== undefined) axisCfg.labelFormat = primaryAxis.numberFormat;
-        if (primaryAxis.visible === false) {
-          axisCfg.labels = false;
-          axisCfg.ticks = false;
-        }
-      }
-      if (Object.keys(axisCfg).length > 0) {
-        specConfig.axis = axisCfg as typeof specConfig.axis;
-      }
-    }
-
-    // Map enriched series config to encoding
-    const seriesCfg = chart.series as Array<Record<string, unknown>> | undefined;
-    if (seriesCfg && seriesCfg.length > 0 && chart.colors === undefined) {
-      // Extract colors from series configs
-      const seriesColors = seriesCfg
-        .map((s) => s.color as string | undefined)
-        .filter((c): c is string => c !== undefined);
-      if (seriesColors.length > 0) {
-        specConfig.range = { category: seriesColors };
-      }
-    }
-
-    // Map chart colors
-    if (chart.colors && chart.colors.length > 0) {
-      specConfig.range = { category: chart.colors };
-    }
-
-    // Map enriched chart area config (background color)
-    const chartArea =
-      chart.ooxml && typeof chart.ooxml === 'object'
-        ? ((chart.ooxml as Record<string, unknown>).chartArea as
-            | Record<string, unknown>
-            | undefined)
-        : undefined;
-    if (chartArea?.fill && typeof chartArea.fill === 'object') {
-      specConfig.background = (chartArea.fill as Record<string, unknown>).color as
-        | string
-        | undefined;
-    }
-
-    // Add axis titles to encoding
-    if (xAxisCfg?.title && encoding.x) {
-      (encoding.x as Record<string, unknown>).title = xAxisCfg.title;
-    }
-    if (yAxisCfg?.title && encoding.y) {
-      (encoding.y as Record<string, unknown>).title = yAxisCfg.title;
-    }
-
-    // Build spec - use pixel dimensions from chart bounds
-    // Default to reasonable pixel sizes if not specified
-    const spec: ChartSpec = {
-      width: chart.widthCells ? chart.widthCells * 80 : chart.width || 600, // Convert cell units to approx pixels, or use pixel width
-      height: chart.heightCells ? chart.heightCells * 20 : chart.height || 400,
-      mark: markSpec,
-      data: { values: rows },
-      encoding,
-      title: titleSpec,
-      ...(Object.keys(specConfig).length > 0 ? { config: specConfig } : {}),
-    };
-
-    return spec;
+    return configToSpec(toChartConfig(rawChart), data);
   }
 
   // ===========================================================================

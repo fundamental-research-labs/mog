@@ -49,6 +49,46 @@ function createChartsApi(charts: ChartFloatingObject[]): WorksheetChartsImpl {
   return new WorksheetChartsImpl(ctx as any, SHEET_ID);
 }
 
+function chartOoxmlWithAnchorIndex(anchorIndex: number): ChartFloatingObject['ooxml'] {
+  return {
+    drawingFrame: {
+      anchorIndex,
+    },
+  } as unknown as ChartFloatingObject['ooxml'];
+}
+
+describe('WorksheetChartsImpl chart list ordering', () => {
+  it('orders imported charts by drawing frame anchorIndex before serialization', async () => {
+    const anchor7 = makeChart({
+      id: 'anchor-7',
+      name: 'Chart anchor 7',
+      ooxml: chartOoxmlWithAnchorIndex(7),
+    });
+    const anchor3 = makeChart({
+      id: 'anchor-3',
+      name: 'Chart anchor 3',
+      ooxml: chartOoxmlWithAnchorIndex(3),
+    });
+    const charts = createChartsApi([anchor7, anchor3]);
+
+    await expect(charts.list()).resolves.toEqual([
+      expect.objectContaining({ id: 'anchor-3', name: 'Chart anchor 3' }),
+      expect.objectContaining({ id: 'anchor-7', name: 'Chart anchor 7' }),
+    ]);
+  });
+
+  it('preserves computeBridge order for charts without imported anchor metadata', async () => {
+    const first = makeChart({ id: 'first-chart', name: 'First chart' });
+    const second = makeChart({ id: 'second-chart', name: 'Second chart' });
+    const charts = createChartsApi([first, second]);
+
+    await expect(charts.list()).resolves.toEqual([
+      expect.objectContaining({ id: 'first-chart', name: 'First chart' }),
+      expect.objectContaining({ id: 'second-chart', name: 'Second chart' }),
+    ]);
+  });
+});
+
 describe('WorksheetChartsImpl chart ref read normalization', () => {
   it('normalizes imported absolute A1 refs from get and list without changing malformed refs', async () => {
     const imported = makeChart({

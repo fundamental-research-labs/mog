@@ -26,6 +26,8 @@ export type {
   ChartConfig,
   ChartFill,
   ChartFormat,
+  ChartSeriesPointCache,
+  ChartSeriesPointCachePoint,
   ChartType,
   DataLabelConfig,
   ImageExportFormat,
@@ -303,24 +305,6 @@ export type CreateChartInput = Omit<StoredChartConfig, 'id'> & { id?: string };
  * the point was rendered with a fallback value.
  */
 export type ChartDataPointValueState = 'value' | 'blank' | 'nonFinite' | 'nonNumeric';
-
-/**
- * Imported point cache for a chart data dimension.
- *
- * OOXML chart caches store sparse points by index, so an omitted index is a
- * meaningful blank/missing point while an explicit "0" value is a real zero.
- */
-export interface ChartSeriesPointCache {
-  pointCount?: number;
-  formatCode?: string;
-  points?: ChartSeriesPointCachePoint[];
-}
-
-export interface ChartSeriesPointCachePoint {
-  idx: number;
-  value: string;
-  formatCode?: string;
-}
 
 /**
  * Chart data point

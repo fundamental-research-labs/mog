@@ -348,6 +348,168 @@ function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartDat
   return categoryFormatCodes.some(Boolean) ? { ...data, categoryFormatCodes } : data;
 }
 
+function hasVisibleChartLineStyle(line: unknown): boolean {
+  if (!line || typeof line !== 'object') return false;
+  const candidate = line as { color?: unknown; width?: unknown };
+  return candidate.color !== undefined || candidate.width !== undefined;
+}
+
+function isNoFillNoLineSeriesConfig(
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+): boolean {
+  if (!series?.format) return false;
+  return series.format.fill?.type === 'none' && !hasVisibleChartLineStyle(series.format.line);
+}
+
+function isBlankChartScalar(value: string | number | null | undefined): boolean {
+  return value === null || value === undefined || value === '';
+}
+
+function isBlankChartPoint(point: ChartDataPoint | undefined): boolean {
+  if (!point) return true;
+  return point.valueState === 'blank';
+}
+
+type ImportedPointCache = {
+  pointCount?: unknown;
+  points?: unknown;
+};
+
+type ImportedPointCachePoint = {
+  idx?: unknown;
+  value?: unknown;
+};
+
+function importedCategoryCache(
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+): ImportedPointCache | undefined {
+  if (!series || typeof series !== 'object') return undefined;
+  const cache = (series as { categoryCache?: unknown }).categoryCache;
+  return cache && typeof cache === 'object' ? (cache as ImportedPointCache) : undefined;
+}
+
+function importedCachePointCount(cache: ImportedPointCache | undefined): number | undefined {
+  const pointCount = cache?.pointCount;
+  return typeof pointCount === 'number' && Number.isInteger(pointCount) && pointCount >= 0
+    ? pointCount
+    : undefined;
+}
+
+function importedCachePoint(
+  cache: ImportedPointCache | undefined,
+  pointIndex: number,
+): ImportedPointCachePoint | undefined {
+  const points = Array.isArray(cache?.points) ? cache.points : [];
+  return points.find((point): point is ImportedPointCachePoint => {
+    if (!point || typeof point !== 'object') return false;
+    return (point as ImportedPointCachePoint).idx === pointIndex;
+  });
+}
+
+function importedCategoryCacheValue(
+  cache: ImportedPointCache | undefined,
+  pointIndex: number,
+): string | number | undefined {
+  const point = importedCachePoint(cache, pointIndex);
+  if (!point) return undefined;
+  const value = point.value;
+  if (value === null || value === undefined || value === '') return '';
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : String(value);
+}
+
+function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): ChartData {
+  const seriesConfig = config.series?.find(
+    (series) => Boolean(series.categories) || importedCategoryCache(series),
+  );
+  if (!seriesConfig) return data;
+
+  const categoryCache = importedCategoryCache(seriesConfig);
+  const categoryPointCount = importedCachePointCount(categoryCache);
+  if (!categoryCache && !seriesConfig.categories) return data;
+
+  const maxLength = Math.max(
+    data.categories.length,
+    ...data.series.map((series) => series.data.length),
+  );
+  if (maxLength <= 0) return data;
+
+  let changed = false;
+  const categories: Array<string | number> = [];
+  for (let pointIndex = 0; pointIndex < maxLength; pointIndex += 1) {
+    const cached = importedCategoryCacheValue(categoryCache, pointIndex);
+    const isOmittedCachedPoint =
+      cached === undefined &&
+      categoryPointCount !== undefined &&
+      pointIndex >= 0 &&
+      pointIndex < categoryPointCount;
+    const isBeyondCachedDomain =
+      categoryPointCount !== undefined &&
+      pointIndex >= categoryPointCount &&
+      data.series.every((series) => isBlankChartPoint(series.data[pointIndex]));
+    const current =
+      data.categories[pointIndex] ??
+      data.series.find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
+      '';
+    const next = cached ?? (isOmittedCachedPoint || isBeyondCachedDomain ? '' : current);
+    categories.push(next);
+    if (next !== data.categories[pointIndex]) changed = true;
+  }
+
+  const series = data.series.map((item) => ({
+    ...item,
+    data: item.data.map((point, pointIndex) => {
+      const category = categories[pointIndex];
+      if (!point || point.x === category) return point;
+      changed = true;
+      return { ...point, x: category, name: String(category) };
+    }),
+  }));
+
+  return changed ? { ...data, categories, series } : data;
+}
+
+function trimTrailingBlankChartData(data: ChartData): ChartData {
+  let lastIndex = Math.max(
+    data.categories.length,
+    ...data.series.map((series) => series.data.length),
+  ) - 1;
+
+  while (
+    lastIndex >= 0 &&
+    isBlankChartScalar(data.categories[lastIndex]) &&
+    data.series.every((series) => isBlankChartPoint(series.data[lastIndex]))
+  ) {
+    lastIndex -= 1;
+  }
+
+  if (lastIndex < 0) return { ...data, categories: [], series: [] };
+  if (
+    lastIndex === data.categories.length - 1 &&
+    data.series.every((series) => lastIndex === series.data.length - 1)
+  ) {
+    return data;
+  }
+
+  return {
+    ...data,
+    categories: data.categories.slice(0, lastIndex + 1),
+    ...(data.categoryFormatCodes
+      ? { categoryFormatCodes: data.categoryFormatCodes.slice(0, lastIndex + 1) }
+      : {}),
+    series: data.series.map((series) => ({
+      ...series,
+      data: series.data.slice(0, lastIndex + 1),
+    })),
+  };
+}
+
+function normalizeChartDataForRendering(data: ChartData, config: ChartConfig): ChartData {
+  return trimTrailingBlankChartData(
+    normalizeImportedCategoryData(withCategoryFormatCodes(data, config), config),
+  );
+}
+
 function defaultExportOptionsForSize(width: number, height: number): ChartExportOptionsSnapshot {
   return {
     format: 'png',
@@ -378,10 +540,7 @@ function buildResolvedChartSpecSnapshot(input: {
   const series = input.chartData.series.map((dataSeries, index) =>
     snapshotSeries(dataSeries, index, categories, input.config, hasExplicitSeriesReferences),
   );
-  const legend = snapshotLegend(
-    input.config,
-    series.map((item) => item.name),
-  );
+  const legend = snapshotLegend(input.config, series);
 
   return {
     schemaVersion: 1,
@@ -483,7 +642,7 @@ function snapshotAxis(
 
 function snapshotLegend(
   config: ChartConfig,
-  seriesNames: string[],
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
 ): ResolvedChartSpecSnapshot['resolved']['legend'] {
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
@@ -497,8 +656,15 @@ function snapshotLegend(
     present,
     visible,
     position: legend?.position,
-    entries: present ? seriesNames : [],
-    visibleEntries: visible ? seriesNames.filter((_name, index) => !deletedEntries.has(index)) : [],
+    entries: present ? series.map((item) => item.name) : [],
+    visibleEntries: visible
+      ? series
+          .filter(
+            (_item, index) =>
+              !deletedEntries.has(index) && !isNoFillNoLineSeriesConfig(config.series?.[index]),
+          )
+          .map((item) => item.name)
+      : [],
   };
 }
 
@@ -529,11 +695,12 @@ function snapshotSeries(
     categories: configured?.categories,
     bubbleSize: configured?.bubbleSize,
   };
+  const name = snapshotSeriesName(series, configured, index);
 
   return {
     index,
     order: configured?.order ?? configured?.idx ?? index,
-    name: series.name,
+    name,
     type: series.type ?? configured?.type,
     axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
     color: series.color ?? configured?.color ?? config.colors?.[index],
@@ -542,7 +709,7 @@ function snapshotSeries(
     values,
     blankMask,
     dataHash: hashJson({
-      name: series.name,
+      name,
       source,
       categories: seriesCategories,
       categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
@@ -550,6 +717,17 @@ function snapshotSeries(
       blankMask,
     }),
   };
+}
+
+function snapshotSeriesName(
+  series: ChartDataSeries,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  index: number,
+): string {
+  if (!configured?.name && typeof configured?.idx === 'number' && Number.isInteger(configured.idx)) {
+    return `Series ${configured.idx}`;
+  }
+  return series.name || `Series ${index + 1}`;
 }
 
 function snapshotCategoriesForSeries(
@@ -1804,7 +1982,7 @@ export class ChartBridge implements IChartBridge {
       const data = extractChartData(accessor, renderConfig);
       return {
         config: renderConfig,
-        data: withCategoryFormatCodes(data, renderConfig),
+        data: normalizeChartDataForRendering(data, renderConfig),
       };
     }
 
@@ -1833,7 +2011,7 @@ export class ChartBridge implements IChartBridge {
     });
     return {
       config,
-      data: withCategoryFormatCodes(data, config),
+      data: normalizeChartDataForRendering(data, config),
     };
   }
 

@@ -27,6 +27,16 @@ function axisPosition(scale: AnyScale, tick: unknown): number {
     : position;
 }
 
+function axisLabelText(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  tick: unknown,
+  format: string | undefined,
+): string {
+  const mapped = axisSpec.labelTextByValue?.[String(tick)];
+  return mapped !== undefined ? mapped : formatAxisTick(channel, axisSpec, tick, format);
+}
+
 /**
  * Generate axis marks.
  */
@@ -97,7 +107,7 @@ export function generateXAxis(
   if (axisSpec.labels !== false && ticks.length > 1) {
     const avgCharWidth = fontSize * 0.6;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
-      const text = formatAxisTick(channel, axisSpec, t, tickFormat);
+      const text = axisLabelText(channel, axisSpec, t, tickFormat);
       return Math.max(max, text.length);
     }, 0);
     const estimatedLabelWidth = maxLabelLen * avgCharWidth;
@@ -146,7 +156,7 @@ export function generateXAxis(
 
     // Label (skip labels that would overlap)
     if (axisSpec.labels !== false && showThisTick) {
-      const labelText = formatAxisTick(
+      const labelText = axisLabelText(
         channel,
         axisSpec,
         tick,
@@ -271,8 +281,9 @@ export function generateYAxis(
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...channel.axis } as AxisSpec;
   const tickFormat = channel.format ?? axisSpec.format;
-  const x = layout.plotArea.x;
-  const role = 'y-axis';
+  const isRight = axisSpec.orient === 'right';
+  const x = isRight ? layout.plotArea.x + layout.plotArea.width : layout.plotArea.x;
+  const role = isRight ? 'y-axis-right' : 'y-axis';
 
   // Axis line
   if (axisSpec.domain !== false) {
@@ -325,12 +336,13 @@ export function generateYAxis(
 
     // Tick mark (skip when label is skipped)
     if (axisSpec.ticks !== false && showThisTick) {
+      const tickSize = axisSpec.tickSize ?? 6;
       marks.push({
         type: 'path',
         x: 0,
         y: 0,
         datum: axisDatum(role, 'tick'),
-        path: `M${x - (axisSpec.tickSize ?? 6)},${y} L${x},${y}`,
+        path: isRight ? `M${x},${y} L${x + tickSize},${y}` : `M${x - tickSize},${y} L${x},${y}`,
         style: {
           stroke: axisSpec.tickColor ?? '#000',
           strokeWidth: axisSpec.tickWidth ?? 1,
@@ -340,22 +352,24 @@ export function generateYAxis(
 
     // Label (skip labels that would overlap vertically)
     if (axisSpec.labels !== false && showThisTick) {
-      const labelText = formatAxisTick(
+      const labelText = axisLabelText(
         channel,
         axisSpec,
         tick,
         axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
       );
 
+      const tickSize = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
+      const labelPadding = axisSpec.labelPadding ?? 3;
       marks.push({
         type: 'text',
-        x: x - (axisSpec.tickSize ?? 6) - (axisSpec.labelPadding ?? 3),
+        x: isRight ? x + tickSize + labelPadding : x - tickSize - labelPadding,
         y,
         text: labelText,
         datum: axisDatum(role, 'label'),
         fontSize: yFontSize,
         fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
-        textAlign: 'right',
+        textAlign: isRight ? 'left' : 'right',
         textBaseline: 'middle',
         style: {
           fill: axisSpec.labelColor ?? '#000',
@@ -388,7 +402,7 @@ export function generateYAxis(
     if (title) {
       marks.push({
         type: 'text',
-        x: x - 45,
+        x: isRight ? x + 45 : x - 45,
         y: layout.plotArea.y + layout.plotArea.height / 2,
         text: title,
         datum: axisDatum(role, 'title'),
@@ -397,7 +411,7 @@ export function generateYAxis(
         textAlign: 'center',
         textBaseline: 'middle',
         fontWeight: 'bold',
-        rotation: -Math.PI / 2,
+        rotation: isRight ? Math.PI / 2 : -Math.PI / 2,
         style: {
           fill: axisSpec.titleColor ?? '#000',
         },

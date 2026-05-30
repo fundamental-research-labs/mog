@@ -32,4 +32,34 @@ describe('normalizeImportedComboChart', () => {
     expect(normalized.chartType).toBe('combo');
     expect(normalized.series).toEqual([{ type: 'area' }, { type: 'line' }]);
   });
+
+  it('collapses imported combo charts with uniform series types when group metadata is absent', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      series: [{ type: 'line' }, { type: 'line' }],
+    });
+
+    expect(normalized.chartType).toBe('line');
+    expect(normalized.series).toEqual([{ type: 'line' }, { type: 'line' }]);
+  });
+
+  it('keeps imported combo charts with mixed series types when group metadata is absent', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      series: [{ type: 'area' }, { type: 'line' }],
+    });
+
+    expect(normalized.chartType).toBe('combo');
+    expect(normalized.series).toEqual([{ type: 'area' }, { type: 'line' }]);
+  });
+
+  it('does not infer chart type from partially typed series', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      series: [{ type: 'line' }, {}],
+    });
+
+    expect(normalized.chartType).toBe('combo');
+    expect(normalized.series).toEqual([{ type: 'line' }, {}]);
+  });
 });

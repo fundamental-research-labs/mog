@@ -137,6 +137,27 @@ fn resolve_combo_axis_role_ids(
     role_ids
 }
 
+pub(super) fn resolve_group_y_axis_index(
+    axes: &[ooxml_types::charts::ChartAxis],
+    groups: &[ooxml_types::charts::ChartGroup],
+    group: &ooxml_types::charts::ChartGroup,
+) -> Option<u8> {
+    if groups.len() <= 1 {
+        return None;
+    }
+
+    let group_value_id = resolve_group_axis_role_ids(axes, group).value?;
+    let role_ids = resolve_combo_axis_role_ids(axes, groups);
+
+    if Some(group_value_id) == role_ids.secondary_value {
+        Some(1)
+    } else if Some(group_value_id) == role_ids.primary_value {
+        Some(0)
+    } else {
+        None
+    }
+}
+
 fn resolve_group_axis_role_ids(
     axes: &[ooxml_types::charts::ChartAxis],
     group: &ooxml_types::charts::ChartGroup,

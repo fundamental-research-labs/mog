@@ -26,7 +26,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 };
                 g.series
                     .iter()
-                    .map(move |s| extract_single_series(s, series_type.clone()))
+                    .map(move |s| extract_single_series(s, series_type.clone(), None))
             })
             .collect();
     }

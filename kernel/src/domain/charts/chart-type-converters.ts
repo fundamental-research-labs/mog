@@ -298,11 +298,7 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
 
 /** Convert a wire ChartSeriesData to the contract SeriesConfig. */
 export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
-  const config: SeriesConfig & {
-    valueCache?: ChartSeriesData['valueCache'];
-    categoryCache?: ChartSeriesData['categoryCache'];
-    bubbleSizeCache?: ChartSeriesData['bubbleSizeCache'];
-  } = {
+  const config: SeriesConfig = {
     name: w.name,
     // SeriesConfig.type is an unrestricted string on the contract side —
     // chart-type strings are validated at the chart level, not here.
@@ -501,22 +497,17 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
 
 /** Convert contract SeriesConfig to wire ChartSeriesData. */
 export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
-  const cached = c as SeriesConfig & {
-    valueCache?: ChartSeriesData['valueCache'];
-    categoryCache?: ChartSeriesData['categoryCache'];
-    bubbleSizeCache?: ChartSeriesData['bubbleSizeCache'];
-  };
   return {
     name: c.name,
     type: c.type,
     color: c.color,
     values: c.values,
-    valueCache: cached.valueCache,
+    valueCache: c.valueCache,
     categories: c.categories,
-    categoryCache: cached.categoryCache,
+    categoryCache: c.categoryCache,
     categoryLabelFormat: c.categoryLabelFormat,
     bubbleSize: c.bubbleSize,
-    bubbleSizeCache: cached.bubbleSizeCache,
+    bubbleSizeCache: c.bubbleSizeCache,
     smooth: c.smooth,
     explosion: c.explosion,
     invertIfNegative: c.invertIfNegative,

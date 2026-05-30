@@ -299,6 +299,8 @@ export interface AxisSpec {
   format?: string;
   /** Per-category format code keyed by the raw category value. */
   labelFormatByValue?: Record<string, string>;
+  /** Per-category display text keyed by the raw category value. */
+  labelTextByValue?: Record<string, string>;
   formatType?: 'number' | 'time';
   orient?: AxisOrient;
   offset?: number;

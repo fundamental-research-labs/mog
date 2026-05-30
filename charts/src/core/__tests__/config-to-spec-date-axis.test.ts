@@ -1,4 +1,4 @@
-import type { TextMark } from '../../primitives/types';
+import type { RectMark, TextMark } from '../../primitives/types';
 import { compile } from '../../grammar/compiler';
 import { isLayerSpec, type ChartSpec, type LayerSpec, type UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType } from '../../types';
@@ -146,6 +146,125 @@ describe('configToSpec imported Excel date category axes', () => {
     );
   });
 
+  it('uses independent y scales for combo series bound to a secondary axis', () => {
+    const data: ChartData = {
+      categories: DATE_SERIALS,
+      series: [
+        {
+          name: 'Dollars',
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: 20_000_000 + pointIndex * 5_000_000,
+          })),
+        },
+        {
+          name: 'Percent',
+          yAxisIndex: 1,
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: -0.1 + pointIndex * 0.15,
+          })),
+        },
+      ],
+    };
+    const config = makeDateAxisConfig('combo', 2);
+    config.axis = {
+      ...config.axis,
+      valueAxis: {
+        visible: true,
+        min: 0,
+        max: 50_000_000,
+      },
+      secondaryYAxis: {
+        visible: true,
+        min: -0.2,
+        max: 0.3,
+        numberFormat: '0%',
+      },
+    };
+    config.series = [
+      { name: 'Dollars', type: 'line' },
+      { name: 'Percent', type: 'column', yAxisIndex: 1 },
+    ];
+
+    const spec = asLayerSpec(configToSpec(config, data));
+
+    expect(spec.resolve).toMatchObject({
+      scale: { y: 'independent' },
+      axis: { y: 'independent' },
+    });
+    expect(spec.layer[1].encoding?.y?.scale).toMatchObject({
+      domain: [-0.2, 0.3],
+    });
+
+    const result = compile(spec);
+    const secondaryBars = result.marks.filter((mark): mark is RectMark => {
+      const datum = mark.datum as { series?: string } | undefined;
+      return mark.type === 'rect' && datum?.series === 'Percent';
+    });
+
+    expect(secondaryBars.length).toBeGreaterThan(0);
+    expect(Math.max(...secondaryBars.map((mark) => mark.height))).toBeGreaterThanOrEqual(20);
+  });
+
+  it('uses layered right-axis rendering for non-combo charts with secondary series', () => {
+    const data: ChartData = {
+      categories: DATE_SERIALS,
+      series: [
+        {
+          name: 'Primary',
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: 1_000_000 + pointIndex * 500_000,
+          })),
+        },
+        {
+          name: 'Secondary',
+          yAxisIndex: 1,
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: 8_000_000 + pointIndex * 2_000_000,
+          })),
+        },
+      ],
+    };
+    const config = makeDateAxisConfig('line', 2);
+    config.axis = {
+      ...config.axis,
+      valueAxis: {
+        visible: true,
+        numberFormat: '$#,##0',
+      },
+      secondaryYAxis: {
+        visible: true,
+        numberFormat: '$#,##0',
+      },
+    };
+    config.series = [
+      { name: 'Primary', type: 'line' },
+      { name: 'Secondary', type: 'line', yAxisIndex: 1 },
+    ];
+
+    const spec = asLayerSpec(configToSpec(config, data));
+
+    expect(spec.resolve).toMatchObject({
+      scale: { y: 'independent' },
+      axis: { y: 'independent' },
+    });
+    expect(spec.layer[1].encoding?.y?.axis).toMatchObject({
+      orient: 'right',
+      format: '$#,##0',
+    });
+
+    const result = compile(spec);
+    const rightAxisLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+      return mark.type === 'text' && datum?.role === 'y-axis-right' && datum.axisPart === 'label';
+    });
+
+    expect(rightAxisLabels.length).toBeGreaterThan(0);
+  });
+
   it('keeps ordinary string category charts on nominal band scales', () => {
     const data: ChartData = {
       categories: ['Jan', 'Feb', 'Mar'],
@@ -179,5 +298,37 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(inlineRows(spec)[0].category).toBe('Jan');
     expect(spec.encoding?.x?.type).toBe('nominal');
     expect(compile(spec).scales.x?.bandwidth).toEqual(expect.any(Function));
+  });
+
+  it('omits blank points from grammar rows when imported charts use gap blanks', () => {
+    const data: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 0, valueState: 'blank' },
+            { x: 'C', y: 2 },
+          ],
+        },
+      ],
+    };
+
+    const gapSpec = asUnitSpec(
+      configToSpec(
+        { type: 'line', anchorRow: 0, anchorCol: 0, width: 8, height: 5, displayBlanksAs: 'gap' },
+        data,
+      ),
+    );
+    const zeroSpec = asUnitSpec(
+      configToSpec(
+        { type: 'line', anchorRow: 0, anchorCol: 0, width: 8, height: 5, displayBlanksAs: 'zero' },
+        data,
+      ),
+    );
+
+    expect(inlineRows(gapSpec).map((row) => row.category)).toEqual(['A', 'C']);
+    expect(inlineRows(zeroSpec).map((row) => row.category)).toEqual(['A', 'B', 'C']);
   });
 });

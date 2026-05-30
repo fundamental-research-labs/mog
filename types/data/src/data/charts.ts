@@ -619,6 +619,31 @@ export interface PieSliceConfig {
 }
 
 /**
+ * Imported point cache for a chart data dimension.
+ *
+ * OOXML chart caches are sparse by point index. An omitted index inside
+ * `pointCount` is a meaningful blank/missing point, while an explicit "0"
+ * point is a real zero value.
+ */
+export interface ChartSeriesPointCache {
+  /** Logical OOXML point count for the dimension, when supplied by the source. */
+  pointCount?: number;
+  /** Dimension-wide number format code; point entries may override it. */
+  formatCode?: string;
+  /** Sparse cached points keyed by OOXML `c:pt/@idx`. */
+  points: ChartSeriesPointCachePoint[];
+}
+
+export interface ChartSeriesPointCachePoint {
+  /** Source point index. Missing indices inside `pointCount` are blanks. */
+  idx: number;
+  /** Raw OOXML cached point value. Numeric values are preserved as strings. */
+  value: string;
+  /** Point-level number format override. */
+  formatCode?: string;
+}
+
+/**
  * Individual series configuration (matches ChartSeriesData wire type)
  */
 export interface SeriesConfig {
@@ -626,9 +651,12 @@ export interface SeriesConfig {
   type?: string;
   color?: string;
   values?: string;
+  valueCache?: ChartSeriesPointCache;
   categories?: string;
+  categoryCache?: ChartSeriesPointCache;
   categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
+  bubbleSizeCache?: ChartSeriesPointCache;
   smooth?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;

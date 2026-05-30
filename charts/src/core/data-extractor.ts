@@ -30,12 +30,6 @@ export type { CellAddress, CellRange };
  */
 export type ChartCellValue = string | number | boolean | null | undefined;
 
-type SeriesConfigWithImportedCaches = SeriesConfig & {
-  valueCache?: ChartSeriesPointCache;
-  categoryCache?: ChartSeriesPointCache;
-  bubbleSizeCache?: ChartSeriesPointCache;
-};
-
 /**
  * Generic cell data accessor interface
  * Implementations can be backed by Yjs, plain objects, etc.
@@ -145,16 +139,33 @@ function createDataPoint(
   return point;
 }
 
-function isBlankChartCellValue(value: ChartCellValue): boolean {
-  return value === null || value === undefined || value === '';
-}
-
 function cachedPointValueAt(
   cache: ChartSeriesPointCache | undefined,
   pointIndex: number,
 ): ChartCellValue {
   const point = cache?.points?.find((candidate) => candidate.idx === pointIndex);
-  return point ? point.value : undefined;
+  return point !== undefined ? point.value : undefined;
+}
+
+function importedCachePointState(
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): { kind: 'explicit'; value: ChartCellValue } | { kind: 'omitted' } | { kind: 'absent' } {
+  if (!cache) return { kind: 'absent' };
+
+  const point = cache.points?.find((candidate) => candidate.idx === pointIndex);
+  if (point !== undefined) return { kind: 'explicit', value: point.value };
+
+  if (
+    typeof cache.pointCount === 'number' &&
+    Number.isInteger(cache.pointCount) &&
+    pointIndex >= 0 &&
+    pointIndex < cache.pointCount
+  ) {
+    return { kind: 'omitted' };
+  }
+
+  return { kind: 'absent' };
 }
 
 function cachedLabelValueAt(
@@ -172,9 +183,10 @@ function valueWithImportedCacheFallback(
   cache: ChartSeriesPointCache | undefined,
   pointIndex: number,
 ): ChartCellValue {
-  if (!isBlankChartCellValue(rawValue)) return rawValue;
-  const cached = cachedPointValueAt(cache, pointIndex);
-  return cached === undefined ? rawValue : cached;
+  const cached = importedCachePointState(cache, pointIndex);
+  if (cached.kind === 'explicit') return cached.value;
+  if (cached.kind === 'omitted') return undefined;
+  return rawValue;
 }
 
 function labelValue(value: ChartCellValue, fallback: string | number): string | number {
@@ -457,6 +469,26 @@ function extractValues(accessor: CellDataAccessor, range: CellRange): ChartCellV
   return values;
 }
 
+function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): string {
+  if (
+    typeof seriesConfig.idx === 'number' &&
+    Number.isInteger(seriesConfig.idx) &&
+    seriesConfig.idx > 0
+  ) {
+    return `Series ${seriesConfig.idx}`;
+  }
+
+  if (
+    typeof seriesConfig.order === 'number' &&
+    Number.isInteger(seriesConfig.order) &&
+    seriesConfig.order >= 0
+  ) {
+    return `Series ${seriesConfig.order + 1}`;
+  }
+
+  return `Series ${seriesIndex + 1}`;
+}
+
 function extractChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
@@ -472,28 +504,25 @@ function extractChartDataFromSeriesRefs(
     const valueItems = extractValues(accessor, valueRange);
     const categoryRange = tryParseRange(seriesConfig.categories);
     const categoryItems = categoryRange ? extractLabels(accessor, categoryRange) : [];
-    if (categories.length === 0 && categoryItems.length > 0) {
-      categories = categoryItems;
-    }
 
     const data: ChartDataPoint[] = valueItems.map((rawValue, pointIndex) => {
-      const importedCaches = seriesConfig as SeriesConfigWithImportedCaches;
       const liveCategory = categoryItems[pointIndex];
-      const cachedCategory = cachedLabelValueAt(importedCaches.categoryCache, pointIndex);
+      const cachedCategory = cachedLabelValueAt(seriesConfig.categoryCache, pointIndex);
       const category =
-        liveCategory !== undefined && liveCategory !== ''
+        cachedCategory ??
+        (liveCategory !== undefined && liveCategory !== ''
           ? liveCategory
-          : (cachedCategory ?? categories[pointIndex] ?? pointIndex + 1);
-      const value = valueWithImportedCacheFallback(rawValue, importedCaches.valueCache, pointIndex);
+          : (categories[pointIndex] ?? pointIndex + 1));
+      const value = valueWithImportedCacheFallback(rawValue, seriesConfig.valueCache, pointIndex);
       return createDataPoint(category, value, String(category));
     });
 
-    if (categories.length === 0) {
+    if (series.length === 0 || categories.length === 0) {
       categories = data.map((point) => point.x);
     }
 
     series.push({
-      name: seriesConfig.name ?? `Series ${seriesIndex + 1}`,
+      name: seriesConfig.name ?? defaultSeriesName(seriesConfig, seriesIndex),
       data,
       ...(seriesConfig.type ? { type: seriesConfig.type as ChartDataSeries['type'] } : {}),
       ...(seriesConfig.color ? { color: seriesConfig.color } : {}),

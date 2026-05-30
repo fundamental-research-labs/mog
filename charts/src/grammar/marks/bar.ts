@@ -27,6 +27,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function resolveOpacity(value: unknown, fallback: number): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? clamp(numeric, 0, 1) : fallback;
+}
+
 function hasExplicitBarSpacing(config: ConfigSpec | undefined): boolean {
   return finiteNumber(config?.gapWidth) !== undefined || finiteNumber(config?.overlap) !== undefined;
 }
@@ -208,6 +213,7 @@ export function generateBarMarks(
     const xValue = encodings.x?.accessor(normalizedDatum);
     const yValue = encodings.y?.accessor(normalizedDatum);
     const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);
+    const opacityValue = encodings.opacity?.accessor(datum);
 
     // Compute group index for grouped bars
     let groupIndex = 0;
@@ -382,7 +388,7 @@ export function generateBarMarks(
         fill: color,
         stroke: markSpec.stroke,
         strokeWidth: markSpec.strokeWidth,
-        opacity: markSpec.opacity ?? 1,
+        opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
       },
     });

@@ -507,7 +507,10 @@ function createBandScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const domainValues = Array.isArray(scaleSpec?.domain)
+    ? scaleSpec.domain.map(String)
+    : [...new Set(values.map(String))];
+  const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.1;
   const paddingInner = scaleSpec?.paddingInner ?? padding;
   const paddingOuter = scaleSpec?.paddingOuter ?? padding;
@@ -562,7 +565,10 @@ function createPointScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const domainValues = Array.isArray(scaleSpec?.domain)
+    ? scaleSpec.domain.map(String)
+    : [...new Set(values.map(String))];
+  const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.5;
 
   // Point scales always place items from the lower pixel value toward the
@@ -675,7 +681,9 @@ function createSequentialColorScale(values: number[], scaleSpec?: ScaleSpec | nu
  * Create a categorical color scale.
  */
 function createCategoricalColorScale(values: unknown[], scaleSpec?: ScaleSpec | null): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const uniqueValues = Array.isArray(scaleSpec?.domain)
+    ? scaleSpec.domain.map(String)
+    : [...new Set(values.map(String))];
   const colors =
     (scaleSpec?.range ? stringRange(scaleSpec.range) : undefined) ?? DEFAULT_CATEGORY_COLORS;
 
@@ -747,14 +755,17 @@ function createOpacityScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = extractNumericValues(data, field);
-  const min = values.length > 0 ? safeMin(values) : 0;
-  const max = values.length > 0 ? safeMax(values) : 1;
+  const min = numericDomainBound(channel.scale?.domain, 0) ?? (values.length > 0 ? safeMin(values) : 0);
+  const max = numericDomainBound(channel.scale?.domain, 1) ?? (values.length > 0 ? safeMax(values) : 1);
+  const rangeStart = numericDomainBound(channel.scale?.range, 0) ?? 0.3;
+  const rangeEnd = numericDomainBound(channel.scale?.range, 1) ?? 1;
 
   return Object.assign((value: unknown): number => {
     const v = typeof value === 'number' ? value : parseFloat(String(value));
-    if (isNaN(v)) return 0.3;
+    if (isNaN(v)) return rangeStart;
     const t = max !== min ? (v - min) / (max - min) : 0.5;
-    return 0.3 + t * 0.7; // Range from 0.3 to 1.0
+    const clampedT = Math.max(0, Math.min(1, t));
+    return rangeStart + clampedT * (rangeEnd - rangeStart);
   }, {});
 }
 

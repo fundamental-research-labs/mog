@@ -8,10 +8,6 @@ export type ImportNormalizableChart = {
   series?: ChartSeriesData[];
 };
 
-function hasImportedComboGroups(chart: ImportNormalizableChart): boolean {
-  return (chart.rt?.chartGroupsMeta?.length ?? 0) > 1;
-}
-
 function chartTypeForImportedGroups(groups: readonly ChartGroupMeta[]): string | null {
   if (groups.length === 0) return null;
   const chartTypes = groups.map((group) => group.chartType).filter(Boolean);
@@ -54,19 +50,38 @@ function seriesTypeAssignments(
   return byIndex;
 }
 
-export function normalizeImportedComboChart<T extends ImportNormalizableChart>(chart: T): T {
-  if (!hasImportedComboGroups(chart)) return chart;
+function chartTypeForUniformSeries(chart: ImportNormalizableChart): string | null {
+  if (chart.chartType !== 'combo' || !chart.series?.length) return null;
 
+  const seriesTypes = chart.series.map((entry) => entry.type);
+  if (seriesTypes.some((chartType) => !chartType)) return null;
+
+  const [firstType] = seriesTypes;
+  return firstType && seriesTypes.every((chartType) => chartType === firstType) ? firstType : null;
+}
+
+export function normalizeImportedComboChart<T extends ImportNormalizableChart>(chart: T): T {
   const groups = chart.rt?.chartGroupsMeta ?? [];
-  const assignments = chart.series ? seriesTypeAssignments(groups, chart.series) : null;
-  const chartType = chartTypeForImportedGroups(groups) ?? chart.chartType;
+  const assignments =
+    groups.length > 1 && chart.series ? seriesTypeAssignments(groups, chart.series) : null;
+  const series = assignments
+    ? chart.series?.map((entry, index) => {
+        if (entry.type) return entry;
+        const chartType = assignments.get(index);
+        return chartType ? { ...entry, type: chartType } : entry;
+      })
+    : chart.series;
+  const chartWithNormalizedSeries = series === chart.series ? chart : { ...chart, series };
+  const chartType =
+    (groups.length > 1 ? chartTypeForImportedGroups(groups) : null) ??
+    chartTypeForUniformSeries(chartWithNormalizedSeries) ??
+    chart.chartType;
+
+  if (chartType === chart.chartType && series === chart.series) return chart;
+
   return {
     ...chart,
     ...(chartType ? { chartType } : {}),
-    series: chart.series?.map((entry, index) => {
-      if (entry.type) return entry;
-      const chartType = assignments?.get(index);
-      return chartType ? { ...entry, type: chartType } : entry;
-    }),
+    ...(series ? { series } : {}),
   };
 }

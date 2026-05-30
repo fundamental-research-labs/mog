@@ -88,9 +88,45 @@ describe('chart data point value provenance', () => {
     ]);
   });
 
+  it('uses OOXML idx and order for unnamed imported series labels', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 20],
+      [30, 40],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'imported-series-label-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          values: 'A1:B1',
+          idx: 2,
+          order: 1,
+        },
+        {
+          values: 'A2:B2',
+          idx: 1,
+          order: 0,
+        },
+        {
+          values: 'A1:A2',
+          order: 2,
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.series.map((series) => series.name)).toEqual(['Series 2', 'Series 1', 'Series 3']);
+  });
+
   it('uses imported sparse value caches to distinguish blanks from explicit zeroes', () => {
     const accessor = ObjectCellAccessor.fromArray([
-      [null, null, null, null],
+      [99, 'na', 77, null],
       ['A', 'B', 'C', 'D'],
     ]);
     const config: StoredChartConfig = {
@@ -109,22 +145,57 @@ describe('chart data point value provenance', () => {
           valueCache: {
             pointCount: 4,
             points: [
-              { idx: 2, value: '0' },
+              { idx: 1, value: '0' },
               { idx: 3, value: '4.5' },
             ],
           },
         },
       ],
-    } as StoredChartConfig;
+    };
 
     const data = extractChartData(accessor, config);
 
     expect(data.series[0].data.map((point) => point.y)).toEqual([0, 0, 0, 4.5]);
     expect(data.series[0].data.map((point) => point.valueState)).toEqual([
       'blank',
+      undefined,
       'blank',
       undefined,
-      undefined,
     ]);
+  });
+
+  it('uses imported category caches as chart-domain labels when present', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [1, 2],
+      ['Live A', 'Live B'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'imported-category-cache-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:B1',
+          categories: 'A2:B2',
+          categoryCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '45292' },
+              { idx: 1, value: 'Cached B' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.categories).toEqual([45292, 'Cached B']);
+    expect(data.series[0].data.map((point) => point.x)).toEqual([45292, 'Cached B']);
   });
 });

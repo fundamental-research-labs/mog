@@ -1,3 +1,4 @@
+use super::axes::resolve_group_y_axis_index;
 use super::common::map_ooxml_chart_type_to_domain;
 use super::data_refs::{extract_cat_ref_formula, extract_num_ref_formula};
 use super::formatting::{extract_chart_format, extract_chart_line, extract_fill_color};
@@ -8,9 +9,9 @@ use super::text::extract_chart_text_string;
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
 ) -> Vec<domain_types::chart::ChartSeriesData> {
-    let is_combo = cs.chart.plot_area.chart_groups.len() > 1;
-    cs.chart
-        .plot_area
+    let plot_area = &cs.chart.plot_area;
+    let is_combo = plot_area.chart_groups.len() > 1;
+    plot_area
         .chart_groups
         .iter()
         .flat_map(|g| {
@@ -19,9 +20,11 @@ pub(super) fn extract_series_from_chart_space(
             } else {
                 None
             };
+            let y_axis_index =
+                resolve_group_y_axis_index(&plot_area.axes, &plot_area.chart_groups, g);
             g.series
                 .iter()
-                .map(move |s| extract_single_series(s, series_type.clone()))
+                .map(move |s| extract_single_series(s, series_type.clone(), y_axis_index))
         })
         .collect()
 }
@@ -30,6 +33,7 @@ pub(super) fn extract_series_from_chart_space(
 pub(super) fn extract_single_series(
     s: &ooxml_types::charts::ChartSeries,
     series_type: Option<domain_types::ChartType>,
+    y_axis_index: Option<u8>,
 ) -> domain_types::chart::ChartSeriesData {
     use ooxml_types::charts::SeriesTextSource;
 
@@ -163,7 +167,7 @@ pub(super) fn extract_single_series(
         smooth: s.smooth,
         explosion: s.explosion,
         invert_if_negative: s.invert_if_negative,
-        y_axis_index: None,
+        y_axis_index,
         show_markers,
         marker_size,
         marker_style,
@@ -338,7 +342,43 @@ fn extract_error_bars_new(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ooxml_types::charts::{CatDataSource, NumData, NumDataSource, NumPoint, NumRef};
+    use ooxml_types::charts::{
+        AxisType, BarChartConfig, CatDataSource, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
+        ChartSpace, ChartType, ChartTypeConfig, LineChartConfig, NumData, NumDataSource, NumPoint,
+        NumRef, PlotArea, Scaling,
+    };
+
+    fn axis(
+        axis_type: AxisType,
+        ax_id: u32,
+        cross_ax: u32,
+        ax_pos: ChartAxisPosition,
+    ) -> ChartAxis {
+        ChartAxis {
+            axis_type,
+            ax_id,
+            cross_ax,
+            ax_pos,
+            scaling: Scaling::default(),
+            ..Default::default()
+        }
+    }
+
+    fn group(
+        chart_type: ChartType,
+        config: ChartTypeConfig,
+        ax_id: Vec<u32>,
+        series: Vec<ooxml_types::charts::ChartSeries>,
+    ) -> ChartGroup {
+        ChartGroup {
+            chart_type,
+            config,
+            series,
+            d_lbls: None,
+            ax_id,
+            raw_chart_type_attr: None,
+        }
+    }
 
     #[test]
     fn extracts_category_cache_format_and_point_overrides() {
@@ -403,7 +443,7 @@ mod tests {
             ..Default::default()
         };
 
-        let extracted = extract_single_series(&series, None);
+        let extracted = extract_single_series(&series, None, None);
         let cache = extracted.value_cache.expect("value cache");
 
         assert_eq!(cache.point_count, Some(4));
@@ -415,6 +455,101 @@ mod tests {
     }
 
     #[test]
+    fn preserves_category_and_bubble_cache_metadata() {
+        let series = ooxml_types::charts::ChartSeries {
+            cat: Some(CatDataSource::NumRef(NumRef {
+                f: "Sheet1!$A$2:$A$3".to_string(),
+                num_cache: Some(NumData {
+                    format_code: Some("m/d/yyyy".to_string()),
+                    pt_count: Some(2),
+                    pts: vec![NumPoint {
+                        idx: 1,
+                        v: "45292".to_string(),
+                        format_code: Some("m/d/yy".to_string()),
+                    }],
+                    extensions: vec![],
+                }),
+                extensions: vec![],
+            })),
+            bubble_size: Some(NumDataSource::Ref(NumRef {
+                f: "Sheet1!$C$2:$C$3".to_string(),
+                num_cache: Some(NumData {
+                    format_code: Some("General".to_string()),
+                    pt_count: Some(2),
+                    pts: vec![NumPoint {
+                        idx: 0,
+                        v: "10".to_string(),
+                        format_code: None,
+                    }],
+                    extensions: vec![],
+                }),
+                extensions: vec![],
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+        let category_cache = extracted.category_cache.expect("category cache");
+        let bubble_size_cache = extracted.bubble_size_cache.expect("bubble size cache");
+
+        assert_eq!(category_cache.point_count, Some(2));
+        assert_eq!(category_cache.format_code.as_deref(), Some("m/d/yyyy"));
+        assert_eq!(category_cache.points[0].idx, 1);
+        assert_eq!(
+            category_cache.points[0].format_code.as_deref(),
+            Some("m/d/yy")
+        );
+        assert_eq!(bubble_size_cache.point_count, Some(2));
+        assert_eq!(bubble_size_cache.points[0].value, "10");
+    }
+
+    #[test]
+    fn assigns_series_y_axis_index_from_combo_group_axis_ids() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    chart_groups: vec![
+                        group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                            vec![10, 20],
+                            vec![ooxml_types::charts::ChartSeries {
+                                idx: 0,
+                                order: 0,
+                                ..Default::default()
+                            }],
+                        ),
+                        group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig::default()),
+                            vec![10, 30],
+                            vec![ooxml_types::charts::ChartSeries {
+                                idx: 1,
+                                order: 1,
+                                ..Default::default()
+                            }],
+                        ),
+                    ],
+                    axes: vec![
+                        axis(AxisType::Category, 10, 20, ChartAxisPosition::Bottom),
+                        axis(AxisType::Value, 20, 10, ChartAxisPosition::Left),
+                        axis(AxisType::Value, 30, 10, ChartAxisPosition::Right),
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let extracted = extract_series_from_chart_space(&cs);
+
+        assert_eq!(extracted.len(), 2);
+        assert_eq!(extracted[0].y_axis_index, Some(0));
+        assert_eq!(extracted[1].y_axis_index, Some(1));
+    }
+
+    #[test]
     fn defaults_series_name_from_ooxml_idx_when_text_is_missing() {
         let series = ooxml_types::charts::ChartSeries {
             idx: 2,
@@ -422,7 +557,7 @@ mod tests {
             ..Default::default()
         };
 
-        let extracted = extract_single_series(&series, None);
+        let extracted = extract_single_series(&series, None, None);
 
         assert_eq!(extracted.name.as_deref(), Some("Series 2"));
     }
@@ -435,7 +570,7 @@ mod tests {
             ..Default::default()
         };
 
-        let extracted = extract_single_series(&series, None);
+        let extracted = extract_single_series(&series, None, None);
 
         assert_eq!(extracted.name.as_deref(), Some("Series 4"));
     }

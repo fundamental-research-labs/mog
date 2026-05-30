@@ -110,7 +110,10 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
  */
 function calculateMargins(spec: ChartSpec): Layout['margin'] {
   const margin: Layout['margin'] = { ...DEFAULT_LAYOUT.margin };
-  const encoding = spec.encoding;
+  const encodings = [
+    spec.encoding,
+    ...(Array.isArray(spec.layer) ? spec.layer.map((layer) => layer.encoding) : []),
+  ].filter((encoding): encoding is EncodingSpec => Boolean(encoding));
   const layoutHints = spec.config?.layoutHints;
   let bottomPadding = 0;
 
@@ -132,15 +135,15 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     }
   }
 
-  // Adjust for X axis
-  if (encoding?.x && encoding.x.axis !== null) {
-    const xAxis = encoding.x.axis;
+  const xAxisEncoding = encodings.find((encoding) => encoding.x && encoding.x.axis !== null);
+  if (xAxisEncoding?.x) {
+    const xAxis = xAxisEncoding.x.axis;
     // Add space for labels
     if (xAxis?.labels !== false) {
       margin.bottom += DEFAULT_LAYOUT.xAxisLabelSpace;
     }
     // Add space for title
-    if (xAxis?.title || encoding.x.title) {
+    if (xAxis?.title || xAxisEncoding.x.title) {
       margin.bottom += DEFAULT_LAYOUT.axisTitleSpace;
     }
     // Handle rotated labels
@@ -149,16 +152,39 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     }
   }
 
-  // Adjust for Y axis
-  if (encoding?.y && encoding.y.axis !== null) {
+  const yAxisSides = new Set<'left' | 'right'>();
+  const yAxisTitles = new Set<'left' | 'right'>();
+  for (const encoding of encodings) {
+    if (!encoding.y || encoding.y.axis === null) continue;
     const yAxis = encoding.y.axis;
+    const side = yAxis?.orient === 'right' ? 'right' : 'left';
+    yAxisSides.add(side);
+    if (yAxis?.title || encoding.y.title) {
+      yAxisTitles.add(side);
+    }
+  }
+
+  for (const side of yAxisSides) {
     // Add space for labels
-    if (yAxis?.labels !== false) {
-      margin.left += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
+    const hasLabels = encodings.some((encoding) => {
+      const yAxis = encoding.y?.axis;
+      const axisSide = yAxis?.orient === 'right' ? 'right' : 'left';
+      return encoding.y && yAxis !== null && axisSide === side && yAxis?.labels !== false;
+    });
+    if (hasLabels) {
+      if (side === 'right') {
+        margin.right += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
+      } else {
+        margin.left += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
+      }
     }
     // Add space for title
-    if (yAxis?.title || encoding.y.title) {
-      margin.left += DEFAULT_LAYOUT.axisTitleSpace;
+    if (yAxisTitles.has(side)) {
+      if (side === 'right') {
+        margin.right += DEFAULT_LAYOUT.axisTitleSpace;
+      } else {
+        margin.left += DEFAULT_LAYOUT.axisTitleSpace;
+      }
     }
   }
 

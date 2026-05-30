@@ -34,6 +34,8 @@ export {
   type ChartDataPoint,
   type ChartDataSeries,
   type ChartInstance,
+  type ChartSeriesPointCache,
+  type ChartSeriesPointCachePoint,
   type ChartType,
   type CreateChartInput,
   type DataLabelConfig,

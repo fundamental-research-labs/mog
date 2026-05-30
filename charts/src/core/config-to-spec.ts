@@ -33,6 +33,7 @@ import type {
   ChartColor,
   ChartConfig,
   ChartData,
+  ChartDataPoint,
   ChartFill,
   ChartFormat,
   ChartType,
@@ -66,6 +67,9 @@ const CANDLESTICK_BAR_WIDTH = 14;
 
 /** Tick count used to simulate minor gridlines. */
 const MINOR_GRIDLINE_TICK_COUNT = 10;
+
+const SERIES_OPACITY_FIELD = '__mogSeriesOpacity';
+const CATEGORY_KEY_PREFIX = '__mogCategory';
 
 type AxisSpecWithTickStep = AxisSpec & { tickStep?: number };
 
@@ -140,18 +144,23 @@ function schemeColorHex(value: string): string | undefined {
 
 function applyTintShade(hexColor: string, tintShade: number | undefined): string {
   if (tintShade === undefined || tintShade === 0) return hexColor;
+  const tintAmount =
+    tintShade > 0 && tintShade <= 1 ? (tintShade > 0.5 ? 1 - tintShade : tintShade) : tintShade;
   const normalized = normalizeHexColor(hexColor);
   if (!normalized) return hexColor;
   const hex = normalized.slice(1);
   const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
   const [h, s, l] = rgbToHsl(r, g, b);
   const adjustedL =
-    tintShade > 0 ? l * (1 - tintShade) + tintShade : l * Math.max(0, 1 + tintShade);
+    tintAmount > 0 ? l * (1 - tintAmount) + tintAmount : l * Math.max(0, 1 + tintAmount);
   const [outR, outG, outB] = hslToRgb(h, s, Math.max(0, Math.min(1, adjustedL)));
   const channels = [outR, outG, outB].map((channel) =>
     Math.max(0, Math.min(255, Math.round(channel * 255))),
   );
-  return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+  return `#${channels
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
 }
 
 function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
@@ -214,8 +223,6 @@ function resolveChartTextColor(color: ChartColor | undefined): string | undefine
 }
 
 function resolveGridlineColor(color: ChartColor | undefined): string | undefined {
-  if (chartColorTintShade(color) !== undefined) return resolveChartColor(color);
-  if (themeColorKey(color) === 'tx1') return '#D9D9D9';
   return resolveChartColor(color);
 }
 
@@ -245,7 +252,8 @@ function excelStyleRepeatColor(theme: string | undefined, index: number): string
 function resolveSeriesColor(series: SeriesConfig, index: number): string | undefined {
   const fill = series.format?.fill;
   const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
-  const fillHasExplicitTransform = fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
+  const fillHasExplicitTransform =
+    fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
   const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
   return (
     (series.color ? resolveChartColor(series.color) : undefined) ??
@@ -257,12 +265,14 @@ function resolveSeriesColor(series: SeriesConfig, index: number): string | undef
 
 function resolvedCategoryColors(config: ChartConfig): string[] | undefined {
   const seriesColors = (config.series ?? [])
-    .map((series, index) => resolveSeriesColor(series, index))
+    .map((series, index) =>
+      isNoFillNoLineSeries(series) ? undefined : resolveSeriesColor(series, index),
+    )
     .filter(Boolean) as string[];
   if (seriesColors.length > 0) return seriesColors;
-  const configColors = (config.colors ?? []).map((color) => resolveChartColor(color)).filter(
-    Boolean,
-  ) as string[];
+  const configColors = (config.colors ?? [])
+    .map((color) => resolveChartColor(color))
+    .filter(Boolean) as string[];
   return configColors.length > 0 ? configColors : undefined;
 }
 
@@ -279,17 +289,22 @@ function normalizeAxisLabelAngle(
 }
 
 function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
-  return sizePt === undefined ? undefined : sizePt * (96 / 72);
+  return sizePt === undefined ? undefined : sizePt * 2;
 }
 
 function linePointsToCanvasPx(widthPt: number | undefined): number | undefined {
-  return widthPt === undefined ? undefined : Math.max(1, widthPt * (96 / 72));
+  return widthPt === undefined ? undefined : Math.max(1, widthPt * 2);
 }
 
 function hasVisibleLineStyle(line: unknown): boolean {
   if (!line || typeof line !== 'object') return false;
   const candidate = line as { color?: unknown; width?: unknown };
   return candidate.color !== undefined || candidate.width !== undefined;
+}
+
+function isNoFillNoLineSeries(series: SeriesConfig | undefined): boolean {
+  if (!series?.format) return false;
+  return series.format.fill?.type === 'none' && !hasVisibleLineStyle(series.format.line);
 }
 
 function dashStyleToStrokeDash(
@@ -410,20 +425,30 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const useExcelDateSerialCategories = config
     ? shouldUseDateSerialCategoryAxis(config, data, isHorizontalBarType(config.type))
     : false;
+  const useStableCategoryKeys = shouldUseStableCategoryKeys(
+    config,
+    data,
+    useExcelDateSerialCategories,
+  );
+  const seriesConfigs = config?.series ?? [];
   for (let i = 0; i < categories.length; i++) {
     const rawCategory = categories[i];
-    const category = useExcelDateSerialCategories
-      ? toFiniteNumber(rawCategory)
-      : undefined;
-    const rowCategory = category ?? String(rawCategory);
-    for (const series of data.series) {
+    const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
+    const rowCategory = useStableCategoryKeys
+      ? categoryKeyForIndex(i)
+      : (category ?? String(rawCategory));
+    for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
+      const series = data.series[seriesIndex];
       const point = series.data[i];
-      if (point) {
+      if (point && shouldIncludePointInRows(point, config)) {
         const row: DataRow = {
           category: rowCategory,
           value: point.y,
           series: series.name,
         };
+        if (config?.series?.some(isNoFillNoLineSeries)) {
+          row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
+        }
         const categoryFormatCode = data.categoryFormatCodes?.[i];
         if (categoryFormatCode) row.categoryFormatCode = categoryFormatCode;
         // Propagate OHLC fields if present (for stock charts)
@@ -436,6 +461,41 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     }
   }
   return rows;
+}
+
+function categoryKeyForIndex(index: number): string {
+  return `${CATEGORY_KEY_PREFIX}:${index}`;
+}
+
+function categoryDisplayLabel(value: string | number | null | undefined): string {
+  return value == null ? '' : String(value);
+}
+
+function hasDuplicateOrBlankCategoryLabels(data: ChartData): boolean {
+  const seen = new Set<string>();
+  for (const category of data.categories ?? []) {
+    const label = categoryDisplayLabel(category);
+    if (label === '' || seen.has(label)) return true;
+    seen.add(label);
+  }
+  return false;
+}
+
+function shouldUseStableCategoryKeys(
+  config: ChartConfig | undefined,
+  data: ChartData,
+  useExcelDateSerialCategories: boolean,
+): boolean {
+  if (!config?.extra || useExcelDateSerialCategories) return false;
+  return hasDuplicateOrBlankCategoryLabels(data);
+}
+
+function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
+  if (!point.valueState || point.valueState === 'value') return true;
+  if (point.valueState === 'blank') {
+    return config?.displayBlanksAs === 'zero';
+  }
+  return false;
 }
 
 // =============================================================================
@@ -518,9 +578,7 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
 /**
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
  */
-function mapAxisConfigToAxisSpec(
-  axisConf: SingleAxisConfig,
-): AxisSpec {
+function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec {
   const spec: AxisSpec = {};
   spec.title = axisConf.title ?? null;
   if (axisConf.visible === false || axisConf.show === false) {
@@ -660,9 +718,9 @@ function resolveAxisConfigForChannel(
 ): SingleAxisConfig | undefined {
   if (!axis) return undefined;
   if (channel === 'x') {
-    return axis.xAxis ?? (isHorizontal ? axis.valueAxis : axis.categoryAxis);
+    return isHorizontal ? (axis.valueAxis ?? axis.xAxis) : (axis.xAxis ?? axis.categoryAxis);
   }
-  return axis.yAxis ?? (isHorizontal ? axis.categoryAxis : axis.valueAxis);
+  return isHorizontal ? (axis.categoryAxis ?? axis.yAxis) : (axis.yAxis ?? axis.valueAxis);
 }
 
 function isDateAxisConfig(axisConf: SingleAxisConfig | undefined): boolean {
@@ -691,6 +749,10 @@ function supportsContinuousCategoryAxis(chartType: ChartType): boolean {
   if (chartType === 'radar') return false;
   const markType = MARK_TYPE_MAP[chartType];
   return markType === 'line' || markType === 'area';
+}
+
+function shouldReverseHorizontalCategoryAxis(config: ChartConfig, isHorizontal: boolean): boolean {
+  return isHorizontal && config.extra !== undefined;
 }
 
 function hasFiniteCategorySerials(data: ChartData): boolean {
@@ -757,14 +819,18 @@ function buildColorEncoding(
   legend?: LegendConfig,
   colors?: string[],
   reverseLegend?: boolean,
+  legendDomain?: string[],
 ): ChannelSpec | undefined {
   if (!hasMultipleSeries) return undefined;
   const channel: ChannelSpec = {
     field: 'series',
     type: 'nominal',
   };
-  if (colors && colors.length > 0) {
-    channel.scale = { range: colors };
+  if ((colors && colors.length > 0) || (legendDomain && legendDomain.length > 0)) {
+    channel.scale = {
+      ...(legendDomain && legendDomain.length > 0 ? { domain: legendDomain } : {}),
+      ...(colors && colors.length > 0 ? { range: colors } : {}),
+    };
   }
   if (legend) {
     if (!legend.show) {
@@ -785,6 +851,20 @@ function buildColorEncoding(
     }
   }
   return channel;
+}
+
+function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | undefined {
+  const seriesConfigs = config.series ?? [];
+  if (!seriesConfigs.some(isNoFillNoLineSeries)) return undefined;
+
+  const names: string[] = [];
+  for (let index = 0; index < data.series.length; index += 1) {
+    if (isNoFillNoLineSeries(seriesConfigs[index])) continue;
+    const name = data.series[index]?.name;
+    if (name && !names.includes(name)) names.push(name);
+  }
+
+  return names.length > 0 ? names : undefined;
 }
 
 /**
@@ -846,10 +926,26 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);
   const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
+  const useStableCategoryKeys = shouldUseStableCategoryKeys(
+    config,
+    data,
+    useDateSerialCategoryAxis,
+  );
   const categoryChannel: ChannelSpec = {
     field: 'category',
     type: useDateSerialCategoryAxis ? 'quantitative' : 'nominal',
-    ...(useDateSerialCategoryAxis ? { scale: { type: 'linear', zero: false, nice: false } } : {}),
+    ...(useDateSerialCategoryAxis
+      ? { scale: { type: 'linear', zero: false, nice: false } }
+      : useStableCategoryKeys || shouldReverseHorizontalCategoryAxis(config, isHorizontal)
+        ? {
+            scale: {
+              ...(useStableCategoryKeys
+                ? { domain: data.categories.map((_category, index) => categoryKeyForIndex(index)) }
+                : {}),
+              ...(shouldReverseHorizontalCategoryAxis(config, isHorizontal) ? { reverse: true } : {}),
+            },
+          }
+        : {}),
   };
   const valueChannel: ChannelSpec = { field: 'value', type: 'quantitative' };
   if (isHorizontal) {
@@ -877,17 +973,27 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyBarCategorySpacingScale(config, encoding, isHorizontal);
-  applyCategoryAxisLabelFormats(data, encoding, isHorizontal);
+  applyCategoryAxisLabels(data, encoding, isHorizontal, useStableCategoryKeys);
 
   // Color encoding for multi-series
+  const legendDomain = visibleLegendDomain(config, data);
   const colorChannel = buildColorEncoding(
     hasMultipleSeries,
     config.legend,
     resolvedCategoryColors(config),
-    Boolean(resolveStackMode(config)),
+    Boolean(resolveStackMode(config)) && !legendDomain,
+    legendDomain,
   );
   if (colorChannel) {
     encoding.color = colorChannel;
+  }
+  if (config.series?.some(isNoFillNoLineSeries)) {
+    encoding.opacity = {
+      field: SERIES_OPACITY_FIELD,
+      type: 'quantitative',
+      scale: { domain: [0, 1], range: [0, 1] },
+      legend: null,
+    };
   }
 
   applyStackedValueDomain(config, data, encoding);
@@ -916,25 +1022,43 @@ function applyBarCategorySpacingScale(
   };
 }
 
-function applyCategoryAxisLabelFormats(
+function applyCategoryAxisLabels(
   data: ChartData,
   encoding: EncodingSpec,
   isHorizontal: boolean,
+  useStableCategoryKeys: boolean,
 ): void {
-  if (!data.categoryFormatCodes?.some(Boolean)) return;
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
-  if (!categoryChannel) return;
+  if (!categoryChannel || categoryChannel.axis === null) return;
+
+  const labelTextByValue: Record<string, string> = {};
+  if (useStableCategoryKeys) {
+    data.categories.forEach((category, index) => {
+      labelTextByValue[categoryKeyForIndex(index)] = categoryDisplayLabel(category);
+    });
+  }
 
   const labelFormatByValue: Record<string, string> = {};
-  data.categories.forEach((category, index) => {
-    const formatCode = data.categoryFormatCodes?.[index];
-    if (formatCode) labelFormatByValue[String(category)] = formatCode;
-  });
-  if (Object.keys(labelFormatByValue).length === 0) return;
+  if (data.categoryFormatCodes?.some(Boolean)) {
+    data.categories.forEach((category, index) => {
+      const formatCode = data.categoryFormatCodes?.[index];
+      if (formatCode) {
+        const key = useStableCategoryKeys ? categoryKeyForIndex(index) : String(category);
+        labelFormatByValue[key] = formatCode;
+      }
+    });
+  }
+  if (
+    Object.keys(labelTextByValue).length === 0 &&
+    Object.keys(labelFormatByValue).length === 0
+  ) {
+    return;
+  }
 
   categoryChannel.axis = {
     ...(categoryChannel.axis ?? {}),
-    labelFormatByValue,
+    ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
+    ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
   };
 }
 
@@ -1159,6 +1283,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 export function buildConfigSpec(
   config: ChartConfig,
   encoding?: EncodingSpec,
+  data?: ChartData,
 ): ConfigSpec | undefined {
   const configSpec: ConfigSpec = {};
   let hasConfig = false;
@@ -1195,7 +1320,8 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const yAxisLabelWidth = estimateYAxisLabelWidth(encoding);
+  const yAxisLabelWidth =
+    estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
   const bottomMargin = estimateXAxisBottomMargin(encoding);
   if (yAxisLabelWidth !== undefined || bottomMargin !== undefined) {
     configSpec.layoutHints = {
@@ -1208,9 +1334,27 @@ export function buildConfigSpec(
   return hasConfig ? configSpec : undefined;
 }
 
-function estimateYAxisLabelWidth(
+function estimateNominalYAxisLabelWidth(
   encoding: EncodingSpec | undefined,
+  data: ChartData | undefined,
 ): number | undefined {
+  const y = encoding?.y;
+  if (!y || y.type === 'quantitative' || y.axis === null || y.axis?.labels === false) {
+    return undefined;
+  }
+
+  const labels = data?.categories ?? [];
+  if (labels.length === 0) return undefined;
+
+  const maxLabelLength = Math.max(0, ...labels.map((label) => String(label ?? '').length));
+  if (maxLabelLength === 0) return undefined;
+
+  const fontSize = y.axis?.labelFontSize ?? 11;
+  const estimatedWidth = Math.ceil(maxLabelLength * fontSize * 0.52);
+  return Math.max(60, Math.min(560, estimatedWidth));
+}
+
+function estimateYAxisLabelWidth(encoding: EncodingSpec | undefined): number | undefined {
   const y = encoding?.y;
   if (!y || y.type !== 'quantitative' || y.axis === null || y.axis?.labels === false) {
     return undefined;
@@ -1242,9 +1386,7 @@ function estimateYAxisLabelWidth(
   return Math.max(36, Math.min(90, estimatedWidth));
 }
 
-function estimateXAxisBottomMargin(
-  encoding: EncodingSpec | undefined,
-): number | undefined {
+function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number | undefined {
   const x = encoding?.x;
   const y = encoding?.y;
   if (
@@ -1340,31 +1482,40 @@ export function buildComboLayers(
   const seriesConfigs = config.series ?? [];
   const baseEncoding = buildEncoding(config, data);
   const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' };
+  const yEncoding = baseEncoding.y ?? { field: 'value', type: 'quantitative' };
+  const colorEncoding = baseEncoding.color;
 
   for (let i = 0; i < data.series.length; i++) {
     const series = data.series[i];
     const seriesConf = seriesConfigs[i];
-    const seriesType = (seriesConf?.type ?? (i === 0 ? 'bar' : 'line')) as ChartType;
+    const seriesType = (seriesConf?.type ?? series.type ?? config.type ?? 'line') as ChartType;
     const markType = MARK_TYPE_MAP[seriesType] ?? 'bar';
+    const yAxisIndex = seriesConf?.yAxisIndex ?? series.yAxisIndex;
 
     const layerEncoding: EncodingSpec = {
       x: { ...xEncoding },
-      y: { field: 'value', type: 'quantitative' },
+      y: { ...yEncoding, field: 'value', type: 'quantitative' },
+      ...(colorEncoding ? { color: { ...colorEncoding } } : {}),
     };
 
     // Per-series y-axis encoding for dual-axis support
-    if (seriesConf?.yAxisIndex === 1) {
+    if (yAxisIndex === 1) {
+      const secondaryAxis = config.axis?.secondaryYAxis;
+      const secondaryAxisSpec = secondaryAxis ? mapAxisConfigToAxisSpec(secondaryAxis) : {};
       layerEncoding.y = {
         field: 'value',
         type: 'quantitative',
-        axis: { title: config.axis?.secondaryYAxis?.title },
+        axis: {
+          ...secondaryAxisSpec,
+          orient: 'right',
+          grid: secondaryAxisSpec.grid ?? false,
+          title: secondaryAxisSpec.title ?? secondaryAxis?.title ?? null,
+        },
       };
       // Apply secondary axis scale domain if configured
-      if (config.axis?.secondaryYAxis) {
-        const scaleDomain = buildAxisScaleDomain(config.axis.secondaryYAxis);
-        if (scaleDomain) {
-          layerEncoding.y.scale = scaleDomain;
-        }
+      if (secondaryAxis) {
+        const scaleSpec = buildAxisScaleSpec(secondaryAxis, false);
+        if (scaleSpec) layerEncoding.y.scale = scaleSpec;
       }
     }
 
@@ -1613,17 +1764,21 @@ export function buildDataLabelLayer(
  * Returns true when secondaryYAxis.show is set and at least one series
  * uses yAxisIndex=1.
  */
-export function hasSecondaryYAxis(config: ChartConfig): boolean {
-  if (!config.axis?.secondaryYAxis?.show) return false;
-  return (config.series ?? []).some((s) => s.yAxisIndex === 1);
+export function hasSecondaryYAxis(config: ChartConfig, data?: ChartData): boolean {
+  const secondaryAxis = config.axis?.secondaryYAxis;
+  if (!(secondaryAxis?.show ?? secondaryAxis?.visible)) return false;
+  return (
+    (config.series ?? []).some((s) => s.yAxisIndex === 1) ||
+    (data?.series ?? []).some((s) => s.yAxisIndex === 1)
+  );
 }
 
 /**
  * Build the resolve spec for dual-axis charts.
  * When series have different yAxisIndex values, we need independent y scales.
  */
-function buildResolve(config: ChartConfig): ChartSpec['resolve'] | undefined {
-  if (!hasSecondaryYAxis(config)) return undefined;
+function buildResolve(config: ChartConfig, data?: ChartData): ChartSpec['resolve'] | undefined {
+  if (!hasSecondaryYAxis(config, data)) return undefined;
   return {
     scale: { y: 'independent' },
     axis: { y: 'independent' },
@@ -1652,7 +1807,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   const mark = buildMark(config);
 
   // 5. Build config (stacking, colors)
-  const configSpec = buildConfigSpec(config, encoding);
+  const configSpec = buildConfigSpec(config, encoding, data);
 
   // 6. Build transforms
   const transforms: Transform[] = [];
@@ -1666,8 +1821,8 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   const width = config.width ? config.width * PIXELS_PER_COLUMN : DEFAULT_CHART_WIDTH;
   const height = config.height ? config.height * PIXELS_PER_ROW : DEFAULT_CHART_HEIGHT;
 
-  // 8. Handle layered chart types (combo, stock, waterfall)
-  if (config.type === 'combo') {
+  // 8. Handle layered chart types (combo, stock, waterfall, dual-axis)
+  if (config.type === 'combo' || hasSecondaryYAxis(config, data)) {
     const layers = buildComboLayers(config, data, rows);
 
     // Data label layer for the whole chart
@@ -1676,7 +1831,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       if (labelLayer) layers.push(labelLayer);
     }
 
-    const resolve = buildResolve(config);
+    const resolve = buildResolve(config, data);
     const spec: LayerSpec = {
       width,
       height,

@@ -9,12 +9,12 @@
 
 import { extendDataForLayerFields, sanitizeDataForScales } from '../algebra/data-sanitize';
 import type { AnyMark, RectMark } from '../primitives/types';
-import { generateAxes } from './axis-generator';
-import { createScales, resolveEncodings } from './encoding-resolver';
+import { generateAxes, generateYAxis } from './axis-generator';
+import { createScales, resolveEncodings, type ScaleMap } from './encoding-resolver';
 import { calculateLayout } from './layout';
 import { generateLegends } from './legend-generator';
 import { generateMarks } from './marks';
-import type { DataRow, EncodingSpec, LayerSpec, MarkSpec, MarkType } from './spec';
+import type { AxisOrient, DataRow, EncodingSpec, LayerSpec, MarkSpec, MarkType } from './spec';
 import { generateTitle } from './title-generator';
 import { applyTransforms } from './transforms';
 import type { CompileOptions, CompileResult } from './types';
@@ -33,6 +33,15 @@ function getMarkType(mark?: MarkType | MarkSpec): MarkType {
 function getMarkSpec(mark?: MarkType | MarkSpec): MarkSpec {
   if (!mark) return { type: 'bar' };
   return typeof mark === 'string' ? { type: mark } : mark;
+}
+
+function yAxisOrient(encoding: EncodingSpec | undefined): AxisOrient {
+  return encoding?.y?.axis?.orient === 'right' ? 'right' : 'left';
+}
+
+function withoutYEncoding(encoding: EncodingSpec): EncodingSpec {
+  const { y: _y, ...rest } = encoding;
+  return rest;
 }
 
 /**
@@ -89,6 +98,9 @@ export function compileLayered(
 
   // Compile each layer
   const allMarks: AnyMark[] = [];
+  const independentYAxes: AnyMark[] = [];
+  const emittedIndependentYAxes = new Set<AxisOrient>();
+  const hasIndependentY = spec.resolve?.scale?.y === 'independent';
 
   for (const layerItem of spec.layer) {
     const layerUnit = layerItem;
@@ -98,15 +110,38 @@ export function compileLayered(
       ? applyTransforms(layerUnit.transform, layerData)
       : layerData;
 
-    const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, scales);
     const markType = getMarkType(layerUnit.mark);
     const markSpec = getMarkSpec(layerUnit.mark);
+    let layerScales: ScaleMap = scales;
+
+    if (hasIndependentY && layerUnit.encoding?.y) {
+      const sanitizedLayerData = sanitizeDataForScales(transformedLayerData, layerUnit.encoding);
+      const independentScales = createScales(
+        layerUnit.encoding,
+        sanitizedLayerData,
+        layout,
+        markType,
+      );
+      layerScales = { ...scales, y: independentScales.y ?? scales.y };
+
+      if (spec.resolve?.axis?.y === 'independent' && layerUnit.encoding.y.axis !== null) {
+        const orient = yAxisOrient(layerUnit.encoding);
+        if (!emittedIndependentYAxes.has(orient) && layerScales.y) {
+          independentYAxes.push(
+            ...generateYAxis(layerUnit.encoding.y, layerScales.y, layout, spec.config?.axis),
+          );
+          emittedIndependentYAxes.add(orient);
+        }
+      }
+    }
+
+    const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, layerScales);
 
     const layerMarks = generateMarks(
       markType,
       markSpec,
       transformedLayerData,
-      scales,
+      layerScales,
       layerEncodings,
       layout,
       layerUnit.encoding,
@@ -117,7 +152,17 @@ export function compileLayered(
   }
 
   // Generate shared axes and legends
-  const axes = options.skipAxes ? [] : generateAxes(mergedEncoding, scales, layout, spec.config);
+  const axes = options.skipAxes
+    ? []
+    : [
+        ...generateAxes(
+          hasIndependentY ? withoutYEncoding(mergedEncoding) : mergedEncoding,
+          scales,
+          layout,
+          spec.config,
+        ),
+        ...independentYAxes,
+      ];
   const legends = options.skipLegend ? [] : generateLegends(mergedEncoding, scales, layout);
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
   const background = generateBackground(spec.config?.background, layout.width, layout.height);

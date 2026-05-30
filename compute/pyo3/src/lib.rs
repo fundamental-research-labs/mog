@@ -63,6 +63,7 @@ bridge_pyo3::generate_class!(
     struct ComputeEngine(compute_api::ComputeService);,
     compute_api::__bridge_descriptor_ComputeService_service_lifecycle,
     compute_api::__bridge_descriptor_ComputeService_core,
+    compute_api::__bridge_descriptor_ComputeService_core_undo,
     compute_api::__bridge_descriptor_ComputeService_viewport,
     compute_api::__bridge_descriptor_ComputeService_tables,
     compute_api::__bridge_descriptor_ComputeService_features,

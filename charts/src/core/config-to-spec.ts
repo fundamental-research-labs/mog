@@ -137,32 +137,78 @@ function applyTintShade(hexColor: string, tintShade: number | undefined): string
   const normalized = normalizeHexColor(hexColor);
   if (!normalized) return hexColor;
   const hex = normalized.slice(1);
-  const channels = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-  const adjusted = channels.map((channel) => {
-    const value =
-      tintShade > 0 ? channel + (255 - channel) * tintShade : channel * (1 + tintShade);
-    return Math.max(0, Math.min(255, Math.round(value)));
-  });
-  return `#${adjusted.map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const adjustedL =
+    tintShade > 0 ? l * (1 - tintShade) + tintShade : l * Math.max(0, 1 + tintShade);
+  const [outR, outG, outB] = hslToRgb(h, s, Math.max(0, Math.min(1, adjustedL)));
+  const channels = [outR, outG, outB].map((channel) =>
+    Math.max(0, Math.min(255, Math.round(channel * 255))),
+  );
+  return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+
+  const delta = max - min;
+  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  let h = 0;
+  if (max === r) {
+    h = (g - b) / delta + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / delta + 2;
+  } else {
+    h = (r - g) / delta + 4;
+  }
+  return [h / 6, s, l];
+}
+
+function hueToRgb(p: number, q: number, t: number): number {
+  let hue = t;
+  if (hue < 0) hue += 1;
+  if (hue > 1) hue -= 1;
+  if (hue < 1 / 6) return p + (q - p) * 6 * hue;
+  if (hue < 1 / 2) return q;
+  if (hue < 2 / 3) return p + (q - p) * (2 / 3 - hue) * 6;
+  return p;
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  if (s === 0) return [l, l, l];
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3)];
 }
 
 function resolveChartColor(color: ChartColor | undefined): string | undefined {
   if (typeof color === 'string') return normalizeHexColor(color) ?? color;
   if (!color || typeof color !== 'object') return undefined;
   const base = schemeColorHex(color.theme);
-  return base ? applyTintShade(base, color.tintShade) : undefined;
+  return base ? applyTintShade(base, chartColorTintShade(color)) : undefined;
 }
 
 function themeColorKey(color: ChartColor | undefined): string | undefined {
   return typeof color === 'object' && color !== null ? color.theme.toLowerCase() : undefined;
 }
 
+function chartColorTintShade(color: ChartColor | undefined): number | undefined {
+  if (!color || typeof color !== 'object') return undefined;
+  const wireColor = color as { tintShade?: number; tint_shade?: number };
+  return wireColor.tintShade ?? wireColor.tint_shade;
+}
+
 function resolveChartTextColor(color: ChartColor | undefined): string | undefined {
+  if (chartColorTintShade(color) !== undefined) return resolveChartColor(color);
   if (themeColorKey(color) === 'tx1') return '#595959';
   return resolveChartColor(color);
 }
 
 function resolveGridlineColor(color: ChartColor | undefined): string | undefined {
+  if (chartColorTintShade(color) !== undefined) return resolveChartColor(color);
   if (themeColorKey(color) === 'tx1') return '#D9D9D9';
   return resolveChartColor(color);
 }
@@ -193,9 +239,11 @@ function excelStyleRepeatColor(theme: string | undefined, index: number): string
 function resolveSeriesColor(series: SeriesConfig, index: number): string | undefined {
   const fill = series.format?.fill;
   const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
+  const fillHasExplicitTransform = fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
   const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
   return (
     (series.color ? resolveChartColor(series.color) : undefined) ??
+    (fillHasExplicitTransform ? resolveFormatFillColor(series.format) : undefined) ??
     excelStyleRepeatColor(fillTheme, sourceIndex) ??
     resolveFormatFillColor(series.format)
   );
@@ -752,6 +800,8 @@ function applyStackedValueDomain(
   const existingDomain = Array.isArray(valueChannel.scale?.domain)
     ? valueChannel.scale.domain
     : undefined;
+  const explicitMin = explicitDomainBound(existingDomain, 0);
+  const explicitMax = explicitDomainBound(existingDomain, 1);
 
   let maxPositive = 0;
   let minNegative = 0;
@@ -768,13 +818,23 @@ function applyStackedValueDomain(
     if (negative < minNegative) minNegative = negative;
   }
 
+  if (maxPositive === 0 && minNegative === 0) return;
+
+  const isAutoDivergingStack =
+    explicitMin === undefined && explicitMax === undefined && minNegative < 0 && maxPositive > 0;
+
   valueChannel.scale = {
     ...(valueChannel.scale ?? {}),
-    domain: [
-      explicitDomainBound(existingDomain, 0) ?? minNegative,
-      explicitDomainBound(existingDomain, 1) ?? maxPositive,
-    ],
+    domain: [explicitMin ?? minNegative, explicitMax ?? maxPositive],
+    ...(isAutoDivergingStack ? { nice: valueChannel.scale?.nice ?? 6 } : {}),
   };
+
+  if (isAutoDivergingStack) {
+    valueChannel.axis = {
+      ...(valueChannel.axis ?? {}),
+      tickCount: valueChannel.axis?.tickCount ?? 6,
+    };
+  }
 }
 
 // =============================================================================

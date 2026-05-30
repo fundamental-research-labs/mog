@@ -1,3 +1,5 @@
+use ooxml_types::drawings::ColorTransform;
+
 /// Extract hex RGB color from chart ShapeProperties fill.
 pub(super) fn extract_fill_color(sp_pr: &ooxml_types::charts::ShapeProperties) -> Option<String> {
     use ooxml_types::drawings::DrawingFill;
@@ -254,7 +256,7 @@ fn extract_chart_font(
 fn extract_chart_color(
     color: &ooxml_types::drawings::DrawingColor,
 ) -> Option<domain_types::chart::ChartColorData> {
-    use ooxml_types::drawings::{ColorTransform, DrawingColor};
+    use ooxml_types::drawings::DrawingColor;
 
     match color {
         DrawingColor::SrgbClr { val, .. } if !val.is_empty() => {
@@ -262,12 +264,7 @@ fn extract_chart_color(
         }
         DrawingColor::SchemeClr { val, transforms } => {
             let theme = val.to_ooxml().to_string();
-            // Extract tint/shade transform if present
-            let tint_shade = transforms.iter().find_map(|t| match t {
-                ColorTransform::Tint { val } => Some(*val as f64 / 100000.0),
-                ColorTransform::Shade { val } => Some(-(*val as f64 / 100000.0)),
-                _ => None,
-            });
+            let tint_shade = extract_luminance_tint_shade(transforms);
             Some(domain_types::chart::ChartColorData::Theme { theme, tint_shade })
         }
         DrawingColor::SysClr { last_clr, .. } => {
@@ -282,6 +279,36 @@ fn extract_chart_color(
         )),
         // ScrgbClr, HslClr — not directly representable in our domain model
         _ => None,
+    }
+}
+
+fn extract_luminance_tint_shade(transforms: &[ColorTransform]) -> Option<f64> {
+    for transform in transforms {
+        match transform {
+            ColorTransform::Tint { val } => return Some(*val as f64 / 100000.0),
+            ColorTransform::Shade { val } => return Some(*val as f64 / 100000.0 - 1.0),
+            _ => {}
+        }
+    }
+
+    let lum_mod = transforms.iter().find_map(|t| match t {
+        ColorTransform::LumMod { val } => Some(*val as f64 / 100000.0),
+        _ => None,
+    });
+    let lum_off = transforms.iter().find_map(|t| match t {
+        ColorTransform::LumOff { val } => Some(*val as f64 / 100000.0),
+        _ => None,
+    });
+
+    match (lum_mod, lum_off) {
+        (Some(lum_mod), Some(lum_off))
+            if (lum_mod + lum_off - 1.0_f64).abs() < 0.00001_f64 =>
+        {
+            Some(lum_off)
+        }
+        (Some(lum_mod), _) => Some(lum_mod - 1.0),
+        (None, Some(lum_off)) => Some(lum_off),
+        (None, None) => None,
     }
 }
 
@@ -314,3 +341,55 @@ fn extract_alpha_transparency(color: &ooxml_types::drawings::DrawingColor) -> Op
 }
 
 // Extract plain text from a ChartText (CT_Tx).
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain_types::chart::ChartColorData;
+    use ooxml_types::drawings::{ColorTransform, DrawingColor, SchemeColor};
+
+    fn tint_shade_for(transforms: Vec<ColorTransform>) -> Option<f64> {
+        match extract_chart_color(&DrawingColor::SchemeClr {
+            val: SchemeColor::Accent1,
+            transforms,
+        }) {
+            Some(ChartColorData::Theme { tint_shade, .. }) => tint_shade,
+            other => panic!("expected theme color, got {other:?}"),
+        }
+    }
+
+    fn assert_close(actual: Option<f64>, expected: f64) {
+        let actual = actual.expect("expected tint/shade value");
+        assert!(
+            (actual - expected).abs() < 0.00001,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn extracts_luminance_mod_as_shade() {
+        assert_close(
+            tint_shade_for(vec![ColorTransform::LumMod { val: 60000 }]),
+            -0.4,
+        );
+    }
+
+    #[test]
+    fn extracts_luminance_mod_off_as_tint() {
+        assert_close(
+            tint_shade_for(vec![
+                ColorTransform::LumMod { val: 60000 },
+                ColorTransform::LumOff { val: 40000 },
+            ]),
+            0.4,
+        );
+    }
+
+    #[test]
+    fn extracts_shade_as_remaining_luminance_delta() {
+        assert_close(
+            tint_shade_for(vec![ColorTransform::Shade { val: 60000 }]),
+            -0.4,
+        );
+    }
+}

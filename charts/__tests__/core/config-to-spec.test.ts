@@ -230,6 +230,34 @@ describe('buildEncoding - bar/column chart encoding', () => {
 
     expect(encoding.y?.scale?.domain).toEqual([-12, 100]);
   });
+
+  it('uses Excel-like major ticks for auto diverging stacked value domains', () => {
+    const config = makeConfig({ type: 'column', subType: 'stacked' });
+    const data = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Positive',
+          data: [
+            { x: 'A', y: 40 },
+            { x: 'B', y: 88 },
+          ],
+        },
+        {
+          name: 'Negative',
+          data: [
+            { x: 'A', y: -12 },
+            { x: 'B', y: -5 },
+          ],
+        },
+      ],
+    };
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.y?.scale).toEqual(expect.objectContaining({ domain: [-12, 88], nice: 6 }));
+    expect(encoding.y?.axis).toEqual(expect.objectContaining({ tickCount: 6 }));
+  });
 });
 
 // =============================================================================
@@ -310,6 +338,73 @@ describe('buildEncoding - multi-series', () => {
 
     expect(encoding.color).toBeDefined();
     expect(encoding.color!.field).toBe('category');
+  });
+
+  it('resolves imported theme luminance transforms with Excel HSL luminance math', () => {
+    const data = makeData(2);
+    const config = makeConfig({
+      type: 'column',
+      series: [
+        {
+          name: 'Series 1',
+          idx: 6,
+          format: { fill: { type: 'solid', color: { theme: 'accent1', tintShade: -0.4 } } },
+        },
+        {
+          name: 'Series 2',
+          idx: 7,
+          format: { fill: { type: 'solid', color: { theme: 'accent2', tintShade: -0.4 } } },
+        },
+      ],
+    });
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.color?.scale?.range).toEqual(['#264478', '#9E480E']);
+  });
+
+  it('accepts snake-case tint_shade from Rust chart-import wire data', () => {
+    const data = makeData(1);
+    const config = makeConfig({
+      type: 'pie',
+      series: [
+        {
+          name: 'Series 1',
+          idx: 6,
+          format: {
+            fill: {
+              type: 'solid',
+              color: { theme: 'accent1', tint_shade: -0.4 } as unknown as {
+                theme: string;
+                tintShade?: number;
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.color?.scale?.range).toEqual(['#264478']);
+  });
+
+  it('uses Excel repeat colors when imported repeat series lack luminance transforms', () => {
+    const data = makeData(1);
+    const config = makeConfig({
+      type: 'pie',
+      series: [
+        {
+          name: 'Series 1',
+          idx: 6,
+          format: { fill: { type: 'solid', color: { theme: 'accent1' } } },
+        },
+      ],
+    });
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.color?.scale?.range).toEqual(['#264478']);
   });
 });
 

@@ -149,11 +149,13 @@ export function generateXAxis(
           ? formatTemporalTick(tick)
           : formatTickValue(tick, tickFormat);
       const labelAngle = axisSpec.labelAngle ?? 0;
+      const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
+      const labelPadding = axisSpec.labelPadding ?? (labelAngle ? 2 : 3);
 
       marks.push({
         type: 'text',
         x,
-        y: y + (axisSpec.tickSize ?? 6) + (axisSpec.labelPadding ?? 3),
+        y: y + tickExtent + labelPadding,
         text: labelText,
         datum: { role },
         fontSize,

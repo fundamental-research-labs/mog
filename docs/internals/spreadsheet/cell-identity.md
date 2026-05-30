@@ -10,11 +10,11 @@ The identity model is the internal foundation for collaborative spreadsheets. It
 | Row    | RowId         | rowOrder / row axis      | RowId               |
 | Column | ColId         | colOrder / column axis   | ColId               |
 
-**Key Insight**: Entity movement is tracked by updating identity-to-position state, not by rewriting every reference or shifting property keys. This avoids O(n) formula rewrites on structure changes and lets concurrent edits compose through the CRDT document.
+**Key Insight**: Entity movement is tracked by updating identity-to-position state, not by treating A1 formula text as the structural source of truth. Stable formula refs avoid rewriting identity references during row/column changes; current storage still refreshes cached A1 strings (`f`) where needed for display, search, export, and rebuild fallback.
 
 ## Cell Identity Model
 
-Users type and see A1-style formulas, but formulas are stored internally as a template plus stable identity references.
+Users type and see A1-style formulas. The live compute/mirror representation stores formulas as a template plus stable identity references; Yrs cell storage keeps an A1 body (`f`) and may also carry persisted identity fields (`ft`/`fr`) depending on the write path.
 
 ```text
 User sees: =A1+B1
@@ -22,7 +22,7 @@ Stored as: template "{0}+{1}"
            refs: [IdentityCellRef(A1's CellId), IdentityCellRef(B1's CellId)]
 ```
 
-Rust stores `CellId`, `SheetId`, `RowId`, and `ColId` as `u128` newtypes over UUID bytes. TypeScript exposes them as branded strings at public boundaries.
+Rust stores `CellId`, `SheetId`, `RowId`, and `ColId` as `u128` newtypes over UUID-compatible bytes. Serde emits compact 32-character lowercase hex strings, while parsers accept both compact hex and hyphenated UUID text. TypeScript exposes them as branded strings at public boundaries.
 
 ## Why Position-Based References Fail
 
@@ -60,7 +60,7 @@ Every materialized cell has a stable `CellId`. Formula references point at ident
 | Model              | What Happens                                                        |
 | ------------------ | ------------------------------------------------------------------- |
 | A1 Model           | Parse formulas, shift affected refs, serialize updated formula text |
-| Identity Model     | Update row/column/cell position state and regenerate derived views  |
+| Identity Model     | Update identity-position state, then refresh derived A1 views where needed |
 
 ### On Concurrent Insert Columns
 
@@ -71,7 +71,7 @@ Every materialized cell has a stable `CellId`. Formula references point at ident
 
 ## Core Types
 
-**Public TypeScript surface:** `contracts/src/cells/cell-identity.ts` re-exports the authored types from `types/core/src/cells/cell-identity.ts`.
+**Public TypeScript surface:** `@mog-sdk/contracts/cell-identity` is the shipped public barrel. It re-exports the authored types from `types/core/src/cells/cell-identity.ts`, which is a workspace-internal type shard.
 
 **Rust sources:** `compute/core/crates/types/cell-types/` defines ID newtypes and allocation, and `compute/core/crates/types/formula-types/src/identity_formula/types.rs` defines identity formula refs.
 
@@ -82,7 +82,7 @@ declare const __cellId: unique symbol;
 export type CellId = string & { readonly [__cellId]: true };
 ```
 
-Rust uses `cell_types::CellId`, a `u128` newtype serialized at the IPC boundary as a UUID string or compact hex string depending on the path.
+Rust uses `cell_types::CellId`, a `u128` newtype serialized by serde as compact hex. Its parser accepts compact hex and hyphenated UUID text, and `Display` renders the hyphenated form.
 
 ### IdentityCellRef
 
@@ -109,7 +109,7 @@ export interface IdentityRangeRef {
 }
 ```
 
-The current formula ref union also includes rectangular row/column identity refs and full-row/full-column refs. Rust also has external workbook reference variants.
+The public TypeScript formula ref union includes cell refs, rectangular range refs, full-row refs, row-range refs, full-column refs, and column-range refs. Rust also has external workbook reference variants.
 
 ### IdentityFormula
 
@@ -120,7 +120,7 @@ export interface IdentityFormula {
 }
 ```
 
-Rust's `IdentityFormula` carries the same template and refs plus precomputed flags such as dynamic-array, volatile, and aggregate status.
+The authored public TypeScript contract is `template` plus `refs`. Rust carries the same fields plus precomputed flags such as dynamic-array, volatile, and aggregate status. The generated bridge wire type currently exposes the dynamic-array and volatile flags.
 
 ### Additional Identity Types
 
@@ -151,15 +151,18 @@ USER INPUT
   User types: =SUM(A1:B10)+C1*2
 
 FORMULA CONVERSION
-  Kernel bridge exposes toIdentityFormula().
+  The workspace-internal kernel bridge exposes toIdentityFormula().
   Rust compute-parser parses the A1 formula, resolves referenced positions
   through an IdentityResolver, and emits:
     { template: "SUM({0})+{1}*2", refs: [...] }
 
 RUST YRS STORAGE
   Cell payloads are keyed by CellId under each sheet's cells map.
-  Formula source/display text is stored under f.
-  Identity formula template and refs are stored under ft and fr.
+  Formula A1 body text is stored under f, without the leading "=".
+  Persisted identity formula data, when present, stores template/ref JSON
+  under ft/fr and flags under fda/fv/fa.
+  Direct cell write paths may persist f without ft/fr; observer rebuild
+  reparses f into an in-memory IdentityFormula when identity fields are absent.
   gridIndex.posToId and gridIndex.idToPos track position <-> CellId.
 
 DISPLAY / EXPORT
@@ -169,7 +172,7 @@ DISPLAY / EXPORT
 
 ## Yrs Storage Structure
 
-The Rust Yrs document schema is defined by `compute/core/crates/compute-document/src/schema.rs` and summarized in `compute/core/src/storage/mod.rs`.
+The field-level Rust Yrs document schema is defined by `compute/core/crates/compute-document/src/schema.rs`. Domain read/write helpers live under `compute/core/src/storage/`.
 
 ```text
 Y.Doc
@@ -178,8 +181,8 @@ Y.Doc
     +-- cells: Y.Map<CellIdHex, Y.Map>
     |   +-- v   value
     |   +-- f   A1 formula body, without leading "="
-    |   +-- ft  identity formula template
-    |   +-- fr  serialized identity formula refs
+    |   +-- ft  optional identity formula template
+    |   +-- fr  optional serialized identity formula refs
     |   +-- fda/fv/fa formula flags when true
     |   +-- fm/ar OOXML formula metadata / CSE array range when present
     +-- cellProperties: Y.Map<CellIdHex, Y.Map>
@@ -193,7 +196,7 @@ Y.Doc
     +-- merges / comments / filters / ranges / rangePayloads / ...
 ```
 
-The TypeScript `SerializedCellData` and `SheetMaps` contracts are still available through `contracts/src/store/store-types.ts`, but that file is a re-export shim over `types/api/src/store/store-types.ts`. The Rust Yrs schema above is the authoritative persisted storage shape.
+The TypeScript `SerializedCellData` and `SheetMaps` contracts are still available through `contracts/src/store/store-types.ts`, but that file is a re-export shim over `types/api/src/store/store-types.ts` and retains compatibility names such as `properties` / `grid`. The Rust Yrs schema above is the authoritative persisted storage shape: sparse cell properties are stored under `cellProperties`, and position mirrors are stored under `gridIndex`.
 
 ### Core Maps
 
@@ -201,15 +204,15 @@ The TypeScript `SerializedCellData` and `SheetMaps` contracts are still availabl
 | ------------------------ | --------------------------------------------- |
 | `cells`                  | Cell values and formula data keyed by CellId  |
 | `cellProperties`         | Sparse cell formatting keyed by CellId        |
-| `gridIndex.posToId`      | Position key to CellId lookup                 |
-| `gridIndex.idToPos`      | CellId to position key lookup                 |
+| `gridIndex.posToId`      | `"rowHex:colHex"` position key to CellId lookup |
+| `gridIndex.idToPos`      | CellId to `"rowHex:colHex"` position key lookup |
 | `rowOrder` / `colOrder`  | Ordered row/column identities                 |
 
 **Benefits:**
 
 - O(1)-style lookup through the in-memory `GridIndex` and `CellMirror`.
 - Cell data and formatting remain keyed by stable identities.
-- Structural changes update identity-position state instead of rewriting every formula reference.
+- Structural changes update identity-position state instead of rewriting source identity references.
 - The observer path can rebuild derived caches from the merged Yrs document.
 
 ## Key Operations
@@ -242,18 +245,19 @@ Structural operations update:
 - Yrs `rowOrder` / `colOrder`, and removed cell entries for deletes.
 - `CellMirror` via `apply_structure_change()`.
 - Range cleanup when deleted rows or columns remove range-backed cells.
+- Metadata ranges, named range refs, and cached A1 formula text (`f`) where structure changes make persisted display text stale.
 
 ### Range Expansion
 
 For a formula like `=SUM(A1:A10)`, an identity range points at durable corner identities. After inserting a row between the corners, the corner identities are unchanged but their displayed positions differ, so the rendered formula can become `=SUM(A1:A11)`.
 
-The structure path still updates position-derived caches, range extents, and persisted A1 display strings where needed. It does not need to rewrite the source identity refs for every formula.
+The structure path still updates position-derived caches, range extents, and persisted A1 display strings where needed. Deletes are pre-reanchored when possible; unresolved deleted endpoints render as `#REF!`. The source identity refs do not need to be rewritten for every formula.
 
 ## Dependency Graph
 
 **Location:** `compute/core/crates/compute-graph/src/lib.rs`
 
-The dependency graph is keyed by `CellId` and stores direct cell dependencies separately from range dependencies:
+The dependency graph is keyed by `CellId` and stores direct cell dependencies separately from range and external dependencies:
 
 ```rust
 pub enum DepTarget {
@@ -266,6 +270,7 @@ pub struct DependencyGraph {
     dependents: FxHashMap<CellId, FxHashSet<CellId>>,
     range_deps: FxHashMap<RangePos, FxHashSet<CellId>>,
     external_deps: FxHashMap<ExternalRefKey, FxHashSet<CellId>>,
+    external_precedents: FxHashMap<CellId, FxHashSet<ExternalRefKey>>,
 }
 ```
 
@@ -303,7 +308,7 @@ Formula refs point to `CellId`, `RowId`, or `ColId` values. Concurrent structure
 
 ### A1 Formula Text Is Derived
 
-The persisted `f` field stores an A1 formula body for compatibility, display, search, and export. It is not the source of truth for identity references. Structural operations may regenerate and write this cached A1 text, while `ft`/`fr` identity formula fields preserve the stable references.
+The live structural source is the `IdentityFormula` in compute/mirror state. The persisted `f` field stores an A1 formula body for compatibility, display, search, export, and rebuild fallback. Structural operations may regenerate and write this cached A1 text, while optional `ft`/`fr` identity formula fields preserve persisted stable references when present.
 
 ### Undo/Redo
 
@@ -330,8 +335,10 @@ The identity model is internal. Public spreadsheet behavior stays A1-oriented.
 | `compute/core/crates/types/cell-types/` | Rust ID newtypes, allocator, virtual CellIds, axis identities |
 | `compute/core/crates/types/formula-types/src/identity_formula/types.rs` | Rust identity formula refs and formula type |
 | `compute/core/crates/compute-parser/` | Formula parsing and identity/A1 rendering |
+| `compute/core/crates/compute-document/src/schema.rs` | Authoritative Yrs schema keys and cell payload field names |
+| `compute/core/src/storage/cells/values.rs` | Cell value writes and persisted gridIndex position mirrors |
 | `compute/core/src/storage/sheet/structural/mod.rs` | Rust insert/delete row/column operations |
-| `compute/core/src/storage/mod.rs` | Rust Yrs storage schema overview |
+| `compute/core/src/storage/engine/services/structural/formula_writeback.rs` | Cached A1 formula text refresh after structural changes |
 | `compute/core/crates/compute-graph/src/lib.rs` | CellId-keyed dependency graph |
 | `kernel/src/domain/sheets/structures.ts` | TypeScript structural-operation facade |
 | `kernel/src/domain/grid-index.ts` | TypeScript cell-position facade over ComputeBridge |
@@ -375,7 +382,7 @@ if (data.formula !== undefined) {
 return rawToCellValue(data.raw) ?? null;
 ```
 
-Or use the kernel helper:
+Or use the workspace-internal kernel helper:
 
 ```typescript
 import { Cells } from '@mog-sdk/kernel/api';
@@ -400,9 +407,9 @@ Rows and columns use the same stable-identity pattern. Rust owns canonical row/c
 | `rowFormats` | RowId | CellFormat |
 | `colWidths`  | ColId | number     |
 | `colFormats` | ColId | CellFormat |
-| `schemas`    | index | ColumnSchema |
+| `schemas`    | ColId | ColumnSchema |
 
-`kernel/src/domain/row-col-identity.ts` contains compatibility helpers, but the canonical identities and index maintenance live in Rust.
+`kernel/src/domain/row-col-identity.ts` contains workspace-internal compatibility helpers, but the canonical identities and index maintenance live in Rust. Older TypeScript store contracts may still mention index-keyed schema maps; canonical Yrs column schemas are keyed by `ColId` hex.
 
 ## Virtual Identity for Range-Resident Cells
 
@@ -425,7 +432,7 @@ The derivation uses `siphasher::sip128::SipHasher`, and virtual IDs are disjoint
 | Deterministic | Same `(SheetId, RowId, ColId)` gives the same `CellId` |
 | Range-independent | Identity depends on structural position, not the range payload ID |
 | Disjoint | Real allocator IDs cannot use the virtual sentinel namespace |
-| Editable | First edit can register the same virtual ID as a sparse cell override |
+| Editable | Edit paths can register the same virtual ID as a sparse cell override |
 
 ### Resolution
 
@@ -449,6 +456,10 @@ Sparse `cells` entries shadow range payload values at the same position. That is
 - `compute/core/crates/types/cell-types/src/identity/virtual_cell.rs`
 - `compute/core/crates/types/cell-types/src/id_alloc.rs`
 - `compute/core/crates/types/formula-types/src/identity_formula/types.rs`
+- `compute/core/crates/compute-document/src/schema.rs`
 - `compute/core/src/mirror/read.rs`
+- `compute/core/src/storage/cells/values.rs`
 - `compute/core/src/storage/sheet/structural/mod.rs`
+- `compute/core/src/storage/engine/services/structural/formula_writeback.rs`
 - `compute/core/src/storage/engine/sync_pipeline.rs`
+- `compute/core/src/storage/sheet/schemas/columns.rs`

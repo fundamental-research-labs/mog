@@ -413,9 +413,6 @@ jobs:
             echo "Stable release; npm packages will publish with npm's default latest tag"
           fi
 
-      - name: 'Publish readiness: list non-eval local gates'
-        run: pnpm check:publish-readiness:list
-
       - name: 'Publish readiness: package inventory'
         run: pnpm validate:packages
 

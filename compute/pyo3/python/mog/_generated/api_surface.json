@@ -52079,8 +52079,7 @@
   ],
   "schemaVersion": 1,
   "source": {
-    "apiSpec": "runtime/sdk/src/generated/api-spec.json",
-    "apiSpecSha256": "db7cb52586d3b3b375ef63da4804c4bc53c910a8b95252e8f732c5bbbfecec10"
+    "apiSpec": "runtime/sdk/src/generated/api-spec.json"
   },
   "statusCounts": {
     "implemented": 106,

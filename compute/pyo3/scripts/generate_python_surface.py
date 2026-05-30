@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import json
 import re
 import sys
@@ -626,7 +625,6 @@ def validate_dispositions(entries: list[SurfaceEntry], dispositions: list[dict[s
 
 
 def build_surface_payload(spec: dict[str, Any], entries: list[SurfaceEntry], dispositions: list[dict[str, Any]]) -> dict[str, Any]:
-    spec_bytes = SPEC_PATH.read_bytes()
     counts = {
         "interfaces": len(spec.get("interfaces", {})),
         "functions": sum(len(v.get("functions", {})) for v in spec.get("interfaces", {}).values()),
@@ -641,7 +639,6 @@ def build_surface_payload(spec: dict[str, Any], entries: list[SurfaceEntry], dis
         "schemaVersion": 1,
         "source": {
             "apiSpec": str(SPEC_PATH.relative_to(ROOT)),
-            "apiSpecSha256": hashlib.sha256(spec_bytes).hexdigest(),
         },
         "counts": counts,
         "statusCounts": dict(sorted(status_counts.items())),

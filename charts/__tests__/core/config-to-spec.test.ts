@@ -595,6 +595,7 @@ describe('buildEncoding - axis config', () => {
         xAxis: {
           type: 'category',
           numberFormat: '"FY3/"0',
+          crossesAt: 'automatic',
           format: {
             font: { size: 9, color: { theme: 'tx1' } },
             textRotation: -1000,
@@ -617,6 +618,7 @@ describe('buildEncoding - axis config', () => {
         labelFontSize: 12,
         labelColor: '#595959',
         labelAngle: -45,
+        crossesAt: 'automatic',
       }),
     );
     expect(encoding.y!.axis).toEqual(
@@ -627,6 +629,28 @@ describe('buildEncoding - axis config', () => {
         gridColor: '#D9D9D9',
         gridWidth: 0.75,
         gridOpacity: 1,
+      }),
+    );
+  });
+
+  it('should lower imported gridline dash and transparency styling', () => {
+    const config = makeConfig({
+      axis: {
+        yAxis: {
+          type: 'value',
+          gridLines: true,
+          gridlineFormat: { width: 0.75, dashStyle: 'dashDot', transparency: 0.25 },
+        },
+      },
+    });
+    const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
+
+    expect(encoding.y!.axis).toEqual(
+      expect.objectContaining({
+        grid: true,
+        gridWidth: 0.75,
+        gridDash: [4, 2, 1, 2],
+        gridOpacity: 0.75,
       }),
     );
   });
@@ -796,6 +820,43 @@ describe('buildConfigSpec - colors', () => {
       shortConfigSpec?.layoutHints?.yAxisLabelWidth ?? 0,
     );
     expect(shortConfigSpec?.layoutHints?.yAxisLabelWidth).toBeLessThan(62);
+  });
+
+  it('estimates an Excel-like bottom gutter for imported zero-crossing category axes', () => {
+    const config = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      axis: {
+        xAxis: {
+          type: 'category',
+          tickMarks: 'none',
+          crossesAt: 'automatic',
+          format: { font: { size: 9 }, textRotation: -1000 },
+        },
+        yAxis: {
+          type: 'value',
+          max: 100000,
+        },
+      },
+    });
+    const data: ChartData = {
+      categories: ['A'],
+      series: [
+        { name: 'Positive', data: [{ x: 'A', y: 88000 }] },
+        { name: 'Negative', data: [{ x: 'A', y: -12000 }] },
+      ],
+    };
+    const encoding = buildEncoding(config, data);
+    const configSpec = buildConfigSpec(config, encoding);
+
+    expect(encoding.x?.axis).toEqual(
+      expect.objectContaining({
+        crossesAt: 'automatic',
+        labelAngle: -45,
+        labelPadding: 14,
+      }),
+    );
+    expect(configSpec?.layoutHints?.bottomMargin).toBe(29);
   });
 
   it('should derive category colors from imported series theme fills', () => {

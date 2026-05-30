@@ -182,6 +182,22 @@ describe('Margin Calculation', () => {
     expect(longLayout.plotArea.x).toBe(122);
     expect(shortLayout.plotArea.width).toBeGreaterThan(longLayout.plotArea.width);
   });
+
+  test('uses imported bottom margin hints as the final x-axis gutter', () => {
+    const spec: ChartSpec = {
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal', axis: {} },
+        y: { field: 'value', type: 'quantitative', axis: {} },
+      },
+      config: { layoutHints: { bottomMargin: 29 } },
+    };
+
+    const layout = calculateLayout(spec, { width: 796, height: 436 });
+
+    expect(layout.margin.bottom).toBe(29);
+    expect(layout.plotArea.y + layout.plotArea.height).toBe(407);
+  });
 });
 
 // =============================================================================

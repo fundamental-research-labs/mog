@@ -377,6 +377,72 @@ describe('Axis Generation', () => {
     const gridLines = result.axes.filter((a) => a.type === 'path' && (a.style.opacity ?? 1) < 1);
     expect(gridLines.length).toBeGreaterThan(0);
   });
+
+  test('places imported automatic x-axis at the value zero crossing', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 100 },
+          { category: 'B', value: -20 },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: {
+          field: 'category',
+          type: 'nominal',
+          axis: { crossesAt: 'automatic' },
+        },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          scale: { domain: [-20, 100], nice: false },
+        },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const plotBottom = result.layout.plotArea.y + result.layout.plotArea.height;
+    const expectedY = result.scales.y!(0) as number;
+    const xAxisLine = result.axes.find(
+      (mark) =>
+        mark.type === 'path' &&
+        (mark as any).datum?.role === 'x-axis' &&
+        (mark as any).path.startsWith(`M${result.layout.plotArea.x},`) &&
+        (mark as any).path.includes(` L${result.layout.plotArea.x + result.layout.plotArea.width},`),
+    ) as any;
+
+    expect(xAxisLine).toBeDefined();
+    expect(Number(xAxisLine.path.match(/^M[^,]+,([^ ]+)/)?.[1])).toBeCloseTo(expectedY, 6);
+    expect(expectedY).toBeLessThan(plotBottom);
+  });
+
+  test('applies imported grid line dash and opacity styles', () => {
+    const spec: ChartSpec = {
+      data: { values: barChartData },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          axis: { grid: true, gridDash: [4, 2], gridOpacity: 0.75 },
+        },
+      },
+    };
+
+    const result = compile(spec);
+    const gridLine = result.axes.find(
+      (mark) =>
+        mark.type === 'path' &&
+        (mark as any).datum?.role === 'y-axis' &&
+        mark.style.strokeDash?.join(',') === '4,2',
+    );
+
+    expect(gridLine?.style.opacity).toBe(0.75);
+  });
 });
 
 // =============================================================================

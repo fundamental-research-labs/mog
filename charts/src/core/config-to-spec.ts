@@ -284,6 +284,29 @@ function hasVisibleLineStyle(line: unknown): boolean {
   return candidate.color !== undefined || candidate.width !== undefined;
 }
 
+function dashStyleToStrokeDash(
+  dashStyle: NonNullable<ChartFormat['line']>['dashStyle'],
+  width: number | undefined,
+): number[] | undefined {
+  const unit = Math.max(1, width ?? 1);
+  switch (dashStyle) {
+    case 'dot':
+      return [unit, unit * 2];
+    case 'dash':
+      return [unit * 4, unit * 2];
+    case 'dashDot':
+      return [unit * 4, unit * 2, unit, unit * 2];
+    case 'longDash':
+      return [unit * 8, unit * 2];
+    case 'longDashDot':
+      return [unit * 8, unit * 2, unit, unit * 2];
+    case 'longDashDotDot':
+      return [unit * 8, unit * 2, unit, unit * 2, unit, unit * 2];
+    default:
+      return undefined;
+  }
+}
+
 // =============================================================================
 // Mark Type Mapping
 // =============================================================================
@@ -481,7 +504,7 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
  */
 function mapAxisConfigToAxisSpec(
-  axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
+  axisConf: NonNullable<AxisConfig['categoryAxis']>,
 ): AxisSpec {
   const spec: AxisSpec = {};
   spec.title = axisConf.title ?? null;
@@ -502,6 +525,8 @@ function mapAxisConfigToAxisSpec(
   }
   if (axisConf.tickMarks === 'none') spec.ticks = false;
   if (axisConf.numberFormat) spec.format = axisConf.numberFormat;
+  if (axisConf.crossesAt) spec.crossesAt = axisConf.crossesAt;
+  if (axisConf.crossesAtValue !== undefined) spec.crossesAtValue = axisConf.crossesAtValue;
 
   const labelFont = axisConf.format?.font;
   if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
@@ -535,7 +560,17 @@ function mapAxisConfigToAxisSpec(
   const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
   if (gridlineColor) spec.gridColor = gridlineColor;
   if (axisConf.gridlineFormat?.width !== undefined) spec.gridWidth = axisConf.gridlineFormat.width;
-  if (axisConf.gridlineFormat) spec.gridOpacity = 1;
+  const gridDash = dashStyleToStrokeDash(
+    axisConf.gridlineFormat?.dashStyle,
+    axisConf.gridlineFormat?.width,
+  );
+  if (gridDash) spec.gridDash = gridDash;
+  if (axisConf.gridlineFormat) {
+    spec.gridOpacity =
+      axisConf.gridlineFormat.transparency === undefined
+        ? 1
+        : Math.max(0, Math.min(1, 1 - axisConf.gridlineFormat.transparency));
+  }
 
   const titleFont = axisConf.titleFormat?.font;
   if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);
@@ -1040,8 +1075,12 @@ export function buildConfigSpec(
   }
 
   const yAxisLabelWidth = estimateYAxisLabelWidth(encoding);
-  if (yAxisLabelWidth !== undefined) {
-    configSpec.layoutHints = { yAxisLabelWidth };
+  const bottomMargin = estimateXAxisBottomMargin(encoding);
+  if (yAxisLabelWidth !== undefined || bottomMargin !== undefined) {
+    configSpec.layoutHints = {
+      ...(yAxisLabelWidth !== undefined ? { yAxisLabelWidth } : {}),
+      ...(bottomMargin !== undefined ? { bottomMargin } : {}),
+    };
     hasConfig = true;
   }
 
@@ -1080,6 +1119,32 @@ function estimateYAxisLabelWidth(
   const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
   const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);
   return Math.max(36, Math.min(90, estimatedWidth));
+}
+
+function estimateXAxisBottomMargin(
+  encoding: EncodingSpec | undefined,
+): number | undefined {
+  const x = encoding?.x;
+  const y = encoding?.y;
+  if (
+    !x ||
+    !y ||
+    y.type !== 'quantitative' ||
+    x.axis === null ||
+    x.axis?.labels === false ||
+    x.axis?.crossesAt !== 'automatic'
+  ) {
+    return undefined;
+  }
+
+  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
+  const min = explicitDomainBound(scaleDomain, 0);
+  const max = explicitDomainBound(scaleDomain, 1);
+  if (min === undefined || max === undefined || min >= 0 || max <= 0) return undefined;
+
+  const fontSize = x.axis?.labelFontSize ?? 11;
+  const labelPadding = x.axis?.labelPadding ?? 3;
+  return Math.max(24, Math.ceil(fontSize + labelPadding + 3));
 }
 
 // =============================================================================

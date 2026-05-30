@@ -109,9 +109,10 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
  * Calculate margins based on axes and other elements.
  */
 function calculateMargins(spec: ChartSpec): Layout['margin'] {
-  const margin = { ...DEFAULT_LAYOUT.margin };
+  const margin: Layout['margin'] = { ...DEFAULT_LAYOUT.margin };
   const encoding = spec.encoding;
   const layoutHints = spec.config?.layoutHints;
+  let bottomPadding = 0;
 
   // Handle padding from config
   if (spec.config?.padding) {
@@ -121,11 +122,13 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
       margin.right += padding;
       margin.bottom += padding;
       margin.left += padding;
+      bottomPadding += padding;
     } else {
       margin.top += padding.top ?? 0;
       margin.right += padding.right ?? 0;
       margin.bottom += padding.bottom ?? 0;
       margin.left += padding.left ?? 0;
+      bottomPadding += padding.bottom ?? 0;
     }
   }
 
@@ -157,6 +160,10 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     if (yAxis?.title || encoding.y.title) {
       margin.left += DEFAULT_LAYOUT.axisTitleSpace;
     }
+  }
+
+  if (layoutHints?.bottomMargin !== undefined) {
+    margin.bottom = layoutHints.bottomMargin + bottomPadding;
   }
 
   return margin;

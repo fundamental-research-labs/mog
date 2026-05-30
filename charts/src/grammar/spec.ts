@@ -294,6 +294,8 @@ export interface AxisSpec {
   gridWidth?: number;
   gridOpacity?: number;
   gridDash?: number[];
+  crossesAt?: 'automatic' | 'min' | 'max' | 'custom';
+  crossesAtValue?: number;
   format?: string;
   /** Per-category format code keyed by the raw category value. */
   labelFormatByValue?: Record<string, string>;
@@ -619,6 +621,7 @@ export interface ConfigSpec {
   /** Layout hints computed from imported workbook chart semantics. */
   layoutHints?: {
     yAxisLabelWidth?: number;
+    bottomMargin?: number;
   };
 }
 

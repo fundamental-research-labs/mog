@@ -34,7 +34,7 @@ export function generateAxes(
 
   // X-axis
   if (encoding?.x && encoding.x.axis !== null && scales.x) {
-    const axisMarks = generateXAxis(encoding.x, scales.x, layout, configAxis);
+    const axisMarks = generateXAxis(encoding.x, scales.x, layout, configAxis, scales.y);
     marks.push(...axisMarks);
   }
 
@@ -55,11 +55,12 @@ export function generateXAxis(
   scale: AnyScale,
   layout: Layout,
   configAxis?: Partial<AxisSpec>,
+  valueScale?: AnyScale,
 ): AnyMark[] {
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...channel.axis } as AxisSpec;
   const tickFormat = channel.format ?? axisSpec.format;
-  const y = layout.plotArea.y + layout.plotArea.height;
+  const y = xAxisY(axisSpec, valueScale, layout);
 
   const role = 'x-axis';
 
@@ -182,6 +183,7 @@ export function generateXAxis(
           stroke: axisSpec.gridColor ?? '#e0e0e0',
           strokeWidth: axisSpec.gridWidth ?? 1,
           opacity: axisSpec.gridOpacity ?? 0.5,
+          strokeDash: axisSpec.gridDash,
         },
       } as PathMark);
     }
@@ -210,6 +212,48 @@ export function generateXAxis(
   }
 
   return marks;
+}
+
+function xAxisY(axisSpec: AxisSpec, valueScale: AnyScale | undefined, layout: Layout): number {
+  const plotBottom = layout.plotArea.y + layout.plotArea.height;
+  if (!valueScale) return plotBottom;
+
+  switch (axisSpec.crossesAt) {
+    case 'min':
+      return plotBottom;
+    case 'max':
+      return layout.plotArea.y;
+    case 'custom':
+      if (axisSpec.crossesAtValue !== undefined) {
+        return clampAxisPosition(
+          valueScale(axisSpec.crossesAtValue) as number,
+          layout.plotArea.y,
+          plotBottom,
+        );
+      }
+      return plotBottom;
+    case 'automatic': {
+      const domain = typeof valueScale.domain === 'function' ? valueScale.domain() : undefined;
+      const min = numericDomainValue(domain, 0);
+      const max = numericDomainValue(domain, 1);
+      if (min !== undefined && max !== undefined && min < 0 && max > 0) {
+        return clampAxisPosition(valueScale(0) as number, layout.plotArea.y, plotBottom);
+      }
+      return plotBottom;
+    }
+    default:
+      return plotBottom;
+  }
+}
+
+function numericDomainValue(domain: unknown[] | undefined, index: number): number | undefined {
+  const value = domain?.[index];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clampAxisPosition(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return max;
+  return Math.max(min, Math.min(max, value));
 }
 
 /**
@@ -332,6 +376,7 @@ export function generateYAxis(
           stroke: axisSpec.gridColor ?? '#e0e0e0',
           strokeWidth: axisSpec.gridWidth ?? 1,
           opacity: axisSpec.gridOpacity ?? 0.5,
+          strokeDash: axisSpec.gridDash,
         },
       } as PathMark);
     }
